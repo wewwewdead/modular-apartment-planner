@@ -64,6 +64,51 @@ function CasementWindow({ win, info }) {
   );
 }
 
+function AwningWindow({ win, info }) {
+  const angleDeg = (info.angle * 180) / Math.PI;
+  const flipSign = win.openDirection === 'right' ? -1 : 1;
+  const projLen = win.width * 0.25;
+  const midX = win.width / 2;
+
+  return (
+    <g transform={`translate(${info.start.x},${info.start.y}) rotate(${angleDeg})`}>
+      {/* Hinge line along wall */}
+      <line
+        x1={0} y1={0}
+        x2={win.width} y2={0}
+        stroke="var(--color-wall-fill)"
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Left arm to apex */}
+      <line
+        x1={0} y1={0}
+        x2={midX} y2={flipSign * -projLen}
+        stroke="var(--color-wall-fill)"
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Right arm to apex */}
+      <line
+        x1={win.width} y1={0}
+        x2={midX} y2={flipSign * -projLen}
+        stroke="var(--color-wall-fill)"
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Dashed arc showing swing path */}
+      <path
+        d={`M 0 0 A ${midX} ${projLen} 0 0 ${win.openDirection === 'left' ? 1 : 0} ${win.width} 0`}
+        fill="none"
+        stroke="var(--color-wall-fill)"
+        strokeWidth={1}
+        strokeDasharray="4 3"
+        vectorEffect="non-scaling-stroke"
+      />
+    </g>
+  );
+}
+
 function FixedWindow({ info }) {
   return (
     <>
@@ -95,6 +140,50 @@ function FixedWindow({ info }) {
   );
 }
 
+function JalousieWindow({ win, info, wall }) {
+  const dir = wallDirection(wall);
+  const perp = perpendicular(dir);
+  const halfThick = wall.thickness / 2;
+  const slats = 5;
+
+  // Evenly space slats along the window width
+  const lines = [];
+  for (let i = 1; i <= slats; i++) {
+    const t = i / (slats + 1);
+    const along = add(info.start, scale(dir, win.width * t));
+    lines.push({
+      x1: add(along, scale(perp, -halfThick * 0.7)).x,
+      y1: add(along, scale(perp, -halfThick * 0.7)).y,
+      x2: add(along, scale(perp, halfThick * 0.7)).x,
+      y2: add(along, scale(perp, halfThick * 0.7)).y,
+    });
+  }
+
+  return (
+    <>
+      {/* Center line */}
+      <line
+        x1={info.start.x} y1={info.start.y}
+        x2={info.end.x} y2={info.end.y}
+        stroke="var(--color-wall-fill)"
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Perpendicular slat lines */}
+      {lines.map((l, i) => (
+        <line
+          key={i}
+          x1={l.x1} y1={l.y1}
+          x2={l.x2} y2={l.y2}
+          stroke="var(--color-wall-fill)"
+          strokeWidth={1}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+    </>
+  );
+}
+
 export default function WindowRenderer({ windows, walls }) {
   return (
     <g className="windows">
@@ -115,7 +204,9 @@ export default function WindowRenderer({ windows, walls }) {
             />
             {type === 'standard' && <StandardWindow info={info} wall={wall} />}
             {type === 'casement' && <CasementWindow win={win} info={info} />}
+            {type === 'awning' && <AwningWindow win={win} info={info} />}
             {type === 'fixed' && <FixedWindow info={info} />}
+            {type === 'jalousie' && <JalousieWindow win={win} info={info} wall={wall} />}
           </g>
         );
       })}

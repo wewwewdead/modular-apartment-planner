@@ -1,5 +1,5 @@
 import { GRID_MINOR, MIN_WALL_LENGTH } from '@/domain/defaults';
-import { createSectionCut } from '@/domain/models';
+import { createSectionCut, nextSectionLabel } from '@/domain/models';
 import { distance } from '@/geometry/point';
 
 function snapToGrid(value) {
@@ -48,19 +48,13 @@ export function createSectionPlaceHandler({ dispatch, editorDispatch, activeFloo
       }
 
       const floor = getFloor(activeFloorId);
-      const existing = floor?.sectionCut || null;
-      const sectionCut = existing
-        ? {
-            ...existing,
-            startPoint: toolState.sectionStartPoint,
-            endPoint: point,
-          }
-        : createSectionCut(toolState.sectionStartPoint, point);
+      const label = nextSectionLabel(floor?.sectionCuts || []);
+      const sectionCut = createSectionCut(toolState.sectionStartPoint, point, { label });
 
-      dispatch({ type: 'SECTION_SET', floorId: activeFloorId, sectionCut });
+      dispatch({ type: 'SECTION_ADD', floorId: activeFloorId, sectionCut });
       editorDispatch({ type: 'SELECT_OBJECT', id: sectionCut.id, objectType: 'sectionCut' });
       resetSectionTool(editorDispatch);
-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Section cut updated.' });
+      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Section cut placed.' });
     },
 
     onMouseMove(modelPos) {

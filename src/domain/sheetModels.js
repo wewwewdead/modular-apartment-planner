@@ -24,6 +24,7 @@ export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, o
     height: options.height ?? 100,
     scale: options.scale ?? 100,
     title: options.title ?? '',
+    rotation: options.rotation ?? 0,
   };
 }
 

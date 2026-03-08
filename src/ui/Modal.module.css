@@ -1,0 +1,115 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 15, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: modalOverlayIn 0.2s ease;
+}
+
+.dialog {
+  background: #FAFAF8;
+  border-radius: var(--radius-lg);
+  padding: 0;
+  min-width: 360px;
+  max-width: 480px;
+  box-shadow: var(--shadow-overlay);
+  border: 1px solid var(--color-border);
+  animation: modalDialogIn 0.25s var(--ease-out);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.headerTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  transition: background var(--duration-fast), color var(--duration-fast);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
+}
+
+.closeIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.body {
+  padding: var(--space-xl);
+}
+
+.modalBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.modalBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.modalBtnDanger {
+  composes: modalBtn;
+  border-color: var(--color-danger-ghost-border);
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.modalBtnDanger:hover {
+  background: var(--color-danger-ghost-bg-hover);
+}
+
+.modalCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+}
+
+.modalCardTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modalCardDesc {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}

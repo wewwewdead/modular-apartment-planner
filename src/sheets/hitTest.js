@@ -30,6 +30,23 @@ export function hitTestViewportHandle(point, viewports, handleSize) {
   return null;
 }
 
+export function getViewportRotationHandle(viewport, handleSize) {
+  const cx = viewport.x + viewport.width / 2;
+  const stemLength = handleSize * 2.5;
+  const radius = handleSize / 2;
+  const stemY1 = viewport.y;
+  const stemY2 = viewport.y - stemLength;
+  const cy = stemY2 - radius;
+  return { cx, cy, radius, stemX: cx, stemY1, stemY2 };
+}
+
+export function hitTestViewportRotationHandle(point, viewport, handleSize) {
+  const { cx, cy, radius } = getViewportRotationHandle(viewport, handleSize);
+  const dx = point.x - cx;
+  const dy = point.y - cy;
+  return dx * dx + dy * dy <= (radius + handleSize * 0.3) * (radius + handleSize * 0.3);
+}
+
 export function hitTestViewport(point, viewports) {
   for (let index = viewports.length - 1; index >= 0; index -= 1) {
     const viewport = viewports[index];

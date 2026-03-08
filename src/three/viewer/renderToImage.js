@@ -1,0 +1,89 @@
+import * as THREE from 'three';
+import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
+import { buildPreviewObjectRoot } from './buildPreviewObjects';
+import { createMaterialPalette, disposeMaterialPalette } from './materials';
+import { disposeScene } from './disposeScene';
+
+const PRESETS = {
+  plan_aligned: new THREE.Vector3(-1.1, 0.92, 1.05),
+  iso_northeast: new THREE.Vector3(1, 0.88, 1),
+  iso_northwest: new THREE.Vector3(-1, 0.88, 1),
+  iso_southeast: new THREE.Vector3(1, 0.88, -1),
+  iso_southwest: new THREE.Vector3(-1, 0.88, -1),
+};
+
+export function renderSceneToImage(project, options = {}) {
+  const {
+    activeFloorId = null,
+    width = 1600,
+    height = 1000,
+    preset = 'plan_aligned',
+  } = options;
+
+  const sceneDescriptor = buildPreviewScene(project, { activeFloorId });
+  if (!sceneDescriptor.hasVisibleObjects) return null;
+
+  const materialPalette = createMaterialPalette();
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf5f7fa);
+
+  const camera = new THREE.PerspectiveCamera(42, width / height, 10, 100000);
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: false,
+    preserveDrawingBuffer: true,
+  });
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setPixelRatio(1);
+  renderer.setSize(width, height);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+  scene.add(new THREE.HemisphereLight(0xdde7f4, 0xe6ded0, 0.7));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
+  keyLight.position.set(3500, 5000, 2000);
+  scene.add(keyLight);
+
+  const root = buildPreviewObjectRoot(sceneDescriptor, materialPalette);
+  scene.add(root);
+
+  const bounds = sceneDescriptor.bounds;
+  const gridSize = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 4000);
+  const normalizedSize = Math.ceil(gridSize / 1000) * 1000;
+  const divisions = Math.max(8, Math.round(normalizedSize / 500));
+  const grid = new THREE.GridHelper(normalizedSize, divisions, 0x8fa1b4, 0xc7d1db);
+  grid.position.y = sceneDescriptor.groundLevel;
+  grid.material.transparent = true;
+  grid.material.opacity = 0.45;
+  scene.add(grid);
+
+  const direction = (PRESETS[preset] || PRESETS.plan_aligned).clone().normalize();
+  const box = new THREE.Box3(
+    new THREE.Vector3(bounds.minX, bounds.minElevation, bounds.minY),
+    new THREE.Vector3(bounds.maxX, bounds.maxElevation, bounds.maxY)
+  );
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const halfFovY = THREE.MathUtils.degToRad(camera.fov / 2);
+  const halfFovX = Math.atan(Math.tan(halfFovY) * camera.aspect);
+  const distanceByHeight = Math.max(size.y, size.z) / (2 * Math.tan(halfFovY));
+  const distanceByWidth = Math.max(size.x, size.z) / (2 * Math.tan(halfFovX));
+  const distance = Math.max(distanceByHeight, distanceByWidth, size.length() / 2 * 1.4) * 1.15;
+
+  camera.position.copy(center.clone().add(direction.multiplyScalar(distance)));
+  camera.lookAt(center);
+  camera.near = Math.max(10, distance / 200);
+  camera.far = distance * 10;
+  camera.updateProjectionMatrix();
+
+  renderer.render(scene, camera);
+  const dataUrl = renderer.domElement.toDataURL('image/png');
+
+  scene.remove(root);
+  disposeScene(root, { disposeMaterials: true });
+  grid.geometry?.dispose?.();
+  grid.material?.dispose?.();
+  disposeMaterialPalette(materialPalette);
+  renderer.dispose();
+
+  return dataUrl;
+}

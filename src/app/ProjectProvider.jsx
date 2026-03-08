@@ -1,16 +1,14 @@
 import { createContext, useContext, useReducer } from 'react';
 import { createProject } from '@/domain/models';
+import { createDuplicatedFloor, getDefaultFloorName, getFloorElevation, getFloorLevelIndex, shiftFloorAbsoluteElements, shiftFloorElevationData, sortFloors } from '@/domain/floorModels';
 import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
+import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
 
 const ProjectContext = createContext(null);
 const HISTORY_LIMIT = 100;
 
 function snapshotProject(project) {
   return JSON.stringify(project);
-}
-
-function getFloor(state, floorId) {
-  return state.project.floors.find(f => f.id === floorId);
 }
 
 function applyProjectUpdate(state, nextProject, recordHistory = true) {
@@ -28,14 +26,56 @@ function applyProjectUpdate(state, nextProject, recordHistory = true) {
   };
 }
 
-function updateFloor(state, floorId, updater, recordHistory = true) {
+function updateFloor(state, floorId, updater, recordHistory = true, options = {}) {
+  const nextFloors = state.project.floors.map((floor) => (
+    floor.id === floorId ? updater(floor) : floor
+  ));
+
   return applyProjectUpdate(state, {
     ...state.project,
     updatedAt: new Date().toISOString(),
-    floors: state.project.floors.map(f =>
-      f.id === floorId ? updater(f) : f
-    ),
+    floors: options.sort ? sortFloors(nextFloors) : nextFloors,
   }, recordHistory);
+}
+
+function replaceFloors(state, floors, recordHistory = true) {
+  return applyProjectUpdate(state, {
+    ...state.project,
+    updatedAt: new Date().toISOString(),
+    floors: sortFloors(floors),
+  }, recordHistory);
+}
+
+function replaceDeletedFloorReferences(project, deletedFloorId, fallbackFloorId) {
+  return {
+    ...project,
+    floors: project.floors.map((floor) => ({
+      ...floor,
+      stairs: (floor.stairs || []).map((stair) => ({
+        ...stair,
+        floorRelation: {
+          fromFloorId: stair.floorRelation?.fromFloorId === deletedFloorId
+            ? fallbackFloorId
+            : (stair.floorRelation?.fromFloorId ?? floor.id),
+          toFloorId: stair.floorRelation?.toFloorId === deletedFloorId
+            ? fallbackFloorId
+            : (stair.floorRelation?.toFloorId ?? floor.id),
+        },
+      })),
+    })),
+    sheets: (project.sheets || []).map((sheet) => ({
+      ...sheet,
+      viewports: (sheet.viewports || []).map((viewport) => ({
+        ...viewport,
+        sourceFloorId: viewport.sourceFloorId === deletedFloorId
+          ? fallbackFloorId
+          : viewport.sourceFloorId,
+        sourceRefId: viewport.sourceFloorId === deletedFloorId
+          ? null
+          : viewport.sourceRefId,
+      })),
+    })),
+  };
 }
 
 function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
@@ -53,25 +93,35 @@ function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
 
 function projectReducer(state, action) {
   switch (action.type) {
-    case 'PROJECT_NEW':
+    case 'PROJECT_NEW': {
+      const newProject = {
+        ...action.project,
+        floors: sortFloors(action.project.floors || []),
+      };
       return {
-        project: action.project,
+        project: newProject,
         isDirty: false,
         lastSavedAt: null,
-        savedSnapshot: snapshotProject(action.project),
+        savedSnapshot: snapshotProject(newProject),
         history: [],
         future: [],
       };
+    }
 
-    case 'PROJECT_LOAD':
+    case 'PROJECT_LOAD': {
+      const loadedProject = {
+        ...action.project,
+        floors: sortFloors(action.project.floors || []),
+      };
       return {
-        project: action.project,
+        project: loadedProject,
         isDirty: false,
         lastSavedAt: action.savedAt || null,
-        savedSnapshot: snapshotProject(action.project),
+        savedSnapshot: snapshotProject(loadedProject),
         history: [],
         future: [],
       };
+    }
 
     case 'PROJECT_SET_NAME':
       return applyProjectUpdate(state, {
@@ -79,6 +129,66 @@ function projectReducer(state, action) {
         name: action.name,
         updatedAt: new Date().toISOString(),
       });
+
+    case 'FLOOR_ADD':
+      return replaceFloors(state, [...state.project.floors, action.floor]);
+
+    case 'FLOOR_UPDATE':
+      return updateFloor(state, action.floor.id, (floor) => {
+        const mergedFloor = {
+          ...floor,
+          ...action.floor,
+        };
+        const nextElevation = getFloorElevation(mergedFloor);
+        const deltaElevation = nextElevation - getFloorElevation(floor);
+        return {
+          ...shiftFloorAbsoluteElements({
+            ...mergedFloor,
+            elevation: getFloorElevation(floor),
+          }, deltaElevation),
+          elevation: nextElevation,
+        };
+      }, true, { sort: true });
+
+    case 'FLOOR_DUPLICATE': {
+      const duplicatedFloor = action.floor;
+      const elevationShift = duplicatedFloor.floorToFloorHeight ?? 0;
+      const insertionLevelIndex = getFloorLevelIndex(duplicatedFloor);
+
+      const shiftedFloors = state.project.floors.map((floor) => {
+        if (getFloorLevelIndex(floor) < insertionLevelIndex) return floor;
+
+        const previousLevelIndex = getFloorLevelIndex(floor);
+        return shiftFloorElevationData({
+          ...floor,
+          name: floor.name === getDefaultFloorName(previousLevelIndex)
+            ? getDefaultFloorName(previousLevelIndex + 1)
+            : floor.name,
+          levelIndex: previousLevelIndex + 1,
+        }, elevationShift);
+      });
+
+      return replaceFloors(state, [...shiftedFloors, duplicatedFloor]);
+    }
+
+    case 'FLOOR_DELETE': {
+      if (state.project.floors.length <= 1) return state;
+
+      const nextProject = replaceDeletedFloorReferences(
+        {
+          ...state.project,
+          floors: state.project.floors.filter((floor) => floor.id !== action.floorId),
+        },
+        action.floorId,
+        action.fallbackFloorId
+      );
+
+      return applyProjectUpdate(state, {
+        ...nextProject,
+        updatedAt: new Date().toISOString(),
+        floors: sortFloors(nextProject.floors),
+      });
+    }
 
     case 'SHEET_ADD':
       return applyProjectUpdate(state, {
@@ -246,6 +356,44 @@ function projectReducer(state, action) {
         stairs: (f.stairs || []).filter(stair => stair.id !== action.stairId),
       }));
 
+    case 'LANDING_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        landings: [...(f.landings || []), action.landing],
+      }));
+
+    case 'LANDING_UPDATE': {
+      return updateFloor(state, action.floorId, f => {
+        const nextLandings = (f.landings || []).map(l =>
+          l.id === action.landing.id ? { ...l, ...action.landing } : l
+        );
+        // Cascade: sync all stairs attached to this landing
+        const nextStairs = (f.stairs || []).map(stair => {
+          const attachedToStart = stair.startLandingAttachment?.landingId === action.landing.id;
+          const attachedToEnd = stair.endLandingAttachment?.landingId === action.landing.id;
+          if (!attachedToStart && !attachedToEnd) return stair;
+          return syncStairLandingAttachment(stair, nextLandings);
+        });
+        return { ...f, landings: nextLandings, stairs: nextStairs };
+      });
+    }
+
+    case 'LANDING_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        landings: (f.landings || []).filter(l => l.id !== action.landingId),
+        stairs: (f.stairs || []).map(stair => {
+          let next = stair;
+          if (stair.startLandingAttachment?.landingId === action.landingId) {
+            next = { ...next, startLandingAttachment: null };
+          }
+          if (stair.endLandingAttachment?.landingId === action.landingId) {
+            next = { ...next, endLandingAttachment: null };
+          }
+          return next;
+        }),
+      }));
+
     case 'ANNOTATION_ADD':
       return updateFloor(state, action.floorId, f => ({
         ...f,
@@ -275,42 +423,44 @@ function projectReducer(state, action) {
         },
       }));
 
-    case 'SLAB_SET':
+    case 'SLAB_ADD':
       return updateFloor(state, action.floorId, f => ({
         ...f,
-        slab: action.slab,
+        slabs: [...(f.slabs || []), action.slab],
       }));
 
     case 'SLAB_UPDATE':
       return updateFloor(state, action.floorId, f => ({
         ...f,
-        slab: f.slab?.id === action.slab.id ? { ...f.slab, ...action.slab } : f.slab,
+        slabs: (f.slabs || []).map(s =>
+          s.id === action.slab.id ? { ...s, ...action.slab } : s
+        ),
       }));
 
     case 'SLAB_DELETE':
       return updateFloor(state, action.floorId, f => ({
         ...f,
-        slab: null,
+        slabs: (f.slabs || []).filter(s => s.id !== action.slabId),
       }));
 
-    case 'SECTION_SET':
+    case 'SECTION_ADD':
       return updateFloor(state, action.floorId, f => ({
         ...f,
-        sectionCut: action.sectionCut,
+        sectionCuts: [...(f.sectionCuts || []), action.sectionCut],
       }));
 
     case 'SECTION_UPDATE':
       return updateFloor(state, action.floorId, f => ({
         ...f,
-        sectionCut: f.sectionCut?.id === action.sectionCut.id
-          ? { ...f.sectionCut, ...action.sectionCut }
-          : f.sectionCut,
+        sectionCuts: (f.sectionCuts || []).map(s =>
+          s.id === action.sectionCut.id ? { ...s, ...action.sectionCut } : s
+        ),
       }));
 
     case 'SECTION_DELETE':
       return updateFloor(state, action.floorId, f => ({
         ...f,
-        sectionCut: null,
+        sectionCuts: (f.sectionCuts || []).filter(s => s.id !== action.sectionId),
       }));
 
     case 'ROOM_ADD':
@@ -336,6 +486,11 @@ function projectReducer(state, action) {
         ...f,
         rooms: action.rooms,
       }));
+
+    case 'FLOOR_REPLACE':
+      return updateFloor(state, action.floorId, () => ({
+        ...action.floor,
+      }), true, { sort: true });
 
     case 'COLUMN_ADD':
       return updateFloor(state, action.floorId, f => ({
@@ -429,6 +584,11 @@ export function useProject() {
   if (!ctx) throw new Error('useProject must be used within ProjectProvider');
   const { state, dispatch } = ctx;
 
+  const duplicateFloor = (floorId) => {
+    const floor = state.project.floors.find((entry) => entry.id === floorId) || null;
+    return floor ? createDuplicatedFloor(floor) : null;
+  };
+
   return {
     project: state.project,
     isDirty: state.isDirty,
@@ -436,6 +596,7 @@ export function useProject() {
     canUndo: state.history.length > 0,
     canRedo: state.future.length > 0,
     dispatch,
+    duplicateFloor,
     getFloor: (floorId) => state.project.floors.find(f => f.id === floorId),
   };
 }

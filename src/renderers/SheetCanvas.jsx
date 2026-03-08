@@ -3,7 +3,7 @@ import { useEditor } from '@/app/EditorProvider';
 import { useProject } from '@/app/ProjectProvider';
 import { MAX_ZOOM, MIN_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { fitViewportToSheet } from '@/sheets/layout';
-import { hitTestViewport, hitTestViewportHandle } from '@/sheets/hitTest';
+import { hitTestViewport, hitTestViewportHandle, hitTestViewportRotationHandle } from '@/sheets/hitTest';
 import { buildSheetScene } from '@/sheets/layout';
 import styles from './SvgCanvas.module.css';
 import SheetRenderer from './SheetRenderer';
@@ -56,6 +56,23 @@ export default function SheetCanvas() {
     if (!sheet || !scene) return;
 
     const point = getSheetPos(event);
+
+    if (selectedType === 'sheetViewport' && selectedId) {
+      const selectedVp = scene.viewports.find((entry) => entry.id === selectedId);
+      if (selectedVp && hitTestViewportRotationHandle(point, selectedVp, 6 / viewport.zoom)) {
+        const cx = selectedVp.x + selectedVp.width / 2;
+        const cy = selectedVp.y + selectedVp.height / 2;
+        dragState.current = {
+          mode: 'rotate',
+          viewportId: selectedId,
+          center: { x: cx, y: cy },
+          initialRotation: selectedVp.rotation || 0,
+          startAngle: Math.atan2(point.y - cy, point.x - cx) * (180 / Math.PI),
+        };
+        return;
+      }
+    }
+
     const handleHit = selectedType === 'sheetViewport' && selectedId
       ? hitTestViewportHandle(point, scene.viewports.filter((entry) => entry.id === selectedId), 6 / viewport.zoom)
       : null;
@@ -99,7 +116,21 @@ export default function SheetCanvas() {
     if (!dragState.current || !sheet) return;
 
     const point = getSheetPos(event);
-    const { initialViewport, origin, mode, handle, viewportId } = dragState.current;
+    const { mode } = dragState.current;
+
+    if (mode === 'rotate') {
+      const { center, initialRotation, startAngle, viewportId } = dragState.current;
+      const currentAngle = Math.atan2(point.y - center.y, point.x - center.x) * (180 / Math.PI);
+      let newRotation = initialRotation + (currentAngle - startAngle);
+      if (event.shiftKey) {
+        newRotation = Math.round(newRotation / 15) * 15;
+      }
+      newRotation = ((newRotation % 360) + 360) % 360;
+      updateViewport(viewportId, { rotation: newRotation });
+      return;
+    }
+
+    const { initialViewport, origin, handle, viewportId } = dragState.current;
     const dx = point.x - origin.x;
     const dy = point.y - origin.y;
 

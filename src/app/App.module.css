@@ -27,13 +27,79 @@
 .canvas {
   grid-area: canvas;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.04), inset -1px 0 3px rgba(0, 0, 0, 0.04);
 }
 
 .properties {
   grid-area: properties;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modelWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 28vw);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.primaryCanvas {
+  min-width: 0;
+  min-height: 0;
+}
+
+.preview {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.previewFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-left: 1px solid var(--color-border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(243, 243, 240, 0.92));
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .panelHidden {
   display: none;
+}
+
+.workspaceMaximized {
+  grid-template-columns: 1fr;
+}
+
+.previewHidden {
+  display: none;
+}
+
+.primaryCanvasHidden {
+  display: none;
+}
+
+@media (max-width: 1200px) {
+  .modelWorkspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 280px;
+  }
+
+  .previewFallback {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+  }
 }

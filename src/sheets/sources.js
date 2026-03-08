@@ -1,13 +1,15 @@
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
-import { buildElevationScene } from '@/elevations/scene';
+import { buildProjectElevationScene } from '@/elevations/scene';
+import { getDefaultActiveFloorId, resolveProjectFloor } from '@/domain/floorModels';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
+import { landingOutline } from '@/geometry/landingGeometry';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 import { getSlabRenderData } from '@/geometry/slabGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
-import { buildSectionScene } from '@/sections/scene';
+import { buildProjectSectionScene } from '@/sections/scene';
 
 const PLAN_PADDING = 1500;
 const VERTICAL_PADDING = 700;
@@ -49,17 +51,21 @@ function collectPlanPoints(floor) {
     const renderData = getStairRenderData(stair);
     if (renderData?.outline) points.push(...renderData.outline);
   }
+  for (const landing of floor.landings || []) {
+    points.push(...landingOutline(landing));
+  }
   for (const column of floor.columns || []) {
     points.push(...columnOutline(column));
   }
-  if (floor.slab) {
-    points.push(...(getSlabRenderData(floor.slab)?.boundaryPoints || []));
+  for (const slab of (floor.slabs || [])) {
+    const rd = getSlabRenderData(slab);
+    if (rd?.boundaryPoints) points.push(...rd.boundaryPoints);
   }
-  if (floor.sectionCut) {
-    points.push(floor.sectionCut.startPoint, floor.sectionCut.endPoint);
-    const renderData = getSectionCutRenderData(floor.sectionCut);
+  for (const sc of (floor.sectionCuts || [])) {
+    points.push(sc.startPoint, sc.endPoint);
+    const renderData = getSectionCutRenderData(sc);
     if (renderData?.arrow) {
-      points.push(renderData.arrow.tip, renderData.arrow.left, renderData.arrow.right);
+      points.push(renderData.arrow.shaftStart, renderData.arrow.shaftEnd, renderData.arrow.headA, renderData.arrow.headB);
     }
   }
 
@@ -109,8 +115,13 @@ function sceneBoundsToRenderBounds(scene) {
   };
 }
 
-function buildSectionSource(floor, sourceRefId) {
-  if (!floor?.sectionCut) {
+function buildSectionSource(project, floor, sourceRefId) {
+  const cuts = floor?.sectionCuts || [];
+  const sectionCut = sourceRefId
+    ? cuts.find(s => s.id === sourceRefId)
+    : cuts[0] || null;
+
+  if (!sectionCut) {
     return {
       kind: 'empty',
       title: 'Section',
@@ -119,26 +130,17 @@ function buildSectionSource(floor, sourceRefId) {
     };
   }
 
-  if (sourceRefId && floor.sectionCut.id !== sourceRefId) {
-    return {
-      kind: 'empty',
-      title: 'Section',
-      message: 'Section source not found.',
-      bounds: { minX: 0, maxX: 2000, minY: -3000, maxY: 1000 },
-    };
-  }
-
-  const scene = buildSectionScene(floor);
+  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
   return {
     kind: 'section',
-    title: floor.sectionCut.label || 'Section',
+    title: sectionCut.label || 'Section',
     floor,
     scene,
     bounds: sceneBoundsToRenderBounds(scene),
   };
 }
 
-function buildElevationSource(floor, sourceView) {
+function buildElevationSource(project, floor, sourceView) {
   if (!floor) {
     return {
       kind: 'empty',
@@ -148,7 +150,7 @@ function buildElevationSource(floor, sourceView) {
     };
   }
 
-  const scene = buildElevationScene(floor, sourceView);
+  const scene = buildProjectElevationScene(project, floor.id, sourceView);
   const annotationScene = buildElevationAnnotationScene(floor, scene);
 
   return {
@@ -162,19 +164,49 @@ function buildElevationSource(floor, sourceView) {
   };
 }
 
+function build3DPreviewSource(project, floor) {
+  if (!floor) {
+    return {
+      kind: 'empty',
+      title: '3D Preview',
+      message: 'Missing floor.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+    };
+  }
+
+  // Use 16:10 aspect ratio matching render resolution (1600x1000).
+  // At scale 100, this fills a 160x100mm viewport on paper.
+  const imageWidth = 16000;
+  const imageHeight = 10000;
+
+  return {
+    kind: '3d_preview',
+    title: '3D Preview',
+    project,
+    activeFloorId: floor.id,
+    bounds: {
+      minX: 0,
+      maxX: imageWidth,
+      minY: 0,
+      maxY: imageHeight,
+    },
+  };
+}
+
 export function resolveSheetViewportSource(project, viewport) {
-  const floor = (project.floors || []).find((entry) => entry.id === viewport.sourceFloorId)
-    || project.floors?.[0]
-    || null;
+  const defaultFloorId = getDefaultActiveFloorId(project, viewport.sourceFloorId);
+  const floor = resolveProjectFloor(project, defaultFloorId);
 
   switch (viewport.sourceView) {
+    case '3d_preview':
+      return build3DPreviewSource(project, floor);
     case 'section':
-      return buildSectionSource(floor, viewport.sourceRefId);
+      return buildSectionSource(project, floor, viewport.sourceRefId);
     case 'elevation_front':
     case 'elevation_rear':
     case 'elevation_left':
     case 'elevation_right':
-      return buildElevationSource(floor, viewport.sourceView);
+      return buildElevationSource(project, floor, viewport.sourceView);
     case 'plan':
     default:
       return buildPlanSource(floor);
@@ -183,6 +215,8 @@ export function resolveSheetViewportSource(project, viewport) {
 
 export function getViewportSourceLabel(sourceView) {
   switch (sourceView) {
+    case '3d_preview':
+      return '3D Preview';
     case 'section':
       return 'Section';
     case 'elevation_front':

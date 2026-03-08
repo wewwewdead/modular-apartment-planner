@@ -4,6 +4,7 @@ const MM_TO_PT = 72 / 25.4;
 const ARC_SEGMENTS = 10;
 const MM_PER_INCH = 25.4;
 const DEFAULT_PNG_DPI = 300;
+const JPEG_QUALITY = 0.92;
 
 function sanitizeFileName(name = 'sheet') {
   return name
@@ -99,7 +100,46 @@ function getCanvasScaleFromDpi(dpi) {
   return Math.max(1, (Number(dpi) || DEFAULT_PNG_DPI) / MM_PER_INCH);
 }
 
-async function renderSvgToCanvas(svgElement, dpi = DEFAULT_PNG_DPI) {
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function preloadSvgImages(svgElement) {
+  const imageMap = new Map();
+  const imageElements = svgElement.querySelectorAll('image');
+  for (const el of imageElements) {
+    const href = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    if (!href || imageMap.has(href)) continue;
+    try {
+      const img = await loadImage(href);
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = w;
+      tempCanvas.height = h;
+      const ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const jpegDataUrl = tempCanvas.toDataURL('image/jpeg', JPEG_QUALITY);
+      const base64 = jpegDataUrl.split(',')[1];
+      const binaryString = atob(base64);
+      const jpegBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        jpegBytes[i] = binaryString.charCodeAt(i);
+      }
+      imageMap.set(href, { img, width: w, height: h, jpegBytes });
+    } catch {
+      // skip images that fail to load
+    }
+  }
+  return imageMap;
+}
+
+async function renderSvgToCanvas(svgElement, dpi = DEFAULT_PNG_DPI, imageMap = new Map()) {
   const width = Number(svgElement.getAttribute('width')) || 100;
   const height = Number(svgElement.getAttribute('height')) || 100;
   const scale = getCanvasScaleFromDpi(dpi);
@@ -110,7 +150,7 @@ async function renderSvgToCanvas(svgElement, dpi = DEFAULT_PNG_DPI) {
   context.fillStyle = '#ffffff';
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.scale(scale, scale);
-  [...svgElement.children].forEach((child) => drawElementToCanvas(context, child));
+  [...svgElement.children].forEach((child) => drawElementToCanvas(context, child, imageMap));
   return { canvas };
 }
 
@@ -457,6 +497,7 @@ class PdfBuilder {
     this.pageHeightPt = pageHeightPt;
     this.content = [];
     this.alphaMap = new Map();
+    this.images = [];
   }
 
   write(line) {
@@ -504,13 +545,20 @@ class PdfBuilder {
     }
   }
 
+  addImage(jpegBytes, pixelWidth, pixelHeight) {
+    const name = `Im${this.images.length + 1}`;
+    this.images.push({ name, jpegBytes, pixelWidth, pixelHeight });
+    return name;
+  }
+
   finish() {
     const encoder = new TextEncoder();
     const contentStream = encoder.encode(this.content.join(''));
     const alphaObjects = [...this.alphaMap.values()];
     const fontObjectNumber = 4;
     const firstAlphaObjectNumber = 5;
-    const contentObjectNumber = firstAlphaObjectNumber + alphaObjects.length;
+    const firstImageObjectNumber = firstAlphaObjectNumber + alphaObjects.length;
+    const contentObjectNumber = firstImageObjectNumber + this.images.length;
     const totalObjects = contentObjectNumber;
     const objects = [];
 
@@ -521,8 +569,16 @@ class PdfBuilder {
       .map((entry, index) => `/${entry.name} ${firstAlphaObjectNumber + index} 0 R`)
       .join(' ');
 
+    const xObjectEntries = this.images
+      .map((entry, index) => `/${entry.name} ${firstImageObjectNumber + index} 0 R`)
+      .join(' ');
+
+    let resources = `/Font << /F1 ${fontObjectNumber} 0 R >>`;
+    if (extGStateEntries) resources += ` /ExtGState << ${extGStateEntries} >>`;
+    if (xObjectEntries) resources += ` /XObject << ${xObjectEntries} >>`;
+
     objects[3] = encoder.encode(
-      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(this.pageWidthPt)} ${fmt(this.pageHeightPt)}] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >>${extGStateEntries ? ` /ExtGState << ${extGStateEntries} >>` : ''} >> /Contents ${contentObjectNumber} 0 R >>\nendobj\n`
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(this.pageWidthPt)} ${fmt(this.pageHeightPt)}] /Resources << ${resources} >> /Contents ${contentObjectNumber} 0 R >>\nendobj\n`
     );
     objects[4] = encoder.encode('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
 
@@ -530,6 +586,19 @@ class PdfBuilder {
       objects[firstAlphaObjectNumber + index] = encoder.encode(
         `${firstAlphaObjectNumber + index} 0 obj\n<< /Type /ExtGState /ca ${fmt(entry.fill)} /CA ${fmt(entry.stroke)} >>\nendobj\n`
       );
+    });
+
+    this.images.forEach((entry, index) => {
+      const objNum = firstImageObjectNumber + index;
+      const headerBytes = encoder.encode(
+        `${objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${entry.pixelWidth} /Height ${entry.pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${entry.jpegBytes.length} >>\nstream\n`
+      );
+      const footerBytes = encoder.encode('\nendstream\nendobj\n');
+      const combined = new Uint8Array(headerBytes.length + entry.jpegBytes.length + footerBytes.length);
+      combined.set(headerBytes, 0);
+      combined.set(entry.jpegBytes, headerBytes.length);
+      combined.set(footerBytes, headerBytes.length + entry.jpegBytes.length);
+      objects[objNum] = combined;
     });
 
     const contentHeader = encoder.encode(
@@ -735,14 +804,25 @@ function drawTextToCanvas(context, element) {
   context.restore();
 }
 
-function drawElementToCanvas(context, element) {
+function drawImageToCanvas(context, element, imageMap) {
+  const href = element.getAttribute('href') || element.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+  const entry = href && imageMap.get(href);
+  if (!entry) return;
+  const x = Number(element.getAttribute('x')) || 0;
+  const y = Number(element.getAttribute('y')) || 0;
+  const width = Number(element.getAttribute('width')) || entry.width;
+  const height = Number(element.getAttribute('height')) || entry.height;
+  context.drawImage(entry.img, x, y, width, height);
+}
+
+function drawElementToCanvas(context, element, imageMap) {
   const tagName = element.tagName.toLowerCase();
   beginCanvasNode(context, element);
 
   switch (tagName) {
     case 'svg':
     case 'g':
-      [...element.children].forEach((child) => drawElementToCanvas(context, child));
+      [...element.children].forEach((child) => drawElementToCanvas(context, child, imageMap));
       break;
     case 'rect':
       drawRectToCanvas(context, element);
@@ -762,8 +842,11 @@ function drawElementToCanvas(context, element) {
     case 'text':
       drawTextToCanvas(context, element);
       break;
+    case 'image':
+      drawImageToCanvas(context, element, imageMap);
+      break;
     default:
-      [...element.children].forEach((child) => drawElementToCanvas(context, child));
+      [...element.children].forEach((child) => drawElementToCanvas(context, child, imageMap));
       break;
   }
 
@@ -892,14 +975,29 @@ function renderText(builder, element) {
   lines.forEach((line) => renderTextLine(builder, line.text, line.x, line.y, style));
 }
 
-function walkElement(builder, element) {
+function renderImage(builder, element, imageMap) {
+  const href = element.getAttribute('href') || element.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+  const entry = href && imageMap.get(href);
+  if (!entry) return;
+  const x = Number(element.getAttribute('x')) || 0;
+  const y = Number(element.getAttribute('y')) || 0;
+  const width = Number(element.getAttribute('width')) || entry.width;
+  const height = Number(element.getAttribute('height')) || entry.height;
+  const imgName = builder.addImage(entry.jpegBytes, entry.width, entry.height);
+  builder.write('q');
+  builder.write(`${fmt(width)} 0 0 ${fmt(-height)} ${fmt(x)} ${fmt(y + height)} cm`);
+  builder.write(`/${imgName} Do`);
+  builder.write('Q');
+}
+
+function walkElement(builder, element, imageMap) {
   const tagName = element.tagName.toLowerCase();
   const wrapped = beginNode(builder, element);
 
   switch (tagName) {
     case 'svg':
     case 'g':
-      [...element.children].forEach((child) => walkElement(builder, child));
+      [...element.children].forEach((child) => walkElement(builder, child, imageMap));
       break;
     case 'rect':
       renderRect(builder, element);
@@ -919,15 +1017,18 @@ function walkElement(builder, element) {
     case 'text':
       renderText(builder, element);
       break;
+    case 'image':
+      renderImage(builder, element, imageMap);
+      break;
     default:
-      [...element.children].forEach((child) => walkElement(builder, child));
+      [...element.children].forEach((child) => walkElement(builder, child, imageMap));
       break;
   }
 
   endNode(builder, wrapped);
 }
 
-function buildVectorPdfFromSvg(svgElement, paperSize) {
+function buildVectorPdfFromSvg(svgElement, paperSize, imageMap = new Map()) {
   const paper = getPaperPreset(paperSize);
   const pageWidthPt = paper.width * MM_TO_PT;
   const pageHeightPt = paper.height * MM_TO_PT;
@@ -935,7 +1036,7 @@ function buildVectorPdfFromSvg(svgElement, paperSize) {
 
   builder.write('q');
   builder.write(`${fmt(MM_TO_PT)} 0 0 ${fmt(-MM_TO_PT)} 0 ${fmt(pageHeightPt)} cm`);
-  [...svgElement.children].forEach((child) => walkElement(builder, child));
+  [...svgElement.children].forEach((child) => walkElement(builder, child, imageMap));
   builder.write('Q');
 
   return builder.finish();
@@ -945,7 +1046,8 @@ export async function exportActiveSheetAsPng(sheetTitle = 'sheet', options = {})
   const svgElement = getExportSvg();
   if (!svgElement) throw new Error('No sheet export source is available.');
   const { dpi = DEFAULT_PNG_DPI } = options;
-  const { canvas } = await renderSvgToCanvas(svgElement, dpi);
+  const imageMap = await preloadSvgImages(svgElement);
+  const { canvas } = await renderSvgToCanvas(svgElement, dpi, imageMap);
 
   await new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -962,6 +1064,7 @@ export async function exportActiveSheetAsPng(sheetTitle = 'sheet', options = {})
 export async function exportActiveSheetAsPdf(sheetTitle = 'sheet', paperSize = 'A3_LANDSCAPE') {
   const svgElement = getExportSvg();
   if (!svgElement) throw new Error('No sheet export source is available.');
-  const pdfBlob = buildVectorPdfFromSvg(svgElement, paperSize);
+  const imageMap = await preloadSvgImages(svgElement);
+  const pdfBlob = buildVectorPdfFromSvg(svgElement, paperSize, imageMap);
   downloadBlob(pdfBlob, `${sanitizeFileName(sheetTitle)}.pdf`);
 }

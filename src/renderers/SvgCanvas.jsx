@@ -1,9 +1,13 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { useEditor } from '@/app/EditorProvider';
 import { useProject } from '@/app/ProjectProvider';
+import { usePlanClipboardController } from '@/clipboard/usePlanClipboardController';
+import { normalizeRectBounds } from '@/clipboard/planClipboard';
+import { getFloorElevation } from '@/domain/floorModels';
 import { useEditorTool } from '@/editor/useEditorTool';
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { TOOLS } from '@/editor/tools';
+import ClipboardPreviewLayer from './ClipboardPreviewLayer';
 import GridRenderer from './GridRenderer';
 import SlabRenderer from './SlabRenderer';
 import WallRenderer from './WallRenderer';
@@ -18,6 +22,8 @@ import SectionRenderer from './SectionRenderer';
 import SelectionOverlay from './SelectionOverlay';
 import DimensionPreview from './DimensionPreview';
 import WallPreview from './WallPreview';
+import LandingRenderer from './LandingRenderer';
+import LandingPreview from './LandingPreview';
 import ColumnRenderer from './ColumnRenderer';
 import ColumnPreview from './ColumnPreview';
 import BeamPreview from './BeamPreview';
@@ -27,6 +33,8 @@ import DoorWindowPreview from './DoorWindowPreview';
 import RoomPreview from './RoomPreview';
 import SectionCutRenderer from './SectionCutRenderer';
 import SectionCutPreview from './SectionCutPreview';
+import RegionSelectionOverlay from './RegionSelectionOverlay';
+import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import { isTypingTarget } from '@/utils/keyboard';
 import styles from './SvgCanvas.module.css';
 
@@ -41,22 +49,34 @@ export default function SvgCanvas() {
   const isPanning = useRef(false);
   const lastPanPos = useRef({ x: 0, y: 0 });
   const spaceHeld = useRef(false);
+  const cursorPosRef = useRef({ x: 0, y: 0 });
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
 
   const { project, dispatch, getFloor } = useProject();
   const editor = useEditor();
   const {
     activeTool, selectedId, selectedType, toolState,
-    viewport, showGrid, snapEnabled, activeFloorId, statusMessage, viewMode,
+    viewport, showGrid, snapEnabled, activeFloorId, statusMessage, viewMode, activeSectionCutId,
+    regionSelection, pastePreview, maximizedPanel,
     dispatch: editorDispatch,
   } = editor;
 
   const floor = getFloor(activeFloorId);
+  const {
+    copySelection,
+    cutSelection,
+    beginPaste,
+    updatePastePreview,
+    cancelPaste,
+    placePaste,
+    previewContent,
+  } = usePlanClipboardController();
 
   const tool = useEditorTool({
     activeTool,
     dispatch,
     editorDispatch,
+    project,
     getFloor,
     activeFloorId,
     viewport,
@@ -82,8 +102,12 @@ export default function SvgCanvas() {
     }
 
     const modelPos = getModelPos(e);
+    if (pastePreview?.active && e.button === 0) {
+      placePaste(modelPos);
+      return;
+    }
     tool.onMouseDown(modelPos, e);
-  }, [getModelPos, tool]);
+  }, [getModelPos, pastePreview, placePaste, tool]);
 
   const handleMouseMove = useCallback((e) => {
     if (isPanning.current) {
@@ -95,23 +119,30 @@ export default function SvgCanvas() {
     }
 
     const modelPos = getModelPos(e);
+    cursorPosRef.current = modelPos;
     setCursorPos(modelPos);
+    if (pastePreview?.active) {
+      updatePastePreview(modelPos);
+      return;
+    }
     tool.onMouseMove(modelPos, e);
-  }, [getModelPos, tool, editorDispatch]);
+  }, [getModelPos, pastePreview, tool, updatePastePreview, editorDispatch]);
 
   const handleMouseUp = useCallback((e) => {
     if (isPanning.current) {
       isPanning.current = false;
       return;
     }
+    if (pastePreview?.active) return;
     const modelPos = getModelPos(e);
     tool.onMouseUp(modelPos, e);
-  }, [getModelPos, tool]);
+  }, [getModelPos, pastePreview, tool]);
 
   const handleDoubleClick = useCallback((e) => {
+    if (pastePreview?.active) return;
     const modelPos = getModelPos(e);
     tool.onDoubleClick(modelPos, e);
-  }, [getModelPos, tool]);
+  }, [getModelPos, pastePreview, tool]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -147,6 +178,31 @@ export default function SvgCanvas() {
       if (e.key === ' ') {
         spaceHeld.current = true;
         e.preventDefault();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && viewMode === 'plan') {
+        const key = e.key.toLowerCase();
+        if (key === 'c') {
+          e.preventDefault();
+          copySelection();
+          return;
+        }
+        if (key === 'x') {
+          e.preventDefault();
+          cutSelection();
+          return;
+        }
+        if (key === 'v') {
+          e.preventDefault();
+          beginPaste(cursorPosRef.current);
+          return;
+        }
+      }
+
+      if (e.key === 'Escape' && pastePreview?.active) {
+        e.preventDefault();
+        cancelPaste();
+        return;
       }
 
       // Tool shortcuts
@@ -185,6 +241,9 @@ export default function SvgCanvas() {
           case 'c':
             editorDispatch({ type: 'SET_TOOL', tool: TOOLS.COLUMN });
             return;
+          case 'l':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.LANDING });
+            return;
         }
       }
 
@@ -205,7 +264,7 @@ export default function SvgCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [tool, editorDispatch, viewMode]);
+  }, [beginPaste, cancelPaste, copySelection, cutSelection, pastePreview?.active, tool, editorDispatch, viewMode]);
 
   // Prevent default context menu on SVG
   useEffect(() => {
@@ -220,8 +279,14 @@ export default function SvgCanvas() {
     };
   }, [handleWheel]);
 
-  const cursor = spaceHeld.current ? 'grab' : tool.getCursor();
+  const cursor = spaceHeld.current ? 'grab' : pastePreview?.active ? 'copy' : tool.getCursor();
   const zoomPercent = Math.round(viewport.zoom * 1000);
+  const displayedTool = viewMode.startsWith('elevation_') ? 'select' : activeTool;
+  const isCanvasMaximized = maximizedPanel === 'canvas';
+  const marqueeBounds = toolState.dragType === 'marquee' && toolState.startPos && toolState.currentPos
+    ? normalizeRectBounds(toolState.startPos, toolState.currentPos)
+    : null;
+  const selectionCount = regionSelection?.objectCount || 0;
 
   return (
     <div className={styles.canvasContainer}>
@@ -247,17 +312,27 @@ export default function SvgCanvas() {
           {floor && (
             viewMode === 'plan' ? (
               <>
-                <SlabRenderer slab={floor.slab} selectedId={selectedId} />
+                {(floor.slabs || []).map(slab => (
+                  <SlabRenderer key={slab.id} slab={slab} selectedId={selectedId} />
+                ))}
                 <RoomRenderer rooms={floor.rooms} selectedId={selectedId} />
                 <RoomPreview toolState={toolState} activeTool={activeTool} />
                 <WallRenderer walls={floor.walls} columns={floor.columns || []} />
                 <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
                 <StairRenderer stairs={floor.stairs || []} />
+                <LandingRenderer landings={floor.landings || []} />
                 <ColumnRenderer columns={floor.columns || []} />
                 <DoorRenderer doors={floor.doors} walls={floor.walls} />
                 <WindowRenderer windows={floor.windows} walls={floor.walls} />
-                <SectionCutRenderer sectionCut={floor.sectionCut} selectedId={selectedId} />
+                {(floor.sectionCuts || []).map(sc => (
+                  <SectionCutRenderer key={sc.id} sectionCut={sc} selectedId={selectedId} />
+                ))}
                 <AnnotationRenderer floor={floor} />
+                <ClipboardPreviewLayer content={previewContent} />
+                <RegionSelectionOverlay
+                  marqueeBounds={marqueeBounds}
+                  selectionBounds={regionSelection?.bounds || null}
+                />
                 <SelectionOverlay
                   selectedId={selectedId}
                   selectedType={selectedType}
@@ -271,7 +346,7 @@ export default function SvgCanvas() {
                   toolState={toolState}
                   activeTool={activeTool}
                   columns={floor.columns || []}
-                  floorLevel={floor.level}
+                  floorLevel={getFloorElevation(floor)}
                 />
                 <StairPreview
                   toolState={toolState}
@@ -285,21 +360,42 @@ export default function SvgCanvas() {
                 />
                 <SectionCutPreview toolState={toolState} activeTool={activeTool} />
                 <ColumnPreview toolState={toolState} activeTool={activeTool} />
+                <LandingPreview toolState={toolState} activeTool={activeTool} />
               </>
             ) : viewMode === 'section_view' ? (
-              <SectionRenderer floor={floor} />
+              <SectionRenderer
+                project={project}
+                floor={floor}
+                activeSectionCutId={activeSectionCutId}
+              />
             ) : (
-              <ElevationRenderer floor={floor} viewMode={viewMode} />
+              <ElevationRenderer
+                project={project}
+                floor={floor}
+                viewMode={viewMode}
+                selectedId={selectedId}
+                selectedType={selectedType}
+              />
             )
           )}
         </g>
       </svg>
+      <button
+        className={styles.expandBtn}
+        onClick={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'canvas' })}
+        title={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
+        aria-label={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
+      >
+        {isCanvasMaximized ? <CollapseIcon /> : <ExpandIcon />}
+      </button>
       <div className={styles.statusBar}>
         <span>X: {Math.round(cursorPos.x)} mm</span>
         <span>Y: {Math.round(cursorPos.y)} mm</span>
         <span>Zoom: {zoomPercent}%</span>
         <span>View: {viewMode}</span>
-        <span>Tool: {activeTool}</span>
+        <span>Tool: {displayedTool}</span>
+        {selectionCount > 0 && <span>Selection: {selectionCount} objects</span>}
+        {pastePreview?.active && <span>Paste: click to place</span>}
         {statusMessage && <span className={styles.statusMessage}>{statusMessage}</span>}
       </div>
     </div>

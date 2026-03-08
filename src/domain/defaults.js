@@ -16,7 +16,7 @@ export const MIN_ZOOM = 0.02;
 export const MAX_ZOOM = 2.0;
 export const ZOOM_FACTOR = 1.1;
 
-export const GRID_MINOR = 100;   // mm
+export const GRID_MINOR = 50;    // mm
 export const GRID_MAJOR = 1000;  // mm
 
 export const PREVIEW_LABEL_OFFSET = 150;
@@ -34,7 +34,11 @@ export const SLAB_THICKNESS = 200; // mm
 export const SLAB_ELEVATION = 0;   // mm
 export const SECTION_DEPTH = 2000; // mm
 
+export const LANDING_WIDTH = 1000;  // mm
+export const LANDING_DEPTH = 1000;  // mm
+export const LANDING_THICKNESS = 200; // mm
+
 export const ROOM_COLOR = '#E8F0FE';
 
-export const ENDPOINT_MERGE_TOLERANCE = 5; // mm
+export const ENDPOINT_MERGE_TOLERANCE = 1; // mm
 export const MIN_ROOM_AREA = 100000; // mm² (0.1 m²)

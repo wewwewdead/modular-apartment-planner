@@ -1,5 +1,7 @@
 import { DOOR_HEIGHT, DOOR_SILL_HEIGHT, SLAB_ELEVATION, SLAB_THICKNESS, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, STAIR_WIDTH, WALL_HEIGHT, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT } from '@/domain/defaults';
+import { createFloor } from '@/domain/models';
 import { createAnnotationSettings } from '@/domain/models';
+import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, sortFloors } from '@/domain/floorModels';
 
 export function deserializeProject(json) {
   if (!json || !json.version || !json.data) {
@@ -20,6 +22,10 @@ export function deserializeProject(json) {
     project.sheets = [];
   }
 
+  if (project.floors.length === 0) {
+    project.floors = [createFloor('Ground Floor', 0)];
+  }
+
   for (const floor of project.floors) {
     if (!floor.id || !Array.isArray(floor.walls)) {
       throw new Error('Invalid floor structure');
@@ -27,13 +33,25 @@ export function deserializeProject(json) {
   }
 
   // Backfill missing room fields for old saves
-  for (const floor of project.floors) {
+  project.floors.forEach((floor, index) => {
+    if (!floor.name) floor.name = index === 0 ? 'Ground Floor' : `Floor ${index}`;
+    if (floor.levelIndex === undefined) {
+      floor.levelIndex = floor.level ?? index;
+    }
+    if (floor.floorToFloorHeight === undefined) {
+      floor.floorToFloorHeight = WALL_HEIGHT;
+    }
+    if (floor.elevation === undefined) {
+      floor.elevation = floor.level ?? (floor.levelIndex * floor.floorToFloorHeight);
+    }
+    delete floor.level;
+
     if (!floor.rooms) floor.rooms = [];
     for (const room of floor.rooms) {
       if (!room.points) room.points = [];
       if (room.area === undefined) room.area = 0;
     }
-  }
+  });
 
   // Backfill door/window type fields for old saves
   for (const floor of project.floors) {
@@ -53,10 +71,21 @@ export function deserializeProject(json) {
     if (!floor.columns) floor.columns = [];
     if (!floor.beams) floor.beams = [];
     if (!floor.stairs) floor.stairs = [];
+    if (!floor.landings) floor.landings = [];
     if (!floor.annotations) floor.annotations = [];
     floor.annotationSettings = createAnnotationSettings(floor.annotationSettings || {});
-    if (floor.slab === undefined) floor.slab = null;
-    if (floor.sectionCut === undefined) floor.sectionCut = null;
+    // Migrate single slab → slabs array
+    if (floor.slab !== undefined) {
+      floor.slabs = floor.slab ? [floor.slab] : [];
+      delete floor.slab;
+    }
+    if (!Array.isArray(floor.slabs)) floor.slabs = [];
+    // Migrate single sectionCut → sectionCuts array
+    if (floor.sectionCut !== undefined) {
+      floor.sectionCuts = floor.sectionCut ? [floor.sectionCut] : [];
+      delete floor.sectionCut;
+    }
+    if (!Array.isArray(floor.sectionCuts)) floor.sectionCuts = [];
     for (const wall of floor.walls) {
       if (wall.height === undefined) wall.height = WALL_HEIGHT;
       if (wall.startAttachment === undefined) wall.startAttachment = null;
@@ -68,7 +97,7 @@ export function deserializeProject(json) {
       }
     }
     for (const beam of floor.beams) {
-      if (beam.floorLevel === undefined) beam.floorLevel = floor.level ?? 0;
+      if (beam.floorLevel === undefined) beam.floorLevel = getFloorElevation(floor, index);
     }
     for (const stair of floor.stairs) {
       if (!stair.startPoint) stair.startPoint = { x: 0, y: 0 };
@@ -89,6 +118,16 @@ export function deserializeProject(json) {
         if (stair.floorRelation.fromFloorId === undefined) stair.floorRelation.fromFloorId = floor.id;
         if (stair.floorRelation.toFloorId === undefined) stair.floorRelation.toFloorId = floor.id;
       }
+      if (stair.startLandingAttachment === undefined) stair.startLandingAttachment = null;
+      if (stair.endLandingAttachment === undefined) stair.endLandingAttachment = null;
+    }
+    for (const landing of floor.landings) {
+      if (!landing.position) landing.position = { x: 0, y: 0 };
+      if (landing.width === undefined) landing.width = 1000;
+      if (landing.depth === undefined) landing.depth = 1000;
+      if (landing.thickness === undefined) landing.thickness = 200;
+      if (landing.elevation === undefined) landing.elevation = 0;
+      if (landing.rotation === undefined) landing.rotation = 0;
     }
     for (const annotation of floor.annotations) {
       if (!annotation.id) {
@@ -101,25 +140,32 @@ export function deserializeProject(json) {
       if (annotation.offset === undefined) annotation.offset = 300;
       if (annotation.textOverride === undefined) annotation.textOverride = '';
     }
-    if (floor.slab) {
-      if (!floor.slab.floorId) floor.slab.floorId = floor.id;
-      if (!floor.slab.boundaryPoints) floor.slab.boundaryPoints = [];
-      if (floor.slab.thickness === undefined) floor.slab.thickness = SLAB_THICKNESS;
-      if (floor.slab.elevation === undefined) floor.slab.elevation = SLAB_ELEVATION;
-      if (floor.slab.name === undefined) floor.slab.name = '';
-      if (floor.slab.type === undefined) floor.slab.type = '';
+    for (const slab of floor.slabs) {
+      if (!slab.floorId) slab.floorId = floor.id;
+      if (!slab.boundaryPoints) slab.boundaryPoints = [];
+      if (slab.thickness === undefined) slab.thickness = SLAB_THICKNESS;
+      if (slab.elevation === undefined) slab.elevation = SLAB_ELEVATION;
+      if (slab.name === undefined) slab.name = '';
+      if (slab.type === undefined) slab.type = '';
     }
-    if (floor.sectionCut) {
-      if (!floor.sectionCut.id) {
-        floor.sectionCut.id = `section_${floor.id}_${Math.random().toString(36).slice(2, 8)}`;
+    for (const sc of floor.sectionCuts) {
+      if (!sc.id) {
+        sc.id = `section_${floor.id}_${Math.random().toString(36).slice(2, 8)}`;
       }
-      if (!floor.sectionCut.startPoint) floor.sectionCut.startPoint = { x: 0, y: 0 };
-      if (!floor.sectionCut.endPoint) floor.sectionCut.endPoint = { x: 1000, y: 0 };
-      if (floor.sectionCut.depth === undefined) floor.sectionCut.depth = 2000;
-      if (floor.sectionCut.label === undefined) floor.sectionCut.label = 'Section A-A';
-      if (floor.sectionCut.direction === undefined) floor.sectionCut.direction = 1;
+      if (!sc.startPoint) sc.startPoint = { x: 0, y: 0 };
+      if (!sc.endPoint) sc.endPoint = { x: 1000, y: 0 };
+      if (sc.depth === undefined) sc.depth = 2000;
+      if (sc.label === undefined) sc.label = 'Section A-A';
+      if (sc.direction === undefined) sc.direction = 1;
     }
   }
+
+  project.floors = sortFloors(project.floors).map((floor, index) => ({
+    ...floor,
+    levelIndex: getFloorLevelIndex(floor, index),
+    elevation: getFloorElevation(floor, index),
+    floorToFloorHeight: getFloorToFloorHeight(floor),
+  }));
 
   for (const sheet of project.sheets) {
     if (!sheet.id) {
@@ -137,7 +183,7 @@ export function deserializeProject(json) {
         viewport.id = `viewport_${sheet.id}_${Math.random().toString(36).slice(2, 8)}`;
       }
       if (viewport.sourceView === undefined) viewport.sourceView = 'plan';
-      if (viewport.sourceFloorId === undefined) viewport.sourceFloorId = project.floors[0]?.id ?? null;
+      if (viewport.sourceFloorId === undefined) viewport.sourceFloorId = getDefaultActiveFloorId(project);
       if (viewport.sourceRefId === undefined) viewport.sourceRefId = null;
       if (viewport.x === undefined) viewport.x = 20;
       if (viewport.y === undefined) viewport.y = 20;
@@ -145,6 +191,7 @@ export function deserializeProject(json) {
       if (viewport.height === undefined) viewport.height = 100;
       if (viewport.scale === undefined) viewport.scale = 100;
       if (viewport.title === undefined) viewport.title = '';
+      if (viewport.rotation === undefined) viewport.rotation = 0;
     }
   }
 

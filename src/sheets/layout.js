@@ -51,6 +51,7 @@ function buildViewportFrame(viewport, source) {
 
   return {
     ...viewport,
+    rotation: viewport.rotation || 0,
     title: resolveViewportTitle(viewport, source),
     source,
     clipRect: {

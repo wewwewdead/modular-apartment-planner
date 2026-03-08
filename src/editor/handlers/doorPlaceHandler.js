@@ -59,12 +59,13 @@ export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, act
             previewWallId: wall.id,
             previewOffset: clampedOffset,
             previewBlocked: blocked,
+            openDirection: toolState.openDirection || 'left',
           },
         });
       } else {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { previewWallId: null, previewOffset: null, previewBlocked: false },
+          payload: { previewWallId: null, previewOffset: null, previewBlocked: false, openDirection: toolState.openDirection || 'left' },
         });
       }
     },
@@ -73,13 +74,21 @@ export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, act
       if (e.button !== 0) return;
       if (!toolState.previewWallId || toolState.previewBlocked) return;
 
-      const door = createDoor(toolState.previewWallId, toolState.previewOffset);
+      const openDir = toolState.openDirection || 'left';
+      const door = createDoor(toolState.previewWallId, toolState.previewOffset, DOOR_WIDTH, openDir);
       dispatch({ type: 'DOOR_ADD', floorId: activeFloorId, door });
     },
 
     onKeyDown(e, toolState) {
       if (e.key === 'Escape') {
         editorDispatch({ type: 'SET_TOOL', tool: 'select' });
+      }
+      if (e.key === 'f' || e.key === 'F') {
+        const flipped = toolState.openDirection === 'right' ? 'left' : 'right';
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { openDirection: flipped },
+        });
       }
     },
 

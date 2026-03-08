@@ -19,7 +19,7 @@ function rectPoints(element) {
   ].join(' ');
 }
 
-export default function ElevationSceneLayer({ scene, annotationScene, showTitle = true }) {
+export default function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selectedId = null, selectedType = null }) {
   if (!scene) return null;
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
@@ -43,14 +43,16 @@ export default function ElevationSceneLayer({ scene, annotationScene, showTitle 
       )}
       {scene.elements.map((element) => {
         const style = STYLE_MAP[element.style] || STYLE_MAP.wall;
+        const isSelected = element.category === selectedType && element.sourceId === selectedId;
         return (
           <polygon
             key={element.id}
             points={rectPoints(element)}
             fill={style.fill}
-            stroke={style.stroke}
-            strokeWidth={1}
+            stroke={isSelected ? 'var(--color-selection)' : style.stroke}
+            strokeWidth={isSelected ? 2 : 1}
             vectorEffect="non-scaling-stroke"
+            opacity={isSelected ? 0.95 : 1}
           />
         );
       })}

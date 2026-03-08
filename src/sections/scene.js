@@ -1,5 +1,7 @@
+import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjectFloor } from '@/domain/floorModels';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
+import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { segmentIntersection } from '@/geometry/line';
 import { pointInPolygon } from '@/geometry/polygon';
 import { projectPointToSectionCut, sectionCutLength } from '@/geometry/sectionCutGeometry';
@@ -105,6 +107,7 @@ function createFootprintRect(id, category, sourceId, sectionCut, polygon, bottom
 }
 
 function buildWallElements(floor, sectionCut) {
+  const floorElevation = getFloorElevation(floor);
   return (floor.walls || [])
     .map((wall) => {
       const outline = getWallRenderData(wall, floor.columns || []).outline;
@@ -114,8 +117,8 @@ function buildWallElements(floor, sectionCut) {
         wall.id,
         sectionCut,
         outline,
-        floor.level ?? 0,
-        (floor.level ?? 0) + (wall.height ?? 0),
+        floorElevation,
+        floorElevation + (wall.height ?? 0),
         sectionCut.depth
       );
     })
@@ -123,22 +126,23 @@ function buildWallElements(floor, sectionCut) {
 }
 
 function buildSlabElements(floor, sectionCut) {
-  if (!floor.slab?.boundaryPoints?.length) return [];
-  return [
-    createFootprintRect(
-      `section-slab-${floor.slab.id}`,
+  return (floor.slabs || [])
+    .filter(slab => slab.boundaryPoints?.length)
+    .map(slab => createFootprintRect(
+      `section-slab-${slab.id}`,
       'slab',
-      floor.slab.id,
+      slab.id,
       sectionCut,
-      floor.slab.boundaryPoints,
-      getSlabBottomLevel(floor.slab),
-      getSlabTopLevel(floor.slab),
+      slab.boundaryPoints,
+      getSlabBottomLevel(slab),
+      getSlabTopLevel(slab),
       sectionCut.depth
-    ),
-  ].filter(Boolean);
+    ))
+    .filter(Boolean);
 }
 
 function buildColumnElements(floor, sectionCut) {
+  const floorElevation = getFloorElevation(floor);
   return (floor.columns || [])
     .map((column) => createFootprintRect(
       `section-column-${column.id}`,
@@ -146,8 +150,8 @@ function buildColumnElements(floor, sectionCut) {
       column.id,
       sectionCut,
       columnOutline(column),
-      floor.level ?? 0,
-      (floor.level ?? 0) + column.height,
+      floorElevation,
+      floorElevation + column.height,
       sectionCut.depth
     ))
     .filter(Boolean);
@@ -173,6 +177,7 @@ function buildBeamElements(floor, sectionCut) {
 }
 
 function buildDoorElements(floor, sectionCut) {
+  const floorElevation = getFloorElevation(floor);
   return (floor.doors || [])
     .map((door) => {
       const wall = (floor.walls || []).find((entry) => entry.id === door.wallId);
@@ -184,8 +189,8 @@ function buildDoorElements(floor, sectionCut) {
         door.id,
         sectionCut,
         [info.p1, info.p2, info.p3, info.p4],
-        (floor.level ?? 0) + (door.sillHeight ?? 0),
-        (floor.level ?? 0) + (door.sillHeight ?? 0) + (door.height ?? 0),
+        floorElevation + (door.sillHeight ?? 0),
+        floorElevation + (door.sillHeight ?? 0) + (door.height ?? 0),
         sectionCut.depth
       );
     })
@@ -193,6 +198,7 @@ function buildDoorElements(floor, sectionCut) {
 }
 
 function buildWindowElements(floor, sectionCut) {
+  const floorElevation = getFloorElevation(floor);
   return (floor.windows || [])
     .map((windowItem) => {
       const wall = (floor.walls || []).find((entry) => entry.id === windowItem.wallId);
@@ -204,15 +210,16 @@ function buildWindowElements(floor, sectionCut) {
         windowItem.id,
         sectionCut,
         [info.p1, info.p2, info.p3, info.p4],
-        (floor.level ?? 0) + (windowItem.sillHeight ?? 0),
-        (floor.level ?? 0) + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
+        floorElevation + (windowItem.sillHeight ?? 0),
+        floorElevation + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
         sectionCut.depth
       );
     })
     .filter(Boolean);
 }
 
-function buildStairElements(floor, sectionCut) {
+function buildStairElements(floor, sectionCut, landingElevationMap) {
+  const floorElevation = getFloorElevation(floor);
   return (floor.stairs || [])
     .map((stair) => {
       const renderData = getStairRenderData(stair);
@@ -229,13 +236,21 @@ function buildStairElements(floor, sectionCut) {
       const clampedEnd = clamp(endProjection.along, 0, sectionCutLength(sectionCut));
       if (Math.abs(clampedEnd - clampedStart) < EPSILON) return null;
 
+      let baseElevation = floorElevation;
+      if (stair.startLandingAttachment) {
+        const elev = landingElevationMap?.get(stair.startLandingAttachment.landingId);
+        if (elev != null) {
+          baseElevation = floorElevation + elev;
+        }
+      }
+
       const risers = Math.max(1, stair.numberOfRisers || 1);
       const rise = stairTotalRise(stair);
       const risePerRiser = rise / risers;
       const alongStep = (clampedEnd - clampedStart) / risers;
-      const points = [{ x: clampedStart, z: floor.level ?? 0 }];
+      const points = [{ x: clampedStart, z: baseElevation }];
       let currentAlong = clampedStart;
-      let currentZ = floor.level ?? 0;
+      let currentZ = baseElevation;
 
       for (let index = 0; index < risers; index += 1) {
         currentAlong += alongStep;
@@ -281,32 +296,84 @@ function computeSceneBounds(rects, stairs, sectionCut, baseLevel) {
   };
 }
 
-export function buildSectionScene(floor) {
-  if (!floor?.sectionCut) return null;
+function resolveLandingElevation(landing, stairs, floorLevel) {
+  if (landing.elevation) return landing.elevation;
+  return computeLandingElevation(landing, stairs, floorLevel) - floorLevel;
+}
 
-  const rectElements = [
-    ...buildWallElements(floor, floor.sectionCut),
-    ...buildSlabElements(floor, floor.sectionCut),
-    ...buildColumnElements(floor, floor.sectionCut),
-    ...buildBeamElements(floor, floor.sectionCut),
-    ...buildDoorElements(floor, floor.sectionCut),
-    ...buildWindowElements(floor, floor.sectionCut),
-  ].sort((a, b) => {
+function buildFloorSectionElements(floor, sectionCut) {
+  const floorElevation = getFloorElevation(floor);
+  const landings = floor.landings || [];
+  const stairs = floor.stairs || [];
+
+  const landingElevationMap = new Map(
+    landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorElevation)])
+  );
+
+  return {
+    rectElements: [
+      ...buildWallElements(floor, sectionCut),
+      ...buildSlabElements(floor, sectionCut),
+      ...buildColumnElements(floor, sectionCut),
+      ...buildBeamElements(floor, sectionCut),
+      ...buildDoorElements(floor, sectionCut),
+      ...buildWindowElements(floor, sectionCut),
+    ],
+    stairElements: buildStairElements(floor, sectionCut, landingElevationMap),
+  };
+}
+
+function buildSectionSceneFromFloors(floors, sectionCut, title = null) {
+  if (!sectionCut) return null;
+
+  const stackBounds = getFloorStackBounds(floors);
+  const rectElements = [];
+  const stairElements = [];
+
+  for (const floor of floors) {
+    const floorElements = buildFloorSectionElements(floor, sectionCut);
+    rectElements.push(...floorElements.rectElements);
+    stairElements.push(...floorElements.stairElements);
+  }
+
+  const sortedRectElements = rectElements.sort((a, b) => {
     if (a.renderMode !== b.renderMode) return a.renderMode === 'projection' ? -1 : 1;
-    return a.depth - b.depth;
+    return b.depth - a.depth;
   });
 
-  const stairElements = buildStairElements(floor, floor.sectionCut).sort((a, b) => {
+  const sortedStairElements = stairElements.sort((a, b) => {
     if (a.renderMode !== b.renderMode) return a.renderMode === 'projection' ? -1 : 1;
-    return a.depth - b.depth;
+    return b.depth - a.depth;
   });
 
   return {
     viewKey: 'section_view',
-    title: floor.sectionCut.label || 'Section',
-    rectElements,
-    stairElements,
-    bounds: computeSceneBounds(rectElements, stairElements, floor.sectionCut, floor.level ?? 0),
-    groundLevel: floor.level ?? 0,
+    title: title || sectionCut.label || 'Section',
+    rectElements: sortedRectElements,
+    stairElements: sortedStairElements,
+    bounds: computeSceneBounds(sortedRectElements, sortedStairElements, sectionCut, stackBounds.minElevation),
+    groundLevel: stackBounds.minElevation,
   };
+}
+
+export function buildSectionScene(floor, sectionCut) {
+  if (!floor || !sectionCut) return null;
+  return buildSectionSceneFromFloors([floor], sectionCut, sectionCut.label || 'Section');
+}
+
+export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = null) {
+  const sourceFloor = resolveProjectFloor(project, sourceFloorId);
+  if (!sourceFloor) return null;
+
+  const cuts = sourceFloor.sectionCuts || [];
+  const sectionCut = sectionCutId
+    ? cuts.find((entry) => entry.id === sectionCutId)
+    : cuts[0] || null;
+  if (!sectionCut) return null;
+
+  return buildSectionSceneFromFloors(
+    getOrderedFloors(project),
+    sectionCut,
+    sectionCut.label || 'Section'
+  );
 }

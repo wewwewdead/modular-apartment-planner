@@ -10,12 +10,12 @@
 
   /* UI colors */
   --color-text-primary: #1A1D23;
-  --color-text-secondary: #6B7080;
+  --color-text-secondary: #5F6470;
   --color-text-tertiary: #9CA3AF;
   --color-panel-bg: #F3F3F0;
   --color-panel-bg-alt: #FAFAF8;
   --color-surface-elevated: #FFFFFF;
-  --color-border: #DDDDD8;
+  --color-border: #D9D9D4;
   --color-border-subtle: rgba(0, 0, 0, 0.06);
   --color-accent: #0D7C66;
   --color-accent-hover: #0A6352;
@@ -23,10 +23,19 @@
   --color-danger: #DC2626;
   --color-danger-hover: #B91C1C;
   --color-danger-subtle: rgba(220, 38, 38, 0.06);
+  --color-card-bg: #EFEFEC;
+  --color-card-bg-hover: #E8E8E4;
+  --color-segment-bg: rgba(0, 0, 0, 0.05);
+  --color-segment-active-bg: var(--color-surface-elevated);
+  --color-segment-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  --color-danger-ghost-border: rgba(220, 38, 38, 0.25);
+  --color-danger-ghost-bg-hover: rgba(220, 38, 38, 0.06);
+  --color-divider: rgba(0, 0, 0, 0.04);
+  --color-sticky-bg: rgba(243, 243, 240, 0.92);
 
   /* Layout */
-  --toolbar-height: 48px;
-  --sidebar-width: 240px;
+  --toolbar-height: 52px;
+  --sidebar-width: 260px;
   --properties-width: 280px;
 
   /* Typography */
@@ -34,6 +43,7 @@
   --font-blueprint: 'JetBrains Mono', 'Courier New', monospace;
 
   /* Spacing */
+  --space-2xs: 2px;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;

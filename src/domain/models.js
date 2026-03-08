@@ -1,5 +1,5 @@
 import { generateId } from './ids';
-import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, DOOR_HEIGHT, DOOR_SILL_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT, COLUMN_WIDTH, COLUMN_DEPTH, BEAM_WIDTH, BEAM_DEPTH, STAIR_WIDTH, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, SLAB_THICKNESS, SLAB_ELEVATION, SECTION_DEPTH, ROOM_COLOR, DIMENSION_DEFAULT_OFFSET } from './defaults';
+import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, DOOR_HEIGHT, DOOR_SILL_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT, COLUMN_WIDTH, COLUMN_DEPTH, BEAM_WIDTH, BEAM_DEPTH, STAIR_WIDTH, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, SLAB_THICKNESS, SLAB_ELEVATION, SECTION_DEPTH, LANDING_WIDTH, LANDING_DEPTH, LANDING_THICKNESS, ROOM_COLOR, DIMENSION_DEFAULT_OFFSET } from './defaults';
 import { polygonArea, polygonCentroid } from '@/geometry/polygon';
 
 export function createProject(name = 'Untitled Project') {
@@ -8,17 +8,22 @@ export function createProject(name = 'Untitled Project') {
     name,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    floors: [createFloor('Ground Floor', 0)],
+    floors: [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })],
     sheets: [],
     version: 1,
   };
 }
 
-export function createFloor(name = 'Floor', level = 0) {
+export function createFloor(name = 'Floor', levelIndex = 0, options = {}) {
+  const floorToFloorHeight = options.floorToFloorHeight ?? WALL_HEIGHT;
+  const elevation = options.elevation ?? (levelIndex * floorToFloorHeight);
+
   return {
     id: generateId('floor'),
     name,
-    level,
+    levelIndex,
+    elevation,
+    floorToFloorHeight,
     walls: [],
     rooms: [],
     doors: [],
@@ -26,11 +31,28 @@ export function createFloor(name = 'Floor', level = 0) {
     columns: [],
     beams: [],
     stairs: [],
+    landings: [],
     annotations: [],
     annotationSettings: createAnnotationSettings(),
-    slab: null,
-    sectionCut: null,
+    slabs: [],
+    sectionCuts: [],
   };
+}
+
+export function nextSectionLabel(existingCuts = []) {
+  const usedLetters = new Set(
+    existingCuts
+      .map(c => {
+        const match = c.label?.match(/^Section\s+([A-Z])-\1$/);
+        return match ? match[1] : null;
+      })
+      .filter(Boolean)
+  );
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(65 + i);
+    if (!usedLetters.has(letter)) return `Section ${letter}-${letter}`;
+  }
+  return `Section ${existingCuts.length + 1}`;
 }
 
 export function createAnnotationSettings(overrides = {}) {
@@ -130,7 +152,7 @@ export function createSlab(floorId, boundaryPoints = [], thickness = SLAB_THICKN
   };
 }
 
-export function createStair(startPoint, width = STAIR_WIDTH, numberOfRisers = STAIR_RISERS, riserHeight = STAIR_RISER_HEIGHT, treadDepth = STAIR_TREAD_DEPTH, direction = { angle: 0 }, floorRelation = {}) {
+export function createStair(startPoint, width = STAIR_WIDTH, numberOfRisers = STAIR_RISERS, riserHeight = STAIR_RISER_HEIGHT, treadDepth = STAIR_TREAD_DEPTH, direction = { angle: 0 }, floorRelation = {}, options = {}) {
   return {
     id: generateId('stair'),
     startPoint: { x: startPoint.x, y: startPoint.y },
@@ -145,6 +167,20 @@ export function createStair(startPoint, width = STAIR_WIDTH, numberOfRisers = ST
       fromFloorId: floorRelation.fromFloorId ?? null,
       toFloorId: floorRelation.toFloorId ?? null,
     },
+    startLandingAttachment: options.startLandingAttachment ?? null,
+    endLandingAttachment: options.endLandingAttachment ?? null,
+  };
+}
+
+export function createLanding(position, width = LANDING_WIDTH, depth = LANDING_DEPTH, options = {}) {
+  return {
+    id: generateId('landing'),
+    position: { x: position.x, y: position.y },
+    width,
+    depth,
+    thickness: options.thickness ?? LANDING_THICKNESS,
+    elevation: options.elevation ?? 0,
+    rotation: options.rotation ?? 0,
   };
 }
 

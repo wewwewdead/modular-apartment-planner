@@ -17,24 +17,10 @@ export function createSlabPlaceHandler({ dispatch, editorDispatch, getFloor, act
     const floor = getFloor(activeFloorId);
     if (!floor || points.length < 3) return;
 
-    if (floor.slab) {
-      dispatch({
-        type: 'SLAB_UPDATE',
-        floorId: activeFloorId,
-        slab: {
-          id: floor.slab.id,
-          floorId: floor.id,
-          boundaryPoints: points,
-        },
-      });
-      editorDispatch({ type: 'SELECT_OBJECT', id: floor.slab.id, objectType: 'slab' });
-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Updated slab boundary.' });
-    } else {
-      const slab = createSlab(floor.id, points);
-      dispatch({ type: 'SLAB_SET', floorId: activeFloorId, slab });
-      editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created floor slab.' });
-    }
+    const slab = createSlab(floor.id, points);
+    dispatch({ type: 'SLAB_ADD', floorId: activeFloorId, slab });
+    editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created slab.' });
 
     resetSlabToolState(editorDispatch);
   }
@@ -50,9 +36,6 @@ export function createSlabPlaceHandler({ dispatch, editorDispatch, getFloor, act
       const closeDistance = SNAP_DISTANCE_PX / viewport.zoom;
 
       if (points.length === 0) {
-        if (floor.slab) {
-          editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Draw a new slab boundary to replace the current one.' });
-        }
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {

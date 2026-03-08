@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ProjectProvider, useProject } from './ProjectProvider';
 import { EditorProvider, useEditor } from './EditorProvider';
+import { ClipboardProvider } from './ClipboardProvider';
 import SvgCanvas from '@/renderers/SvgCanvas';
 import SheetCanvas from '@/renderers/SheetCanvas';
 import Toolbar from '@/ui/Toolbar';
@@ -8,10 +9,20 @@ import Sidebar from '@/ui/Sidebar';
 import PropertiesPanel from '@/ui/PropertiesPanel';
 import Modal from '@/ui/Modal';
 import { createProject } from '@/domain/models';
+import { getDefaultActiveFloorId, getOrderedFloors } from '@/domain/floorModels';
 import { saveProject, loadProject, listProjects, deleteProject } from '@/persistence/storage';
+import {
+  exportProjectFile,
+  importProjectFile,
+  isFilePickerAbortError,
+  openProjectFile,
+} from '@/persistence/fileTransfer';
 import { useAutosave } from '@/persistence/useAutosave';
 import { isTypingTarget } from '@/utils/keyboard';
 import styles from './App.module.css';
+import modalStyles from '@/ui/Modal.module.css';
+
+const ThreePreviewPanel = lazy(() => import('@/three/viewer/ThreePreviewPanel'));
 
 function EditorShell({
   project,
@@ -23,7 +34,13 @@ function EditorShell({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { workspaceMode, activeSheetId, dispatch: editorDispatch } = useEditor();
+  const {
+    workspaceMode,
+    activeSheetId,
+    activeFloorId,
+    maximizedPanel,
+    dispatch: editorDispatch,
+  } = useEditor();
 
   useEffect(() => {
     const sheets = project.sheets || [];
@@ -65,7 +82,29 @@ function EditorShell({
         <Sidebar />
       </div>
       <div className={styles.canvas}>
-        {workspaceMode === 'sheet' ? <SheetCanvas /> : <SvgCanvas />}
+        {workspaceMode === 'sheet' ? (
+          <SheetCanvas />
+        ) : (
+          <div className={`${styles.modelWorkspace} ${maximizedPanel ? styles.workspaceMaximized : ''}`}>
+            {maximizedPanel !== 'preview' && (
+              <div className={styles.primaryCanvas}>
+                <SvgCanvas />
+              </div>
+            )}
+            {maximizedPanel !== 'canvas' && (
+              <div className={styles.preview}>
+                <Suspense fallback={<div className={styles.previewFallback}>Loading 3D preview...</div>}>
+                  <ThreePreviewPanel
+                    project={project}
+                    activeFloorId={activeFloorId}
+                    isMaximized={maximizedPanel === 'preview'}
+                    onToggleMaximize={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'preview' })}
+                  />
+                </Suspense>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className={`${styles.properties} ${isPropertiesCollapsed ? styles.panelHidden : ''}`}>
         <PropertiesPanel />
@@ -76,10 +115,15 @@ function EditorShell({
 
 function AppInner() {
   const { project, isDirty, dispatch } = useProject();
+  const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
+  const availableFloorIds = useMemo(() => orderedFloors.map((floor) => floor.id), [orderedFloors]);
+  const initialActiveFloorId = getDefaultActiveFloorId(project);
   const [showLoadModal, setShowLoadModal] = useState(false);
   const [savedProjects, setSavedProjects] = useState([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
+  const [projectFileHandle, setProjectFileHandle] = useState(null);
+  const importInputRef = useRef(null);
 
   useAutosave(project, isDirty, dispatch);
 
@@ -97,13 +141,25 @@ function AppInner() {
 
   const handleNew = useCallback(() => {
     if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
+    setProjectFileHandle(null);
     dispatch({ type: 'PROJECT_NEW', project: createProject() });
   }, [isDirty, dispatch]);
 
   const handleSave = useCallback(async () => {
-    await saveProject(project);
-    dispatch({ type: 'MARK_SAVED' });
-  }, [project, dispatch]);
+    try {
+      const { fileHandle } = await exportProjectFile(project, { fileHandle: projectFileHandle });
+      setProjectFileHandle(fileHandle);
+      try {
+        await saveProject(project);
+      } catch {
+        // Browser draft sync is secondary to file save.
+      }
+      dispatch({ type: 'MARK_SAVED' });
+    } catch (err) {
+      if (isFilePickerAbortError(err)) return;
+      alert('Failed to save project file: ' + err.message);
+    }
+  }, [project, projectFileHandle, dispatch]);
 
   // Ctrl+S save
   useEffect(() => {
@@ -123,11 +179,52 @@ function AppInner() {
     setShowLoadModal(true);
   }, []);
 
+  const handleOpenProjectFile = useCallback(async () => {
+    if (typeof window.showOpenFilePicker !== 'function') {
+      importInputRef.current?.click();
+      return;
+    }
+
+    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) {
+      return;
+    }
+
+    try {
+      const { project: loaded, savedAt, fileHandle } = await openProjectFile();
+      dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
+      setProjectFileHandle(fileHandle);
+      setShowLoadModal(false);
+    } catch (err) {
+      if (isFilePickerAbortError(err)) return;
+      alert('Failed to import project file: ' + err.message);
+    }
+  }, [isDirty, dispatch]);
+
+  const handleImportFile = useCallback(async (e) => {
+    const file = e.target.files?.[0] || null;
+    e.target.value = '';
+    if (!file) return;
+
+    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) {
+      return;
+    }
+
+    try {
+      const { project: loaded, savedAt } = await importProjectFile(file);
+      dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
+      setProjectFileHandle(null);
+      setShowLoadModal(false);
+    } catch (err) {
+      alert('Failed to import project file: ' + err.message);
+    }
+  }, [isDirty, dispatch]);
+
   const handleLoad = useCallback(async (id) => {
     if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
     try {
       const { project: loaded, savedAt } = await loadProject(id);
       dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
+      setProjectFileHandle(null);
       setShowLoadModal(false);
     } catch (err) {
       alert('Failed to load project: ' + err.message);
@@ -146,10 +243,19 @@ function AppInner() {
     }
   }, []);
 
-  const activeFloorId = project.floors[0]?.id;
-
   return (
-    <EditorProvider activeFloorId={activeFloorId}>
+    <EditorProvider
+      initialActiveFloorId={initialActiveFloorId}
+      availableFloorIds={availableFloorIds}
+    >
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleImportFile}
+        style={{ display: 'none' }}
+      />
+
       <EditorShell
         project={project}
         handleNew={handleNew}
@@ -162,80 +268,52 @@ function AppInner() {
       />
 
       {showLoadModal && (
-        <Modal title="Load Project" onClose={() => setShowLoadModal(false)}>
-          {savedProjects.length === 0 ? (
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
-              No saved projects found.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {savedProjects.map(p => (
-                <div
-                  key={p.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 12px',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--color-surface-elevated)',
-                    fontSize: '13px',
-                  }}
-                >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontWeight: 500 }}>{p.name}</span>
-                    <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
-                      {new Date(p.savedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={() => handleLoad(p.id)}
-                      style={{
-                        padding: '6px 12px',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        background: 'var(--color-surface-elevated)',
-                        fontSize: '12px',
-                        fontWeight: 500,
-                      }}
-                    >
-                      Load
-                    </button>
-                    <button
-                      onClick={() => handleDelete(p.id, p.name)}
-                      style={{
-                        padding: '6px 12px',
-                        border: '1px solid var(--color-danger-subtle)',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        background: 'var(--color-danger-subtle)',
-                        color: 'var(--color-danger)',
-                        fontSize: '12px',
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+        <Modal title="Open Project" onClose={() => setShowLoadModal(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className={modalStyles.modalCard}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span className={modalStyles.modalCardTitle}>Project File</span>
+                <span className={modalStyles.modalCardDesc}>
+                  Open a JSON file previously saved to your computer.
+                </span>
+              </div>
+              <button className={modalStyles.modalBtn} onClick={handleOpenProjectFile} style={{ alignSelf: 'flex-start' }}>
+                Open Project File
+              </button>
             </div>
-          )}
-          <button
-            onClick={() => setShowLoadModal(false)}
-            style={{
-              marginTop: '16px',
-              padding: '8px 16px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: 500,
-              background: 'var(--color-surface-elevated)',
-            }}
-          >
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span className={modalStyles.modalCardTitle}>Browser Drafts</span>
+                <span className={modalStyles.modalCardDesc} style={{ fontSize: '11px' }}>
+                  Stored only in this browser on this machine.
+                </span>
+              </div>
+              {savedProjects.length === 0 ? (
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px', margin: 0 }}>
+                  No browser drafts found.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {savedProjects.map(p => (
+                    <div key={p.id} className={modalStyles.modalCard} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontWeight: 500, fontSize: '13px' }}>{p.name}</span>
+                        <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
+                          {new Date(p.savedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className={modalStyles.modalBtn} onClick={() => handleLoad(p.id)}>Load</button>
+                        <button className={modalStyles.modalBtnDanger} onClick={() => handleDelete(p.id, p.name)}>Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <button className={modalStyles.modalBtn} onClick={() => setShowLoadModal(false)} style={{ marginTop: '16px' }}>
             Cancel
           </button>
         </Modal>
@@ -247,7 +325,9 @@ function AppInner() {
 export default function App() {
   return (
     <ProjectProvider>
-      <AppInner />
+      <ClipboardProvider>
+        <AppInner />
+      </ClipboardProvider>
     </ProjectProvider>
   );
 }

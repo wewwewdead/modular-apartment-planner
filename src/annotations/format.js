@@ -1,5 +1,7 @@
 export function formatMeasurement(mm) {
-  return `${(Math.abs(mm) / 1000).toFixed(3)} m`;
+  const abs = Math.abs(mm);
+  if (abs < 1000) return `${Math.round(abs)} mm`;
+  return `${(abs / 1000).toFixed(3)} m`;
 }
 
 export function getAnnotationDisplayLabel(annotation) {

@@ -11,7 +11,7 @@ const ROOM_DIMENSION_INSET = 180;
 const OVERALL_CHAIN_GAP = 500;
 const OVERALL_TOTAL_GAP = 900;
 const ARROW_SIZE = 80;
-const VALUE_MERGE_TOLERANCE = 5;
+const VALUE_MERGE_TOLERANCE = 1;
 const MIN_DIMENSION_LENGTH = 100;
 
 function normalizeTextAngle(angleDeg) {

@@ -32,6 +32,35 @@
   user-select: none;
 }
 
+.expandBtn {
+  position: absolute;
+  bottom: 32px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--duration-fast), background var(--duration-fast);
+  z-index: 5;
+}
+
+.expandBtn:hover {
+  opacity: 1;
+  background: white;
+}
+
+.expandBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .statusMessage {
   margin-left: auto;
   color: var(--color-accent);

@@ -11,6 +11,8 @@ import { createBeamPlaceHandler } from './handlers/beamPlaceHandler';
 import { createSlabPlaceHandler } from './handlers/slabPlaceHandler';
 import { createStairPlaceHandler } from './handlers/stairPlaceHandler';
 import { createSectionPlaceHandler } from './handlers/sectionPlaceHandler';
+import { createLandingPlaceHandler } from './handlers/landingPlaceHandler';
+import { createElevationSelectHandler } from './handlers/elevationSelectHandler';
 
 function createReadOnlyHandler() {
   return {
@@ -25,11 +27,24 @@ function createReadOnlyHandler() {
   };
 }
 
-export function useEditorTool({ activeTool, dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode }) {
+export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode }) {
   const getFloorRef = useRef(getFloor);
   getFloorRef.current = getFloor;
 
   const handler = useMemo(() => {
+    if (viewMode?.startsWith('elevation_')) {
+      return createElevationSelectHandler({
+        dispatch,
+        editorDispatch,
+        project,
+        getFloor: (...args) => getFloorRef.current(...args),
+        activeFloorId,
+        viewport,
+        snapEnabled,
+        viewMode,
+      });
+    }
+
     if (viewMode !== 'plan') {
       return createReadOnlyHandler();
     }
@@ -63,10 +78,12 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, getFloor, 
         return createWindowPlaceHandler(ctx);
       case TOOLS.COLUMN:
         return createColumnPlaceHandler(ctx);
+      case TOOLS.LANDING:
+        return createLandingPlaceHandler(ctx);
       default:
         return null;
     }
-  }, [activeTool, activeFloorId, viewport.zoom, snapEnabled, viewMode]);
+  }, [activeTool, activeFloorId, project, viewport.zoom, snapEnabled, viewMode]);
 
   return {
     onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),

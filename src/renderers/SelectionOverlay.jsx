@@ -1,5 +1,6 @@
 import { columnOutline } from '@/geometry/columnGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { getLandingRenderData } from '@/geometry/landingGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { getSlabRenderData } from '@/geometry/slabGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
@@ -56,8 +57,8 @@ export default function SelectionOverlay({ selectedId, selectedType, floor, zoom
   if (!selectedId || !floor) return null;
 
   if (selectedType === 'slab') {
-    const slab = floor.slab;
-    const renderData = slab?.id === selectedId ? getSlabRenderData(slab) : null;
+    const slab = (floor.slabs || []).find(s => s.id === selectedId) || null;
+    const renderData = slab ? getSlabRenderData(slab) : null;
     if (!renderData) return null;
 
     const handleR = HANDLE_SIZE / zoom;
@@ -98,7 +99,7 @@ export default function SelectionOverlay({ selectedId, selectedType, floor, zoom
   }
 
   if (selectedType === 'sectionCut') {
-    const sectionCut = floor.sectionCut?.id === selectedId ? floor.sectionCut : null;
+    const sectionCut = (floor.sectionCuts || []).find(s => s.id === selectedId) || null;
     const renderData = getSectionCutRenderData(sectionCut);
     if (!renderData) return null;
     const handleR = HANDLE_SIZE / zoom;
@@ -217,6 +218,24 @@ export default function SelectionOverlay({ selectedId, selectedType, floor, zoom
     const stair = (floor.stairs || []).find(entry => entry.id === selectedId);
     if (!stair) return null;
     const renderData = getStairRenderData(stair);
+    if (!renderData) return null;
+    const points = renderData.outline.map(p => `${p.x},${p.y}`).join(' ');
+    return (
+      <polygon
+        points={points}
+        fill="var(--color-selection-fill)"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+
+  if (selectedType === 'landing') {
+    const landing = (floor.landings || []).find(l => l.id === selectedId);
+    if (!landing) return null;
+    const renderData = getLandingRenderData(landing);
     if (!renderData) return null;
     const points = renderData.outline.map(p => `${p.x},${p.y}`).join(' ');
     return (

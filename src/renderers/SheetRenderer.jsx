@@ -1,5 +1,5 @@
 import { buildSheetScene } from '@/sheets/layout';
-import { getViewportHandleRects } from '@/sheets/hitTest';
+import { getViewportHandleRects, getViewportRotationHandle } from '@/sheets/hitTest';
 import SheetViewportContent from './SheetViewportContent';
 
 const HANDLE_SIZE = 4;
@@ -93,7 +93,11 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
       {scene.viewports.map((viewport) => {
         const isSelected = selectedType === 'sheetViewport' && selectedId === viewport.id;
         return (
-          <g key={viewport.id} className="sheet-viewport">
+          <g
+            key={viewport.id}
+            className="sheet-viewport"
+            transform={viewport.rotation ? `rotate(${viewport.rotation}, ${viewport.x + viewport.width / 2}, ${viewport.y + viewport.height / 2})` : undefined}
+          >
             <text
               x={viewport.x}
               y={viewport.y - 2}
@@ -139,6 +143,30 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
                 strokeWidth={0.5}
               />
             ))}
+            {isSelected && (() => {
+              const rh = getViewportRotationHandle(viewport, HANDLE_SIZE);
+              return (
+                <>
+                  <line
+                    x1={rh.stemX}
+                    y1={rh.stemY1}
+                    x2={rh.stemX}
+                    y2={rh.stemY2}
+                    stroke="#0f8f74"
+                    strokeWidth={0.4}
+                  />
+                  <circle
+                    cx={rh.cx}
+                    cy={rh.cy}
+                    r={rh.radius}
+                    fill="#ffffff"
+                    stroke="#0f8f74"
+                    strokeWidth={0.5}
+                    style={{ cursor: 'grab' }}
+                  />
+                </>
+              );
+            })()}
           </g>
         );
       })}

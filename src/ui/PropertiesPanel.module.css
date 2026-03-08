@@ -24,7 +24,42 @@
   color: var(--color-text-secondary);
   margin-bottom: var(--space-sm);
   padding-top: var(--space-sm);
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-divider);
+}
+
+/* Segmented unit toggle (pill-shaped) */
+.segmentControl {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: var(--space-md);
+  background: var(--color-segment-bg);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  width: fit-content;
+}
+
+.segmentBtn {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.segmentBtn:hover {
+  color: var(--color-text-primary);
+}
+
+.segmentBtnActive {
+  composes: segmentBtn;
+  background: var(--color-segment-active-bg);
+  color: var(--color-text-primary);
+  box-shadow: var(--color-segment-active-shadow);
 }
 
 .colorField {
@@ -49,8 +84,8 @@
 }
 
 .colorPicker {
-  width: 36px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   padding: 2px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -58,12 +93,26 @@
   cursor: pointer;
 }
 
-.colorValue {
+.colorHexInput {
+  width: 72px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-family: var(--font-blueprint);
   color: var(--color-text-secondary);
+  background: var(--color-surface-elevated);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
 }
 
+.colorHexInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+/* Ghost danger button for delete */
 .deleteBtn {
   display: flex;
   align-items: center;
@@ -73,17 +122,52 @@
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
-  color: white;
-  background: var(--color-danger);
+  color: var(--color-danger);
+  background: transparent;
+  border: 1px solid var(--color-danger-ghost-border);
   margin-top: var(--space-md);
   transition: background var(--duration-fast), transform var(--duration-fast);
+  cursor: pointer;
 }
 
 .deleteBtn:hover {
-  background: var(--color-danger-hover);
+  background: var(--color-danger-ghost-bg-hover);
 }
 
 .deleteBtn:active {
+  transform: scale(0.97);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Accent ghost button for non-destructive actions */
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid rgba(13, 124, 102, 0.25);
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  transition: background var(--duration-fast), transform var(--duration-fast);
+  cursor: pointer;
+}
+
+.actionBtn:hover {
+  background: var(--color-accent-subtle);
+}
+
+.actionBtn:active {
   transform: scale(0.97);
 }
 
@@ -93,45 +177,7 @@
   line-height: 1.6;
 }
 
-.unitToggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-}
-
-.unitToggle span {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-}
-
-.unitBtn {
-  height: 24px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-elevated);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
-}
-
-.unitBtn:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.unitBtnActive {
-  background: var(--color-accent);
-  color: white;
-  border-color: var(--color-accent);
-}
-
-.unitBtnActive:hover {
-  background: var(--color-accent-hover);
-}
-
+/* Export button */
 .exportMenu {
   position: relative;
   display: flex;
@@ -148,10 +194,10 @@
   width: 100%;
   height: 30px;
   padding: 0 var(--space-md);
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(13, 124, 102, 0.25);
   border-radius: var(--radius-sm);
-  background: var(--color-surface-elevated);
-  color: var(--color-text-primary);
+  background: transparent;
+  color: var(--color-accent);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -159,7 +205,7 @@
 }
 
 .exportMenuTrigger:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--color-accent-subtle);
 }
 
 .exportMenuChevron {

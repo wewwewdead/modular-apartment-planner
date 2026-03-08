@@ -10,4 +10,5 @@ export const TOOLS = {
   DOOR: 'door',
   WINDOW: 'window',
   COLUMN: 'column',
+  LANDING: 'landing',
 };

@@ -1,10 +1,11 @@
-import { buildSectionScene } from '@/sections/scene';
+import { buildProjectSectionScene } from '@/sections/scene';
 import SectionSceneLayer from './SectionSceneLayer';
 
-export default function SectionRenderer({ floor }) {
-  const scene = buildSectionScene(floor);
+export default function SectionRenderer({ project, floor, activeSectionCutId }) {
+  const cuts = floor?.sectionCuts || [];
+  const sectionCut = (activeSectionCutId && cuts.find(s => s.id === activeSectionCutId)) || cuts[0] || null;
 
-  if (!floor?.sectionCut) {
+  if (!sectionCut) {
     return (
       <g className="section-empty">
         <text
@@ -22,6 +23,7 @@ export default function SectionRenderer({ floor }) {
     );
   }
 
+  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
   if (!scene) return null;
 
   return <SectionSceneLayer scene={scene} />;

@@ -1,0 +1,807 @@
+import { buildManualDimensionFigures } from '@/annotations/dimensions';
+import { generateId } from '@/domain/ids';
+import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { columnOutline } from '@/geometry/columnGeometry';
+import { segmentIntersection } from '@/geometry/line';
+import { pointInPolygon } from '@/geometry/polygon';
+import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
+import { getSlabRenderData } from '@/geometry/slabGeometry';
+import { getLandingRenderData } from '@/geometry/landingGeometry';
+import { getStairRenderData } from '@/geometry/stairGeometry';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
+import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
+
+const PLAN_KEYS = ['walls', 'doors', 'windows', 'columns', 'beams', 'stairs', 'landings', 'annotations', 'slabs', 'sectionCuts', 'rooms'];
+
+function translatePoint(point, dx, dy) {
+  return { x: point.x + dx, y: point.y + dy };
+}
+
+function rectPoints(bounds) {
+  return [
+    { x: bounds.minX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.minX, y: bounds.maxY },
+  ];
+}
+
+function pointInRect(point, bounds) {
+  return point.x >= bounds.minX &&
+    point.x <= bounds.maxX &&
+    point.y >= bounds.minY &&
+    point.y <= bounds.maxY;
+}
+
+function segmentIntersectsRect(start, end, bounds) {
+  if (pointInRect(start, bounds) || pointInRect(end, bounds)) return true;
+
+  const rect = rectPoints(bounds);
+  for (let index = 0; index < rect.length; index += 1) {
+    const hit = segmentIntersection(start, end, rect[index], rect[(index + 1) % rect.length]);
+    if (hit) return true;
+  }
+
+  return false;
+}
+
+function polygonIntersectsRect(points, bounds) {
+  if (!points?.length) return false;
+  if (points.some((point) => pointInRect(point, bounds))) return true;
+
+  const rect = rectPoints(bounds);
+  if (rect.some((point) => pointInPolygon(point, points))) return true;
+
+  for (let index = 0; index < points.length; index += 1) {
+    if (segmentIntersectsRect(points[index], points[(index + 1) % points.length], bounds)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function geometryIntersectsRect(geometry, bounds) {
+  if (!geometry) return false;
+  if (geometry.polygon) return polygonIntersectsRect(geometry.polygon, bounds);
+  if (geometry.segments) {
+    return geometry.segments.some((segment) => segmentIntersectsRect(segment.start, segment.end, bounds));
+  }
+  return false;
+}
+
+function collectGeometryPoints(geometry) {
+  if (!geometry) return [];
+  if (geometry.polygon) return geometry.polygon;
+  if (geometry.segments) {
+    return geometry.segments.flatMap((segment) => [segment.start, segment.end]);
+  }
+  return [];
+}
+
+function cloneAttachment(attachment, nextColumnId = attachment?.columnId ?? null) {
+  if (!attachment) return null;
+  if (!nextColumnId) return null;
+  return {
+    ...attachment,
+    columnId: nextColumnId,
+  };
+}
+
+function createEmptyMap() {
+  return PLAN_KEYS.reduce((acc, key) => {
+    acc[key] = [];
+    return acc;
+  }, {});
+}
+
+function toIdSetMap(selection = createEmptyMap()) {
+  return PLAN_KEYS.reduce((acc, key) => {
+    acc[key] = new Set(selection[key] || []);
+    return acc;
+  }, {});
+}
+
+function countSelection(selection = createEmptyMap()) {
+  return PLAN_KEYS.reduce((count, key) => count + (selection[key]?.length || 0), 0);
+}
+
+function countContent(content = createEmptyMap()) {
+  return PLAN_KEYS.reduce((count, key) => count + (content[key]?.length || 0), 0);
+}
+
+function idPrefixForKey(key) {
+  switch (key) {
+    case 'walls':
+      return 'wall';
+    case 'doors':
+      return 'door';
+    case 'windows':
+      return 'win';
+    case 'columns':
+      return 'col';
+    case 'beams':
+      return 'beam';
+    case 'stairs':
+      return 'stair';
+    case 'landings':
+      return 'landing';
+    case 'annotations':
+      return 'anno';
+    case 'slabs':
+      return 'slab';
+    case 'sectionCuts':
+      return 'section';
+    case 'rooms':
+      return 'room';
+    default:
+      return 'obj';
+  }
+}
+
+function iteratePlanGeometry(floor, visit) {
+  const walls = floor?.walls || [];
+  const columns = floor?.columns || [];
+
+  for (const wall of walls) {
+    visit('walls', wall.id, wall, {
+      polygon: getWallRenderData(wall, columns).outline,
+    });
+  }
+
+  for (const door of floor?.doors || []) {
+    const wall = walls.find((entry) => entry.id === door.wallId);
+    if (!wall) continue;
+    const info = doorOutlineOnWall(wall, door);
+    visit('doors', door.id, door, {
+      polygon: [info.p1, info.p2, info.p3, info.p4],
+    });
+  }
+
+  for (const window_ of floor?.windows || []) {
+    const wall = walls.find((entry) => entry.id === window_.wallId);
+    if (!wall) continue;
+    const info = windowOutlineOnWall(wall, window_);
+    visit('windows', window_.id, window_, {
+      polygon: [info.p1, info.p2, info.p3, info.p4],
+    });
+  }
+
+  for (const column of columns) {
+    visit('columns', column.id, column, {
+      polygon: columnOutline(column),
+    });
+  }
+
+  for (const beam of floor?.beams || []) {
+    const renderData = getBeamRenderData(beam, columns);
+    if (!renderData) continue;
+    visit('beams', beam.id, beam, {
+      polygon: renderData.outline,
+    });
+  }
+
+  for (const stair of floor?.stairs || []) {
+    const renderData = getStairRenderData(stair);
+    if (!renderData) continue;
+    visit('stairs', stair.id, stair, {
+      polygon: renderData.outline,
+    });
+  }
+
+  for (const landing of floor?.landings || []) {
+    const renderData = getLandingRenderData(landing);
+    if (!renderData) continue;
+    visit('landings', landing.id, landing, {
+      polygon: renderData.outline,
+    });
+  }
+
+  for (const annotation of floor?.annotations || []) {
+    const figure = buildManualDimensionFigures([annotation])[0];
+    if (!figure) continue;
+    visit('annotations', annotation.id, annotation, {
+      segments: figure.segments,
+    });
+  }
+
+  for (const slab of floor?.slabs || []) {
+    const renderData = getSlabRenderData(slab);
+    if (!renderData) continue;
+    visit('slabs', slab.id, slab, {
+      polygon: renderData.outline,
+    });
+  }
+
+  for (const sectionCut of floor?.sectionCuts || []) {
+    const renderData = getSectionCutRenderData(sectionCut);
+    if (!renderData) continue;
+    visit('sectionCuts', sectionCut.id, sectionCut, {
+      segments: [{
+        start: renderData.line.start,
+        end: renderData.line.end,
+      }],
+    });
+  }
+
+  for (const room of floor?.rooms || []) {
+    if (!room.points?.length) continue;
+    visit('rooms', room.id, room, {
+      polygon: room.points,
+    });
+  }
+}
+
+function rebaseWall(wall, anchor, selectedColumns) {
+  return {
+    ...wall,
+    start: translatePoint(wall.start, -anchor.x, -anchor.y),
+    end: translatePoint(wall.end, -anchor.x, -anchor.y),
+    startAttachment: selectedColumns.has(wall.startAttachment?.columnId)
+      ? { ...wall.startAttachment }
+      : null,
+    endAttachment: selectedColumns.has(wall.endAttachment?.columnId)
+      ? { ...wall.endAttachment }
+      : null,
+  };
+}
+
+function rebaseDoor(door) {
+  return { ...door };
+}
+
+function rebaseWindow(window_) {
+  return { ...window_ };
+}
+
+function rebaseColumn(column, anchor) {
+  return {
+    ...column,
+    x: column.x - anchor.x,
+    y: column.y - anchor.y,
+  };
+}
+
+function rebaseBeam(beam) {
+  return {
+    ...beam,
+    startRef: beam.startRef ? { ...beam.startRef } : null,
+    endRef: beam.endRef ? { ...beam.endRef } : null,
+  };
+}
+
+function rebaseStair(stair, anchor) {
+  return {
+    ...stair,
+    startPoint: translatePoint(stair.startPoint, -anchor.x, -anchor.y),
+    floorRelation: {
+      fromFloorId: stair.floorRelation?.fromFloorId ?? null,
+      toFloorId: stair.floorRelation?.toFloorId ?? null,
+    },
+    startLandingAttachment: stair.startLandingAttachment ? { ...stair.startLandingAttachment } : null,
+    endLandingAttachment: stair.endLandingAttachment ? { ...stair.endLandingAttachment } : null,
+  };
+}
+
+function rebaseLanding(landing, anchor) {
+  return {
+    ...landing,
+    position: translatePoint(landing.position, -anchor.x, -anchor.y),
+  };
+}
+
+function rebaseAnnotation(annotation, anchor) {
+  return {
+    ...annotation,
+    startPoint: translatePoint(annotation.startPoint, -anchor.x, -anchor.y),
+    endPoint: translatePoint(annotation.endPoint, -anchor.x, -anchor.y),
+  };
+}
+
+function rebaseSlab(slab, anchor) {
+  return {
+    ...slab,
+    boundaryPoints: (slab.boundaryPoints || []).map((point) => translatePoint(point, -anchor.x, -anchor.y)),
+  };
+}
+
+function rebaseSectionCut(sectionCut, anchor) {
+  return {
+    ...sectionCut,
+    startPoint: translatePoint(sectionCut.startPoint, -anchor.x, -anchor.y),
+    endPoint: translatePoint(sectionCut.endPoint, -anchor.x, -anchor.y),
+  };
+}
+
+function rebaseRoom(room, anchor) {
+  return {
+    ...room,
+    points: (room.points || []).map((point) => translatePoint(point, -anchor.x, -anchor.y)),
+    labelPosition: room.labelPosition
+      ? translatePoint(room.labelPosition, -anchor.x, -anchor.y)
+      : null,
+  };
+}
+
+function translateWall(wall, point) {
+  return {
+    ...wall,
+    start: translatePoint(wall.start, point.x, point.y),
+    end: translatePoint(wall.end, point.x, point.y),
+    startAttachment: wall.startAttachment ? { ...wall.startAttachment } : null,
+    endAttachment: wall.endAttachment ? { ...wall.endAttachment } : null,
+  };
+}
+
+function translateColumn(column, point) {
+  return {
+    ...column,
+    x: column.x + point.x,
+    y: column.y + point.y,
+  };
+}
+
+function translateStair(stair, point) {
+  return {
+    ...stair,
+    startPoint: translatePoint(stair.startPoint, point.x, point.y),
+    floorRelation: {
+      fromFloorId: stair.floorRelation?.fromFloorId ?? null,
+      toFloorId: stair.floorRelation?.toFloorId ?? null,
+    },
+    startLandingAttachment: stair.startLandingAttachment ? { ...stair.startLandingAttachment } : null,
+    endLandingAttachment: stair.endLandingAttachment ? { ...stair.endLandingAttachment } : null,
+  };
+}
+
+function translateLanding(landing, point) {
+  return {
+    ...landing,
+    position: translatePoint(landing.position, point.x, point.y),
+  };
+}
+
+function translateAnnotation(annotation, point) {
+  return {
+    ...annotation,
+    startPoint: translatePoint(annotation.startPoint, point.x, point.y),
+    endPoint: translatePoint(annotation.endPoint, point.x, point.y),
+  };
+}
+
+function translateSlab(slab, point) {
+  return {
+    ...slab,
+    boundaryPoints: (slab.boundaryPoints || []).map((entry) => translatePoint(entry, point.x, point.y)),
+  };
+}
+
+function translateSectionCut(sectionCut, point) {
+  return {
+    ...sectionCut,
+    startPoint: translatePoint(sectionCut.startPoint, point.x, point.y),
+    endPoint: translatePoint(sectionCut.endPoint, point.x, point.y),
+  };
+}
+
+function translateRoom(room, point) {
+  return {
+    ...room,
+    points: (room.points || []).map((entry) => translatePoint(entry, point.x, point.y)),
+    labelPosition: room.labelPosition
+      ? translatePoint(room.labelPosition, point.x, point.y)
+      : null,
+  };
+}
+
+function translateContent(content, point) {
+  return {
+    walls: (content.walls || []).map((wall) => translateWall(wall, point)),
+    doors: (content.doors || []).map((door) => ({ ...door })),
+    windows: (content.windows || []).map((window_) => ({ ...window_ })),
+    columns: (content.columns || []).map((column) => translateColumn(column, point)),
+    beams: (content.beams || []).map((beam) => ({
+      ...beam,
+      startRef: beam.startRef ? { ...beam.startRef } : null,
+      endRef: beam.endRef ? { ...beam.endRef } : null,
+    })),
+    stairs: (content.stairs || []).map((stair) => translateStair(stair, point)),
+    landings: (content.landings || []).map((landing) => translateLanding(landing, point)),
+    annotations: (content.annotations || []).map((annotation) => translateAnnotation(annotation, point)),
+    slabs: (content.slabs || []).map((slab) => translateSlab(slab, point)),
+    sectionCuts: (content.sectionCuts || []).map((sectionCut) => translateSectionCut(sectionCut, point)),
+    rooms: (content.rooms || []).map((room) => translateRoom(room, point)),
+  };
+}
+
+function buildContentBounds(content) {
+  const floorLike = { ...content };
+  const points = [];
+
+  iteratePlanGeometry(floorLike, (_, __, ___, geometry) => {
+    points.push(...collectGeometryPoints(geometry));
+  });
+
+  if (!points.length) return null;
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+}
+
+function cloneSelection(selection) {
+  return PLAN_KEYS.reduce((acc, key) => {
+    acc[key] = [...(selection[key] || [])];
+    return acc;
+  }, {});
+}
+
+export function createEmptyPlanSelection() {
+  return createEmptyMap();
+}
+
+export function createEmptyPlanContent() {
+  return createEmptyMap();
+}
+
+export function normalizeRectBounds(startPoint, endPoint) {
+  return {
+    minX: Math.min(startPoint.x, endPoint.x),
+    minY: Math.min(startPoint.y, endPoint.y),
+    maxX: Math.max(startPoint.x, endPoint.x),
+    maxY: Math.max(startPoint.y, endPoint.y),
+  };
+}
+
+export function rectSize(bounds) {
+  return {
+    width: bounds.maxX - bounds.minX,
+    height: bounds.maxY - bounds.minY,
+  };
+}
+
+export function countPlanSelection(selection) {
+  return countSelection(selection);
+}
+
+export function countPlanContent(content) {
+  return countContent(content);
+}
+
+export function collectPlanRegionSelection(floor, bounds) {
+  const selection = createEmptyPlanSelection();
+
+  iteratePlanGeometry(floor, (key, id, _, geometry) => {
+    if (geometryIntersectsRect(geometry, bounds)) {
+      selection[key].push(id);
+    }
+  });
+
+  return {
+    bounds,
+    selection,
+    objectCount: countSelection(selection),
+  };
+}
+
+export function buildPlanClipboardPayload({ projectId, floorId, floor, regionSelection }) {
+  const selection = regionSelection?.selection || createEmptyPlanSelection();
+  const selectionSets = toIdSetMap(selection);
+  const anchor = {
+    x: regionSelection?.bounds?.minX || 0,
+    y: regionSelection?.bounds?.minY || 0,
+  };
+  const content = createEmptyPlanContent();
+
+  content.walls = (floor.walls || [])
+    .filter((wall) => selectionSets.walls.has(wall.id))
+    .map((wall) => rebaseWall(wall, anchor, selectionSets.columns));
+
+  content.columns = (floor.columns || [])
+    .filter((column) => selectionSets.columns.has(column.id))
+    .map((column) => rebaseColumn(column, anchor));
+
+  content.doors = (floor.doors || [])
+    .filter((door) => selectionSets.doors.has(door.id) && selectionSets.walls.has(door.wallId))
+    .map((door) => rebaseDoor(door));
+
+  content.windows = (floor.windows || [])
+    .filter((window_) => selectionSets.windows.has(window_.id) && selectionSets.walls.has(window_.wallId))
+    .map((window_) => rebaseWindow(window_));
+
+  content.beams = (floor.beams || [])
+    .filter((beam) => {
+      if (!selectionSets.beams.has(beam.id)) return false;
+      const startId = beam.startRef?.id;
+      const endId = beam.endRef?.id;
+      return selectionSets.columns.has(startId) && selectionSets.columns.has(endId);
+    })
+    .map((beam) => rebaseBeam(beam));
+
+  content.stairs = (floor.stairs || [])
+    .filter((stair) => selectionSets.stairs.has(stair.id))
+    .map((stair) => rebaseStair(stair, anchor));
+
+  content.landings = (floor.landings || [])
+    .filter((landing) => selectionSets.landings.has(landing.id))
+    .map((landing) => rebaseLanding(landing, anchor));
+
+  content.annotations = (floor.annotations || [])
+    .filter((annotation) => selectionSets.annotations.has(annotation.id))
+    .map((annotation) => rebaseAnnotation(annotation, anchor));
+
+  content.slabs = (floor.slabs || [])
+    .filter((slab) => selectionSets.slabs.has(slab.id))
+    .map((slab) => rebaseSlab(slab, anchor));
+
+  content.sectionCuts = (floor.sectionCuts || [])
+    .filter((sectionCut) => selectionSets.sectionCuts.has(sectionCut.id))
+    .map((sectionCut) => rebaseSectionCut(sectionCut, anchor));
+
+  content.rooms = (floor.rooms || [])
+    .filter((room) => selectionSets.rooms.has(room.id))
+    .map((room) => rebaseRoom(room, anchor));
+
+  return {
+    sourceProjectId: projectId,
+    sourceFloorId: floorId,
+    sourceBounds: regionSelection?.bounds || null,
+    sourceSelectionCount: regionSelection?.objectCount || 0,
+    bounds: buildContentBounds(content),
+    anchor,
+    objectCount: countContent(content),
+    content,
+  };
+}
+
+export function materializePlanClipboardContent(payload, placementPoint) {
+  if (!payload) return null;
+  return translateContent(payload.content, placementPoint);
+}
+
+export function cutPlanSelectionFromFloor(floor, selection) {
+  const selectionSets = toIdSetMap(selection);
+  const selectedWallIds = selectionSets.walls;
+  const selectedColumnIds = selectionSets.columns;
+
+  const nextWalls = (floor.walls || [])
+    .filter((wall) => !selectedWallIds.has(wall.id))
+    .map((wall) => ({
+      ...wall,
+      startAttachment: selectedColumnIds.has(wall.startAttachment?.columnId)
+        ? null
+        : cloneAttachment(wall.startAttachment),
+      endAttachment: selectedColumnIds.has(wall.endAttachment?.columnId)
+        ? null
+        : cloneAttachment(wall.endAttachment),
+    }));
+
+  const nextDoors = (floor.doors || []).filter((door) => (
+    !selectionSets.doors.has(door.id) && !selectedWallIds.has(door.wallId)
+  ));
+
+  const nextWindows = (floor.windows || []).filter((window_) => (
+    !selectionSets.windows.has(window_.id) && !selectedWallIds.has(window_.wallId)
+  ));
+
+  const nextColumns = (floor.columns || []).filter((column) => !selectedColumnIds.has(column.id));
+  const nextColumnIds = new Set(nextColumns.map((column) => column.id));
+
+  const nextBeams = (floor.beams || []).filter((beam) => (
+    !selectionSets.beams.has(beam.id) &&
+    nextColumnIds.has(beam.startRef?.id) &&
+    nextColumnIds.has(beam.endRef?.id)
+  ));
+
+  return {
+    ...floor,
+    walls: nextWalls,
+    doors: nextDoors,
+    windows: nextWindows,
+    columns: nextColumns,
+    beams: nextBeams,
+    stairs: (floor.stairs || []).filter((stair) => !selectionSets.stairs.has(stair.id)),
+    landings: (floor.landings || []).filter((landing) => !selectionSets.landings.has(landing.id)),
+    annotations: (floor.annotations || []).filter((annotation) => !selectionSets.annotations.has(annotation.id)),
+    slabs: (floor.slabs || []).filter((slab) => !selectionSets.slabs.has(slab.id)),
+    sectionCuts: (floor.sectionCuts || []).filter((sectionCut) => !selectionSets.sectionCuts.has(sectionCut.id)),
+    rooms: (floor.rooms || []).filter((room) => !selectionSets.rooms.has(room.id)),
+  };
+}
+
+export function pastePlanClipboardOnFloor({ floor, floorId, payload, placementPoint }) {
+  const translated = materializePlanClipboardContent(payload, placementPoint);
+  if (!translated) {
+    return {
+      nextFloor: floor,
+      insertedSelection: createEmptyPlanSelection(),
+      insertedCount: 0,
+      insertedBounds: null,
+    };
+  }
+
+  const idMaps = PLAN_KEYS.reduce((acc, key) => {
+    acc[key] = new Map();
+    return acc;
+  }, {});
+  const insertedSelection = createEmptyPlanSelection();
+
+  const nextColumns = (translated.columns || []).map((column) => {
+    const nextId = generateId(idPrefixForKey('columns'));
+    idMaps.columns.set(column.id, nextId);
+    insertedSelection.columns.push(nextId);
+    return {
+      ...column,
+      id: nextId,
+    };
+  });
+
+  const nextWalls = (translated.walls || []).map((wall) => {
+    const nextId = generateId(idPrefixForKey('walls'));
+    idMaps.walls.set(wall.id, nextId);
+    insertedSelection.walls.push(nextId);
+    return {
+      ...wall,
+      id: nextId,
+      startAttachment: cloneAttachment(wall.startAttachment, idMaps.columns.get(wall.startAttachment?.columnId) || null),
+      endAttachment: cloneAttachment(wall.endAttachment, idMaps.columns.get(wall.endAttachment?.columnId) || null),
+    };
+  });
+
+  const nextDoors = (translated.doors || []).flatMap((door) => {
+    const nextWallId = idMaps.walls.get(door.wallId);
+    if (!nextWallId) return [];
+    const nextId = generateId(idPrefixForKey('doors'));
+    idMaps.doors.set(door.id, nextId);
+    insertedSelection.doors.push(nextId);
+    return [{
+      ...door,
+      id: nextId,
+      wallId: nextWallId,
+    }];
+  });
+
+  const nextWindows = (translated.windows || []).flatMap((window_) => {
+    const nextWallId = idMaps.walls.get(window_.wallId);
+    if (!nextWallId) return [];
+    const nextId = generateId(idPrefixForKey('windows'));
+    idMaps.windows.set(window_.id, nextId);
+    insertedSelection.windows.push(nextId);
+    return [{
+      ...window_,
+      id: nextId,
+      wallId: nextWallId,
+    }];
+  });
+
+  const nextBeams = (translated.beams || []).flatMap((beam) => {
+    const nextStartId = idMaps.columns.get(beam.startRef?.id);
+    const nextEndId = idMaps.columns.get(beam.endRef?.id);
+    if (!nextStartId || !nextEndId) return [];
+
+    const nextId = generateId(idPrefixForKey('beams'));
+    idMaps.beams.set(beam.id, nextId);
+    insertedSelection.beams.push(nextId);
+
+    return [{
+      ...beam,
+      id: nextId,
+      startRef: beam.startRef ? { ...beam.startRef, id: nextStartId } : null,
+      endRef: beam.endRef ? { ...beam.endRef, id: nextEndId } : null,
+    }];
+  });
+
+  const nextLandings = (translated.landings || []).map((landing) => {
+    const nextId = generateId(idPrefixForKey('landings'));
+    idMaps.landings.set(landing.id, nextId);
+    insertedSelection.landings.push(nextId);
+    return {
+      ...landing,
+      id: nextId,
+    };
+  });
+
+  const nextStairs = (translated.stairs || []).map((stair) => {
+    const nextId = generateId(idPrefixForKey('stairs'));
+    idMaps.stairs.set(stair.id, nextId);
+    insertedSelection.stairs.push(nextId);
+    return {
+      ...stair,
+      id: nextId,
+      floorRelation: {
+        fromFloorId: floorId,
+        toFloorId: null,
+      },
+      startLandingAttachment: stair.startLandingAttachment
+        ? { ...stair.startLandingAttachment, landingId: idMaps.landings.get(stair.startLandingAttachment.landingId) || stair.startLandingAttachment.landingId }
+        : null,
+      endLandingAttachment: stair.endLandingAttachment
+        ? { ...stair.endLandingAttachment, landingId: idMaps.landings.get(stair.endLandingAttachment.landingId) || stair.endLandingAttachment.landingId }
+        : null,
+    };
+  });
+
+  const nextAnnotations = (translated.annotations || []).map((annotation) => {
+    const nextId = generateId(idPrefixForKey('annotations'));
+    idMaps.annotations.set(annotation.id, nextId);
+    insertedSelection.annotations.push(nextId);
+    return {
+      ...annotation,
+      id: nextId,
+    };
+  });
+
+  const nextSlabs = (translated.slabs || []).map((slab) => {
+    const nextId = generateId(idPrefixForKey('slabs'));
+    idMaps.slabs.set(slab.id, nextId);
+    insertedSelection.slabs.push(nextId);
+    return {
+      ...slab,
+      id: nextId,
+      floorId,
+    };
+  });
+
+  const nextSectionCuts = (translated.sectionCuts || []).map((sectionCut) => {
+    const nextId = generateId(idPrefixForKey('sectionCuts'));
+    idMaps.sectionCuts.set(sectionCut.id, nextId);
+    insertedSelection.sectionCuts.push(nextId);
+    return {
+      ...sectionCut,
+      id: nextId,
+    };
+  });
+
+  const nextRooms = (translated.rooms || []).map((room) => {
+    const nextId = generateId(idPrefixForKey('rooms'));
+    idMaps.rooms.set(room.id, nextId);
+    insertedSelection.rooms.push(nextId);
+    return {
+      ...room,
+      id: nextId,
+    };
+  });
+
+  const insertedContent = {
+    walls: nextWalls,
+    doors: nextDoors,
+    windows: nextWindows,
+    columns: nextColumns,
+    beams: nextBeams,
+    stairs: nextStairs,
+    landings: nextLandings,
+    annotations: nextAnnotations,
+    slabs: nextSlabs,
+    sectionCuts: nextSectionCuts,
+    rooms: nextRooms,
+  };
+
+  return {
+    nextFloor: {
+      ...floor,
+      walls: [...(floor.walls || []), ...nextWalls],
+      doors: [...(floor.doors || []), ...nextDoors],
+      windows: [...(floor.windows || []), ...nextWindows],
+      columns: [...(floor.columns || []), ...nextColumns],
+      beams: [...(floor.beams || []), ...nextBeams],
+      stairs: [...(floor.stairs || []), ...nextStairs],
+      landings: [...(floor.landings || []), ...nextLandings],
+      annotations: [...(floor.annotations || []), ...nextAnnotations],
+      slabs: [...(floor.slabs || []), ...nextSlabs],
+      sectionCuts: [...(floor.sectionCuts || []), ...nextSectionCuts],
+      rooms: [...(floor.rooms || []), ...nextRooms],
+    },
+    insertedSelection,
+    insertedCount: countSelection(insertedSelection),
+    insertedBounds: buildContentBounds(insertedContent),
+  };
+}
+
+export function clonePlanSelection(selection) {
+  return cloneSelection(selection);
+}

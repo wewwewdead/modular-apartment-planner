@@ -1,5 +1,6 @@
 import { createBeam } from '@/domain/models';
 import { BEAM_WIDTH, BEAM_DEPTH } from '@/domain/defaults';
+import { getFloorElevation } from '@/domain/floorModels';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { pointInPolygon } from '@/geometry/polygon';
 
@@ -61,7 +62,7 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
         { kind: 'column', id: column.id },
         BEAM_WIDTH,
         BEAM_DEPTH,
-        floor.level ?? 0
+        getFloorElevation(floor)
       );
 
       dispatch({ type: 'BEAM_ADD', floorId: activeFloorId, beam });

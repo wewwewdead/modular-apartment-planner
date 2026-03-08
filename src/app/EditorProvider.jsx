@@ -17,64 +17,75 @@ function getInitialSheetViewport() {
   return { panX: 120, panY: 80, zoom: 2 };
 }
 
+function clearSelectionState(state) {
+  return {
+    ...state,
+    selectedId: null,
+    selectedType: null,
+    regionSelection: null,
+    pastePreview: { active: false, point: null },
+  };
+}
+
 function editorReducer(state, action) {
   switch (action.type) {
     case 'SET_TOOL':
       return {
-        ...state,
+        ...clearSelectionState(state),
         activeTool: action.tool,
         toolState: {},
-        selectedId: null,
-        selectedType: null,
         statusMessage: null,
       };
 
     case 'SET_VIEW_MODE':
       return {
-        ...state,
+        ...clearSelectionState(state),
         workspaceMode: 'model',
         viewMode: normalizeViewMode(action.viewMode),
+        activeSectionCutId: action.sectionCutId ?? state.activeSectionCutId,
         viewport: { ...state.modelViewport },
         toolState: {},
-        selectedId: null,
-        selectedType: null,
         statusMessage: null,
       };
 
     case 'SET_WORKSPACE_MODE':
       return {
-        ...state,
+        ...clearSelectionState(state),
         workspaceMode: action.workspaceMode,
         viewport: action.workspaceMode === 'sheet'
           ? { ...state.sheetViewport }
           : { ...state.modelViewport },
         toolState: {},
-        selectedId: null,
-        selectedType: null,
         statusMessage: null,
       };
 
     case 'SET_ACTIVE_SHEET':
       return {
-        ...state,
+        ...clearSelectionState(state),
         activeSheetId: action.sheetId,
-        selectedId: null,
-        selectedType: null,
         statusMessage: null,
       };
 
     case 'SELECT_OBJECT':
       return {
-        ...state,
+        ...clearSelectionState(state),
         selectedId: action.id,
         selectedType: action.objectType,
       };
 
     case 'DESELECT':
+      return clearSelectionState(state);
+
+    case 'SET_REGION_SELECTION':
       return {
-        ...state,
-        selectedId: null,
-        selectedType: null,
+        ...clearSelectionState(state),
+        regionSelection: action.selection && action.bounds
+          ? {
+              bounds: action.bounds,
+              selection: action.selection,
+              objectCount: Object.values(action.selection).reduce((count, ids) => count + (ids?.length || 0), 0),
+            }
+          : null,
       };
 
     case 'UPDATE_TOOL_STATE':
@@ -132,7 +143,12 @@ function editorReducer(state, action) {
       return { ...state, snapEnabled: !state.snapEnabled };
 
     case 'SET_ACTIVE_FLOOR':
-      return { ...state, activeFloorId: action.floorId, statusMessage: null };
+      return {
+        ...clearSelectionState(state),
+        activeFloorId: action.floorId,
+        toolState: {},
+        statusMessage: null,
+      };
 
     case 'SET_STATUS_MESSAGE':
       return { ...state, statusMessage: action.message };
@@ -141,12 +157,50 @@ function editorReducer(state, action) {
       if (!state.statusMessage) return state;
       return { ...state, statusMessage: null };
 
+    case 'START_PASTE_PREVIEW':
+      return {
+        ...state,
+        selectedId: null,
+        selectedType: null,
+        regionSelection: null,
+        pastePreview: {
+          active: true,
+          point: action.point ?? null,
+        },
+      };
+
+    case 'UPDATE_PASTE_PREVIEW':
+      if (!state.pastePreview?.active) return state;
+      return {
+        ...state,
+        pastePreview: {
+          active: true,
+          point: action.point,
+        },
+      };
+
+    case 'CANCEL_PASTE_PREVIEW':
+      if (!state.pastePreview?.active) return state;
+      return {
+        ...state,
+        pastePreview: {
+          active: false,
+          point: null,
+        },
+      };
+
+    case 'TOGGLE_MAXIMIZE_PANEL':
+      return {
+        ...state,
+        maximizedPanel: state.maximizedPanel === action.panel ? null : action.panel,
+      };
+
     default:
       return state;
   }
 }
 
-export function createInitialEditorState(activeFloorId) {
+export function createInitialEditorState(activeFloorId = null) {
   const modelViewport = getInitialModelViewport();
   const sheetViewport = getInitialSheetViewport();
   return {
@@ -163,22 +217,33 @@ export function createInitialEditorState(activeFloorId) {
     viewMode: 'plan',
     activeFloorId,
     activeSheetId: null,
+    activeSectionCutId: null,
     statusMessage: null,
+    regionSelection: null,
+    pastePreview: { active: false, point: null },
+    maximizedPanel: null,
   };
 }
 
-export function EditorProvider({ children, activeFloorId }) {
+export function EditorProvider({ children, initialActiveFloorId = null, availableFloorIds = [] }) {
   const [state, dispatch] = useReducer(
     editorReducer,
-    activeFloorId,
+    initialActiveFloorId,
     createInitialEditorState
   );
 
   useEffect(() => {
-    if (activeFloorId && activeFloorId !== state.activeFloorId) {
-      dispatch({ type: 'SET_ACTIVE_FLOOR', floorId: activeFloorId });
+    if (!availableFloorIds.length) {
+      if (state.activeFloorId !== null) {
+        dispatch({ type: 'SET_ACTIVE_FLOOR', floorId: null });
+      }
+      return;
     }
-  }, [activeFloorId]);
+
+    if (!state.activeFloorId || !availableFloorIds.includes(state.activeFloorId)) {
+      dispatch({ type: 'SET_ACTIVE_FLOOR', floorId: availableFloorIds[0] });
+    }
+  }, [availableFloorIds, state.activeFloorId]);
 
   return (
     <EditorContext.Provider value={{ state, dispatch }}>

@@ -3,44 +3,84 @@ import { useProject } from '@/app/ProjectProvider';
 import { useEditor } from '@/app/EditorProvider';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
+import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
+import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { getAnnotationDisplayLabel } from '@/annotations/format';
 import styles from './Sidebar.module.css';
 
-function Section({ title, count, collapsed, onToggle, collapsible = true, children }) {
+function ChevronSvg({ collapsed }) {
+  return (
+    <span className={`${styles.chevron} ${collapsed ? styles.chevronCollapsed : ''}`}>
+      <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.chevronIcon}>
+        <path
+          d="M5 3.5l4 3.5-4 3.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+function DuplicateIcon() {
+  return (
+    <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+      <rect x="5" y="5" width="7" height="7" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2 9V3a1 1 0 0 1 1-1h6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+      <path d="M3 4.5h8M5.5 4.5V3a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M4 4.5l.5 7.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5l.5-7.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function Section({ title, count, collapsed, onToggle, collapsible = true, action, children }) {
   return (
     <div className={styles.section}>
-      <button
-        type="button"
-        className={`${styles.sectionHeader} ${collapsible ? styles.sectionHeaderClickable : ''}`}
-        onClick={collapsible ? onToggle : undefined}
-        aria-expanded={!collapsed}
-      >
-        <span className={`${styles.chevron} ${collapsed ? styles.chevronCollapsed : ''}`}>
-          {collapsible ? '▾' : ''}
-        </span>
-        <span className={styles.sectionTitle}>{title}</span>
-        {count !== undefined && <span className={styles.count}>{count}</span>}
-      </button>
+      <div className={styles.sectionHeaderRow}>
+        <button
+          type="button"
+          className={`${styles.sectionHeader} ${collapsible ? styles.sectionHeaderClickable : ''} ${styles.sectionHeaderContent}`}
+          onClick={collapsible ? onToggle : undefined}
+          aria-expanded={!collapsed}
+        >
+          {collapsible ? <ChevronSvg collapsed={collapsed} /> : <span style={{ width: 14 }} />}
+          <span className={styles.sectionTitle}>{title}</span>
+          {count !== undefined && <span className={styles.count}>{count}</span>}
+        </button>
+        {action}
+      </div>
       {!collapsed && children}
     </div>
   );
 }
 
 export default function Sidebar() {
-  const { project, dispatch } = useProject();
+  const { project, dispatch, duplicateFloor } = useProject();
   const { activeFloorId, activeSheetId, selectedId, workspaceMode, dispatch: editorDispatch } = useEditor();
-  const floor = project.floors.find(f => f.id === activeFloorId);
+  const orderedFloors = getOrderedFloors(project);
+  const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const [collapsedSections, setCollapsedSections] = useState({
     floors: false,
     sheets: false,
-    slab: false,
+    slabs: false,
     walls: false,
     annotations: false,
     beams: false,
     stairs: false,
+    landings: false,
     doors: false,
     windows: false,
     columns: false,
@@ -49,6 +89,54 @@ export default function Sidebar() {
 
   const selectObject = (id, type) => {
     editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
+  };
+
+  const selectFloor = (floorId) => {
+    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+    editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId });
+    editorDispatch({ type: 'SELECT_OBJECT', id: floorId, objectType: 'floor' });
+  };
+
+  const setActiveFloor = (floorId) => {
+    editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId });
+  };
+
+  const addFloor = () => {
+    const nextFloor = createFloorAboveHighest(project.floors || []);
+    dispatch({ type: 'FLOOR_ADD', floor: nextFloor });
+    selectFloor(nextFloor.id);
+  };
+
+  const handleDuplicateFloor = (floorToDuplicate) => {
+    const duplicatedFloor = duplicateFloor(floorToDuplicate.id);
+    if (!duplicatedFloor) return;
+
+    dispatch({ type: 'FLOOR_DUPLICATE', floor: duplicatedFloor });
+    selectFloor(duplicatedFloor.id);
+  };
+
+  const handleDeleteFloor = (floorToDelete) => {
+    if ((project.floors || []).length <= 1) return;
+
+    const confirmed = window.confirm(`Delete "${floorToDelete.name}"?`);
+    if (!confirmed) return;
+
+    const remainingFloors = orderedFloors.filter((entry) => entry.id !== floorToDelete.id);
+    const fallbackFloor = remainingFloors[0] || null;
+
+    dispatch({
+      type: 'FLOOR_DELETE',
+      floorId: floorToDelete.id,
+      fallbackFloorId: fallbackFloor?.id ?? null,
+    });
+
+    if (floorToDelete.id === activeFloorId && fallbackFloor) {
+      if (workspaceMode === 'model') {
+        selectFloor(fallbackFloor.id);
+      } else {
+        setActiveFloor(fallbackFloor.id);
+      }
+    }
   };
 
   const addSheet = () => {
@@ -81,19 +169,47 @@ export default function Sidebar() {
 
       <Section
         title="Floors"
+        count={orderedFloors.length}
         collapsed={collapsedSections.floors}
         onToggle={() => toggleSection('floors')}
+        action={
+          <button type="button" className={styles.sectionAddBtn} onClick={addFloor} title="Add Floor">+</button>
+        }
       >
-        {project.floors.map(f => (
+        {orderedFloors.map((entry) => (
           <div
-            key={f.id}
-            className={`${styles.item} ${f.id === activeFloorId ? styles.itemSelected : ''}`}
-            onClick={() => {
-              editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: f.id });
-              editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
-            }}
+            key={entry.id}
+            className={`${styles.floorCard} ${entry.id === activeFloorId ? styles.floorCardActive : ''}`}
           >
-            {f.name}
+            <button
+              type="button"
+              className={styles.floorButton}
+              onClick={() => selectFloor(entry.id)}
+            >
+              <span className={styles.floorName}>{entry.name}</span>
+              <span className={styles.floorMeta}>
+                L{getFloorLevelIndex(entry)} · {Math.round(getFloorElevation(entry))} mm
+              </span>
+            </button>
+            <div className={styles.floorActions}>
+              <button
+                type="button"
+                className={styles.floorActionBtn}
+                onClick={() => handleDuplicateFloor(entry)}
+                title={`Duplicate ${entry.name}`}
+              >
+                <DuplicateIcon />
+              </button>
+              <button
+                type="button"
+                className={`${styles.floorActionBtn} ${styles.floorActionDanger}`}
+                onClick={() => handleDeleteFloor(entry)}
+                title={`Delete ${entry.name}`}
+                disabled={orderedFloors.length <= 1}
+              >
+                <TrashIcon />
+              </button>
+            </div>
           </div>
         ))}
       </Section>
@@ -103,10 +219,10 @@ export default function Sidebar() {
         count={(project.sheets || []).length}
         collapsed={collapsedSections.sheets}
         onToggle={() => toggleSection('sheets')}
+        action={
+          <button type="button" className={styles.sectionAddBtn} onClick={addSheet} title="Add Sheet">+</button>
+        }
       >
-        <button type="button" className={styles.item} onClick={addSheet}>
-          + Add Sheet
-        </button>
         {(project.sheets || []).map((sheet, index) => (
           <div
             key={sheet.id}
@@ -124,20 +240,23 @@ export default function Sidebar() {
 
       {floor && (
         <>
+          <div className={styles.contextHeader}>Floor: {floor.name}</div>
+
           <Section
-            title="Slab"
-            count={floor.slab ? 1 : 0}
-            collapsed={collapsedSections.slab}
-            onToggle={() => toggleSection('slab')}
+            title="Slabs"
+            count={(floor.slabs || []).length}
+            collapsed={collapsedSections.slabs}
+            onToggle={() => toggleSection('slabs')}
           >
-            {floor.slab && (
+            {(floor.slabs || []).map(slab => (
               <div
-                className={`${styles.item} ${selectedId === floor.slab.id ? styles.itemSelected : ''}`}
-                onClick={() => selectObject(floor.slab.id, 'slab')}
+                key={slab.id}
+                className={`${styles.item} ${selectedId === slab.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(slab.id, 'slab')}
               >
-                {getSlabDisplayLabel(floor.slab)}
+                {getSlabDisplayLabel(slab)}
               </div>
-            )}
+            ))}
           </Section>
 
           <Section
@@ -204,6 +323,23 @@ export default function Sidebar() {
                 onClick={() => selectObject(stair.id, 'stair')}
               >
                 {getStairDisplayLabel(stair)}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Landings"
+            count={(floor.landings || []).length}
+            collapsed={collapsedSections.landings}
+            onToggle={() => toggleSection('landings')}
+          >
+            {(floor.landings || []).map(landing => (
+              <div
+                key={landing.id}
+                className={`${styles.item} ${selectedId === landing.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(landing.id, 'landing')}
+              >
+                {getLandingDisplayLabel(landing)}
               </div>
             ))}
           </Section>
