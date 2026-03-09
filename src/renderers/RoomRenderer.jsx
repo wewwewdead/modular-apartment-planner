@@ -1,4 +1,6 @@
-export default function RoomRenderer({ rooms, selectedId }) {
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
+
+export default function RoomRenderer({ rooms, selectedId, interactive = true }) {
   return (
     <g className="rooms">
       {rooms.map(room => {
@@ -10,10 +12,10 @@ export default function RoomRenderer({ rooms, selectedId }) {
             {hasPolygon && (
               <polygon
                 points={room.points.map(p => `${p.x},${p.y}`).join(' ')}
-                fill={room.color}
-                fillOpacity={isSelected ? 0.55 : 0.4}
+                fill={DRAWING_GRAPHICS.plan.roomFill.fill}
+                fillOpacity={isSelected ? 0.72 : 1}
                 stroke="none"
-                style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                style={{ pointerEvents: interactive ? 'all' : 'none', cursor: interactive ? 'pointer' : 'default' }}
               />
             )}
           </g>

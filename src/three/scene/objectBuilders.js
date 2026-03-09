@@ -7,6 +7,16 @@ import { getStairRenderData } from '@/geometry/stairGeometry';
 import { wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
 import { buildWallPreviewContexts, buildWallSolidSegments } from './wallPreviewContext';
 
+const FIXTURE_3D_HEIGHTS = {
+  kitchenTop: 900,
+  toilet: 400,
+  lavatory: 850,
+  table: 750,
+  tv: 750,
+  sofa: 800,
+  bed: 550,
+};
+
 const DOOR_INSERT_THICKNESS_MIN = 35;
 const DOOR_INSERT_THICKNESS_MAX = 70;
 const WINDOW_INSERT_THICKNESS_MIN = 45;
@@ -309,6 +319,39 @@ function buildLandingObjects(floor, floorLevel, landingElevationMap) {
   ));
 }
 
+function buildFixtureObjects(floor, floorLevel) {
+  // Sit fixtures on top of the highest slab surface (or floorLevel if no slabs)
+  // +1mm offset prevents z-fighting where fixture bottom meets slab top
+  const slabs = floor.slabs || [];
+  const slabTop = slabs.length > 0
+    ? Math.max(...slabs.map(s => s.elevation ?? floorLevel))
+    : floorLevel;
+  const fixtureBase = Math.max(slabTop, floorLevel) + 1;
+
+  return (floor.fixtures || []).map((fixture) => {
+    const descriptor = createBoxDescriptor(
+      fixture.id,
+      'fixture',
+      { x: fixture.x, y: fixture.y },
+      {
+        x: fixture.width,
+        y: FIXTURE_3D_HEIGHTS[fixture.fixtureType] || 750,
+        z: fixture.depth,
+      },
+      fixtureBase,
+      (fixture.rotation || 0) * Math.PI / 180,
+      {
+        sourceId: fixture.id,
+        floorId: floor.id,
+        materialKey: 'fixture_' + fixture.fixtureType,
+      }
+    );
+    descriptor.geometry = 'fixture';
+    descriptor.fixtureType = fixture.fixtureType;
+    return descriptor;
+  });
+}
+
 export function buildFloorPreviewObjects(floor) {
   const floorLevel = getFloorElevation(floor);
   const landings = floor.landings || [];
@@ -329,5 +372,6 @@ export function buildFloorPreviewObjects(floor) {
     ...buildLandingObjects(floor, floorLevel, landingElevationMap),
     ...buildDoorObjects(wallContexts),
     ...buildWindowObjects(wallContexts),
+    ...buildFixtureObjects(floor, floorLevel),
   ];
 }

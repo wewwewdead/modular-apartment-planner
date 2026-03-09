@@ -18,6 +18,7 @@ const INSPECTABLE_TYPES = new Set([
   'landing',
   'door',
   'window',
+  'fixture',
 ]);
 
 const TYPE_LABELS = {
@@ -29,6 +30,16 @@ const TYPE_LABELS = {
   landing: 'Landing',
   door: 'Door',
   window: 'Window',
+  fixture: 'Fixture',
+};
+
+const FIXTURE_TYPE_LABELS = {
+  kitchenTop: 'Kitchen Top',
+  toilet: 'Toilet',
+  lavatory: 'Lavatory',
+  table: 'Table',
+  tv: 'TV',
+  sofa: 'Sofa',
 };
 
 function mmRow(label, value) {
@@ -57,6 +68,8 @@ function findObjectInFloor(floor, selectedType, selectedId) {
       return floor.doors?.find((door) => door.id === selectedId) || null;
     case 'window':
       return floor.windows?.find((windowItem) => windowItem.id === selectedId) || null;
+    case 'fixture':
+      return (floor.fixtures || []).find((fixture) => fixture.id === selectedId) || null;
     default:
       return null;
   }
@@ -78,6 +91,8 @@ function titleForObject(selectedType, object, floor) {
     case 'door':
     case 'window':
       return `${TYPE_LABELS[selectedType]} ${object.id.split('_').pop()}`;
+    case 'fixture':
+      return FIXTURE_TYPE_LABELS[object.fixtureType] || 'Fixture';
     default:
       return object?.id || TYPE_LABELS[selectedType] || 'Object';
   }
@@ -132,6 +147,11 @@ function rowsForObject(selectedType, object, floor) {
         mmRow('Width', object.width),
         mmRow('Height', object.height),
         mmRow('Sill', object.sillHeight),
+      ];
+    case 'fixture':
+      return [
+        mmRow('Width', object.width),
+        mmRow('Depth', object.depth),
       ];
     default:
       return [];

@@ -234,6 +234,197 @@ function createWindowObject(descriptor, materialPalette, isSelected) {
   return group;
 }
 
+// ── Fixture helpers ──
+
+function addBox(group, materialKey, sx, sy, sz, px, py, pz, materialPalette, isSelected) {
+  const geo = new THREE.BoxGeometry(Math.max(sx, 1), Math.max(sy, 1), Math.max(sz, 1));
+  const mesh = new THREE.Mesh(geo, createMeshMaterial(materialPalette, materialKey, isSelected));
+  mesh.position.set(px, py, pz);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh, materialPalette, isSelected);
+  group.add(mesh);
+}
+
+function addCylinder(group, materialKey, rTop, rBot, h, segs, px, py, pz, materialPalette, isSelected) {
+  const geo = new THREE.CylinderGeometry(Math.max(rTop, 0.5), Math.max(rBot, 0.5), Math.max(h, 0.5), segs);
+  const mesh = new THREE.Mesh(geo, createMeshMaterial(materialPalette, materialKey, isSelected));
+  mesh.position.set(px, py, pz);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh, materialPalette, isSelected);
+  group.add(mesh);
+  return mesh;
+}
+
+function buildKitchenTopFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_kitchenTop';
+  // Cabinet body
+  addBox(group, mat, W, H * 0.88, D, 0, H * 0.44, 0, palette, sel);
+  // Countertop slab
+  addBox(group, mat, W + 20, H * 0.04, D + 18, 0, H * 0.90, 0, palette, sel);
+  // Stovetop area
+  addBox(group, 'fixtureAccentDark', W * 0.48, 5, D * 0.7, -W * 0.18, H * 0.921, 0, palette, sel);
+  // 4 burner rings (2x2 grid on left half)
+  const burnerOffsets = [
+    { x: -W * 0.30, z: -D * 0.15, r: D * 0.13 },
+    { x: -W * 0.30, z: D * 0.15, r: D * 0.13 },
+    { x: -W * 0.08, z: -D * 0.15, r: D * 0.10 },
+    { x: -W * 0.08, z: D * 0.15, r: D * 0.10 },
+  ];
+  for (const b of burnerOffsets) {
+    addCylinder(group, 'fixtureAccentMetal', b.r, b.r, 8, 16, b.x, H * 0.921, b.z, palette, sel);
+  }
+  // Sink basin
+  addBox(group, 'fixtureAccentCeramic', W * 0.22, H * 0.06, D * 0.5, W * 0.22, H * 0.88, 0, palette, sel);
+}
+
+function buildToiletFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_toilet';
+  // Cistern box
+  addBox(group, mat, W * 0.75, H * 0.75, D * 0.30, 0, H * 0.375, -D * 0.35, palette, sel);
+  // Cistern cap
+  addBox(group, mat, W * 0.70, H * 0.04, D * 0.26, 0, H * 0.77, -D * 0.35, palette, sel);
+  // Bowl outer
+  const bowlOuter = addCylinder(group, mat, W * 0.38, W * 0.30, H * 0.65, 20, 0, H * 0.325, D * 0.12, palette, sel);
+  bowlOuter.scale.z = 0.75;
+  // Bowl inner
+  const bowlInner = addCylinder(group, 'fixtureAccentCeramic', W * 0.30, W * 0.24, H * 0.15, 20, 0, H * 0.58, D * 0.12, palette, sel);
+  bowlInner.scale.z = 0.75;
+  // Seat rim
+  const seatRim = addCylinder(group, mat, W * 0.37, W * 0.37, H * 0.05, 20, 0, H * 0.66, D * 0.12, palette, sel);
+  seatRim.scale.z = 0.75;
+}
+
+function buildLavatoryFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_lavatory';
+  const scaleZ = D / W;
+  // Pedestal column
+  addBox(group, mat, W * 0.25, H * 0.75, D * 0.25, 0, H * 0.375, 0, palette, sel);
+  // Pedestal base
+  addBox(group, mat, W * 0.35, H * 0.03, D * 0.35, 0, H * 0.015, 0, palette, sel);
+  // Basin outer
+  const basinOuter = addCylinder(group, mat, W * 0.46, W * 0.38, H * 0.15, 20, 0, H * 0.825, 0, palette, sel);
+  basinOuter.scale.z = scaleZ;
+  // Basin inner
+  const basinInner = addCylinder(group, 'fixtureAccentCeramic', W * 0.38, W * 0.30, H * 0.10, 20, 0, H * 0.86, 0, palette, sel);
+  basinInner.scale.z = scaleZ;
+  // Basin rim
+  const basinRim = addCylinder(group, mat, W * 0.47, W * 0.47, H * 0.02, 20, 0, H * 0.90, 0, palette, sel);
+  basinRim.scale.z = scaleZ;
+  // Faucet stem
+  addBox(group, 'fixtureAccentMetal', W * 0.04, H * 0.08, D * 0.04, 0, H * 0.94, -D * 0.30, palette, sel);
+  // Faucet spout
+  addBox(group, 'fixtureAccentMetal', W * 0.04, H * 0.02, D * 0.12, 0, H * 0.96, -D * 0.18, palette, sel);
+}
+
+function buildTableFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_table';
+  // Tabletop
+  addBox(group, mat, W, H * 0.05, D, 0, H * 0.975, 0, palette, sel);
+  // Front apron
+  addBox(group, mat, W * 0.90, H * 0.06, D * 0.03, 0, H * 0.92, D * 0.44, palette, sel);
+  // Back apron
+  addBox(group, mat, W * 0.90, H * 0.06, D * 0.03, 0, H * 0.92, -D * 0.44, palette, sel);
+  // Left apron
+  addBox(group, 'fixtureAccentWood', W * 0.03, H * 0.06, D * 0.80, -W * 0.44, H * 0.92, 0, palette, sel);
+  // Right apron
+  addBox(group, 'fixtureAccentWood', W * 0.03, H * 0.06, D * 0.80, W * 0.44, H * 0.92, 0, palette, sel);
+  // 4 legs
+  const legR = W * 0.02;
+  const legH = H * 0.88;
+  const legY = H * 0.44;
+  const legPositions = [
+    { x: -W * 0.43, z: -D * 0.40 },
+    { x: -W * 0.43, z: D * 0.40 },
+    { x: W * 0.43, z: -D * 0.40 },
+    { x: W * 0.43, z: D * 0.40 },
+  ];
+  for (const lp of legPositions) {
+    addCylinder(group, 'fixtureAccentWood', legR, legR, legH, 8, lp.x, legY, lp.z, palette, sel);
+  }
+}
+
+function buildTvFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_tv';
+  // Screen panel
+  addBox(group, mat, W, H * 0.56, D * 0.3, 0, H * 0.72, 0, palette, sel);
+  // Bezel top
+  addBox(group, 'fixtureAccentDark', W * 1.01, H * 0.012, D * 0.35, 0, H * 1.00, 0, palette, sel);
+  // Bezel bottom
+  addBox(group, 'fixtureAccentDark', W * 1.01, H * 0.025, D * 0.35, 0, H * 0.435, 0, palette, sel);
+  // Stand neck
+  addBox(group, 'fixtureAccentMetal', W * 0.04, H * 0.15, D * 0.5, 0, H * 0.365, 0, palette, sel);
+  // Stand base
+  addBox(group, 'fixtureAccentMetal', W * 0.30, H * 0.02, D * 1.8, 0, H * 0.01, 0, palette, sel);
+}
+
+function buildSofaFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_sofa';
+  // Base frame
+  addBox(group, mat, W, H * 0.15, D, 0, H * 0.075, 0, palette, sel);
+  // Backrest
+  addBox(group, mat, W * 0.92, H * 0.52, D * 0.20, 0, H * 0.50, -D * 0.40, palette, sel);
+  // Left armrest
+  addBox(group, mat, W * 0.06, H * 0.38, D * 0.85, -W * 0.47, H * 0.34, D * 0.05, palette, sel);
+  // Right armrest
+  addBox(group, mat, W * 0.06, H * 0.38, D * 0.85, W * 0.47, H * 0.34, D * 0.05, palette, sel);
+  // 3 seat cushions
+  const cushionW = W * 0.28;
+  const cushionH = H * 0.14;
+  const cushionD = D * 0.58;
+  const cushionY = H * 0.22;
+  const cushionZ = D * 0.10;
+  for (const cx of [-W * 0.28, 0, W * 0.28]) {
+    addBox(group, 'fixtureAccentFabric', cushionW, cushionH, cushionD, cx, cushionY, cushionZ, palette, sel);
+  }
+}
+
+function buildBedFixture(group, W, H, D, palette, sel) {
+  const mat = 'fixture_bed';
+  // Bed frame
+  addBox(group, mat, W, H * 0.30, D, 0, H * 0.15, 0, palette, sel);
+  // Headboard
+  addBox(group, 'fixtureAccentWood', W, H * 0.65, D * 0.04, 0, H * 0.325, -D * 0.48, palette, sel);
+  // Mattress (slightly inset, sits on frame)
+  addBox(group, mat, W * 0.94, H * 0.30, D * 0.90, 0, H * 0.45, D * 0.03, palette, sel);
+  // Left pillow
+  addBox(group, 'fixtureAccentCeramic', W * 0.32, H * 0.12, D * 0.16, -W * 0.22, H * 0.66, -D * 0.36, palette, sel);
+  // Right pillow
+  addBox(group, 'fixtureAccentCeramic', W * 0.32, H * 0.12, D * 0.16, W * 0.22, H * 0.66, -D * 0.36, palette, sel);
+}
+
+const FIXTURE_BUILDERS = {
+  kitchenTop: buildKitchenTopFixture,
+  toilet: buildToiletFixture,
+  lavatory: buildLavatoryFixture,
+  table: buildTableFixture,
+  tv: buildTvFixture,
+  sofa: buildSofaFixture,
+  bed: buildBedFixture,
+};
+
+function createFixtureObject(descriptor, materialPalette, isSelected) {
+  const builder = FIXTURE_BUILDERS[descriptor.fixtureType];
+  if (!builder) {
+    return createBoxObject(descriptor, materialPalette, isSelected);
+  }
+
+  const group = new THREE.Group();
+  const W = descriptor.size.x;
+  const H = descriptor.size.y;
+  const D = descriptor.size.z;
+
+  builder(group, W, H, D, materialPalette, isSelected);
+
+  group.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation));
+  group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+
+  return group;
+}
+
+// ── Dispatcher ──
+
 function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
   if (descriptor.geometry === 'prism') {
     return createPrismObject(descriptor, materialPalette, isSelected);
@@ -245,6 +436,10 @@ function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
 
   if (descriptor.geometry === 'window') {
     return createWindowObject(descriptor, materialPalette, isSelected);
+  }
+
+  if (descriptor.geometry === 'fixture') {
+    return createFixtureObject(descriptor, materialPalette, isSelected);
   }
 
   return createBoxObject(descriptor, materialPalette, isSelected);

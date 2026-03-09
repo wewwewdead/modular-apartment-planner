@@ -1,13 +1,14 @@
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
 
 const STYLE_MAP = {
-  wall: { fill: '#f7f8fa', stroke: '#4c5b70' },
-  slab: { fill: '#d7dee8', stroke: '#4c5b70' },
-  column: { fill: '#c2c8cf', stroke: '#4c5b70' },
-  beam: { fill: '#b3c0cf', stroke: '#4c5b70' },
-  stair: { fill: '#e4e8ef', stroke: '#4c5b70' },
-  door: { fill: '#ffffff', stroke: '#4c5b70' },
-  window: { fill: '#e6f3ff', stroke: '#4c5b70' },
+  wall: { fill: DRAWING_GRAPHICS.elevation.fill, stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
+  slab: { fill: DRAWING_GRAPHICS.elevation.accentFill, stroke: DRAWING_GRAPHICS.elevation.accentStroke, strokeWidth: DRAWING_GRAPHICS.elevation.accentStrokeWidth },
+  column: { fill: DRAWING_GRAPHICS.elevation.accentFill, stroke: DRAWING_GRAPHICS.elevation.accentStroke, strokeWidth: DRAWING_GRAPHICS.elevation.accentStrokeWidth },
+  beam: { fill: DRAWING_GRAPHICS.elevation.accentFill, stroke: DRAWING_GRAPHICS.elevation.accentStroke, strokeWidth: DRAWING_GRAPHICS.elevation.accentStrokeWidth },
+  stair: { fill: '#fbfcfd', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
+  door: { fill: '#ffffff', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
+  window: { fill: '#ffffff', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
 };
 
 function rectPoints(element) {
@@ -33,7 +34,7 @@ export default function ElevationSceneLayer({ scene, annotationScene, showTitle 
           y={titleY}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill="var(--color-text-secondary)"
+          fill={DRAWING_GRAPHICS.annotation.textMuted}
           fontSize={220}
           fontFamily="var(--font-blueprint)"
           style={{ pointerEvents: 'none' }}
@@ -50,9 +51,8 @@ export default function ElevationSceneLayer({ scene, annotationScene, showTitle 
             points={rectPoints(element)}
             fill={style.fill}
             stroke={isSelected ? 'var(--color-selection)' : style.stroke}
-            strokeWidth={isSelected ? 2 : 1}
+            strokeWidth={isSelected ? 1.5 : style.strokeWidth}
             vectorEffect="non-scaling-stroke"
-            opacity={isSelected ? 0.95 : 1}
           />
         );
       })}
@@ -61,11 +61,10 @@ export default function ElevationSceneLayer({ scene, annotationScene, showTitle 
         y1={-scene.groundLevel}
         x2={scene.bounds.maxX + 500}
         y2={-scene.groundLevel}
-        stroke="var(--color-text-secondary)"
-        strokeWidth={1}
-        strokeDasharray="10 6"
+        stroke={DRAWING_GRAPHICS.elevation.groundStroke}
+        strokeWidth={0.8}
+        strokeDasharray={DRAWING_GRAPHICS.elevation.groundDash}
         vectorEffect="non-scaling-stroke"
-        opacity={0.6}
       />
       {annotationScene && (
         <BlueprintAnnotationLayer

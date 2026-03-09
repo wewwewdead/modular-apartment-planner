@@ -1,4 +1,5 @@
 import { doorOutlineOnWall } from '@/geometry/wallGeometry';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 function SwingDoor({ door, info }) {
   const flipSign = door.openDirection === 'right' ? -1 : 1;
@@ -9,16 +10,16 @@ function SwingDoor({ door, info }) {
       <line
         x1={0} y1={0}
         x2={0} y2={flipSign * -door.width}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       <path
         d={`M ${door.width} 0 A ${door.width} ${door.width} 0 0 ${door.openDirection === 'left' ? 1 : 0} 0 ${flipSign * -door.width}`}
         fill="none"
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
-        strokeDasharray="4 3"
+        stroke={DRAWING_GRAPHICS.plan.hiddenStroke}
+        strokeWidth={DRAWING_GRAPHICS.plan.hiddenStrokeWidth}
+        strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
         vectorEffect="non-scaling-stroke"
       />
     </g>
@@ -35,32 +36,32 @@ function DoubleDoor({ door, info }) {
       <line
         x1={0} y1={0}
         x2={0} y2={-halfWidth}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       <path
         d={`M ${-halfWidth} 0 A ${halfWidth} ${halfWidth} 0 0 1 0 ${-halfWidth}`}
         fill="none"
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
-        strokeDasharray="4 3"
+        stroke={DRAWING_GRAPHICS.plan.hiddenStroke}
+        strokeWidth={DRAWING_GRAPHICS.plan.hiddenStrokeWidth}
+        strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
         vectorEffect="non-scaling-stroke"
       />
       {/* Right leaf */}
       <line
         x1={0} y1={0}
         x2={0} y2={halfWidth}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       <path
         d={`M ${halfWidth} 0 A ${halfWidth} ${halfWidth} 0 0 1 0 ${halfWidth}`}
         fill="none"
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
-        strokeDasharray="4 3"
+        stroke={DRAWING_GRAPHICS.plan.hiddenStroke}
+        strokeWidth={DRAWING_GRAPHICS.plan.hiddenStrokeWidth}
+        strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
         vectorEffect="non-scaling-stroke"
       />
     </g>
@@ -80,24 +81,24 @@ function SlidingDoor({ door, info }) {
       <line
         x1={0} y1={0}
         x2={door.width} y2={0}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={4}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.5}
         vectorEffect="non-scaling-stroke"
       />
       {/* Direction arrow line */}
       <line
         x1={arrowStart} y1={arrowY}
         x2={arrowEnd} y2={arrowY}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
       {/* Arrowhead */}
       <polyline
         points={`${arrowEnd - 6},${arrowY - 4} ${arrowEnd},${arrowY} ${arrowEnd - 6},${arrowY + 4}`}
         fill="none"
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
     </g>

@@ -33,7 +33,7 @@
 }
 
 .sectionHeaderClickable:hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .sectionHeaderClickable:hover .sectionTitle {
@@ -134,6 +134,7 @@
   font-size: 13px;
   font-weight: 500;
   background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
   transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
 }
 
@@ -161,7 +162,7 @@
 
 .item:hover {
   background: rgba(0, 0, 0, 0.04);
-  border-left-color: var(--color-border);
+  border-left-color: rgba(0, 0, 0, 0.08);
 }
 
 .item:disabled {

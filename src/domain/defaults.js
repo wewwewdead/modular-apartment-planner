@@ -38,6 +38,21 @@ export const LANDING_WIDTH = 1000;  // mm
 export const LANDING_DEPTH = 1000;  // mm
 export const LANDING_THICKNESS = 200; // mm
 
+export const FIXTURE_KITCHEN_TOP_WIDTH = 2400;
+export const FIXTURE_KITCHEN_TOP_DEPTH = 600;
+export const FIXTURE_TOILET_WIDTH = 700;
+export const FIXTURE_TOILET_DEPTH = 400;
+export const FIXTURE_LAVATORY_WIDTH = 500;
+export const FIXTURE_LAVATORY_DEPTH = 400;
+export const FIXTURE_TABLE_WIDTH = 1200;
+export const FIXTURE_TABLE_DEPTH = 800;
+export const FIXTURE_TV_WIDTH = 1200;
+export const FIXTURE_TV_DEPTH = 100;
+export const FIXTURE_SOFA_WIDTH = 2000;
+export const FIXTURE_SOFA_DEPTH = 900;
+export const FIXTURE_BED_WIDTH = 1400;
+export const FIXTURE_BED_DEPTH = 2000;
+
 export const ROOM_COLOR = '#E8F0FE';
 
 export const ENDPOINT_MERGE_TOLERANCE = 1; // mm

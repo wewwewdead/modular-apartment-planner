@@ -26,6 +26,9 @@ import LandingRenderer from './LandingRenderer';
 import LandingPreview from './LandingPreview';
 import ColumnRenderer from './ColumnRenderer';
 import ColumnPreview from './ColumnPreview';
+import FixtureDefs from './FixtureDefs';
+import FixtureRenderer from './FixtureRenderer';
+import FixturePreview from './FixturePreview';
 import BeamPreview from './BeamPreview';
 import StairPreview from './StairPreview';
 import SlabPreview from './SlabPreview';
@@ -244,6 +247,10 @@ export default function SvgCanvas() {
           case 'l':
             editorDispatch({ type: 'SET_TOOL', tool: TOOLS.LANDING });
             return;
+          case 'f':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
+            editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
+            return;
         }
       }
 
@@ -312,6 +319,7 @@ export default function SvgCanvas() {
           {floor && (
             viewMode === 'plan' ? (
               <>
+                <FixtureDefs />
                 {(floor.slabs || []).map(slab => (
                   <SlabRenderer key={slab.id} slab={slab} selectedId={selectedId} />
                 ))}
@@ -322,6 +330,7 @@ export default function SvgCanvas() {
                 <StairRenderer stairs={floor.stairs || []} />
                 <LandingRenderer landings={floor.landings || []} />
                 <ColumnRenderer columns={floor.columns || []} />
+                <FixtureRenderer fixtures={floor.fixtures || []} />
                 <DoorRenderer doors={floor.doors} walls={floor.walls} />
                 <WindowRenderer windows={floor.windows} walls={floor.walls} />
                 {(floor.sectionCuts || []).map(sc => (
@@ -361,6 +370,7 @@ export default function SvgCanvas() {
                 <SectionCutPreview toolState={toolState} activeTool={activeTool} />
                 <ColumnPreview toolState={toolState} activeTool={activeTool} />
                 <LandingPreview toolState={toolState} activeTool={activeTool} />
+                <FixturePreview toolState={toolState} activeTool={activeTool} />
               </>
             ) : viewMode === 'section_view' ? (
               <SectionRenderer

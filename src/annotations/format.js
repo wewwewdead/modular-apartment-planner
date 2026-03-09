@@ -1,7 +1,11 @@
+import { formatDrawingArea, formatDrawingMeasurement } from '@/sheets/standards';
+
 export function formatMeasurement(mm) {
-  const abs = Math.abs(mm);
-  if (abs < 1000) return `${Math.round(abs)} mm`;
-  return `${(abs / 1000).toFixed(3)} m`;
+  return formatDrawingMeasurement(mm);
+}
+
+export function formatAreaLabel(area) {
+  return formatDrawingArea(area);
 }
 
 export function getAnnotationDisplayLabel(annotation) {

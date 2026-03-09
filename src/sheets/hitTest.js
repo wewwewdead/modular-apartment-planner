@@ -9,11 +9,17 @@ function pointInRect(point, rect) {
 
 export function getViewportHandleRects(viewport, handleSize) {
   const size = handleSize;
+  const midX = viewport.x + viewport.width / 2;
+  const midY = viewport.y + viewport.height / 2;
   return {
     nw: { x: viewport.x - size / 2, y: viewport.y - size / 2, width: size, height: size },
+    n: { x: midX - size / 2, y: viewport.y - size / 2, width: size, height: size },
     ne: { x: viewport.x + viewport.width - size / 2, y: viewport.y - size / 2, width: size, height: size },
-    sw: { x: viewport.x - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
+    e: { x: viewport.x + viewport.width - size / 2, y: midY - size / 2, width: size, height: size },
     se: { x: viewport.x + viewport.width - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
+    s: { x: midX - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
+    sw: { x: viewport.x - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
+    w: { x: viewport.x - size / 2, y: midY - size / 2, width: size, height: size },
   };
 }
 

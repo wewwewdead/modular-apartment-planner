@@ -1,68 +1,18 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createMaterialPalette, disposeMaterialPalette } from './materials';
 import { disposeScene } from './disposeScene';
-
-const DEFAULT_PRESET_NAME = 'plan_aligned';
-const CLICK_DISTANCE_THRESHOLD = 6;
-
-const PRESETS = {
-  // Match the SVG blueprint's top/bottom and left/right reading in the preview.
-  plan_aligned: new THREE.Vector3(-1.1, 0.92, 1.05),
-  default: new THREE.Vector3(-1.1, 0.92, 1.05),
-  iso_northeast: new THREE.Vector3(1, 0.88, 1),
-  iso_northwest: new THREE.Vector3(-1, 0.88, 1),
-  iso_southeast: new THREE.Vector3(1, 0.88, -1),
-  iso_southwest: new THREE.Vector3(-1, 0.88, -1),
-};
-
-function descriptorBoundsToWorldBox(bounds) {
-  return new THREE.Box3(
-    new THREE.Vector3(bounds.minX, bounds.minElevation, bounds.minY),
-    new THREE.Vector3(bounds.maxX, bounds.maxElevation, bounds.maxY)
-  );
-}
-
-function createGrid(bounds, groundLevel) {
-  const size = Math.max(
-    bounds.maxX - bounds.minX,
-    bounds.maxY - bounds.minY,
-    4000
-  );
-  const normalizedSize = Math.ceil(size / 1000) * 1000;
-  const divisions = Math.max(8, Math.round(normalizedSize / 500));
-  const grid = new THREE.GridHelper(normalizedSize, divisions, 0x8fa1b4, 0xc7d1db);
-  grid.position.y = groundLevel;
-  grid.material.transparent = true;
-  grid.material.opacity = 0.45;
-  return grid;
-}
-
-function fitCameraToBox(camera, controls, box, presetName) {
-  const preset = PRESETS[presetName] || PRESETS[DEFAULT_PRESET_NAME];
-  const direction = preset.clone().normalize();
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const radius = Math.max(size.length() / 2, 1200);
-  const halfFovY = THREE.MathUtils.degToRad(camera.fov / 2);
-  const halfFovX = Math.atan(Math.tan(halfFovY) * camera.aspect);
-  const distanceByHeight = Math.max(size.y, size.z) / (2 * Math.tan(halfFovY));
-  const distanceByWidth = Math.max(size.x, size.z) / (2 * Math.tan(halfFovX));
-  const distance = Math.max(distanceByHeight, distanceByWidth, radius * 1.4) * 1.15;
-
-  controls.target.copy(center);
-  camera.position.copy(center.clone().add(direction.multiplyScalar(distance)));
-  camera.near = Math.max(10, distance / 200);
-  camera.far = distance * 10;
-  camera.updateProjectionMatrix();
-  controls.update();
-}
+import { createInspectNavigation } from './createInspectNavigation';
+import { createWalkNavigation } from './createWalkNavigation';
+import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
+import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
 
 export function createPreviewViewport(container) {
   const materialPalette = createMaterialPalette();
   const scene = new THREE.Scene();
   scene.background = null;
   const raycaster = new THREE.Raycaster();
+  const timer = new THREE.Timer();
+  timer.connect(document);
 
   const camera = new THREE.PerspectiveCamera(42, 1, 10, 100000);
   const renderer = new THREE.WebGLRenderer({
@@ -78,13 +28,10 @@ export function createPreviewViewport(container) {
   renderer.domElement.style.display = 'block';
   container.appendChild(renderer.domElement);
 
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.screenSpacePanning = true;
-  controls.minDistance = 400;
-  controls.maxDistance = 150000;
-  controls.maxPolarAngle = Math.PI * 0.495;
+  const inspectNavigation = createInspectNavigation({
+    camera,
+    domElement: renderer.domElement,
+  });
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.72));
   scene.add(new THREE.HemisphereLight(0xdde7f4, 0xe6ded0, 0.7));
@@ -96,13 +43,110 @@ export function createPreviewViewport(container) {
   let worldRoot = null;
   let gridHelper = null;
   let currentBounds = null;
-  let currentPreset = DEFAULT_PRESET_NAME;
   let pickHandler = null;
   let pickContext = { activeFloorId: null };
   let pointerDown = null;
+  let navigationMode = 'inspect';
+  let walkUiHandler = null;
+  let walkExitHandler = null;
+  let inspectState = null;
+  let activeFloorContext = {
+    floorId: null,
+    spawn: null,
+  };
+  const walkPoseByFloorId = new Map();
+  const walkNavigation = createWalkNavigation({
+    camera,
+    domElement: renderer.domElement,
+    onStateChange: () => {
+      emitWalkUiState();
+    },
+    onExitRequested: () => {
+      setNavigationMode('inspect');
+      walkExitHandler?.();
+    },
+  });
 
-  const renderFrame = () => {
-    controls.update();
+  const emitWalkUiState = () => {
+    walkUiHandler?.({
+      navigationMode,
+      isLocked: navigationMode === 'walk' && walkNavigation.isLocked(),
+      canLock: navigationMode === 'walk',
+    });
+  };
+
+  const saveCurrentWalkPose = () => {
+    if (!activeFloorContext.floorId) return;
+    walkPoseByFloorId.set(activeFloorContext.floorId, walkNavigation.capturePose());
+  };
+
+  const restoreWalkPose = ({ forceSpawn = false } = {}) => {
+    if (!activeFloorContext.floorId) return;
+
+    const rememberedPose = !forceSpawn
+      ? walkPoseByFloorId.get(activeFloorContext.floorId)
+      : null;
+
+    if (rememberedPose) {
+      walkNavigation.restorePose(rememberedPose);
+      return;
+    }
+
+    const spawn = activeFloorContext.spawn;
+    if (!spawn?.position || !spawn.lookAt) return;
+
+    walkNavigation.restorePose({
+      position: [spawn.position.x, spawn.position.y, spawn.position.z],
+      lookAt: [spawn.lookAt.x, spawn.lookAt.y, spawn.lookAt.z],
+    });
+  };
+
+  const setNavigationMode = (nextMode = 'inspect') => {
+    const resolvedMode = nextMode === 'walk' ? 'walk' : 'inspect';
+    if (navigationMode === resolvedMode) {
+      emitWalkUiState();
+      return;
+    }
+
+    if (navigationMode === 'inspect') {
+      inspectState = inspectNavigation.captureState();
+    }
+
+    if (navigationMode === 'walk') {
+      saveCurrentWalkPose();
+    }
+
+    navigationMode = resolvedMode;
+    inspectNavigation.setEnabled(navigationMode === 'inspect');
+    walkNavigation.setEnabled(navigationMode === 'walk');
+
+    if (navigationMode === 'inspect') {
+      // Derive inspect state from walk camera so the view doesn't jump
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward);
+      const orbitTarget = camera.position.clone().add(forward.multiplyScalar(3000));
+      const derived = {
+        position: camera.position.toArray(),
+        target: orbitTarget.toArray(),
+      };
+      if (!inspectNavigation.restoreState(derived)) {
+        inspectNavigation.resetView();
+      }
+    } else {
+      restoreWalkPose();
+    }
+
+    emitWalkUiState();
+  };
+
+  const renderFrame = (timestamp) => {
+    timer.update(timestamp);
+    const deltaSeconds = Math.min(timer.getDelta(), 0.1);
+    if (navigationMode === 'inspect') {
+      inspectNavigation.update(deltaSeconds);
+    } else {
+      walkNavigation.update(deltaSeconds);
+    }
     renderer.render(scene, camera);
     animationFrame = window.requestAnimationFrame(renderFrame);
   };
@@ -127,6 +171,7 @@ export function createPreviewViewport(container) {
   };
 
   const pickObjectAt = (clientX, clientY) => {
+    if (navigationMode !== 'inspect') return;
     if (!worldRoot || !pickHandler) return;
 
     const rect = renderer.domElement.getBoundingClientRect();
@@ -165,6 +210,11 @@ export function createPreviewViewport(container) {
   };
 
   const handlePointerDown = (event) => {
+    if (navigationMode !== 'inspect') {
+      pointerDown = null;
+      return;
+    }
+
     if (event.button !== 0) {
       pointerDown = null;
       return;
@@ -181,6 +231,11 @@ export function createPreviewViewport(container) {
   };
 
   const handlePointerUp = (event) => {
+    if (navigationMode !== 'inspect') {
+      pointerDown = null;
+      return;
+    }
+
     if (event.button !== 0 || !pointerDown) {
       pointerDown = null;
       return;
@@ -207,6 +262,8 @@ export function createPreviewViewport(container) {
   return {
     setWorld(nextRoot, bounds, groundLevel = 0) {
       const hadWorld = !!worldRoot;
+      const walkPose = navigationMode === 'walk' ? walkNavigation.capturePose() : null;
+
       if (worldRoot) {
         scene.remove(worldRoot);
         disposeScene(worldRoot, { disposeMaterials: true });
@@ -220,23 +277,33 @@ export function createPreviewViewport(container) {
 
       worldRoot = nextRoot;
       currentBounds = descriptorBoundsToWorldBox(bounds);
+      inspectNavigation.setBounds(currentBounds);
       gridHelper = createGrid(bounds, groundLevel);
       scene.add(gridHelper);
       scene.add(worldRoot);
-      if (!hadWorld) fitCameraToBox(camera, controls, currentBounds, currentPreset);
+      if (!hadWorld && navigationMode === 'inspect') {
+        inspectNavigation.resetView();
+      }
+
+      if (walkPose) {
+        walkNavigation.restorePose(walkPose);
+      }
     },
     resetView() {
-      if (!currentBounds) return;
-      fitCameraToBox(camera, controls, currentBounds, currentPreset);
+      if (navigationMode === 'walk') {
+        if (activeFloorContext.floorId) {
+          walkPoseByFloorId.delete(activeFloorContext.floorId);
+        }
+        restoreWalkPose({ forceSpawn: true });
+        return;
+      }
+      inspectNavigation.resetView();
     },
     fit() {
-      if (!currentBounds) return;
-      fitCameraToBox(camera, controls, currentBounds, currentPreset);
+      inspectNavigation.resetView();
     },
-    setProjectionPreset(presetName = DEFAULT_PRESET_NAME) {
-      currentPreset = presetName in PRESETS ? presetName : DEFAULT_PRESET_NAME;
-      if (!currentBounds) return;
-      fitCameraToBox(camera, controls, currentBounds, currentPreset);
+    setProjectionPreset(presetName) {
+      inspectNavigation.setProjectionPreset(presetName);
     },
     setPickHandler(handler) {
       pickHandler = typeof handler === 'function' ? handler : null;
@@ -247,10 +314,37 @@ export function createPreviewViewport(container) {
         ...nextContext,
       };
     },
+    setNavigationMode,
+    setActiveFloorContext(nextContext = {}) {
+      const previousFloorId = activeFloorContext.floorId;
+      const nextFloorId = nextContext.floorId ?? activeFloorContext.floorId;
+      const floorChanged = previousFloorId !== nextFloorId;
+
+      if (navigationMode === 'walk' && floorChanged && previousFloorId) {
+        saveCurrentWalkPose();
+      }
+
+      activeFloorContext = {
+        ...activeFloorContext,
+        ...nextContext,
+      };
+
+      if (navigationMode === 'walk' && floorChanged) {
+        restoreWalkPose();
+      }
+    },
+    setWalkUiHandler(handler) {
+      walkUiHandler = typeof handler === 'function' ? handler : null;
+      emitWalkUiState();
+    },
+    setWalkExitHandler(handler) {
+      walkExitHandler = typeof handler === 'function' ? handler : null;
+    },
     resize,
     dispose() {
       window.cancelAnimationFrame(animationFrame);
-      controls.dispose();
+      inspectNavigation.dispose();
+      walkNavigation.dispose();
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
       renderer.domElement.removeEventListener('pointercancel', handlePointerCancel);
@@ -268,6 +362,7 @@ export function createPreviewViewport(container) {
       }
 
       disposeMaterialPalette(materialPalette);
+      timer.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },

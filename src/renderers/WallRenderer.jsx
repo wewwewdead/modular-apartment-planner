@@ -1,4 +1,5 @@
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 export default function WallRenderer({ walls, columns }) {
   return (
@@ -12,9 +13,9 @@ export default function WallRenderer({ walls, columns }) {
             data-id={wall.id}
             data-type="wall"
             points={points}
-            fill="var(--color-wall-fill)"
-            stroke="var(--color-wall-stroke)"
-            strokeWidth={1}
+            fill={DRAWING_GRAPHICS.plan.cutFill}
+            stroke={DRAWING_GRAPHICS.plan.cutStroke}
+            strokeWidth={DRAWING_GRAPHICS.plan.cutStrokeWidth}
             vectorEffect="non-scaling-stroke"
           />
         );

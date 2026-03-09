@@ -130,6 +130,13 @@ function projectReducer(state, action) {
         updatedAt: new Date().toISOString(),
       });
 
+    case 'PROJECT_UPDATE':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        ...action.updates,
+        updatedAt: new Date().toISOString(),
+      });
+
     case 'FLOOR_ADD':
       return replaceFloors(state, [...state.project.floors, action.floor]);
 
@@ -491,6 +498,23 @@ function projectReducer(state, action) {
       return updateFloor(state, action.floorId, () => ({
         ...action.floor,
       }), true, { sort: true });
+
+    case 'FIXTURE_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f, fixtures: [...(f.fixtures || []), action.fixture],
+      }));
+    case 'FIXTURE_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        fixtures: (f.fixtures || []).map(fix =>
+          fix.id === action.fixture.id ? { ...fix, ...action.fixture } : fix
+        ),
+      }));
+    case 'FIXTURE_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        fixtures: (f.fixtures || []).filter(fix => fix.id !== action.fixtureId),
+      }));
 
     case 'COLUMN_ADD':
       return updateFloor(state, action.floorId, f => ({

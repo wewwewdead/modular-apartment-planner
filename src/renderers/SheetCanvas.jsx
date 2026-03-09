@@ -3,6 +3,7 @@ import { useEditor } from '@/app/EditorProvider';
 import { useProject } from '@/app/ProjectProvider';
 import { MAX_ZOOM, MIN_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { fitViewportToSheet } from '@/sheets/layout';
+import { SHEET_TOKENS } from '@/sheets/standards';
 import { hitTestViewport, hitTestViewportHandle, hitTestViewportRotationHandle } from '@/sheets/hitTest';
 import { buildSheetScene } from '@/sheets/layout';
 import styles from './SvgCanvas.module.css';
@@ -17,6 +18,7 @@ function screenToSheet(screenX, screenY, viewport, svgRect) {
 export default function SheetCanvas() {
   const svgRef = useRef(null);
   const dragState = useRef(null);
+  const activePointerId = useRef(null);
   const isPanning = useRef(false);
   const lastPanPos = useRef({ x: 0, y: 0 });
 
@@ -41,17 +43,65 @@ export default function SheetCanvas() {
     if (!sheet) return;
     const current = (sheet.viewports || []).find((entry) => entry.id === viewportId);
     if (!current) return;
-    const nextViewport = fitViewportToSheet({ ...current, ...updates }, sheet);
+    const sceneViewport = scene?.viewports.find((entry) => entry.id === viewportId) || null;
+    const isManualEdit = ['x', 'y', 'width', 'height', 'rotation'].some((key) => key in updates);
+    const baseViewport = sceneViewport
+      ? {
+          ...current,
+          x: sceneViewport.x,
+          y: sceneViewport.y,
+          width: sceneViewport.width,
+          height: sceneViewport.height,
+          rotation: sceneViewport.rotation,
+        }
+      : current;
+    const nextViewport = fitViewportToSheet({
+      ...baseViewport,
+      ...updates,
+      lockAutoLayout: 'lockAutoLayout' in updates
+        ? updates.lockAutoLayout
+        : (isManualEdit ? true : baseViewport.lockAutoLayout),
+    }, sheet);
     dispatch({ type: 'SHEET_VIEWPORT_UPDATE', sheetId: sheet.id, viewport: nextViewport });
-  }, [dispatch, sheet]);
+  }, [dispatch, scene?.viewports, sheet]);
 
-  const handleMouseDown = useCallback((event) => {
+  const capturePointer = useCallback((pointerId) => {
+    if (!svgRef.current) return;
+    activePointerId.current = pointerId;
+    try {
+      svgRef.current.setPointerCapture(pointerId);
+    } catch {
+      activePointerId.current = pointerId;
+    }
+  }, []);
+
+  const releasePointer = useCallback((pointerId = activePointerId.current) => {
+    if (!svgRef.current || pointerId == null) {
+      activePointerId.current = null;
+      return;
+    }
+    try {
+      if (svgRef.current.hasPointerCapture?.(pointerId)) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // Ignore browsers that reject release calls after capture is already gone.
+    }
+    activePointerId.current = null;
+  }, []);
+
+  const handlePointerDown = useCallback((event) => {
+    if (activePointerId.current !== null && activePointerId.current !== event.pointerId) return;
+
     if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
+      capturePointer(event.pointerId);
       isPanning.current = true;
       lastPanPos.current = { x: event.clientX, y: event.clientY };
       event.preventDefault();
       return;
     }
+
+    if (event.button !== 0) return;
 
     if (!sheet || !scene) return;
 
@@ -59,7 +109,7 @@ export default function SheetCanvas() {
 
     if (selectedType === 'sheetViewport' && selectedId) {
       const selectedVp = scene.viewports.find((entry) => entry.id === selectedId);
-      if (selectedVp && hitTestViewportRotationHandle(point, selectedVp, 6 / viewport.zoom)) {
+      if (selectedVp && hitTestViewportRotationHandle(point, selectedVp, Math.max(SHEET_TOKENS.viewportHandleSize, 6 / viewport.zoom))) {
         const cx = selectedVp.x + selectedVp.width / 2;
         const cy = selectedVp.y + selectedVp.height / 2;
         dragState.current = {
@@ -69,22 +119,33 @@ export default function SheetCanvas() {
           initialRotation: selectedVp.rotation || 0,
           startAngle: Math.atan2(point.y - cy, point.x - cx) * (180 / Math.PI),
         };
+        capturePointer(event.pointerId);
+        event.preventDefault();
         return;
       }
     }
 
-    const handleHit = selectedType === 'sheetViewport' && selectedId
-      ? hitTestViewportHandle(point, scene.viewports.filter((entry) => entry.id === selectedId), 6 / viewport.zoom)
-      : null;
+    const handleViewportCandidates = selectedType === 'sheetViewport' && selectedId
+      ? [
+          ...scene.viewports.filter((entry) => entry.id === selectedId),
+          ...scene.viewports.filter((entry) => entry.id !== selectedId),
+        ]
+      : scene.viewports;
+
+    const handleHit = hitTestViewportHandle(point, handleViewportCandidates, Math.max(SHEET_TOKENS.viewportHandleSize, 6 / viewport.zoom));
 
     if (handleHit) {
+      editorDispatch({ type: 'SELECT_OBJECT', id: handleHit.viewportId, objectType: 'sheetViewport' });
+      const selectedViewport = scene.viewports.find((entry) => entry.id === handleHit.viewportId);
       dragState.current = {
         mode: 'resize',
         viewportId: handleHit.viewportId,
         handle: handleHit.handle,
         origin: point,
-        initialViewport: sheet.viewports.find((entry) => entry.id === handleHit.viewportId),
+        initialViewport: selectedViewport || sheet.viewports.find((entry) => entry.id === handleHit.viewportId),
       };
+      capturePointer(event.pointerId);
+      event.preventDefault();
       return;
     }
 
@@ -95,16 +156,20 @@ export default function SheetCanvas() {
         mode: 'move',
         viewportId: viewportHit.id,
         origin: point,
-        initialViewport: sheet.viewports.find((entry) => entry.id === viewportHit.id),
+        initialViewport: viewportHit,
       };
+      capturePointer(event.pointerId);
+      event.preventDefault();
       return;
     }
 
     editorDispatch({ type: 'SELECT_OBJECT', id: sheet.id, objectType: 'sheet' });
     dragState.current = null;
-  }, [editorDispatch, getSheetPos, scene, selectedId, selectedType, sheet, viewport.zoom]);
+  }, [activePointerId, capturePointer, editorDispatch, getSheetPos, scene, selectedId, selectedType, sheet, viewport.zoom]);
 
-  const handleMouseMove = useCallback((event) => {
+  const handlePointerMove = useCallback((event) => {
+    if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+
     if (isPanning.current) {
       const dx = event.clientX - lastPanPos.current.x;
       const dy = event.clientY - lastPanPos.current.y;
@@ -167,10 +232,19 @@ export default function SheetCanvas() {
     updateViewport(viewportId, next);
   }, [editorDispatch, getSheetPos, sheet, updateViewport]);
 
-  const handleMouseUp = useCallback(() => {
+  const handlePointerUp = useCallback((event) => {
+    if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
     isPanning.current = false;
     dragState.current = null;
-  }, []);
+    releasePointer(event.pointerId);
+  }, [releasePointer]);
+
+  const handlePointerCancel = useCallback((event) => {
+    if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+    isPanning.current = false;
+    dragState.current = null;
+    releasePointer(event.pointerId);
+  }, [releasePointer]);
 
   const handleWheel = useCallback((event) => {
     event.preventDefault();
@@ -202,10 +276,11 @@ export default function SheetCanvas() {
       <svg
         ref={svgRef}
         className={styles.svg}
-        style={{ cursor: dragState.current ? 'grabbing' : 'default' }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        style={{ cursor: dragState.current ? 'grabbing' : 'default', touchAction: 'none' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
       >
         <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
           {sheet ? (

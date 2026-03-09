@@ -140,3 +140,106 @@ export function ExpandIcon(props) {
 export function CollapseIcon(props) {
   return <I {...props}><path d="M9 15v-4H5" {...p} /><path d="M11 5v4h4" {...p} /><path d="M5 15l4-4" {...p} /><path d="M15 5l-4 4" {...p} /></I>;
 }
+
+// Fixture icons (plan-view symbols — architecturally detailed)
+export function KitchenTopIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="2" y="5" width="16" height="10" rx="0.5" {...p} />
+      {/* 4 burners */}
+      <circle cx="5" cy="8" r="1.2" {...p} /><circle cx="5" cy="12" r="1.2" {...p} />
+      <circle cx="9" cy="8" r="1.2" {...p} /><circle cx="9" cy="12" r="1.2" {...p} />
+      {/* Sink + drain */}
+      <rect x="13" y="7" width="3.5" height="6" rx="1" {...p} />
+      <circle cx="14.75" cy="10" r="0.5" fill="currentColor" stroke="none" />
+    </I>
+  );
+}
+
+export function ToiletIcon(props) {
+  return (
+    <I {...props}>
+      {/* Cistern + flush line */}
+      <rect x="6" y="3" width="8" height="5" rx="1" {...p} />
+      <line x1="9" y1="4" x2="11" y2="4" {...p} strokeWidth={1} />
+      {/* Bowl + inner seat rim */}
+      <ellipse cx="10" cy="13" rx="4" ry="4.5" {...p} />
+      <ellipse cx="10" cy="13" rx="2.8" ry="3.2" {...p} strokeWidth={0.8} />
+    </I>
+  );
+}
+
+export function LavatoryIcon(props) {
+  return (
+    <I {...props}>
+      {/* Counter */}
+      <rect x="4" y="4" width="12" height="12" rx="1" {...p} />
+      {/* Basin ellipse */}
+      <ellipse cx="10" cy="10" rx="3.5" ry="3" {...p} />
+      {/* Faucet line + drain dot */}
+      <line x1="10" y1="5.5" x2="10" y2="7" {...p} strokeWidth={1} />
+      <circle cx="10" cy="10" r="0.5" fill="currentColor" stroke="none" />
+    </I>
+  );
+}
+
+export function TableIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="3" y="4" width="14" height="12" rx="0.5" {...p} />
+      {/* 4 leg rings with center dots */}
+      {[[5, 6], [15, 6], [5, 14], [15, 14]].map(([cx, cy], i) => (
+        <g key={i}>
+          <circle cx={cx} cy={cy} r="1.2" {...p} strokeWidth={1} />
+          <circle cx={cx} cy={cy} r="0.4" fill="currentColor" stroke="none" />
+        </g>
+      ))}
+    </I>
+  );
+}
+
+export function TVIcon(props) {
+  return (
+    <I {...props}>
+      {/* Screen */}
+      <rect x="2" y="7" width="16" height="5" rx="0.5" {...p} />
+      {/* Inner bezel */}
+      <rect x="3" y="7.8" width="14" height="3.4" rx="0.3" {...p} strokeWidth={0.8} />
+      {/* Stand mount + base */}
+      <line x1="10" y1="12" x2="10" y2="14" {...p} />
+      <line x1="7" y1="14" x2="13" y2="14" {...p} />
+      {/* Power LED dot */}
+      <circle cx="16.5" cy="11" r="0.4" fill="currentColor" stroke="none" />
+    </I>
+  );
+}
+
+export function SofaIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="2" y="5" width="16" height="10" rx="1" {...p} />
+      {/* Backrest line */}
+      <line x1="2" y1="8" x2="18" y2="8" {...p} />
+      {/* Armrest lines */}
+      <line x1="4" y1="8" x2="4" y2="15" {...p} />
+      <line x1="16" y1="8" x2="16" y2="15" {...p} />
+      {/* Cushion dividers */}
+      <line x1="8" y1="8.5" x2="8" y2="14.5" {...p} strokeWidth={0.8} strokeDasharray="1.5 1" />
+      <line x1="12" y1="8.5" x2="12" y2="14.5" {...p} strokeWidth={0.8} strokeDasharray="1.5 1" />
+    </I>
+  );
+}
+
+export function BedIcon(props) {
+  return (
+    <I {...props}>
+      {/* Bed frame */}
+      <rect x="3" y="3" width="14" height="14" rx="0.5" {...p} />
+      {/* Headboard bar */}
+      <rect x="3" y="3" width="14" height="2.5" rx="0.5" {...p} strokeWidth={1.8} />
+      {/* Two pillows */}
+      <rect x="4.5" y="6.5" width="4.5" height="3" rx="1.2" {...p} />
+      <rect x="11" y="6.5" width="4.5" height="3" rx="1.2" {...p} />
+    </I>
+  );
+}

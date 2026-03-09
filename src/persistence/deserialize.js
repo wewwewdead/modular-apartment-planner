@@ -2,6 +2,7 @@ import { DOOR_HEIGHT, DOOR_SILL_HEIGHT, SLAB_ELEVATION, SLAB_THICKNESS, STAIR_RI
 import { createFloor } from '@/domain/models';
 import { createAnnotationSettings } from '@/domain/models';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, sortFloors } from '@/domain/floorModels';
+import { createSheetRevision } from '@/domain/sheetModels';
 
 export function deserializeProject(json) {
   if (!json || !json.version || !json.data) {
@@ -21,6 +22,11 @@ export function deserializeProject(json) {
   if (!Array.isArray(project.sheets)) {
     project.sheets = [];
   }
+  if (project.address === undefined) project.address = '';
+  project.documentDefaults = {
+    drawnBy: project.documentDefaults?.drawnBy ?? '',
+    checkedBy: project.documentDefaults?.checkedBy ?? '',
+  };
 
   if (project.floors.length === 0) {
     project.floors = [createFloor('Ground Floor', 0)];
@@ -69,6 +75,7 @@ export function deserializeProject(json) {
       if (win.sillHeight === undefined) win.sillHeight = WINDOW_SILL_HEIGHT;
     }
     if (!floor.columns) floor.columns = [];
+    if (!floor.fixtures) floor.fixtures = [];
     if (!floor.beams) floor.beams = [];
     if (!floor.stairs) floor.stairs = [];
     if (!floor.landings) floor.landings = [];
@@ -95,6 +102,15 @@ export function deserializeProject(json) {
       if (column.showLabel === undefined) {
         column.showLabel = Boolean(column.name);
       }
+    }
+    for (const fixture of floor.fixtures) {
+      if (!fixture.fixtureType) fixture.fixtureType = 'kitchenTop';
+      if (fixture.x === undefined) fixture.x = 0;
+      if (fixture.y === undefined) fixture.y = 0;
+      if (fixture.width === undefined) fixture.width = 600;
+      if (fixture.depth === undefined) fixture.depth = 400;
+      if (fixture.rotation === undefined) fixture.rotation = 0;
+      if (fixture.name === undefined) fixture.name = '';
     }
     for (const beam of floor.beams) {
       if (beam.floorLevel === undefined) beam.floorLevel = getFloorElevation(floor, index);
@@ -173,9 +189,25 @@ export function deserializeProject(json) {
     }
     if (sheet.title === undefined) sheet.title = '';
     if (sheet.paperSize === undefined) sheet.paperSize = 'A3_LANDSCAPE';
+    if (sheet.number === undefined) sheet.number = '';
+    if (sheet.issueDate === undefined) sheet.issueDate = '';
     if (sheet.scaleLabel === undefined) sheet.scaleLabel = '1:100';
+    if (sheet.scaleMode === undefined) sheet.scaleMode = 'custom';
+    if (sheet.layoutTemplate === undefined) sheet.layoutTemplate = 'auto';
     if (sheet.drawingName === undefined) sheet.drawingName = sheet.title || 'Drawing';
     if (sheet.projectNameOverride === undefined) sheet.projectNameOverride = '';
+    sheet.titleBlock = {
+      projectTitleOverride: sheet.titleBlock?.projectTitleOverride ?? '',
+      projectAddressOverride: sheet.titleBlock?.projectAddressOverride ?? '',
+      drawnBy: sheet.titleBlock?.drawnBy ?? '',
+      checkedBy: sheet.titleBlock?.checkedBy ?? '',
+    };
+    if (!Array.isArray(sheet.revisions)) sheet.revisions = [];
+    sheet.revisions = sheet.revisions.map((revision) => ({
+      ...createSheetRevision(),
+      ...revision,
+      id: revision?.id || `revision_${sheet.id}_${Math.random().toString(36).slice(2, 8)}`,
+    }));
     if (!Array.isArray(sheet.viewports)) sheet.viewports = [];
 
     for (const viewport of sheet.viewports) {
@@ -192,6 +224,12 @@ export function deserializeProject(json) {
       if (viewport.scale === undefined) viewport.scale = 100;
       if (viewport.title === undefined) viewport.title = '';
       if (viewport.rotation === undefined) viewport.rotation = 0;
+      if (viewport.role === undefined) viewport.role = viewport.sourceView === '3d_preview'
+        ? 'supplemental'
+        : (viewport.sourceView === 'plan' ? 'primary' : 'secondary');
+      if (viewport.captionPosition === undefined) viewport.captionPosition = 'below';
+      if (viewport.referenceNote === undefined) viewport.referenceNote = '';
+      if (viewport.lockAutoLayout === undefined) viewport.lockAutoLayout = false;
     }
   }
 

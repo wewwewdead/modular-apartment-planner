@@ -1,16 +1,78 @@
-const STYLE_MAP = {
-  wall_cut: { fill: '#cfd7e3', stroke: '#35465d', strokeWidth: 1.8, opacity: 1 },
-  wall_projection: { fill: '#f7f8fa', stroke: '#7d8ca0', strokeWidth: 1, opacity: 0.7 },
-  slab_cut: { fill: '#bcc7d6', stroke: '#35465d', strokeWidth: 1.8, opacity: 1 },
-  slab_projection: { fill: '#dfe6ef', stroke: '#7d8ca0', strokeWidth: 1, opacity: 0.7 },
-  column_cut: { fill: '#b9c1cb', stroke: '#35465d', strokeWidth: 1.8, opacity: 1 },
-  column_projection: { fill: '#d7dde5', stroke: '#7d8ca0', strokeWidth: 1, opacity: 0.7 },
-  beam_cut: { fill: '#b4c1d0', stroke: '#35465d', strokeWidth: 1.8, opacity: 1 },
-  beam_projection: { fill: '#d8e0ea', stroke: '#7d8ca0', strokeWidth: 1, opacity: 0.7 },
-  door_cut: { fill: '#ffffff', stroke: '#35465d', strokeWidth: 1.5, opacity: 1 },
-  door_projection: { fill: '#ffffff', stroke: '#7d8ca0', strokeWidth: 1, opacity: 0.75 },
-  window_cut: { fill: '#e6f3ff', stroke: '#35465d', strokeWidth: 1.5, opacity: 1 },
-  window_projection: { fill: '#eef7ff', stroke: '#7d8ca0', strokeWidth: 1, opacity: 0.75 },
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
+
+const SECTION_STYLE_MAP = {
+  wall_cut: {
+    fill: DRAWING_GRAPHICS.section.cutFill,
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
+    opacity: 1,
+  },
+  wall_projection: {
+    fill: DRAWING_GRAPHICS.section.projectionFill,
+    stroke: DRAWING_GRAPHICS.section.projectionStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.projectionStrokeWidth,
+    opacity: 1,
+  },
+  slab_cut: {
+    fill: DRAWING_GRAPHICS.section.cutFill,
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
+    opacity: 1,
+  },
+  slab_projection: {
+    fill: DRAWING_GRAPHICS.section.projectionFill,
+    stroke: DRAWING_GRAPHICS.section.projectionStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.projectionStrokeWidth,
+    opacity: 1,
+  },
+  column_cut: {
+    fill: DRAWING_GRAPHICS.section.cutFill,
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
+    opacity: 1,
+  },
+  column_projection: {
+    fill: DRAWING_GRAPHICS.section.projectionFill,
+    stroke: DRAWING_GRAPHICS.section.projectionStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.projectionStrokeWidth,
+    opacity: 1,
+  },
+  beam_cut: {
+    fill: DRAWING_GRAPHICS.section.cutFill,
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.cutStrokeWidth,
+    opacity: 1,
+  },
+  beam_projection: {
+    fill: DRAWING_GRAPHICS.section.projectionFill,
+    stroke: DRAWING_GRAPHICS.section.projectionStroke,
+    strokeWidth: DRAWING_GRAPHICS.section.projectionStrokeWidth,
+    opacity: 1,
+  },
+  door_cut: {
+    fill: '#ffffff',
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: 1.15,
+    opacity: 1,
+  },
+  door_projection: {
+    fill: '#ffffff',
+    stroke: DRAWING_GRAPHICS.section.projectionStroke,
+    strokeWidth: 0.82,
+    opacity: 1,
+  },
+  window_cut: {
+    fill: '#ffffff',
+    stroke: DRAWING_GRAPHICS.section.cutStroke,
+    strokeWidth: 1.15,
+    opacity: 1,
+  },
+  window_projection: {
+    fill: '#ffffff',
+    stroke: DRAWING_GRAPHICS.section.projectionStroke,
+    strokeWidth: 0.82,
+    opacity: 1,
+  },
 };
 
 function rectPoints(element) {
@@ -40,7 +102,7 @@ export default function SectionSceneLayer({ scene, showTitle = true }) {
           y={titleY}
           textAnchor="middle"
           dominantBaseline="middle"
-          fill="var(--color-text-secondary)"
+          fill={DRAWING_GRAPHICS.annotation.textMuted}
           fontSize={220}
           fontFamily="var(--font-blueprint)"
           style={{ pointerEvents: 'none' }}
@@ -49,7 +111,7 @@ export default function SectionSceneLayer({ scene, showTitle = true }) {
         </text>
       )}
       {scene.rectElements.map((element) => {
-        const style = STYLE_MAP[`${element.category}_${element.renderMode}`] || STYLE_MAP.wall_projection;
+        const style = SECTION_STYLE_MAP[`${element.category}_${element.renderMode}`] || SECTION_STYLE_MAP.wall_projection;
         return (
           <polygon
             key={element.id}
@@ -67,10 +129,13 @@ export default function SectionSceneLayer({ scene, showTitle = true }) {
           key={element.id}
           points={stairPolylinePoints(element)}
           fill="none"
-          stroke={element.renderMode === 'cut' ? '#35465d' : '#7d8ca0'}
-          strokeWidth={element.renderMode === 'cut' ? 1.8 : 1}
+          stroke={element.renderMode === 'cut'
+            ? DRAWING_GRAPHICS.section.cutStroke
+            : DRAWING_GRAPHICS.section.projectionStroke}
+          strokeWidth={element.renderMode === 'cut'
+            ? DRAWING_GRAPHICS.section.cutStrokeWidth
+            : DRAWING_GRAPHICS.section.projectionStrokeWidth}
           vectorEffect="non-scaling-stroke"
-          opacity={element.renderMode === 'cut' ? 1 : 0.75}
         />
       ))}
       <line
@@ -78,11 +143,10 @@ export default function SectionSceneLayer({ scene, showTitle = true }) {
         y1={-scene.groundLevel}
         x2={scene.bounds.maxX + 500}
         y2={-scene.groundLevel}
-        stroke="var(--color-text-secondary)"
-        strokeWidth={1}
-        strokeDasharray="10 6"
+        stroke={DRAWING_GRAPHICS.section.groundStroke}
+        strokeWidth={0.8}
+        strokeDasharray={DRAWING_GRAPHICS.section.groundDash}
         vectorEffect="non-scaling-stroke"
-        opacity={0.6}
       />
     </g>
   );

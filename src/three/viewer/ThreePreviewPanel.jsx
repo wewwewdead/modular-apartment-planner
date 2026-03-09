@@ -5,6 +5,7 @@ import { buildPreviewObjectRoot } from './buildPreviewObjects';
 import { createPreviewViewport } from './createPreviewViewport';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
+import { resolveWalkFloorContext } from './resolveWalkFloorContext';
 import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import styles from './ThreePreviewPanel.module.css';
 
@@ -13,6 +14,12 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
   const containerRef = useRef(null);
   const resizeObserverRef = useRef(null);
   const [previewScope, setPreviewScope] = useState('all');
+  const [navigationMode, setNavigationMode] = useState('inspect');
+  const [walkUiState, setWalkUiState] = useState({
+    navigationMode: 'inspect',
+    isLocked: false,
+    canLock: false,
+  });
   const { selectedId, selectedType, dispatch: editorDispatch } = useEditor();
 
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
@@ -36,6 +43,10 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
   const inspection = useMemo(
     () => getPreviewInspection(project, selectedType, selectedId),
     [project, selectedId, selectedType]
+  );
+  const walkFloorContext = useMemo(
+    () => resolveWalkFloorContext(sceneDescriptor, activeFloorId),
+    [sceneDescriptor, activeFloorId]
   );
   const visibleInspection = inspection && sceneDescriptor.visibleFloorIds.includes(inspection.floorId)
     ? inspection
@@ -95,6 +106,13 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
   }, [activeFloorId]);
 
   useEffect(() => {
+    viewportRef.current?.setWalkUiHandler(setWalkUiState);
+    viewportRef.current?.setWalkExitHandler(() => {
+      setNavigationMode('inspect');
+    });
+  }, []);
+
+  useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
@@ -104,6 +122,24 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
     });
     viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel);
   }, [sceneDescriptor, selectedId, selectedType]);
+
+  useEffect(() => {
+    viewportRef.current?.setNavigationMode(navigationMode);
+  }, [navigationMode]);
+
+  useEffect(() => {
+    viewportRef.current?.setActiveFloorContext(walkFloorContext);
+  }, [walkFloorContext]);
+
+  const resetLabel = navigationMode === 'walk' ? 'Reset Walk' : 'Reset View';
+  const primaryFooter = navigationMode === 'walk'
+    ? (walkUiState.isLocked
+      ? 'Look: mouse · Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Exit: Esc'
+      : 'Walk: click preview to capture mouse · Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Exit: Esc')
+    : 'Orbit: drag · Pan: right drag · Zoom: wheel · Inspect: click object';
+  const secondaryFooter = navigationMode === 'walk'
+    ? 'Ghost walk is noclip flight now, still read-only and collision-free.'
+    : 'Perspective preview, future-ready for presets and floor visibility.';
 
   return (
     <section className={`${styles.panel} ${className}`}>
@@ -117,6 +153,24 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
           </span>
         </div>
         <div className={styles.actions}>
+          <div className={styles.modeToggle} role="group" aria-label="Preview navigation mode">
+            <button
+              type="button"
+              className={navigationMode === 'inspect' ? styles.modeButtonActive : styles.modeButton}
+              onClick={() => setNavigationMode('inspect')}
+              aria-pressed={navigationMode === 'inspect'}
+            >
+              Inspect
+            </button>
+            <button
+              type="button"
+              className={navigationMode === 'walk' ? styles.modeButtonActive : styles.modeButton}
+              onClick={() => setNavigationMode('walk')}
+              aria-pressed={navigationMode === 'walk'}
+            >
+              Walk
+            </button>
+          </div>
           <select
             className={styles.floorSelect}
             value={previewScope}
@@ -132,12 +186,12 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
             className={styles.button}
             onClick={() => viewportRef.current?.resetView()}
           >
-            Reset View
+            {resetLabel}
           </button>
           {onToggleMaximize && (
             <button
               type="button"
-              className={styles.button}
+              className={`${styles.button} ${styles.iconButton}`}
               onClick={onToggleMaximize}
               title={isMaximized ? 'Restore split view' : 'Maximize preview'}
               aria-label={isMaximized ? 'Restore split view' : 'Maximize preview'}
@@ -150,6 +204,18 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
 
       <div className={styles.viewportWrap}>
         <div ref={containerRef} className={styles.viewport} />
+        {navigationMode === 'walk' && (
+          <div className={styles.walkOverlay}>
+            <span className={styles.walkOverlayTitle}>
+              {walkUiState.isLocked ? 'Walk Mode Active' : 'Walk Mode Ready'}
+            </span>
+            <span className={styles.walkOverlayBody}>
+              {walkUiState.isLocked
+                ? 'Noclip flight is live. W/S follow the camera view, A/D strafe, R/F move up and down, Shift goes faster, and Esc exits.'
+                : 'Click inside the preview to capture the mouse, then use W/A/S/D for noclip flight and R/F for vertical movement.'}
+            </span>
+          </div>
+        )}
         {visibleInspection && (
           <div className={styles.inspectCard}>
             <span className={styles.inspectEyebrow}>Selected Object</span>
@@ -176,8 +242,8 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
       </div>
 
       <div className={styles.footer}>
-        <span>Orbit: drag · Pan: right drag · Zoom: wheel · Inspect: click object</span>
-        <span>Perspective preview, future-ready for presets and floor visibility.</span>
+        <span>{primaryFooter}</span>
+        <span>{secondaryFooter}</span>
       </div>
     </section>
   );

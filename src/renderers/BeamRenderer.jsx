@@ -1,4 +1,5 @@
 import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 export default function BeamRenderer({ beams, columns }) {
   return (
@@ -15,10 +16,10 @@ export default function BeamRenderer({ beams, columns }) {
             data-id={beam.id}
             data-type="beam"
             points={points}
-            fill="rgba(95, 121, 138, 0.6)"
-            stroke="#5B7182"
-            strokeWidth={1}
-            strokeDasharray="10 4"
+            fill={DRAWING_GRAPHICS.plan.objectFill}
+            stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+            strokeWidth={DRAWING_GRAPHICS.plan.secondaryStrokeWidth}
+            strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
             vectorEffect="non-scaling-stroke"
           />
         );

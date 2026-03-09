@@ -34,6 +34,14 @@ function createFallbackBounds(stackBounds, activeFloor) {
   };
 }
 
+function createNavigationTarget(bounds, fallbackBounds) {
+  const source = bounds || fallbackBounds;
+  return {
+    x: (source.minX + source.maxX) / 2,
+    z: (source.minY + source.maxY) / 2,
+  };
+}
+
 export function buildPreviewScene(project, options = {}) {
   const floors = getOrderedFloors(project);
   const activeFloorId = getDefaultActiveFloorId(project, options.activeFloorId);
@@ -58,11 +66,15 @@ export function buildPreviewScene(project, options = {}) {
     .filter((floor) => floor.visible)
     .flatMap((floor) => floor.objects);
   const bounds = boundsFromObjects(visibleObjects) || createFallbackBounds(stackBounds, activeFloor);
+  const floorsWithNavigationTargets = floorDescriptors.map((floor) => ({
+    ...floor,
+    navigationTarget: createNavigationTarget(floor.bounds, bounds),
+  }));
 
   return {
     activeFloorId,
     visibleFloorIds: [...visibleFloorIds],
-    floors: floorDescriptors,
+    floors: floorsWithNavigationTargets,
     bounds,
     defaultTarget: {
       x: (bounds.minX + bounds.maxX) / 2,

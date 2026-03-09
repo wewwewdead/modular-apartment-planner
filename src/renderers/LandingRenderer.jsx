@@ -1,4 +1,5 @@
 import { getLandingRenderData } from '@/geometry/landingGeometry';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 export default function LandingRenderer({ landings }) {
   return (
@@ -15,9 +16,9 @@ export default function LandingRenderer({ landings }) {
             data-id={landing.id}
             data-type="landing"
             points={points}
-            fill="rgba(160, 165, 175, 0.25)"
-            stroke="#666"
-            strokeWidth={1}
+            fill={DRAWING_GRAPHICS.plan.objectFill}
+            stroke={DRAWING_GRAPHICS.plan.objectStroke}
+            strokeWidth={DRAWING_GRAPHICS.plan.objectStrokeWidth}
             vectorEffect="non-scaling-stroke"
           />
         );

@@ -1,4 +1,5 @@
 import { columnOutline } from '@/geometry/columnGeometry';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 export default function ColumnRenderer({ columns }) {
   return (
@@ -12,9 +13,9 @@ export default function ColumnRenderer({ columns }) {
               data-id={column.id}
               data-type="column"
               points={points}
-              fill="var(--color-column-fill, #A0A0A0)"
-              stroke="var(--color-column-stroke, #555)"
-              strokeWidth={1}
+              fill={DRAWING_GRAPHICS.plan.cutFill}
+              stroke={DRAWING_GRAPHICS.plan.cutStroke}
+              strokeWidth={DRAWING_GRAPHICS.plan.cutStrokeWidth}
               vectorEffect="non-scaling-stroke"
             />
           </g>

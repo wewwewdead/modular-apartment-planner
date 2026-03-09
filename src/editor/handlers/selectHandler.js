@@ -5,6 +5,7 @@ import { columnOutline } from '@/geometry/columnGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { landingContainsPoint } from '@/geometry/landingGeometry';
+import { fixtureContainsPoint } from '@/geometry/fixtureGeometry';
 import { slabContainsPoint } from '@/geometry/slabGeometry';
 import { hitTestAnnotation } from '@/annotations/scene';
 import { MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
@@ -48,6 +49,13 @@ function hitTest(modelPos, floor, annotationTolerance) {
     const outline = columnOutline(column);
     if (pointInPolygon(modelPos, outline)) {
       return { id: column.id, type: 'column' };
+    }
+  }
+
+  // Hit test fixtures
+  for (const fixture of (floor.fixtures || [])) {
+    if (fixtureContainsPoint(fixture, modelPos)) {
+      return { id: fixture.id, type: 'fixture' };
     }
   }
 
@@ -132,7 +140,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
       const hit = hitTest(modelPos, floor, SNAP_DISTANCE_PX / viewport.zoom * 2.5);
       if (hit) {
         editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
-        const draggableTypes = new Set(['wall', 'column', 'door', 'window', 'stair', 'sectionCut', 'landing']);
+        const draggableTypes = new Set(['wall', 'column', 'fixture', 'door', 'window', 'stair', 'sectionCut', 'landing']);
         if (!draggableTypes.has(hit.type)) return;
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -277,6 +285,18 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           type: 'COLUMN_UPDATE',
           floorId: activeFloorId,
           column: { id: col.id, x: col.x + dx, y: col.y + dy },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'fixture') {
+        const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+        if (!fixture) return;
+        dispatch({
+          type: 'FIXTURE_UPDATE',
+          floorId: activeFloorId,
+          fixture: { id: fixture.id, x: fixture.x + dx, y: fixture.y + dy },
         });
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -485,6 +505,8 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
         } else if (selectedType === 'column') {
           dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
+        } else if (selectedType === 'fixture') {
+          dispatch({ type: 'FIXTURE_DELETE', floorId: activeFloorId, fixtureId: selectedId });
         } else if (selectedType === 'beam') {
           dispatch({ type: 'BEAM_DELETE', floorId: activeFloorId, beamId: selectedId });
         } else if (selectedType === 'stair') {

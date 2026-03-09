@@ -1,4 +1,5 @@
 import { columnOutline } from '@/geometry/columnGeometry';
+import { fixtureOutline } from '@/geometry/fixtureGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { getLandingRenderData } from '@/geometry/landingGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
@@ -300,6 +301,23 @@ export default function SelectionOverlay({ selectedId, selectedType, floor, zoom
           />
         ))}
       </g>
+    );
+  }
+
+  if (selectedType === 'fixture') {
+    const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+    if (!fixture) return null;
+    const outline = fixtureOutline(fixture);
+    const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+    return (
+      <polygon
+        points={points}
+        fill="var(--color-selection-fill)"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
     );
   }
 

@@ -6,7 +6,7 @@ import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
-import { createSheetViewport } from '@/domain/sheetModels';
+import { createSheetRevision, createSheetViewport } from '@/domain/sheetModels';
 import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
 import { wallLength } from '@/geometry/wallGeometry';
 import { getColumnAutoLabel, getColumnListLabel } from '@/domain/columnLabels';
@@ -18,9 +18,15 @@ import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { sectionCutLength } from '@/geometry/sectionCutGeometry';
 import { getManualAnnotationFigure } from '@/annotations/scene';
-import { fitViewportToSheet, getDefaultViewportRect } from '@/sheets/layout';
+import {
+  buildSheetScene,
+  fitViewportToSheet,
+  getDefaultViewportRect,
+  materializeSheetViewportFrames,
+} from '@/sheets/layout';
 import { listPaperPresets } from '@/sheets/paper';
 import { getViewportSourceLabel, resolveSheetViewportSource } from '@/sheets/sources';
+import { FIXTURE_TYPES } from '@/editor/tools';
 import InputField from './InputField';
 import styles from './PropertiesPanel.module.css';
 
@@ -801,6 +807,63 @@ function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u 
   );
 }
 
+function FixtureProperties({ fixture, dispatch, floorId, u }) {
+  const updateFixture = (updates) => {
+    dispatch({ type: 'FIXTURE_UPDATE', floorId, fixture: { id: fixture.id, ...updates } });
+  };
+
+  const fixtureTypeLabels = {
+    kitchenTop: 'Kitchen Top',
+    toilet: 'Toilet',
+    lavatory: 'Lavatory',
+    table: 'Table',
+    tv: 'TV',
+    sofa: 'Sofa',
+  };
+
+  return (
+    <div>
+      <div className={styles.title}>Fixture</div>
+      <InputField
+        label="Name" value={fixture.name}
+        onChange={(v) => updateFixture({ name: v })}
+      />
+      <InputField
+        label="Type"
+        value={fixtureTypeLabels[fixture.fixtureType] || fixture.fixtureType}
+        readOnly
+      />
+      <div className={styles.subtitle}>Position</div>
+      <InputField
+        label="X" type="number" suffix={u.suffix}
+        value={u.toDisplay(fixture.x)}
+        onChange={(v) => updateFixture({ x: u.fromDisplay(v) })}
+      />
+      <InputField
+        label="Y" type="number" suffix={u.suffix}
+        value={u.toDisplay(fixture.y)}
+        onChange={(v) => updateFixture({ y: u.fromDisplay(v) })}
+      />
+      <div className={styles.subtitle}>Dimensions</div>
+      <InputField
+        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        value={u.toDisplay(fixture.width)}
+        onChange={(v) => updateFixture({ width: Math.max(50, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+        value={u.toDisplay(fixture.depth)}
+        onChange={(v) => updateFixture({ depth: Math.max(50, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Rotation" type="number" suffix="°" step={15}
+        value={fixture.rotation}
+        onChange={(v) => updateFixture({ rotation: ((+v % 360) + 360) % 360 })}
+      />
+    </div>
+  );
+}
+
 function AnnotationSettingsProperties({ floor, dispatch }) {
   const settings = floor.annotationSettings || {};
 
@@ -839,16 +902,52 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
     dispatch({ type: 'SHEET_UPDATE', sheet: { id: sheet.id, ...updates } });
   };
 
+  const updateLayoutTemplate = (nextLayoutTemplate) => {
+    if (nextLayoutTemplate === sheet.layoutTemplate) return;
+
+    if (nextLayoutTemplate === 'manual') {
+      dispatch({
+        type: 'SHEET_UPDATE',
+        sheet: materializeSheetViewportFrames(project, sheet),
+      });
+      return;
+    }
+
+    updateSheet({
+      layoutTemplate: nextLayoutTemplate,
+      viewports: (sheet.viewports || []).map((viewport) => ({
+        ...viewport,
+        lockAutoLayout: false,
+      })),
+    });
+  };
+
+  const updateTitleBlock = (updates) => {
+    updateSheet({
+      titleBlock: {
+        ...(sheet.titleBlock || {}),
+        ...updates,
+      },
+    });
+  };
+
+  const updateRevisions = (nextRevisions) => {
+    updateSheet({ revisions: nextRevisions });
+  };
+
   const addViewport = () => {
     try {
       const sourceFloorId = getDefaultActiveFloorId(project, activeFloorId);
       const sourceView = 'plan';
-      const viewportBase = createSheetViewport(sourceView, sourceFloorId, { scale: 100 });
+      const viewportBase = createSheetViewport(sourceView, sourceFloorId, {
+        scale: 100,
+        lockAutoLayout: sheet.layoutTemplate !== 'auto',
+      });
 
       let rect;
       try {
         const source = resolveSheetViewportSource(project, viewportBase);
-        rect = getDefaultViewportRect(sheet, source, viewportBase.scale);
+        rect = getDefaultViewportRect(sheet, source, viewportBase.scale, { role: viewportBase.role });
       } catch {
         // Geometry resolution failed — use default dimensions
         rect = { x: 20, y: 20, width: 160, height: 100 };
@@ -864,17 +963,81 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
     }
   };
 
+  const addRevision = () => {
+    updateRevisions([createSheetRevision(), ...(sheet.revisions || [])]);
+  };
+
+  const updateRevision = (revisionId, updates) => {
+    updateRevisions((sheet.revisions || []).map((revision) => (
+      revision.id === revisionId ? { ...revision, ...updates } : revision
+    )));
+  };
+
+  const removeRevision = (revisionId) => {
+    updateRevisions((sheet.revisions || []).filter((revision) => revision.id !== revisionId));
+  };
+
+  const paperPreset = listPaperPresets().find((preset) => preset.key === sheet.paperSize);
+  const titleBlock = sheet.titleBlock || {};
+  const projectTitleValue = titleBlock.projectTitleOverride || sheet.projectNameOverride;
+
   return (
     <div>
       <div className={styles.title}>Sheet</div>
       <InputField label="Title" value={sheet.title} onChange={(value) => updateSheet({ title: value })} />
+      <InputField label="Number" value={sheet.number || ''} onChange={(value) => updateSheet({ number: value })} />
       <InputField label="Drawing" value={sheet.drawingName} onChange={(value) => updateSheet({ drawingName: value })} />
+      <InputField label="Issue Date" value={sheet.issueDate || ''} onChange={(value) => updateSheet({ issueDate: value })} />
       <InputField label="Scale" value={sheet.scaleLabel} onChange={(value) => updateSheet({ scaleLabel: value })} />
       <InputField
-        label="Project"
-        value={sheet.projectNameOverride}
-        onChange={(value) => updateSheet({ projectNameOverride: value })}
+        label="Project Title"
+        value={projectTitleValue}
+        onChange={(value) => updateSheet({
+          projectNameOverride: value,
+          titleBlock: {
+            ...(sheet.titleBlock || {}),
+            projectTitleOverride: value,
+          },
+        })}
       />
+      <InputField
+        label="Address"
+        value={titleBlock.projectAddressOverride || ''}
+        onChange={(value) => updateTitleBlock({ projectAddressOverride: value })}
+      />
+      <InputField
+        label="Drawn By"
+        value={titleBlock.drawnBy || ''}
+        onChange={(value) => updateTitleBlock({ drawnBy: value })}
+      />
+      <InputField
+        label="Checked"
+        value={titleBlock.checkedBy || ''}
+        onChange={(value) => updateTitleBlock({ checkedBy: value })}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Scale Mode</label>
+        <select
+          value={sheet.scaleMode}
+          onChange={(e) => updateSheet({ scaleMode: e.target.value })}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+        >
+          <option value="custom">Custom</option>
+          <option value="per_viewport">Per viewport</option>
+          <option value="as_noted">As noted</option>
+        </select>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Layout</label>
+        <select
+          value={sheet.layoutTemplate}
+          onChange={(e) => updateLayoutTemplate(e.target.value)}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+        >
+          <option value="auto">Hybrid Auto</option>
+          <option value="manual">Manual Frames</option>
+        </select>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Paper</label>
         <select
@@ -894,15 +1057,63 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
       >
         Add viewport
       </button>
-      <InputField label="Width" suffix={u.suffix} value={u.toDisplay(listPaperPresets().find((preset) => preset.key === sheet.paperSize)?.width || 0)} readOnly />
-      <InputField label="Height" suffix={u.suffix} value={u.toDisplay(listPaperPresets().find((preset) => preset.key === sheet.paperSize)?.height || 0)} readOnly />
+      <InputField label="Width" suffix={u.suffix} value={u.toDisplay(paperPreset?.width || 0)} readOnly />
+      <InputField label="Height" suffix={u.suffix} value={u.toDisplay(paperPreset?.height || 0)} readOnly />
+
+      <div className={styles.subtitle}>Revisions</div>
+      <button className={styles.actionBtn} onClick={addRevision}>
+        Add revision
+      </button>
+      {(sheet.revisions || []).map((revision) => (
+        <div key={revision.id} className={styles.revisionCard}>
+          <InputField
+            label="Rev"
+            value={revision.code}
+            onChange={(value) => updateRevision(revision.id, { code: value })}
+          />
+          <InputField
+            label="Date"
+            value={revision.date}
+            onChange={(value) => updateRevision(revision.id, { date: value })}
+          />
+          <InputField
+            label="Note"
+            value={revision.description}
+            onChange={(value) => updateRevision(revision.id, { description: value })}
+          />
+          <button className={styles.deleteBtn} onClick={() => removeRevision(revision.id)}>
+            Delete revision
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
 
 function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
+  const sheetScene = buildSheetScene(project, sheet);
+  const sceneViewport = sheetScene?.viewports.find((entry) => entry.id === viewport.id) || null;
+  const displayedViewport = sceneViewport || viewport;
+
   const updateViewport = (updates) => {
-    const nextViewport = fitViewportToSheet({ ...viewport, ...updates }, sheet);
+    const isManualEdit = ['x', 'y', 'width', 'height', 'rotation'].some((key) => key in updates);
+    const baseViewport = sceneViewport
+      ? {
+          ...viewport,
+          x: sceneViewport.x,
+          y: sceneViewport.y,
+          width: sceneViewport.width,
+          height: sceneViewport.height,
+          rotation: sceneViewport.rotation,
+        }
+      : viewport;
+    const nextViewport = fitViewportToSheet({
+      ...baseViewport,
+      ...updates,
+      lockAutoLayout: 'lockAutoLayout' in updates
+        ? updates.lockAutoLayout
+        : (isManualEdit ? true : baseViewport.lockAutoLayout),
+    }, sheet);
     dispatch({ type: 'SHEET_VIEWPORT_UPDATE', sheetId: sheet.id, viewport: nextViewport });
   };
 
@@ -916,6 +1127,9 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
       sourceView: nextSourceView,
       sourceFloorId: nextFloorId,
       sourceRefId: refId,
+      role: nextSourceView === '3d_preview'
+        ? 'supplemental'
+        : (viewport.role === 'supplemental' ? 'secondary' : viewport.role),
     });
   };
 
@@ -923,6 +1137,22 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
   const sectionCutOptions = currentFloor?.sectionCuts || [];
 
   const source = resolveSheetViewportSource(project, viewport);
+
+  const toggleLayoutMode = () => {
+    if (sheet.layoutTemplate !== 'auto') return;
+    if (viewport.lockAutoLayout) {
+      updateViewport({ lockAutoLayout: false });
+      return;
+    }
+    updateViewport({
+      x: displayedViewport.x,
+      y: displayedViewport.y,
+      width: displayedViewport.width,
+      height: displayedViewport.height,
+      rotation: displayedViewport.rotation || 0,
+      lockAutoLayout: true,
+    });
+  };
 
   return (
     <div>
@@ -971,13 +1201,48 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         </div>
       )}
       <InputField label="Source Label" value={source.title || getViewportSourceLabel(viewport.sourceView)} readOnly />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Role</label>
+        <select
+          value={viewport.role}
+          onChange={(e) => updateViewport({ role: e.target.value })}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+        >
+          <option value="primary">Primary</option>
+          <option value="secondary">Secondary</option>
+          <option value="detail">Detail</option>
+          <option value="supplemental">Supplemental</option>
+        </select>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Caption</label>
+        <select
+          value={viewport.captionPosition}
+          onChange={(e) => updateViewport({ captionPosition: e.target.value })}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+        >
+          <option value="below">Below</option>
+          <option value="above">Above</option>
+        </select>
+      </div>
+      <InputField label="Reference" value={viewport.referenceNote || ''} onChange={(value) => updateViewport({ referenceNote: value })} />
+      <InputField
+        label="Frame Mode"
+        value={sheet.layoutTemplate === 'auto' ? (viewport.lockAutoLayout ? 'Manual' : 'Auto') : 'Manual (sheet)'}
+        readOnly
+      />
+      {sheet.layoutTemplate === 'auto' && (
+        <button className={styles.actionBtn} onClick={toggleLayoutMode}>
+          {viewport.lockAutoLayout ? 'Use auto layout' : 'Convert to manual frame'}
+        </button>
+      )}
       <div className={styles.subtitle}>Frame</div>
-      <InputField label="X" type="number" suffix={u.suffix} value={u.toDisplay(viewport.x)} onChange={(value) => updateViewport({ x: u.fromDisplay(value) })} />
-      <InputField label="Y" type="number" suffix={u.suffix} value={u.toDisplay(viewport.y)} onChange={(value) => updateViewport({ y: u.fromDisplay(value) })} />
-      <InputField label="Width" type="number" suffix={u.suffix} value={u.toDisplay(viewport.width)} onChange={(value) => updateViewport({ width: Math.max(20, u.fromDisplay(value)) })} />
-      <InputField label="Height" type="number" suffix={u.suffix} value={u.toDisplay(viewport.height)} onChange={(value) => updateViewport({ height: Math.max(20, u.fromDisplay(value)) })} />
+      <InputField label="X" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.x)} onChange={(value) => updateViewport({ x: u.fromDisplay(value) })} />
+      <InputField label="Y" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.y)} onChange={(value) => updateViewport({ y: u.fromDisplay(value) })} />
+      <InputField label="Width" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.width)} onChange={(value) => updateViewport({ width: Math.max(20, u.fromDisplay(value)) })} />
+      <InputField label="Height" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.height)} onChange={(value) => updateViewport({ height: Math.max(20, u.fromDisplay(value)) })} />
       <InputField label="Scale 1:" type="number" value={Math.round(viewport.scale)} onChange={(value) => updateViewport({ scale: Math.max(1, Math.round(value)) })} />
-      <InputField label="Rotation" type="number" suffix="°" step={1} value={viewport.rotation || 0} onChange={(value) => updateViewport({ rotation: ((value % 360) + 360) % 360 })} />
+      <InputField label="Rotation" type="number" suffix="°" step={1} value={displayedViewport.rotation || 0} onChange={(value) => updateViewport({ rotation: ((value % 360) + 360) % 360 })} />
     </div>
   );
 }
@@ -1048,6 +1313,42 @@ function ProjectSummary({ project, floor, dispatch }) {
   return (
     <div>
       <div className={styles.title}>Project Summary</div>
+      <InputField
+        label="Name"
+        value={project.name}
+        onChange={(value) => dispatch({ type: 'PROJECT_SET_NAME', name: value })}
+      />
+      <InputField
+        label="Address"
+        value={project.address || ''}
+        onChange={(value) => dispatch({ type: 'PROJECT_UPDATE', updates: { address: value } })}
+      />
+      <InputField
+        label="Drawn By"
+        value={project.documentDefaults?.drawnBy || ''}
+        onChange={(value) => dispatch({
+          type: 'PROJECT_UPDATE',
+          updates: {
+            documentDefaults: {
+              ...(project.documentDefaults || {}),
+              drawnBy: value,
+            },
+          },
+        })}
+      />
+      <InputField
+        label="Checked"
+        value={project.documentDefaults?.checkedBy || ''}
+        onChange={(value) => dispatch({
+          type: 'PROJECT_UPDATE',
+          updates: {
+            documentDefaults: {
+              ...(project.documentDefaults || {}),
+              checkedBy: value,
+            },
+          },
+        })}
+      />
       <div className={styles.summary}>
         <p>Name: {project.name}</p>
         <p>Floors: {project.floors.length}</p>
@@ -1140,6 +1441,8 @@ export default function PropertiesPanel() {
       dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
     } else if (selectedType === 'column') {
       dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
+    } else if (selectedType === 'fixture') {
+      dispatch({ type: 'FIXTURE_DELETE', floorId: activeFloorId, fixtureId: selectedId });
     } else if (selectedType === 'room') {
       dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
     } else if (selectedType === 'floor') {
@@ -1245,6 +1548,11 @@ export default function PropertiesPanel() {
       const column = (floor.columns || []).find(c => c.id === selectedId);
       if (column) {
         content = <ColumnProperties column={column} floor={floor} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+      }
+    } else if (selectedType === 'fixture') {
+      const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+      if (fixture) {
+        content = <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} />;
       }
     } else if (selectedType === 'room') {
       const room = floor.rooms.find(r => r.id === selectedId);

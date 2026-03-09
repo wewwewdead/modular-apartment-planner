@@ -1,5 +1,6 @@
 import { windowOutlineOnWall, wallDirection } from '@/geometry/wallGeometry';
 import { perpendicular, scale, add } from '@/geometry/point';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 function StandardWindow({ info, wall }) {
   const dir = wallDirection(wall);
@@ -21,8 +22,8 @@ function StandardWindow({ info, wall }) {
       key={i}
       x1={l.x1} y1={l.y1}
       x2={l.x2} y2={l.y2}
-      stroke="var(--color-wall-fill)"
-      strokeWidth={i === 1 ? 2 : 1}
+      stroke={i === 1 ? DRAWING_GRAPHICS.plan.markerStroke : DRAWING_GRAPHICS.plan.secondaryStroke}
+      strokeWidth={i === 1 ? 1.1 : 0.72}
       vectorEffect="non-scaling-stroke"
     />
   ));
@@ -39,25 +40,25 @@ function CasementWindow({ win, info }) {
       <line
         x1={0} y1={0}
         x2={win.width} y2={0}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       {/* Hinge leaf */}
       <line
         x1={0} y1={0}
         x2={0} y2={flipSign * -leafLen}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
       {/* Quarter-circle arc */}
       <path
         d={`M ${leafLen} 0 A ${leafLen} ${leafLen} 0 0 ${win.openDirection === 'left' ? 1 : 0} 0 ${flipSign * -leafLen}`}
         fill="none"
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
-        strokeDasharray="4 3"
+        stroke={DRAWING_GRAPHICS.plan.hiddenStroke}
+        strokeWidth={DRAWING_GRAPHICS.plan.hiddenStrokeWidth}
+        strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
         vectorEffect="non-scaling-stroke"
       />
     </g>
@@ -76,33 +77,33 @@ function AwningWindow({ win, info }) {
       <line
         x1={0} y1={0}
         x2={win.width} y2={0}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       {/* Left arm to apex */}
       <line
         x1={0} y1={0}
         x2={midX} y2={flipSign * -projLen}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
       {/* Right arm to apex */}
       <line
         x1={win.width} y1={0}
         x2={midX} y2={flipSign * -projLen}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
       {/* Dashed arc showing swing path */}
       <path
         d={`M 0 0 A ${midX} ${projLen} 0 0 ${win.openDirection === 'left' ? 1 : 0} ${win.width} 0`}
         fill="none"
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
-        strokeDasharray="4 3"
+        stroke={DRAWING_GRAPHICS.plan.hiddenStroke}
+        strokeWidth={DRAWING_GRAPHICS.plan.hiddenStrokeWidth}
+        strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
         vectorEffect="non-scaling-stroke"
       />
     </g>
@@ -116,24 +117,24 @@ function FixedWindow({ info }) {
       <line
         x1={info.start.x} y1={info.start.y}
         x2={info.end.x} y2={info.end.y}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       {/* Diagonal X: p1→p3 */}
       <line
         x1={info.p1.x} y1={info.p1.y}
         x2={info.p3.x} y2={info.p3.y}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
       {/* Diagonal X: p2→p4 */}
       <line
         x1={info.p2.x} y1={info.p2.y}
         x2={info.p4.x} y2={info.p4.y}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={1}
+        stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+        strokeWidth={0.72}
         vectorEffect="non-scaling-stroke"
       />
     </>
@@ -165,8 +166,8 @@ function JalousieWindow({ win, info, wall }) {
       <line
         x1={info.start.x} y1={info.start.y}
         x2={info.end.x} y2={info.end.y}
-        stroke="var(--color-wall-fill)"
-        strokeWidth={2}
+        stroke={DRAWING_GRAPHICS.plan.markerStroke}
+        strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       {/* Perpendicular slat lines */}
@@ -175,8 +176,8 @@ function JalousieWindow({ win, info, wall }) {
           key={i}
           x1={l.x1} y1={l.y1}
           x2={l.x2} y2={l.y2}
-          stroke="var(--color-wall-fill)"
-          strokeWidth={1}
+          stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+          strokeWidth={0.72}
           vectorEffect="non-scaling-stroke"
         />
       ))}

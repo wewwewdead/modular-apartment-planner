@@ -7,6 +7,7 @@ import { landingOutline } from '@/geometry/landingGeometry';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 import { getSlabRenderData } from '@/geometry/slabGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
+import { fixtureOutline } from '@/geometry/fixtureGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { buildProjectSectionScene } from '@/sections/scene';
@@ -81,6 +82,10 @@ function collectPlanPoints(floor) {
     if (!wall) continue;
     const outline = windowOutlineOnWall(wall, windowItem);
     points.push(outline.p1, outline.p2, outline.p3, outline.p4);
+  }
+
+  for (const fixture of floor.fixtures || []) {
+    points.push(...fixtureOutline(fixture));
   }
 
   return points;
@@ -168,7 +173,7 @@ function build3DPreviewSource(project, floor) {
   if (!floor) {
     return {
       kind: 'empty',
-      title: '3D Preview',
+      title: 'Axonometric View',
       message: 'Missing floor.',
       bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
     };
@@ -181,7 +186,7 @@ function build3DPreviewSource(project, floor) {
 
   return {
     kind: '3d_preview',
-    title: '3D Preview',
+    title: 'Axonometric View',
     project,
     activeFloorId: floor.id,
     bounds: {
@@ -216,7 +221,7 @@ export function resolveSheetViewportSource(project, viewport) {
 export function getViewportSourceLabel(sourceView) {
   switch (sourceView) {
     case '3d_preview':
-      return '3D Preview';
+      return 'Axonometric View';
     case 'section':
       return 'Section';
     case 'elevation_front':

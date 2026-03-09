@@ -1,4 +1,5 @@
 import { getStairRenderData } from '@/geometry/stairGeometry';
+import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 export default function StairRenderer({ stairs }) {
   return (
@@ -13,9 +14,9 @@ export default function StairRenderer({ stairs }) {
           <g key={stair.id} data-id={stair.id} data-type="stair">
             <polygon
               points={points}
-              fill="rgba(207, 179, 120, 0.18)"
-              stroke="#8E6D38"
-              strokeWidth={1}
+              fill="#ffffff"
+              stroke={DRAWING_GRAPHICS.plan.objectStroke}
+              strokeWidth={DRAWING_GRAPHICS.plan.objectStrokeWidth}
               vectorEffect="non-scaling-stroke"
             />
             {renderData.treads.map((tread, index) => (
@@ -25,8 +26,8 @@ export default function StairRenderer({ stairs }) {
                 y1={tread.start.y}
                 x2={tread.end.x}
                 y2={tread.end.y}
-                stroke="#8E6D38"
-                strokeWidth={0.9}
+                stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+                strokeWidth={0.72}
                 vectorEffect="non-scaling-stroke"
                 style={{ pointerEvents: 'none' }}
               />
@@ -38,8 +39,8 @@ export default function StairRenderer({ stairs }) {
                   y1={renderData.arrow.start.y}
                   x2={renderData.arrow.end.x}
                   y2={renderData.arrow.end.y}
-                  stroke="#7A4E13"
-                  strokeWidth={1.6}
+                  stroke={DRAWING_GRAPHICS.plan.markerStroke}
+                  strokeWidth={DRAWING_GRAPHICS.plan.markerStrokeWidth}
                   vectorEffect="non-scaling-stroke"
                 />
                 <line
@@ -47,8 +48,8 @@ export default function StairRenderer({ stairs }) {
                   y1={renderData.arrow.end.y}
                   x2={renderData.arrow.headA.x}
                   y2={renderData.arrow.headA.y}
-                  stroke="#7A4E13"
-                  strokeWidth={1.6}
+                  stroke={DRAWING_GRAPHICS.plan.markerStroke}
+                  strokeWidth={DRAWING_GRAPHICS.plan.markerStrokeWidth}
                   vectorEffect="non-scaling-stroke"
                 />
                 <line
@@ -56,8 +57,8 @@ export default function StairRenderer({ stairs }) {
                   y1={renderData.arrow.end.y}
                   x2={renderData.arrow.headB.x}
                   y2={renderData.arrow.headB.y}
-                  stroke="#7A4E13"
-                  strokeWidth={1.6}
+                  stroke={DRAWING_GRAPHICS.plan.markerStroke}
+                  strokeWidth={DRAWING_GRAPHICS.plan.markerStrokeWidth}
                   vectorEffect="non-scaling-stroke"
                 />
               </g>

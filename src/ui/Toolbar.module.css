@@ -3,52 +3,70 @@
   align-items: center;
   height: var(--toolbar-height);
   background: var(--color-panel-bg);
-  border-bottom: 1px solid var(--color-border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   padding: 0 var(--space-md);
   gap: var(--space-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.toolbar::-webkit-scrollbar {
+  height: 3px;
+}
+.toolbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.10);
+  border-radius: 2px;
+}
+.toolbar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .group {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-md);
   flex-shrink: 0;
 }
 
 .group + .group {
-  border-left: 1px solid var(--color-border-subtle);
+  border-left: none;
 }
 
 .divider {
   width: 1px;
   height: 24px;
-  background: var(--color-border-subtle);
+  background: rgba(0, 0, 0, 0.08);
   margin: 0 var(--space-xs);
   flex-shrink: 0;
 }
 
-/* Icon button base (34x34) */
+/* Icon button base (36x36) */
 .btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.01em;
-  color: var(--color-text-primary);
-  transition: background var(--duration-fast), transform var(--duration-fast);
+  color: var(--color-text-secondary);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
   white-space: nowrap;
   position: relative;
 }
 
 .btn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
 }
 
 .btn:active {
@@ -56,12 +74,14 @@
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .btn:disabled:hover {
   background: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
 }
 
 .btn:disabled:active {
@@ -88,6 +108,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--color-accent);
+  box-shadow: 0 0 6px rgba(13, 124, 102, 0.40);
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -111,7 +132,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
+  height: 30px;
   padding: 0 10px;
   border-radius: calc(var(--radius-md) - 2px);
   font-size: 11px;
@@ -125,7 +146,7 @@
 
 .segmentedBtn:hover {
   color: var(--color-text-primary);
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(0, 0, 0, 0.04);
 }
 
 .segmentedBtnActive {
@@ -136,31 +157,45 @@
   box-shadow: var(--color-segment-active-shadow);
 }
 
+/* Group label */
+.groupLabel {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
 /* Tool palette - inline row */
 .toolPalette {
   display: flex;
   align-items: center;
   gap: 1px;
-  padding: 0 var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-md);
   flex-shrink: 0;
-  border-left: 1px solid var(--color-border-subtle);
 }
 
 .toolPaletteBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   color: var(--color-text-secondary);
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
   position: relative;
   cursor: pointer;
 }
 
 .toolPaletteBtn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
   color: var(--color-text-primary);
 }
 
@@ -171,6 +206,7 @@
 
 .toolPaletteBtn:disabled:hover {
   background: transparent;
+  border-color: transparent;
   color: var(--color-text-secondary);
 }
 
@@ -178,6 +214,7 @@
   composes: toolPaletteBtn;
   background: var(--color-accent-subtle);
   color: var(--color-accent);
+  border-color: rgba(13, 124, 102, 0.15);
 }
 
 .toolPaletteBtnActive:hover {
@@ -190,16 +227,38 @@
   display: block;
 }
 
+/* Fixture palette */
+.fixturePalette {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.fixturePaletteLabel {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-tertiary);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
 /* Toggle buttons (sidebar, properties, grid, snap) */
 .toggleBtn {
   composes: btn;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .toggleBtn.toggleActive {
   opacity: 1;
   background: var(--color-accent-subtle);
   color: var(--color-accent);
+  border-color: rgba(13, 124, 102, 0.15);
 }
 
 .spacer {
@@ -211,9 +270,12 @@
   .toolPalette {
     gap: 0;
   }
+  .fixturePalette {
+    gap: 0;
+  }
   .toolPaletteBtn {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
   }
   .segmentedBtn,
   .segmentedBtnActive {
@@ -233,10 +295,19 @@
   .toolPalette {
     padding: 0 var(--space-xs);
   }
+  .fixturePalette {
+    padding: 0 var(--space-xs);
+  }
+  .fixturePaletteLabel {
+    display: none;
+  }
+  .groupLabel {
+    display: none;
+  }
   .segmentedBtn,
   .segmentedBtnActive {
     padding: 0 5px;
     font-size: 10px;
-    height: 24px;
+    height: 26px;
   }
 }

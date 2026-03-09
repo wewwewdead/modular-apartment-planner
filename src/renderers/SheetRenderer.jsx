@@ -1,55 +1,10 @@
 import { buildSheetScene } from '@/sheets/layout';
+import { SHEET_COLORS, SHEET_TOKENS } from '@/sheets/standards';
 import { getViewportHandleRects, getViewportRotationHandle } from '@/sheets/hitTest';
 import SheetViewportContent from './SheetViewportContent';
+import SheetTitleBlock from './sheet/SheetTitleBlock';
 
-const HANDLE_SIZE = 4;
-
-function TitleBlock({ titleBlock }) {
-  const rowHeight = titleBlock.height / titleBlock.rows.length;
-
-  return (
-    <g className="sheet-title-block">
-      <rect
-        x={titleBlock.x}
-        y={titleBlock.y}
-        width={titleBlock.width}
-        height={titleBlock.height}
-        fill="#ffffff"
-        stroke="#4c5b70"
-        strokeWidth={0.5}
-      />
-      {titleBlock.rows.map((row, index) => {
-        const y = titleBlock.y + rowHeight * index;
-        return (
-          <g key={row.label}>
-            <line
-              x1={titleBlock.x}
-              y1={y}
-              x2={titleBlock.x + titleBlock.width}
-              y2={y}
-              stroke="#4c5b70"
-              strokeWidth={0.35}
-            />
-            <line
-              x1={titleBlock.x + titleBlock.width * 0.28}
-              y1={y}
-              x2={titleBlock.x + titleBlock.width * 0.28}
-              y2={y + rowHeight}
-              stroke="#4c5b70"
-              strokeWidth={0.35}
-            />
-            <text x={titleBlock.x + 2} y={y + rowHeight * 0.67} fontSize={2.5} fill="#4c5b70">
-              {row.label}
-            </text>
-            <text x={titleBlock.x + titleBlock.width * 0.31} y={y + rowHeight * 0.67} fontSize={2.8} fill="#223247">
-              {row.value}
-            </text>
-          </g>
-        );
-      })}
-    </g>
-  );
-}
+const HANDLE_SIZE = SHEET_TOKENS.viewportHandleSize;
 
 function EmptyViewportMessage({ viewport, message }) {
   return (
@@ -58,11 +13,51 @@ function EmptyViewportMessage({ viewport, message }) {
       y={viewport.y + viewport.height / 2}
       textAnchor="middle"
       dominantBaseline="middle"
-      fill="#66768a"
+      fill={SHEET_COLORS.textFaint}
       fontSize={4}
+      pointerEvents="none"
     >
       {message}
     </text>
+  );
+}
+
+function ViewportCaption({ viewport }) {
+  const isAbove = viewport.caption.position === 'above';
+  const ruleY = isAbove ? viewport.y - 2.2 : viewport.y + viewport.height + 1.2;
+  const secondaryY = isAbove ? viewport.y - 2.8 : viewport.caption.y;
+  const primaryY = secondaryY - 3.1;
+
+  return (
+    <g className="sheet-viewport-caption" pointerEvents="none">
+      <line
+        x1={viewport.x}
+        y1={ruleY}
+        x2={viewport.x + viewport.width}
+        y2={ruleY}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <text
+        x={viewport.x}
+        y={primaryY}
+        fontSize={3}
+        fill={SHEET_COLORS.text}
+        fontWeight={600}
+        letterSpacing={0.12}
+      >
+        {viewport.caption.primaryText}
+      </text>
+      <text
+        x={viewport.x}
+        y={secondaryY}
+        fontSize={1.9}
+        fill={SHEET_COLORS.textMuted}
+        letterSpacing={0.12}
+      >
+        {viewport.caption.secondaryText}
+      </text>
+    </g>
   );
 }
 
@@ -77,7 +72,7 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
         y={0}
         width={scene.paper.width}
         height={scene.paper.height}
-        fill="#f2f4f7"
+        fill={SHEET_COLORS.sheetBackdrop}
         stroke="none"
       />
       <rect
@@ -85,11 +80,21 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
         y={scene.border.y}
         width={scene.border.width}
         height={scene.border.height}
-        fill="#ffffff"
-        stroke={selectedType === 'sheet' && selectedId === sheet.id ? '#0f8f74' : '#4c5b70'}
-        strokeWidth={selectedType === 'sheet' && selectedId === sheet.id ? 1 : 0.7}
+        fill={SHEET_COLORS.paper}
+        stroke={selectedType === 'sheet' && selectedId === sheet.id ? '#0f8f74' : SHEET_COLORS.border}
+        strokeWidth={selectedType === 'sheet' && selectedId === sheet.id ? 1 : 0.6}
       />
-      <TitleBlock titleBlock={scene.titleBlock} />
+      <rect
+        x={scene.liveArea.x}
+        y={scene.liveArea.y}
+        width={scene.liveArea.width}
+        height={scene.liveArea.height}
+        fill="none"
+        stroke={SHEET_COLORS.divider}
+        strokeWidth={0.2}
+      />
+      <SheetTitleBlock titleBlock={scene.titleBlock} />
+
       {scene.viewports.map((viewport) => {
         const isSelected = selectedType === 'sheetViewport' && selectedId === viewport.id;
         return (
@@ -98,22 +103,25 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
             className="sheet-viewport"
             transform={viewport.rotation ? `rotate(${viewport.rotation}, ${viewport.x + viewport.width / 2}, ${viewport.y + viewport.height / 2})` : undefined}
           >
-            <text
-              x={viewport.x}
-              y={viewport.y - 2}
-              fontSize={3.4}
-              fill="#4c5b70"
-            >
-              {viewport.title}
-            </text>
+            <ViewportCaption viewport={viewport} />
             <rect
               x={viewport.x}
               y={viewport.y}
               width={viewport.width}
               height={viewport.height}
-              fill="#ffffff"
-              stroke={isSelected ? '#0f8f74' : '#4c5b70'}
+              fill={viewport.source.kind === '3d_preview' ? '#f8fafc' : SHEET_COLORS.paper}
+              stroke={isSelected ? '#0f8f74' : SHEET_COLORS.border}
               strokeWidth={isSelected ? 0.8 : 0.45}
+            />
+            <rect
+              x={viewport.contentRect.x}
+              y={viewport.contentRect.y}
+              width={viewport.contentRect.width}
+              height={viewport.contentRect.height}
+              fill="none"
+              stroke={SHEET_COLORS.divider}
+              strokeWidth={0.18}
+              pointerEvents="none"
             />
             {viewport.source.kind === 'empty' ? (
               <EmptyViewportMessage viewport={viewport} message={viewport.source.message} />
@@ -125,8 +133,12 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
                 height={viewport.clipRect.height}
                 viewBox={`0 0 ${viewport.clipRect.width} ${viewport.clipRect.height}`}
                 overflow="hidden"
+                pointerEvents="none"
               >
-                <g transform={`translate(${viewport.contentTransform.translateX}, ${viewport.contentTransform.translateY}) scale(${viewport.contentTransform.scale})`}>
+                <g
+                  transform={`translate(${viewport.contentTransform.translateX}, ${viewport.contentTransform.translateY}) scale(${viewport.contentTransform.scale})`}
+                  pointerEvents="none"
+                >
                   <SheetViewportContent source={viewport.source} />
                 </g>
               </svg>

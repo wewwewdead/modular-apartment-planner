@@ -143,6 +143,7 @@ export default function Sidebar() {
     const nextIndex = (project.sheets || []).length + 1;
     const sheet = createSheet(`Sheet ${nextIndex}`, {
       drawingName: `Drawing ${nextIndex}`,
+      number: `A${String(nextIndex).padStart(2, '0')}`,
     });
     dispatch({ type: 'SHEET_ADD', sheet });
     editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: sheet.id });

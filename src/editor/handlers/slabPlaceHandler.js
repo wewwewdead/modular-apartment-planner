@@ -1,5 +1,6 @@
 import { createSlab } from '@/domain/models';
 import { SNAP_DISTANCE_PX } from '@/domain/defaults';
+import { getFloorElevation } from '@/domain/floorModels';
 import { distance } from '@/geometry/point';
 
 function resetSlabToolState(editorDispatch) {
@@ -17,7 +18,7 @@ export function createSlabPlaceHandler({ dispatch, editorDispatch, getFloor, act
     const floor = getFloor(activeFloorId);
     if (!floor || points.length < 3) return;
 
-    const slab = createSlab(floor.id, points);
+    const slab = createSlab(floor.id, points, undefined, getFloorElevation(floor));
     dispatch({ type: 'SLAB_ADD', floorId: activeFloorId, slab });
     editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
     editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created slab.' });

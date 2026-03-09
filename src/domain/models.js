@@ -1,11 +1,17 @@
 import { generateId } from './ids';
 import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, DOOR_HEIGHT, DOOR_SILL_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT, COLUMN_WIDTH, COLUMN_DEPTH, BEAM_WIDTH, BEAM_DEPTH, STAIR_WIDTH, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, SLAB_THICKNESS, SLAB_ELEVATION, SECTION_DEPTH, LANDING_WIDTH, LANDING_DEPTH, LANDING_THICKNESS, ROOM_COLOR, DIMENSION_DEFAULT_OFFSET } from './defaults';
+import { FIXTURE_DEFAULTS } from '@/editor/tools';
 import { polygonArea, polygonCentroid } from '@/geometry/polygon';
 
 export function createProject(name = 'Untitled Project') {
   return {
     id: generateId('proj'),
     name,
+    address: '',
+    documentDefaults: {
+      drawnBy: '',
+      checkedBy: '',
+    },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     floors: [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })],
@@ -32,6 +38,7 @@ export function createFloor(name = 'Floor', levelIndex = 0, options = {}) {
     beams: [],
     stairs: [],
     landings: [],
+    fixtures: [],
     annotations: [],
     annotationSettings: createAnnotationSettings(),
     slabs: [],
@@ -181,6 +188,19 @@ export function createLanding(position, width = LANDING_WIDTH, depth = LANDING_D
     thickness: options.thickness ?? LANDING_THICKNESS,
     elevation: options.elevation ?? 0,
     rotation: options.rotation ?? 0,
+  };
+}
+
+export function createFixture(fixtureType, x, y, options = {}) {
+  const defaults = FIXTURE_DEFAULTS[fixtureType] || { width: 600, depth: 400 };
+  return {
+    id: generateId('fix'),
+    fixtureType,
+    x, y,
+    width: options.width ?? defaults.width,
+    depth: options.depth ?? defaults.depth,
+    rotation: options.rotation ?? 0,
+    name: options.name ?? '',
   };
 }
 

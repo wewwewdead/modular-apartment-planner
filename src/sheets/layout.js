@@ -1,34 +1,73 @@
 import { getSheetDisplayLabel } from '@/domain/sheetModels';
+import {
+  DRAWING_GRAPHICS,
+  SHEET_COLORS,
+  SHEET_TOKENS,
+  resolveSheetMetadata,
+  resolveViewportReferenceNote,
+  resolveViewportScaleLabel,
+  snapRectToGrid,
+} from './standards';
 import { getPaperPreset } from './paper';
 import { getViewportSourceLabel, resolveSheetViewportSource } from './sources';
-
-const SHEET_MARGIN = 12;
-const TITLE_BLOCK_HEIGHT = 32;
-const CONTENT_PADDING = 4;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
 function resolveViewportScale(viewport) {
-  return Math.max(1, viewport.scale || 100);
+  return Math.max(1, Number(viewport?.scale) || 100);
 }
 
-function buildTitleBlock(project, sheet, paper) {
-  const titleBlockWidth = Math.min(130, paper.width * 0.42);
-  const x = paper.width - SHEET_MARGIN - titleBlockWidth;
-  const y = paper.height - SHEET_MARGIN - TITLE_BLOCK_HEIGHT;
+function getCaptionClearance(viewport) {
+  if (viewport?.captionPosition === 'above' || viewport?.captionPosition === 'below') {
+    return SHEET_TOKENS.viewportCaptionGap + SHEET_TOKENS.viewportCaptionHeight;
+  }
+  return 0;
+}
+
+function buildSheetZones(paper) {
+  const border = {
+    x: SHEET_TOKENS.margin,
+    y: SHEET_TOKENS.margin,
+    width: paper.width - SHEET_TOKENS.margin * 2,
+    height: paper.height - SHEET_TOKENS.margin * 2,
+  };
+
+  const liveArea = {
+    x: border.x + SHEET_TOKENS.innerInset,
+    y: border.y + SHEET_TOKENS.innerInset,
+    width: border.width - SHEET_TOKENS.innerInset * 2,
+    height: border.height - SHEET_TOKENS.innerInset * 2,
+  };
+
+  const footer = {
+    x: liveArea.x,
+    y: liveArea.y + liveArea.height - SHEET_TOKENS.footerHeight,
+    width: liveArea.width,
+    height: SHEET_TOKENS.footerHeight,
+  };
+
+  const contentArea = {
+    x: liveArea.x,
+    y: liveArea.y,
+    width: liveArea.width,
+    height: footer.y - liveArea.y - SHEET_TOKENS.contentGap,
+  };
+
+  const titleBlock = {
+    x: footer.x + footer.width - Math.min(SHEET_TOKENS.titleBlockWidth, footer.width * 0.46),
+    y: footer.y,
+    width: Math.min(SHEET_TOKENS.titleBlockWidth, footer.width * 0.46),
+    height: footer.height,
+  };
 
   return {
-    x,
-    y,
-    width: titleBlockWidth,
-    height: TITLE_BLOCK_HEIGHT,
-    rows: [
-      { label: 'Drawing', value: sheet.drawingName || getSheetDisplayLabel(sheet) },
-      { label: 'Project', value: sheet.projectNameOverride || project.name || 'Untitled Project' },
-      { label: 'Scale', value: sheet.scaleLabel || 'As noted' },
-    ],
+    border,
+    liveArea,
+    footer,
+    contentArea,
+    titleBlock,
   };
 }
 
@@ -36,95 +75,406 @@ function resolveViewportTitle(viewport, source) {
   return viewport.title?.trim() || source.title || getViewportSourceLabel(viewport.sourceView);
 }
 
-function buildViewportFrame(viewport, source) {
+function formatCaptionSecondary(viewport, source, sheet) {
+  const scaleLabel = resolveViewportScaleLabel(viewport, source, sheet);
+  const reference = resolveViewportReferenceNote(viewport, source);
+  return `${reference}  |  SCALE ${scaleLabel}`;
+}
+
+function buildContentTransform(viewport, source, contentRect) {
   const bounds = source.bounds || { minX: 0, maxX: 1000, minY: 0, maxY: 1000 };
-  const scale = 1 / resolveViewportScale(viewport);
   const sourceWidth = Math.max(1, bounds.maxX - bounds.minX);
   const sourceHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const innerWidth = Math.max(10, viewport.width - CONTENT_PADDING * 2);
-  const innerHeight = Math.max(10, viewport.height - CONTENT_PADDING * 2);
+  const scale = source.kind === '3d_preview'
+    ? Math.min(contentRect.width / sourceWidth, contentRect.height / sourceHeight)
+    : (1 / resolveViewportScale(viewport));
+
   const drawnWidth = sourceWidth * scale;
   const drawnHeight = sourceHeight * scale;
+  const translateX = (contentRect.width - drawnWidth) / 2 - bounds.minX * scale;
+  const translateY = (contentRect.height - drawnHeight) / 2 - bounds.minY * scale;
 
-  const translateX = Math.max(0, (innerWidth - drawnWidth) / 2) - bounds.minX * scale;
-  const translateY = Math.max(0, (innerHeight - drawnHeight) / 2) - bounds.minY * scale;
+  return {
+    scale,
+    translateX,
+    translateY,
+  };
+}
+
+function buildViewportScene(viewport, source, sheet, rect) {
+  const frameRect = snapRectToGrid(rect);
+  const contentRect = {
+    x: frameRect.x + SHEET_TOKENS.viewportPadding,
+    y: frameRect.y + SHEET_TOKENS.viewportPadding,
+    width: Math.max(10, frameRect.width - SHEET_TOKENS.viewportPadding * 2),
+    height: Math.max(10, frameRect.height - SHEET_TOKENS.viewportPadding * 2),
+  };
+
+  const captionGap = SHEET_TOKENS.viewportCaptionGap;
+  const captionHeight = SHEET_TOKENS.viewportCaptionHeight;
+  const captionY = viewport.captionPosition === 'above'
+    ? frameRect.y - captionGap
+    : frameRect.y + frameRect.height + captionGap + captionHeight;
+
+  const caption = {
+    position: viewport.captionPosition || 'below',
+    x: frameRect.x,
+    y: captionY,
+    width: frameRect.width,
+    primaryText: resolveViewportTitle(viewport, source),
+    secondaryText: formatCaptionSecondary(viewport, source, sheet),
+  };
 
   return {
     ...viewport,
-    rotation: viewport.rotation || 0,
-    title: resolveViewportTitle(viewport, source),
+    x: frameRect.x,
+    y: frameRect.y,
+    width: frameRect.width,
+    height: frameRect.height,
+    title: caption.primaryText,
     source,
-    clipRect: {
-      x: viewport.x + CONTENT_PADDING,
-      y: viewport.y + CONTENT_PADDING,
-      width: innerWidth,
-      height: innerHeight,
+    frameRect,
+    clipRect: contentRect,
+    contentRect,
+    caption,
+    contentTransform: buildContentTransform(viewport, source, contentRect),
+    autoLayoutApplied: !viewport.lockAutoLayout,
+  };
+}
+
+function buildTitleBlock(project, sheet, titleBlockRect, index, viewports) {
+  const meta = resolveSheetMetadata(project, sheet, index, viewports);
+  const revisionWidth = Math.max(44, titleBlockRect.width * 0.28);
+  const infoX = titleBlockRect.x + titleBlockRect.width - revisionWidth;
+  const mainWidth = titleBlockRect.width - revisionWidth;
+  const bandHeight = titleBlockRect.height * 0.3;
+  const titleHeight = titleBlockRect.height * 0.36;
+  const metaRowHeight = (titleBlockRect.height - bandHeight - titleHeight) / 2;
+  const metaLabelWidth = 15;
+  const visibleRevisions = [...(sheet?.revisions || [])].slice(-4).reverse();
+
+  return {
+    frame: titleBlockRect,
+    projectBand: {
+      x: titleBlockRect.x,
+      y: titleBlockRect.y,
+      width: mainWidth,
+      height: bandHeight,
+      title: meta.projectTitle,
+      address: meta.projectAddress,
     },
-    contentTransform: {
-      translateX,
-      translateY,
-      scale,
+    drawingCell: {
+      x: titleBlockRect.x,
+      y: titleBlockRect.y + bandHeight,
+      width: mainWidth * 0.68,
+      height: titleHeight,
+      label: 'DRAWING TITLE',
+      value: meta.drawingTitle,
+    },
+    numberCell: {
+      x: titleBlockRect.x + mainWidth * 0.68,
+      y: titleBlockRect.y + bandHeight,
+      width: mainWidth * 0.32,
+      height: titleHeight,
+      label: 'SHEET NO.',
+      value: meta.sheetNumber,
+    },
+    metaRows: [
+      {
+        x: titleBlockRect.x,
+        y: titleBlockRect.y + bandHeight + titleHeight,
+        width: mainWidth / 2,
+        height: metaRowHeight,
+        labelWidth: metaLabelWidth,
+        label: 'DATE',
+        value: meta.issueDate,
+      },
+      {
+        x: titleBlockRect.x + mainWidth / 2,
+        y: titleBlockRect.y + bandHeight + titleHeight,
+        width: mainWidth / 2,
+        height: metaRowHeight,
+        labelWidth: metaLabelWidth,
+        label: 'SCALE',
+        value: meta.scaleLabel,
+      },
+      {
+        x: titleBlockRect.x,
+        y: titleBlockRect.y + bandHeight + titleHeight + metaRowHeight,
+        width: mainWidth / 2,
+        height: metaRowHeight,
+        labelWidth: metaLabelWidth,
+        label: 'DRAWN BY',
+        value: meta.drawnBy || 'TBD',
+      },
+      {
+        x: titleBlockRect.x + mainWidth / 2,
+        y: titleBlockRect.y + bandHeight + titleHeight + metaRowHeight,
+        width: mainWidth / 2,
+        height: metaRowHeight,
+        labelWidth: metaLabelWidth,
+        label: 'CHECKED',
+        value: meta.checkedBy || 'TBD',
+      },
+    ],
+    revisions: {
+      x: infoX,
+      y: titleBlockRect.y,
+      width: revisionWidth,
+      height: titleBlockRect.height,
+      headerHeight: 8,
+      rows: visibleRevisions,
     },
   };
+}
+
+function rectFromArea(area) {
+  return {
+    x: area.x,
+    y: area.y,
+    width: area.width,
+    height: area.height,
+  };
+}
+
+function partitionByRole(entries) {
+  const primary = [];
+  const secondary = [];
+  const supplemental = [];
+
+  entries.forEach((entry, index) => {
+    const role = entry.viewport.role
+      || (entry.source.kind === '3d_preview' ? 'supplemental' : (index === 0 ? 'primary' : 'secondary'));
+
+    if (role === 'supplemental' || entry.source.kind === '3d_preview') {
+      supplemental.push(entry);
+    } else if (role === 'primary') {
+      primary.push(entry);
+    } else {
+      secondary.push(entry);
+    }
+  });
+
+  return { primary, secondary, supplemental };
+}
+
+function stackAreas(area, count) {
+  if (count <= 0) return [];
+  if (count === 1) return [rectFromArea(area)];
+  if (count >= 4) {
+    const columns = 2;
+    const rows = Math.ceil(count / columns);
+    const cellWidth = (area.width - SHEET_TOKENS.viewportGutter) / columns;
+    const cellHeight = (area.height - SHEET_TOKENS.viewportGutter * (rows - 1)) / rows;
+    return Array.from({ length: count }, (_, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      return {
+        x: area.x + column * (cellWidth + SHEET_TOKENS.viewportGutter),
+        y: area.y + row * (cellHeight + SHEET_TOKENS.viewportGutter),
+        width: cellWidth,
+        height: cellHeight,
+      };
+    });
+  }
+
+  const height = (area.height - SHEET_TOKENS.viewportGutter * (count - 1)) / count;
+  return Array.from({ length: count }, (_, index) => ({
+    x: area.x,
+    y: area.y + index * (height + SHEET_TOKENS.viewportGutter),
+    width: area.width,
+    height,
+  }));
+}
+
+function layoutAutoViewports(entries, area) {
+  if (!entries.length) return new Map();
+
+  const result = new Map();
+  const roles = partitionByRole(entries);
+  const primaryEntry = roles.primary[0] || roles.secondary[0] || roles.supplemental[0];
+  const secondaryEntries = [
+    ...roles.primary.slice(primaryEntry && roles.primary[0] === primaryEntry ? 1 : 0),
+    ...roles.secondary.filter((entry) => entry !== primaryEntry),
+    ...roles.supplemental.filter((entry) => entry !== primaryEntry),
+  ];
+
+  if (!primaryEntry) return result;
+
+  const onlySupplemental = primaryEntry.source.kind === '3d_preview'
+    && secondaryEntries.every((entry) => entry.source.kind === '3d_preview');
+
+  if (!secondaryEntries.length) {
+    result.set(primaryEntry.viewport.id, rectFromArea(area));
+    return result;
+  }
+
+  if (onlySupplemental) {
+    const areas = stackAreas(area, 1 + secondaryEntries.length);
+    [primaryEntry, ...secondaryEntries].forEach((entry, index) => {
+      result.set(entry.viewport.id, areas[index]);
+    });
+    return result;
+  }
+
+  const primaryWidthRatio = secondaryEntries.length >= 3 ? 0.58 : 0.64;
+  const primaryArea = {
+    x: area.x,
+    y: area.y,
+    width: area.width * primaryWidthRatio - SHEET_TOKENS.viewportGutter / 2,
+    height: area.height,
+  };
+  const sideArea = {
+    x: primaryArea.x + primaryArea.width + SHEET_TOKENS.viewportGutter,
+    y: area.y,
+    width: area.width - primaryArea.width - SHEET_TOKENS.viewportGutter,
+    height: area.height,
+  };
+
+  result.set(primaryEntry.viewport.id, rectFromArea(primaryArea));
+  stackAreas(sideArea, secondaryEntries.length).forEach((rect, index) => {
+    result.set(secondaryEntries[index].viewport.id, rect);
+  });
+
+  return result;
 }
 
 export function buildSheetScene(project, sheet) {
   if (!sheet) return null;
 
   const paper = getPaperPreset(sheet.paperSize);
-  const titleBlock = buildTitleBlock(project, sheet, paper);
-  const contentArea = {
-    x: SHEET_MARGIN,
-    y: SHEET_MARGIN,
-    width: paper.width - SHEET_MARGIN * 2,
-    height: paper.height - SHEET_MARGIN * 2,
-  };
+  const zones = buildSheetZones(paper);
+  const sourceEntries = (sheet.viewports || []).map((viewport) => ({
+    viewport,
+    source: resolveSheetViewportSource(project, viewport),
+  }));
+  const allowAutoLayout = sheet.layoutTemplate !== 'manual';
+  const autoEntries = allowAutoLayout
+    ? sourceEntries.filter((entry) => !entry.viewport.lockAutoLayout)
+    : [];
+  const manualEntries = sourceEntries.filter((entry) => entry.viewport.lockAutoLayout);
+  const autoRects = layoutAutoViewports(autoEntries, zones.contentArea);
 
-  const viewports = (sheet.viewports || []).map((viewport) => (
-    buildViewportFrame(viewport, resolveSheetViewportSource(project, viewport))
-  ));
+  const sceneViewports = sourceEntries.map((entry) => {
+    const rect = autoRects.get(entry.viewport.id)
+      || fitViewportToSheet(entry.viewport, sheet);
+    return buildViewportScene(entry.viewport, entry.source, sheet, rect);
+  });
+
+  const sheetIndex = (project?.sheets || []).findIndex((entry) => entry.id === sheet.id);
 
   return {
     paper,
-    title: getSheetDisplayLabel(sheet),
-    border: {
-      x: SHEET_MARGIN,
-      y: SHEET_MARGIN,
-      width: paper.width - SHEET_MARGIN * 2,
-      height: paper.height - SHEET_MARGIN * 2,
+    title: getSheetDisplayLabel(sheet, Math.max(0, sheetIndex)),
+    border: zones.border,
+    liveArea: zones.liveArea,
+    contentArea: zones.contentArea,
+    footer: zones.footer,
+    titleBlock: buildTitleBlock(project, sheet, zones.titleBlock, Math.max(0, sheetIndex), sceneViewports),
+    viewports: sceneViewports,
+    graphics: {
+      colors: SHEET_COLORS,
+      drawing: DRAWING_GRAPHICS,
     },
-    contentArea,
-    titleBlock,
-    viewports,
+    manualViewportCount: manualEntries.length,
+  };
+}
+
+export function materializeSheetViewportFrames(project, sheet) {
+  if (!sheet) return sheet;
+
+  const scene = buildSheetScene(project, {
+    ...sheet,
+    layoutTemplate: 'auto',
+  });
+
+  if (!scene) return sheet;
+
+  const frameById = new Map(scene.viewports.map((viewport) => [viewport.id, viewport]));
+
+  return {
+    ...sheet,
+    layoutTemplate: 'manual',
+    viewports: (sheet.viewports || []).map((viewport) => {
+      const frame = frameById.get(viewport.id);
+      if (!frame) {
+        return {
+          ...viewport,
+          lockAutoLayout: true,
+        };
+      }
+
+      return {
+        ...viewport,
+        x: frame.x,
+        y: frame.y,
+        width: frame.width,
+        height: frame.height,
+        rotation: frame.rotation || 0,
+        lockAutoLayout: true,
+      };
+    }),
   };
 }
 
 export function fitViewportToSheet(viewport, sheet) {
   const paper = getPaperPreset(sheet.paperSize);
-  const width = clamp(viewport.width, 40, paper.width - SHEET_MARGIN * 2);
-  const height = clamp(viewport.height, 30, paper.height - SHEET_MARGIN * 2 - TITLE_BLOCK_HEIGHT);
-  const maxX = paper.width - SHEET_MARGIN - width;
-  const maxY = paper.height - SHEET_MARGIN - height;
+  const zones = buildSheetZones(paper);
+  const captionClearance = getCaptionClearance(viewport);
+  const captionAbove = viewport.captionPosition === 'above' ? captionClearance : 0;
+  const captionBelow = viewport.captionPosition === 'below' ? captionClearance : 0;
+  const width = clamp(
+    viewport.width,
+    SHEET_TOKENS.viewportMinWidth,
+    zones.contentArea.width
+  );
+  const height = clamp(
+    viewport.height,
+    SHEET_TOKENS.viewportMinHeight,
+    zones.contentArea.height - captionClearance
+  );
+  const maxX = zones.contentArea.x + zones.contentArea.width - width;
+  const minY = zones.contentArea.y + captionAbove;
+  const maxY = zones.contentArea.y + zones.contentArea.height - height - captionBelow;
 
   return {
     ...viewport,
-    width,
-    height,
-    x: clamp(viewport.x, SHEET_MARGIN, maxX),
-    y: clamp(viewport.y, SHEET_MARGIN, maxY),
+    ...snapRectToGrid({
+      x: clamp(viewport.x, zones.contentArea.x, maxX),
+      y: clamp(viewport.y, minY, Math.max(minY, maxY)),
+      width,
+      height,
+    }),
   };
 }
 
-export function getDefaultViewportRect(sheet, source, scale = 100) {
+export function getDefaultViewportRect(sheet, source, scale = 100, options = {}) {
   const paper = getPaperPreset(sheet.paperSize);
+  const zones = buildSheetZones(paper);
   const bounds = source.bounds || { minX: 0, maxX: 1000, minY: 0, maxY: 1000 };
-  const denom = Math.max(1, scale);
-  const width = Math.max(70, Math.min((bounds.maxX - bounds.minX) / denom + CONTENT_PADDING * 2, paper.width - SHEET_MARGIN * 2));
-  const height = Math.max(50, Math.min((bounds.maxY - bounds.minY) / denom + CONTENT_PADDING * 2, paper.height - SHEET_MARGIN * 2 - TITLE_BLOCK_HEIGHT));
-  return {
-    x: SHEET_MARGIN + 8,
-    y: SHEET_MARGIN + 8,
+  const sourceWidth = Math.max(1000, bounds.maxX - bounds.minX);
+  const sourceHeight = Math.max(1000, bounds.maxY - bounds.minY);
+  const role = options.role || (source.kind === '3d_preview' ? 'supplemental' : 'primary');
+  const baseScale = source.kind === '3d_preview' ? 1 : Math.max(1, scale);
+  const width = clamp(
+    source.kind === '3d_preview'
+      ? zones.contentArea.width * 0.72
+      : (sourceWidth / baseScale) + SHEET_TOKENS.viewportPadding * 2,
+    role === 'primary' ? 120 : 84,
+    role === 'primary' ? zones.contentArea.width * 0.72 : zones.contentArea.width * 0.44
+  );
+  const height = clamp(
+    source.kind === '3d_preview'
+      ? zones.contentArea.height * 0.54
+      : (sourceHeight / baseScale) + SHEET_TOKENS.viewportPadding * 2,
+    role === 'primary' ? 96 : 72,
+    role === 'primary' ? zones.contentArea.height * 0.78 : zones.contentArea.height * 0.42
+  );
+
+  return snapRectToGrid({
+    x: zones.contentArea.x + SHEET_TOKENS.viewportGutter,
+    y: zones.contentArea.y + SHEET_TOKENS.viewportGutter,
     width,
     height,
-  };
+  });
 }

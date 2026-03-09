@@ -12,9 +12,11 @@ import {
   SelectIcon, DimensionIcon, WallIcon, BeamIcon, StairIcon,
   SectionCutIcon, SlabIcon, RoomIcon, DoorIcon, WindowIcon,
   ColumnIcon, LandingIcon,
+  KitchenTopIcon, ToiletIcon, LavatoryIcon, TableIcon, TVIcon, SofaIcon, BedIcon,
   GridIcon, SnapIcon, DetectRoomsIcon,
   SidebarIcon, PropertiesIcon,
 } from './ToolbarIcons';
+import { FIXTURE_TYPES } from '@/editor/tools';
 import styles from './Toolbar.module.css';
 
 const viewModes = [
@@ -50,7 +52,7 @@ export default function Toolbar({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, dispatch: editorDispatch } = useEditor();
+  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, toolState, dispatch: editorDispatch } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const {
     canCopySelection,
@@ -60,6 +62,16 @@ export default function Toolbar({
     beginPaste,
   } = usePlanClipboardController();
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan';
+
+  const fixtureItems = [
+    { fixtureType: FIXTURE_TYPES.KITCHEN_TOP, label: 'Kitchen Top', Icon: KitchenTopIcon },
+    { fixtureType: FIXTURE_TYPES.TOILET, label: 'Toilet', Icon: ToiletIcon },
+    { fixtureType: FIXTURE_TYPES.LAVATORY, label: 'Lavatory', Icon: LavatoryIcon },
+    { fixtureType: FIXTURE_TYPES.TABLE, label: 'Table', Icon: TableIcon },
+    { fixtureType: FIXTURE_TYPES.TV, label: 'TV', Icon: TVIcon },
+    { fixtureType: FIXTURE_TYPES.SOFA, label: 'Sofa', Icon: SofaIcon },
+    { fixtureType: FIXTURE_TYPES.BED, label: 'Bed', Icon: BedIcon },
+  ];
 
   const setTool = (tool) => editorDispatch({ type: 'SET_TOOL', tool });
 
@@ -204,6 +216,7 @@ export default function Toolbar({
 
       {/* Tool palette - inline row of 12 icons */}
       <div className={styles.toolPalette}>
+        <span className={styles.groupLabel}>Tools</span>
         {toolItems.map(({ tool, label, shortcut, Icon }) => (
           <button
             key={tool}
@@ -218,8 +231,32 @@ export default function Toolbar({
         ))}
       </div>
 
+      {/* Fixtures palette */}
+      <div className={styles.fixturePalette}>
+        <span className={styles.fixturePaletteLabel}>Fixtures</span>
+        {fixtureItems.map(({ fixtureType, label, Icon }) => {
+          const isActive = activeTool === TOOLS.FIXTURE && toolState.fixtureType === fixtureType;
+          return (
+            <button
+              key={fixtureType}
+              className={isActive ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
+              onClick={() => {
+                editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
+                editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType, previewRotation: 0 } });
+              }}
+              disabled={!isPlanView}
+              title={`${label} (F)`}
+              aria-label={label}
+            >
+              <Icon className={styles.toolPaletteIcon} />
+            </button>
+          );
+        })}
+      </div>
+
       {/* Panel toggles & utility toggles */}
       <div className={styles.group}>
+        <span className={styles.groupLabel}>Panels</span>
         <button
           className={`${styles.toggleBtn} ${!isSidebarCollapsed ? styles.toggleActive : ''}`}
           onClick={onToggleSidebar}
@@ -237,6 +274,7 @@ export default function Toolbar({
           <PropertiesIcon className={styles.icon} />
         </button>
         <div className={styles.divider} />
+        <span className={styles.groupLabel}>Display</span>
         <button
           className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
           onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
