@@ -89,6 +89,10 @@ export function LandingIcon(props) {
   return <I {...props}><path d="M3 14l4-4h6l4 4" {...p} /><rect x="6" y="8" width="8" height="4" rx="0.5" {...p} /></I>;
 }
 
+export function RailingIcon(props) {
+  return <I {...props}><line x1="3" y1="10" x2="17" y2="10" {...p} /><circle cx="3" cy="10" r="1.5" {...p} /><circle cx="17" cy="10" r="1.5" {...p} /><line x1="6" y1="7" x2="6" y2="13" {...p} /><line x1="10" y1="7" x2="10" y2="13" {...p} /><line x1="14" y1="7" x2="14" y2="13" {...p} /></I>;
+}
+
 export function GridIcon(props) {
   return <I {...props}><rect x="3" y="3" width="14" height="14" rx="1" {...p} /><path d="M3 7.67h14M3 12.33h14M7.67 3v14M12.33 3v14" {...p} /></I>;
 }
@@ -139,6 +143,16 @@ export function ExpandIcon(props) {
 
 export function CollapseIcon(props) {
   return <I {...props}><path d="M9 15v-4H5" {...p} /><path d="M11 5v4h4" {...p} /><path d="M5 15l4-4" {...p} /><path d="M15 5l-4 4" {...p} /></I>;
+}
+
+export function CenterViewIcon(props) {
+  return (
+    <I {...props}>
+      <circle cx="10" cy="10" r="4.5" {...p} />
+      <circle cx="10" cy="10" r="1" fill="currentColor" stroke="none" />
+      <path d="M10 2.5v3M10 14.5v3M2.5 10h3M14.5 10h3" {...p} />
+    </I>
+  );
 }
 
 // Fixture icons (plan-view symbols — architecturally detailed)

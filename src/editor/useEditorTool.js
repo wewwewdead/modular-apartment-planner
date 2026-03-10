@@ -13,6 +13,7 @@ import { createStairPlaceHandler } from './handlers/stairPlaceHandler';
 import { createSectionPlaceHandler } from './handlers/sectionPlaceHandler';
 import { createLandingPlaceHandler } from './handlers/landingPlaceHandler';
 import { createFixturePlaceHandler } from './handlers/fixturePlaceHandler';
+import { createRailingPlaceHandler } from './handlers/railingPlaceHandler';
 import { createElevationSelectHandler } from './handlers/elevationSelectHandler';
 
 function createReadOnlyHandler() {
@@ -83,6 +84,8 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
         return createLandingPlaceHandler(ctx);
       case TOOLS.FIXTURE:
         return createFixturePlaceHandler(ctx);
+      case TOOLS.RAILING:
+        return createRailingPlaceHandler(ctx);
       default:
         return null;
     }

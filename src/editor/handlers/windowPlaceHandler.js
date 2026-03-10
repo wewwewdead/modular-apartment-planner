@@ -1,6 +1,6 @@
 import { createWindow } from '@/domain/models';
 import { distanceToSegment } from '@/geometry/line';
-import { projectPointOnWall, wallLength } from '@/geometry/wallGeometry';
+import { clampWallOpeningOffset, projectPointOnWall, wallLength } from '@/geometry/wallGeometry';
 import { WINDOW_WIDTH } from '@/domain/defaults';
 
 const WALL_DETECT_RADIUS = 500; // mm
@@ -48,9 +48,7 @@ export function createWindowPlaceHandler({ dispatch, editorDispatch, getFloor, a
 
       if (wall) {
         const offset = projectPointOnWall(wall, modelPos);
-        const halfWidth = WINDOW_WIDTH / 2;
-        const maxOffset = wallLength(wall) - halfWidth;
-        const clampedOffset = Math.max(halfWidth, Math.min(maxOffset, offset));
+        const clampedOffset = clampWallOpeningOffset(wallLength(wall), WINDOW_WIDTH, offset);
         const blocked = overlapsExisting(wall.id, clampedOffset, WINDOW_WIDTH, floor.doors, floor.windows);
 
         editorDispatch({

@@ -1,5 +1,6 @@
 import { formatMeasurement } from '@/annotations/format';
 import { TOOLS } from '@/editor/tools';
+import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
 import { distance } from '@/geometry/point';
 import { PREVIEW_LABEL_OFFSET } from '@/domain/defaults';
 
@@ -9,10 +10,16 @@ export default function WallPreview({ toolState, activeTool }) {
   }
 
   const { start, preview } = toolState;
+  const dx = preview.x - start.x;
+  const dy = preview.y - start.y;
   const len = distance(start, preview);
-  const label = formatMeasurement(len);
+  const lengthLabel = formatMeasurement(len);
+  const bearingLabel = formatSurveyorBearing(pointsToSurveyorBearing(start, preview));
   const midX = (start.x + preview.x) / 2;
   const midY = (start.y + preview.y) / 2;
+  const safeLen = len || 1;
+  const labelX = midX + ((-dy / safeLen) * PREVIEW_LABEL_OFFSET);
+  const labelY = midY + ((dx / safeLen) * PREVIEW_LABEL_OFFSET);
 
   return (
     <g className="wall-preview" style={{ pointerEvents: 'none' }}>
@@ -36,14 +43,28 @@ export default function WallPreview({ toolState, activeTool }) {
         vectorEffect="non-scaling-stroke"
       />
       <text
-        x={midX} y={midY}
+        x={labelX} y={labelY}
         textAnchor="middle"
-        dy={-PREVIEW_LABEL_OFFSET}
         fill="var(--color-selection)"
         fontSize={140}
         fontFamily="var(--font-blueprint)"
+        paintOrder="stroke"
+        stroke="rgba(255, 255, 255, 0.92)"
+        strokeWidth={26}
       >
-        {label}
+        {lengthLabel}
+      </text>
+      <text
+        x={labelX} y={labelY + 112}
+        textAnchor="middle"
+        fill="var(--color-selection)"
+        fontSize={92}
+        fontFamily="var(--font-blueprint)"
+        paintOrder="stroke"
+        stroke="rgba(255, 255, 255, 0.92)"
+        strokeWidth={18}
+      >
+        {bearingLabel}
       </text>
     </g>
   );

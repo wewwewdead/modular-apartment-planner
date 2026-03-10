@@ -53,6 +53,9 @@ export const FIXTURE_SOFA_DEPTH = 900;
 export const FIXTURE_BED_WIDTH = 1400;
 export const FIXTURE_BED_DEPTH = 2000;
 
+export const RAILING_HEIGHT = 1000; // mm
+export const RAILING_WIDTH = 50;    // mm
+
 export const ROOM_COLOR = '#E8F0FE';
 
 export const ENDPOINT_MERGE_TOLERANCE = 1; // mm

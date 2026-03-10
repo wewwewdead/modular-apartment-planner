@@ -11,7 +11,7 @@ import {
   CopyIcon, CutIcon, PasteIcon,
   SelectIcon, DimensionIcon, WallIcon, BeamIcon, StairIcon,
   SectionCutIcon, SlabIcon, RoomIcon, DoorIcon, WindowIcon,
-  ColumnIcon, LandingIcon,
+  ColumnIcon, LandingIcon, RailingIcon,
   KitchenTopIcon, ToiletIcon, LavatoryIcon, TableIcon, TVIcon, SofaIcon, BedIcon,
   GridIcon, SnapIcon, DetectRoomsIcon,
   SidebarIcon, PropertiesIcon,
@@ -41,6 +41,7 @@ const toolItems = [
   { tool: TOOLS.WINDOW, label: 'Window', shortcut: 'N', Icon: WindowIcon },
   { tool: TOOLS.COLUMN, label: 'Column', shortcut: 'C', Icon: ColumnIcon },
   { tool: TOOLS.LANDING, label: 'Landing', shortcut: 'L', Icon: LandingIcon },
+  { tool: TOOLS.RAILING, label: 'Railing', shortcut: 'H', Icon: RailingIcon },
 ];
 
 export default function Toolbar({

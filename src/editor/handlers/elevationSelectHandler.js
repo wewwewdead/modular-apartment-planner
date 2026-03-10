@@ -2,7 +2,7 @@ import { buildProjectElevationScene } from '@/elevations/scene';
 import { getElevationView, projectElevationHorizontal } from '@/elevations/projection';
 import { getFloorElevation } from '@/domain/floorModels';
 import { pointInPolygon } from '@/geometry/polygon';
-import { wallLength } from '@/geometry/wallGeometry';
+import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
 
 const EPSILON = 1e-6;
 
@@ -83,9 +83,6 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
       if (!wall) return;
 
       const wallLen = wallLength(wall);
-      const halfWidth = (windowItem.width || 0) / 2;
-      const minOffset = halfWidth;
-      const maxOffset = Math.max(halfWidth, wallLen - halfWidth);
 
       const view = getElevationView(viewMode);
       const startHorizontal = projectElevationHorizontal(view, wall.start);
@@ -95,7 +92,7 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
       let nextOffset = windowItem.offset;
       if (Math.abs(projectedSpan) > EPSILON) {
         const t = (modelPos.x - startHorizontal) / projectedSpan;
-        nextOffset = clamp(t * wallLen, minOffset, maxOffset);
+        nextOffset = clampWallOpeningOffset(wallLen, windowItem.width, t * wallLen);
       }
 
       const wallBase = getFloorElevation(floor);

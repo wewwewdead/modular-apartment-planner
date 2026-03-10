@@ -7,6 +7,7 @@ import { getSlabRenderData } from '@/geometry/slabGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { getManualAnnotationFigure } from '@/annotations/scene';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
+import { getRailingRenderData } from '@/geometry/railingGeometry';
 
 const HANDLE_SIZE = 8; // px, will use vectorEffect
 
@@ -318,6 +319,52 @@ export default function SelectionOverlay({ selectedId, selectedType, floor, zoom
         strokeDasharray="6 3"
         vectorEffect="non-scaling-stroke"
       />
+    );
+  }
+
+  if (selectedType === 'railing') {
+    const railing = (floor.railings || []).find(r => r.id === selectedId);
+    if (!railing) return null;
+    const renderData = getRailingRenderData(railing);
+    if (!renderData) return null;
+    const points = renderData.outline.map(p => `${p.x},${p.y}`).join(' ');
+    const handleR = HANDLE_SIZE / zoom;
+
+    return (
+      <g>
+        <polygon
+          points={points}
+          fill="var(--color-selection-fill)"
+          stroke="var(--color-selection)"
+          strokeWidth={2}
+          strokeDasharray="6 3"
+          vectorEffect="non-scaling-stroke"
+        />
+        <rect
+          data-handle="start"
+          x={railing.startPoint.x - handleR / 2}
+          y={railing.startPoint.y - handleR / 2}
+          width={handleR}
+          height={handleR}
+          fill="white"
+          stroke="var(--color-selection)"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          style={{ cursor: 'move' }}
+        />
+        <rect
+          data-handle="end"
+          x={railing.endPoint.x - handleR / 2}
+          y={railing.endPoint.y - handleR / 2}
+          width={handleR}
+          height={handleR}
+          fill="white"
+          stroke="var(--color-selection)"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          style={{ cursor: 'move' }}
+        />
+      </g>
     );
   }
 

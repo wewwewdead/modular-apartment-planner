@@ -3,6 +3,7 @@ import { createProject } from '@/domain/models';
 import { createDuplicatedFloor, getDefaultFloorName, getFloorElevation, getFloorLevelIndex, shiftFloorAbsoluteElements, shiftFloorElevationData, sortFloors } from '@/domain/floorModels';
 import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
 import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
+import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
 
 const ProjectContext = createContext(null);
 const HISTORY_LIMIT = 100;
@@ -89,6 +90,15 @@ function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
   }
 
   return syncWallAttachmentPoints(nextWall, columns);
+}
+
+function clampWallMountedOpenings(openings, wallId, nextWallLength) {
+  return openings.map((opening) => {
+    if (opening.wallId !== wallId) return opening;
+
+    const nextOffset = clampWallOpeningOffset(nextWallLength, opening.width, opening.offset);
+    return nextOffset === opening.offset ? opening : { ...opening, offset: nextOffset };
+  });
 }
 
 function projectReducer(state, action) {
@@ -268,14 +278,28 @@ function projectReducer(state, action) {
       }));
 
     case 'WALL_UPDATE':
-      return updateFloor(state, action.floorId, f => ({
-        ...f,
-        walls: f.walls.map(w => (
-          w.id === action.wall.id
-            ? mergeWallUpdate(w, action.wall, f.columns || [])
-            : w
-        )),
-      }));
+      return updateFloor(state, action.floorId, f => {
+        let updatedWall = null;
+        const walls = f.walls.map((wall) => {
+          if (wall.id !== action.wall.id) return wall;
+
+          updatedWall = mergeWallUpdate(wall, action.wall, f.columns || []);
+          return updatedWall;
+        });
+
+        if (!updatedWall) {
+          return f;
+        }
+
+        const nextWallLength = wallLength(updatedWall);
+
+        return {
+          ...f,
+          walls,
+          doors: clampWallMountedOpenings(f.doors, updatedWall.id, nextWallLength),
+          windows: clampWallMountedOpenings(f.windows, updatedWall.id, nextWallLength),
+        };
+      });
 
     case 'WALL_DELETE': {
       const wallId = action.wallId;
@@ -448,6 +472,26 @@ function projectReducer(state, action) {
       return updateFloor(state, action.floorId, f => ({
         ...f,
         slabs: (f.slabs || []).filter(s => s.id !== action.slabId),
+      }));
+
+    case 'RAILING_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        railings: [...(f.railings || []), action.railing],
+      }));
+
+    case 'RAILING_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        railings: (f.railings || []).map(r =>
+          r.id === action.railing.id ? { ...r, ...action.railing } : r
+        ),
+      }));
+
+    case 'RAILING_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        railings: (f.railings || []).filter(r => r.id !== action.railingId),
       }));
 
     case 'SECTION_ADD':

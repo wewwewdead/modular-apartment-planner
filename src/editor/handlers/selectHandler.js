@@ -1,5 +1,5 @@
 import { distance } from '@/geometry/point';
-import { doorOutlineOnWall, windowOutlineOnWall, wallLength, projectPointOnWall } from '@/geometry/wallGeometry';
+import { clampWallOpeningOffset, doorOutlineOnWall, windowOutlineOnWall, wallLength, projectPointOnWall } from '@/geometry/wallGeometry';
 import { pointInPolygon } from '@/geometry/polygon';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
@@ -12,6 +12,7 @@ import { MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { getWallRenderData, resolveWallEndpoints, snapWallEndpoint } from '@/geometry/wallColumnGeometry';
 import { duplicateColumn } from '@/domain/columnModels';
 import { hitTestSectionCut } from '@/geometry/sectionCutGeometry';
+import { railingContainsPoint } from '@/geometry/railingGeometry';
 import { collectPlanRegionSelection, normalizeRectBounds, rectSize } from '@/clipboard/planClipboard';
 
 function hitTest(modelPos, floor, annotationTolerance) {
@@ -56,6 +57,13 @@ function hitTest(modelPos, floor, annotationTolerance) {
   for (const fixture of (floor.fixtures || [])) {
     if (fixtureContainsPoint(fixture, modelPos)) {
       return { id: fixture.id, type: 'fixture' };
+    }
+  }
+
+  // Hit test railings
+  for (const railing of (floor.railings || [])) {
+    if (railingContainsPoint(railing, modelPos)) {
+      return { id: railing.id, type: 'railing' };
     }
   }
 
@@ -140,7 +148,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
       const hit = hitTest(modelPos, floor, SNAP_DISTANCE_PX / viewport.zoom * 2.5);
       if (hit) {
         editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
-        const draggableTypes = new Set(['wall', 'column', 'fixture', 'door', 'window', 'stair', 'sectionCut', 'landing']);
+        const draggableTypes = new Set(['wall', 'column', 'fixture', 'door', 'window', 'stair', 'sectionCut', 'landing', 'railing']);
         if (!draggableTypes.has(hit.type)) return;
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -340,6 +348,44 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
             payload: { startPos: modelPos },
           });
         }
+      } else if (selectedType === 'railing') {
+        const railing = (floor.railings || []).find(r => r.id === selectedId);
+        if (!railing) return;
+
+        if (toolState.dragType === 'handle') {
+          const handle = toolState.handle;
+          const nextRailing = handle === 'start'
+            ? { ...railing, startPoint: modelPos }
+            : { ...railing, endPoint: modelPos };
+
+          if (distance(nextRailing.startPoint, nextRailing.endPoint) < MIN_WALL_LENGTH) return;
+
+          dispatch({
+            type: 'RAILING_UPDATE',
+            floorId: activeFloorId,
+            railing: nextRailing,
+          });
+        } else {
+          dispatch({
+            type: 'RAILING_UPDATE',
+            floorId: activeFloorId,
+            railing: {
+              id: railing.id,
+              startPoint: {
+                x: railing.startPoint.x + dx,
+                y: railing.startPoint.y + dy,
+              },
+              endPoint: {
+                x: railing.endPoint.x + dx,
+                y: railing.endPoint.y + dy,
+              },
+            },
+          });
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: { startPos: modelPos },
+          });
+        }
       } else if (selectedType === 'beam') {
         return;
       } else if (selectedType === 'stair') {
@@ -411,9 +457,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         if (!wall) return;
 
         const newOffset = projectPointOnWall(wall, modelPos);
-        const halfWidth = item.width / 2;
-        const maxOffset = wallLength(wall) - halfWidth;
-        const clampedOffset = Math.max(halfWidth, Math.min(maxOffset, newOffset));
+        const clampedOffset = clampWallOpeningOffset(wallLength(wall), item.width, newOffset);
 
         const updateType = selectedType === 'door' ? 'DOOR_UPDATE' : 'WINDOW_UPDATE';
         dispatch({
@@ -517,6 +561,8 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           dispatch({ type: 'ANNOTATION_DELETE', floorId: activeFloorId, annotationId: selectedId });
         } else if (selectedType === 'slab') {
           dispatch({ type: 'SLAB_DELETE', floorId: activeFloorId, slabId: selectedId });
+        } else if (selectedType === 'railing') {
+          dispatch({ type: 'RAILING_DELETE', floorId: activeFloorId, railingId: selectedId });
         } else if (selectedType === 'sectionCut') {
           dispatch({ type: 'SECTION_DELETE', floorId: activeFloorId, sectionId: selectedId });
         } else if (selectedType === 'room') {

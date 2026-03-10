@@ -352,6 +352,29 @@ function buildFixtureObjects(floor, floorLevel) {
   });
 }
 
+function buildRailingObjects(floor, floorLevel) {
+  return (floor.railings || []).map((railing) => {
+    const type = railing.type || 'guardrail';
+    const descriptor = createLinearBoxDescriptor(
+      railing.id,
+      'railing',
+      railing.startPoint,
+      railing.endPoint,
+      railing.width,
+      floorLevel,
+      railing.height,
+      {
+        sourceId: railing.id,
+        floorId: floor.id,
+        materialKey: 'railing_' + type,
+      }
+    );
+    descriptor.geometry = 'railing';
+    descriptor.railingType = type;
+    return descriptor;
+  });
+}
+
 export function buildFloorPreviewObjects(floor) {
   const floorLevel = getFloorElevation(floor);
   const landings = floor.landings || [];
@@ -373,5 +396,6 @@ export function buildFloorPreviewObjects(floor) {
     ...buildDoorObjects(wallContexts),
     ...buildWindowObjects(wallContexts),
     ...buildFixtureObjects(floor, floorLevel),
+    ...buildRailingObjects(floor, floorLevel),
   ];
 }

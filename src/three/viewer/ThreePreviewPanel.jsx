@@ -6,6 +6,7 @@ import { createPreviewViewport } from './createPreviewViewport';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
 import { resolveWalkFloorContext } from './resolveWalkFloorContext';
+import CompassOverlay from '@/ui/CompassOverlay';
 import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import styles from './ThreePreviewPanel.module.css';
 
@@ -13,6 +14,7 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
   const viewportRef = useRef(null);
   const containerRef = useRef(null);
   const resizeObserverRef = useRef(null);
+  const compassNeedleRef = useRef(null);
   const [previewScope, setPreviewScope] = useState('all');
   const [navigationMode, setNavigationMode] = useState('inspect');
   const [walkUiState, setWalkUiState] = useState({
@@ -113,6 +115,17 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
   }, []);
 
   useEffect(() => {
+    viewportRef.current?.setCompassHeadingHandler((headingDeg) => {
+      if (!compassNeedleRef.current) return;
+      compassNeedleRef.current.style.setProperty('--compass-heading', `${headingDeg}deg`);
+    });
+
+    return () => {
+      viewportRef.current?.setCompassHeadingHandler(null);
+    };
+  }, []);
+
+  useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
@@ -204,6 +217,7 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
 
       <div className={styles.viewportWrap}>
         <div ref={containerRef} className={styles.viewport} />
+        <CompassOverlay className={styles.compassDock} needleRef={compassNeedleRef} />
         {navigationMode === 'walk' && (
           <div className={styles.walkOverlay}>
             <span className={styles.walkOverlayTitle}>

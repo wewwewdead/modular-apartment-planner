@@ -423,6 +423,65 @@ function createFixtureObject(descriptor, materialPalette, isSelected) {
   return group;
 }
 
+// ── Railing ──
+
+function createRailingObject(descriptor, materialPalette, isSelected) {
+  const group = new THREE.Group();
+  const { x: length, y: height, z: width } = descriptor.size;
+  const railingType = descriptor.railingType || 'handrail';
+  const railHeight = 50; // handrail tube diameter
+  const postWidth = 30;
+
+  if (railingType === 'glass') {
+    // Top metal rail
+    addBox(group, 'railing_handrail', length, railHeight, postWidth,
+      0, height - railHeight / 2, 0, materialPalette, isSelected);
+    // Bottom metal rail
+    addBox(group, 'railing_handrail', length, railHeight, postWidth,
+      0, railHeight / 2, 0, materialPalette, isSelected);
+    // Glass panel (full height between rails, no outline for clean look)
+    const glassH = height - railHeight * 2;
+    const glassGeo = new THREE.BoxGeometry(
+      Math.max(length, 1), Math.max(glassH, 1), Math.max(width * 0.3, 1)
+    );
+    const glassMesh = new THREE.Mesh(glassGeo,
+      createMeshMaterial(materialPalette, 'railing_glass', isSelected));
+    glassMesh.position.set(0, height / 2, 0);
+    glassMesh.castShadow = false;
+    glassMesh.receiveShadow = true;
+    group.add(glassMesh);
+  } else if (railingType === 'guardrail') {
+    // Solid opaque panel
+    addBox(group, 'railing_guardrail', length, height, width,
+      0, height / 2, 0, materialPalette, isSelected);
+  } else {
+    // handrail: top rail + vertical balusters
+    // Top rail
+    addBox(group, 'railing_handrail', length, railHeight, postWidth,
+      0, height - railHeight / 2, 0, materialPalette, isSelected);
+    // Balusters spaced ~300mm apart
+    const spacing = 300;
+    const postCount = Math.max(2, Math.floor(length / spacing) + 1);
+    const actualSpacing = length / (postCount - 1);
+    for (let i = 0; i < postCount; i++) {
+      const px = -length / 2 + i * actualSpacing;
+      addCylinder(group, 'railing_handrail',
+        postWidth / 2, postWidth / 2, height - railHeight, 8,
+        px, (height - railHeight) / 2, 0, materialPalette, isSelected);
+    }
+  }
+
+  // Position and rotate
+  const center = planPointToWorld(
+    descriptor.center,
+    descriptor.baseElevation
+  );
+  group.position.copy(center);
+  group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+
+  return group;
+}
+
 // ── Dispatcher ──
 
 function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
@@ -436,6 +495,10 @@ function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
 
   if (descriptor.geometry === 'window') {
     return createWindowObject(descriptor, materialPalette, isSelected);
+  }
+
+  if (descriptor.geometry === 'railing') {
+    return createRailingObject(descriptor, materialPalette, isSelected);
   }
 
   if (descriptor.geometry === 'fixture') {

@@ -130,6 +130,26 @@ export function createMaterialPalette() {
       metalness: 0.02,
       side: THREE.DoubleSide,
     }),
+    railing_glass: new THREE.MeshStandardMaterial({
+      color: 0x8dc8ef,
+      roughness: 0.15,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    }),
+    railing_handrail: new THREE.MeshStandardMaterial({
+      color: 0x888888,
+      roughness: 0.35,
+      metalness: 0.4,
+      side: THREE.DoubleSide,
+    }),
+    railing_guardrail: new THREE.MeshStandardMaterial({
+      color: 0x95a3b0,
+      roughness: 0.8,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+    }),
     outline: new THREE.LineBasicMaterial({
       color: 0x25303d,
       transparent: true,

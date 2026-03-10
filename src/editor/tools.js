@@ -22,6 +22,13 @@ export const TOOLS = {
   COLUMN: 'column',
   LANDING: 'landing',
   FIXTURE: 'fixture',
+  RAILING: 'railing',
+};
+
+export const RAILING_TYPES = {
+  GLASS: 'glass',
+  HANDRAIL: 'handrail',
+  GUARDRAIL: 'guardrail',
 };
 
 export const FIXTURE_TYPES = {

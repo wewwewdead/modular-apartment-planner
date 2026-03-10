@@ -49,12 +49,16 @@ export function createPreviewViewport(container) {
   let navigationMode = 'inspect';
   let walkUiHandler = null;
   let walkExitHandler = null;
+  let compassHeadingHandler = null;
   let inspectState = null;
   let activeFloorContext = {
     floorId: null,
     spawn: null,
   };
   const walkPoseByFloorId = new Map();
+  const forwardVector = new THREE.Vector3();
+  const horizontalForward = new THREE.Vector3();
+  let lastCompassHeading = 0;
   const walkNavigation = createWalkNavigation({
     camera,
     domElement: renderer.domElement,
@@ -73,6 +77,21 @@ export function createPreviewViewport(container) {
       isLocked: navigationMode === 'walk' && walkNavigation.isLocked(),
       canLock: navigationMode === 'walk',
     });
+  };
+
+  const emitCompassHeading = () => {
+    if (!compassHeadingHandler) return;
+
+    camera.getWorldDirection(forwardVector);
+    horizontalForward.set(forwardVector.x, 0, forwardVector.z);
+    if (horizontalForward.lengthSq() > 1e-6) {
+      horizontalForward.normalize();
+      lastCompassHeading = THREE.MathUtils.radToDeg(
+        Math.atan2(horizontalForward.x, -horizontalForward.z)
+      );
+    }
+
+    compassHeadingHandler(lastCompassHeading);
   };
 
   const saveCurrentWalkPose = () => {
@@ -147,6 +166,7 @@ export function createPreviewViewport(container) {
     } else {
       walkNavigation.update(deltaSeconds);
     }
+    emitCompassHeading();
     renderer.render(scene, camera);
     animationFrame = window.requestAnimationFrame(renderFrame);
   };
@@ -339,6 +359,10 @@ export function createPreviewViewport(container) {
     },
     setWalkExitHandler(handler) {
       walkExitHandler = typeof handler === 'function' ? handler : null;
+    },
+    setCompassHeadingHandler(handler) {
+      compassHeadingHandler = typeof handler === 'function' ? handler : null;
+      emitCompassHeading();
     },
     resize,
     dispose() {

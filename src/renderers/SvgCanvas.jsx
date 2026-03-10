@@ -6,8 +6,10 @@ import { normalizeRectBounds } from '@/clipboard/planClipboard';
 import { getFloorElevation } from '@/domain/floorModels';
 import { useEditorTool } from '@/editor/useEditorTool';
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
+import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
 import { TOOLS } from '@/editor/tools';
 import ClipboardPreviewLayer from './ClipboardPreviewLayer';
+import CompassOverlay from '@/ui/CompassOverlay';
 import GridRenderer from './GridRenderer';
 import SlabRenderer from './SlabRenderer';
 import WallRenderer from './WallRenderer';
@@ -36,8 +38,10 @@ import DoorWindowPreview from './DoorWindowPreview';
 import RoomPreview from './RoomPreview';
 import SectionCutRenderer from './SectionCutRenderer';
 import SectionCutPreview from './SectionCutPreview';
+import RailingRenderer from './RailingRenderer';
+import RailingPreview from './RailingPreview';
 import RegionSelectionOverlay from './RegionSelectionOverlay';
-import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
+import { CenterViewIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import { isTypingTarget } from '@/utils/keyboard';
 import styles from './SvgCanvas.module.css';
 
@@ -164,6 +168,20 @@ export default function SvgCanvas() {
     editorDispatch({ type: 'ZOOM', zoom: newZoom, panX: newPanX, panY: newPanY });
   }, [viewport, editorDispatch]);
 
+  const handleResetCenterPoint = useCallback(() => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    editorDispatch({
+      type: 'SET_VIEWPORT',
+      viewport: {
+        ...viewport,
+        panX: rect.width / 2,
+        panY: rect.height / 2,
+      },
+    });
+  }, [editorDispatch, viewport]);
+
   useEffect(() => {
     if (!statusMessage) return undefined;
 
@@ -247,6 +265,9 @@ export default function SvgCanvas() {
           case 'l':
             editorDispatch({ type: 'SET_TOOL', tool: TOOLS.LANDING });
             return;
+          case 'h':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.RAILING });
+            return;
           case 'f':
             editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
             editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
@@ -294,9 +315,13 @@ export default function SvgCanvas() {
     ? normalizeRectBounds(toolState.startPos, toolState.currentPos)
     : null;
   const selectionCount = regionSelection?.objectCount || 0;
+  const liveWallBearing = activeTool === TOOLS.WALL && toolState.start && toolState.preview
+    ? formatSurveyorBearing(pointsToSurveyorBearing(toolState.start, toolState.preview))
+    : null;
 
   return (
     <div className={styles.canvasContainer}>
+      <CompassOverlay className={styles.compassDock} />
       <svg
         ref={svgRef}
         className={styles.svg}
@@ -329,6 +354,7 @@ export default function SvgCanvas() {
                 <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
                 <StairRenderer stairs={floor.stairs || []} />
                 <LandingRenderer landings={floor.landings || []} />
+                <RailingRenderer railings={floor.railings || []} />
                 <ColumnRenderer columns={floor.columns || []} />
                 <FixtureRenderer fixtures={floor.fixtures || []} />
                 <DoorRenderer doors={floor.doors} walls={floor.walls} />
@@ -368,6 +394,7 @@ export default function SvgCanvas() {
                   walls={floor.walls}
                 />
                 <SectionCutPreview toolState={toolState} activeTool={activeTool} />
+                <RailingPreview toolState={toolState} activeTool={activeTool} />
                 <ColumnPreview toolState={toolState} activeTool={activeTool} />
                 <LandingPreview toolState={toolState} activeTool={activeTool} />
                 <FixturePreview toolState={toolState} activeTool={activeTool} />
@@ -390,20 +417,33 @@ export default function SvgCanvas() {
           )}
         </g>
       </svg>
-      <button
-        className={styles.expandBtn}
-        onClick={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'canvas' })}
-        title={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
-        aria-label={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
-      >
-        {isCanvasMaximized ? <CollapseIcon /> : <ExpandIcon />}
-      </button>
+      <div className={styles.overlayControls}>
+        <button
+          type="button"
+          className={styles.overlayBtn}
+          onClick={handleResetCenterPoint}
+          title="Reset center point"
+          aria-label="Reset center point"
+        >
+          <CenterViewIcon />
+        </button>
+        <button
+          type="button"
+          className={styles.overlayBtn}
+          onClick={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'canvas' })}
+          title={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
+          aria-label={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
+        >
+          {isCanvasMaximized ? <CollapseIcon /> : <ExpandIcon />}
+        </button>
+      </div>
       <div className={styles.statusBar}>
         <span>X: {Math.round(cursorPos.x)} mm</span>
         <span>Y: {Math.round(cursorPos.y)} mm</span>
         <span>Zoom: {zoomPercent}%</span>
         <span>View: {viewMode}</span>
         <span>Tool: {displayedTool}</span>
+        {liveWallBearing && <span>Bearing: {liveWallBearing}</span>}
         {selectionCount > 0 && <span>Selection: {selectionCount} objects</span>}
         {pastePreview?.active && <span>Paste: click to place</span>}
         {statusMessage && <span className={styles.statusMessage}>{statusMessage}</span>}

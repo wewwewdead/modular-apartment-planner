@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProject } from '@/app/ProjectProvider';
 import { useEditor } from '@/app/EditorProvider';
-import { getAnnotationDisplayLabel } from '@/annotations/format';
+import { formatMeasurement, getAnnotationDisplayLabel } from '@/annotations/format';
+import { MIN_WALL_LENGTH } from '@/domain/defaults';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { createSheetRevision, createSheetViewport } from '@/domain/sheetModels';
 import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
-import { wallLength } from '@/geometry/wallGeometry';
+import { resizeWallFromStart, wallLength } from '@/geometry/wallGeometry';
+import { normalize, subtract, add, scale } from '@/geometry/point';
 import { getColumnAutoLabel, getColumnListLabel } from '@/domain/columnLabels';
 import { duplicateColumn } from '@/domain/columnModels';
 import { beamLength } from '@/geometry/beamGeometry';
@@ -17,6 +19,8 @@ import { stairRun, stairTotalRise } from '@/geometry/stairGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { sectionCutLength } from '@/geometry/sectionCutGeometry';
+import { railingLength } from '@/geometry/railingGeometry';
+import { RAILING_TYPES } from '@/editor/tools';
 import { getManualAnnotationFigure } from '@/annotations/scene';
 import {
   buildSheetScene,
@@ -26,7 +30,9 @@ import {
 } from '@/sheets/layout';
 import { listPaperPresets } from '@/sheets/paper';
 import { getViewportSourceLabel, resolveSheetViewportSource } from '@/sheets/sources';
-import { FIXTURE_TYPES } from '@/editor/tools';
+import { FIXTURE_TYPES, TOOLS } from '@/editor/tools';
+import { createWall } from '@/domain/models';
+import { formatSurveyorBearing, pointsToSurveyorBearing, surveyorBearingToSvgAngle, endpointFromBearing } from '@/geometry/bearing';
 import InputField from './InputField';
 import styles from './PropertiesPanel.module.css';
 
@@ -41,6 +47,125 @@ function useUnits() {
     fromDisplay: (v) => isMm ? v : v * 1000,
     step: (mmStep) => isMm ? mmStep : mmStep / 1000,
   };
+}
+
+function WallDrawingInput({ start, preview, dispatch, editorDispatch, activeFloorId, u, selectNewWall }) {
+  const [nsDir, setNsDir] = useState('N');
+  const [ewDir, setEwDir] = useState('E');
+  const [degrees, setDegrees] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const [lengthVal, setLengthVal] = useState('');
+  const lengthRef = useRef(null);
+  const livePreviewLength = preview ? formatMeasurement(wallLength({ start, end: preview })) : '';
+  const livePreviewBearing = preview ? formatSurveyorBearing(pointsToSurveyorBearing(start, preview)) : '';
+
+  const handleConfirm = () => {
+    const deg = parseInt(degrees, 10) || 0;
+    const min = parseInt(minutes, 10) || 0;
+    const len = u.fromDisplay(parseFloat(lengthVal) || 0);
+
+    if (len < MIN_WALL_LENGTH) return;
+    if (deg < 0 || deg > 90 || min < 0 || min > 59) return;
+
+    const angle = surveyorBearingToSvgAngle(nsDir, deg, min, ewDir);
+    const endPt = endpointFromBearing(start, len, angle);
+    const wall = createWall(start, endPt);
+
+    dispatch({ type: 'WALL_ADD', floorId: activeFloorId, wall });
+    if (selectNewWall) {
+      editorDispatch({ type: 'SELECT_OBJECT', id: wall.id, objectType: 'wall' });
+    } else {
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { start: endPt, startAttachment: null, preview: null },
+      });
+    }
+
+    setDegrees('');
+    setMinutes('');
+    setLengthVal('');
+    setTimeout(() => lengthRef.current?.focus(), 0);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleConfirm();
+    }
+  };
+
+  return (
+    <div>
+      {!selectNewWall && (
+        <>
+          <div className={styles.title}>Drawing Wall</div>
+          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-sm)' }}>
+            Start: ({u.toDisplay(start.x)}, {u.toDisplay(start.y)}) {u.suffix}
+          </div>
+        </>
+      )}
+      {preview && (
+        <div className={styles.drawingMeta}>
+          Cursor: {livePreviewLength} · {livePreviewBearing}
+        </div>
+      )}
+      <div className={styles.drawingHint}>
+        Hold Shift while drawing to snap the wall bearing to 45° increments.
+      </div>
+
+      <div className={styles.subtitle}>Bearing</div>
+      <div className={styles.bearingRow}>
+        <select className={styles.bearingSelect} value={nsDir} onChange={(e) => setNsDir(e.target.value)}>
+          <option value="N">N</option>
+          <option value="S">S</option>
+        </select>
+        <input
+          className={styles.bearingInput}
+          type="number"
+          min={0}
+          max={90}
+          placeholder="0"
+          value={degrees}
+          onChange={(e) => setDegrees(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <span className={styles.bearingSymbol}>°</span>
+        <input
+          className={styles.bearingInput}
+          type="number"
+          min={0}
+          max={59}
+          placeholder="0"
+          value={minutes}
+          onChange={(e) => setMinutes(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <span className={styles.bearingSymbol}>′</span>
+        <select className={styles.bearingSelect} value={ewDir} onChange={(e) => setEwDir(e.target.value)}>
+          <option value="E">E</option>
+          <option value="W">W</option>
+        </select>
+      </div>
+
+      <div className={styles.subtitle}>Length</div>
+      <input
+        ref={lengthRef}
+        className={styles.bearingInput}
+        style={{ width: '100%', textAlign: 'left', padding: '0 8px', marginBottom: 'var(--space-sm)' }}
+        type="number"
+        min={0}
+        step={u.step(100)}
+        placeholder={`0 ${u.suffix}`}
+        value={lengthVal}
+        onChange={(e) => setLengthVal(e.target.value)}
+        onKeyDown={handleKeyDown}
+      />
+
+      <button className={styles.confirmBtn} onClick={handleConfirm}>
+        Create Wall (Enter)
+      </button>
+    </div>
+  );
 }
 
 function SheetExportMenu({ sheet, editorDispatch }) {
@@ -127,11 +252,16 @@ function SheetExportMenu({ sheet, editorDispatch }) {
   );
 }
 
-function WallProperties({ wall, dispatch, floorId, u }) {
+function WallProperties({ wall, dispatch, editorDispatch, floorId, u }) {
   const len = wallLength(wall);
 
   const updateWall = (updates) => {
     dispatch({ type: 'WALL_UPDATE', floorId, wall: { id: wall.id, ...updates } });
+  };
+
+  const updateWallLength = (value) => {
+    const resizedWall = resizeWallFromStart(wall, u.fromDisplay(value), MIN_WALL_LENGTH);
+    updateWall({ end: resizedWall.end });
   };
 
   return (
@@ -171,9 +301,18 @@ function WallProperties({ wall, dispatch, floorId, u }) {
         onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Length" type="number" suffix={u.suffix}
+        label="Length" type="number" suffix={u.suffix} step={u.step(100)}
         value={u.toDisplay(len)}
-        readOnly
+        onChange={updateWallLength}
+      />
+      <div className={styles.subtitle}>Continue from End</div>
+      <WallDrawingInput
+        start={wall.end}
+        dispatch={dispatch}
+        editorDispatch={editorDispatch}
+        activeFloorId={floorId}
+        u={u}
+        selectNewWall
       />
     </div>
   );
@@ -402,9 +541,27 @@ function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
         onChange={(value) => updateAnnotation({ textOverride: value })}
       />
       <InputField
-        label="Measured" type="number" suffix={u.suffix}
+        label="Measured" type="number" suffix={u.suffix} step={u.step(100)}
         value={u.toDisplay(measuredValue)}
-        readOnly
+        onChange={(value) => {
+          const newLen = u.fromDisplay(value);
+          if (newLen <= 0) return;
+          const s = annotation.startPoint;
+          const e = annotation.endPoint;
+          const mode = annotation.mode;
+          let newEnd;
+          if (mode === 'horizontal') {
+            const sign = e.x >= s.x ? 1 : -1;
+            newEnd = { ...e, x: s.x + sign * newLen };
+          } else if (mode === 'vertical') {
+            const sign = e.y >= s.y ? 1 : -1;
+            newEnd = { ...e, y: s.y + sign * newLen };
+          } else {
+            const dir = normalize(subtract(e, s));
+            newEnd = add(s, scale(dir, newLen));
+          }
+          updateAnnotation({ endPoint: newEnd });
+        }}
       />
     </div>
   );
@@ -637,6 +794,75 @@ function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u
       >
         Open section view
       </button>
+    </div>
+  );
+}
+
+function RailingProperties({ railing, dispatch, floorId, u }) {
+  const updateRailing = (updates) => {
+    dispatch({ type: 'RAILING_UPDATE', floorId, railing: { id: railing.id, ...updates } });
+  };
+  const len = railingLength(railing);
+
+  return (
+    <div>
+      <div className={styles.title}>Railing</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+        <select value={railing.type} onChange={(e) => updateRailing({ type: e.target.value })}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+                   borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}>
+          <option value={RAILING_TYPES.GLASS}>Glass</option>
+          <option value={RAILING_TYPES.HANDRAIL}>Handrail</option>
+          <option value={RAILING_TYPES.GUARDRAIL}>Guardrail</option>
+        </select>
+      </div>
+      <div className={styles.subtitle}>Start Point</div>
+      <InputField
+        label="X" type="number" suffix={u.suffix}
+        value={u.toDisplay(railing.startPoint.x)}
+        onChange={(value) => updateRailing({
+          startPoint: { ...railing.startPoint, x: u.fromDisplay(value) },
+        })}
+      />
+      <InputField
+        label="Y" type="number" suffix={u.suffix}
+        value={u.toDisplay(railing.startPoint.y)}
+        onChange={(value) => updateRailing({
+          startPoint: { ...railing.startPoint, y: u.fromDisplay(value) },
+        })}
+      />
+      <div className={styles.subtitle}>End Point</div>
+      <InputField
+        label="X" type="number" suffix={u.suffix}
+        value={u.toDisplay(railing.endPoint.x)}
+        onChange={(value) => updateRailing({
+          endPoint: { ...railing.endPoint, x: u.fromDisplay(value) },
+        })}
+      />
+      <InputField
+        label="Y" type="number" suffix={u.suffix}
+        value={u.toDisplay(railing.endPoint.y)}
+        onChange={(value) => updateRailing({
+          endPoint: { ...railing.endPoint, y: u.fromDisplay(value) },
+        })}
+      />
+      <div className={styles.subtitle}>Properties</div>
+      <InputField
+        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+        value={u.toDisplay(railing.height)}
+        onChange={(value) => updateRailing({ height: Math.max(100, u.fromDisplay(value)) })}
+      />
+      <InputField
+        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        value={u.toDisplay(railing.width)}
+        onChange={(value) => updateRailing({ width: Math.max(10, u.fromDisplay(value)) })}
+      />
+      <InputField
+        label="Length" type="number" suffix={u.suffix}
+        value={u.toDisplay(len)}
+        readOnly
+      />
     </div>
   );
 }
@@ -1374,7 +1600,7 @@ function ProjectSummary({ project, floor, dispatch }) {
 
 export default function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
-  const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, dispatch: editorDispatch } = useEditor();
+  const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, activeTool, toolState, dispatch: editorDispatch } = useEditor();
   const orderedFloors = getOrderedFloors(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
@@ -1443,6 +1669,8 @@ export default function PropertiesPanel() {
       dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
     } else if (selectedType === 'fixture') {
       dispatch({ type: 'FIXTURE_DELETE', floorId: activeFloorId, fixtureId: selectedId });
+    } else if (selectedType === 'railing') {
+      dispatch({ type: 'RAILING_DELETE', floorId: activeFloorId, railingId: selectedId });
     } else if (selectedType === 'room') {
       dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
     } else if (selectedType === 'floor') {
@@ -1505,7 +1733,7 @@ export default function PropertiesPanel() {
     } else if (selectedType === 'wall') {
       const wall = floor.walls.find(w => w.id === selectedId);
       if (wall) {
-        content = <WallProperties wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <WallProperties wall={wall} dispatch={dispatch} editorDispatch={editorDispatch} floorId={activeFloorId} u={u} />;
       }
     } else if (selectedType === 'beam') {
       const beam = (floor.beams || []).find(b => b.id === selectedId);
@@ -1554,6 +1782,11 @@ export default function PropertiesPanel() {
       if (fixture) {
         content = <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} />;
       }
+    } else if (selectedType === 'railing') {
+      const railing = (floor.railings || []).find(r => r.id === selectedId);
+      if (railing) {
+        content = <RailingProperties railing={railing} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+      }
     } else if (selectedType === 'room') {
       const room = floor.rooms.find(r => r.id === selectedId);
       if (room) {
@@ -1576,6 +1809,16 @@ export default function PropertiesPanel() {
       </div>
       {workspaceMode === 'sheet' && sheet && (
         <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />
+      )}
+      {activeTool === TOOLS.WALL && toolState.start && workspaceMode === 'model' && (
+        <WallDrawingInput
+          start={toolState.start}
+          preview={toolState.preview}
+          dispatch={dispatch}
+          editorDispatch={editorDispatch}
+          activeFloorId={activeFloorId}
+          u={u}
+        />
       )}
       {content}
       {selectedId && selectedType !== 'floor' && (

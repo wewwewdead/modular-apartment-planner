@@ -1,5 +1,6 @@
 import { subtract, normalize, perpendicular, scale, add, dot } from './point';
 import { segmentLength } from './line';
+import { MIN_WALL_LENGTH } from '@/domain/defaults';
 
 export function wallOutline(wall) {
   const dir = normalize(subtract(wall.end, wall.start));
@@ -17,6 +18,31 @@ export function wallOutline(wall) {
 
 export function wallLength(wall) {
   return segmentLength(wall.start, wall.end);
+}
+
+export function resizeWallFromStart(wall, requestedLength, minLength = MIN_WALL_LENGTH) {
+  const targetLength = Math.max(minLength, Number(requestedLength) || 0);
+  const direction = normalize(subtract(wall.end, wall.start));
+  const safeDirection = (direction.x === 0 && direction.y === 0)
+    ? { x: 1, y: 0 }
+    : direction;
+
+  return {
+    start: wall.start,
+    end: add(wall.start, scale(safeDirection, targetLength)),
+  };
+}
+
+export function clampWallOpeningOffset(length, width, offset) {
+  const safeLength = Math.max(0, Number(length) || 0);
+  const safeWidth = Math.max(0, Number(width) || 0);
+  const safeOffset = Number(offset) || 0;
+  const halfWidth = safeWidth / 2;
+
+  if (safeLength <= 0) return 0;
+  if (safeWidth >= safeLength) return safeLength / 2;
+
+  return Math.max(halfWidth, Math.min(safeLength - halfWidth, safeOffset));
 }
 
 export function positionOnWall(wall, offset) {

@@ -7,6 +7,7 @@ import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { beamLength } from '@/geometry/beamGeometry';
 import { slabArea } from '@/geometry/slabGeometry';
 import { stairRun, stairTotalRise } from '@/geometry/stairGeometry';
+import { railingLength } from '@/geometry/railingGeometry';
 import { wallLength } from '@/geometry/wallGeometry';
 
 const INSPECTABLE_TYPES = new Set([
@@ -19,6 +20,7 @@ const INSPECTABLE_TYPES = new Set([
   'door',
   'window',
   'fixture',
+  'railing',
 ]);
 
 const TYPE_LABELS = {
@@ -31,6 +33,7 @@ const TYPE_LABELS = {
   door: 'Door',
   window: 'Window',
   fixture: 'Fixture',
+  railing: 'Railing',
 };
 
 const FIXTURE_TYPE_LABELS = {
@@ -70,6 +73,8 @@ function findObjectInFloor(floor, selectedType, selectedId) {
       return floor.windows?.find((windowItem) => windowItem.id === selectedId) || null;
     case 'fixture':
       return (floor.fixtures || []).find((fixture) => fixture.id === selectedId) || null;
+    case 'railing':
+      return (floor.railings || []).find((r) => r.id === selectedId) || null;
     default:
       return null;
   }
@@ -93,6 +98,10 @@ function titleForObject(selectedType, object, floor) {
       return `${TYPE_LABELS[selectedType]} ${object.id.split('_').pop()}`;
     case 'fixture':
       return FIXTURE_TYPE_LABELS[object.fixtureType] || 'Fixture';
+    case 'railing': {
+      const typeLabel = object.type ? object.type.charAt(0).toUpperCase() + object.type.slice(1) : 'Railing';
+      return `${typeLabel} Railing ${object.id.split('_').pop()}`;
+    }
     default:
       return object?.id || TYPE_LABELS[selectedType] || 'Object';
   }
@@ -152,6 +161,13 @@ function rowsForObject(selectedType, object, floor) {
       return [
         mmRow('Width', object.width),
         mmRow('Depth', object.depth),
+      ];
+    case 'railing':
+      return [
+        mmRow('Length', railingLength(object)),
+        mmRow('Height', object.height),
+        mmRow('Width', object.width),
+        { label: 'Type', value: object.type ? object.type.charAt(0).toUpperCase() + object.type.slice(1) : '—' },
       ];
     default:
       return [];
