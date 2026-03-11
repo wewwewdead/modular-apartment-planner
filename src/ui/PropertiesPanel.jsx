@@ -4,6 +4,7 @@ import { useEditor } from '@/app/EditorProvider';
 import { formatMeasurement, getAnnotationDisplayLabel } from '@/annotations/format';
 import { MIN_WALL_LENGTH } from '@/domain/defaults';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
+import { countObjectsInProjectPhase } from '@/domain/phaseAssignments';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
@@ -33,6 +34,7 @@ import { getViewportSourceLabel, resolveSheetViewportSource } from '@/sheets/sou
 import { FIXTURE_TYPES, TOOLS } from '@/editor/tools';
 import { createWall } from '@/domain/models';
 import { formatSurveyorBearing, pointsToSurveyorBearing, surveyorBearingToSvgAngle, endpointFromBearing } from '@/geometry/bearing';
+import { getOrderedPhases } from '@/domain/phaseModels';
 import InputField from './InputField';
 import styles from './PropertiesPanel.module.css';
 
@@ -252,7 +254,69 @@ function SheetExportMenu({ sheet, editorDispatch }) {
   );
 }
 
-function WallProperties({ wall, dispatch, editorDispatch, floorId, u }) {
+function PhaseSelector({ phaseId, phases, onChange }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+      <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Phase</label>
+      <select
+        value={phaseId || ''}
+        onChange={(e) => onChange(e.target.value || null)}
+        style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+                 borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
+      >
+        <option value="">Unassigned</option>
+        {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function PhaseProperties({ phase, project, dispatch }) {
+  const updatePhase = (updates) => {
+    dispatch({ type: 'PHASE_UPDATE', phase: { id: phase.id, ...updates } });
+  };
+
+  return (
+    <div>
+      <div className={styles.title}>Phase</div>
+      <InputField
+        label="Name"
+        value={phase.name}
+        onChange={(value) => updatePhase({ name: value })}
+      />
+      <div className={styles.colorField}>
+        <label className={styles.colorLabel}>Color</label>
+        <div className={styles.colorControls}>
+          <input
+            className={styles.colorPicker}
+            type="color"
+            value={phase.color}
+            onChange={(e) => updatePhase({ color: e.target.value })}
+            aria-label="Phase color"
+          />
+          <input
+            className={styles.colorHexInput}
+            type="text"
+            value={phase.color}
+            onChange={(e) => {
+              const hex = e.target.value;
+              if (/^#[0-9a-fA-F]{6}$/.test(hex)) updatePhase({ color: hex });
+            }}
+            onBlur={(e) => {
+              let hex = e.target.value.trim();
+              if (!hex.startsWith('#')) hex = '#' + hex;
+              if (/^#[0-9a-fA-F]{6}$/.test(hex)) updatePhase({ color: hex });
+            }}
+          />
+        </div>
+      </div>
+      <InputField label="Order" value={phase.order} readOnly />
+      <InputField label="Objects" value={countObjectsInProjectPhase(project, phase.id)} readOnly />
+    </div>
+  );
+}
+
+function WallProperties({ wall, dispatch, editorDispatch, floorId, u, phases }) {
   const len = wallLength(wall);
 
   const updateWall = (updates) => {
@@ -267,6 +331,7 @@ function WallProperties({ wall, dispatch, editorDispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Wall</div>
+      <PhaseSelector phaseId={wall.phaseId} phases={phases} onChange={(v) => updateWall({ phaseId: v })} />
       <div className={styles.subtitle}>Start Point</div>
       <InputField
         label="X" type="number" suffix={u.suffix}
@@ -318,7 +383,7 @@ function WallProperties({ wall, dispatch, editorDispatch, floorId, u }) {
   );
 }
 
-function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u }) {
+function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u, phases }) {
   const updateDoor = (updates) => {
     dispatch({ type: 'DOOR_UPDATE', floorId, door: { id: door.id, ...updates } });
   };
@@ -328,6 +393,7 @@ function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u }) {
   return (
     <div>
       <div className={styles.title}>Door</div>
+      <PhaseSelector phaseId={door.phaseId} phases={phases} onChange={(v) => updateDoor({ phaseId: v })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
         <select value={doorType} onChange={(e) => updateDoor({ type: e.target.value })}
@@ -385,7 +451,7 @@ function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u }) {
   );
 }
 
-function SlabProperties({ slab, floor, dispatch, floorId, u }) {
+function SlabProperties({ slab, floor, dispatch, floorId, u, phases }) {
   const updateSlab = (updates) => {
     dispatch({ type: 'SLAB_UPDATE', floorId, slab: { id: slab.id, ...updates } });
   };
@@ -394,6 +460,7 @@ function SlabProperties({ slab, floor, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Slab</div>
+      <PhaseSelector phaseId={slab.phaseId} phases={phases} onChange={(v) => updateSlab({ phaseId: v })} />
       <InputField
         label="Name"
         value={slab.name}
@@ -435,7 +502,7 @@ function SlabProperties({ slab, floor, dispatch, floorId, u }) {
   );
 }
 
-function BeamProperties({ beam, floor, dispatch, floorId, u }) {
+function BeamProperties({ beam, floor, dispatch, floorId, u, phases }) {
   const updateBeam = (updates) => {
     dispatch({ type: 'BEAM_UPDATE', floorId, beam: { id: beam.id, ...updates } });
   };
@@ -447,6 +514,7 @@ function BeamProperties({ beam, floor, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Beam</div>
+      <PhaseSelector phaseId={beam.phaseId} phases={phases} onChange={(v) => updateBeam({ phaseId: v })} />
       <InputField label="Label" value={getBeamDisplayLabel(beam, floor.columns || [])} readOnly />
       <InputField
         label="Start"
@@ -567,7 +635,7 @@ function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
   );
 }
 
-function StairProperties({ stair, project, dispatch, floorId, u }) {
+function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
   const updateStair = (updates) => {
     dispatch({ type: 'STAIR_UPDATE', floorId, stair: { id: stair.id, ...updates } });
   };
@@ -580,6 +648,7 @@ function StairProperties({ stair, project, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Stair</div>
+      <PhaseSelector phaseId={stair.phaseId} phases={phases} onChange={(v) => updateStair({ phaseId: v })} />
       <InputField label="Label" value={getStairDisplayLabel(stair)} readOnly />
       <div className={styles.subtitle}>Start Point</div>
       <InputField
@@ -660,7 +729,7 @@ function StairProperties({ stair, project, dispatch, floorId, u }) {
   );
 }
 
-function LandingProperties({ landing, floor, dispatch, floorId, u }) {
+function LandingProperties({ landing, floor, dispatch, floorId, u, phases }) {
   const updateLanding = (updates) => {
     dispatch({ type: 'LANDING_UPDATE', floorId, landing: { id: landing.id, ...updates } });
   };
@@ -675,6 +744,7 @@ function LandingProperties({ landing, floor, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Landing</div>
+      <PhaseSelector phaseId={landing.phaseId} phases={phases} onChange={(v) => updateLanding({ phaseId: v })} />
       <InputField label="Label" value={getLandingDisplayLabel(landing)} readOnly />
       <div className={styles.subtitle}>Position</div>
       <InputField
@@ -798,7 +868,7 @@ function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u
   );
 }
 
-function RailingProperties({ railing, dispatch, floorId, u }) {
+function RailingProperties({ railing, dispatch, floorId, u, phases }) {
   const updateRailing = (updates) => {
     dispatch({ type: 'RAILING_UPDATE', floorId, railing: { id: railing.id, ...updates } });
   };
@@ -807,6 +877,7 @@ function RailingProperties({ railing, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Railing</div>
+      <PhaseSelector phaseId={railing.phaseId} phases={phases} onChange={(v) => updateRailing({ phaseId: v })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
         <select value={railing.type} onChange={(e) => updateRailing({ type: e.target.value })}
@@ -867,7 +938,7 @@ function RailingProperties({ railing, dispatch, floorId, u }) {
   );
 }
 
-function WindowProperties({ window: win, wall, dispatch, floorId, u }) {
+function WindowProperties({ window: win, wall, dispatch, floorId, u, phases }) {
   const updateWindow = (updates) => {
     dispatch({ type: 'WINDOW_UPDATE', floorId, window: { id: win.id, ...updates } });
   };
@@ -877,6 +948,7 @@ function WindowProperties({ window: win, wall, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Window</div>
+      <PhaseSelector phaseId={win.phaseId} phases={phases} onChange={(v) => updateWindow({ phaseId: v })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
         <select value={winType} onChange={(e) => updateWindow({ type: e.target.value })}
@@ -926,7 +998,7 @@ function WindowProperties({ window: win, wall, dispatch, floorId, u }) {
   );
 }
 
-function RoomProperties({ room, dispatch, floorId }) {
+function RoomProperties({ room, dispatch, floorId, phases }) {
   const areaM2 = room.area ? (room.area / 1_000_000).toFixed(2) : '\u2014';
   const updateRoom = (updates) => {
     dispatch({ type: 'ROOM_UPDATE', floorId, room: { id: room.id, ...updates } });
@@ -934,6 +1006,7 @@ function RoomProperties({ room, dispatch, floorId }) {
   return (
     <div>
       <div className={styles.title}>Room</div>
+      <PhaseSelector phaseId={room.phaseId} phases={phases} onChange={(v) => updateRoom({ phaseId: v })} />
       <InputField label="Name" value={room.name} onChange={(v) => updateRoom({ name: v })} />
       <InputField label="Area" suffix="m\u00B2" value={areaM2} readOnly />
       <div className={styles.colorField}>
@@ -966,15 +1039,17 @@ function RoomProperties({ room, dispatch, floorId }) {
   );
 }
 
-function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u }) {
+function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u, phases }) {
   const updateColumn = (updates) => {
     dispatch({ type: 'COLUMN_UPDATE', floorId, column: { id: column.id, ...updates } });
   };
   const autoLabel = getColumnAutoLabel(column, floor?.columns || []);
+  const normalizedRotation = ((+(column.rotation || 0) % 360) + 360) % 360;
 
   return (
     <div>
       <div className={styles.title}>Column</div>
+      <PhaseSelector phaseId={column.phaseId} phases={phases} onChange={(v) => updateColumn({ phaseId: v })} />
       <InputField
         label="Name" value={column.name}
         onChange={(v) => updateColumn({ name: v, showLabel: v ? true : column.showLabel })}
@@ -1019,6 +1094,11 @@ function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u 
         value={u.toDisplay(column.height)}
         onChange={(v) => updateColumn({ height: Math.max(100, u.fromDisplay(v)) })}
       />
+      <InputField
+        label="Rotation" type="number" suffix="°" step={1}
+        value={normalizedRotation}
+        onChange={(v) => updateColumn({ rotation: ((+v % 360) + 360) % 360 })}
+      />
       <button
         className={styles.actionBtn}
         onClick={() => {
@@ -1033,7 +1113,7 @@ function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u 
   );
 }
 
-function FixtureProperties({ fixture, dispatch, floorId, u }) {
+function FixtureProperties({ fixture, dispatch, floorId, u, phases }) {
   const updateFixture = (updates) => {
     dispatch({ type: 'FIXTURE_UPDATE', floorId, fixture: { id: fixture.id, ...updates } });
   };
@@ -1050,6 +1130,7 @@ function FixtureProperties({ fixture, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Fixture</div>
+      <PhaseSelector phaseId={fixture.phaseId} phases={phases} onChange={(v) => updateFixture({ phaseId: v })} />
       <InputField
         label="Name" value={fixture.name}
         onChange={(v) => updateFixture({ name: v })}
@@ -1452,6 +1533,43 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         </select>
       </div>
       <InputField label="Reference" value={viewport.referenceNote || ''} onChange={(value) => updateViewport({ referenceNote: value })} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Phase</label>
+        <select
+          value={viewport.phaseId || ''}
+          onChange={(e) => {
+            const nextPhaseId = e.target.value || null;
+            if (!nextPhaseId) {
+              updateViewport({ phaseId: null, phaseViewMode: 'all' });
+            } else {
+              updateViewport({
+                phaseId: nextPhaseId,
+                phaseViewMode: viewport.phaseViewMode === 'all' ? 'cumulative' : viewport.phaseViewMode,
+              });
+            }
+          }}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+        >
+          <option value="">All Phases</option>
+          {(project.phases || []).map((phase) => (
+            <option key={phase.id} value={phase.id}>{phase.name}</option>
+          ))}
+        </select>
+      </div>
+      {viewport.phaseId && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Phase Mode</label>
+          <select
+            value={viewport.phaseViewMode || 'all'}
+            onChange={(e) => updateViewport({ phaseViewMode: e.target.value })}
+            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          >
+            <option value="all">All</option>
+            <option value="single">Single</option>
+            <option value="cumulative">Cumulative</option>
+          </select>
+        </div>
+      )}
       <InputField
         label="Frame Mode"
         value={sheet.layoutTemplate === 'auto' ? (viewport.lockAutoLayout ? 'Manual' : 'Auto') : 'Manual (sheet)'}
@@ -1602,6 +1720,7 @@ export default function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
   const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, activeTool, toolState, dispatch: editorDispatch } = useEditor();
   const orderedFloors = getOrderedFloors(project);
+  const phases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
   const u = useUnits();
@@ -1643,6 +1762,14 @@ export default function PropertiesPanel() {
 
   const handleDelete = () => {
     if (!selectedId) return;
+    if (selectedType === 'phase') {
+      const phase = (project.phases || []).find(p => p.id === selectedId);
+      if (phase && window.confirm(`Delete phase "${phase.name}"?`)) {
+        dispatch({ type: 'PHASE_DELETE', phaseId: selectedId });
+      }
+      editorDispatch({ type: 'DESELECT' });
+      return;
+    }
     if (selectedType === 'sheet') {
       dispatch({ type: 'SHEET_DELETE', sheetId: selectedId });
     } else if (selectedType === 'sheetViewport' && sheet) {
@@ -1725,20 +1852,25 @@ export default function PropertiesPanel() {
           u={u}
         />
       );
+    } else if (selectedType === 'phase') {
+      const phase = (project.phases || []).find(p => p.id === selectedId);
+      if (phase) {
+        content = <PhaseProperties phase={phase} project={project} dispatch={dispatch} />;
+      }
     } else if (selectedType === 'slab') {
       const slab = (floor.slabs || []).find(s => s.id === selectedId) || null;
       if (slab) {
-        content = <SlabProperties slab={slab} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <SlabProperties slab={slab} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'wall') {
       const wall = floor.walls.find(w => w.id === selectedId);
       if (wall) {
-        content = <WallProperties wall={wall} dispatch={dispatch} editorDispatch={editorDispatch} floorId={activeFloorId} u={u} />;
+        content = <WallProperties wall={wall} dispatch={dispatch} editorDispatch={editorDispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'beam') {
       const beam = (floor.beams || []).find(b => b.id === selectedId);
       if (beam) {
-        content = <BeamProperties beam={beam} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <BeamProperties beam={beam} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'sectionCut') {
       const sectionCut = (floor.sectionCuts || []).find(s => s.id === selectedId) || null;
@@ -1753,44 +1885,44 @@ export default function PropertiesPanel() {
     } else if (selectedType === 'stair') {
       const stair = (floor.stairs || []).find(entry => entry.id === selectedId);
       if (stair) {
-        content = <StairProperties stair={stair} project={project} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <StairProperties stair={stair} project={project} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'landing') {
       const landing = (floor.landings || []).find(l => l.id === selectedId);
       if (landing) {
-        content = <LandingProperties landing={landing} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <LandingProperties landing={landing} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'door') {
       const door = floor.doors.find(d => d.id === selectedId);
       const wall = door ? floor.walls.find(w => w.id === door.wallId) : null;
       if (door) {
-        content = <DoorProperties door={door} wall={wall} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+        content = <DoorProperties door={door} wall={wall} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} phases={phases} />;
       }
     } else if (selectedType === 'window') {
       const win = floor.windows.find(w => w.id === selectedId);
       const wall = win ? floor.walls.find(w => w.id === win.wallId) : null;
       if (win) {
-        content = <WindowProperties window={win} wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <WindowProperties window={win} wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'column') {
       const column = (floor.columns || []).find(c => c.id === selectedId);
       if (column) {
-        content = <ColumnProperties column={column} floor={floor} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+        content = <ColumnProperties column={column} floor={floor} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} phases={phases} />;
       }
     } else if (selectedType === 'fixture') {
       const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
       if (fixture) {
-        content = <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'railing') {
       const railing = (floor.railings || []).find(r => r.id === selectedId);
       if (railing) {
-        content = <RailingProperties railing={railing} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = <RailingProperties railing={railing} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
       }
     } else if (selectedType === 'room') {
       const room = floor.rooms.find(r => r.id === selectedId);
       if (room) {
-        content = <RoomProperties room={room} dispatch={dispatch} floorId={activeFloorId} />;
+        content = <RoomProperties room={room} dispatch={dispatch} floorId={activeFloorId} phases={phases} />;
       }
     }
   }

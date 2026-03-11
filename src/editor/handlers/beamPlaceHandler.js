@@ -13,7 +13,7 @@ function findColumnAtPoint(columns, modelPos) {
   return null;
 }
 
-export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId }) {
+export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, activePhaseId }) {
   return {
     onMouseMove(modelPos, e, toolState) {
       const floor = getFloor(activeFloorId);
@@ -65,6 +65,7 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
         getFloorElevation(floor)
       );
 
+      beam.phaseId = activePhaseId || null;
       dispatch({ type: 'BEAM_ADD', floorId: activeFloorId, beam });
       editorDispatch({ type: 'SELECT_OBJECT', id: beam.id, objectType: 'beam' });
       editorDispatch({

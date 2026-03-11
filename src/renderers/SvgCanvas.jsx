@@ -1,9 +1,11 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useEditor } from '@/app/EditorProvider';
 import { useProject } from '@/app/ProjectProvider';
 import { usePlanClipboardController } from '@/clipboard/usePlanClipboardController';
 import { normalizeRectBounds } from '@/clipboard/planClipboard';
 import { getFloorElevation } from '@/domain/floorModels';
+import { filterProjectByPhase } from '@/domain/phaseFilter';
+import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
 import { useEditorTool } from '@/editor/useEditorTool';
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
@@ -65,10 +67,16 @@ export default function SvgCanvas() {
     activeTool, selectedId, selectedType, toolState,
     viewport, showGrid, snapEnabled, activeFloorId, statusMessage, viewMode, activeSectionCutId,
     regionSelection, pastePreview, maximizedPanel,
+    activePhaseId, phaseViewMode,
     dispatch: editorDispatch,
   } = editor;
 
   const floor = getFloor(activeFloorId);
+  const filteredFloor = usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode);
+  const filteredProject = useMemo(
+    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
+    [project, activePhaseId, phaseViewMode]
+  );
   const {
     copySelection,
     cutSelection,
@@ -92,6 +100,7 @@ export default function SvgCanvas() {
     selectedType,
     toolState,
     viewMode,
+    activePhaseId,
   });
 
   const getModelPos = useCallback((e) => {
@@ -345,20 +354,20 @@ export default function SvgCanvas() {
             viewMode === 'plan' ? (
               <>
                 <FixtureDefs />
-                {(floor.slabs || []).map(slab => (
+                {(filteredFloor.slabs || []).map(slab => (
                   <SlabRenderer key={slab.id} slab={slab} selectedId={selectedId} />
                 ))}
-                <RoomRenderer rooms={floor.rooms} selectedId={selectedId} />
+                <RoomRenderer rooms={filteredFloor.rooms} selectedId={selectedId} />
                 <RoomPreview toolState={toolState} activeTool={activeTool} />
-                <WallRenderer walls={floor.walls} columns={floor.columns || []} />
-                <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
-                <StairRenderer stairs={floor.stairs || []} />
-                <LandingRenderer landings={floor.landings || []} />
-                <RailingRenderer railings={floor.railings || []} />
-                <ColumnRenderer columns={floor.columns || []} />
-                <FixtureRenderer fixtures={floor.fixtures || []} />
-                <DoorRenderer doors={floor.doors} walls={floor.walls} />
-                <WindowRenderer windows={floor.windows} walls={floor.walls} />
+                <WallRenderer walls={filteredFloor.walls} columns={filteredFloor.columns || []} />
+                <BeamRenderer beams={filteredFloor.beams || []} columns={filteredFloor.columns || []} />
+                <StairRenderer stairs={filteredFloor.stairs || []} />
+                <LandingRenderer landings={filteredFloor.landings || []} />
+                <RailingRenderer railings={filteredFloor.railings || []} />
+                <ColumnRenderer columns={filteredFloor.columns || []} />
+                <FixtureRenderer fixtures={filteredFloor.fixtures || []} />
+                <DoorRenderer doors={filteredFloor.doors} walls={filteredFloor.walls} />
+                <WindowRenderer windows={filteredFloor.windows} walls={filteredFloor.walls} />
                 {(floor.sectionCuts || []).map(sc => (
                   <SectionCutRenderer key={sc.id} sectionCut={sc} selectedId={selectedId} />
                 ))}
@@ -401,14 +410,14 @@ export default function SvgCanvas() {
               </>
             ) : viewMode === 'section_view' ? (
               <SectionRenderer
-                project={project}
-                floor={floor}
+                project={filteredProject}
+                floor={filteredFloor}
                 activeSectionCutId={activeSectionCutId}
               />
             ) : (
               <ElevationRenderer
-                project={project}
-                floor={floor}
+                project={filteredProject}
+                floor={filteredFloor}
                 viewMode={viewMode}
                 selectedId={selectedId}
                 selectedType={selectedType}
@@ -443,6 +452,9 @@ export default function SvgCanvas() {
         <span>Zoom: {zoomPercent}%</span>
         <span>View: {viewMode}</span>
         <span>Tool: {displayedTool}</span>
+        {activePhaseId && (
+          <span>Phase: {(project.phases || []).find(p => p.id === activePhaseId)?.name || 'Unknown'} ({phaseViewMode})</span>
+        )}
         {liveWallBearing && <span>Bearing: {liveWallBearing}</span>}
         {selectionCount > 0 && <span>Selection: {selectionCount} objects</span>}
         {pastePreview?.active && <span>Paste: click to place</span>}

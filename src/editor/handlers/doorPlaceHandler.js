@@ -39,7 +39,7 @@ function overlapsExisting(wallId, offset, width, doors, windows) {
   return false;
 }
 
-export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId }) {
+export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, activePhaseId }) {
   return {
     onMouseMove(modelPos, e, toolState) {
       const floor = getFloor(activeFloorId);
@@ -74,6 +74,7 @@ export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, act
 
       const openDir = toolState.openDirection || 'left';
       const door = createDoor(toolState.previewWallId, toolState.previewOffset, DOOR_WIDTH, openDir);
+      door.phaseId = activePhaseId || null;
       dispatch({ type: 'DOOR_ADD', floorId: activeFloorId, door });
     },
 

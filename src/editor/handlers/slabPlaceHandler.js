@@ -13,12 +13,13 @@ function resetSlabToolState(editorDispatch) {
   });
 }
 
-export function createSlabPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport }) {
+export function createSlabPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, activePhaseId }) {
   function commitSlab(points) {
     const floor = getFloor(activeFloorId);
     if (!floor || points.length < 3) return;
 
     const slab = createSlab(floor.id, points, undefined, getFloorElevation(floor));
+    slab.phaseId = activePhaseId || null;
     dispatch({ type: 'SLAB_ADD', floorId: activeFloorId, slab });
     editorDispatch({ type: 'SELECT_OBJECT', id: slab.id, objectType: 'slab' });
     editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Created slab.' });

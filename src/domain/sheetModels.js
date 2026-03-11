@@ -56,6 +56,8 @@ export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, o
     captionPosition: options.captionPosition ?? 'below',
     referenceNote: options.referenceNote ?? '',
     lockAutoLayout: options.lockAutoLayout ?? false,
+    phaseId: options.phaseId ?? null,
+    phaseViewMode: options.phaseViewMode ?? 'all',
   };
 }
 

@@ -8,6 +8,7 @@ import Toolbar from '@/ui/Toolbar';
 import Sidebar from '@/ui/Sidebar';
 import PropertiesPanel from '@/ui/PropertiesPanel';
 import Modal from '@/ui/Modal';
+import NewProjectModal from '@/ui/NewProjectModal';
 import { createProject } from '@/domain/models';
 import { getDefaultActiveFloorId, getOrderedFloors } from '@/domain/floorModels';
 import { saveProject, loadProject, listProjects, deleteProject } from '@/persistence/storage';
@@ -117,8 +118,10 @@ function AppInner() {
   const { project, isDirty, dispatch } = useProject();
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
   const availableFloorIds = useMemo(() => orderedFloors.map((floor) => floor.id), [orderedFloors]);
+  const availablePhaseIds = useMemo(() => (project.phases || []).map((p) => p.id), [project.phases]);
   const initialActiveFloorId = getDefaultActiveFloorId(project);
   const [showLoadModal, setShowLoadModal] = useState(false);
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [savedProjects, setSavedProjects] = useState([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isPropertiesCollapsed, setIsPropertiesCollapsed] = useState(false);
@@ -141,9 +144,15 @@ function AppInner() {
 
   const handleNew = useCallback(() => {
     if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
+    setShowNewProjectModal(true);
+  }, [isDirty]);
+
+  const handleCreateProject = useCallback(({ name }) => {
+    const newProject = createProject(name);
     setProjectFileHandle(null);
-    dispatch({ type: 'PROJECT_NEW', project: createProject() });
-  }, [isDirty, dispatch]);
+    dispatch({ type: 'PROJECT_NEW', project: newProject });
+    setShowNewProjectModal(false);
+  }, [dispatch]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -247,6 +256,7 @@ function AppInner() {
     <EditorProvider
       initialActiveFloorId={initialActiveFloorId}
       availableFloorIds={availableFloorIds}
+      availablePhaseIds={availablePhaseIds}
     >
       <input
         ref={importInputRef}
@@ -266,6 +276,13 @@ function AppInner() {
         onToggleSidebar={() => setIsSidebarCollapsed(value => !value)}
         onToggleProperties={() => setIsPropertiesCollapsed(value => !value)}
       />
+
+      {showNewProjectModal && (
+        <NewProjectModal
+          onConfirm={handleCreateProject}
+          onClose={() => setShowNewProjectModal(false)}
+        />
+      )}
 
       {showLoadModal && (
         <Modal title="Open Project" onClose={() => setShowLoadModal(false)}>

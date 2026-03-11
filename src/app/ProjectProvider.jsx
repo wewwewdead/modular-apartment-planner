@@ -1,6 +1,8 @@
 import { createContext, useContext, useReducer } from 'react';
 import { createProject } from '@/domain/models';
+import { clearProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { createDuplicatedFloor, getDefaultFloorName, getFloorElevation, getFloorLevelIndex, shiftFloorAbsoluteElements, shiftFloorElevationData, sortFloors } from '@/domain/floorModels';
+import { sortPhases } from '@/domain/phaseModels';
 import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
 import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
@@ -589,6 +591,40 @@ function projectReducer(state, action) {
           beam.startRef?.id !== action.columnId && beam.endRef?.id !== action.columnId
         )),
       }));
+
+    case 'PHASE_ADD':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        phases: sortPhases([...(state.project.phases || []), action.phase]),
+      });
+
+    case 'PHASE_UPDATE':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        phases: sortPhases(
+          (state.project.phases || []).map(p =>
+            p.id === action.phase.id ? { ...p, ...action.phase } : p
+          )
+        ),
+      });
+
+    case 'PHASE_DELETE': {
+      const nextProject = clearProjectPhaseReferences(state.project, action.phaseId);
+      return applyProjectUpdate(state, {
+        ...nextProject,
+        updatedAt: new Date().toISOString(),
+        phases: (state.project.phases || []).filter((phase) => phase.id !== action.phaseId),
+      });
+    }
+
+    case 'PHASE_REORDER':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        phases: action.phases,
+      });
 
     case 'MARK_SAVED':
       return {

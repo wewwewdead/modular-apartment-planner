@@ -346,7 +346,10 @@ export function buildSheetScene(project, sheet) {
   const zones = buildSheetZones(paper);
   const sourceEntries = (sheet.viewports || []).map((viewport) => ({
     viewport,
-    source: resolveSheetViewportSource(project, viewport),
+    source: resolveSheetViewportSource(project, viewport, {
+      activePhaseId: viewport.phaseId,
+      phaseViewMode: viewport.phaseViewMode || 'all',
+    }),
   }));
   const allowAutoLayout = sheet.layoutTemplate !== 'manual';
   const autoEntries = allowAutoLayout

@@ -6,7 +6,7 @@ function findExistingRoomForFace(rooms, face) {
   return rooms.find(room => roomPolygonKey(room.points) === face.key) || null;
 }
 
-export function createRoomPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId }) {
+export function createRoomPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, activePhaseId }) {
   return {
     onMouseDown(modelPos, e) {
       if (e.button !== 0) return;
@@ -29,6 +29,7 @@ export function createRoomPlaceHandler({ dispatch, editorDispatch, getFloor, act
       }
 
       const room = createRoom(`Room ${floor.rooms.length + 1}`, face.points);
+      room.phaseId = activePhaseId || null;
       dispatch({ type: 'ROOM_ADD', floorId: activeFloorId, room });
       editorDispatch({ type: 'SELECT_OBJECT', id: room.id, objectType: 'room' });
       editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { previewPoints: face.points } });

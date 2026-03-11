@@ -1,6 +1,7 @@
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
 import { buildProjectElevationScene } from '@/elevations/scene';
 import { getDefaultActiveFloorId, resolveProjectFloor } from '@/domain/floorModels';
+import { filterFloorByPhase, filterProjectByPhase } from '@/domain/phaseFilter';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { landingOutline } from '@/geometry/landingGeometry';
@@ -198,20 +199,26 @@ function build3DPreviewSource(project, floor) {
   };
 }
 
-export function resolveSheetViewportSource(project, viewport) {
+export function resolveSheetViewportSource(project, viewport, phaseContext) {
   const defaultFloorId = getDefaultActiveFloorId(project, viewport.sourceFloorId);
-  const floor = resolveProjectFloor(project, defaultFloorId);
+  let effectiveProject = project;
+  let floor = resolveProjectFloor(project, defaultFloorId);
+
+  if (phaseContext?.activePhaseId && phaseContext?.phaseViewMode && phaseContext.phaseViewMode !== 'all') {
+    effectiveProject = filterProjectByPhase(project, phaseContext.activePhaseId, phaseContext.phaseViewMode);
+    floor = resolveProjectFloor(effectiveProject, defaultFloorId);
+  }
 
   switch (viewport.sourceView) {
     case '3d_preview':
-      return build3DPreviewSource(project, floor);
+      return build3DPreviewSource(effectiveProject, floor);
     case 'section':
-      return buildSectionSource(project, floor, viewport.sourceRefId);
+      return buildSectionSource(effectiveProject, floor, viewport.sourceRefId);
     case 'elevation_front':
     case 'elevation_rear':
     case 'elevation_left':
     case 'elevation_right':
-      return buildElevationSource(project, floor, viewport.sourceView);
+      return buildElevationSource(effectiveProject, floor, viewport.sourceView);
     case 'plan':
     default:
       return buildPlanSource(floor);

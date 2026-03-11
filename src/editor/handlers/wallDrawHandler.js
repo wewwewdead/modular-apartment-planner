@@ -16,7 +16,7 @@ function constrainAngle(start, end, shiftHeld) {
   };
 }
 
-export function createWallDrawHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
+export function createWallDrawHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, activePhaseId }) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -63,6 +63,7 @@ export function createWallDrawHandler({ dispatch, editorDispatch, getFloor, acti
           startAttachment: toolState.startAttachment || null,
           endAttachment: attachment,
         });
+        wall.phaseId = activePhaseId || null;
         dispatch({ type: 'WALL_ADD', floorId: activeFloorId, wall });
 
         // Check if we snapped back to chain start (close loop)

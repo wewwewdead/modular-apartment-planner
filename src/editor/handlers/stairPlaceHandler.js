@@ -32,7 +32,7 @@ function resetStairTool(editorDispatch) {
   });
 }
 
-export function createStairPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
+export function createStairPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, activePhaseId }) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -102,6 +102,7 @@ export function createStairPlaceHandler({ dispatch, editorDispatch, getFloor, ac
         }
       );
 
+      stair.phaseId = activePhaseId || null;
       dispatch({ type: 'STAIR_ADD', floorId: activeFloorId, stair });
       editorDispatch({ type: 'SELECT_OBJECT', id: stair.id, objectType: 'stair' });
       resetStairTool(editorDispatch);

@@ -53,7 +53,7 @@ export default function Toolbar({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, toolState, dispatch: editorDispatch } = useEditor();
+  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, toolState, activePhaseId, dispatch: editorDispatch } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const {
     canCopySelection,
@@ -97,7 +97,11 @@ export default function Toolbar({
       return;
     }
     const detected = detectRooms(floor.walls, floor.columns || []);
-    const rooms = detected.map((d, i) => createRoom(`Room ${i + 1}`, d.points));
+    const rooms = detected.map((d, i) => {
+      const room = createRoom(`Room ${i + 1}`, d.points);
+      room.phaseId = activePhaseId || null;
+      return room;
+    });
     dispatch({ type: 'ROOMS_SET', floorId: activeFloorId, rooms });
     editorDispatch({ type: 'DESELECT' });
     editorDispatch({

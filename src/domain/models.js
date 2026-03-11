@@ -16,6 +16,7 @@ export function createProject(name = 'Untitled Project') {
     updatedAt: new Date().toISOString(),
     floors: [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })],
     sheets: [],
+    phases: [],
     version: 1,
   };
 }

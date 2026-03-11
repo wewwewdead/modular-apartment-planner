@@ -1,6 +1,8 @@
 import { DOOR_HEIGHT, DOOR_SILL_HEIGHT, SLAB_ELEVATION, SLAB_THICKNESS, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, STAIR_WIDTH, WALL_HEIGHT, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT } from '@/domain/defaults';
+import { sanitizeProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { createFloor } from '@/domain/models';
 import { createAnnotationSettings } from '@/domain/models';
+import { normalizePhases } from '@/domain/phaseModels';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, sortFloors } from '@/domain/floorModels';
 import { createSheetRevision } from '@/domain/sheetModels';
 
@@ -230,8 +232,16 @@ export function deserializeProject(json) {
       if (viewport.captionPosition === undefined) viewport.captionPosition = 'below';
       if (viewport.referenceNote === undefined) viewport.referenceNote = '';
       if (viewport.lockAutoLayout === undefined) viewport.lockAutoLayout = false;
+      if (viewport.phaseId === undefined) viewport.phaseId = null;
+      if (viewport.phaseViewMode === undefined) viewport.phaseViewMode = 'all';
     }
   }
 
-  return { project, savedAt: json.savedAt };
+  project.phases = normalizePhases(project.phases || []);
+  const validPhaseIds = new Set(project.phases.map((phase) => phase.id));
+
+  return {
+    project: sanitizeProjectPhaseReferences(project, validPhaseIds),
+    savedAt: json.savedAt,
+  };
 }

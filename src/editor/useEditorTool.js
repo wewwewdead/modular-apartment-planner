@@ -29,7 +29,7 @@ function createReadOnlyHandler() {
   };
 }
 
-export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode }) {
+export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode, activePhaseId }) {
   const getFloorRef = useRef(getFloor);
   getFloorRef.current = getFloor;
 
@@ -54,7 +54,7 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
     const ctx = {
       dispatch, editorDispatch,
       getFloor: (...args) => getFloorRef.current(...args),
-      activeFloorId, viewport, snapEnabled,
+      activeFloorId, viewport, snapEnabled, activePhaseId,
     };
 
     switch (activeTool) {
@@ -89,7 +89,7 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
       default:
         return null;
     }
-  }, [activeTool, activeFloorId, project, viewport.zoom, snapEnabled, viewMode]);
+  }, [activeTool, activeFloorId, project, viewport.zoom, snapEnabled, viewMode, activePhaseId]);
 
   return {
     onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),

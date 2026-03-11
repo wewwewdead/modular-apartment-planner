@@ -24,7 +24,7 @@ function resetRailingTool(editorDispatch) {
   });
 }
 
-export function createRailingPlaceHandler({ dispatch, editorDispatch, activeFloorId, snapEnabled }) {
+export function createRailingPlaceHandler({ dispatch, editorDispatch, activeFloorId, snapEnabled, activePhaseId }) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -48,6 +48,7 @@ export function createRailingPlaceHandler({ dispatch, editorDispatch, activeFloo
       }
 
       const railing = createRailing(toolState.railingStartPoint, point);
+      railing.phaseId = activePhaseId || null;
 
       dispatch({ type: 'RAILING_ADD', floorId: activeFloorId, railing });
       editorDispatch({ type: 'SELECT_OBJECT', id: railing.id, objectType: 'railing' });

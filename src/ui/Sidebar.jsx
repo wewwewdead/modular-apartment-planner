@@ -4,6 +4,7 @@ import { useEditor } from '@/app/EditorProvider';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
+import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
@@ -69,12 +70,14 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
 
 export default function Sidebar() {
   const { project, dispatch, duplicateFloor } = useProject();
-  const { activeFloorId, activeSheetId, selectedId, workspaceMode, dispatch: editorDispatch } = useEditor();
+  const { activeFloorId, activeSheetId, selectedId, workspaceMode, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
   const orderedFloors = getOrderedFloors(project);
+  const orderedPhases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const [collapsedSections, setCollapsedSections] = useState({
     floors: false,
     sheets: false,
+    phases: false,
     slabs: false,
     walls: false,
     annotations: false,
@@ -137,6 +140,44 @@ export default function Sidebar() {
         setActiveFloor(fallbackFloor.id);
       }
     }
+  };
+
+  const addPhase = () => {
+    const nextOrder = getNextPhaseOrder(project.phases || []);
+    const color = PHASE_COLORS[nextOrder % PHASE_COLORS.length];
+    const phase = createPhase(`Phase ${nextOrder + 1}`, nextOrder, color);
+    dispatch({ type: 'PHASE_ADD', phase });
+    editorDispatch({ type: 'SET_ACTIVE_PHASE', phaseId: phase.id });
+    editorDispatch({ type: 'SELECT_OBJECT', id: phase.id, objectType: 'phase' });
+  };
+
+  const selectPhase = (phaseId) => {
+    editorDispatch({ type: 'SET_ACTIVE_PHASE', phaseId });
+    if (phaseViewMode === 'all') {
+      editorDispatch({ type: 'SET_PHASE_VIEW_MODE', mode: 'single' });
+    }
+    editorDispatch({ type: 'SELECT_OBJECT', id: phaseId, objectType: 'phase' });
+  };
+
+  const handleDeletePhase = (phase) => {
+    if (!window.confirm(`Delete phase "${phase.name}"?`)) return;
+    dispatch({ type: 'PHASE_DELETE', phaseId: phase.id });
+    if (activePhaseId === phase.id) {
+      editorDispatch({ type: 'SET_ACTIVE_PHASE', phaseId: null });
+      editorDispatch({ type: 'SET_PHASE_VIEW_MODE', mode: 'all' });
+    }
+    editorDispatch({ type: 'DESELECT' });
+  };
+
+  const handleMovePhase = (phase, direction) => {
+    const newOrder = phase.order + direction;
+    const reordered = reorderPhases(project.phases || [], phase.id, newOrder);
+    dispatch({ type: 'PHASE_REORDER', phases: reordered });
+  };
+
+  const handleTogglePhaseVisibility = (phase, e) => {
+    e.stopPropagation();
+    dispatch({ type: 'PHASE_UPDATE', phase: { id: phase.id, visible: phase.visible !== false ? false : true } });
   };
 
   const addSheet = () => {
@@ -235,6 +276,100 @@ export default function Sidebar() {
             }}
           >
             {getSheetDisplayLabel(sheet, index)}
+          </div>
+        ))}
+      </Section>
+
+      <Section
+        title="Phases"
+        count={orderedPhases.length}
+        collapsed={collapsedSections.phases}
+        onToggle={() => toggleSection('phases')}
+        action={
+          <button type="button" className={styles.sectionAddBtn} onClick={addPhase} title="Add Phase">+</button>
+        }
+      >
+        <div className={styles.phaseViewControl} role="group" aria-label="Phase view mode">
+          {['all', 'single', 'cumulative'].map(mode => (
+            <button
+              key={mode}
+              type="button"
+              className={phaseViewMode === mode ? styles.phaseViewBtnActive : styles.phaseViewBtn}
+              onClick={() => editorDispatch({ type: 'SET_PHASE_VIEW_MODE', mode })}
+            >
+              {mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
+        </div>
+        {orderedPhases.map((phase) => (
+          <div
+            key={phase.id}
+            className={`${styles.phaseItem} ${phase.id === activePhaseId ? styles.phaseItemActive : ''} ${phase.visible === false ? styles.phaseItemHidden : ''}`}
+          >
+            <button
+              type="button"
+              className={styles.floorButton}
+              onClick={() => selectPhase(phase.id)}
+            >
+              <span className={styles.phaseNameRow}>
+                <span
+                  className={styles.phaseColorDot}
+                  style={{ background: phase.color }}
+                />
+                <span className={styles.floorName}>{phase.name}</span>
+              </span>
+              <span className={styles.floorMeta}>Order: {phase.order}</span>
+            </button>
+            <div className={styles.floorActions}>
+              <button
+                type="button"
+                className={styles.phaseVisibilityBtn}
+                onClick={(e) => handleTogglePhaseVisibility(phase, e)}
+                title={phase.visible !== false ? 'Hide phase' : 'Show phase'}
+              >
+                {phase.visible !== false ? (
+                  <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+                    <path d="M7 4C4 4 1.5 7 1.5 7s2.5 3 5.5 3 5.5-3 5.5-3S10 4 7 4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+                    <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+                    <path d="M7 4C4 4 1.5 7 1.5 7s2.5 3 5.5 3 5.5-3 5.5-3S10 4 7 4z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+                    <line x1="2" y1="2" x2="12" y2="12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                  </svg>
+                )}
+              </button>
+              <button
+                type="button"
+                className={styles.floorActionBtn}
+                onClick={() => handleMovePhase(phase, -1)}
+                title="Move up"
+                disabled={phase.order === 0}
+              >
+                <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+                  <path d="M7 3l4 5H3z" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={styles.floorActionBtn}
+                onClick={() => handleMovePhase(phase, 1)}
+                title="Move down"
+                disabled={phase.order >= orderedPhases.length - 1}
+              >
+                <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+                  <path d="M7 11l4-5H3z" fill="currentColor" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={`${styles.floorActionBtn} ${styles.floorActionDanger}`}
+                onClick={() => handleDeletePhase(phase)}
+                title={`Delete ${phase.name}`}
+              >
+                <TrashIcon />
+              </button>
+            </div>
           </div>
         ))}
       </Section>

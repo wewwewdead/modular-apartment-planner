@@ -195,6 +195,12 @@ function editorReducer(state, action) {
         maximizedPanel: state.maximizedPanel === action.panel ? null : action.panel,
       };
 
+    case 'SET_ACTIVE_PHASE':
+      return { ...state, activePhaseId: action.phaseId };
+
+    case 'SET_PHASE_VIEW_MODE':
+      return { ...state, phaseViewMode: action.mode };
+
     default:
       return state;
   }
@@ -222,10 +228,12 @@ export function createInitialEditorState(activeFloorId = null) {
     regionSelection: null,
     pastePreview: { active: false, point: null },
     maximizedPanel: null,
+    activePhaseId: null,
+    phaseViewMode: 'all',
   };
 }
 
-export function EditorProvider({ children, initialActiveFloorId = null, availableFloorIds = [] }) {
+export function EditorProvider({ children, initialActiveFloorId = null, availableFloorIds = [], availablePhaseIds = [] }) {
   const [state, dispatch] = useReducer(
     editorReducer,
     initialActiveFloorId,
@@ -244,6 +252,13 @@ export function EditorProvider({ children, initialActiveFloorId = null, availabl
       dispatch({ type: 'SET_ACTIVE_FLOOR', floorId: availableFloorIds[0] });
     }
   }, [availableFloorIds, state.activeFloorId]);
+
+  useEffect(() => {
+    if (state.activePhaseId && !availablePhaseIds.includes(state.activePhaseId)) {
+      dispatch({ type: 'SET_ACTIVE_PHASE', phaseId: null });
+      dispatch({ type: 'SET_PHASE_VIEW_MODE', mode: 'all' });
+    }
+  }, [availablePhaseIds, state.activePhaseId]);
 
   return (
     <EditorContext.Provider value={{ state, dispatch }}>

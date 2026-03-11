@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor } from '@/app/EditorProvider';
+import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
 import { buildPreviewObjectRoot } from './buildPreviewObjects';
 import { createPreviewViewport } from './createPreviewViewport';
@@ -22,7 +23,12 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
     isLocked: false,
     canLock: false,
   });
-  const { selectedId, selectedType, dispatch: editorDispatch } = useEditor();
+  const { selectedId, selectedType, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
+
+  const filteredProject = useMemo(
+    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
+    [project, activePhaseId, phaseViewMode]
+  );
 
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
 
@@ -32,10 +38,10 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
     return undefined;
   }, [previewScope, orderedFloors]);
 
-  const sceneDescriptor = useMemo(() => buildPreviewScene(project, {
+  const sceneDescriptor = useMemo(() => buildPreviewScene(filteredProject, {
     activeFloorId,
     visibleFloorIds,
-  }), [project, activeFloorId, visibleFloorIds]);
+  }), [filteredProject, activeFloorId, visibleFloorIds]);
 
   const activeFloor = (project?.floors || []).find((floor) => floor.id === activeFloorId) || null;
   const visibleCount = sceneDescriptor.floors

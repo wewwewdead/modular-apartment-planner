@@ -5,7 +5,7 @@ function snapToGrid(value) {
   return Math.round(value / GRID_MINOR) * GRID_MINOR;
 }
 
-export function createColumnPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, snapEnabled }) {
+export function createColumnPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, snapEnabled, activePhaseId }) {
   return {
     onMouseMove(modelPos) {
       let x = modelPos.x;
@@ -29,6 +29,7 @@ export function createColumnPlaceHandler({ dispatch, editorDispatch, getFloor, a
         y = snapToGrid(y);
       }
       const column = createColumn(x, y);
+      column.phaseId = activePhaseId || null;
       dispatch({ type: 'COLUMN_ADD', floorId: activeFloorId, column });
     },
 
