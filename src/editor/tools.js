@@ -23,6 +23,9 @@ export const TOOLS = {
   LANDING: 'landing',
   FIXTURE: 'fixture',
   RAILING: 'railing',
+  ROOF_PARAPET: 'roof_parapet',
+  ROOF_DRAIN: 'roof_drain',
+  ROOF_OPENING: 'roof_opening',
 };
 
 export const RAILING_TYPES = {

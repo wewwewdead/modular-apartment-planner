@@ -12,6 +12,7 @@ import {
   SelectIcon, DimensionIcon, WallIcon, BeamIcon, StairIcon,
   SectionCutIcon, SlabIcon, RoomIcon, DoorIcon, WindowIcon,
   ColumnIcon, LandingIcon, RailingIcon,
+  ParapetIcon, DrainIcon, OpeningIcon,
   KitchenTopIcon, ToiletIcon, LavatoryIcon, TableIcon, TVIcon, SofaIcon, BedIcon,
   GridIcon, SnapIcon, DetectRoomsIcon,
   SidebarIcon, PropertiesIcon,
@@ -53,7 +54,7 @@ export default function Toolbar({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, toolState, activePhaseId, dispatch: editorDispatch } = useEditor();
+  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, modelTarget, toolState, activePhaseId, dispatch: editorDispatch } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const {
     canCopySelection,
@@ -62,7 +63,8 @@ export default function Toolbar({
     cutSelection,
     beginPaste,
   } = usePlanClipboardController();
-  const isPlanView = workspaceMode === 'model' && viewMode === 'plan';
+  const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
+  const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
 
   const fixtureItems = [
     { fixtureType: FIXTURE_TYPES.KITCHEN_TOP, label: 'Kitchen Top', Icon: KitchenTopIcon },
@@ -75,6 +77,12 @@ export default function Toolbar({
   ];
 
   const setTool = (tool) => editorDispatch({ type: 'SET_TOOL', tool });
+  const roofToolItems = [
+    { tool: TOOLS.SELECT, label: 'Select', shortcut: 'V', Icon: SelectIcon },
+    { tool: TOOLS.ROOF_PARAPET, label: 'Parapet', shortcut: 'P', Icon: ParapetIcon },
+    { tool: TOOLS.ROOF_DRAIN, label: 'Drain', shortcut: 'G', Icon: DrainIcon },
+    { tool: TOOLS.ROOF_OPENING, label: 'Opening', shortcut: 'O', Icon: OpeningIcon },
+  ];
 
   const handleUndo = useCallback(() => {
     if (!canUndo) return;
@@ -175,7 +183,7 @@ export default function Toolbar({
         <button
           className={styles.btn}
           onClick={copySelection}
-          disabled={!canCopySelection}
+          disabled={!canCopySelection || modelTarget !== 'floor' || workspaceMode !== 'model'}
           title="Copy (Ctrl+C)"
         >
           <CopyIcon className={styles.icon} />
@@ -183,7 +191,7 @@ export default function Toolbar({
         <button
           className={styles.btn}
           onClick={cutSelection}
-          disabled={!canCopySelection}
+          disabled={!canCopySelection || modelTarget !== 'floor' || workspaceMode !== 'model'}
           title="Cut (Ctrl+X)"
         >
           <CutIcon className={styles.icon} />
@@ -191,10 +199,34 @@ export default function Toolbar({
         <button
           className={styles.btn}
           onClick={() => beginPaste()}
-          disabled={!canPaste}
+          disabled={!canPaste || modelTarget !== 'floor' || workspaceMode !== 'model'}
           title="Paste (Ctrl+V)"
         >
           <PasteIcon className={styles.icon} />
+        </button>
+      </div>
+
+      <div className={styles.segmentedGroup}>
+        <button
+          className={workspaceMode === 'model' && modelTarget === 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn}
+          onClick={() => editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' })}
+          title="Floor Editing"
+        >
+          Floor
+        </button>
+        <button
+          className={workspaceMode === 'model' && modelTarget === 'roof' ? styles.segmentedBtnActive : styles.segmentedBtn}
+          onClick={() => editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' })}
+          title="Roof Editing"
+        >
+          Roof
+        </button>
+        <button
+          className={workspaceMode === 'sheet' ? styles.segmentedBtnActive : styles.segmentedBtn}
+          onClick={() => editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' })}
+          title="Sheet Workspace"
+        >
+          Sheets
         </button>
       </div>
 
@@ -210,24 +242,17 @@ export default function Toolbar({
             {label}
           </button>
         ))}
-        <button
-          className={activeViewKey === 'sheets' ? styles.segmentedBtnActive : styles.segmentedBtn}
-          onClick={() => editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' })}
-          title="Sheet Workspace"
-        >
-          Sheets
-        </button>
       </div>
 
       {/* Tool palette - inline row of 12 icons */}
       <div className={styles.toolPalette}>
         <span className={styles.groupLabel}>Tools</span>
-        {toolItems.map(({ tool, label, shortcut, Icon }) => (
+        {(modelTarget === 'roof' ? roofToolItems : toolItems).map(({ tool, label, shortcut, Icon }) => (
           <button
             key={tool}
             className={activeTool === tool ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
             onClick={() => setTool(tool)}
-            disabled={!isPlanView}
+            disabled={modelTarget === 'roof' ? !isRoofPlanView : !isPlanView}
             title={`${label} (${shortcut})`}
             aria-label={label}
           >

@@ -15,6 +15,10 @@ import { createLandingPlaceHandler } from './handlers/landingPlaceHandler';
 import { createFixturePlaceHandler } from './handlers/fixturePlaceHandler';
 import { createRailingPlaceHandler } from './handlers/railingPlaceHandler';
 import { createElevationSelectHandler } from './handlers/elevationSelectHandler';
+import { createRoofSelectHandler } from './handlers/roofSelectHandler';
+import { createRoofParapetPlaceHandler } from './handlers/roofParapetPlaceHandler';
+import { createRoofDrainPlaceHandler } from './handlers/roofDrainPlaceHandler';
+import { createRoofOpeningPlaceHandler } from './handlers/roofOpeningPlaceHandler';
 
 function createReadOnlyHandler() {
   return {
@@ -29,11 +33,36 @@ function createReadOnlyHandler() {
   };
 }
 
-export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode, activePhaseId }) {
+export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, roofSystem, modelTarget, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode, activePhaseId }) {
   const getFloorRef = useRef(getFloor);
   getFloorRef.current = getFloor;
 
   const handler = useMemo(() => {
+    if (modelTarget === 'roof') {
+      if (viewMode !== 'plan') {
+        return createReadOnlyHandler();
+      }
+
+      const roofCtx = {
+        dispatch,
+        editorDispatch,
+        roofSystem,
+        viewport,
+      };
+
+      switch (activeTool) {
+        case TOOLS.ROOF_PARAPET:
+          return createRoofParapetPlaceHandler(roofCtx);
+        case TOOLS.ROOF_DRAIN:
+          return createRoofDrainPlaceHandler(roofCtx);
+        case TOOLS.ROOF_OPENING:
+          return createRoofOpeningPlaceHandler(roofCtx);
+        case TOOLS.SELECT:
+        default:
+          return createRoofSelectHandler(roofCtx);
+      }
+    }
+
     if (viewMode?.startsWith('elevation_')) {
       return createElevationSelectHandler({
         dispatch,
@@ -89,7 +118,7 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
       default:
         return null;
     }
-  }, [activeTool, activeFloorId, project, viewport.zoom, snapEnabled, viewMode, activePhaseId]);
+  }, [activeTool, activeFloorId, project, roofSystem, modelTarget, viewport.zoom, snapEnabled, viewMode, activePhaseId]);
 
   return {
     onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),

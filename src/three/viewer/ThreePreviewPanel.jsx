@@ -47,7 +47,9 @@ export default function ThreePreviewPanel({ project, activeFloorId, isMaximized 
   const visibleCount = sceneDescriptor.floors
     .filter((floor) => floor.visible)
     .reduce((count, floor) => count + floor.objects.length, 0);
-  const visibleFloorCount = sceneDescriptor.floors.filter((floor) => floor.visible).length;
+  const visibleFloorCount = sceneDescriptor.floors
+    .filter((floor) => floor.visible && floor.floorId !== sceneDescriptor.roofLayerId)
+    .length;
   const inspection = useMemo(
     () => getPreviewInspection(project, selectedType, selectedId),
     [project, selectedId, selectedType]

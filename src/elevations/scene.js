@@ -2,6 +2,7 @@ import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjec
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
+import { buildRoofElevationElements } from '@/geometry/roofElevationGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
@@ -157,8 +158,15 @@ function buildWindowRects(floor, view) {
     .filter(Boolean);
 }
 
-function computeSceneBounds(elements = [], baseLevel = 0) {
-  if (!elements.length) {
+function computeSceneBoundsWithPolygons(elements = [], polygonElements = [], baseLevel = 0) {
+  const rectXs = elements.flatMap((element) => [element.left, element.right]);
+  const rectZs = elements.flatMap((element) => [element.bottom, element.top]);
+  const polygonXs = polygonElements.flatMap((element) => element.points.map((point) => point.x));
+  const polygonZs = polygonElements.flatMap((element) => element.points.map((point) => point.z));
+  const xs = [...rectXs, ...polygonXs];
+  const zs = [...rectZs, ...polygonZs];
+
+  if (!xs.length || !zs.length) {
     return {
       minX: -1000,
       maxX: 1000,
@@ -168,10 +176,10 @@ function computeSceneBounds(elements = [], baseLevel = 0) {
   }
 
   return {
-    minX: Math.min(...elements.map((element) => element.left)),
-    maxX: Math.max(...elements.map((element) => element.right)),
-    minZ: Math.min(baseLevel, ...elements.map((element) => element.bottom)),
-    maxZ: Math.max(...elements.map((element) => element.top)),
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minZ: Math.min(baseLevel, ...zs),
+    maxZ: Math.max(...zs),
   };
 }
 
@@ -200,18 +208,26 @@ function buildFloorElevationElements(floor, view) {
   ];
 }
 
-function buildElevationSceneFromFloors(floors, viewMode) {
+function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null) {
   const view = getElevationView(viewMode);
   const stackBounds = getFloorStackBounds(floors);
-  const elements = floors
+  const floorElements = floors
     .flatMap((floor) => buildFloorElevationElements(floor, view))
+    .sort((a, b) => b.depth - a.depth);
+  const roofElements = roofSystem
+    ? buildRoofElevationElements(roofSystem, view)
+    : { elements: [], polygonElements: [] };
+  const elements = [...floorElements, ...(roofElements.elements || [])]
+    .sort((a, b) => b.depth - a.depth);
+  const polygonElements = [...(roofElements.polygonElements || [])]
     .sort((a, b) => b.depth - a.depth);
 
   return {
     viewKey: view.key,
     title: view.label,
     elements,
-    bounds: computeSceneBounds(elements, stackBounds.minElevation),
+    polygonElements,
+    bounds: computeSceneBoundsWithPolygons(elements, polygonElements, stackBounds.minElevation),
     groundLevel: stackBounds.minElevation,
   };
 }
@@ -224,5 +240,5 @@ export function buildElevationScene(floor, viewMode) {
 export function buildProjectElevationScene(project, sourceFloorId, viewMode) {
   const sourceFloor = resolveProjectFloor(project, sourceFloorId);
   if (!sourceFloor) return null;
-  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode);
+  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode, project?.roofSystem || null);
 }

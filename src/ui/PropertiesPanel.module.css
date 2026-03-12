@@ -177,6 +177,104 @@
   line-height: 1.6;
 }
 
+.scheduleSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.scheduleMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scheduleMetricCard {
+  position: relative;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.58);
+  min-height: 72px;
+}
+
+.scheduleMetricLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+.scheduleMetricValue {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.scheduleMetricMeta {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.scheduleTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.scheduleTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  color: var(--color-text-primary);
+}
+
+.scheduleTable th,
+.scheduleTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-divider);
+  text-align: left;
+  vertical-align: top;
+}
+
+.scheduleTable th {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  color: var(--color-text-secondary);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.scheduleTable tr:last-child td {
+  border-bottom: none;
+}
+
+.scheduleEmptyRow {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.scheduleNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.scheduleNotes p {
+  margin: 0;
+}
+
 .revisionCard {
   padding: var(--space-sm);
   margin-bottom: var(--space-sm);

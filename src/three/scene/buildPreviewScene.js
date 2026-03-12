@@ -1,4 +1,5 @@
 import { buildFloorPreviewObjects } from './objectBuilders';
+import { buildRoofPreviewObjects } from '@/geometry/roof3dGeometry';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorStackBounds, getOrderedFloors } from '@/domain/floorModels';
 
 function mergeBounds(current, next) {
@@ -46,6 +47,7 @@ export function buildPreviewScene(project, options = {}) {
   const floors = getOrderedFloors(project);
   const activeFloorId = getDefaultActiveFloorId(project, options.activeFloorId);
   const activeFloor = floors.find((floor) => floor.id === activeFloorId) || null;
+  const topFloor = floors[floors.length - 1] || null;
   const stackBounds = getFloorStackBounds(floors);
   const resolvedVisibleFloorIds = options.visibleFloorIds || floors.map((floor) => floor.id);
   const visibleFloorIds = new Set(resolvedVisibleFloorIds);
@@ -62,6 +64,26 @@ export function buildPreviewScene(project, options = {}) {
     };
   });
 
+  if (project?.roofSystem) {
+    const roofObjects = buildRoofPreviewObjects(project.roofSystem)
+      .map((descriptor) => ({
+        ...descriptor,
+        metadata: {
+          ...(descriptor.metadata || {}),
+          floorId: topFloor?.id || activeFloorId,
+        },
+      }));
+
+    floorDescriptors.push({
+      floorId: project.roofSystem.id,
+      name: project.roofSystem.name || 'Roof',
+      elevation: project.roofSystem.baseElevation ?? stackBounds.maxElevation,
+      visible: !options.visibleFloorIds || (topFloor ? visibleFloorIds.has(topFloor.id) : true),
+      objects: roofObjects,
+      bounds: boundsFromObjects(roofObjects),
+    });
+  }
+
   const visibleObjects = floorDescriptors
     .filter((floor) => floor.visible)
     .flatMap((floor) => floor.objects);
@@ -75,6 +97,7 @@ export function buildPreviewScene(project, options = {}) {
     activeFloorId,
     visibleFloorIds: [...visibleFloorIds],
     floors: floorsWithNavigationTargets,
+    roofLayerId: project?.roofSystem?.id || null,
     bounds,
     defaultTarget: {
       x: (bounds.minX + bounds.maxX) / 2,

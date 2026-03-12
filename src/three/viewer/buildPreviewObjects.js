@@ -12,7 +12,7 @@ function planAngleToWorldRotation(angle = 0) {
   return -angle;
 }
 
-function createShape(outline) {
+function createShape(outline, holes = []) {
   const shape = new THREE.Shape();
   outline.forEach((point, index) => {
     if (index === 0) {
@@ -23,6 +23,21 @@ function createShape(outline) {
     shape.lineTo(point.x, -point.y);
   });
   shape.closePath();
+
+  holes.forEach((hole) => {
+    if (!hole?.length) return;
+    const path = new THREE.Path();
+    hole.forEach((point, index) => {
+      if (index === 0) {
+        path.moveTo(point.x, -point.y);
+        return;
+      }
+      path.lineTo(point.x, -point.y);
+    });
+    path.closePath();
+    shape.holes.push(path);
+  });
+
   return shape;
 }
 
@@ -62,7 +77,7 @@ function addOutline(object3d, materialPalette, isSelected) {
 }
 
 function createPrismObject(descriptor, materialPalette, isSelected) {
-  const geometry = new THREE.ExtrudeGeometry(createShape(descriptor.outline), {
+  const geometry = new THREE.ExtrudeGeometry(createShape(descriptor.outline, descriptor.holes), {
     depth: descriptor.height,
     bevelEnabled: false,
     curveSegments: 1,
@@ -71,6 +86,63 @@ function createPrismObject(descriptor, materialPalette, isSelected) {
 
   geometry.rotateX(-Math.PI / 2);
   geometry.translate(0, descriptor.baseElevation, 0);
+
+  const mesh = new THREE.Mesh(geometry, createMeshMaterial(materialPalette, descriptor.materialKey, isSelected));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh, materialPalette, isSelected);
+  return mesh;
+}
+
+function createRoofMeshObject(descriptor, materialPalette, isSelected) {
+  const positions = [];
+
+  function pushVertex(point, elevation) {
+    positions.push(point.x, elevation, point.y);
+  }
+
+  function pushTriangle(a, b, c, surface) {
+    pushVertex(a, surface === 'top' ? a.topElevation : a.bottomElevation);
+    pushVertex(b, surface === 'top' ? b.topElevation : b.bottomElevation);
+    pushVertex(c, surface === 'top' ? c.topElevation : c.bottomElevation);
+  }
+
+  function pushQuad(a, b) {
+    pushVertex(a, a.topElevation);
+    pushVertex(b, b.topElevation);
+    pushVertex(b, b.bottomElevation);
+
+    pushVertex(a, a.topElevation);
+    pushVertex(b, b.bottomElevation);
+    pushVertex(a, a.bottomElevation);
+  }
+
+  for (const surface of descriptor.surfaces || []) {
+    const outline = surface.outline || [];
+    if (outline.length < 3) continue;
+
+    const contour = outline.map((point) => new THREE.Vector2(point.x, -point.y));
+    const faces = THREE.ShapeUtils.triangulateShape(contour, []);
+
+    for (const face of faces) {
+      const a = outline[face[0]];
+      const b = outline[face[1]];
+      const c = outline[face[2]];
+      pushTriangle(a, b, c, 'top');
+      pushTriangle(c, b, a, 'bottom');
+    }
+  }
+
+  const outerBoundary = descriptor.outerBoundary || [];
+  for (let index = 0; index < outerBoundary.length; index += 1) {
+    const start = outerBoundary[index];
+    const end = outerBoundary[(index + 1) % outerBoundary.length];
+    pushQuad(start, end);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
 
   const mesh = new THREE.Mesh(geometry, createMeshMaterial(materialPalette, descriptor.materialKey, isSelected));
   mesh.castShadow = true;
@@ -487,6 +559,10 @@ function createRailingObject(descriptor, materialPalette, isSelected) {
 function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
   if (descriptor.geometry === 'prism') {
     return createPrismObject(descriptor, materialPalette, isSelected);
+  }
+
+  if (descriptor.geometry === 'roofMesh') {
+    return createRoofMeshObject(descriptor, materialPalette, isSelected);
   }
 
   if (descriptor.geometry === 'stair') {

@@ -3,6 +3,7 @@ import { sanitizeProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { createFloor } from '@/domain/models';
 import { createAnnotationSettings } from '@/domain/models';
 import { normalizePhases } from '@/domain/phaseModels';
+import { createRoofSystem, syncRoofSystemAttachment } from '@/domain/roofModels';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, sortFloors } from '@/domain/floorModels';
 import { createSheetRevision } from '@/domain/sheetModels';
 
@@ -10,7 +11,7 @@ export function deserializeProject(json) {
   if (!json || !json.version || !json.data) {
     throw new Error('Invalid project data');
   }
-  if (json.version !== 1) {
+  if (json.version !== 1 && json.version !== 2 && json.version !== 3 && json.version !== 4) {
     throw new Error(`Unsupported project version: ${json.version}`);
   }
 
@@ -23,6 +24,9 @@ export function deserializeProject(json) {
 
   if (!Array.isArray(project.sheets)) {
     project.sheets = [];
+  }
+  if (project.roofSystem === undefined) {
+    project.roofSystem = null;
   }
   if (project.address === undefined) project.address = '';
   project.documentDefaults = {
@@ -138,6 +142,7 @@ export function deserializeProject(json) {
       }
       if (stair.startLandingAttachment === undefined) stair.startLandingAttachment = null;
       if (stair.endLandingAttachment === undefined) stair.endLandingAttachment = null;
+      if (stair.roofAccess === undefined) stair.roofAccess = null;
     }
     for (const landing of floor.landings) {
       if (!landing.position) landing.position = { x: 0, y: 0 };
@@ -184,6 +189,74 @@ export function deserializeProject(json) {
     elevation: getFloorElevation(floor, index),
     floorToFloorHeight: getFloorToFloorHeight(floor),
   }));
+
+  if (project.roofSystem) {
+    const roofSystem = {
+      ...createRoofSystem(project.roofSystem.name || 'Roof'),
+      ...project.roofSystem,
+      boundaryPolygon: (project.roofSystem.boundaryPolygon || []).map((point) => ({
+        x: point.x,
+        y: point.y,
+      })),
+      parapets: (project.roofSystem.parapets || []).map((parapet) => ({
+        ...parapet,
+        startPoint: parapet.startPoint ? { x: parapet.startPoint.x, y: parapet.startPoint.y } : { x: 0, y: 0 },
+        endPoint: parapet.endPoint ? { x: parapet.endPoint.x, y: parapet.endPoint.y } : { x: 1000, y: 0 },
+        attachment: parapet.attachment
+          ? {
+              type: parapet.attachment.type ?? 'roof_edge',
+              edgeIndex: Number.isFinite(parapet.attachment.edgeIndex) ? parapet.attachment.edgeIndex : 0,
+              startOffset: Number.isFinite(parapet.attachment.startOffset) ? parapet.attachment.startOffset : 0,
+              endOffset: Number.isFinite(parapet.attachment.endOffset) ? parapet.attachment.endOffset : 0,
+            }
+          : null,
+      })),
+      drains: (project.roofSystem.drains || []).map((drain) => ({
+        ...drain,
+        position: drain.position ? { x: drain.position.x, y: drain.position.y } : { x: 0, y: 0 },
+      })),
+      roofOpenings: (project.roofSystem.roofOpenings || []).map((opening) => ({
+        ...opening,
+        boundaryPoints: (opening.boundaryPoints || []).map((point) => ({
+          x: point.x,
+          y: point.y,
+        })),
+      })),
+      roofPlanes: (project.roofSystem.roofPlanes || []).map((plane) => ({
+        ...plane,
+        boundaryPoints: (plane.boundaryPoints || []).map((point) => ({
+          x: point.x,
+          y: point.y,
+        })),
+      })),
+      roofEdges: (project.roofSystem.roofEdges || []).map((edge) => ({
+        ...edge,
+        startPoint: edge.startPoint ? { x: edge.startPoint.x, y: edge.startPoint.y } : { x: 0, y: 0 },
+        endPoint: edge.endPoint ? { x: edge.endPoint.x, y: edge.endPoint.y } : { x: 1000, y: 0 },
+        planeIds: [...new Set(edge.planeIds || [])],
+      })),
+      ridges: (project.roofSystem.ridges || []).map((ridge) => ({
+        ...ridge,
+        startPoint: ridge.startPoint ? { x: ridge.startPoint.x, y: ridge.startPoint.y } : { x: 0, y: 0 },
+        endPoint: ridge.endPoint ? { x: ridge.endPoint.x, y: ridge.endPoint.y } : { x: 1000, y: 0 },
+        planeIds: [...new Set(ridge.planeIds || [])],
+      })),
+      valleys: (project.roofSystem.valleys || []).map((valley) => ({
+        ...valley,
+        startPoint: valley.startPoint ? { x: valley.startPoint.x, y: valley.startPoint.y } : { x: 0, y: 0 },
+        endPoint: valley.endPoint ? { x: valley.endPoint.x, y: valley.endPoint.y } : { x: 1000, y: 0 },
+        planeIds: [...new Set(valley.planeIds || [])],
+      })),
+      hips: (project.roofSystem.hips || []).map((hip) => ({
+        ...hip,
+        startPoint: hip.startPoint ? { x: hip.startPoint.x, y: hip.startPoint.y } : { x: 0, y: 0 },
+        endPoint: hip.endPoint ? { x: hip.endPoint.x, y: hip.endPoint.y } : { x: 1000, y: 0 },
+        planeIds: [...new Set(hip.planeIds || [])],
+      })),
+    };
+
+    project.roofSystem = syncRoofSystemAttachment(project, roofSystem);
+  }
 
   for (const sheet of project.sheets) {
     if (!sheet.id) {

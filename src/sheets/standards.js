@@ -119,7 +119,7 @@ export function formatDrawingArea(area) {
 }
 
 export function resolveViewportScaleLabel(viewport, source, sheet) {
-  if (source?.kind === '3d_preview') return 'NTS';
+  if (source?.kind === '3d_preview' || source?.kind === 'roof_schedule') return 'NTS';
   if (sheet?.scaleMode === 'as_noted') return 'As noted';
   return `1:${Math.max(1, Math.round(Number(viewport?.scale) || 100))}`;
 }
@@ -128,6 +128,10 @@ export function resolveViewportReferenceNote(viewport, source) {
   const custom = viewport?.referenceNote?.trim();
   if (custom) return custom;
   if (source?.kind === '3d_preview') return 'AXONOMETRIC VIEW';
+  if (source?.kind === 'roof_plan') return 'ROOF PLAN';
+  if (source?.kind === 'roof_drainage') return 'ROOF DRAINAGE PLAN';
+  if (source?.kind === 'roof_section') return 'ROOF SECTION';
+  if (source?.kind === 'roof_schedule') return 'ROOF SCHEDULE';
   if (source?.kind === 'section') return 'BUILDING SECTION';
   if (source?.kind === 'elevation') return 'EXTERIOR ELEVATION';
   return 'CONSTRUCTION VIEW';

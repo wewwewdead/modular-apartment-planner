@@ -5,6 +5,7 @@ import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
+import { createRoofSystemForProject } from '@/domain/roofModels';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
@@ -70,12 +71,21 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
 
 export default function Sidebar() {
   const { project, dispatch, duplicateFloor } = useProject();
-  const { activeFloorId, activeSheetId, selectedId, workspaceMode, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
+  const { activeFloorId, activeSheetId, selectedId, workspaceMode, modelTarget, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
   const orderedFloors = getOrderedFloors(project);
   const orderedPhases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
+  const roofSystem = project.roofSystem || null;
   const [collapsedSections, setCollapsedSections] = useState({
     floors: false,
+    roof: false,
+    roofPlanes: false,
+    ridges: false,
+    valleys: false,
+    hips: false,
+    parapets: false,
+    drains: false,
+    roofOpenings: false,
     sheets: false,
     phases: false,
     slabs: false,
@@ -95,9 +105,14 @@ export default function Sidebar() {
   };
 
   const selectFloor = (floorId) => {
-    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
     editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId });
     editorDispatch({ type: 'SELECT_OBJECT', id: floorId, objectType: 'floor' });
+  };
+
+  const selectRoofObject = (id, type) => {
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
+    editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
   };
 
   const setActiveFloor = (floorId) => {
@@ -199,6 +214,12 @@ export default function Sidebar() {
     }));
   };
 
+  const createRoof = () => {
+    const nextRoofSystem = createRoofSystemForProject(project);
+    dispatch({ type: 'ROOF_CREATE', roofSystem: nextRoofSystem });
+    selectRoofObject(nextRoofSystem.id, 'roofSystem');
+  };
+
   return (
     <div className={styles.sidebar}>
       <Section title="Project" collapsible={false}>
@@ -254,6 +275,37 @@ export default function Sidebar() {
             </div>
           </div>
         ))}
+      </Section>
+
+      <Section
+        title="Roof"
+        count={roofSystem ? 1 : 0}
+        collapsed={collapsedSections.roof}
+        onToggle={() => toggleSection('roof')}
+        action={!roofSystem ? (
+          <button type="button" className={styles.sectionAddBtn} onClick={createRoof} title="Create Roof">+</button>
+        ) : undefined}
+      >
+        {roofSystem ? (
+          <div
+            className={`${styles.floorCard} ${workspaceMode === 'model' && modelTarget === 'roof' ? styles.floorCardActive : ''}`}
+          >
+            <button
+              type="button"
+              className={styles.floorButton}
+              onClick={() => selectRoofObject(roofSystem.id, 'roofSystem')}
+            >
+              <span className={styles.floorName}>{roofSystem.name || 'Roof'}</span>
+              <span className={styles.floorMeta}>
+                {Math.round(roofSystem.baseElevation || 0)} mm · {(roofSystem.roofType || 'flat').toUpperCase()}
+              </span>
+            </button>
+          </div>
+        ) : (
+          <div className={styles.item} onClick={createRoof}>
+            Create roof from top outline
+          </div>
+        )}
       </Section>
 
       <Section
@@ -374,7 +426,136 @@ export default function Sidebar() {
         ))}
       </Section>
 
-      {floor && (
+      {roofSystem && workspaceMode === 'model' && modelTarget === 'roof' && (
+        <>
+          <div className={styles.contextHeader}>Roof: {roofSystem.name || 'Roof'}</div>
+
+          {roofSystem.roofType === 'custom' && (
+            <>
+              <Section
+                title="Roof Planes"
+                count={(roofSystem.roofPlanes || []).length}
+                collapsed={collapsedSections.roofPlanes}
+                onToggle={() => toggleSection('roofPlanes')}
+              >
+                {(roofSystem.roofPlanes || []).map((roofPlane, index) => (
+                  <div
+                    key={roofPlane.id}
+                    className={`${styles.item} ${selectedId === roofPlane.id ? styles.itemSelected : ''}`}
+                    onClick={() => selectRoofObject(roofPlane.id, 'roofPlane')}
+                  >
+                    {roofPlane.name || `Plane ${index + 1}`}
+                  </div>
+                ))}
+              </Section>
+
+              <Section
+                title="Ridges"
+                count={(roofSystem.ridges || []).length}
+                collapsed={collapsedSections.ridges}
+                onToggle={() => toggleSection('ridges')}
+              >
+                {(roofSystem.ridges || []).map((ridge, index) => (
+                  <div
+                    key={ridge.id}
+                    className={`${styles.item} ${selectedId === ridge.id ? styles.itemSelected : ''}`}
+                    onClick={() => selectRoofObject(ridge.id, 'roofEdge')}
+                  >
+                    {ridge.name || `Ridge ${index + 1}`}
+                  </div>
+                ))}
+              </Section>
+
+              <Section
+                title="Valleys"
+                count={(roofSystem.valleys || []).length}
+                collapsed={collapsedSections.valleys}
+                onToggle={() => toggleSection('valleys')}
+              >
+                {(roofSystem.valleys || []).map((valley, index) => (
+                  <div
+                    key={valley.id}
+                    className={`${styles.item} ${selectedId === valley.id ? styles.itemSelected : ''}`}
+                    onClick={() => selectRoofObject(valley.id, 'roofEdge')}
+                  >
+                    {valley.name || `Valley ${index + 1}`}
+                  </div>
+                ))}
+              </Section>
+
+              <Section
+                title="Hips"
+                count={(roofSystem.hips || []).length}
+                collapsed={collapsedSections.hips}
+                onToggle={() => toggleSection('hips')}
+              >
+                {(roofSystem.hips || []).map((hip, index) => (
+                  <div
+                    key={hip.id}
+                    className={`${styles.item} ${selectedId === hip.id ? styles.itemSelected : ''}`}
+                    onClick={() => selectRoofObject(hip.id, 'roofEdge')}
+                  >
+                    {hip.name || `Hip ${index + 1}`}
+                  </div>
+                ))}
+              </Section>
+            </>
+          )}
+
+          <Section
+            title="Parapets"
+            count={(roofSystem.parapets || []).length}
+            collapsed={collapsedSections.parapets}
+            onToggle={() => toggleSection('parapets')}
+          >
+            {(roofSystem.parapets || []).map((parapet, index) => (
+              <div
+                key={parapet.id}
+                className={`${styles.item} ${selectedId === parapet.id ? styles.itemSelected : ''}`}
+                onClick={() => selectRoofObject(parapet.id, 'parapet')}
+              >
+                {parapet.name || `Parapet ${index + 1}`}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Drains"
+            count={(roofSystem.drains || []).length}
+            collapsed={collapsedSections.drains}
+            onToggle={() => toggleSection('drains')}
+          >
+            {(roofSystem.drains || []).map((drain, index) => (
+              <div
+                key={drain.id}
+                className={`${styles.item} ${selectedId === drain.id ? styles.itemSelected : ''}`}
+                onClick={() => selectRoofObject(drain.id, 'drain')}
+              >
+                {drain.name || `Drain ${index + 1}`}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Openings"
+            count={(roofSystem.roofOpenings || []).length}
+            collapsed={collapsedSections.roofOpenings}
+            onToggle={() => toggleSection('roofOpenings')}
+          >
+            {(roofSystem.roofOpenings || []).map((opening, index) => (
+              <div
+                key={opening.id}
+                className={`${styles.item} ${selectedId === opening.id ? styles.itemSelected : ''}`}
+                onClick={() => selectRoofObject(opening.id, 'roofOpening')}
+              >
+                {opening.name || `Opening ${index + 1}`}
+              </div>
+            ))}
+          </Section>
+        </>
+      )}
+
+      {floor && modelTarget === 'floor' && (
         <>
           <div className={styles.contextHeader}>Floor: {floor.name}</div>
 

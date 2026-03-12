@@ -29,6 +29,16 @@ function clearSelectionState(state) {
 
 function editorReducer(state, action) {
   switch (action.type) {
+    case 'SET_MODEL_TARGET':
+      return {
+        ...clearSelectionState(state),
+        workspaceMode: 'model',
+        modelTarget: action.modelTarget,
+        activeTool: TOOLS.SELECT,
+        toolState: {},
+        statusMessage: null,
+      };
+
     case 'SET_TOOL':
       return {
         ...clearSelectionState(state),
@@ -211,6 +221,7 @@ export function createInitialEditorState(activeFloorId = null) {
   const sheetViewport = getInitialSheetViewport();
   return {
     activeTool: TOOLS.SELECT,
+    modelTarget: 'floor',
     selectedId: null,
     selectedType: null,
     toolState: {},

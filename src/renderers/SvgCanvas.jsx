@@ -4,6 +4,7 @@ import { useProject } from '@/app/ProjectProvider';
 import { usePlanClipboardController } from '@/clipboard/usePlanClipboardController';
 import { normalizeRectBounds } from '@/clipboard/planClipboard';
 import { getFloorElevation } from '@/domain/floorModels';
+import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
 import { useEditorTool } from '@/editor/useEditorTool';
@@ -43,6 +44,10 @@ import SectionCutPreview from './SectionCutPreview';
 import RailingRenderer from './RailingRenderer';
 import RailingPreview from './RailingPreview';
 import RegionSelectionOverlay from './RegionSelectionOverlay';
+import RoofRenderer from './RoofRenderer';
+import RoofSectionRenderer from './RoofSectionRenderer';
+import RoofSelectionOverlay from './RoofSelectionOverlay';
+import RoofPreviewLayer from './RoofPreviewLayer';
 import { CenterViewIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import { isTypingTarget } from '@/utils/keyboard';
 import styles from './SvgCanvas.module.css';
@@ -67,11 +72,13 @@ export default function SvgCanvas() {
     activeTool, selectedId, selectedType, toolState,
     viewport, showGrid, snapEnabled, activeFloorId, statusMessage, viewMode, activeSectionCutId,
     regionSelection, pastePreview, maximizedPanel,
+    modelTarget,
     activePhaseId, phaseViewMode,
     dispatch: editorDispatch,
   } = editor;
 
   const floor = getFloor(activeFloorId);
+  const roofSystem = project.roofSystem || null;
   const filteredFloor = usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode);
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
@@ -94,6 +101,8 @@ export default function SvgCanvas() {
     project,
     getFloor,
     activeFloorId,
+    roofSystem,
+    modelTarget,
     viewport,
     snapEnabled,
     selectedId,
@@ -118,12 +127,12 @@ export default function SvgCanvas() {
     }
 
     const modelPos = getModelPos(e);
-    if (pastePreview?.active && e.button === 0) {
+    if (modelTarget === 'floor' && pastePreview?.active && e.button === 0) {
       placePaste(modelPos);
       return;
     }
     tool.onMouseDown(modelPos, e);
-  }, [getModelPos, pastePreview, placePaste, tool]);
+  }, [getModelPos, modelTarget, pastePreview, placePaste, tool]);
 
   const handleMouseMove = useCallback((e) => {
     if (isPanning.current) {
@@ -137,28 +146,28 @@ export default function SvgCanvas() {
     const modelPos = getModelPos(e);
     cursorPosRef.current = modelPos;
     setCursorPos(modelPos);
-    if (pastePreview?.active) {
+    if (modelTarget === 'floor' && pastePreview?.active) {
       updatePastePreview(modelPos);
       return;
     }
     tool.onMouseMove(modelPos, e);
-  }, [getModelPos, pastePreview, tool, updatePastePreview, editorDispatch]);
+  }, [getModelPos, modelTarget, pastePreview, tool, updatePastePreview, editorDispatch]);
 
   const handleMouseUp = useCallback((e) => {
     if (isPanning.current) {
       isPanning.current = false;
       return;
     }
-    if (pastePreview?.active) return;
+    if (modelTarget === 'floor' && pastePreview?.active) return;
     const modelPos = getModelPos(e);
     tool.onMouseUp(modelPos, e);
-  }, [getModelPos, pastePreview, tool]);
+  }, [getModelPos, modelTarget, pastePreview, tool]);
 
   const handleDoubleClick = useCallback((e) => {
-    if (pastePreview?.active) return;
+    if (modelTarget === 'floor' && pastePreview?.active) return;
     const modelPos = getModelPos(e);
     tool.onDoubleClick(modelPos, e);
-  }, [getModelPos, pastePreview, tool]);
+  }, [getModelPos, modelTarget, pastePreview, tool]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -210,7 +219,7 @@ export default function SvgCanvas() {
         e.preventDefault();
       }
 
-      if ((e.ctrlKey || e.metaKey) && viewMode === 'plan') {
+      if ((e.ctrlKey || e.metaKey) && viewMode === 'plan' && modelTarget === 'floor') {
         const key = e.key.toLowerCase();
         if (key === 'c') {
           e.preventDefault();
@@ -229,7 +238,7 @@ export default function SvgCanvas() {
         }
       }
 
-      if (e.key === 'Escape' && pastePreview?.active) {
+      if (e.key === 'Escape' && modelTarget === 'floor' && pastePreview?.active) {
         e.preventDefault();
         cancelPaste();
         return;
@@ -237,50 +246,67 @@ export default function SvgCanvas() {
 
       // Tool shortcuts
       if (viewMode === 'plan' && !e.ctrlKey && !e.metaKey) {
-        switch (e.key.toLowerCase()) {
-          case 'v':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
-            return;
-          case 'm':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.DIMENSION });
-            return;
-          case 'w':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.WALL });
-            return;
-          case 'b':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.BEAM });
-            return;
-          case 't':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.STAIR });
-            return;
-          case 'q':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SECTION });
-            return;
-          case 's':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SLAB });
-            return;
-          case 'r':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOM });
-            return;
-          case 'd':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.DOOR });
-            return;
-          case 'n':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.WINDOW });
-            return;
-          case 'c':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.COLUMN });
-            return;
-          case 'l':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.LANDING });
-            return;
-          case 'h':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.RAILING });
-            return;
-          case 'f':
-            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
-            editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
-            return;
+        if (modelTarget === 'roof') {
+          switch (e.key.toLowerCase()) {
+            case 'v':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
+              return;
+            case 'p':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOF_PARAPET });
+              return;
+            case 'g':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOF_DRAIN });
+              return;
+            case 'o':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOF_OPENING });
+              return;
+          }
+        } else {
+          switch (e.key.toLowerCase()) {
+            case 'v':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
+              return;
+            case 'm':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.DIMENSION });
+              return;
+            case 'w':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.WALL });
+              return;
+            case 'b':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.BEAM });
+              return;
+            case 't':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.STAIR });
+              return;
+            case 'q':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SECTION });
+              return;
+            case 's':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SLAB });
+              return;
+            case 'r':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOM });
+              return;
+            case 'd':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.DOOR });
+              return;
+            case 'n':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.WINDOW });
+              return;
+            case 'c':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.COLUMN });
+              return;
+            case 'l':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.LANDING });
+              return;
+            case 'h':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.RAILING });
+              return;
+            case 'f':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
+              editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
+              return;
+          }
         }
       }
 
@@ -301,7 +327,7 @@ export default function SvgCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [beginPaste, cancelPaste, copySelection, cutSelection, pastePreview?.active, tool, editorDispatch, viewMode]);
+  }, [beginPaste, cancelPaste, copySelection, cutSelection, modelTarget, pastePreview?.active, tool, editorDispatch, viewMode]);
 
   // Prevent default context menu on SVG
   useEffect(() => {
@@ -316,7 +342,7 @@ export default function SvgCanvas() {
     };
   }, [handleWheel]);
 
-  const cursor = spaceHeld.current ? 'grab' : pastePreview?.active ? 'copy' : tool.getCursor();
+  const cursor = spaceHeld.current ? 'grab' : (modelTarget === 'floor' && pastePreview?.active) ? 'copy' : tool.getCursor();
   const zoomPercent = Math.round(viewport.zoom * 1000);
   const displayedTool = viewMode.startsWith('elevation_') ? 'select' : activeTool;
   const isCanvasMaximized = maximizedPanel === 'canvas';
@@ -324,9 +350,10 @@ export default function SvgCanvas() {
     ? normalizeRectBounds(toolState.startPos, toolState.currentPos)
     : null;
   const selectionCount = regionSelection?.objectCount || 0;
-  const liveWallBearing = activeTool === TOOLS.WALL && toolState.start && toolState.preview
+  const liveWallBearing = modelTarget === 'floor' && activeTool === TOOLS.WALL && toolState.start && toolState.preview
     ? formatSurveyorBearing(pointsToSurveyorBearing(toolState.start, toolState.preview))
     : null;
+  const hasRoofSectionCut = Boolean(resolveRoofSectionCut(project, activeFloorId, activeSectionCutId).sectionCut);
 
   return (
     <div className={styles.canvasContainer}>
@@ -350,7 +377,58 @@ export default function SvgCanvas() {
               style={{ pointerEvents: 'none' }}
             />
           )}
-          {floor && (
+          {modelTarget === 'roof' ? (
+            roofSystem ? (
+              <>
+                {viewMode === 'plan' ? (
+                  <>
+                    <RoofRenderer roofSystem={roofSystem} selectedId={selectedId} selectedType={selectedType} />
+                    <RoofSelectionOverlay
+                      roofSystem={roofSystem}
+                      selectedId={selectedId}
+                      selectedType={selectedType}
+                      zoom={viewport.zoom}
+                    />
+                    <RoofPreviewLayer activeTool={activeTool} toolState={toolState} roofSystem={roofSystem} />
+                  </>
+                ) : viewMode === 'section_view' ? (
+                  <RoofSectionRenderer
+                    project={project}
+                    preferredFloorId={activeFloorId}
+                    activeSectionCutId={activeSectionCutId}
+                  />
+                ) : (
+                  <g className="roof-empty-view">
+                    <text
+                      x={0}
+                      y={0}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="var(--color-text-secondary)"
+                      fontSize={180}
+                      fontFamily="var(--font-blueprint)"
+                    >
+                      Roof mode supports plan and section views in v1.
+                    </text>
+                  </g>
+                )}
+              </>
+            ) : (
+              <g className="roof-empty-view">
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="var(--color-text-secondary)"
+                  fontSize={180}
+                  fontFamily="var(--font-blueprint)"
+                >
+                  Create a roof to edit roof geometry.
+                </text>
+              </g>
+            )
+          ) : floor && (
             viewMode === 'plan' ? (
               <>
                 <FixtureDefs />
@@ -451,13 +529,15 @@ export default function SvgCanvas() {
         <span>Y: {Math.round(cursorPos.y)} mm</span>
         <span>Zoom: {zoomPercent}%</span>
         <span>View: {viewMode}</span>
+        <span>Mode: {modelTarget}</span>
         <span>Tool: {displayedTool}</span>
         {activePhaseId && (
           <span>Phase: {(project.phases || []).find(p => p.id === activePhaseId)?.name || 'Unknown'} ({phaseViewMode})</span>
         )}
         {liveWallBearing && <span>Bearing: {liveWallBearing}</span>}
         {selectionCount > 0 && <span>Selection: {selectionCount} objects</span>}
-        {pastePreview?.active && <span>Paste: click to place</span>}
+        {modelTarget === 'roof' && viewMode === 'section_view' && !hasRoofSectionCut && <span>Section: add a floor section cut</span>}
+        {modelTarget === 'floor' && pastePreview?.active && <span>Paste: click to place</span>}
         {statusMessage && <span className={styles.statusMessage}>{statusMessage}</span>}
       </div>
     </div>

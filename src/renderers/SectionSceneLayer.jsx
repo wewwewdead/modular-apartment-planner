@@ -88,6 +88,10 @@ function stairPolylinePoints(element) {
   return element.points.map((point) => `${point.x},${-point.z}`).join(' ');
 }
 
+function scenePolygonPoints(element) {
+  return element.points.map((point) => `${point.x},${-point.z}`).join(' ');
+}
+
 export default function SectionSceneLayer({ scene, showTitle = true }) {
   if (!scene) return null;
 
@@ -116,6 +120,20 @@ export default function SectionSceneLayer({ scene, showTitle = true }) {
           <polygon
             key={element.id}
             points={rectPoints(element)}
+            fill={style.fill}
+            stroke={style.stroke}
+            strokeWidth={style.strokeWidth}
+            vectorEffect="non-scaling-stroke"
+            opacity={style.opacity}
+          />
+        );
+      })}
+      {(scene.polygonElements || []).map((element) => {
+        const style = SECTION_STYLE_MAP[`${element.category}_${element.renderMode}`] || SECTION_STYLE_MAP.slab_projection;
+        return (
+          <polygon
+            key={element.id}
+            points={scenePolygonPoints(element)}
             fill={style.fill}
             stroke={style.stroke}
             strokeWidth={style.strokeWidth}

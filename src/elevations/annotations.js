@@ -14,6 +14,10 @@ function toElevationPoint(x, z) {
   return { x, y: -z };
 }
 
+function sceneHasGeometry(scene) {
+  return Boolean(scene?.elements?.length || scene?.polygonElements?.length);
+}
+
 function uniqueSortedValues(values = []) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted.filter((value, index) => (
@@ -35,7 +39,7 @@ function createVerticalDimension(id, x, startZ, endZ, offset, sourceType, source
 }
 
 function buildOverallDimensions(scene) {
-  if (!scene?.elements?.length) return [];
+  if (!sceneHasGeometry(scene)) return [];
 
   const overallWidth = createDimensionFigure({
     id: `${scene.viewKey}-overall-width`,
@@ -61,7 +65,7 @@ function buildOverallDimensions(scene) {
 }
 
 function buildLevelDimensions(scene) {
-  if (!scene?.elements?.length) return [];
+  if (!sceneHasGeometry(scene)) return [];
 
   const levelValues = [];
   for (const element of scene.elements) {

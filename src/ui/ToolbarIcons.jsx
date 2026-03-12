@@ -93,6 +93,22 @@ export function RailingIcon(props) {
   return <I {...props}><line x1="3" y1="10" x2="17" y2="10" {...p} /><circle cx="3" cy="10" r="1.5" {...p} /><circle cx="17" cy="10" r="1.5" {...p} /><line x1="6" y1="7" x2="6" y2="13" {...p} /><line x1="10" y1="7" x2="10" y2="13" {...p} /><line x1="14" y1="7" x2="14" y2="13" {...p} /></I>;
 }
 
+export function RoofIcon(props) {
+  return <I {...props}><path d="M3 11h14" {...p} /><path d="M5 11V7h10v4" {...p} /><path d="M4 7l6-4 6 4" {...p} /></I>;
+}
+
+export function ParapetIcon(props) {
+  return <I {...props}><path d="M4 13h12" {...p} /><path d="M4 13V7h2v3h8V7h2v6" {...p} /></I>;
+}
+
+export function DrainIcon(props) {
+  return <I {...props}><circle cx="10" cy="9" r="4" {...p} /><path d="M10 13v4" {...p} /><path d="M8 15l2 2 2-2" {...p} /></I>;
+}
+
+export function OpeningIcon(props) {
+  return <I {...props}><rect x="4" y="4" width="12" height="12" rx="1" {...p} /><path d="M7 7h6v6H7z" {...p} strokeDasharray="2 2" /></I>;
+}
+
 export function GridIcon(props) {
   return <I {...props}><rect x="3" y="3" width="14" height="14" rx="1" {...p} /><path d="M3 7.67h14M3 12.33h14M7.67 3v14M12.33 3v14" {...p} /></I>;
 }

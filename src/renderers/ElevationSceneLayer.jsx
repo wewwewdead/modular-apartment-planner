@@ -9,6 +9,7 @@ const STYLE_MAP = {
   stair: { fill: '#fbfcfd', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
   door: { fill: '#ffffff', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
   window: { fill: '#ffffff', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
+  roofOpening: { fill: '#ffffff', stroke: DRAWING_GRAPHICS.elevation.lineStroke, strokeWidth: DRAWING_GRAPHICS.elevation.lineStrokeWidth },
 };
 
 function rectPoints(element) {
@@ -20,11 +21,19 @@ function rectPoints(element) {
   ].join(' ');
 }
 
+function polygonPoints(element) {
+  return (element.points || []).map((point) => `${point.x},${-point.z}`).join(' ');
+}
+
 export default function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selectedId = null, selectedType = null }) {
   if (!scene) return null;
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
   const titleY = -scene.bounds.maxZ - 500;
+  const drawables = [
+    ...scene.elements.map((element) => ({ shape: 'rect', ...element })),
+    ...(scene.polygonElements || []).map((element) => ({ shape: 'polygon', ...element })),
+  ].sort((a, b) => b.depth - a.depth);
 
   return (
     <g className="elevation">
@@ -42,19 +51,30 @@ export default function ElevationSceneLayer({ scene, annotationScene, showTitle 
           {scene.title}
         </text>
       )}
-      {scene.elements.map((element) => {
+      {drawables.map((element) => {
         const style = STYLE_MAP[element.style] || STYLE_MAP.wall;
         const isSelected = element.category === selectedType && element.sourceId === selectedId;
-        return (
-          <polygon
-            key={element.id}
-            points={rectPoints(element)}
-            fill={style.fill}
-            stroke={isSelected ? 'var(--color-selection)' : style.stroke}
-            strokeWidth={isSelected ? 1.5 : style.strokeWidth}
-            vectorEffect="non-scaling-stroke"
-          />
-        );
+        return element.shape === 'rect'
+          ? (
+            <polygon
+              key={element.id}
+              points={rectPoints(element)}
+              fill={style.fill}
+              stroke={isSelected ? 'var(--color-selection)' : style.stroke}
+              strokeWidth={isSelected ? 1.5 : style.strokeWidth}
+              vectorEffect="non-scaling-stroke"
+            />
+          )
+          : (
+            <polygon
+              key={element.id}
+              points={polygonPoints(element)}
+              fill={style.fill}
+              stroke={isSelected ? 'var(--color-selection)' : style.stroke}
+              strokeWidth={isSelected ? 1.5 : style.strokeWidth}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
       })}
       <line
         x1={scene.bounds.minX - 500}

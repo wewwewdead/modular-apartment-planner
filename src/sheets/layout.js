@@ -15,6 +15,10 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function sourceFitsFrame(source) {
+  return source?.kind === '3d_preview' || source?.kind === 'roof_schedule';
+}
+
 function resolveViewportScale(viewport) {
   return Math.max(1, Number(viewport?.scale) || 100);
 }
@@ -85,7 +89,7 @@ function buildContentTransform(viewport, source, contentRect) {
   const bounds = source.bounds || { minX: 0, maxX: 1000, minY: 0, maxY: 1000 };
   const sourceWidth = Math.max(1, bounds.maxX - bounds.minX);
   const sourceHeight = Math.max(1, bounds.maxY - bounds.minY);
-  const scale = source.kind === '3d_preview'
+  const scale = sourceFitsFrame(source)
     ? Math.min(contentRect.width / sourceWidth, contentRect.height / sourceHeight)
     : (1 / resolveViewportScale(viewport));
 
@@ -458,20 +462,24 @@ export function getDefaultViewportRect(sheet, source, scale = 100, options = {})
   const sourceWidth = Math.max(1000, bounds.maxX - bounds.minX);
   const sourceHeight = Math.max(1000, bounds.maxY - bounds.minY);
   const role = options.role || (source.kind === '3d_preview' ? 'supplemental' : 'primary');
-  const baseScale = source.kind === '3d_preview' ? 1 : Math.max(1, scale);
+  const baseScale = sourceFitsFrame(source) ? 1 : Math.max(1, scale);
   const width = clamp(
     source.kind === '3d_preview'
       ? zones.contentArea.width * 0.72
+      : source.kind === 'roof_schedule'
+        ? zones.contentArea.width * 0.58
       : (sourceWidth / baseScale) + SHEET_TOKENS.viewportPadding * 2,
     role === 'primary' ? 120 : 84,
-    role === 'primary' ? zones.contentArea.width * 0.72 : zones.contentArea.width * 0.44
+    role === 'primary' ? zones.contentArea.width * 0.72 : (source.kind === 'roof_schedule' ? zones.contentArea.width * 0.58 : zones.contentArea.width * 0.44)
   );
   const height = clamp(
     source.kind === '3d_preview'
       ? zones.contentArea.height * 0.54
+      : source.kind === 'roof_schedule'
+        ? zones.contentArea.height * 0.48
       : (sourceHeight / baseScale) + SHEET_TOKENS.viewportPadding * 2,
     role === 'primary' ? 96 : 72,
-    role === 'primary' ? zones.contentArea.height * 0.78 : zones.contentArea.height * 0.42
+    role === 'primary' ? zones.contentArea.height * 0.78 : (source.kind === 'roof_schedule' ? zones.contentArea.height * 0.56 : zones.contentArea.height * 0.42)
   );
 
   return snapRectToGrid({

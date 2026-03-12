@@ -15,9 +15,10 @@ export function createProject(name = 'Untitled Project') {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     floors: [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })],
+    roofSystem: null,
     sheets: [],
     phases: [],
-    version: 1,
+    version: 4,
   };
 }
 
@@ -178,6 +179,7 @@ export function createStair(startPoint, width = STAIR_WIDTH, numberOfRisers = ST
     },
     startLandingAttachment: options.startLandingAttachment ?? null,
     endLandingAttachment: options.endLandingAttachment ?? null,
+    roofAccess: options.roofAccess ?? null,
   };
 }
 

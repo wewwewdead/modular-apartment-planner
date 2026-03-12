@@ -8,6 +8,9 @@ import FixtureRenderer from './FixtureRenderer';
 import ElevationSceneLayer from './ElevationSceneLayer';
 import LandingRenderer from './LandingRenderer';
 import RoomRenderer from './RoomRenderer';
+import RoofRenderer from './RoofRenderer';
+import RoofDrainageRenderer from './RoofDrainageRenderer';
+import RoofScheduleRenderer from './RoofScheduleRenderer';
 import SectionCutRenderer from './SectionCutRenderer';
 import SectionSceneLayer from './SectionSceneLayer';
 import SlabRenderer from './SlabRenderer';
@@ -165,11 +168,23 @@ export default function SheetViewportContent({ source }) {
     return <PlanViewportContent floor={source.floor} />;
   }
 
+  if (source.kind === 'roof_plan') {
+    return <RoofRenderer roofSystem={source.roofSystem} interactive={false} />;
+  }
+
+  if (source.kind === 'roof_drainage') {
+    return <RoofDrainageRenderer roofSystem={source.roofSystem} interactive={false} />;
+  }
+
+  if (source.kind === 'roof_schedule') {
+    return <RoofScheduleRenderer schedule={source.schedule} showTitle={false} />;
+  }
+
   if (source.kind === '3d_preview') {
     return <ThreePreviewViewportContent source={source} />;
   }
 
-  if (source.kind === 'section') {
+  if (source.kind === 'section' || source.kind === 'roof_section') {
     return <SectionSceneLayer scene={source.scene} showTitle={false} />;
   }
 

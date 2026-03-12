@@ -2,8 +2,10 @@ import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjec
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
+import { buildRoofSectionElements } from '@/geometry/roofSectionGeometry';
 import { segmentIntersection } from '@/geometry/line';
 import { pointInPolygon } from '@/geometry/polygon';
+import { buildStairRoofAccessSectionElement } from '@/geometry/roofAccessGeometry';
 import { projectPointToSectionCut, sectionCutLength } from '@/geometry/sectionCutGeometry';
 import { getStairRenderData, stairTotalRise } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
@@ -271,13 +273,15 @@ function buildStairElements(floor, sectionCut, landingElevationMap) {
     .filter(Boolean);
 }
 
-function computeSceneBounds(rects, stairs, sectionCut, baseLevel) {
+function computeSceneBounds(rects, stairs, sectionCut, baseLevel, polygons = []) {
   const stairXs = stairs.flatMap((element) => element.points.map((point) => point.x));
   const stairZs = stairs.flatMap((element) => element.points.map((point) => point.z));
   const rectXs = rects.flatMap((element) => [element.left, element.right]);
   const rectZs = rects.flatMap((element) => [element.bottom, element.top]);
-  const xs = [...rectXs, ...stairXs];
-  const zs = [...rectZs, ...stairZs];
+  const polygonXs = polygons.flatMap((element) => element.points.map((point) => point.x));
+  const polygonZs = polygons.flatMap((element) => element.points.map((point) => point.z));
+  const xs = [...rectXs, ...stairXs, ...polygonXs];
+  const zs = [...rectZs, ...stairZs, ...polygonZs];
 
   if (!xs.length || !zs.length) {
     return {
@@ -301,7 +305,7 @@ function resolveLandingElevation(landing, stairs, floorLevel) {
   return computeLandingElevation(landing, stairs, floorLevel) - floorLevel;
 }
 
-function buildFloorSectionElements(floor, sectionCut) {
+function buildFloorSectionElements(floor, sectionCut, roofSystem = null) {
   const floorElevation = getFloorElevation(floor);
   const landings = floor.landings || [];
   const stairs = floor.stairs || [];
@@ -319,24 +323,52 @@ function buildFloorSectionElements(floor, sectionCut) {
       ...buildDoorElements(floor, sectionCut),
       ...buildWindowElements(floor, sectionCut),
     ],
-    stairElements: buildStairElements(floor, sectionCut, landingElevationMap),
+    polygonElements: [],
+    stairElements: [
+      ...buildStairElements(floor, sectionCut, landingElevationMap),
+      ...(roofSystem
+        ? stairs
+          .map((stair) => buildStairRoofAccessSectionElement({
+            stair,
+            floor,
+            roofSystem,
+            sectionCut,
+            landingElevationMap,
+          }))
+          .filter(Boolean)
+        : []),
+    ],
   };
 }
 
-function buildSectionSceneFromFloors(floors, sectionCut, title = null) {
+function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSystem = null) {
   if (!sectionCut) return null;
 
   const stackBounds = getFloorStackBounds(floors);
   const rectElements = [];
+  const polygonElements = [];
   const stairElements = [];
 
   for (const floor of floors) {
-    const floorElements = buildFloorSectionElements(floor, sectionCut);
+    const floorElements = buildFloorSectionElements(floor, sectionCut, roofSystem);
     rectElements.push(...floorElements.rectElements);
+    polygonElements.push(...(floorElements.polygonElements || []));
     stairElements.push(...floorElements.stairElements);
   }
 
+  if (roofSystem) {
+    const roofElements = buildRoofSectionElements(roofSystem, sectionCut);
+    rectElements.push(...roofElements.rectElements);
+    polygonElements.push(...(roofElements.polygonElements || []));
+    stairElements.push(...roofElements.stairElements);
+  }
+
   const sortedRectElements = rectElements.sort((a, b) => {
+    if (a.renderMode !== b.renderMode) return a.renderMode === 'projection' ? -1 : 1;
+    return b.depth - a.depth;
+  });
+
+  const sortedPolygonElements = polygonElements.sort((a, b) => {
     if (a.renderMode !== b.renderMode) return a.renderMode === 'projection' ? -1 : 1;
     return b.depth - a.depth;
   });
@@ -350,8 +382,9 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null) {
     viewKey: 'section_view',
     title: title || sectionCut.label || 'Section',
     rectElements: sortedRectElements,
+    polygonElements: sortedPolygonElements,
     stairElements: sortedStairElements,
-    bounds: computeSceneBounds(sortedRectElements, sortedStairElements, sectionCut, stackBounds.minElevation),
+    bounds: computeSceneBounds(sortedRectElements, sortedStairElements, sectionCut, stackBounds.minElevation, sortedPolygonElements),
     groundLevel: stackBounds.minElevation,
   };
 }
@@ -374,6 +407,7 @@ export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = 
   return buildSectionSceneFromFloors(
     getOrderedFloors(project),
     sectionCut,
-    sectionCut.label || 'Section'
+    sectionCut.label || 'Section',
+    project.roofSystem || null
   );
 }

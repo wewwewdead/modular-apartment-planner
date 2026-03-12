@@ -14,6 +14,32 @@ export function createMaterialPalette() {
       metalness: 0.02,
       side: THREE.DoubleSide,
     }),
+    roof: new THREE.MeshStandardMaterial({
+      color: 0xd9dde2,
+      roughness: 0.86,
+      metalness: 0.03,
+      side: THREE.DoubleSide,
+    }),
+    parapet: new THREE.MeshStandardMaterial({
+      color: 0xc4ccd4,
+      roughness: 0.82,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    }),
+    drain: new THREE.MeshStandardMaterial({
+      color: 0x6d7a87,
+      roughness: 0.42,
+      metalness: 0.28,
+      side: THREE.DoubleSide,
+    }),
+    roofOpening: new THREE.MeshStandardMaterial({
+      color: 0x8dc8ef,
+      roughness: 0.18,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.18,
+      side: THREE.DoubleSide,
+    }),
     column: new THREE.MeshStandardMaterial({
       color: 0x95a3b0,
       roughness: 0.8,

@@ -33,6 +33,16 @@ export const STAIR_TREAD_DEPTH = 280;  // mm
 export const SLAB_THICKNESS = 200; // mm
 export const SLAB_ELEVATION = 0;   // mm
 export const SECTION_DEPTH = 2000; // mm
+export const ROOF_SLAB_THICKNESS = 180; // mm
+export const ROOF_FINISH_SLOPE = 1.5; // percent
+export const ROOF_PITCH_SLOPE = 25; // percent
+export const ROOF_OVERHANG = 450; // mm
+export const ROOF_RIDGE_OFFSET = 0; // mm
+export const ROOF_PITCH_DIRECTION = { x: 0, y: 1 };
+export const ROOF_PARAPET_HEIGHT = 1100; // mm
+export const ROOF_PARAPET_THICKNESS = 180; // mm
+export const ROOF_DRAIN_DIAMETER = 120; // mm
+export const ROOF_OPENING_CURB_HEIGHT = 0; // mm
 
 export const LANDING_WIDTH = 1000;  // mm
 export const LANDING_DEPTH = 1000;  // mm

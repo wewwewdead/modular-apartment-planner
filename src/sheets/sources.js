@@ -1,6 +1,7 @@
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
 import { buildProjectElevationScene } from '@/elevations/scene';
 import { getDefaultActiveFloorId, resolveProjectFloor } from '@/domain/floorModels';
+import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterFloorByPhase, filterProjectByPhase } from '@/domain/phaseFilter';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
@@ -11,6 +12,9 @@ import { getStairRenderData } from '@/geometry/stairGeometry';
 import { fixtureOutline } from '@/geometry/fixtureGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
+import { buildRoofPlanBounds } from '@/geometry/roofPlanGeometry';
+import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
+import { buildRoofScheduleLayout } from '@/roof/roofScheduleLayout';
 import { buildProjectSectionScene } from '@/sections/scene';
 
 const PLAN_PADDING = 1500;
@@ -199,6 +203,99 @@ function build3DPreviewSource(project, floor) {
   };
 }
 
+function buildRoofPlanSource(project) {
+  const roofSystem = project?.roofSystem || null;
+  if (!roofSystem) {
+    return {
+      kind: 'empty',
+      title: 'Roof Plan',
+      message: 'No roof system in this project.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+    };
+  }
+
+  return {
+    kind: 'roof_plan',
+    title: roofSystem.name ? `${roofSystem.name} Plan` : 'Roof Plan',
+    roofSystem,
+    bounds: buildRoofPlanBounds(roofSystem),
+  };
+}
+
+function buildRoofDrainageSource(project) {
+  const roofSystem = project?.roofSystem || null;
+  if (!roofSystem) {
+    return {
+      kind: 'empty',
+      title: 'Roof Drainage',
+      message: 'No roof system in this project.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+    };
+  }
+
+  return {
+    kind: 'roof_drainage',
+    title: roofSystem.name ? `${roofSystem.name} Drainage` : 'Roof Drainage',
+    roofSystem,
+    bounds: buildRoofPlanBounds(roofSystem),
+  };
+}
+
+function buildRoofSectionSource(project, sourceFloorId, sourceRefId) {
+  const roofSystem = project?.roofSystem || null;
+  if (!roofSystem) {
+    return {
+      kind: 'empty',
+      title: 'Roof Section',
+      message: 'No roof system in this project.',
+      bounds: { minX: 0, maxX: 2000, minY: -3000, maxY: 1000 },
+    };
+  }
+
+  const { floor, sectionCut } = resolveRoofSectionCut(project, sourceFloorId, sourceRefId);
+  if (!floor || !sectionCut) {
+    return {
+      kind: 'empty',
+      title: 'Roof Section',
+      message: 'No section cut is available for the roof.',
+      bounds: { minX: 0, maxX: 2000, minY: -3000, maxY: 1000 },
+    };
+  }
+
+  const scene = buildProjectSectionScene(project, floor.id, sectionCut.id);
+  return {
+    kind: 'roof_section',
+    title: `Roof ${sectionCut.label || 'Section'}`,
+    roofSystem,
+    sourceFloor: floor,
+    scene,
+    bounds: sceneBoundsToRenderBounds(scene),
+  };
+}
+
+function buildRoofScheduleSource(project) {
+  const roofSystem = project?.roofSystem || null;
+  if (!roofSystem) {
+    return {
+      kind: 'empty',
+      title: 'Roof Schedule',
+      message: 'No roof system in this project.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1400 },
+    };
+  }
+
+  const schedule = buildRoofScheduleSummary(roofSystem);
+  const layout = buildRoofScheduleLayout(schedule, { showTitle: false });
+
+  return {
+    kind: 'roof_schedule',
+    title: schedule.title,
+    roofSystem,
+    schedule,
+    bounds: layout.bounds,
+  };
+}
+
 export function resolveSheetViewportSource(project, viewport, phaseContext) {
   const defaultFloorId = getDefaultActiveFloorId(project, viewport.sourceFloorId);
   let effectiveProject = project;
@@ -210,6 +307,14 @@ export function resolveSheetViewportSource(project, viewport, phaseContext) {
   }
 
   switch (viewport.sourceView) {
+    case 'roof_plan':
+      return buildRoofPlanSource(effectiveProject);
+    case 'roof_drainage':
+      return buildRoofDrainageSource(effectiveProject);
+    case 'roof_section':
+      return buildRoofSectionSource(effectiveProject, defaultFloorId, viewport.sourceRefId);
+    case 'roof_schedule':
+      return buildRoofScheduleSource(effectiveProject);
     case '3d_preview':
       return build3DPreviewSource(effectiveProject, floor);
     case 'section':
@@ -227,6 +332,14 @@ export function resolveSheetViewportSource(project, viewport, phaseContext) {
 
 export function getViewportSourceLabel(sourceView) {
   switch (sourceView) {
+    case 'roof_plan':
+      return 'Roof Plan';
+    case 'roof_drainage':
+      return 'Roof Drainage';
+    case 'roof_section':
+      return 'Roof Section';
+    case 'roof_schedule':
+      return 'Roof Schedule';
     case '3d_preview':
       return 'Axonometric View';
     case 'section':

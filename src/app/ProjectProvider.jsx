@@ -3,6 +3,7 @@ import { createProject } from '@/domain/models';
 import { clearProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { createDuplicatedFloor, getDefaultFloorName, getFloorElevation, getFloorLevelIndex, shiftFloorAbsoluteElements, shiftFloorElevationData, sortFloors } from '@/domain/floorModels';
 import { sortPhases } from '@/domain/phaseModels';
+import { getRoofAttachmentElevation, syncProjectRoofSystem } from '@/domain/roofModels';
 import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
 import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
@@ -15,7 +16,8 @@ function snapshotProject(project) {
 }
 
 function applyProjectUpdate(state, nextProject, recordHistory = true) {
-  const nextSnapshot = snapshotProject(nextProject);
+  const syncedProject = syncProjectRoofSystem(nextProject);
+  const nextSnapshot = snapshotProject(syncedProject);
   const history = recordHistory
     ? [...state.history, state.project].slice(-HISTORY_LIMIT)
     : state.history;
@@ -24,7 +26,7 @@ function applyProjectUpdate(state, nextProject, recordHistory = true) {
     ...state,
     history,
     future: recordHistory ? [] : state.future,
-    project: nextProject,
+    project: syncedProject,
     isDirty: nextSnapshot !== state.savedSnapshot,
   };
 }
@@ -81,6 +83,33 @@ function replaceDeletedFloorReferences(project, deletedFloorId, fallbackFloorId)
   };
 }
 
+function clearStairRoofAccessReferences(project, roofOpeningId = null) {
+  return {
+    ...project,
+    floors: (project.floors || []).map((floor) => ({
+      ...floor,
+      stairs: (floor.stairs || []).map((stair) => {
+        const currentRoofOpeningId = stair.roofAccess?.roofOpeningId || null;
+        if (!currentRoofOpeningId) return stair;
+        if (roofOpeningId && currentRoofOpeningId !== roofOpeningId) return stair;
+        return {
+          ...stair,
+          roofAccess: null,
+        };
+      }),
+    })),
+  };
+}
+
+function updateRoofSystem(state, updater, recordHistory = true) {
+  const nextRoofSystem = updater(state.project.roofSystem);
+  return applyProjectUpdate(state, {
+    ...state.project,
+    updatedAt: new Date().toISOString(),
+    roofSystem: nextRoofSystem,
+  }, recordHistory);
+}
+
 function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
   const nextWall = { ...existingWall, ...wallUpdate };
 
@@ -106,10 +135,10 @@ function clampWallMountedOpenings(openings, wallId, nextWallLength) {
 function projectReducer(state, action) {
   switch (action.type) {
     case 'PROJECT_NEW': {
-      const newProject = {
+      const newProject = syncProjectRoofSystem({
         ...action.project,
         floors: sortFloors(action.project.floors || []),
-      };
+      });
       return {
         project: newProject,
         isDirty: false,
@@ -121,10 +150,10 @@ function projectReducer(state, action) {
     }
 
     case 'PROJECT_LOAD': {
-      const loadedProject = {
+      const loadedProject = syncProjectRoofSystem({
         ...action.project,
         floors: sortFloors(action.project.floors || []),
-      };
+      });
       return {
         project: loadedProject,
         isDirty: false,
@@ -148,6 +177,190 @@ function projectReducer(state, action) {
         ...action.updates,
         updatedAt: new Date().toISOString(),
       });
+
+    case 'ROOF_CREATE':
+      return updateRoofSystem(state, () => action.roofSystem);
+
+    case 'ROOF_UPDATE':
+      return updateRoofSystem(state, (roofSystem) => {
+        if (!roofSystem || roofSystem.id !== action.roofSystem.id) return roofSystem;
+
+        const mergedRoofSystem = {
+          ...roofSystem,
+          ...action.roofSystem,
+        };
+
+        if ('baseElevation' in action.roofSystem) {
+          mergedRoofSystem.attachmentOffset = (action.roofSystem.baseElevation ?? roofSystem.baseElevation)
+            - getRoofAttachmentElevation(state.project);
+        }
+
+        return mergedRoofSystem;
+      });
+
+    case 'ROOF_DELETE':
+      return applyProjectUpdate(state, {
+        ...clearStairRoofAccessReferences(state.project),
+        updatedAt: new Date().toISOString(),
+        roofSystem: null,
+      });
+
+    case 'PARAPET_ADD':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? { ...roofSystem, parapets: [...(roofSystem.parapets || []), action.parapet] }
+          : roofSystem
+      ));
+
+    case 'PARAPET_UPDATE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              parapets: (roofSystem.parapets || []).map((parapet) => (
+                parapet.id === action.parapet.id ? { ...parapet, ...action.parapet } : parapet
+              )),
+            }
+          : roofSystem
+      ));
+
+    case 'PARAPET_DELETE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              parapets: (roofSystem.parapets || []).filter((parapet) => parapet.id !== action.parapetId),
+            }
+          : roofSystem
+      ));
+
+    case 'DRAIN_ADD':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? { ...roofSystem, drains: [...(roofSystem.drains || []), action.drain] }
+          : roofSystem
+      ));
+
+    case 'DRAIN_UPDATE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              drains: (roofSystem.drains || []).map((drain) => (
+                drain.id === action.drain.id ? { ...drain, ...action.drain } : drain
+              )),
+            }
+          : roofSystem
+      ));
+
+    case 'DRAIN_DELETE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              drains: (roofSystem.drains || []).filter((drain) => drain.id !== action.drainId),
+            }
+          : roofSystem
+      ));
+
+    case 'ROOF_OPENING_ADD':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? { ...roofSystem, roofOpenings: [...(roofSystem.roofOpenings || []), action.roofOpening] }
+          : roofSystem
+      ));
+
+    case 'ROOF_OPENING_UPDATE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              roofOpenings: (roofSystem.roofOpenings || []).map((roofOpening) => (
+                roofOpening.id === action.roofOpening.id ? { ...roofOpening, ...action.roofOpening } : roofOpening
+              )),
+            }
+          : roofSystem
+      ));
+
+    case 'ROOF_OPENING_DELETE':
+      return applyProjectUpdate(state, clearStairRoofAccessReferences({
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        roofSystem: state.project.roofSystem
+          ? {
+              ...state.project.roofSystem,
+              roofOpenings: (state.project.roofSystem.roofOpenings || []).filter((roofOpening) => roofOpening.id !== action.roofOpeningId),
+            }
+          : null,
+      }, action.roofOpeningId));
+
+    case 'ROOF_PLANE_ADD':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? { ...roofSystem, roofPlanes: [...(roofSystem.roofPlanes || []), action.roofPlane] }
+          : roofSystem
+      ));
+
+    case 'ROOF_PLANE_UPDATE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              roofPlanes: (roofSystem.roofPlanes || []).map((roofPlane) => (
+                roofPlane.id === action.roofPlane.id ? { ...roofPlane, ...action.roofPlane } : roofPlane
+              )),
+            }
+          : roofSystem
+      ));
+
+    case 'ROOF_PLANE_DELETE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              roofPlanes: (roofSystem.roofPlanes || []).filter((roofPlane) => roofPlane.id !== action.roofPlaneId),
+              roofEdges: (roofSystem.roofEdges || []).filter((roofEdge) => !((roofEdge.planeIds || []).includes(action.roofPlaneId))),
+            }
+          : roofSystem
+      ));
+
+    case 'ROOF_EDGE_UPDATE':
+      return updateRoofSystem(state, (roofSystem) => {
+        if (!roofSystem) return roofSystem;
+
+        const existingEdges = roofSystem.roofEdges || [];
+        const existingIndex = existingEdges.findIndex((roofEdge) => (
+          roofEdge.id === action.roofEdge.id
+          || (action.roofEdge.geometryKey && roofEdge.geometryKey === action.roofEdge.geometryKey)
+        ));
+
+        if (existingIndex === -1) {
+          return {
+            ...roofSystem,
+            roofEdges: [...existingEdges, action.roofEdge],
+          };
+        }
+
+        return {
+          ...roofSystem,
+          roofEdges: existingEdges.map((roofEdge, index) => (
+            index === existingIndex ? { ...roofEdge, ...action.roofEdge } : roofEdge
+          )),
+        };
+      });
+
+    case 'ROOF_EDGE_DELETE':
+      return updateRoofSystem(state, (roofSystem) => (
+        roofSystem
+          ? {
+              ...roofSystem,
+              roofEdges: (roofSystem.roofEdges || []).filter((roofEdge) => (
+                roofEdge.id !== action.roofEdgeId
+                && (action.geometryKey ? roofEdge.geometryKey !== action.geometryKey : true)
+              )),
+            }
+          : roofSystem
+      ));
 
     case 'FLOOR_ADD':
       return replaceFloors(state, [...state.project.floors, action.floor]);

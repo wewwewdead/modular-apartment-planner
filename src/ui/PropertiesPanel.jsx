@@ -6,6 +6,7 @@ import { MIN_WALL_LENGTH } from '@/domain/defaults';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { countObjectsInProjectPhase } from '@/domain/phaseAssignments';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
+import { resolveRoofSectionFloor } from '@/domain/roofModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { createSheetRevision, createSheetViewport } from '@/domain/sheetModels';
@@ -19,6 +20,7 @@ import { slabArea } from '@/geometry/slabGeometry';
 import { stairRun, stairTotalRise } from '@/geometry/stairGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
+import { isRoofAccessOpening, normalizeRoofOpeningType } from '@/roof/openings';
 import { sectionCutLength } from '@/geometry/sectionCutGeometry';
 import { railingLength } from '@/geometry/railingGeometry';
 import { RAILING_TYPES } from '@/editor/tools';
@@ -36,6 +38,15 @@ import { createWall } from '@/domain/models';
 import { formatSurveyorBearing, pointsToSurveyorBearing, surveyorBearingToSvgAngle, endpointFromBearing } from '@/geometry/bearing';
 import { getOrderedPhases } from '@/domain/phaseModels';
 import InputField from './InputField';
+import {
+  DrainProperties,
+  ParapetProperties,
+  RoofEdgeProperties,
+  RoofEmptyState,
+  RoofOpeningProperties,
+  RoofPlaneProperties,
+  RoofSystemProperties,
+} from './RoofProperties';
 import styles from './PropertiesPanel.module.css';
 
 function useUnits() {
@@ -641,6 +652,11 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
   };
 
   const floorOptions = getOrderedFloors(project);
+  const roofSystem = project.roofSystem || null;
+  const roofOpenings = (roofSystem?.roofOpenings || []).map((opening, index) => ({
+    ...opening,
+    label: opening.name || `Roof Opening ${index + 1}`,
+  }));
   const totalRise = stairTotalRise(stair);
   const totalRun = stairRun(stair);
   const directionAngle = stair.direction?.angle ?? 0;
@@ -722,6 +738,49 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
           ))}
         </select>
       </div>
+      {roofSystem && (
+        <>
+          <div className={styles.subtitle}>Roof Access</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Opening</label>
+            <select
+              value={stair.roofAccess?.roofOpeningId || ''}
+              onChange={(e) => updateStair({ roofAccess: e.target.value ? { roofOpeningId: e.target.value } : null })}
+              style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+            >
+              <option value="">None</option>
+              {roofOpenings.map((opening) => (
+                <option key={opening.id} value={opening.id}>
+                  {opening.label} ({normalizeRoofOpeningType(opening.type || 'opening')})
+                </option>
+              ))}
+            </select>
+          </div>
+          {roofOpenings.length === 0 ? (
+            <div className={styles.drawingHint}>
+              Add a roof opening first. Set the opening type to `Hatch` if it should act as roof access.
+            </div>
+          ) : stair.roofAccess?.roofOpeningId ? (
+            <div className={styles.drawingHint}>
+              The linked roof opening will be used as the stair's roof-access target in sections. Hatch-type openings are recommended for access.
+            </div>
+          ) : (
+            <div className={styles.drawingHint}>
+              Select a roof opening if this stair should terminate at a roof hatch or access opening.
+            </div>
+          )}
+          {stair.roofAccess?.roofOpeningId && !roofOpenings.some((opening) => opening.id === stair.roofAccess.roofOpeningId) && (
+            <div className={styles.drawingHint}>
+              This stair references a roof opening that is no longer available.
+            </div>
+          )}
+          {roofOpenings.some((opening) => isRoofAccessOpening(opening.type || 'opening')) && !stair.roofAccess?.roofOpeningId && (
+            <div className={styles.drawingHint}>
+              Hatch-type roof openings are available and can be linked here for roof access.
+            </div>
+          )}
+        </>
+      )}
       <div className={styles.subtitle}>Derived</div>
       <InputField label="Total Rise" type="number" suffix={u.suffix} value={u.toDisplay(totalRise)} readOnly />
       <InputField label="Stair Run" type="number" suffix={u.suffix} value={u.toDisplay(totalRun)} readOnly />
@@ -1204,7 +1263,7 @@ function AnnotationSettingsProperties({ floor, dispatch }) {
   );
 }
 
-function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloorId, u }) {
+function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloorId, modelTarget, u }) {
   const updateSheet = (updates) => {
     dispatch({ type: 'SHEET_UPDATE', sheet: { id: sheet.id, ...updates } });
   };
@@ -1244,8 +1303,10 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
 
   const addViewport = () => {
     try {
-      const sourceFloorId = getDefaultActiveFloorId(project, activeFloorId);
-      const sourceView = 'plan';
+      const sourceFloorId = modelTarget === 'roof'
+        ? (resolveRoofSectionFloor(project, activeFloorId)?.id || getDefaultActiveFloorId(project, activeFloorId))
+        : getDefaultActiveFloorId(project, activeFloorId);
+      const sourceView = modelTarget === 'roof' ? 'roof_plan' : 'plan';
       const viewportBase = createSheetViewport(sourceView, sourceFloorId, {
         scale: 100,
         lockAutoLayout: sheet.layoutTemplate !== 'auto',
@@ -1425,20 +1486,22 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
   };
 
   const floorOptions = getOrderedFloors(project);
-  const updateSource = (nextSourceView, nextFloorId = viewport.sourceFloorId, nextRefId) => {
-    const floor = floorOptions.find((entry) => entry.id === nextFloorId) || null;
-    const refId = nextRefId !== undefined
-      ? nextRefId
-      : nextSourceView === 'section' ? (floor?.sectionCuts || [])[0]?.id || null : null;
-    updateViewport({
-      sourceView: nextSourceView,
-      sourceFloorId: nextFloorId,
-      sourceRefId: refId,
-      role: nextSourceView === '3d_preview'
-        ? 'supplemental'
-        : (viewport.role === 'supplemental' ? 'secondary' : viewport.role),
-    });
-  };
+    const updateSource = (nextSourceView, nextFloorId = viewport.sourceFloorId, nextRefId) => {
+      const floor = floorOptions.find((entry) => entry.id === nextFloorId) || null;
+      const refId = nextRefId !== undefined
+        ? nextRefId
+        : (nextSourceView === 'section' || nextSourceView === 'roof_section')
+          ? (floor?.sectionCuts || [])[0]?.id || null
+          : null;
+      updateViewport({
+        sourceView: nextSourceView,
+        sourceFloorId: nextFloorId,
+        sourceRefId: refId,
+        role: nextSourceView === '3d_preview'
+          ? 'supplemental'
+          : ((nextSourceView === 'plan' || nextSourceView === 'roof_plan' || nextSourceView === 'roof_drainage') ? 'primary' : 'secondary'),
+      });
+    };
 
   const currentFloor = floorOptions.find((entry) => entry.id === viewport.sourceFloorId) || null;
   const sectionCutOptions = currentFloor?.sectionCuts || [];
@@ -1473,8 +1536,12 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
           style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
         >
           <option value="plan">Plan</option>
+          <option value="roof_plan">Roof Plan</option>
+          <option value="roof_drainage">Roof Drainage</option>
+          <option value="roof_schedule">Roof Schedule</option>
           <option value="3d_preview">3D Preview</option>
           <option value="section">Section</option>
+          <option value="roof_section">Roof Section</option>
           <option value="elevation_front">Front Elevation</option>
           <option value="elevation_rear">Rear Elevation</option>
           <option value="elevation_left">Left Elevation</option>
@@ -1493,12 +1560,12 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
           ))}
         </select>
       </div>
-      {viewport.sourceView === 'section' && sectionCutOptions.length > 0 && (
+      {(viewport.sourceView === 'section' || viewport.sourceView === 'roof_section') && sectionCutOptions.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
           <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Section Cut</label>
           <select
             value={viewport.sourceRefId || ''}
-            onChange={(e) => updateSource('section', viewport.sourceFloorId, e.target.value || null)}
+            onChange={(e) => updateSource(viewport.sourceView, viewport.sourceFloorId, e.target.value || null)}
             style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
           >
             {sectionCutOptions.map((sc) => (
@@ -1718,15 +1785,16 @@ function ProjectSummary({ project, floor, dispatch }) {
 
 export default function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
-  const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, activeTool, toolState, dispatch: editorDispatch } = useEditor();
+  const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, modelTarget, activeTool, toolState, dispatch: editorDispatch } = useEditor();
   const orderedFloors = getOrderedFloors(project);
   const phases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
+  const roofSystem = project.roofSystem || null;
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
   const u = useUnits();
 
   const selectFloor = (floorId) => {
-    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
     editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId });
     editorDispatch({ type: 'SELECT_OBJECT', id: floorId, objectType: 'floor' });
   };
@@ -1800,6 +1868,18 @@ export default function PropertiesPanel() {
       dispatch({ type: 'RAILING_DELETE', floorId: activeFloorId, railingId: selectedId });
     } else if (selectedType === 'room') {
       dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
+    } else if (selectedType === 'roofSystem') {
+      dispatch({ type: 'ROOF_DELETE' });
+    } else if (selectedType === 'parapet') {
+      dispatch({ type: 'PARAPET_DELETE', parapetId: selectedId });
+    } else if (selectedType === 'drain') {
+      dispatch({ type: 'DRAIN_DELETE', drainId: selectedId });
+    } else if (selectedType === 'roofOpening') {
+      dispatch({ type: 'ROOF_OPENING_DELETE', roofOpeningId: selectedId });
+    } else if (selectedType === 'roofPlane') {
+      dispatch({ type: 'ROOF_PLANE_DELETE', roofPlaneId: selectedId });
+    } else if (selectedType === 'roofEdge') {
+      dispatch({ type: 'ROOF_EDGE_DELETE', roofEdgeId: selectedId });
     } else if (selectedType === 'floor') {
       const targetFloor = orderedFloors.find((entry) => entry.id === selectedId) || null;
       if (targetFloor) {
@@ -1811,8 +1891,14 @@ export default function PropertiesPanel() {
   };
 
   let content = workspaceMode === 'sheet' && sheet
-    ? <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} u={u} />
-    : (
+    ? <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} modelTarget={modelTarget} u={u} />
+    : modelTarget === 'roof'
+      ? (
+        roofSystem
+          ? <RoofSystemProperties project={project} roofSystem={roofSystem} dispatch={dispatch} editorDispatch={editorDispatch} u={u} />
+          : <RoofEmptyState project={project} dispatch={dispatch} editorDispatch={editorDispatch} />
+      )
+      : (
         <>
           {floor && (
             <FloorProperties
@@ -1831,12 +1917,41 @@ export default function PropertiesPanel() {
   if (selectedId && workspaceMode === 'sheet' && sheet) {
     if (selectedType === 'sheet') {
       if (sheet.id === selectedId) {
-        content = <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} u={u} />;
+        content = <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} modelTarget={modelTarget} u={u} />;
       }
     } else if (selectedType === 'sheetViewport') {
       const viewport = (sheet.viewports || []).find((entry) => entry.id === selectedId);
       if (viewport) {
         content = <SheetViewportProperties sheet={sheet} viewport={viewport} project={project} dispatch={dispatch} u={u} />;
+      }
+    }
+  } else if (selectedId && modelTarget === 'roof' && roofSystem) {
+    if (selectedType === 'roofSystem' && selectedId === roofSystem.id) {
+      content = <RoofSystemProperties project={project} roofSystem={roofSystem} dispatch={dispatch} editorDispatch={editorDispatch} u={u} />;
+    } else if (selectedType === 'parapet') {
+      const parapet = (roofSystem.parapets || []).find((entry) => entry.id === selectedId);
+      if (parapet) {
+        content = <ParapetProperties parapet={parapet} roofSystem={roofSystem} dispatch={dispatch} u={u} />;
+      }
+    } else if (selectedType === 'drain') {
+      const drain = (roofSystem.drains || []).find((entry) => entry.id === selectedId);
+      if (drain) {
+        content = <DrainProperties drain={drain} dispatch={dispatch} u={u} />;
+      }
+    } else if (selectedType === 'roofOpening') {
+      const roofOpening = (roofSystem.roofOpenings || []).find((entry) => entry.id === selectedId);
+      if (roofOpening) {
+        content = <RoofOpeningProperties roofOpening={roofOpening} project={project} dispatch={dispatch} u={u} />;
+      }
+    } else if (selectedType === 'roofPlane') {
+      const roofPlane = (roofSystem.roofPlanes || []).find((entry) => entry.id === selectedId);
+      if (roofPlane) {
+        content = <RoofPlaneProperties roofPlane={roofPlane} dispatch={dispatch} u={u} />;
+      }
+    } else if (selectedType === 'roofEdge') {
+      const roofEdge = (roofSystem.roofEdges || []).find((entry) => entry.id === selectedId);
+      if (roofEdge) {
+        content = <RoofEdgeProperties roofEdge={roofEdge} roofSystem={roofSystem} dispatch={dispatch} u={u} />;
       }
     }
   } else if (selectedId && floor) {
@@ -1942,7 +2057,7 @@ export default function PropertiesPanel() {
       {workspaceMode === 'sheet' && sheet && (
         <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />
       )}
-      {activeTool === TOOLS.WALL && toolState.start && workspaceMode === 'model' && (
+      {activeTool === TOOLS.WALL && modelTarget === 'floor' && toolState.start && workspaceMode === 'model' && (
         <WallDrawingInput
           start={toolState.start}
           preview={toolState.preview}

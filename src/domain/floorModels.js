@@ -108,6 +108,7 @@ function cloneStair(stair, sourceFloorId, duplicatedFloorId, landingIdMap) {
     endLandingAttachment: stair.endLandingAttachment
       ? { ...stair.endLandingAttachment, landingId: landingIdMap.get(stair.endLandingAttachment.landingId) || stair.endLandingAttachment.landingId }
       : null,
+    roofAccess: stair.roofAccess ? { ...stair.roofAccess } : null,
   };
 }
 
