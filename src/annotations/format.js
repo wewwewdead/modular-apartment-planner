@@ -1,7 +1,7 @@
 import { formatDrawingArea, formatDrawingMeasurement } from '@/sheets/standards';
 
-export function formatMeasurement(mm) {
-  return formatDrawingMeasurement(mm);
+export function formatMeasurement(mm, options = {}) {
+  return formatDrawingMeasurement(mm, options);
 }
 
 export function formatAreaLabel(area) {

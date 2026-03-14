@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProject } from '@/app/ProjectProvider';
 import { useEditor } from '@/app/EditorProvider';
 import { formatMeasurement, getAnnotationDisplayLabel } from '@/annotations/format';
@@ -6,7 +6,9 @@ import { MIN_WALL_LENGTH } from '@/domain/defaults';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { countObjectsInProjectPhase } from '@/domain/phaseAssignments';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
+import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { resolveRoofSectionFloor } from '@/domain/roofModels';
+import { findTrussInstance, getProjectTrussSystems } from '@/domain/trussModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { createSheetRevision, createSheetViewport } from '@/domain/sheetModels';
@@ -47,6 +49,12 @@ import {
   RoofPlaneProperties,
   RoofSystemProperties,
 } from './RoofProperties';
+import {
+  TrussEmptyState,
+  TrussInstanceProperties,
+  TrussSystemProperties,
+} from './TrussProperties';
+import PhaseSelector from './PhaseSelector';
 import styles from './PropertiesPanel.module.css';
 
 function useUnits() {
@@ -261,23 +269,6 @@ function SheetExportMenu({ sheet, editorDispatch }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function PhaseSelector({ phaseId, phases, onChange }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-      <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Phase</label>
-      <select
-        value={phaseId || ''}
-        onChange={(e) => onChange(e.target.value || null)}
-        style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
-                 borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
-      >
-        <option value="">Unassigned</option>
-        {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
     </div>
   );
 }
@@ -1306,7 +1297,11 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
       const sourceFloorId = modelTarget === 'roof'
         ? (resolveRoofSectionFloor(project, activeFloorId)?.id || getDefaultActiveFloorId(project, activeFloorId))
         : getDefaultActiveFloorId(project, activeFloorId);
-      const sourceView = modelTarget === 'roof' ? 'roof_plan' : 'plan';
+      const sourceView = modelTarget === 'roof'
+        ? (viewMode === 'section_view'
+          ? 'roof_section'
+          : (viewMode.startsWith('elevation_') ? `roof_${viewMode}` : 'roof_plan'))
+        : (modelTarget === 'truss' ? 'truss_plan' : 'plan');
       const viewportBase = createSheetViewport(sourceView, sourceFloorId, {
         scale: 100,
         lockAutoLayout: sheet.layoutTemplate !== 'auto',
@@ -1486,22 +1481,32 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
   };
 
   const floorOptions = getOrderedFloors(project);
-    const updateSource = (nextSourceView, nextFloorId = viewport.sourceFloorId, nextRefId) => {
-      const floor = floorOptions.find((entry) => entry.id === nextFloorId) || null;
-      const refId = nextRefId !== undefined
-        ? nextRefId
-        : (nextSourceView === 'section' || nextSourceView === 'roof_section')
-          ? (floor?.sectionCuts || [])[0]?.id || null
-          : null;
-      updateViewport({
-        sourceView: nextSourceView,
-        sourceFloorId: nextFloorId,
-        sourceRefId: refId,
-        role: nextSourceView === '3d_preview'
-          ? 'supplemental'
-          : ((nextSourceView === 'plan' || nextSourceView === 'roof_plan' || nextSourceView === 'roof_drainage') ? 'primary' : 'secondary'),
-      });
-    };
+  const trussInstanceOptions = getProjectTrussSystems(project, viewport.sourceFloorId)
+    .flatMap((trussSystem) => (trussSystem.trussInstances || []).map((trussInstance, index) => ({
+      id: trussInstance.id,
+      label: `${trussSystem.name || 'Truss System'} · Instance ${index + 1}`,
+    })));
+  const updateSource = (nextSourceView, nextFloorId = viewport.sourceFloorId, nextRefId) => {
+    const floor = floorOptions.find((entry) => entry.id === nextFloorId) || null;
+    const refId = nextRefId !== undefined
+      ? nextRefId
+      : (nextSourceView === 'section' || nextSourceView === 'roof_section')
+        ? (floor?.sectionCuts || [])[0]?.id || null
+        : (nextSourceView === 'truss_detail'
+          ? (getProjectTrussSystems(project, nextFloorId)
+            .flatMap((trussSystem) => trussSystem.trussInstances || [])[0]?.id || null)
+          : null);
+    updateViewport({
+      sourceView: nextSourceView,
+      sourceFloorId: nextFloorId,
+      sourceRefId: refId,
+      role: nextSourceView === '3d_preview'
+        ? 'supplemental'
+        : ((nextSourceView === 'plan' || nextSourceView === 'roof_plan' || nextSourceView === 'roof_drainage' || nextSourceView === 'truss_plan')
+          ? 'primary'
+          : (nextSourceView === 'truss_detail' ? 'detail' : 'secondary')),
+    });
+  };
 
   const currentFloor = floorOptions.find((entry) => entry.id === viewport.sourceFloorId) || null;
   const sectionCutOptions = currentFloor?.sectionCuts || [];
@@ -1537,6 +1542,12 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         >
           <option value="plan">Plan</option>
           <option value="roof_plan">Roof Plan</option>
+          <option value="roof_elevation_front">Roof Front Elevation</option>
+          <option value="roof_elevation_rear">Roof Rear Elevation</option>
+          <option value="roof_elevation_left">Roof Left Elevation</option>
+          <option value="roof_elevation_right">Roof Right Elevation</option>
+          <option value="truss_plan">Truss Plan</option>
+          <option value="truss_detail">Truss Detail</option>
           <option value="roof_drainage">Roof Drainage</option>
           <option value="roof_schedule">Roof Schedule</option>
           <option value="3d_preview">3D Preview</option>
@@ -1570,6 +1581,20 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
           >
             {sectionCutOptions.map((sc) => (
               <option key={sc.id} value={sc.id}>{sc.label || sc.id}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      {viewport.sourceView === 'truss_detail' && trussInstanceOptions.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Truss</label>
+          <select
+            value={viewport.sourceRefId || ''}
+            onChange={(e) => updateSource(viewport.sourceView, viewport.sourceFloorId, e.target.value || null)}
+            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          >
+            {trussInstanceOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
             ))}
           </select>
         </div>
@@ -1763,6 +1788,7 @@ function ProjectSummary({ project, floor, dispatch }) {
       <div className={styles.summary}>
         <p>Name: {project.name}</p>
         <p>Floors: {project.floors.length}</p>
+        <p>Truss Systems: {(project.trussSystems || []).length}</p>
         <p>Sheets: {(project.sheets || []).length}</p>
         {floor && (
           <>
@@ -1785,13 +1811,42 @@ function ProjectSummary({ project, floor, dispatch }) {
 
 export default function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
-  const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, modelTarget, activeTool, toolState, dispatch: editorDispatch } = useEditor();
+  const {
+    selectedId,
+    selectedType,
+    activeFloorId,
+    activeSheetId,
+    workspaceMode,
+    modelTarget,
+    activeTool,
+    toolState,
+    activePhaseId,
+    phaseViewMode,
+    dispatch: editorDispatch,
+  } = useEditor();
   const orderedFloors = getOrderedFloors(project);
   const phases = getOrderedPhases(project);
+  const filteredProject = useMemo(
+    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
+    [project, activePhaseId, phaseViewMode]
+  );
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const roofSystem = project.roofSystem || null;
+  const floorTrussSystems = getProjectTrussSystems(project, activeFloorId);
+  const visibleFloorTrussSystems = getProjectTrussSystems(filteredProject, activeFloorId);
+  const visibleRoofSystem = filteredProject.roofSystem || null;
+  const isRoofHiddenByPhase = Boolean(roofSystem && !visibleRoofSystem);
+  const visibleTrussIds = new Set((filteredProject.trussSystems || []).map((entry) => entry.id));
+  const activePhaseName = phases.find((phase) => phase.id === activePhaseId)?.name || null;
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
   const u = useUnits();
+  const { trussSystem: selectedTrussParent } = selectedType === 'trussInstance'
+    ? findTrussInstance(project, selectedId)
+    : { trussSystem: null };
+  const activeTrussSystem = selectedType === 'trussSystem'
+    ? (project.trussSystems || []).find((entry) => entry.id === selectedId) || visibleFloorTrussSystems[0] || floorTrussSystems[0] || null
+    : (selectedTrussParent || visibleFloorTrussSystems[0] || floorTrussSystems[0] || null);
+  const isActiveTrussHiddenByPhase = Boolean(activeTrussSystem && !visibleTrussIds.has(activeTrussSystem.id));
 
   const selectFloor = (floorId) => {
     editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
@@ -1880,6 +1935,13 @@ export default function PropertiesPanel() {
       dispatch({ type: 'ROOF_PLANE_DELETE', roofPlaneId: selectedId });
     } else if (selectedType === 'roofEdge') {
       dispatch({ type: 'ROOF_EDGE_DELETE', roofEdgeId: selectedId });
+    } else if (selectedType === 'trussSystem') {
+      dispatch({ type: 'TRUSS_SYSTEM_DELETE', trussSystemId: selectedId });
+    } else if (selectedType === 'trussInstance') {
+      const { trussSystem } = findTrussInstance(project, selectedId);
+      if (trussSystem) {
+        dispatch({ type: 'TRUSS_INSTANCE_DELETE', trussSystemId: trussSystem.id, trussInstanceId: selectedId });
+      }
     } else if (selectedType === 'floor') {
       const targetFloor = orderedFloors.find((entry) => entry.id === selectedId) || null;
       if (targetFloor) {
@@ -1895,9 +1957,45 @@ export default function PropertiesPanel() {
     : modelTarget === 'roof'
       ? (
         roofSystem
-          ? <RoofSystemProperties project={project} roofSystem={roofSystem} dispatch={dispatch} editorDispatch={editorDispatch} u={u} />
-          : <RoofEmptyState project={project} dispatch={dispatch} editorDispatch={editorDispatch} />
+          ? (
+            <RoofSystemProperties
+              project={project}
+              roofSystem={roofSystem}
+              dispatch={dispatch}
+              editorDispatch={editorDispatch}
+              u={u}
+              phases={phases}
+              isHiddenByPhase={isRoofHiddenByPhase}
+              activePhaseName={activePhaseName}
+              phaseViewMode={phaseViewMode}
+            />
+          )
+          : <RoofEmptyState project={project} dispatch={dispatch} editorDispatch={editorDispatch} activePhaseId={activePhaseId} />
       )
+      : modelTarget === 'truss'
+        ? (
+          activeTrussSystem
+            ? (
+              <TrussSystemProperties
+                project={project}
+                trussSystem={activeTrussSystem}
+                dispatch={dispatch}
+                editorDispatch={editorDispatch}
+                u={u}
+                phases={phases}
+                isHiddenByPhase={isActiveTrussHiddenByPhase}
+                activePhaseName={activePhaseName}
+                phaseViewMode={phaseViewMode}
+              />
+            )
+            : (
+              <TrussEmptyState
+                project={project}
+                activeFloorId={activeFloorId}
+                editorDispatch={editorDispatch}
+              />
+            )
+        )
       : (
         <>
           {floor && (
@@ -1927,7 +2025,19 @@ export default function PropertiesPanel() {
     }
   } else if (selectedId && modelTarget === 'roof' && roofSystem) {
     if (selectedType === 'roofSystem' && selectedId === roofSystem.id) {
-      content = <RoofSystemProperties project={project} roofSystem={roofSystem} dispatch={dispatch} editorDispatch={editorDispatch} u={u} />;
+      content = (
+        <RoofSystemProperties
+          project={project}
+          roofSystem={roofSystem}
+          dispatch={dispatch}
+          editorDispatch={editorDispatch}
+          u={u}
+          phases={phases}
+          isHiddenByPhase={isRoofHiddenByPhase}
+          activePhaseName={activePhaseName}
+          phaseViewMode={phaseViewMode}
+        />
+      );
     } else if (selectedType === 'parapet') {
       const parapet = (roofSystem.parapets || []).find((entry) => entry.id === selectedId);
       if (parapet) {
@@ -1952,6 +2062,39 @@ export default function PropertiesPanel() {
       const roofEdge = (roofSystem.roofEdges || []).find((entry) => entry.id === selectedId);
       if (roofEdge) {
         content = <RoofEdgeProperties roofEdge={roofEdge} roofSystem={roofSystem} dispatch={dispatch} u={u} />;
+      }
+    }
+  } else if (modelTarget === 'truss') {
+    if (selectedType === 'trussSystem') {
+      const trussSystem = (project.trussSystems || []).find((entry) => entry.id === selectedId) || activeTrussSystem;
+      if (trussSystem) {
+        content = (
+          <TrussSystemProperties
+            project={project}
+            trussSystem={trussSystem}
+            dispatch={dispatch}
+            editorDispatch={editorDispatch}
+            u={u}
+            phases={phases}
+            isHiddenByPhase={Boolean(trussSystem && !visibleTrussIds.has(trussSystem.id))}
+            activePhaseName={activePhaseName}
+            phaseViewMode={phaseViewMode}
+          />
+        );
+      }
+    } else if (selectedType === 'trussInstance') {
+      const { trussSystem, trussInstance } = findTrussInstance(project, selectedId);
+      if (trussSystem && trussInstance) {
+        content = (
+          <TrussInstanceProperties
+            project={project}
+            trussSystem={trussSystem}
+            trussInstance={trussInstance}
+            dispatch={dispatch}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     }
   } else if (selectedId && floor) {

@@ -10,6 +10,7 @@ import {
   NewIcon, SaveIcon, LoadIcon, UndoIcon, RedoIcon,
   CopyIcon, CutIcon, PasteIcon,
   SelectIcon, DimensionIcon, WallIcon, BeamIcon, StairIcon,
+  TrussDrawIcon,
   SectionCutIcon, SlabIcon, RoomIcon, DoorIcon, WindowIcon,
   ColumnIcon, LandingIcon, RailingIcon,
   ParapetIcon, DrainIcon, OpeningIcon,
@@ -18,6 +19,7 @@ import {
   SidebarIcon, PropertiesIcon,
 } from './ToolbarIcons';
 import { FIXTURE_TYPES } from '@/editor/tools';
+import Tooltip from './Tooltip';
 import styles from './Toolbar.module.css';
 
 const viewModes = [
@@ -54,7 +56,20 @@ export default function Toolbar({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, workspaceMode, modelTarget, toolState, activePhaseId, dispatch: editorDispatch } = useEditor();
+  const {
+    activeTool,
+    showGrid,
+    snapEnabled,
+    activeFloorId,
+    viewMode,
+    workspaceMode,
+    modelTarget,
+    toolState,
+    activePhaseId,
+    selectedId,
+    selectedType,
+    dispatch: editorDispatch,
+  } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const {
     canCopySelection,
@@ -65,6 +80,7 @@ export default function Toolbar({
   } = usePlanClipboardController();
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
   const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
+  const isTrussPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'truss';
 
   const fixtureItems = [
     { fixtureType: FIXTURE_TYPES.KITCHEN_TOP, label: 'Kitchen Top', Icon: KitchenTopIcon },
@@ -76,13 +92,55 @@ export default function Toolbar({
     { fixtureType: FIXTURE_TYPES.BED, label: 'Bed', Icon: BedIcon },
   ];
 
-  const setTool = (tool) => editorDispatch({ type: 'SET_TOOL', tool });
+  const setTool = (tool) => {
+    editorDispatch({ type: 'SET_TOOL', tool });
+
+    if (tool !== TOOLS.TRUSS_DRAW || modelTarget !== 'truss') return;
+
+    const targetTrussSystem = selectedType === 'trussSystem'
+      ? (project.trussSystems || []).find((entry) => entry.id === selectedId) || null
+      : selectedType === 'trussInstance'
+        ? (project.trussSystems || []).find((entry) => (
+            (entry.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId)
+          )) || null
+        : null;
+    const selectedTrussInstance = selectedType === 'trussInstance' && targetTrussSystem
+      ? (targetTrussSystem.trussInstances || []).find((entry) => entry.id === selectedId) || null
+      : null;
+    const lastSystemInstance = targetTrussSystem && (targetTrussSystem.trussInstances || []).length
+      ? targetTrussSystem.trussInstances[targetTrussSystem.trussInstances.length - 1]
+      : null;
+
+    editorDispatch({
+      type: 'UPDATE_TOOL_STATE',
+      payload: {
+        targetTrussSystemId: targetTrussSystem?.id || null,
+        trussTypeId: selectedTrussInstance?.trussTypeId
+          || lastSystemInstance?.trussTypeId
+          || null,
+        trussMaterial: selectedTrussInstance?.material
+          || lastSystemInstance?.material
+          || null,
+      },
+    });
+  };
   const roofToolItems = [
     { tool: TOOLS.SELECT, label: 'Select', shortcut: 'V', Icon: SelectIcon },
     { tool: TOOLS.ROOF_PARAPET, label: 'Parapet', shortcut: 'P', Icon: ParapetIcon },
     { tool: TOOLS.ROOF_DRAIN, label: 'Drain', shortcut: 'G', Icon: DrainIcon },
     { tool: TOOLS.ROOF_OPENING, label: 'Opening', shortcut: 'O', Icon: OpeningIcon },
   ];
+  const trussToolItems = [
+    { tool: TOOLS.SELECT, label: 'Select', shortcut: 'V', Icon: SelectIcon },
+    { tool: TOOLS.TRUSS_DRAW, label: 'Draw Truss', shortcut: 'T', Icon: TrussDrawIcon },
+  ];
+  const currentViewModes = modelTarget === 'truss'
+    ? [
+        { key: 'plan', label: 'Plan', viewMode: 'plan' },
+        { key: 'detail', label: 'Detail', viewMode: 'truss_detail' },
+        { key: 'section', label: 'Section', viewMode: 'section_view' },
+      ]
+    : viewModes;
 
   const handleUndo = useCallback(() => {
     if (!canUndo) return;
@@ -141,90 +199,122 @@ export default function Toolbar({
   }, [handleRedo, handleUndo]);
 
   const activeViewKey = workspaceMode === 'sheet' ? 'sheets' :
-    viewModes.find(v => v.viewMode === viewMode)?.key || 'plan';
+    currentViewModes.find(v => v.viewMode === viewMode)?.key || 'plan';
 
   return (
     <div className={styles.toolbar}>
       {/* File & clipboard actions */}
       <div className={styles.group}>
-        <button className={styles.btn} onClick={onNew} title="New Project">
-          <NewIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.btn}
-          onClick={handleUndo}
-          disabled={!canUndo}
-          title="Undo (Ctrl+Z)"
-          aria-label="Undo"
-        >
-          <UndoIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.btn}
-          onClick={handleRedo}
-          disabled={!canRedo}
-          title="Redo (Ctrl+Shift+Z)"
-          aria-label="Redo"
-        >
-          <RedoIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.saveBtn}
-          onClick={onSave}
-          title="Save (Ctrl+S)"
-          data-dirty={isDirty}
-        >
-          <SaveIcon className={styles.icon} />
-        </button>
+        <Tooltip label="New Project">
+          <button className={styles.btn} onClick={onNew} aria-label="New Project">
+            <NewIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Undo" shortcut="Ctrl+Z">
+          <button
+            className={styles.btn}
+            onClick={handleUndo}
+            disabled={!canUndo}
+            aria-label="Undo"
+          >
+            <UndoIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Redo" shortcut="Ctrl+Shift+Z">
+          <button
+            className={styles.btn}
+            onClick={handleRedo}
+            disabled={!canRedo}
+            aria-label="Redo"
+          >
+            <RedoIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Save" shortcut="Ctrl+S">
+          <button
+            className={styles.saveBtn}
+            onClick={onSave}
+            data-dirty={isDirty}
+            aria-label="Save"
+          >
+            <SaveIcon className={styles.icon} />
+          </button>
+        </Tooltip>
         <div className={styles.divider} />
-        <button className={styles.btn} onClick={onLoad} title="Load Project">
-          <LoadIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.btn}
-          onClick={copySelection}
-          disabled={!canCopySelection || modelTarget !== 'floor' || workspaceMode !== 'model'}
-          title="Copy (Ctrl+C)"
-        >
-          <CopyIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.btn}
-          onClick={cutSelection}
-          disabled={!canCopySelection || modelTarget !== 'floor' || workspaceMode !== 'model'}
-          title="Cut (Ctrl+X)"
-        >
-          <CutIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.btn}
-          onClick={() => beginPaste()}
-          disabled={!canPaste || modelTarget !== 'floor' || workspaceMode !== 'model'}
-          title="Paste (Ctrl+V)"
-        >
-          <PasteIcon className={styles.icon} />
-        </button>
+        <Tooltip label="Load Project">
+          <button className={styles.btn} onClick={onLoad} aria-label="Load Project">
+            <LoadIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Copy" shortcut="Ctrl+C">
+          <button
+            className={styles.btn}
+            onClick={copySelection}
+            disabled={!canCopySelection || modelTarget !== 'floor' || workspaceMode !== 'model'}
+            aria-label="Copy"
+          >
+            <CopyIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Cut" shortcut="Ctrl+X">
+          <button
+            className={styles.btn}
+            onClick={cutSelection}
+            disabled={!canCopySelection || modelTarget !== 'floor' || workspaceMode !== 'model'}
+            aria-label="Cut"
+          >
+            <CutIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Paste" shortcut="Ctrl+V">
+          <button
+            className={styles.btn}
+            onClick={() => beginPaste()}
+            disabled={!canPaste || modelTarget !== 'floor' || workspaceMode !== 'model'}
+            aria-label="Paste"
+          >
+            <PasteIcon className={styles.icon} />
+          </button>
+        </Tooltip>
       </div>
 
       <div className={styles.segmentedGroup}>
         <button
           className={workspaceMode === 'model' && modelTarget === 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn}
-          onClick={() => editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' })}
-          title="Floor Editing"
+          onClick={() => {
+            editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
+            if (viewMode === 'truss_detail') {
+              editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+            }
+          }}
         >
           Floor
         </button>
         <button
           className={workspaceMode === 'model' && modelTarget === 'roof' ? styles.segmentedBtnActive : styles.segmentedBtn}
-          onClick={() => editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' })}
-          title="Roof Editing"
+          onClick={() => {
+            editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
+            if (viewMode === 'truss_detail') {
+              editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+            }
+          }}
         >
           Roof
         </button>
         <button
+          className={workspaceMode === 'model' && modelTarget === 'truss' ? styles.segmentedBtnActive : styles.segmentedBtn}
+          onClick={() => {
+            editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'truss' });
+            if (viewMode !== 'plan' && viewMode !== 'section_view' && viewMode !== 'truss_detail') {
+              editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+            }
+          }}
+        >
+          Truss
+        </button>
+        <button
           className={workspaceMode === 'sheet' ? styles.segmentedBtnActive : styles.segmentedBtn}
           onClick={() => editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' })}
-          title="Sheet Workspace"
         >
           Sheets
         </button>
@@ -232,32 +322,31 @@ export default function Toolbar({
 
       {/* View mode segmented control */}
       <div className={styles.segmentedGroup}>
-        {viewModes.map(({ key, label, viewMode: vm }) => (
+        {currentViewModes.map(({ key, label, viewMode: vm }) => (
           <button
             key={key}
             className={activeViewKey === key ? styles.segmentedBtnActive : styles.segmentedBtn}
             onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: vm })}
-            title={`${label} View`}
           >
             {label}
           </button>
         ))}
       </div>
 
-      {/* Tool palette - inline row of 12 icons */}
+      {/* Tool palette - inline row of icons */}
       <div className={styles.toolPalette}>
         <span className={styles.groupLabel}>Tools</span>
-        {(modelTarget === 'roof' ? roofToolItems : toolItems).map(({ tool, label, shortcut, Icon }) => (
-          <button
-            key={tool}
-            className={activeTool === tool ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
-            onClick={() => setTool(tool)}
-            disabled={modelTarget === 'roof' ? !isRoofPlanView : !isPlanView}
-            title={`${label} (${shortcut})`}
-            aria-label={label}
-          >
-            <Icon className={styles.toolPaletteIcon} />
-          </button>
+        {(modelTarget === 'roof' ? roofToolItems : (modelTarget === 'truss' ? trussToolItems : toolItems)).map(({ tool, label, shortcut, Icon }) => (
+          <Tooltip key={tool} label={label} shortcut={shortcut}>
+            <button
+              className={activeTool === tool ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
+              onClick={() => setTool(tool)}
+              disabled={modelTarget === 'roof' ? !isRoofPlanView : (modelTarget === 'truss' ? !isTrussPlanView : !isPlanView)}
+              aria-label={label}
+            >
+              <Icon className={styles.toolPaletteIcon} />
+            </button>
+          </Tooltip>
         ))}
       </div>
 
@@ -267,19 +356,19 @@ export default function Toolbar({
         {fixtureItems.map(({ fixtureType, label, Icon }) => {
           const isActive = activeTool === TOOLS.FIXTURE && toolState.fixtureType === fixtureType;
           return (
-            <button
-              key={fixtureType}
-              className={isActive ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
-              onClick={() => {
-                editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
-                editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType, previewRotation: 0 } });
-              }}
-              disabled={!isPlanView}
-              title={`${label} (F)`}
-              aria-label={label}
-            >
-              <Icon className={styles.toolPaletteIcon} />
-            </button>
+            <Tooltip key={fixtureType} label={label} shortcut="F">
+              <button
+                className={isActive ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
+                onClick={() => {
+                  editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
+                  editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType, previewRotation: 0 } });
+                }}
+                disabled={!isPlanView}
+                aria-label={label}
+              >
+                <Icon className={styles.toolPaletteIcon} />
+              </button>
+            </Tooltip>
           );
         })}
       </div>
@@ -287,49 +376,54 @@ export default function Toolbar({
       {/* Panel toggles & utility toggles */}
       <div className={styles.group}>
         <span className={styles.groupLabel}>Panels</span>
-        <button
-          className={`${styles.toggleBtn} ${!isSidebarCollapsed ? styles.toggleActive : ''}`}
-          onClick={onToggleSidebar}
-          title={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
-          aria-label={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
-        >
-          <SidebarIcon className={styles.icon} />
-        </button>
-        <button
-          className={`${styles.toggleBtn} ${!isPropertiesCollapsed ? styles.toggleActive : ''}`}
-          onClick={onToggleProperties}
-          title={isPropertiesCollapsed ? 'Show Properties' : 'Hide Properties'}
-          aria-label={isPropertiesCollapsed ? 'Show Properties' : 'Hide Properties'}
-        >
-          <PropertiesIcon className={styles.icon} />
-        </button>
+        <Tooltip label={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}>
+          <button
+            className={`${styles.toggleBtn} ${!isSidebarCollapsed ? styles.toggleActive : ''}`}
+            onClick={onToggleSidebar}
+            aria-label={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+          >
+            <SidebarIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label={isPropertiesCollapsed ? 'Show Properties' : 'Hide Properties'}>
+          <button
+            className={`${styles.toggleBtn} ${!isPropertiesCollapsed ? styles.toggleActive : ''}`}
+            onClick={onToggleProperties}
+            aria-label={isPropertiesCollapsed ? 'Show Properties' : 'Hide Properties'}
+          >
+            <PropertiesIcon className={styles.icon} />
+          </button>
+        </Tooltip>
         <div className={styles.divider} />
         <span className={styles.groupLabel}>Display</span>
-        <button
-          className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
-          onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
-          title="Toggle Grid"
-          aria-label="Toggle Grid"
-        >
-          <GridIcon className={styles.icon} />
-        </button>
-        <button
-          className={`${styles.toggleBtn} ${snapEnabled ? styles.toggleActive : ''}`}
-          onClick={() => editorDispatch({ type: 'TOGGLE_SNAP' })}
-          title="Toggle Snap"
-          aria-label="Toggle Snap"
-        >
-          <SnapIcon className={styles.icon} />
-        </button>
-        <button
-          className={styles.btn}
-          onClick={handleDetectRooms}
-          title="Auto-detect Rooms"
-          disabled={!isPlanView}
-          aria-label="Auto-detect Rooms"
-        >
-          <DetectRoomsIcon className={styles.icon} />
-        </button>
+        <Tooltip label="Toggle Grid">
+          <button
+            className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
+            onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
+            aria-label="Toggle Grid"
+          >
+            <GridIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Toggle Snap">
+          <button
+            className={`${styles.toggleBtn} ${snapEnabled ? styles.toggleActive : ''}`}
+            onClick={() => editorDispatch({ type: 'TOGGLE_SNAP' })}
+            aria-label="Toggle Snap"
+          >
+            <SnapIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Auto-detect Rooms">
+          <button
+            className={styles.btn}
+            onClick={handleDetectRooms}
+            disabled={!isPlanView}
+            aria-label="Auto-detect Rooms"
+          >
+            <DetectRoomsIcon className={styles.icon} />
+          </button>
+        </Tooltip>
       </div>
 
       <div className={styles.spacer} />

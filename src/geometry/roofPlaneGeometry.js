@@ -17,6 +17,10 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function clamp01(value) {
+  return clamp(value, 0, 1);
+}
+
 function ensureCounterClockwise(points = []) {
   const cloned = clonePoints(points);
   return signedPolygonArea(cloned) >= 0 ? cloned : cloned.reverse();
@@ -86,6 +90,10 @@ function axisRange(points, origin, axis) {
   };
 }
 
+function pointFromAxisCoordinates(origin, axisX, axisY, x, y) {
+  return add(add(origin, scale(axisX, x)), scale(axisY, y));
+}
+
 function interpolateAxisIntersection(start, end, startValue, endValue, limit) {
   const denominator = endValue - startValue;
   if (Math.abs(denominator) < EPSILON) {
@@ -148,6 +156,12 @@ function collectAxisIntersections(points, origin, axis, limit) {
   }
 
   return uniqueSequentialPoints(hits);
+}
+
+function clipPolygonToAxisBand(points, origin, axis, minLimit, maxLimit) {
+  if (maxLimit - minLimit <= EPSILON) return [];
+  const highClipped = clipPolygonByAxis(points, origin, axis, maxLimit, true);
+  return clipPolygonByAxis(highClipped, origin, axis, minLimit, false);
 }
 
 function isConvexPolygon(points = []) {
@@ -215,6 +229,52 @@ function slopeRatio(source) {
   return Math.max(0, Number(source?.pitch?.slope ?? source?.slope ?? 0)) / 100;
 }
 
+function sampleShapeProfileRise(shapeProfile, ratio) {
+  const points = (shapeProfile?.points || []).filter((point) => (
+    Number.isFinite(point?.position) && Number.isFinite(point?.rise)
+  ));
+  if (!points.length) return 0;
+  if (points.length === 1) return Math.max(0, points[0].rise);
+
+  const ordered = [...points].sort((a, b) => a.position - b.position);
+  const clampedRatio = clamp01(ratio);
+  if (clampedRatio <= ordered[0].position + EPSILON) return Math.max(0, ordered[0].rise);
+  if (clampedRatio >= ordered[ordered.length - 1].position - EPSILON) {
+    return Math.max(0, ordered[ordered.length - 1].rise);
+  }
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const start = ordered[index];
+    const end = ordered[index + 1];
+    if (clampedRatio < start.position - EPSILON || clampedRatio > end.position + EPSILON) continue;
+
+    const span = end.position - start.position;
+    if (Math.abs(span) <= EPSILON) return Math.max(0, end.rise);
+
+    const localRatio = (clampedRatio - start.position) / span;
+    return Math.max(0, start.rise + ((end.rise - start.rise) * localRatio));
+  }
+
+  return Math.max(0, ordered[ordered.length - 1].rise);
+}
+
+function resolveShapeProfilePeakBand(shapeProfile) {
+  const points = (shapeProfile?.points || []).filter((point) => (
+    Number.isFinite(point?.position) && Number.isFinite(point?.rise)
+  ));
+  if (!points.length) return null;
+
+  const maxRise = Math.max(...points.map((point) => point.rise));
+  const peakPoints = points.filter((point) => Math.abs(point.rise - maxRise) <= EPSILON);
+  if (!peakPoints.length || maxRise <= EPSILON) return null;
+
+  return {
+    maxRise,
+    minPosition: Math.min(...peakPoints.map((point) => point.position)),
+    maxPosition: Math.max(...peakPoints.map((point) => point.position)),
+  };
+}
+
 function ensureRoofOutline(boundaryPolygon, roofType, pitch) {
   const convexBoundary = isConvexPolygon(boundaryPolygon);
   const wantsOverhang = roofType !== 'flat' && roofType !== 'custom' && (pitch.overhang ?? 0) > EPSILON;
@@ -239,6 +299,370 @@ function createPresetPlane(id, planeType, outline, slopeDirection) {
     baseElevation: 0,
     material: '',
     heightRule: 'base_low_edge',
+  };
+}
+
+function createShapeProfilePlane(id, planeType, outline, slopeDirection, slope, baseElevation, getSurfaceElevation) {
+  return {
+    ...createPresetPlane(id, planeType, outline, slopeDirection),
+    slope,
+    baseElevation,
+    getSurfaceElevation,
+    surfaceFactor: Math.sqrt(1 + Math.pow(Math.max(0, slope) / 100, 2)),
+  };
+}
+
+function createRoofEdgeRelationship(id, edgeRole, startPoint, endPoint, planeIds = []) {
+  return {
+    id,
+    edgeId: id,
+    edgeRole,
+    isPerimeter: false,
+    startPoint: clonePoint(startPoint),
+    endPoint: clonePoint(endPoint),
+    planeIds: [...new Set((planeIds || []).filter(Boolean))],
+  };
+}
+
+function buildHipRoofGeometry(
+  roofSystem,
+  roofType,
+  boundaryPolygon,
+  roofOutline,
+  centroid,
+  direction,
+  ridgeDirection,
+  pitch
+) {
+  const spanRange = axisRange(roofOutline, centroid, direction);
+  const layoutRange = axisRange(roofOutline, centroid, ridgeDirection);
+  const spanWidth = Math.max(0, spanRange.max - spanRange.min);
+  const layoutLength = Math.max(0, layoutRange.max - layoutRange.min);
+  const baseElevation = roofSystem?.baseElevation ?? 0;
+  const slabThickness = roofSystem?.slabThickness ?? 0;
+  const slope = pitch?.slope ?? 0;
+  const ratio = slopeRatio({ pitch });
+
+  if (spanWidth <= EPSILON || layoutLength <= EPSILON) {
+    return null;
+  }
+
+  const spanMid = (spanRange.min + spanRange.max) / 2;
+  const hipInset = Math.min(spanWidth / 2, layoutLength / 2);
+  const ridgeStartValue = layoutRange.min + hipInset;
+  const ridgeEndValue = layoutRange.max - hipInset;
+  const ridgeStartPoint = pointFromAxisCoordinates(centroid, direction, ridgeDirection, spanMid, ridgeStartValue);
+  const ridgeEndPoint = pointFromAxisCoordinates(centroid, direction, ridgeDirection, spanMid, ridgeEndValue);
+  const hasRidge = (ridgeEndValue - ridgeStartValue) > EPSILON;
+
+  function sideDistance(point) {
+    const spanValue = axisValue(point, centroid, direction);
+    return Math.max(0, Math.min(spanValue - spanRange.min, spanRange.max - spanValue));
+  }
+
+  function endDistance(point) {
+    const layoutValue = axisValue(point, centroid, ridgeDirection);
+    return Math.max(0, Math.min(layoutValue - layoutRange.min, layoutRange.max - layoutValue));
+  }
+
+  function getRiseAtPoint(point) {
+    if (!point) return 0;
+    return Math.max(0, ratio * Math.min(sideDistance(point), endDistance(point)));
+  }
+
+  function getSurfaceElevation(point, surface = 'top') {
+    const rise = getRiseAtPoint(point);
+    return surface === 'bottom'
+      ? baseElevation + rise
+      : baseElevation + slabThickness + rise;
+  }
+
+  function createPlaneOutline(localPoints) {
+    const points = localPoints.map((point) => pointFromAxisCoordinates(
+      centroid,
+      direction,
+      ridgeDirection,
+      point.x,
+      point.y
+    ));
+    return restoreOrientation(uniqueSequentialPoints(points), roofOutline);
+  }
+
+  const leftOutline = createPlaneOutline([
+    { x: spanRange.min, y: layoutRange.min },
+    { x: spanRange.min, y: layoutRange.max },
+    { x: spanMid, y: ridgeEndValue },
+    { x: spanMid, y: ridgeStartValue },
+  ]);
+  const rightOutline = createPlaneOutline([
+    { x: spanMid, y: ridgeStartValue },
+    { x: spanMid, y: ridgeEndValue },
+    { x: spanRange.max, y: layoutRange.max },
+    { x: spanRange.max, y: layoutRange.min },
+  ]);
+  const startHipOutline = createPlaneOutline([
+    { x: spanRange.min, y: layoutRange.min },
+    { x: spanRange.max, y: layoutRange.min },
+    { x: spanMid, y: ridgeStartValue },
+  ]);
+  const endHipOutline = createPlaneOutline([
+    { x: spanRange.min, y: layoutRange.max },
+    { x: spanMid, y: ridgeEndValue },
+    { x: spanRange.max, y: layoutRange.max },
+  ]);
+
+  const planes = [];
+  const leftPlane = leftOutline.length >= 3
+    ? createShapeProfilePlane(`${roofSystem?.id || 'roof'}-hip-left`, 'hip_left', leftOutline, scale(direction, -1), slope, baseElevation, getSurfaceElevation)
+    : null;
+  const rightPlane = rightOutline.length >= 3
+    ? createShapeProfilePlane(`${roofSystem?.id || 'roof'}-hip-right`, 'hip_right', rightOutline, direction, slope, baseElevation, getSurfaceElevation)
+    : null;
+  const startHipPlane = startHipOutline.length >= 3
+    ? createShapeProfilePlane(`${roofSystem?.id || 'roof'}-hip-start`, 'hip_start', startHipOutline, scale(ridgeDirection, -1), slope, baseElevation, getSurfaceElevation)
+    : null;
+  const endHipPlane = endHipOutline.length >= 3
+    ? createShapeProfilePlane(`${roofSystem?.id || 'roof'}-hip-end`, 'hip_end', endHipOutline, ridgeDirection, slope, baseElevation, getSurfaceElevation)
+    : null;
+
+  if (leftPlane) planes.push(leftPlane);
+  if (rightPlane) planes.push(rightPlane);
+  if (startHipPlane) planes.push(startHipPlane);
+  if (endHipPlane) planes.push(endHipPlane);
+
+  const roofOutlineWithElevations = roofOutline.map((point) => ({
+    ...point,
+    topElevation: getSurfaceElevation(point, 'top'),
+    bottomElevation: getSurfaceElevation(point, 'bottom'),
+  }));
+  const elevationSamplePoints = uniquePoints([
+    ...roofOutline,
+    ...planes.flatMap((plane) => plane.outline || []),
+    ridgeStartPoint,
+    ridgeEndPoint,
+  ]).map((point) => ({
+    ...point,
+    topElevation: getSurfaceElevation(point, 'top'),
+    bottomElevation: getSurfaceElevation(point, 'bottom'),
+  }));
+  const minBottomElevation = Math.min(...elevationSamplePoints.map((point) => point.bottomElevation));
+  const maxTopElevation = Math.max(...elevationSamplePoints.map((point) => point.topElevation));
+
+  const roofEdges = [
+    leftPlane && startHipPlane
+      ? createRoofEdgeRelationship(
+          `${roofSystem?.id || 'roof'}-hip-start-left`,
+          'hip',
+          pointFromAxisCoordinates(centroid, direction, ridgeDirection, spanRange.min, layoutRange.min),
+          ridgeStartPoint,
+          [leftPlane.id, startHipPlane.id]
+        )
+      : null,
+    rightPlane && startHipPlane
+      ? createRoofEdgeRelationship(
+          `${roofSystem?.id || 'roof'}-hip-start-right`,
+          'hip',
+          pointFromAxisCoordinates(centroid, direction, ridgeDirection, spanRange.max, layoutRange.min),
+          ridgeStartPoint,
+          [rightPlane.id, startHipPlane.id]
+        )
+      : null,
+    leftPlane && endHipPlane
+      ? createRoofEdgeRelationship(
+          `${roofSystem?.id || 'roof'}-hip-end-left`,
+          'hip',
+          pointFromAxisCoordinates(centroid, direction, ridgeDirection, spanRange.min, layoutRange.max),
+          ridgeEndPoint,
+          [leftPlane.id, endHipPlane.id]
+        )
+      : null,
+    rightPlane && endHipPlane
+      ? createRoofEdgeRelationship(
+          `${roofSystem?.id || 'roof'}-hip-end-right`,
+          'hip',
+          pointFromAxisCoordinates(centroid, direction, ridgeDirection, spanRange.max, layoutRange.max),
+          ridgeEndPoint,
+          [rightPlane.id, endHipPlane.id]
+        )
+      : null,
+  ].filter(Boolean);
+
+  const ridges = hasRidge
+    ? [{
+        id: `${roofSystem?.id || 'roof'}-ridge`,
+        edgeId: `${roofSystem?.id || 'roof'}-ridge`,
+        startPoint: clonePoint(ridgeStartPoint),
+        endPoint: clonePoint(ridgeEndPoint),
+        planeIds: [leftPlane?.id, rightPlane?.id].filter(Boolean),
+      }]
+    : [];
+  const hips = roofEdges.map((edge) => ({
+    id: edge.id,
+    edgeId: edge.id,
+    startPoint: clonePoint(edge.startPoint),
+    endPoint: clonePoint(edge.endPoint),
+    planeIds: [...edge.planeIds],
+  }));
+
+  return {
+    roofType,
+    boundaryPolygon,
+    roofOutline,
+    roofOutlineWithElevations,
+    convexBoundary: false,
+    overhangApplied: false,
+    pitch,
+    centroid,
+    direction,
+    ridgeDirection,
+    ridgeAxisValue: spanMid,
+    ridgeSegment: hasRidge ? {
+      start: ridgeStartPoint,
+      end: ridgeEndPoint,
+    } : null,
+    planes,
+    roofEdges,
+    ridges,
+    valleys: [],
+    hips,
+    minBottomElevation,
+    maxTopElevation,
+    getRiseAtPoint,
+    getSurfaceElevation,
+    findPlaneAtPoint: (point) => (
+      (planes || []).find((plane) => pointInPolygon(point, plane.outline || []))
+      || planes[0]
+      || null
+    ),
+  };
+}
+
+function buildProfileDrivenRoofGeometry(
+  roofSystem,
+  roofType,
+  boundaryPolygon,
+  roofOutline,
+  centroid,
+  direction,
+  ridgeDirection,
+  pitch,
+  shapeProfile
+) {
+  const outlineRange = axisRange(roofOutline, centroid, direction);
+  const axisSpan = Math.max(0, outlineRange.max - outlineRange.min);
+  const baseElevation = roofSystem?.baseElevation ?? 0;
+  const slabThickness = roofSystem?.slabThickness ?? 0;
+  const profilePoints = [...(shapeProfile?.points || [])]
+    .filter((point) => Number.isFinite(point?.position) && Number.isFinite(point?.rise))
+    .sort((a, b) => a.position - b.position);
+
+  if (axisSpan <= EPSILON || profilePoints.length < 2) {
+    return null;
+  }
+
+  function getRiseAtPoint(point) {
+    if (!point) return 0;
+    const axisPosition = axisValue(point, centroid, direction);
+    const ratio = (axisPosition - outlineRange.min) / axisSpan;
+    return sampleShapeProfileRise(shapeProfile, ratio);
+  }
+
+  function getSurfaceElevation(point, surface = 'top') {
+    const rise = getRiseAtPoint(point);
+    return surface === 'bottom'
+      ? baseElevation + rise
+      : baseElevation + slabThickness + rise;
+  }
+
+  const planes = [];
+  for (let index = 0; index < profilePoints.length - 1; index += 1) {
+    const start = profilePoints[index];
+    const end = profilePoints[index + 1];
+    const bandOutline = clipPolygonToAxisBand(
+      roofOutline,
+      centroid,
+      direction,
+      outlineRange.min + (axisSpan * start.position),
+      outlineRange.min + (axisSpan * end.position)
+    );
+    if (bandOutline.length < 3) continue;
+
+    const segmentRun = Math.max((end.position - start.position) * axisSpan, EPSILON);
+    const segmentSlope = Math.max(0, Math.abs(end.rise - start.rise) / segmentRun) * 100;
+    const segmentDirection = end.rise > start.rise
+      ? scale(direction, -1)
+      : (end.rise < start.rise ? direction : { x: 0, y: 0 });
+
+    const planeType = segmentSlope <= EPSILON
+      ? `${roofType}_crown`
+      : `${roofType}_segment_${index + 1}`;
+    planes.push(createShapeProfilePlane(
+      `${roofSystem?.id || 'roof'}-${planeType}`,
+      planeType,
+      bandOutline,
+      segmentDirection,
+      segmentSlope,
+      baseElevation,
+      getSurfaceElevation
+    ));
+  }
+
+  const roofOutlineWithElevations = roofOutline.map((point) => ({
+    ...point,
+    topElevation: getSurfaceElevation(point, 'top'),
+    bottomElevation: getSurfaceElevation(point, 'bottom'),
+  }));
+  const minBottomElevation = Math.min(...roofOutlineWithElevations.map((point) => point.bottomElevation));
+  const maxTopElevation = Math.max(...roofOutlineWithElevations.map((point) => point.topElevation));
+
+  const peakBand = resolveShapeProfilePeakBand(shapeProfile);
+  const ridgeAxisValue = peakBand
+    ? outlineRange.min + (axisSpan * ((peakBand.minPosition + peakBand.maxPosition) / 2))
+    : 0;
+  const ridgeHits = peakBand
+    ? uniquePoints(collectAxisIntersections(roofOutline, centroid, direction, ridgeAxisValue))
+      .sort((a, b) => axisValue(a, centroid, ridgeDirection) - axisValue(b, centroid, ridgeDirection))
+    : [];
+  const ridgeSegment = ridgeHits.length >= 2
+    ? {
+        start: ridgeHits[0],
+        end: ridgeHits[ridgeHits.length - 1],
+      }
+    : null;
+
+  return {
+    roofType,
+    boundaryPolygon,
+    roofOutline,
+    roofOutlineWithElevations,
+    convexBoundary: false,
+    overhangApplied: false,
+    pitch,
+    centroid,
+    direction,
+    ridgeDirection,
+    ridgeAxisValue,
+    ridgeSegment,
+    planes,
+    roofEdges: [],
+    ridges: ridgeSegment ? [{
+      id: `${roofSystem?.id || 'roof'}-ridge`,
+      edgeId: `${roofSystem?.id || 'roof'}-ridge`,
+      startPoint: clonePoint(ridgeSegment.start),
+      endPoint: clonePoint(ridgeSegment.end),
+      planeIds: planes.map((plane) => plane.id),
+    }] : [],
+    valleys: [],
+    hips: [],
+    minBottomElevation,
+    maxTopElevation,
+    getRiseAtPoint,
+    getSurfaceElevation,
+    findPlaneAtPoint: (point) => (
+      (planes || []).find((plane) => pointInPolygon(point, plane.outline || []))
+      || planes[0]
+      || null
+    ),
   };
 }
 
@@ -407,7 +831,41 @@ export function buildRoofPlaneGeometry(roofSystem) {
   const centroid = polygonCentroid(boundaryPolygon);
   const direction = normalizeRoofPitchDirection(pitch.direction);
   const ridgeDirection = normalize(perpendicular(direction));
+  const attachedShapeProfile = roofSystem?.attachedShapeProfile || null;
   const { convexBoundary, overhangApplied, roofOutline } = ensureRoofOutline(boundaryPolygon, roofType, pitch);
+
+  if (roofType === 'hip') {
+    const hipGeometry = buildHipRoofGeometry(
+      roofSystem,
+      roofType,
+      boundaryPolygon,
+      roofOutline,
+      centroid,
+      direction,
+      ridgeDirection,
+      pitch
+    );
+    if (hipGeometry) return hipGeometry;
+  }
+
+  if (
+    ['box_gable', 'pyramid_hipped', 'domed', 'dropped_eaves'].includes(roofType)
+    && attachedShapeProfile?.points?.length >= 2
+  ) {
+    const profileGeometry = buildProfileDrivenRoofGeometry(
+      roofSystem,
+      roofType,
+      boundaryPolygon,
+      roofOutline,
+      centroid,
+      direction,
+      ridgeDirection,
+      pitch,
+      attachedShapeProfile
+    );
+    if (profileGeometry) return profileGeometry;
+  }
+
   const outlineRange = axisRange(roofOutline, centroid, direction);
   const baseElevation = roofSystem?.baseElevation ?? 0;
   const slabThickness = roofSystem?.slabThickness ?? 0;

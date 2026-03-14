@@ -5,8 +5,10 @@ import { getOrderedFloors } from '@/domain/floorModels';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
-import { roofPitchDirectionToAngle } from '@/domain/roofModels';
+import { getRoofTypeLabel, roofPitchDirectionToAngle } from '@/domain/roofModels';
+import { resolveTrussType } from '@/domain/trussModels';
 import { beamLength } from '@/geometry/beamGeometry';
+import { getTrussSystemPurlinTotalLength } from '@/geometry/trussGeometry';
 import { findRoofOpeningById, normalizeRoofOpeningType } from '@/roof/openings';
 import { resolveParapetLine } from '@/geometry/roofPlanGeometry';
 import { slabArea } from '@/geometry/slabGeometry';
@@ -29,6 +31,8 @@ const INSPECTABLE_TYPES = new Set([
   'parapet',
   'drain',
   'roofOpening',
+  'trussSystem',
+  'trussInstance',
 ]);
 
 const TYPE_LABELS = {
@@ -46,6 +50,8 @@ const TYPE_LABELS = {
   parapet: 'Parapet',
   drain: 'Drain',
   roofOpening: 'Roof Opening',
+  trussSystem: 'Truss System',
+  trussInstance: 'Truss Instance',
 };
 
 const FIXTURE_TYPE_LABELS = {
@@ -63,6 +69,23 @@ function mmRow(label, value) {
 
 function areaRow(label, value) {
   return { label, value: `${(Math.abs(value || 0) / 1_000_000).toFixed(2)} m²` };
+}
+
+function materialLabel(material) {
+  return material ? material.charAt(0).toUpperCase() + material.slice(1) : '—';
+}
+
+function trussShapeLabel(value) {
+  return String(value || '')
+    .split('_')
+    .map((part) => part ? part.charAt(0).toUpperCase() + part.slice(1) : '')
+    .join(' ') || '—';
+}
+
+function trussSupportLabel(floor, beamId) {
+  const beam = (floor?.beams || []).find((entry) => entry.id === beamId) || null;
+  if (!beam || !floor) return '—';
+  return getBeamDisplayLabel(beam, floor.columns || []);
 }
 
 function findObjectInFloor(floor, selectedType, selectedId) {
@@ -109,6 +132,24 @@ function findObjectInRoof(roofSystem, selectedType, selectedId) {
   }
 }
 
+function findObjectInTrusses(project, selectedType, selectedId) {
+  if (selectedType === 'trussSystem') {
+    const trussSystem = (project?.trussSystems || []).find((entry) => entry.id === selectedId) || null;
+    return trussSystem ? { trussSystem, trussInstance: null } : null;
+  }
+
+  if (selectedType === 'trussInstance') {
+    for (const trussSystem of project?.trussSystems || []) {
+      const trussInstance = (trussSystem.trussInstances || []).find((entry) => entry.id === selectedId) || null;
+      if (trussInstance) {
+        return { trussSystem, trussInstance };
+      }
+    }
+  }
+
+  return null;
+}
+
 function titleForObject(selectedType, object, floor) {
   switch (selectedType) {
     case 'beam':
@@ -139,6 +180,12 @@ function titleForObject(selectedType, object, floor) {
       return object.name || `Drain ${object.id.split('_').pop()}`;
     case 'roofOpening':
       return object.name || `Roof Opening ${object.id.split('_').pop()}`;
+    case 'trussSystem':
+      return object.name || 'Truss System';
+    case 'trussInstance': {
+      const trussType = resolveTrussType(object.trussTypeId);
+      return `${trussType.name} ${object.id.split('_').pop()}`;
+    }
     default:
       return object?.id || TYPE_LABELS[selectedType] || 'Object';
   }
@@ -211,7 +258,7 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
       ];
     case 'roofSystem':
       return [
-        { label: 'Type', value: (object.roofType || 'flat').toUpperCase() },
+        { label: 'Type', value: getRoofTypeLabel(object.roofType || 'flat') },
         mmRow('Base Elev.', object.baseElevation),
         mmRow('Slab Thick.', object.slabThickness),
         ...(object.roofType === 'flat'
@@ -224,6 +271,10 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
                 { label: 'Hips', value: String((object.hips || []).length) },
               ]
           : [
+              ...(object.trussAttachmentId ? [{
+                label: 'Pitch Source',
+                value: object.pitchSource === 'manual' ? 'Manual Slope' : 'Follow Truss',
+              }] : []),
               { label: 'Roof Slope', value: `${Number(object.pitch?.slope || 0).toFixed(1)}%` },
               { label: 'Slope Dir.', value: `${Math.round(roofPitchDirectionToAngle(object.pitch?.direction))}°` },
               mmRow('Overhang', object.pitch?.overhang),
@@ -253,6 +304,56 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
         }, 0) / 2)),
         mmRow('Curb Height', object.curbHeight),
       ];
+    case 'trussSystem':
+      {
+        const purlinTotalLength = getTrussSystemPurlinTotalLength(object);
+        return [
+          { label: 'Floor', value: floor?.name || 'Unassigned' },
+          mmRow('Base Elev.', object.baseElevation),
+          { label: 'Rotation', value: `${Number(object.planRotationOffsetDegrees || 0).toFixed(1)}°` },
+          { label: 'Instances', value: String((object.trussInstances || []).length) },
+          { label: 'Purlins', value: object.purlinSystem?.enabled ? 'Enabled' : 'Disabled' },
+          ...(object.purlinSystem?.enabled
+            ? [
+                mmRow('Purlin Spacing', object.purlinSystem.spacing),
+                mmRow('Purlin Start', object.purlinSystem.startOffset),
+                mmRow('Purlin End', object.purlinSystem.endOffset),
+                mmRow('Purlin OH A', object.purlinSystem.overhangStart),
+                mmRow('Purlin OH B', object.purlinSystem.overhangEnd),
+                {
+                  label: 'Purlin Total Length',
+                  value: purlinTotalLength > 0 ? formatMeasurement(purlinTotalLength) : 'Single support only',
+                },
+                { label: 'Purlin Section', value: `${formatMeasurement(object.purlinSystem.width)} x ${formatMeasurement(object.purlinSystem.depth)}` },
+                { label: 'Purlin Material', value: materialLabel(object.purlinSystem.material) },
+              ]
+            : []),
+          { label: 'Roof Link', value: roofSystem?.trussAttachmentId === object.id ? (roofSystem.name || 'Active Roof Source') : 'Not Roof Source' },
+        ];
+      }
+    case 'trussInstance': {
+      const trussType = resolveTrussType(object.trussTypeId);
+      return [
+        { label: 'Type', value: trussType.name },
+        { label: 'Family', value: trussShapeLabel(trussType.family) },
+        { label: 'Shape', value: trussShapeLabel(trussType.shape || trussType.family) },
+        { label: 'Roof Fit', value: trussType.attachedRoofType ? trussType.attachedRoofType.toUpperCase() : 'UNSUPPORTED' },
+        { label: 'Material', value: materialLabel(object.material || trussType.material) },
+        { label: 'Web Pattern', value: trussType.webPattern?.label || trussType.webPattern?.key || '—' },
+        { label: 'Support A', value: trussSupportLabel(floor, object.supportBeamIds?.start) },
+        { label: 'Support B', value: trussSupportLabel(floor, object.supportBeamIds?.end) },
+        mmRow('Span', object.span),
+        mmRow('Rise', object.rise),
+        { label: 'Pitch', value: `${Number(object.pitch || 0).toFixed(1)}%` },
+        mmRow('Spacing', object.spacing),
+        { label: 'Count', value: String(object.count || 1) },
+        mmRow('Bearing A', object.bearingOffsets?.start),
+        mmRow('Bearing B', object.bearingOffsets?.end),
+        mmRow('Overhang A', object.overhangs?.start),
+        mmRow('Overhang B', object.overhangs?.end),
+        { label: 'Roof Link', value: object.roofAttachmentId || 'None' },
+      ];
+    }
     default:
       return [];
   }
@@ -292,6 +393,22 @@ export function getPreviewInspection(project, selectedType, selectedId) {
       title: titleForObject(selectedType, roofObject, topFloor || { columns: [] }),
       subtitle: `${project?.roofSystem?.name || 'Roof'} · ${TYPE_LABELS[selectedType]}`,
       rows: rowsForObject(selectedType, roofObject, topFloor || { columns: [] }, project?.roofSystem || null),
+    };
+  }
+
+  const trussObject = findObjectInTrusses(project, selectedType, selectedId);
+  if (trussObject?.trussSystem) {
+    const floor = (project?.floors || []).find((entry) => entry.id === trussObject.trussSystem.floorId) || null;
+    const object = trussObject.trussInstance || trussObject.trussSystem;
+
+    return {
+      id: selectedId,
+      type: selectedType,
+      floorId: trussObject.trussSystem.floorId,
+      floorName: floor?.name || 'Truss',
+      title: titleForObject(selectedType, object, floor || { columns: [] }),
+      subtitle: `${trussObject.trussSystem.name || 'Truss System'} · ${TYPE_LABELS[selectedType]}`,
+      rows: rowsForObject(selectedType, object, floor || { columns: [] }, project?.roofSystem || null),
     };
   }
 

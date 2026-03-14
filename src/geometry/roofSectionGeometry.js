@@ -4,6 +4,7 @@ import { buildRoofPlaneGeometry } from './roofPlaneGeometry';
 import { pointInPolygon } from './polygon';
 import { projectPointToSectionCut, sectionCutLength } from './sectionCutGeometry';
 import { getParapetRenderData } from './roofPlanGeometry';
+import { SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 
 const EPSILON = 1e-6;
 
@@ -134,6 +135,43 @@ function pointAtAlong(sectionCut, along) {
   };
 }
 
+function createDiagnostics(visible, reason, elementCount = 0) {
+  return {
+    visible,
+    reason,
+    elementCount,
+  };
+}
+
+function summarizePolygonSectionVisibility(sectionCut, polygon = [], depthLimit = 0) {
+  if (!sectionCut || polygon.length < 3) {
+    return createDiagnostics(false, SECTION_VISIBILITY_REASONS.NO_GEOMETRY, 0);
+  }
+
+  const projected = projectPolygon(sectionCut, polygon);
+  if (!projected.length) {
+    return createDiagnostics(false, SECTION_VISIBILITY_REASONS.NO_GEOMETRY, 0);
+  }
+
+  const alongs = projected.map((entry) => entry.along);
+  const offsets = projected.map((entry) => entry.offset);
+  const maxLength = sectionCutLength(sectionCut);
+  const minAlong = Math.min(...alongs);
+  const maxAlong = Math.max(...alongs);
+  const minOffset = Math.min(...offsets);
+  const maxOffset = Math.max(...offsets);
+
+  if (maxAlong < -EPSILON || minAlong > maxLength + EPSILON) {
+    return createDiagnostics(false, SECTION_VISIBILITY_REASONS.MISSES_CUT, 0);
+  }
+
+  if (maxOffset < -EPSILON || minOffset > depthLimit + EPSILON) {
+    return createDiagnostics(false, SECTION_VISIBILITY_REASONS.OUTSIDE_DEPTH_OR_DIRECTION, 0);
+  }
+
+  return createDiagnostics(false, SECTION_VISIBILITY_REASONS.NO_GEOMETRY, 0);
+}
+
 function createSlopedSectionPolygon(id, roofGeometry, sectionCut, plane, interval, renderMode, depth, sourceId) {
   if (!interval) return null;
 
@@ -209,7 +247,12 @@ function buildOpeningCurbElements(openingEntries, roofSystem, roofGeometry, sect
 
 export function buildRoofSectionElements(roofSystem, sectionCut) {
   if (!roofSystem || !sectionCut || (roofSystem.boundaryPolygon || []).length < 3) {
-    return { rectElements: [], polygonElements: [], stairElements: [] };
+    return {
+      rectElements: [],
+      polygonElements: [],
+      stairElements: [],
+      diagnostics: createDiagnostics(false, SECTION_VISIBILITY_REASONS.NO_GEOMETRY, 0),
+    };
   }
 
   const roofGeometry = buildRoofPlaneGeometry(roofSystem);
@@ -326,12 +369,19 @@ export function buildRoofSectionElements(roofSystem, sectionCut) {
     ));
   }
 
+  const builtRectElements = [
+    ...rectElements,
+    ...buildOpeningCurbElements(openingEntries, roofSystem, roofGeometry, sectionCut, topElevation),
+  ].filter(Boolean);
+  const builtPolygonElements = polygonElements.filter(Boolean);
+  const elementCount = builtRectElements.length + builtPolygonElements.length;
+
   return {
-    rectElements: [
-      ...rectElements,
-      ...buildOpeningCurbElements(openingEntries, roofSystem, roofGeometry, sectionCut, topElevation),
-    ].filter(Boolean),
-    polygonElements: polygonElements.filter(Boolean),
+    rectElements: builtRectElements,
+    polygonElements: builtPolygonElements,
     stairElements: [],
+    diagnostics: elementCount > 0
+      ? createDiagnostics(true, SECTION_VISIBILITY_REASONS.OK, elementCount)
+      : summarizePolygonSectionVisibility(sectionCut, roofSystem.boundaryPolygon || [], sectionCut.depth),
   };
 }

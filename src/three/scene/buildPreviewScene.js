@@ -1,6 +1,7 @@
 import { buildFloorPreviewObjects } from './objectBuilders';
 import { buildRoofPreviewObjects } from '@/geometry/roof3dGeometry';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorStackBounds, getOrderedFloors } from '@/domain/floorModels';
+import { buildTrussPreviewObjects } from '@/geometry/trussGeometry';
 
 function mergeBounds(current, next) {
   if (!next) return current;
@@ -53,7 +54,10 @@ export function buildPreviewScene(project, options = {}) {
   const visibleFloorIds = new Set(resolvedVisibleFloorIds);
 
   const floorDescriptors = floors.map((floor) => {
-    const objects = buildFloorPreviewObjects(floor);
+    const trussObjects = (project?.trussSystems || [])
+      .filter((trussSystem) => trussSystem.floorId === floor.id)
+      .flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
+    const objects = [...buildFloorPreviewObjects(floor), ...trussObjects];
     return {
       floorId: floor.id,
       name: floor.name,

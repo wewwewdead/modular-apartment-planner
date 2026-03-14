@@ -1,4 +1,5 @@
 import { generateId } from './ids';
+import { CURRENT_PROJECT_VERSION } from './projectVersion';
 import { WALL_THICKNESS, WALL_HEIGHT, DOOR_WIDTH, DOOR_HEIGHT, DOOR_SILL_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT, COLUMN_WIDTH, COLUMN_DEPTH, BEAM_WIDTH, BEAM_DEPTH, STAIR_WIDTH, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, SLAB_THICKNESS, SLAB_ELEVATION, SECTION_DEPTH, LANDING_WIDTH, LANDING_DEPTH, LANDING_THICKNESS, RAILING_HEIGHT, RAILING_WIDTH, ROOM_COLOR, DIMENSION_DEFAULT_OFFSET } from './defaults';
 import { FIXTURE_DEFAULTS } from '@/editor/tools';
 import { polygonArea, polygonCentroid } from '@/geometry/polygon';
@@ -16,9 +17,10 @@ export function createProject(name = 'Untitled Project') {
     updatedAt: new Date().toISOString(),
     floors: [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })],
     roofSystem: null,
+    trussSystems: [],
     sheets: [],
     phases: [],
-    version: 4,
+    version: CURRENT_PROJECT_VERSION,
   };
 }
 

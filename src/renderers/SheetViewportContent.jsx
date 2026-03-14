@@ -15,6 +15,8 @@ import SectionCutRenderer from './SectionCutRenderer';
 import SectionSceneLayer from './SectionSceneLayer';
 import SlabRenderer from './SlabRenderer';
 import StairRenderer from './StairRenderer';
+import TrussDetailRenderer from './TrussDetailRenderer';
+import TrussRenderer from './TrussRenderer';
 import WallRenderer from './WallRenderer';
 import WindowRenderer from './WindowRenderer';
 
@@ -172,6 +174,20 @@ export default function SheetViewportContent({ source }) {
     return <RoofRenderer roofSystem={source.roofSystem} interactive={false} />;
   }
 
+  if (source.kind === 'truss_plan') {
+    return <TrussRenderer floor={source.floor} trussSystems={source.trussSystems} />;
+  }
+
+  if (source.kind === 'truss_detail') {
+    return (
+      <TrussDetailRenderer
+        trussSystem={source.trussSystem}
+        trussInstanceId={source.trussInstanceId}
+        showTitle={false}
+      />
+    );
+  }
+
   if (source.kind === 'roof_drainage') {
     return <RoofDrainageRenderer roofSystem={source.roofSystem} interactive={false} />;
   }
@@ -193,6 +209,16 @@ export default function SheetViewportContent({ source }) {
       <ElevationSceneLayer
         scene={source.scene}
         annotationScene={source.annotationScene}
+        showTitle={false}
+      />
+    );
+  }
+
+  if (source.kind === 'roof_elevation') {
+    return (
+      <ElevationSceneLayer
+        scene={source.scene}
+        annotationScene={null}
         showTitle={false}
       />
     );

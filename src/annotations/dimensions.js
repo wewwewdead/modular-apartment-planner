@@ -4,6 +4,7 @@ import { add, distance, midpoint, normalize, perpendicular, scale, subtract } fr
 import { pointInPolygon } from '@/geometry/polygon';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { formatMeasurement } from './format';
+import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS, createMeasurementMetadata } from './policy';
 
 const EPSILON = 1e-6;
 const WALL_DIMENSION_GAP = 300;
@@ -118,16 +119,20 @@ export function createDimensionFigure({
   const lineDirection = normalize(subtract(core.lineEnd, core.lineStart));
   const startArrow = createArrowHead(core.lineStart, lineDirection);
   const endArrow = createArrowHead(core.lineEnd, scale(lineDirection, -1));
+  const measurementMeta = createMeasurementMetadata(core.measurement);
 
   return {
     id,
     type: 'dimension',
+    trustLevel: ANNOTATION_TRUST_LEVELS.AUTHORITATIVE,
+    semanticRole: ANNOTATION_SEMANTIC_ROLES.MEASUREMENT,
     source,
     sourceType,
     sourceId,
     mode,
     measurement: core.measurement,
-    label: label || formatMeasurement(core.measurement),
+    measurementMeta,
+    label: label || measurementMeta.displayValue,
     lineStart: core.lineStart,
     lineEnd: core.lineEnd,
     extensionLines: core.extensionLines,
@@ -135,7 +140,7 @@ export function createDimensionFigure({
     text: {
       position: core.textPosition,
       angle: core.textAngle,
-      value: label || formatMeasurement(core.measurement),
+      value: label || measurementMeta.displayValue,
     },
     segments: [
       { start: core.lineStart, end: core.lineEnd },

@@ -74,10 +74,30 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+}
+
+.previewFallback::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 .panelHidden {
-  display: none;
+  width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  transition: width var(--duration-layout) var(--ease-in-out-soft),
+              padding var(--duration-layout) var(--ease-in-out-soft);
 }
 
 .workspaceMaximized {
@@ -101,5 +121,40 @@
   .previewFallback {
     border-left: none;
     border-top: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 0px 1fr 0px;
+  }
+  .sidebar, .properties {
+    position: fixed;
+    top: var(--toolbar-height);
+    bottom: 0;
+    z-index: 20;
+    transition: transform var(--duration-layout) var(--ease-out);
+    box-shadow: var(--shadow-floating);
+    width: var(--sidebar-width);
+    background: var(--color-panel-bg);
+  }
+  .sidebar {
+    left: 0;
+    transform: translateX(-100%);
+  }
+  .properties {
+    right: 0;
+    left: auto;
+    width: var(--properties-width);
+    transform: translateX(100%);
+  }
+  .sidebarVisible {
+    transform: translateX(0);
+  }
+  .propertiesVisible {
+    transform: translateX(0);
+  }
+  .panelHidden {
+    width: auto;
   }
 }

@@ -10,6 +10,7 @@
 }
 
 .title {
+  font-family: var(--font-heading);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -17,6 +18,7 @@
 }
 
 .subtitle {
+  font-family: var(--font-heading);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -40,10 +42,10 @@
 }
 
 .segmentBtn {
-  height: 24px;
+  height: 28px;
   padding: 0 12px;
   border-radius: calc(var(--radius-md) - 2px);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-text-secondary);
   background: transparent;
@@ -154,9 +156,9 @@
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
-  color: var(--color-accent);
+  color: var(--color-active-glow);
   background: transparent;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  border: 1px solid var(--color-active-glow-border);
   margin-top: var(--space-sm);
   margin-bottom: var(--space-sm);
   transition: background var(--duration-fast), transform var(--duration-fast);
@@ -164,7 +166,7 @@
 }
 
 .actionBtn:hover {
-  background: var(--color-accent-subtle);
+  background: var(--color-active-glow-subtle);
 }
 
 .actionBtn:active {
@@ -196,9 +198,16 @@
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.58);
   min-height: 72px;
+  transition: transform var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.scheduleMetricCard:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .scheduleMetricLabel {
+  font-family: var(--font-heading);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -430,17 +439,21 @@
   font-size: 12px;
   font-weight: 600;
   color: #fff;
-  background: var(--color-accent);
+  background: linear-gradient(180deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
   border: none;
   margin-top: var(--space-sm);
   cursor: pointer;
-  transition: opacity var(--duration-fast), transform var(--duration-fast);
+  transition: opacity var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
 }
 
 .confirmBtn:hover {
   opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), var(--shadow-sm);
 }
 
 .confirmBtn:active {
   transform: scale(0.97);
+  box-shadow: var(--shadow-pressed);
 }

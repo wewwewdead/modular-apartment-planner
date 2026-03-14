@@ -19,6 +19,8 @@ import { createRoofSelectHandler } from './handlers/roofSelectHandler';
 import { createRoofParapetPlaceHandler } from './handlers/roofParapetPlaceHandler';
 import { createRoofDrainPlaceHandler } from './handlers/roofDrainPlaceHandler';
 import { createRoofOpeningPlaceHandler } from './handlers/roofOpeningPlaceHandler';
+import { createTrussSelectHandler } from './handlers/trussSelectHandler';
+import { createTrussDrawHandler } from './handlers/trussDrawHandler';
 
 function createReadOnlyHandler() {
   return {
@@ -33,11 +35,38 @@ function createReadOnlyHandler() {
   };
 }
 
-export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, roofSystem, modelTarget, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode, activePhaseId }) {
+export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, roofSystem, trussSystems, modelTarget, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode, activePhaseId }) {
   const getFloorRef = useRef(getFloor);
   getFloorRef.current = getFloor;
 
   const handler = useMemo(() => {
+    if (modelTarget === 'truss') {
+      if (viewMode !== 'plan') {
+        return createReadOnlyHandler();
+      }
+
+      const trussCtx = {
+        dispatch,
+        editorDispatch,
+        getFloor: (...args) => getFloorRef.current(...args),
+        activeFloorId,
+        trussSystems,
+        viewport,
+        selectedId,
+        selectedType,
+        viewMode,
+        activePhaseId,
+      };
+
+      switch (activeTool) {
+        case TOOLS.TRUSS_DRAW:
+          return createTrussDrawHandler(trussCtx);
+        case TOOLS.SELECT:
+        default:
+          return createTrussSelectHandler(trussCtx);
+      }
+    }
+
     if (modelTarget === 'roof') {
       if (viewMode !== 'plan') {
         return createReadOnlyHandler();
@@ -118,7 +147,7 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
       default:
         return null;
     }
-  }, [activeTool, activeFloorId, project, roofSystem, modelTarget, viewport.zoom, snapEnabled, viewMode, activePhaseId]);
+  }, [activeTool, activeFloorId, project, roofSystem, trussSystems, modelTarget, viewport.zoom, snapEnabled, viewMode, activePhaseId, selectedId, selectedType]);
 
   return {
     onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),

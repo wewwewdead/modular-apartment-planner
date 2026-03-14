@@ -1,6 +1,6 @@
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
-import { buildRoofPlanGeometry } from '@/geometry/roofPlanGeometry';
-import { buildRoofSlopeArrows } from '@/geometry/roofDrainageGeometry';
+import { buildRoofPlanScene } from '@/geometry/roofPlanScene';
+import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
 
 function slopeArrowPoints(arrow) {
   return `${arrow.headA.x},${arrow.headA.y} ${arrow.shaftEnd.x},${arrow.shaftEnd.y} ${arrow.headB.x},${arrow.headB.y}`;
@@ -9,8 +9,8 @@ function slopeArrowPoints(arrow) {
 export default function RoofRenderer({ roofSystem, selectedId = null, selectedType = null, interactive = true }) {
   if (!roofSystem) return null;
 
-  const plan = buildRoofPlanGeometry(roofSystem);
-  const arrows = buildRoofSlopeArrows(roofSystem);
+  const scene = buildRoofPlanScene(roofSystem);
+  const { plan, arrows, tags } = scene;
   const isRoofSelected = selectedType === 'roofSystem' && selectedId === roofSystem.id;
   const isCustom = plan.roofType === 'custom';
   const transitionEdges = (plan.roofEdges || []).filter((edge) => !['ridge', 'valley', 'hip'].includes(edge.edgeRole));
@@ -181,22 +181,9 @@ export default function RoofRenderer({ roofSystem, selectedId = null, selectedTy
             strokeWidth={DRAWING_GRAPHICS.plan.markerStrokeWidth}
             vectorEffect="non-scaling-stroke"
           />
-          {arrow.label && (
-            <text
-              x={arrow.labelPosition.x}
-              y={arrow.labelPosition.y}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fill={DRAWING_GRAPHICS.annotation.text}
-              fontSize={120}
-              fontFamily="var(--font-blueprint)"
-              style={{ pointerEvents: 'none' }}
-            >
-              {arrow.label}
-            </text>
-          )}
         </g>
       ))}
+      <BlueprintAnnotationLayer dimensions={[]} tags={tags} className="roof-plan-annotations" />
     </g>
   );
 }

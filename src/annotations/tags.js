@@ -4,6 +4,7 @@ import { columnCenter } from '@/geometry/columnGeometry';
 import { add, perpendicular, scale } from '@/geometry/point';
 import { doorOutlineOnWall, wallDirection, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { formatAreaLabel } from './format';
+import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS } from './policy';
 
 function formatRoomArea(room) {
   return formatAreaLabel(room.area);
@@ -16,6 +17,8 @@ function createTag(id, textLines, position, options = {}) {
   return {
     id,
     type: 'tag',
+    trustLevel: options.trustLevel ?? ANNOTATION_TRUST_LEVELS.INFORMATIONAL,
+    semanticRole: options.semanticRole ?? ANNOTATION_SEMANTIC_ROLES.LABEL,
     sourceType: options.sourceType ?? null,
     sourceId: options.sourceId ?? null,
     position,

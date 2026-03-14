@@ -23,6 +23,7 @@ export const TOOLS = {
   LANDING: 'landing',
   FIXTURE: 'fixture',
   RAILING: 'railing',
+  TRUSS_DRAW: 'truss_draw',
   ROOF_PARAPET: 'roof_parapet',
   ROOF_DRAIN: 'roof_drain',
   ROOF_OPENING: 'roof_opening',

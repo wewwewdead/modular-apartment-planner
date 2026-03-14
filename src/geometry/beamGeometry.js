@@ -58,6 +58,16 @@ function trimPoint(origin, otherPoint, column) {
   return best ? best.point : { ...origin };
 }
 
+function resolveRefPosition(ref, columns) {
+  if (!ref) return null;
+  if (ref.kind === 'point') {
+    return { point: { x: ref.x, y: ref.y }, column: null };
+  }
+  const column = findColumn(columns, ref);
+  if (!column) return null;
+  return { point: columnCenter(column), column };
+}
+
 export function resolveBeamColumns(beam, columns = []) {
   return {
     startColumn: findColumn(columns, beam.startRef),
@@ -66,14 +76,19 @@ export function resolveBeamColumns(beam, columns = []) {
 }
 
 export function resolveBeamAxis(beam, columns = []) {
-  const { startColumn, endColumn } = resolveBeamColumns(beam, columns);
-  if (!startColumn || !endColumn || startColumn.id === endColumn.id) return null;
+  const startResolved = resolveRefPosition(beam.startRef, columns);
+  const endResolved = resolveRefPosition(beam.endRef, columns);
+  if (!startResolved || !endResolved) return null;
+
+  // Prevent zero-length beams (same column)
+  if (startResolved.column && endResolved.column
+    && startResolved.column.id === endResolved.column.id) return null;
 
   return {
-    startColumn,
-    endColumn,
-    startCenter: columnCenter(startColumn),
-    endCenter: columnCenter(endColumn),
+    startColumn: startResolved.column,
+    endColumn: endResolved.column,
+    startCenter: startResolved.point,
+    endCenter: endResolved.point,
   };
 }
 

@@ -11,13 +11,32 @@ import {
   ROOF_RIDGE_OFFSET,
   ROOF_SLAB_THICKNESS,
 } from './defaults';
-import { getFloorStackBounds, getOrderedFloors } from './floorModels';
+import { getOrderedFloors } from './floorModels';
+import { CURRENT_PROJECT_VERSION } from './projectVersion';
 import { polygonArea } from '@/geometry/polygon';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { deriveCustomRoofTopology } from '@/roof/customRoofTopology';
+import {
+  getAttachedTrussSystem,
+  getRoofAttachmentElevation,
+  resolveRoofAttachmentContext,
+  resolveTrussSystemRoofAttachmentType,
+} from '@/truss/roofAttachment';
 
-const ROOF_TYPES = new Set(['flat', 'shed', 'gable', 'custom']);
+export { getAttachedTrussSystem, getRoofAttachmentElevation } from '@/truss/roofAttachment';
+
+const ROOF_TYPES = new Set([
+  'flat',
+  'shed',
+  'gable',
+  'hip',
+  'box_gable',
+  'pyramid_hipped',
+  'domed',
+  'dropped_eaves',
+  'custom',
+]);
 const ROOF_EDGE_ROLES = new Set([
   'derived',
   'ridge',
@@ -42,8 +61,65 @@ function isFiniteNumber(value) {
   return Number.isFinite(value);
 }
 
+function normalizePhaseId(phaseId = null) {
+  return typeof phaseId === 'string' && phaseId ? phaseId : null;
+}
+
+function normalizeTrussAttachmentId(trussAttachmentId = null) {
+  return typeof trussAttachmentId === 'string' && trussAttachmentId ? trussAttachmentId : null;
+}
+
+function normalizeRoofPitchSource(pitchSource = null, trussAttachmentId = null) {
+  if (pitchSource === 'manual') return 'manual';
+  if (pitchSource === 'truss') return 'truss';
+  return normalizeTrussAttachmentId(trussAttachmentId) ? 'truss' : 'manual';
+}
+
 function normalizeRoofType(roofType = 'flat') {
   return ROOF_TYPES.has(roofType) ? roofType : 'flat';
+}
+
+export function getRoofTypeLabel(roofType = 'flat') {
+  switch (normalizeRoofType(roofType)) {
+    case 'shed':
+      return 'Shed';
+    case 'gable':
+      return 'Gable';
+    case 'hip':
+      return 'Hip';
+    case 'box_gable':
+      return 'Box Gable';
+    case 'pyramid_hipped':
+      return 'Pyramid Hipped';
+    case 'domed':
+      return 'Domed';
+    case 'dropped_eaves':
+      return 'Dropped Eaves';
+    case 'custom':
+      return 'Custom';
+    case 'flat':
+    default:
+      return 'Flat';
+  }
+}
+
+function normalizeAttachedShapeProfile(shapeProfile = null, roofType = null) {
+  const points = (shapeProfile?.points || [])
+    .map((point) => ({
+      position: Math.max(0, Math.min(1, Number(point?.position) || 0)),
+      rise: Math.max(0, Number(point?.rise) || 0),
+    }))
+    .filter((point) => Number.isFinite(point.position) && Number.isFinite(point.rise))
+    .sort((a, b) => a.position - b.position);
+
+  if (points.length < 2) return null;
+
+  return {
+    shape: normalizeRoofType(shapeProfile?.shape ?? roofType ?? 'flat'),
+    totalSpan: Math.max(0, Number(shapeProfile?.totalSpan) || 0),
+    maxRise: Math.max(0, Number(shapeProfile?.maxRise) || Math.max(...points.map((point) => point.rise))),
+    points,
+  };
 }
 
 function normalizeRoofEdgeRole(role = 'derived') {
@@ -62,6 +138,66 @@ export function normalizeRoofPitchDirection(direction = null) {
   return {
     x: x / length,
     y: y / length,
+  };
+}
+
+export function getAttachableRoofTrussSystems(project, catalog) {
+  return (project?.trussSystems || []).filter((trussSystem) => (
+    Boolean(resolveTrussSystemRoofAttachmentType(trussSystem, catalog))
+  ));
+}
+
+function resolveCreateRoofAttachmentId(project, requestedTrussAttachmentId = null, catalog) {
+  const normalizedRequestedId = normalizeTrussAttachmentId(requestedTrussAttachmentId);
+  const attachableTrussSystems = getAttachableRoofTrussSystems(project, catalog);
+  if (!attachableTrussSystems.length) return null;
+  if (normalizedRequestedId && attachableTrussSystems.some((entry) => entry.id === normalizedRequestedId)) {
+    return normalizedRequestedId;
+  }
+  return attachableTrussSystems[0].id;
+}
+
+function resolveAttachedRoofOverrides(roofSystemLike, attachmentContext) {
+  const derivedRoofState = attachmentContext?.derivedRoofState || null;
+  const followsAttachedTruss = Boolean(roofSystemLike?.trussAttachmentId && derivedRoofState);
+  const roofType = followsAttachedTruss
+    ? normalizeRoofType(derivedRoofState.roofType)
+    : normalizeRoofType(roofSystemLike?.roofType ?? 'flat');
+  const pitchSource = normalizeRoofPitchSource(roofSystemLike?.pitchSource, roofSystemLike?.trussAttachmentId);
+  const allowsManualAttachedSlope = followsAttachedTruss && roofType !== 'flat' && roofType !== 'custom';
+  const attachedPitch = followsAttachedTruss
+    ? {
+        ...derivedRoofState.pitch,
+        overhang: isFiniteNumber(roofSystemLike?.pitch?.overhang)
+          ? Math.max(0, roofSystemLike.pitch.overhang)
+          : (derivedRoofState.pitch?.overhang ?? 0),
+      }
+    : null;
+  const pitch = followsAttachedTruss
+    ? createRoofPitch(
+        allowsManualAttachedSlope && pitchSource === 'manual'
+          ? {
+              ...attachedPitch,
+              slope: isFiniteNumber(roofSystemLike?.pitch?.slope)
+                ? Math.max(0, roofSystemLike.pitch.slope)
+                : derivedRoofState.pitch?.slope,
+            }
+          : attachedPitch
+      )
+    : createRoofPitch(roofSystemLike?.pitch);
+  const boundaryPolygon = followsAttachedTruss
+    ? clonePoints(attachmentContext?.derivedBoundaryPolygon || [])
+    : clonePoints(roofSystemLike?.boundaryPolygon || createDefaultBoundary());
+
+  return {
+    followsAttachedTruss,
+    pitchSource: allowsManualAttachedSlope ? pitchSource : 'manual',
+    roofType,
+    pitch,
+    boundaryPolygon: boundaryPolygon.length ? boundaryPolygon : createDefaultBoundary(),
+    attachedShapeProfile: followsAttachedTruss
+      ? normalizeAttachedShapeProfile(derivedRoofState.attachedShapeProfile, roofType)
+      : null,
   };
 }
 
@@ -147,10 +283,6 @@ function collectFloorFootprintPoints(floor) {
   }
 
   return points.filter(Boolean);
-}
-
-export function getRoofAttachmentElevation(project) {
-  return getFloorStackBounds(project).maxElevation;
 }
 
 export function resolveRoofSectionFloor(project, preferredFloorId = null) {
@@ -454,6 +586,7 @@ function normalizeRoofSystemCollections(roofSystem) {
 
 export function createRoofSystem(name = 'Roof', options = {}) {
   const boundaryPolygon = clonePoints(options.boundaryPolygon || []);
+  const trussAttachmentId = normalizeTrussAttachmentId(options.trussAttachmentId);
   const attachmentOffset = isFiniteNumber(options.attachmentOffset)
     ? options.attachmentOffset
     : 0;
@@ -461,6 +594,10 @@ export function createRoofSystem(name = 'Roof', options = {}) {
     id: options.id || generateId('roof'),
     roofType: normalizeRoofType(options.roofType ?? 'flat'),
     name,
+    phaseId: normalizePhaseId(options.phaseId),
+    trussAttachmentId,
+    pitchSource: normalizeRoofPitchSource(options.pitchSource, trussAttachmentId),
+    attachedShapeProfile: normalizeAttachedShapeProfile(options.attachedShapeProfile, options.roofType),
     baseElevation: options.baseElevation ?? 0,
     attachmentOffset,
     boundaryPolygon: boundaryPolygon.length ? boundaryPolygon : createDefaultBoundary(),
@@ -490,16 +627,31 @@ export function createRoofSystem(name = 'Roof', options = {}) {
 }
 
 export function createRoofSystemForProject(project, options = {}) {
-  const attachmentElevation = getRoofAttachmentElevation(project);
+  const resolvedTrussAttachmentId = resolveCreateRoofAttachmentId(project, options.trussAttachmentId, options.catalog);
+  if (!resolvedTrussAttachmentId) {
+    return null;
+  }
+
+  const creationOptions = {
+    ...options,
+    trussAttachmentId: resolvedTrussAttachmentId,
+  };
+  const attachmentContext = resolveRoofAttachmentContext(project, creationOptions, options.catalog);
+  const attachmentElevation = attachmentContext.attachmentElevation;
   const attachmentOffset = isFiniteNumber(options.attachmentOffset)
     ? options.attachmentOffset
     : 0;
+  const attachedOverrides = resolveAttachedRoofOverrides(creationOptions, attachmentContext);
+  if (!attachedOverrides.followsAttachedTruss) return null;
 
   return createRoofSystem(options.name ?? 'Roof', {
-    ...options,
+    ...creationOptions,
     baseElevation: options.baseElevation ?? (attachmentElevation + attachmentOffset),
     attachmentOffset,
-    boundaryPolygon: options.boundaryPolygon || deriveRoofBoundaryFromProject(project),
+    roofType: attachedOverrides.roofType,
+    pitch: attachedOverrides.pitch,
+    attachedShapeProfile: attachedOverrides.attachedShapeProfile,
+    boundaryPolygon: attachedOverrides.boundaryPolygon,
   });
 }
 
@@ -511,28 +663,37 @@ export function getRoofTopElevation(roofSystem) {
 export function syncRoofSystemAttachment(project, roofSystem) {
   if (!roofSystem) return null;
 
-  const attachmentElevation = getRoofAttachmentElevation(project);
+  const attachmentContext = resolveRoofAttachmentContext(project, roofSystem);
+  const attachmentElevation = attachmentContext.attachmentElevation;
+  const attachedOverrides = resolveAttachedRoofOverrides(roofSystem, attachmentContext);
   const attachmentOffset = isFiniteNumber(roofSystem.attachmentOffset)
     ? roofSystem.attachmentOffset
     : ((roofSystem.baseElevation ?? attachmentElevation) - attachmentElevation);
   const normalizedBaseElevation = attachmentElevation + attachmentOffset;
+  const normalizedRoofType = attachedOverrides.roofType;
+  const normalizedPitch = attachedOverrides.pitch;
+  const normalizedBoundaryPolygon = attachedOverrides.boundaryPolygon;
   const baseRoofSystem = {
     ...roofSystem,
     id: roofSystem.id || generateId('roof'),
-    roofType: normalizeRoofType(roofSystem.roofType ?? 'flat'),
+    roofType: normalizedRoofType,
+    phaseId: normalizePhaseId(roofSystem.phaseId),
+    trussAttachmentId: normalizeTrussAttachmentId(roofSystem.trussAttachmentId),
+    pitchSource: attachedOverrides.pitchSource,
+    attachedShapeProfile: attachedOverrides.attachedShapeProfile,
     attachmentOffset,
     baseElevation: normalizedBaseElevation,
-    boundaryPolygon: clonePoints(roofSystem.boundaryPolygon || createDefaultBoundary()),
+    boundaryPolygon: normalizedBoundaryPolygon,
     slabThickness: roofSystem.slabThickness ?? ROOF_SLAB_THICKNESS,
     finishSlope: roofSystem.finishSlope ?? ROOF_FINISH_SLOPE,
-    pitch: createRoofPitch(roofSystem.pitch),
+    pitch: normalizedPitch,
     parapets: normalizeParapets(roofSystem.parapets || []),
     drains: normalizeDrains(roofSystem.drains || []),
     roofOpenings: normalizeRoofOpenings(roofSystem.roofOpenings || []),
     roofPlanes: normalizeRoofPlanes(
       roofSystem.roofPlanes || [],
-      roofSystem.roofType ?? 'flat',
-      roofSystem.boundaryPolygon || createDefaultBoundary(),
+      normalizedRoofType,
+      normalizedBoundaryPolygon,
       normalizedBaseElevation
     ),
     roofEdges: normalizeRoofEdges(roofSystem.roofEdges || []),
@@ -556,7 +717,7 @@ export function syncProjectRoofSystem(project) {
 
   return {
     ...project,
-    version: Math.max(4, Number(project.version || 0)),
+    version: Math.max(CURRENT_PROJECT_VERSION, Number(project.version || 0)),
     roofSystem: syncedRoofSystem,
   };
 }

@@ -12,6 +12,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+  contain: content;
 }
 
 .sectionHeader {
@@ -24,7 +25,7 @@
   background: transparent;
   text-align: left;
   transition: background var(--duration-fast);
-  border-bottom: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-accent);
   padding-bottom: 6px;
 }
 
@@ -41,11 +42,12 @@
 }
 
 .sectionTitle {
-  font-size: 11px;
+  font-family: var(--font-heading);
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   transition: color var(--duration-fast);
 }
 
@@ -100,14 +102,54 @@
   color: var(--color-accent);
 }
 
+.sectionAddBtn:active {
+  transform: scale(0.92);
+}
+
 .count {
   margin-left: auto;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  background: rgba(0, 0, 0, 0.04);
-  padding: 0 6px;
+  font-size: 10px;
+  color: var(--color-active-glow);
+  background: var(--color-active-glow-subtle);
+  padding: 0 5px;
   border-radius: 10px;
   line-height: 18px;
+  font-weight: 700;
+}
+
+/* Animated section collapse */
+.sectionContent {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--duration-layout) ease;
+}
+
+.sectionContentCollapsed {
+  grid-template-rows: 0fr;
+}
+
+.sectionContentInner {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* Staggered fade-in for items */
+@keyframes sectionItemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sectionItem {
+  animation: sectionItemFadeIn 0.2s var(--ease-out) both;
 }
 
 /* Sticky floor context header */
@@ -116,12 +158,13 @@
   top: 0;
   z-index: 2;
   padding: 6px 4px;
+  font-family: var(--font-heading);
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-active-glow);
   background: var(--color-sticky-bg);
   backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--color-divider);
+  border-bottom: 1px solid var(--color-active-glow-border);
   margin-bottom: var(--space-xs);
 }
 
@@ -171,14 +214,14 @@
 }
 
 .itemSelected {
-  background: var(--color-accent-subtle);
-  color: var(--color-accent);
+  background: var(--color-active-glow-subtle);
+  color: var(--color-active-glow);
   font-weight: 500;
-  border-left-color: var(--color-accent);
+  border-left-color: var(--color-active-glow);
 }
 
 .itemSelected:hover {
-  background: rgba(13, 124, 102, 0.12);
+  background: rgba(45, 95, 142, 0.15);
 }
 
 /* Floor cards */
@@ -188,12 +231,14 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-card-bg);
-  transition: background var(--duration-fast), border-color var(--duration-fast);
+  transition: background var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
   overflow: hidden;
 }
 
 .floorCard:hover {
   background: var(--color-card-bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .floorCard:hover .floorActions {
@@ -201,8 +246,8 @@
 }
 
 .floorCardActive {
-  border-color: var(--color-accent);
-  background: var(--color-accent-subtle);
+  border-color: var(--color-active-glow);
+  background: var(--color-active-glow-subtle);
 }
 
 .floorButton {
@@ -257,6 +302,10 @@
   color: var(--color-text-primary);
 }
 
+.floorActionBtn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
 .floorActionBtn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -280,12 +329,14 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-card-bg);
-  transition: background var(--duration-fast), border-color var(--duration-fast);
+  transition: background var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast), box-shadow var(--duration-fast);
   overflow: hidden;
 }
 
 .phaseItem:hover {
   background: var(--color-card-bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .phaseItem:hover .floorActions {
@@ -293,8 +344,8 @@
 }
 
 .phaseItemActive {
-  border-color: var(--color-accent);
-  background: var(--color-accent-subtle);
+  border-color: var(--color-active-glow);
+  background: var(--color-active-glow-subtle);
 }
 
 .phaseColorDot {
@@ -324,7 +375,7 @@
 
 .phaseViewBtn {
   flex: 1;
-  height: 24px;
+  height: 28px;
   border-radius: calc(var(--radius-md) - 2px);
   font-size: 11px;
   font-weight: 600;

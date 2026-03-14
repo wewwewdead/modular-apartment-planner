@@ -197,6 +197,33 @@ function createStairObject(descriptor, materialPalette, isSelected) {
   return group;
 }
 
+function createSegment3DObject(descriptor, materialPalette, isSelected) {
+  const start = new THREE.Vector3(descriptor.start.x, descriptor.start.y, descriptor.start.z);
+  const end = new THREE.Vector3(descriptor.end.x, descriptor.end.y, descriptor.end.z);
+  const direction = new THREE.Vector3().subVectors(end, start);
+  const length = Math.max(direction.length(), 1);
+  const crossSectionHeight = Math.max(descriptor.crossSection?.height || descriptor.thickness || 1, 1);
+  const crossSectionWidth = Math.max(descriptor.crossSection?.width || descriptor.thickness || 1, 1);
+  const geometry = new THREE.BoxGeometry(
+    length,
+    crossSectionHeight,
+    crossSectionWidth
+  );
+  const mesh = new THREE.Mesh(geometry, createMeshMaterial(materialPalette, descriptor.materialKey, isSelected));
+  const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(1, 0, 0),
+    direction.clone().normalize()
+  );
+
+  mesh.position.copy(midpoint);
+  mesh.quaternion.copy(quaternion);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh, materialPalette, isSelected);
+  return mesh;
+}
+
 function createWindowObject(descriptor, materialPalette, isSelected) {
   const group = new THREE.Group();
   const { x: width, y: height, z: depth } = descriptor.size;
@@ -569,6 +596,10 @@ function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
     return createStairObject(descriptor, materialPalette, isSelected);
   }
 
+  if (descriptor.geometry === 'segment3d') {
+    return createSegment3DObject(descriptor, materialPalette, isSelected);
+  }
+
   if (descriptor.geometry === 'window') {
     return createWindowObject(descriptor, materialPalette, isSelected);
   }
@@ -585,7 +616,11 @@ function createObjectForDescriptor(descriptor, materialPalette, isSelected) {
 }
 
 function matchesSelection(descriptor, selection) {
-  if (!selection?.selectedId || selection.selectedType !== descriptor.kind) return false;
+  if (!selection?.selectedId) return false;
+  if (selection.selectedType === 'trussSystem') {
+    return descriptor.metadata?.trussSystemId === selection.selectedId;
+  }
+  if (selection.selectedType !== descriptor.kind) return false;
   return (descriptor.metadata?.sourceId || descriptor.id) === selection.selectedId;
 }
 

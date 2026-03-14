@@ -2,7 +2,9 @@ import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjec
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
+import { buildRailingSectionElements } from '@/geometry/railingSectionGeometry';
 import { buildRoofSectionElements } from '@/geometry/roofSectionGeometry';
+import { buildTrussSectionElements } from '@/geometry/trussSectionGeometry';
 import { segmentIntersection } from '@/geometry/line';
 import { pointInPolygon } from '@/geometry/polygon';
 import { buildStairRoofAccessSectionElement } from '@/geometry/roofAccessGeometry';
@@ -11,6 +13,7 @@ import { getStairRenderData, stairTotalRise } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { getSlabBottomLevel, getSlabTopLevel } from '@/elevations/slab';
+import { SECTION_VISIBILITY_REASONS } from './diagnostics';
 
 const EPSILON = 1e-6;
 
@@ -273,15 +276,17 @@ function buildStairElements(floor, sectionCut, landingElevationMap) {
     .filter(Boolean);
 }
 
-function computeSceneBounds(rects, stairs, sectionCut, baseLevel, polygons = []) {
+function computeSceneBounds(rects, stairs, sectionCut, baseLevel, polygons = [], lines = []) {
   const stairXs = stairs.flatMap((element) => element.points.map((point) => point.x));
   const stairZs = stairs.flatMap((element) => element.points.map((point) => point.z));
   const rectXs = rects.flatMap((element) => [element.left, element.right]);
   const rectZs = rects.flatMap((element) => [element.bottom, element.top]);
   const polygonXs = polygons.flatMap((element) => element.points.map((point) => point.x));
   const polygonZs = polygons.flatMap((element) => element.points.map((point) => point.z));
-  const xs = [...rectXs, ...stairXs, ...polygonXs];
-  const zs = [...rectZs, ...stairZs, ...polygonZs];
+  const lineXs = lines.flatMap((element) => element.points.map((point) => point.x));
+  const lineZs = lines.flatMap((element) => element.points.map((point) => point.z));
+  const xs = [...rectXs, ...stairXs, ...polygonXs, ...lineXs];
+  const zs = [...rectZs, ...stairZs, ...polygonZs, ...lineZs];
 
   if (!xs.length || !zs.length) {
     return {
@@ -313,6 +318,7 @@ function buildFloorSectionElements(floor, sectionCut, roofSystem = null) {
   const landingElevationMap = new Map(
     landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorElevation)])
   );
+  const railingElements = buildRailingSectionElements(floor, sectionCut);
 
   return {
     rectElements: [
@@ -322,8 +328,10 @@ function buildFloorSectionElements(floor, sectionCut, roofSystem = null) {
       ...buildBeamElements(floor, sectionCut),
       ...buildDoorElements(floor, sectionCut),
       ...buildWindowElements(floor, sectionCut),
+      ...(railingElements.rectElements || []),
     ],
     polygonElements: [],
+    lineElements: railingElements.lineElements || [],
     stairElements: [
       ...buildStairElements(floor, sectionCut, landingElevationMap),
       ...(roofSystem
@@ -338,22 +346,71 @@ function buildFloorSectionElements(floor, sectionCut, roofSystem = null) {
           .filter(Boolean)
         : []),
     ],
+    diagnostics: {
+      railing: railingElements.diagnostics || {
+        visible: false,
+        reason: SECTION_VISIBILITY_REASONS.NO_GEOMETRY,
+        elementCount: 0,
+      },
+    },
   };
 }
 
-function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSystem = null) {
+function mergeVisibilityDiagnostics(current, next) {
+  const currentCount = current?.elementCount || 0;
+  const nextCount = next?.elementCount || 0;
+
+  if (currentCount > 0 || nextCount > 0) {
+    return {
+      visible: true,
+      reason: SECTION_VISIBILITY_REASONS.OK,
+      elementCount: currentCount + nextCount,
+    };
+  }
+
+  const reasons = [current?.reason, next?.reason].filter(Boolean);
+  const reason = reasons.includes(SECTION_VISIBILITY_REASONS.OUTSIDE_DEPTH_OR_DIRECTION)
+    ? SECTION_VISIBILITY_REASONS.OUTSIDE_DEPTH_OR_DIRECTION
+    : reasons.includes(SECTION_VISIBILITY_REASONS.MISSES_CUT)
+      ? SECTION_VISIBILITY_REASONS.MISSES_CUT
+      : SECTION_VISIBILITY_REASONS.NO_GEOMETRY;
+
+  return {
+    visible: false,
+    reason,
+    elementCount: 0,
+  };
+}
+
+function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSystem = null, project = null) {
   if (!sectionCut) return null;
 
   const stackBounds = getFloorStackBounds(floors);
   const rectElements = [];
   const polygonElements = [];
   const stairElements = [];
+  const lineElements = [];
+  let roofDiagnostics = {
+    visible: false,
+    reason: SECTION_VISIBILITY_REASONS.NO_GEOMETRY,
+    elementCount: 0,
+  };
+  let railingDiagnostics = {
+    visible: false,
+    reason: SECTION_VISIBILITY_REASONS.NO_GEOMETRY,
+    elementCount: 0,
+  };
 
   for (const floor of floors) {
     const floorElements = buildFloorSectionElements(floor, sectionCut, roofSystem);
     rectElements.push(...floorElements.rectElements);
     polygonElements.push(...(floorElements.polygonElements || []));
+    lineElements.push(...(floorElements.lineElements || []));
     stairElements.push(...floorElements.stairElements);
+    railingDiagnostics = mergeVisibilityDiagnostics(
+      railingDiagnostics,
+      floorElements.diagnostics?.railing
+    );
   }
 
   if (roofSystem) {
@@ -361,7 +418,11 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
     rectElements.push(...roofElements.rectElements);
     polygonElements.push(...(roofElements.polygonElements || []));
     stairElements.push(...roofElements.stairElements);
+    roofDiagnostics = roofElements.diagnostics || roofDiagnostics;
   }
+
+  const trussElements = buildTrussSectionElements(project?.trussSystems || [], sectionCut);
+  lineElements.push(...(trussElements.lineElements || []));
 
   const sortedRectElements = rectElements.sort((a, b) => {
     if (a.renderMode !== b.renderMode) return a.renderMode === 'projection' ? -1 : 1;
@@ -378,20 +439,35 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
     return b.depth - a.depth;
   });
 
+  const sortedLineElements = lineElements.sort((a, b) => {
+    if (a.renderMode !== b.renderMode) return a.renderMode === 'projection' ? -1 : 1;
+    return (b.depth || 0) - (a.depth || 0);
+  });
+
   return {
     viewKey: 'section_view',
     title: title || sectionCut.label || 'Section',
     rectElements: sortedRectElements,
     polygonElements: sortedPolygonElements,
     stairElements: sortedStairElements,
-    bounds: computeSceneBounds(sortedRectElements, sortedStairElements, sectionCut, stackBounds.minElevation, sortedPolygonElements),
+    lineElements: sortedLineElements,
+    bounds: computeSceneBounds(sortedRectElements, sortedStairElements, sectionCut, stackBounds.minElevation, sortedPolygonElements, sortedLineElements),
     groundLevel: stackBounds.minElevation,
+    diagnostics: {
+      roof: roofDiagnostics,
+      railing: railingDiagnostics,
+      truss: trussElements.diagnostics || {
+        visible: false,
+        reason: SECTION_VISIBILITY_REASONS.NO_GEOMETRY,
+        elementCount: 0,
+      },
+    },
   };
 }
 
 export function buildSectionScene(floor, sectionCut) {
   if (!floor || !sectionCut) return null;
-  return buildSectionSceneFromFloors([floor], sectionCut, sectionCut.label || 'Section');
+  return buildSectionSceneFromFloors([floor], sectionCut, sectionCut.label || 'Section', null, null);
 }
 
 export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = null) {
@@ -408,6 +484,7 @@ export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = 
     getOrderedFloors(project),
     sectionCut,
     sectionCut.label || 'Section',
-    project.roofSystem || null
+    project.roofSystem || null,
+    project
   );
 }

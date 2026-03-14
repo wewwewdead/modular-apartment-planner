@@ -1,4 +1,5 @@
 import { getSheetDisplayLabel, getSheetNumberLabel } from '@/domain/sheetModels';
+import { formatMeasurementValue } from '@/annotations/policy';
 
 export const SHEET_TOKENS = {
   margin: 12,
@@ -108,8 +109,8 @@ export function formatSheetDate(value) {
   return `${year}-${month}-${day}`;
 }
 
-export function formatDrawingMeasurement(mm) {
-  return `${Math.round(Math.abs(Number(mm) || 0))} mm`;
+export function formatDrawingMeasurement(mm, options = {}) {
+  return formatMeasurementValue(mm, null, options);
 }
 
 export function formatDrawingArea(area) {
@@ -128,7 +129,10 @@ export function resolveViewportReferenceNote(viewport, source) {
   const custom = viewport?.referenceNote?.trim();
   if (custom) return custom;
   if (source?.kind === '3d_preview') return 'AXONOMETRIC VIEW';
+  if (source?.kind === 'truss_plan') return 'TRUSS PLAN';
+  if (source?.kind === 'truss_detail') return 'TRUSS DETAIL';
   if (source?.kind === 'roof_plan') return 'ROOF PLAN';
+  if (source?.kind === 'roof_elevation') return 'ROOF ELEVATION';
   if (source?.kind === 'roof_drainage') return 'ROOF DRAINAGE PLAN';
   if (source?.kind === 'roof_section') return 'ROOF SECTION';
   if (source?.kind === 'roof_schedule') return 'ROOF SCHEDULE';

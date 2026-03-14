@@ -7,6 +7,7 @@ import { wallLength, wallOutline } from './wallGeometry';
 const DRAIN_HIT_PADDING = 180;
 const EDGE_EPSILON = 1e-4;
 const PARAPET_ALIGNMENT_THRESHOLD = 0.82;
+const GABLE_LIKE_ROOF_TYPES = new Set(['gable', 'hip', 'box_gable', 'pyramid_hipped', 'domed', 'dropped_eaves']);
 
 function classifyParapetEdge(edge, roofGeometry, axisRange) {
   const roofType = roofGeometry.roofType || 'flat';
@@ -28,7 +29,7 @@ function classifyParapetEdge(edge, roofGeometry, axisRange) {
     return { role: 'transition_edge', label: 'Transition Edge', allowed: false };
   }
 
-  if (roofType === 'gable') {
+  if (GABLE_LIKE_ROOF_TYPES.has(roofType)) {
     if (nearHigh || nearLow) return { role: 'eave', label: 'Eave', allowed: false };
     if (alongSlope) return { role: 'gable_end', label: 'Gable End', allowed: true };
     return { role: 'transition_edge', label: 'Transition Edge', allowed: false };

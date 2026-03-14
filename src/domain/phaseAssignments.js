@@ -26,6 +26,13 @@ export function countObjectsInProjectPhase(project, phaseId) {
     }
   }
 
+  if (project?.roofSystem?.phaseId === phaseId) {
+    count += 1;
+  }
+  for (const trussSystem of project?.trussSystems || []) {
+    if (trussSystem.phaseId === phaseId) count += 1;
+  }
+
   return count;
 }
 
@@ -36,6 +43,14 @@ export function clearProjectPhaseReferences(project, phaseId) {
       mapPhaseAssignableFloorObjects(floor, (obj) => (
         obj.phaseId === phaseId ? { ...obj, phaseId: null } : obj
       ))
+    )),
+    roofSystem: project.roofSystem?.phaseId === phaseId
+      ? { ...project.roofSystem, phaseId: null }
+      : project.roofSystem,
+    trussSystems: (project.trussSystems || []).map((trussSystem) => (
+      trussSystem.phaseId === phaseId
+        ? { ...trussSystem, phaseId: null }
+        : trussSystem
     )),
     sheets: (project.sheets || []).map((sheet) => ({
       ...sheet,
@@ -57,6 +72,14 @@ export function sanitizeProjectPhaseReferences(project, validPhaseIds) {
           ? obj
           : { ...obj, phaseId: null }
       ))
+    )),
+    roofSystem: project.roofSystem?.phaseId == null || validPhaseIds.has(project.roofSystem.phaseId)
+      ? project.roofSystem
+      : { ...project.roofSystem, phaseId: null },
+    trussSystems: (project.trussSystems || []).map((trussSystem) => (
+      trussSystem.phaseId == null || validPhaseIds.has(trussSystem.phaseId)
+        ? trussSystem
+        : { ...trussSystem, phaseId: null }
     )),
     sheets: (project.sheets || []).map((sheet) => ({
       ...sheet,

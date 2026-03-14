@@ -1,8 +1,11 @@
 import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjectFloor } from '@/domain/floorModels';
+import { getProjectTrussSystems } from '@/domain/trussModels';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
+import { buildRailingElevationElements } from '@/geometry/railingElevationGeometry';
 import { buildRoofElevationElements } from '@/geometry/roofElevationGeometry';
+import { buildTrussElevationElements } from '@/geometry/trussElevationGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
@@ -158,13 +161,15 @@ function buildWindowRects(floor, view) {
     .filter(Boolean);
 }
 
-function computeSceneBoundsWithPolygons(elements = [], polygonElements = [], baseLevel = 0) {
+function computeSceneBounds(elements = [], polygonElements = [], lineElements = [], baseLevel = 0) {
   const rectXs = elements.flatMap((element) => [element.left, element.right]);
   const rectZs = elements.flatMap((element) => [element.bottom, element.top]);
   const polygonXs = polygonElements.flatMap((element) => element.points.map((point) => point.x));
   const polygonZs = polygonElements.flatMap((element) => element.points.map((point) => point.z));
-  const xs = [...rectXs, ...polygonXs];
-  const zs = [...rectZs, ...polygonZs];
+  const lineXs = lineElements.flatMap((element) => [element.start?.x, element.end?.x]).filter(Number.isFinite);
+  const lineZs = lineElements.flatMap((element) => [element.start?.z, element.end?.z]).filter(Number.isFinite);
+  const xs = [...rectXs, ...polygonXs, ...lineXs];
+  const zs = [...rectZs, ...polygonZs, ...lineZs];
 
   if (!xs.length || !zs.length) {
     return {
@@ -178,7 +183,7 @@ function computeSceneBoundsWithPolygons(elements = [], polygonElements = [], bas
   return {
     minX: Math.min(...xs),
     maxX: Math.max(...xs),
-    minZ: Math.min(baseLevel, ...zs),
+    minZ: Number.isFinite(baseLevel) ? Math.min(baseLevel, ...zs) : Math.min(...zs),
     maxZ: Math.max(...zs),
   };
 }
@@ -196,30 +201,50 @@ function buildFloorElevationElements(floor, view) {
   const landingElevationMap = new Map(
     landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorElevation)])
   );
+  const railingElements = buildRailingElevationElements(floor, view);
 
-  return [
-    ...buildWallRects(floor, view),
-    ...buildSlabRects(floor, view),
-    ...buildColumnRects(floor, view),
-    ...buildBeamRects(floor, view),
-    ...buildStairRects(floor, view, landingElevationMap),
-    ...buildDoorRects(floor, view),
-    ...buildWindowRects(floor, view),
-  ];
+  return {
+    elements: [
+      ...buildWallRects(floor, view),
+      ...buildSlabRects(floor, view),
+      ...buildColumnRects(floor, view),
+      ...buildBeamRects(floor, view),
+      ...buildStairRects(floor, view, landingElevationMap),
+      ...buildDoorRects(floor, view),
+      ...buildWindowRects(floor, view),
+      ...(railingElements.elements || []),
+    ],
+    lineElements: railingElements.lineElements || [],
+  };
 }
 
-function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null) {
+function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null, project = null) {
   const view = getElevationView(viewMode);
   const stackBounds = getFloorStackBounds(floors);
-  const floorElements = floors
-    .flatMap((floor) => buildFloorElevationElements(floor, view))
+  const floorElevationContent = floors
+    .map((floor) => buildFloorElevationElements(floor, view));
+  const floorElements = floorElevationContent
+    .flatMap((content) => content.elements || [])
     .sort((a, b) => b.depth - a.depth);
+  const floorLineElements = floorElevationContent
+    .flatMap((content) => content.lineElements || []);
+  const trussLineElements = project
+    ? floors.flatMap((floor) => (
+      buildTrussElevationElements(getProjectTrussSystems(project, floor.id), view).lineElements || []
+    ))
+    : [];
   const roofElements = roofSystem
     ? buildRoofElevationElements(roofSystem, view)
-    : { elements: [], polygonElements: [] };
+    : { elements: [], polygonElements: [], lineElements: [] };
   const elements = [...floorElements, ...(roofElements.elements || [])]
     .sort((a, b) => b.depth - a.depth);
   const polygonElements = [...(roofElements.polygonElements || [])]
+    .sort((a, b) => b.depth - a.depth);
+  const lineElements = [
+    ...floorLineElements,
+    ...trussLineElements,
+    ...(roofElements.lineElements || []),
+  ]
     .sort((a, b) => b.depth - a.depth);
 
   return {
@@ -227,7 +252,8 @@ function buildElevationSceneFromFloors(floors, viewMode, roofSystem = null) {
     title: view.label,
     elements,
     polygonElements,
-    bounds: computeSceneBoundsWithPolygons(elements, polygonElements, stackBounds.minElevation),
+    lineElements,
+    bounds: computeSceneBounds(elements, polygonElements, lineElements, stackBounds.minElevation),
     groundLevel: stackBounds.minElevation,
   };
 }
@@ -240,5 +266,29 @@ export function buildElevationScene(floor, viewMode) {
 export function buildProjectElevationScene(project, sourceFloorId, viewMode) {
   const sourceFloor = resolveProjectFloor(project, sourceFloorId);
   if (!sourceFloor) return null;
-  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode, project?.roofSystem || null);
+  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode, project?.roofSystem || null, project);
+}
+
+export function buildRoofOnlyElevationScene(roofSystem, viewMode) {
+  if (!roofSystem) return null;
+
+  const view = getElevationView(viewMode);
+  const roofElements = buildRoofElevationElements(roofSystem, view);
+  const elements = [...(roofElements.elements || [])]
+    .sort((a, b) => b.depth - a.depth);
+  const polygonElements = [...(roofElements.polygonElements || [])]
+    .sort((a, b) => b.depth - a.depth);
+  const lineElements = [...(roofElements.lineElements || [])]
+    .sort((a, b) => b.depth - a.depth);
+  const titleBase = roofSystem.name?.trim() || 'Roof';
+
+  return {
+    viewKey: view.key,
+    title: `${titleBase} ${view.label}`,
+    elements,
+    polygonElements,
+    lineElements,
+    bounds: computeSceneBounds(elements, polygonElements, lineElements, null),
+    groundLevel: null,
+  };
 }

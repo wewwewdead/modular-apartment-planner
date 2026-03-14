@@ -16,7 +16,7 @@ function fallbackDirection() {
 
 function planeArrow(plane, label) {
   const outline = plane?.outline || [];
-  if (outline.length < 3) return null;
+  if (outline.length < 3 || !label) return null;
 
   const centroid = polygonCentroid(outline);
   const rawDirection = plane.slopeDirection || fallbackDirection();

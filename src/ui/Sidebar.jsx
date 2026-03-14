@@ -5,7 +5,8 @@ import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
-import { createRoofSystemForProject } from '@/domain/roofModels';
+import { getAttachableRoofTrussSystems, getRoofTypeLabel } from '@/domain/roofModels';
+import { TOOLS } from '@/editor/tools';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
@@ -64,18 +65,27 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
         </button>
         {action}
       </div>
-      {!collapsed && children}
+      <div className={`${styles.sectionContent} ${collapsed ? styles.sectionContentCollapsed : ''}`}>
+        <div className={styles.sectionContentInner}>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
 
 export default function Sidebar() {
   const { project, dispatch, duplicateFloor } = useProject();
-  const { activeFloorId, activeSheetId, selectedId, workspaceMode, modelTarget, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
+  const { activeFloorId, activeSheetId, selectedId, selectedType, workspaceMode, modelTarget, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
   const orderedFloors = getOrderedFloors(project);
   const orderedPhases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const roofSystem = project.roofSystem || null;
+  const trussSystems = project.trussSystems || [];
+  const attachableRoofTrussSystems = getAttachableRoofTrussSystems(project);
+  const roofPhase = roofSystem?.phaseId
+    ? orderedPhases.find((phase) => phase.id === roofSystem.phaseId) || null
+    : null;
   const [collapsedSections, setCollapsedSections] = useState({
     floors: false,
     roof: false,
@@ -86,6 +96,7 @@ export default function Sidebar() {
     parapets: false,
     drains: false,
     roofOpenings: false,
+    trusses: false,
     sheets: false,
     phases: false,
     slabs: false,
@@ -112,6 +123,24 @@ export default function Sidebar() {
 
   const selectRoofObject = (id, type) => {
     editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
+    editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
+  };
+
+  const openRoofWorkspace = () => {
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
+    editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+    if (roofSystem) {
+      editorDispatch({ type: 'SELECT_OBJECT', id: roofSystem.id, objectType: 'roofSystem' });
+      return;
+    }
+    editorDispatch({ type: 'DESELECT' });
+  };
+
+  const selectTrussObject = (id, type, floorId = null) => {
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'truss' });
+    if (floorId) {
+      editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId });
+    }
     editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
   };
 
@@ -215,9 +244,41 @@ export default function Sidebar() {
   };
 
   const createRoof = () => {
-    const nextRoofSystem = createRoofSystemForProject(project);
-    dispatch({ type: 'ROOF_CREATE', roofSystem: nextRoofSystem });
-    selectRoofObject(nextRoofSystem.id, 'roofSystem');
+    openRoofWorkspace();
+  };
+
+  const createTruss = () => {
+    const targetTrussSystem = selectedType === 'trussSystem'
+      ? (project.trussSystems || []).find((entry) => entry.id === selectedId) || null
+      : selectedType === 'trussInstance'
+        ? (project.trussSystems || []).find((entry) => (
+            (entry.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId)
+          )) || null
+        : null;
+    const selectedTrussInstance = selectedType === 'trussInstance' && targetTrussSystem
+      ? (targetTrussSystem.trussInstances || []).find((entry) => entry.id === selectedId) || null
+      : null;
+    const lastSystemInstance = targetTrussSystem && (targetTrussSystem.trussInstances || []).length
+      ? targetTrussSystem.trussInstances[targetTrussSystem.trussInstances.length - 1]
+      : null;
+
+    editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'truss' });
+    editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: activeFloorId });
+    editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+    editorDispatch({ type: 'SET_TOOL', tool: TOOLS.TRUSS_DRAW });
+    editorDispatch({
+      type: 'UPDATE_TOOL_STATE',
+      payload: {
+        targetTrussSystemId: targetTrussSystem?.id || null,
+        trussTypeId: selectedTrussInstance?.trussTypeId
+          || lastSystemInstance?.trussTypeId
+          || null,
+        trussMaterial: selectedTrussInstance?.material
+          || lastSystemInstance?.material
+          || null,
+      },
+    });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Select two support beams to create a truss.' });
   };
 
   return (
@@ -297,13 +358,68 @@ export default function Sidebar() {
             >
               <span className={styles.floorName}>{roofSystem.name || 'Roof'}</span>
               <span className={styles.floorMeta}>
-                {Math.round(roofSystem.baseElevation || 0)} mm · {(roofSystem.roofType || 'flat').toUpperCase()}
+                {Math.round(roofSystem.baseElevation || 0)} mm
+                {' · '}
+                {getRoofTypeLabel(roofSystem.roofType || 'flat')}
+                {roofPhase ? ` · ${roofPhase.name}` : ''}
               </span>
             </button>
           </div>
         ) : (
           <div className={styles.item} onClick={createRoof}>
-            Create roof from top outline
+            {attachableRoofTrussSystems.length
+              ? 'Create roof from truss'
+              : 'Add truss system before roof'}
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="Trusses"
+        count={trussSystems.length}
+        collapsed={collapsedSections.trusses}
+        onToggle={() => toggleSection('trusses')}
+        action={(
+          <button type="button" className={styles.sectionAddBtn} onClick={createTruss} title="Draw Truss">+</button>
+        )}
+      >
+        {trussSystems.length ? trussSystems.map((trussSystem) => {
+          const floorName = orderedFloors.find((entry) => entry.id === trussSystem.floorId)?.name || 'Unassigned Floor';
+          const trussSystemSelected = selectedId === trussSystem.id
+            || (trussSystem.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId);
+          return (
+            <div
+              key={trussSystem.id}
+              className={`${styles.floorCard} ${workspaceMode === 'model' && modelTarget === 'truss' && trussSystemSelected ? styles.floorCardActive : ''}`}
+            >
+              <button
+                type="button"
+                className={styles.floorButton}
+                onClick={() => selectTrussObject(trussSystem.id, 'trussSystem', trussSystem.floorId)}
+              >
+                <span className={styles.floorName}>{trussSystem.name || 'Truss System'}</span>
+                <span className={styles.floorMeta}>
+                  {floorName} · {(trussSystem.trussInstances || []).length} instance{(trussSystem.trussInstances || []).length === 1 ? '' : 's'}
+                </span>
+              </button>
+              {(workspaceMode === 'model' && modelTarget === 'truss' && activeFloorId === trussSystem.floorId) && (
+                <div>
+                  {(trussSystem.trussInstances || []).map((trussInstance, index) => (
+                    <div
+                      key={trussInstance.id}
+                      className={`${styles.item} ${selectedId === trussInstance.id ? styles.itemSelected : ''}`}
+                      onClick={() => selectTrussObject(trussInstance.id, 'trussInstance', trussSystem.floorId)}
+                    >
+                      Instance {index + 1}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }) : (
+          <div className={styles.item} onClick={createTruss}>
+            Draw first truss above beams
           </div>
         )}
       </Section>

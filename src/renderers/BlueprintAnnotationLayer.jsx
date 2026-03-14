@@ -1,4 +1,5 @@
 import { DRAWING_GRAPHICS, SHEET_COLORS } from '@/sheets/standards';
+import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS } from '@/annotations/policy';
 
 function estimateTextWidth(text, fontSize) {
   return Math.max(fontSize * 1.2, String(text || '').length * fontSize * 0.58);
@@ -80,40 +81,115 @@ function DimensionFigure({ figure }) {
   );
 }
 
-function TagFigure({ tag }) {
-  const isRoom = tag.sourceType === 'room';
-  const nameSize = isRoom ? DRAWING_GRAPHICS.annotation.roomNameSize : DRAWING_GRAPHICS.annotation.textSize;
-  const areaSize = DRAWING_GRAPHICS.annotation.roomAreaSize;
-  const lineHeight = isRoom ? 168 : 150;
-  const startY = tag.position.y - ((tag.textLines.length - 1) * lineHeight) / 2;
+function TagTextMask({ tag, fontSize, lineHeight, opacity = 0.92 }) {
+  const maxLineLength = Math.max(...tag.textLines.map((line) => String(line || '').length), 1);
+  const width = estimateTextWidth('X'.repeat(maxLineLength), fontSize) + (tag.maskPaddingX ?? 44);
+  const height = Math.max(lineHeight, tag.textLines.length * lineHeight) + (tag.maskPaddingY ?? 22);
+  const x = tag.textAnchor === 'start'
+    ? tag.position.x
+    : (tag.textAnchor === 'end' ? tag.position.x - width : tag.position.x - (width / 2));
 
   return (
-    <text
-      key={tag.id}
-      x={tag.position.x}
-      y={startY}
-      textAnchor={tag.textAnchor}
-      dominantBaseline="middle"
-      fill={isRoom ? DRAWING_GRAPHICS.annotation.text : DRAWING_GRAPHICS.annotation.textMuted}
-      fontSize={nameSize}
-      fontWeight={isRoom ? 600 : 500}
-      fontFamily="var(--font-blueprint)"
+    <rect
+      x={x}
+      y={tag.position.y - height / 2}
+      width={width}
+      height={height}
+      fill={SHEET_COLORS.mask}
+      opacity={opacity}
       transform={`rotate(${tag.angle || 0}, ${tag.position.x}, ${tag.position.y})`}
-      style={{ pointerEvents: 'none' }}
-    >
-      {tag.textLines.map((line, index) => (
-        <tspan
-          key={`${tag.id}-line-${index}`}
-          x={tag.position.x}
-          dy={index === 0 ? 0 : lineHeight}
-          fontSize={isRoom && index > 0 ? areaSize : nameSize}
-          fill={isRoom && index > 0 ? DRAWING_GRAPHICS.annotation.textMuted : undefined}
-          fontWeight={isRoom && index > 0 ? 500 : undefined}
-        >
-          {line}
-        </tspan>
-      ))}
-    </text>
+    />
+  );
+}
+
+function resolveTagStyle(tag, isRoom) {
+  const isInformationalMeasurement = (
+    tag.semanticRole === ANNOTATION_SEMANTIC_ROLES.MEASUREMENT
+    && tag.trustLevel !== ANNOTATION_TRUST_LEVELS.AUTHORITATIVE
+  );
+
+  if (isRoom) {
+    return {
+      textFill: DRAWING_GRAPHICS.annotation.text,
+      fontWeight: 600,
+      maskOpacity: 0.92,
+      leaderStroke: DRAWING_GRAPHICS.annotation.dimensionExtension,
+      leaderDash: undefined,
+    };
+  }
+
+  if (isInformationalMeasurement) {
+    return {
+      textFill: SHEET_COLORS.textMuted,
+      fontWeight: 500,
+      maskOpacity: 0.84,
+      leaderStroke: SHEET_COLORS.borderMuted,
+      leaderDash: '6 4',
+    };
+  }
+
+  return {
+    textFill: DRAWING_GRAPHICS.annotation.textMuted,
+    fontWeight: 500,
+    maskOpacity: 0.92,
+    leaderStroke: DRAWING_GRAPHICS.annotation.dimensionExtension,
+    leaderDash: undefined,
+  };
+}
+
+function TagFigure({ tag }) {
+  const isRoom = tag.sourceType === 'room';
+  const nameSize = isRoom
+    ? DRAWING_GRAPHICS.annotation.roomNameSize
+    : (tag.fontSize ?? DRAWING_GRAPHICS.annotation.textSize);
+  const areaSize = DRAWING_GRAPHICS.annotation.roomAreaSize;
+  const lineHeight = isRoom ? 168 : (tag.lineHeight ?? 150);
+  const startY = tag.position.y - ((tag.textLines.length - 1) * lineHeight) / 2;
+  const style = resolveTagStyle(tag, isRoom);
+
+  return (
+    <g key={tag.id}>
+      {tag.leaderLine ? (
+        <line
+          x1={tag.leaderLine.start.x}
+          y1={tag.leaderLine.start.y}
+          x2={tag.leaderLine.end.x}
+          y2={tag.leaderLine.end.y}
+          stroke={style.leaderStroke}
+          strokeWidth={DRAWING_GRAPHICS.annotation.dimensionExtensionWidth}
+          strokeDasharray={style.leaderDash}
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : null}
+      {tag.mask ? (
+        <TagTextMask tag={tag} fontSize={nameSize} lineHeight={lineHeight} opacity={style.maskOpacity} />
+      ) : null}
+      <text
+        x={tag.position.x}
+        y={startY}
+        textAnchor={tag.textAnchor}
+        dominantBaseline="middle"
+        fill={style.textFill}
+        fontSize={nameSize}
+        fontWeight={style.fontWeight}
+        fontFamily="var(--font-blueprint)"
+        transform={`rotate(${tag.angle || 0}, ${tag.position.x}, ${tag.position.y})`}
+        style={{ pointerEvents: 'none' }}
+      >
+        {tag.textLines.map((line, index) => (
+          <tspan
+            key={`${tag.id}-line-${index}`}
+            x={tag.position.x}
+            dy={index === 0 ? 0 : lineHeight}
+            fontSize={isRoom && index > 0 ? areaSize : nameSize}
+            fill={isRoom && index > 0 ? DRAWING_GRAPHICS.annotation.textMuted : undefined}
+            fontWeight={isRoom && index > 0 ? 500 : undefined}
+          >
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
   );
 }
 

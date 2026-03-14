@@ -32,8 +32,9 @@
 
 .headerTitle {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--color-text-primary);
 }
@@ -46,13 +47,17 @@
   height: 28px;
   border-radius: var(--radius-sm);
   color: var(--color-text-secondary);
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition: background var(--duration-fast), color var(--duration-fast), transform var(--duration-micro) var(--ease-tactile);
   cursor: pointer;
 }
 
 .closeBtn:hover {
   background: rgba(0, 0, 0, 0.06);
   color: var(--color-text-primary);
+}
+
+.closeBtn:active {
+  transform: scale(0.92);
 }
 
 .closeIcon {
@@ -76,11 +81,18 @@
   font-weight: 600;
   background: var(--color-surface-elevated);
   color: var(--color-text-primary);
-  transition: background var(--duration-fast), border-color var(--duration-fast);
+  transition: background var(--duration-fast), border-color var(--duration-fast), transform var(--duration-micro) var(--ease-tactile), box-shadow var(--duration-fast);
 }
 
 .modalBtn:hover {
   background: rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.modalBtn:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-pressed);
 }
 
 .modalBtnDanger {

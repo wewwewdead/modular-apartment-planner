@@ -1,10 +1,14 @@
+import { useEffect, useState } from 'react';
 import InputField from './InputField';
+import PhaseSelector from './PhaseSelector';
 import styles from './PropertiesPanel.module.css';
 import { TOOLS } from '@/editor/tools';
 import {
   createRoofPlane,
   createRoofSystemForProject,
   deriveRoofBoundaryFromProject,
+  getAttachableRoofTrussSystems,
+  getRoofTypeLabel,
   roofPitchDirectionFromAngle,
   roofPitchDirectionToAngle,
 } from '@/domain/roofModels';
@@ -18,6 +22,7 @@ import {
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { isRoofAccessOpening, isSkylightRoofOpening, normalizeRoofOpeningType } from '@/roof/openings';
 import { polygonArea } from '@/geometry/polygon';
+import { resolveTrussSystemRoofAttachmentType } from '@/truss/roofAttachment';
 import { wallLength } from '@/geometry/wallGeometry';
 import RoofScheduleSummary from './RoofScheduleSummary';
 
@@ -32,6 +37,11 @@ function parapetPlacementHint(roofSystem) {
     case 'shed':
       return 'Attached parapets on shed roofs snap only to the high edge and rake edges. The low eave edge is excluded.';
     case 'gable':
+    case 'hip':
+    case 'box_gable':
+    case 'pyramid_hipped':
+    case 'domed':
+    case 'dropped_eaves':
       return 'Attached parapets on gable roofs snap only to gable-end edges. The eaves are excluded.';
     case 'custom':
       return 'Attached parapets on custom roofs can snap to any roof perimeter edge. Derived drainage still treats eave edges separately.';
@@ -41,9 +51,26 @@ function parapetPlacementHint(roofSystem) {
   }
 }
 
-export function RoofEmptyState({ project, dispatch, editorDispatch }) {
+export function RoofEmptyState({ project, dispatch, editorDispatch, activePhaseId = null }) {
+  const attachableTrussSystems = getAttachableRoofTrussSystems(project);
+  const [selectedTrussSystemId, setSelectedTrussSystemId] = useState(attachableTrussSystems[0]?.id || '');
+
+  useEffect(() => {
+    if (!attachableTrussSystems.some((entry) => entry.id === selectedTrussSystemId)) {
+      setSelectedTrussSystemId(attachableTrussSystems[0]?.id || '');
+    }
+  }, [attachableTrussSystems, selectedTrussSystemId]);
+
+  const selectedTrussSystem = attachableTrussSystems.find((entry) => entry.id === selectedTrussSystemId) || null;
+  const selectedRoofType = selectedTrussSystem
+    ? resolveTrussSystemRoofAttachmentType(selectedTrussSystem)
+    : null;
   const handleCreate = () => {
-    const roofSystem = createRoofSystemForProject(project);
+    const roofSystem = createRoofSystemForProject(project, {
+      phaseId: activePhaseId || null,
+      trussAttachmentId: selectedTrussSystemId || null,
+    });
+    if (!roofSystem) return;
     dispatch({ type: 'ROOF_CREATE', roofSystem });
     editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'roof' });
     editorDispatch({ type: 'SELECT_OBJECT', id: roofSystem.id, objectType: 'roofSystem' });
@@ -53,19 +80,56 @@ export function RoofEmptyState({ project, dispatch, editorDispatch }) {
     <div>
       <div className={styles.title}>Roof</div>
       <div className={styles.drawingHint}>
-        Create a dedicated roof system above the highest floor. The initial boundary will derive from the current top outline.
+        Roof creation is truss-driven. Add a roof-ready truss system first, then create the roof from that truss so the roof outline, shape, pitch family, and support elevation all follow the truss system.
       </div>
-      <button className={styles.actionBtn} onClick={handleCreate}>
-        Create roof
+      {!attachableTrussSystems.length ? (
+        <div className={styles.drawingHint}>
+          No roof-ready truss system is available. Create trusses first, and keep each truss system on one supported roof shape before adding a roof.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Truss</label>
+            <select
+              value={selectedTrussSystemId}
+              onChange={(e) => setSelectedTrussSystemId(e.target.value)}
+              style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
+            >
+              {attachableTrussSystems.map((trussSystem) => (
+                <option key={trussSystem.id} value={trussSystem.id}>
+                  {trussSystem.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <InputField label="Roof Shape" value={getRoofTypeLabel(selectedRoofType || 'flat')} readOnly />
+        </>
+      )}
+      <button className={styles.actionBtn} onClick={handleCreate} disabled={!attachableTrussSystems.length}>
+        Create roof from truss
       </button>
     </div>
   );
 }
 
-export function RoofSystemProperties({ project, roofSystem, dispatch, editorDispatch, u }) {
+export function RoofSystemProperties({
+  project,
+  roofSystem,
+  dispatch,
+  editorDispatch,
+  u,
+  phases = [],
+  isHiddenByPhase = false,
+  activePhaseName = null,
+  phaseViewMode = 'all',
+}) {
   const updateRoof = (updates) => {
     dispatch({ type: 'ROOF_UPDATE', roofSystem: { id: roofSystem.id, ...updates } });
   };
+  const trussSystems = project.trussSystems || [];
+  const attachableTrussSystems = getAttachableRoofTrussSystems(project);
+  const attachedTruss = trussSystems.find((entry) => entry.id === roofSystem.trussAttachmentId) || null;
+  const attachedTrussRoofType = attachedTruss ? resolveTrussSystemRoofAttachmentType(attachedTruss) : null;
   const geometry = buildRoofPlanGeometry(roofSystem);
   const roofPlaneGeometry = buildRoofPlaneGeometry(roofSystem);
   const schedule = buildRoofScheduleSummary(roofSystem);
@@ -74,6 +138,13 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
   const pitchAngle = roofPitchDirectionToAngle(pitch.direction);
   const customPlaneCount = (roofSystem.roofPlanes || []).length;
   const customSeamCount = (roofPlaneGeometry.roofEdges || []).filter((edge) => !edge.isPerimeter).length;
+  const isAttachedToTruss = Boolean(roofSystem.trussAttachmentId);
+  const pitchSource = roofSystem.pitchSource === 'manual'
+    ? 'manual'
+    : (isAttachedToTruss ? 'truss' : 'manual');
+  const supportsAttachedSlopeOverride = Boolean(isAttachedToTruss && roofType !== 'flat' && roofType !== 'custom');
+  const followsAttachedTrussBoundary = isAttachedToTruss;
+  const followsAttachedTrussPitch = supportsAttachedSlopeOverride && pitchSource !== 'manual';
 
   const addRoofPlane = () => {
     const nextPlane = createRoofPlane(
@@ -104,24 +175,77 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
   return (
     <div>
       <div className={styles.title}>Roof</div>
+      {isHiddenByPhase && (
+        <div className={styles.drawingHint}>
+          Roof geometry is hidden in the current phase view{activePhaseName ? ` (${activePhaseName}, ${phaseViewMode})` : ''}, but you can still reassign its phase here.
+        </div>
+      )}
       <InputField
         label="Name"
         value={roofSystem.name}
         onChange={(value) => updateRoof({ name: value })}
       />
+      <PhaseSelector
+        phaseId={roofSystem.phaseId}
+        phases={phases}
+        onChange={(value) => updateRoof({ phaseId: value })}
+      />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Truss Link</label>
         <select
-          value={roofType}
-          onChange={(e) => updateRoof({ roofType: e.target.value })}
+          value={roofSystem.trussAttachmentId || ''}
+          onChange={(e) => updateRoof({ trussAttachmentId: e.target.value || null })}
           style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
         >
-          <option value="flat">Flat</option>
-          <option value="shed">Shed</option>
-          <option value="gable">Gable</option>
-          <option value="custom">Custom</option>
+          {!roofSystem.trussAttachmentId && (
+            <option value="" disabled>Select truss system</option>
+          )}
+          {trussSystems.map((trussSystem) => (
+            <option
+              key={trussSystem.id}
+              value={trussSystem.id}
+              disabled={!resolveTrussSystemRoofAttachmentType(trussSystem)}
+            >
+              {resolveTrussSystemRoofAttachmentType(trussSystem)
+                ? trussSystem.name
+                : `${trussSystem.name} (roof fit unavailable)`}
+            </option>
+          ))}
         </select>
       </div>
+      {attachedTruss && (
+        <div className={styles.drawingHint}>
+          {!attachedTrussRoofType
+            ? `Attached to ${attachedTruss.name}, but this truss system does not resolve to one roof-mapped shape. Make the truss system consistent before using it as the roof source.`
+            : followsAttachedTrussPitch
+            ? `Attached to ${attachedTruss.name}. Outline, roof shape, pitch family, and support elevation live-follow the truss system. Additional roof overhang is still editable, and roof extents sit on top of truss overhangs and purlins when enabled.`
+            : supportsAttachedSlopeOverride
+              ? `Attached to ${attachedTruss.name}. Outline, roof shape, and support elevation still follow the truss system, while roof slope and overhang are manually adjusted.`
+            : followsAttachedTrussBoundary
+              ? `Attached to ${attachedTruss.name}. Outline and support elevation live-follow the truss system. Flat roofs keep their own slope settings.`
+              : `Attached to ${attachedTruss.name}. Support elevation follows the truss system. Custom roof planes remain manual.`}
+        </div>
+      )}
+      {isAttachedToTruss ? (
+        <>
+          <InputField label="Type" value={getRoofTypeLabel(attachedTrussRoofType || roofType)} readOnly />
+          <InputField label="Shape Source" value={attachedTruss ? (attachedTruss.name || 'Attached Truss') : 'Attached Truss'} readOnly />
+        </>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+          <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+          <select
+            value={roofType}
+            onChange={(e) => updateRoof({ roofType: e.target.value })}
+            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
+          >
+            <option value="flat">Flat</option>
+            <option value="shed">Shed</option>
+            <option value="gable">Gable</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+      )}
       <InputField
         label="Base Elev."
         type="number"
@@ -130,6 +254,11 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
         value={u.toDisplay(roofSystem.baseElevation || 0)}
         onChange={(value) => updateRoof({ baseElevation: u.fromDisplay(value) })}
       />
+      {isAttachedToTruss && (
+        <div className={styles.drawingHint}>
+          Base elevation stays attached to the truss as an offset from the current truss support plane.
+        </div>
+      )}
       <InputField
         label="Slab Thick."
         type="number"
@@ -161,12 +290,26 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
         </>
       ) : (
         <>
+          {supportsAttachedSlopeOverride && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Slope Source</label>
+              <select
+                value={pitchSource}
+                onChange={(e) => updateRoof({ pitchSource: e.target.value })}
+                style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}
+              >
+                <option value="truss">Follow Truss</option>
+                <option value="manual">Manual Slope</option>
+              </select>
+            </div>
+          )}
           <InputField
             label="Roof Slope"
             type="number"
             suffix="%"
             step={0.1}
             value={pitch.slope || 0}
+            readOnly={followsAttachedTrussPitch}
             onChange={(value) => updatePitch({ slope: Math.max(0, value) })}
           />
           <InputField
@@ -175,6 +318,7 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
             suffix="°"
             step={1}
             value={pitchAngle}
+            readOnly={supportsAttachedSlopeOverride}
             onChange={(value) => updatePitch({ direction: roofPitchDirectionFromAngle(value) })}
           />
           <InputField
@@ -192,16 +336,33 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
               suffix={u.suffix}
               step={u.step(10)}
               value={u.toDisplay(pitch.ridgeOffset || 0)}
+              readOnly={supportsAttachedSlopeOverride}
               onChange={(value) => updatePitch({ ridgeOffset: u.fromDisplay(value) })}
             />
           )}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-            <button className={styles.actionBtn} onClick={() => updatePitch({ direction: roofPitchDirectionFromAngle(pitchAngle + 90) })}>
+            <button
+              className={styles.actionBtn}
+              disabled={supportsAttachedSlopeOverride}
+              onClick={() => updatePitch({ direction: roofPitchDirectionFromAngle(pitchAngle + 90) })}
+            >
               Rotate 90°
             </button>
             {roofType === 'gable' && (
-              <button className={styles.actionBtn} onClick={() => updatePitch({ ridgeOffset: 0 })}>
+              <button
+                className={styles.actionBtn}
+                disabled={supportsAttachedSlopeOverride}
+                onClick={() => updatePitch({ ridgeOffset: 0 })}
+              >
                 Center ridge
+              </button>
+            )}
+            {supportsAttachedSlopeOverride && pitchSource === 'manual' && (
+              <button
+                className={styles.actionBtn}
+                onClick={() => updateRoof({ pitchSource: 'truss' })}
+              >
+                Reset slope
               </button>
             )}
           </div>
@@ -235,10 +396,16 @@ export function RoofSystemProperties({ project, roofSystem, dispatch, editorDisp
       <InputField label="Openings" value={(roofSystem.roofOpenings || []).length} readOnly />
       <button
         className={styles.actionBtn}
+        disabled={followsAttachedTrussBoundary}
         onClick={() => updateRoof({ boundaryPolygon: deriveRoofBoundaryFromProject(project) })}
       >
-        Reset outline from top floor
+        {followsAttachedTrussBoundary ? 'Outline follows attached truss' : 'Reset outline from top floor'}
       </button>
+      {!roofSystem.trussAttachmentId && attachableTrussSystems.length > 0 && (
+        <div className={styles.drawingHint}>
+          This is a legacy compatibility roof. New roofs are created from a truss system first, and attached roofs lock their shape to the selected truss type.
+        </div>
+      )}
       <div className={styles.subtitle}>Add Objects</div>
       <button className={styles.actionBtn} onClick={() => selectRoofTool(editorDispatch, TOOLS.ROOF_PARAPET)}>
         Place parapet

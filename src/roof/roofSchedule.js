@@ -133,7 +133,7 @@ export function buildRoofScheduleSummary(roofSystem) {
   const roofGeometry = buildRoofPlaneGeometry(roofSystem);
   const roofOutline = roofGeometry.roofOutline || roofSystem.boundaryPolygon || [];
   const grossPlanArea = polygonArea(roofOutline);
-  const grossSurfaceArea = (roofSystem.roofType || 'flat') === 'custom'
+  const grossSurfaceArea = (roofGeometry.planes || []).length
     ? (roofGeometry.planes || []).reduce((sum, plane) => (
         sum + (polygonArea(plane.outline || []) * (plane.surfaceFactor || surfaceAreaFactorFromSlope(plane.slope)))
       ), 0)
@@ -152,6 +152,9 @@ export function buildRoofScheduleSummary(roofSystem) {
     notes.push('Gutter and downspout quantities are zero for flat roofs until explicit gutter objects are added.');
   } else {
     notes.push('Gutter lengths and downspout counts are derived from eave edges for the current roof type.');
+  }
+  if ((roofSystem?.trussAttachmentId || null) && roofSystem?.attachedShapeProfile?.points?.length >= 2) {
+    notes.push('Attached roof surface area is derived from the truss-driven roof shape profile, not a single generic pitch factor.');
   }
 
   if ((roofSystem?.roofOpenings || []).some((opening) => !opening.type || normalizeRoofOpeningType(opening.type) === 'opening')) {

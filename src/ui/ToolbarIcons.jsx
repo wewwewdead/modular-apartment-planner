@@ -57,6 +57,18 @@ export function BeamIcon(props) {
   return <I {...props}><rect x="2" y="8" width="16" height="4" rx="0.5" {...p} /><circle cx="5" cy="10" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none" /></I>;
 }
 
+export function TrussDrawIcon(props) {
+  return (
+    <I {...props}>
+      <line x1="3" y1="13" x2="17" y2="13" {...p} />
+      <path d="M4 13 10 6l6 7" {...p} />
+      <path d="M6.5 10h7" {...p} strokeDasharray="2 2" />
+      <circle cx="4" cy="13" r="1" fill="currentColor" stroke="none" />
+      <circle cx="16" cy="13" r="1" fill="currentColor" stroke="none" />
+    </I>
+  );
+}
+
 export function StairIcon(props) {
   return <I {...props}><path d="M4 16h3v-3h3v-3h3v-3h3V4" {...p} /></I>;
 }

@@ -79,7 +79,7 @@ function EditorShell({
           onToggleProperties={onToggleProperties}
         />
       </div>
-      <div className={`${styles.sidebar} ${isSidebarCollapsed ? styles.panelHidden : ''}`}>
+      <div className={`${styles.sidebar} ${isSidebarCollapsed ? styles.panelHidden : styles.sidebarVisible}`}>
         <Sidebar />
       </div>
       <div className={styles.canvas}>
@@ -107,7 +107,7 @@ function EditorShell({
           </div>
         )}
       </div>
-      <div className={`${styles.properties} ${isPropertiesCollapsed ? styles.panelHidden : ''}`}>
+      <div className={`${styles.properties} ${isPropertiesCollapsed ? styles.panelHidden : styles.propertiesVisible}`}>
         <PropertiesPanel />
       </div>
     </div>

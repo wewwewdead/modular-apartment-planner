@@ -6,6 +6,11 @@ function gutterRoleMatches(roofType, role) {
     case 'shed':
       return role === 'low_eave';
     case 'gable':
+    case 'hip':
+    case 'box_gable':
+    case 'pyramid_hipped':
+    case 'domed':
+    case 'dropped_eaves':
       return role === 'eave';
     case 'custom':
       return role === 'eave';

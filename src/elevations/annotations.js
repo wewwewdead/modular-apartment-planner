@@ -15,7 +15,7 @@ function toElevationPoint(x, z) {
 }
 
 function sceneHasGeometry(scene) {
-  return Boolean(scene?.elements?.length || scene?.polygonElements?.length);
+  return Boolean(scene?.elements?.length || scene?.polygonElements?.length || scene?.lineElements?.length);
 }
 
 function uniqueSortedValues(values = []) {

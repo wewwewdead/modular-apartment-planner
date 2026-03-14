@@ -6,6 +6,8 @@ import { normalizeRectBounds } from '@/clipboard/planClipboard';
 import { getFloorElevation } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
+import { buildProjectSectionScene } from '@/sections/scene';
+import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
 import { useEditorTool } from '@/editor/useEditorTool';
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
@@ -45,9 +47,15 @@ import RailingRenderer from './RailingRenderer';
 import RailingPreview from './RailingPreview';
 import RegionSelectionOverlay from './RegionSelectionOverlay';
 import RoofRenderer from './RoofRenderer';
+import RoofElevationRenderer from './RoofElevationRenderer';
 import RoofSectionRenderer from './RoofSectionRenderer';
 import RoofSelectionOverlay from './RoofSelectionOverlay';
 import RoofPreviewLayer from './RoofPreviewLayer';
+import TrussRenderer from './TrussRenderer';
+import TrussSelectionOverlay from './TrussSelectionOverlay';
+import TrussDrawOverlay from './TrussDrawOverlay';
+import TrussDetailRenderer from './TrussDetailRenderer';
+import TrussSectionRenderer from './TrussSectionRenderer';
 import { CenterViewIcon, ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import { isTypingTarget } from '@/utils/keyboard';
 import styles from './SvgCanvas.module.css';
@@ -78,12 +86,43 @@ export default function SvgCanvas() {
   } = editor;
 
   const floor = getFloor(activeFloorId);
-  const roofSystem = project.roofSystem || null;
   const filteredFloor = usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode);
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
     [project, activePhaseId, phaseViewMode]
   );
+  const roofSystem = filteredProject.roofSystem || null;
+  const roofHiddenByPhase = Boolean(project.roofSystem && !roofSystem);
+  const hasProjectRoof = Boolean(project.roofSystem);
+  const hasProjectRailings = Boolean((project.floors || []).some((entry) => (entry.railings || []).length));
+  const visibleProjectRailings = Boolean((filteredProject.floors || []).some((entry) => (entry.railings || []).length));
+  const railingsHiddenByPhase = Boolean(hasProjectRailings && !visibleProjectRailings);
+  const hasProjectTrusses = Boolean((filteredProject.trussSystems || []).length);
+  const floorTrussSystems = (filteredProject.trussSystems || []).filter((trussSystem) => trussSystem.floorId === activeFloorId);
+  const allFloorTrussSystems = (project.trussSystems || []).filter((trussSystem) => trussSystem.floorId === activeFloorId);
+  const trussesHiddenByPhase = Boolean(allFloorTrussSystems.length && !floorTrussSystems.length);
+  const activeTrussContext = useMemo(() => {
+    if (selectedType === 'trussSystem') {
+      const trussSystem = (filteredProject.trussSystems || []).find((entry) => entry.id === selectedId) || null;
+      return {
+        trussSystem,
+        trussInstanceId: null,
+      };
+    }
+    if (selectedType === 'trussInstance') {
+      const trussSystem = (filteredProject.trussSystems || []).find((entry) => (
+        (entry.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId)
+      )) || null;
+      return {
+        trussSystem,
+        trussInstanceId: selectedId,
+      };
+    }
+    return {
+      trussSystem: floorTrussSystems[0] || null,
+      trussInstanceId: floorTrussSystems[0]?.trussInstances?.[0]?.id || null,
+    };
+  }, [filteredProject.trussSystems, floorTrussSystems, selectedId, selectedType]);
   const {
     copySelection,
     cutSelection,
@@ -102,6 +141,7 @@ export default function SvgCanvas() {
     getFloor,
     activeFloorId,
     roofSystem,
+    trussSystems: floorTrussSystems,
     modelTarget,
     viewport,
     snapEnabled,
@@ -261,6 +301,41 @@ export default function SvgCanvas() {
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOF_OPENING });
               return;
           }
+        } else if (modelTarget === 'truss') {
+          switch (e.key.toLowerCase()) {
+            case 'v':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
+              return;
+            case 't': {
+              const targetTrussSystem = selectedType === 'trussSystem'
+                ? floorTrussSystems.find((entry) => entry.id === selectedId) || null
+                : selectedType === 'trussInstance'
+                  ? floorTrussSystems.find((entry) => (
+                      (entry.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId)
+                    )) || null
+                  : null;
+              const selectedTrussInstance = selectedType === 'trussInstance' && targetTrussSystem
+                ? (targetTrussSystem.trussInstances || []).find((entry) => entry.id === selectedId) || null
+                : null;
+              const lastSystemInstance = targetTrussSystem && (targetTrussSystem.trussInstances || []).length
+                ? targetTrussSystem.trussInstances[targetTrussSystem.trussInstances.length - 1]
+                : null;
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.TRUSS_DRAW });
+              editorDispatch({
+                type: 'UPDATE_TOOL_STATE',
+                payload: {
+                  targetTrussSystemId: targetTrussSystem?.id || null,
+                  trussTypeId: selectedTrussInstance?.trussTypeId
+                    || lastSystemInstance?.trussTypeId
+                    || null,
+                  trussMaterial: selectedTrussInstance?.material
+                    || lastSystemInstance?.material
+                    || null,
+                },
+              });
+              return;
+            }
+          }
         } else {
           switch (e.key.toLowerCase()) {
             case 'v':
@@ -327,7 +402,7 @@ export default function SvgCanvas() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [beginPaste, cancelPaste, copySelection, cutSelection, modelTarget, pastePreview?.active, tool, editorDispatch, viewMode]);
+  }, [beginPaste, cancelPaste, copySelection, cutSelection, modelTarget, pastePreview?.active, tool, editorDispatch, viewMode, selectedId, selectedType, floorTrussSystems]);
 
   // Prevent default context menu on SVG
   useEffect(() => {
@@ -354,6 +429,44 @@ export default function SvgCanvas() {
     ? formatSurveyorBearing(pointsToSurveyorBearing(toolState.start, toolState.preview))
     : null;
   const hasRoofSectionCut = Boolean(resolveRoofSectionCut(project, activeFloorId, activeSectionCutId).sectionCut);
+  const hasTrussSectionCut = Boolean((floor?.sectionCuts || []).length);
+  const roofSectionScene = useMemo(() => {
+    if (modelTarget !== 'roof' || viewMode !== 'section_view') return null;
+    const { floor: roofFloor, sectionCut } = resolveRoofSectionCut(project, activeFloorId, activeSectionCutId);
+    if (!roofFloor || !sectionCut) return null;
+    return buildProjectSectionScene(filteredProject, roofFloor.id, sectionCut.id);
+  }, [activeFloorId, activeSectionCutId, filteredProject, modelTarget, project, viewMode]);
+  const roofSectionReason = roofHiddenByPhase
+    ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE
+    : roofSectionScene?.diagnostics?.roof?.reason || null;
+  const roofSectionMessage = getSectionVisibilityMessage('roof', roofSectionReason);
+  const trussSectionScene = useMemo(() => {
+    if (modelTarget !== 'truss' || viewMode !== 'section_view' || !filteredFloor) return null;
+    const cuts = filteredFloor.sectionCuts || [];
+    const sectionCut = (activeSectionCutId && cuts.find((entry) => entry.id === activeSectionCutId)) || cuts[0] || null;
+    if (!sectionCut) return null;
+    return buildProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
+  }, [activeSectionCutId, filteredFloor, filteredProject, modelTarget, viewMode]);
+  const trussSectionMessage = getSectionVisibilityMessage('truss', trussSectionScene?.diagnostics?.truss?.reason || null);
+  const floorSectionScene = useMemo(() => {
+    if (modelTarget !== 'floor' || viewMode !== 'section_view' || !filteredFloor) return null;
+    const cuts = filteredFloor.sectionCuts || [];
+    const sectionCut = (activeSectionCutId && cuts.find((entry) => entry.id === activeSectionCutId)) || cuts[0] || null;
+    if (!sectionCut) return null;
+    return buildProjectSectionScene(filteredProject, filteredFloor.id, sectionCut.id);
+  }, [activeSectionCutId, filteredFloor, filteredProject, modelTarget, viewMode]);
+  const floorRoofSectionReason = roofHiddenByPhase
+    ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE
+    : floorSectionScene?.diagnostics?.roof?.reason || null;
+  const floorRoofSectionMessage = (hasProjectRoof || roofHiddenByPhase)
+    ? getSectionVisibilityMessage('roof', floorRoofSectionReason)
+    : null;
+  const floorRailingSectionReason = railingsHiddenByPhase
+    ? SECTION_VISIBILITY_REASONS.HIDDEN_BY_PHASE
+    : floorSectionScene?.diagnostics?.railing?.reason || null;
+  const floorRailingSectionMessage = (hasProjectRailings || railingsHiddenByPhase)
+    ? getSectionVisibilityMessage('railing', floorRailingSectionReason)
+    : null;
 
   return (
     <div className={styles.canvasContainer}>
@@ -362,9 +475,9 @@ export default function SvgCanvas() {
         ref={svgRef}
         className={styles.svg}
         style={{ cursor }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handleMouseDown}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
         onDoubleClick={handleDoubleClick}
       >
         <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
@@ -378,25 +491,65 @@ export default function SvgCanvas() {
             />
           )}
           {modelTarget === 'roof' ? (
-            roofSystem ? (
+            roofSystem || (viewMode === 'section_view' && roofHiddenByPhase) ? (
               <>
                 {viewMode === 'plan' ? (
-                  <>
-                    <RoofRenderer roofSystem={roofSystem} selectedId={selectedId} selectedType={selectedType} />
-                    <RoofSelectionOverlay
-                      roofSystem={roofSystem}
-                      selectedId={selectedId}
-                      selectedType={selectedType}
-                      zoom={viewport.zoom}
-                    />
-                    <RoofPreviewLayer activeTool={activeTool} toolState={toolState} roofSystem={roofSystem} />
-                  </>
+                  roofSystem ? (
+                    <>
+                      <RoofRenderer roofSystem={roofSystem} selectedId={selectedId} selectedType={selectedType} />
+                      <RoofSelectionOverlay
+                        roofSystem={roofSystem}
+                        selectedId={selectedId}
+                        selectedType={selectedType}
+                        zoom={viewport.zoom}
+                      />
+                      <RoofPreviewLayer activeTool={activeTool} toolState={toolState} roofSystem={roofSystem} />
+                    </>
+                  ) : (
+                    <g className="roof-empty-view">
+                      <text
+                        x={0}
+                        y={0}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill="var(--color-text-secondary)"
+                        fontSize={180}
+                        fontFamily="var(--font-blueprint)"
+                      >
+                        Roof is hidden in the current phase view.
+                      </text>
+                    </g>
+                  )
                 ) : viewMode === 'section_view' ? (
                   <RoofSectionRenderer
-                    project={project}
+                    project={filteredProject}
                     preferredFloorId={activeFloorId}
                     activeSectionCutId={activeSectionCutId}
+                    roofHiddenByPhase={roofHiddenByPhase}
                   />
+                ) : viewMode.startsWith('elevation_') ? (
+                  roofSystem ? (
+                    <RoofElevationRenderer
+                      roofSystem={roofSystem}
+                      viewMode={viewMode}
+                      selectedId={selectedId}
+                      selectedType={selectedType}
+                    />
+                  ) : (
+                    <g className="roof-empty-view">
+                      <text
+                        x={0}
+                        y={0}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill="var(--color-text-secondary)"
+                        fontSize={180}
+                        fontFamily="var(--font-blueprint)"
+                      >
+                        Roof is hidden in the current phase view.
+                      </text>
+                    </g>
+                  )
                 ) : (
                   <g className="roof-empty-view">
                     <text
@@ -408,7 +561,7 @@ export default function SvgCanvas() {
                       fontSize={180}
                       fontFamily="var(--font-blueprint)"
                     >
-                      Roof mode supports plan and section views in v1.
+                      Roof mode supports plan, elevation, and section views.
                     </text>
                   </g>
                 )}
@@ -424,7 +577,107 @@ export default function SvgCanvas() {
                   fontSize={180}
                   fontFamily="var(--font-blueprint)"
                 >
-                  Create a roof to edit roof geometry.
+                  {roofHiddenByPhase ? 'Roof is hidden in the current phase view.' : 'Create a roof to edit roof geometry.'}
+                </text>
+              </g>
+            )
+          ) : modelTarget === 'truss' ? (
+            viewMode === 'plan' ? (
+              <>
+                <TrussRenderer
+                  floor={filteredFloor}
+                  trussSystems={floorTrussSystems}
+                  selectedId={selectedId}
+                  selectedType={selectedType}
+                />
+                <TrussSelectionOverlay
+                  floor={filteredFloor}
+                  trussSystems={floorTrussSystems}
+                  selectedId={selectedId}
+                  selectedType={selectedType}
+                  toolState={toolState}
+                  zoom={viewport.zoom}
+                />
+                <TrussDrawOverlay
+                  floor={filteredFloor}
+                  activeTool={activeTool}
+                  toolState={toolState}
+                />
+                {!floorTrussSystems.length && (
+                  <g className="truss-empty-view">
+                    <text
+                      x={0}
+                      y={0}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="var(--color-text-secondary)"
+                      fontSize={180}
+                      fontFamily="var(--font-blueprint)"
+                    >
+                      {trussesHiddenByPhase
+                        ? 'Trusses on this floor are hidden in the current phase view.'
+                        : 'Draw a truss by selecting two support beams on the active floor.'}
+                    </text>
+                  </g>
+                )}
+              </>
+            ) : viewMode === 'truss_detail' ? (
+              floorTrussSystems.length ? (
+                <TrussDetailRenderer
+                  trussSystem={activeTrussContext.trussSystem}
+                  trussInstanceId={activeTrussContext.trussInstanceId}
+                />
+              ) : (
+                <g className="truss-empty-view">
+                  <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="var(--color-text-secondary)"
+                    fontSize={180}
+                    fontFamily="var(--font-blueprint)"
+                  >
+                    Create at least one truss in plan view to show truss details.
+                  </text>
+                </g>
+              )
+            ) : viewMode === 'section_view' ? (
+              filteredFloor ? (
+                <TrussSectionRenderer
+                  project={filteredProject}
+                  floor={filteredFloor}
+                  activeSectionCutId={activeSectionCutId}
+                />
+              ) : (
+                <g className="truss-empty-view">
+                  <text
+                    x={0}
+                    y={0}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill="var(--color-text-secondary)"
+                    fontSize={180}
+                    fontFamily="var(--font-blueprint)"
+                  >
+                    Select a floor to view trusses in section.
+                  </text>
+                </g>
+              )
+            ) : (
+              <g className="truss-empty-view">
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="var(--color-text-secondary)"
+                  fontSize={180}
+                  fontFamily="var(--font-blueprint)"
+                >
+                  {hasProjectTrusses
+                    ? 'Truss mode supports plan, detail, and section views in v1.'
+                    : 'Create at least one truss in plan view to show truss details.'}
                 </text>
               </g>
             )
@@ -491,6 +744,10 @@ export default function SvgCanvas() {
                 project={filteredProject}
                 floor={filteredFloor}
                 activeSectionCutId={activeSectionCutId}
+                roofHiddenByPhase={roofHiddenByPhase}
+                hasProjectRoof={hasProjectRoof}
+                railingsHiddenByPhase={railingsHiddenByPhase}
+                hasProjectRailings={hasProjectRailings}
               />
             ) : (
               <ElevationRenderer
@@ -524,22 +781,50 @@ export default function SvgCanvas() {
           {isCanvasMaximized ? <CollapseIcon /> : <ExpandIcon />}
         </button>
       </div>
-      <div className={styles.statusBar}>
-        <span>X: {Math.round(cursorPos.x)} mm</span>
-        <span>Y: {Math.round(cursorPos.y)} mm</span>
-        <span>Zoom: {zoomPercent}%</span>
-        <span>View: {viewMode}</span>
-        <span>Mode: {modelTarget}</span>
-        <span>Tool: {displayedTool}</span>
+      <div className={styles.statusBar} role="status" aria-live="polite">
+        <span className={styles.statusCoords}>X: {Math.round(cursorPos.x)} mm</span>
+        <span className={styles.statusCoords}>Y: {Math.round(cursorPos.y)} mm</span>
+        <span className={styles.statusContext}>Zoom: {zoomPercent}%</span>
+        <span className={styles.statusContext}>View: {viewMode}</span>
+        <span className={styles.statusContext}>Mode: {modelTarget}</span>
+        <span className={styles.statusTool}>{displayedTool}</span>
         {activePhaseId && (
-          <span>Phase: {(project.phases || []).find(p => p.id === activePhaseId)?.name || 'Unknown'} ({phaseViewMode})</span>
+          <span className={styles.statusContext}>Phase: {(project.phases || []).find(p => p.id === activePhaseId)?.name || 'Unknown'} ({phaseViewMode})</span>
         )}
-        {liveWallBearing && <span>Bearing: {liveWallBearing}</span>}
-        {selectionCount > 0 && <span>Selection: {selectionCount} objects</span>}
-        {modelTarget === 'roof' && viewMode === 'section_view' && !hasRoofSectionCut && <span>Section: add a floor section cut</span>}
-        {modelTarget === 'floor' && pastePreview?.active && <span>Paste: click to place</span>}
-        {statusMessage && <span className={styles.statusMessage}>{statusMessage}</span>}
+        {modelTarget === 'roof' && roofHiddenByPhase && <span className={styles.statusContext}>Roof: hidden by phase filter</span>}
+        {modelTarget === 'truss' && !floorTrussSystems.length && (
+          <span className={styles.statusContext}>
+            {trussesHiddenByPhase ? 'Trusses: hidden by phase filter' : 'Trusses: none on active floor'}
+          </span>
+        )}
+        {modelTarget === 'truss' && activeTool === TOOLS.TRUSS_DRAW && <span className={styles.statusContext}>Draw: select two support beams</span>}
+        {liveWallBearing && <span className={styles.statusContext}>Bearing: {liveWallBearing}</span>}
+        {selectionCount > 0 && <span className={styles.statusContext}>Selection: {selectionCount} objects</span>}
+        {modelTarget === 'roof' && viewMode === 'section_view' && !hasRoofSectionCut && <span className={styles.statusContext}>Section: add a floor section cut</span>}
+        {modelTarget === 'truss' && viewMode === 'section_view' && !hasTrussSectionCut && <span className={styles.statusContext}>Section: add a floor section cut</span>}
+        {modelTarget === 'floor' && viewMode === 'section_view' && !(filteredFloor?.sectionCuts || []).length && (
+          <span className={styles.statusContext}>Section: add a floor section cut</span>
+        )}
+        {modelTarget === 'roof' && viewMode === 'section_view' && hasRoofSectionCut && roofSectionMessage && (
+          <span className={styles.statusContext}>Roof Section: {roofSectionMessage}</span>
+        )}
+        {modelTarget === 'truss' && viewMode === 'section_view' && hasTrussSectionCut && trussSectionMessage && (
+          <span className={styles.statusContext}>Truss Section: {trussSectionMessage}</span>
+        )}
+        {modelTarget === 'floor' && viewMode === 'section_view' && floorRoofSectionMessage && (
+          <span className={styles.statusContext}>Roof Section: {floorRoofSectionMessage}</span>
+        )}
+        {modelTarget === 'floor' && viewMode === 'section_view' && floorRailingSectionMessage && (
+          <span className={styles.statusContext}>Railing Section: {floorRailingSectionMessage}</span>
+        )}
+        {modelTarget === 'floor' && pastePreview?.active && <span className={styles.statusContext}>Paste: click to place</span>}
       </div>
+      {statusMessage && (
+        <div className={styles.toast}>
+          {statusMessage}
+          <div className={styles.toastProgress} />
+        </div>
+      )}
     </div>
   );
 }

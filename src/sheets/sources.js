@@ -1,7 +1,8 @@
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
-import { buildProjectElevationScene } from '@/elevations/scene';
+import { buildProjectElevationScene, buildRoofOnlyElevationScene } from '@/elevations/scene';
 import { getDefaultActiveFloorId, resolveProjectFloor } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
+import { getProjectTrussSystems } from '@/domain/trussModels';
 import { filterFloorByPhase, filterProjectByPhase } from '@/domain/phaseFilter';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
@@ -13,6 +14,8 @@ import { fixtureOutline } from '@/geometry/fixtureGeometry';
 import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { buildRoofPlanBounds } from '@/geometry/roofPlanGeometry';
+import { buildRoofPlanScene } from '@/geometry/roofPlanScene';
+import { buildFloorTrussGeometry, buildTrussDetailScene } from '@/geometry/trussGeometry';
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { buildRoofScheduleLayout } from '@/roof/roofScheduleLayout';
 import { buildProjectSectionScene } from '@/sections/scene';
@@ -174,6 +177,36 @@ function buildElevationSource(project, floor, sourceView) {
   };
 }
 
+function normalizeRoofElevationSourceView(sourceView) {
+  if (sourceView === 'roof_elevation_front') return 'elevation_front';
+  if (sourceView === 'roof_elevation_rear') return 'elevation_rear';
+  if (sourceView === 'roof_elevation_left') return 'elevation_left';
+  if (sourceView === 'roof_elevation_right') return 'elevation_right';
+  return 'elevation_front';
+}
+
+function buildRoofElevationSource(project, sourceView) {
+  const roofSystem = project?.roofSystem || null;
+  if (!roofSystem) {
+    return {
+      kind: 'empty',
+      title: 'Roof Elevation',
+      message: 'No roof system in this project.',
+      bounds: { minX: 0, maxX: 2000, minY: -3000, maxY: 1000 },
+    };
+  }
+
+  const scene = buildRoofOnlyElevationScene(roofSystem, normalizeRoofElevationSourceView(sourceView));
+  return {
+    kind: 'roof_elevation',
+    title: scene.title,
+    roofSystem,
+    viewMode: sourceView,
+    scene,
+    bounds: sceneBoundsToRenderBounds(scene),
+  };
+}
+
 function build3DPreviewSource(project, floor) {
   if (!floor) {
     return {
@@ -218,7 +251,7 @@ function buildRoofPlanSource(project) {
     kind: 'roof_plan',
     title: roofSystem.name ? `${roofSystem.name} Plan` : 'Roof Plan',
     roofSystem,
-    bounds: buildRoofPlanBounds(roofSystem),
+    bounds: buildRoofPlanScene(roofSystem).bounds,
   };
 }
 
@@ -238,6 +271,78 @@ function buildRoofDrainageSource(project) {
     title: roofSystem.name ? `${roofSystem.name} Drainage` : 'Roof Drainage',
     roofSystem,
     bounds: buildRoofPlanBounds(roofSystem),
+  };
+}
+
+function buildTrussPlanSource(project, sourceFloorId) {
+  const floor = resolveProjectFloor(project, sourceFloorId);
+  const trussSystems = getProjectTrussSystems(project, sourceFloorId);
+  if (!floor || !trussSystems.length) {
+    return {
+      kind: 'empty',
+      title: 'Truss Plan',
+      message: 'No truss systems on this floor.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+    };
+  }
+
+  const trussGeometry = buildFloorTrussGeometry(trussSystems);
+  const floorBounds = expandBounds(boundsFromPoints(collectPlanPoints(floor)), PLAN_PADDING);
+  return {
+    kind: 'truss_plan',
+    title: `${floor.name} Truss Plan`,
+    floor,
+    trussSystems,
+    bounds: {
+      minX: Math.min(floorBounds.minX, trussGeometry.bounds.minX),
+      maxX: Math.max(floorBounds.maxX, trussGeometry.bounds.maxX),
+      minY: Math.min(floorBounds.minY, trussGeometry.bounds.minY),
+      maxY: Math.max(floorBounds.maxY, trussGeometry.bounds.maxY),
+    },
+  };
+}
+
+function buildTrussDetailSource(project, sourceFloorId, sourceRefId = null) {
+  const trussSystems = getProjectTrussSystems(project, sourceFloorId);
+  const trussDetailRef = sourceRefId
+    ? trussSystems.find((trussSystem) => (
+        (trussSystem.trussInstances || []).some((trussInstance) => trussInstance.id === sourceRefId)
+      )) || null
+    : trussSystems[0] || null;
+  const trussInstanceId = sourceRefId
+    || trussDetailRef?.trussInstances?.[0]?.id
+    || null;
+  if (!trussDetailRef || !trussInstanceId) {
+    return {
+      kind: 'empty',
+      title: 'Truss Detail',
+      message: 'No truss detail is available for this floor.',
+      bounds: { minX: 0, maxX: 2000, minY: -3000, maxY: 1000 },
+    };
+  }
+
+  const detailScene = buildTrussDetailScene(trussDetailRef, trussInstanceId);
+  if (!detailScene) {
+    return {
+      kind: 'empty',
+      title: 'Truss Detail',
+      message: 'No truss detail is available for this floor.',
+      bounds: { minX: 0, maxX: 2000, minY: -3000, maxY: 1000 },
+    };
+  }
+
+  return {
+    kind: 'truss_detail',
+    title: detailScene.title,
+    trussSystem: trussDetailRef,
+    trussInstanceId,
+    detailScene,
+    bounds: {
+      minX: detailScene.bounds.minX,
+      maxX: detailScene.bounds.maxX,
+      minY: -detailScene.bounds.maxZ,
+      maxY: -detailScene.bounds.minZ,
+    },
   };
 }
 
@@ -307,10 +412,19 @@ export function resolveSheetViewportSource(project, viewport, phaseContext) {
   }
 
   switch (viewport.sourceView) {
+    case 'truss_plan':
+      return buildTrussPlanSource(effectiveProject, defaultFloorId);
+    case 'truss_detail':
+      return buildTrussDetailSource(effectiveProject, defaultFloorId, viewport.sourceRefId);
     case 'roof_plan':
       return buildRoofPlanSource(effectiveProject);
     case 'roof_drainage':
       return buildRoofDrainageSource(effectiveProject);
+    case 'roof_elevation_front':
+    case 'roof_elevation_rear':
+    case 'roof_elevation_left':
+    case 'roof_elevation_right':
+      return buildRoofElevationSource(effectiveProject, viewport.sourceView);
     case 'roof_section':
       return buildRoofSectionSource(effectiveProject, defaultFloorId, viewport.sourceRefId);
     case 'roof_schedule':
@@ -332,10 +446,22 @@ export function resolveSheetViewportSource(project, viewport, phaseContext) {
 
 export function getViewportSourceLabel(sourceView) {
   switch (sourceView) {
+    case 'truss_plan':
+      return 'Truss Plan';
+    case 'truss_detail':
+      return 'Truss Detail';
     case 'roof_plan':
       return 'Roof Plan';
     case 'roof_drainage':
       return 'Roof Drainage';
+    case 'roof_elevation_front':
+      return 'Roof Front Elevation';
+    case 'roof_elevation_rear':
+      return 'Roof Rear Elevation';
+    case 'roof_elevation_left':
+      return 'Roof Left Elevation';
+    case 'roof_elevation_right':
+      return 'Roof Right Elevation';
     case 'roof_section':
       return 'Roof Section';
     case 'roof_schedule':

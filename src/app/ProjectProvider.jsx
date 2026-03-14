@@ -4,6 +4,7 @@ import { clearProjectPhaseReferences } from '@/domain/phaseAssignments';
 import { createDuplicatedFloor, getDefaultFloorName, getFloorElevation, getFloorLevelIndex, shiftFloorAbsoluteElements, shiftFloorElevationData, sortFloors } from '@/domain/floorModels';
 import { sortPhases } from '@/domain/phaseModels';
 import { getRoofAttachmentElevation, syncProjectRoofSystem } from '@/domain/roofModels';
+import { syncProjectTrussSystems } from '@/domain/trussModels';
 import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
 import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
@@ -15,8 +16,12 @@ function snapshotProject(project) {
   return JSON.stringify(project);
 }
 
+function syncProjectStructures(project) {
+  return syncProjectRoofSystem(syncProjectTrussSystems(project));
+}
+
 function applyProjectUpdate(state, nextProject, recordHistory = true) {
-  const syncedProject = syncProjectRoofSystem(nextProject);
+  const syncedProject = syncProjectStructures(nextProject);
   const nextSnapshot = snapshotProject(syncedProject);
   const history = recordHistory
     ? [...state.history, state.project].slice(-HISTORY_LIMIT)
@@ -110,6 +115,15 @@ function updateRoofSystem(state, updater, recordHistory = true) {
   }, recordHistory);
 }
 
+function updateTrussSystems(state, updater, recordHistory = true) {
+  const nextTrussSystems = updater(state.project.trussSystems || []);
+  return applyProjectUpdate(state, {
+    ...state.project,
+    updatedAt: new Date().toISOString(),
+    trussSystems: nextTrussSystems,
+  }, recordHistory);
+}
+
 function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
   const nextWall = { ...existingWall, ...wallUpdate };
 
@@ -135,7 +149,7 @@ function clampWallMountedOpenings(openings, wallId, nextWallLength) {
 function projectReducer(state, action) {
   switch (action.type) {
     case 'PROJECT_NEW': {
-      const newProject = syncProjectRoofSystem({
+      const newProject = syncProjectStructures({
         ...action.project,
         floors: sortFloors(action.project.floors || []),
       });
@@ -150,7 +164,7 @@ function projectReducer(state, action) {
     }
 
     case 'PROJECT_LOAD': {
-      const loadedProject = syncProjectRoofSystem({
+      const loadedProject = syncProjectStructures({
         ...action.project,
         floors: sortFloors(action.project.floors || []),
       });
@@ -189,10 +203,32 @@ function projectReducer(state, action) {
           ...roofSystem,
           ...action.roofSystem,
         };
+        const trussAttachmentChanged = Object.prototype.hasOwnProperty.call(action.roofSystem, 'trussAttachmentId')
+          && (action.roofSystem.trussAttachmentId || null) !== (roofSystem.trussAttachmentId || null);
+
+        if (trussAttachmentChanged && !Object.prototype.hasOwnProperty.call(action.roofSystem, 'baseElevation')) {
+          const attachmentBaseElevation = getRoofAttachmentElevation(state.project, mergedRoofSystem);
+          mergedRoofSystem.attachmentOffset = mergedRoofSystem.trussAttachmentId
+            ? 0
+            : ((roofSystem.baseElevation ?? attachmentBaseElevation) - attachmentBaseElevation);
+          if (!Object.prototype.hasOwnProperty.call(action.roofSystem, 'pitchSource')) {
+            mergedRoofSystem.pitchSource = mergedRoofSystem.trussAttachmentId ? 'truss' : 'manual';
+          }
+        }
 
         if ('baseElevation' in action.roofSystem) {
+          const attachmentBaseElevation = getRoofAttachmentElevation(state.project, mergedRoofSystem);
           mergedRoofSystem.attachmentOffset = (action.roofSystem.baseElevation ?? roofSystem.baseElevation)
-            - getRoofAttachmentElevation(state.project);
+            - attachmentBaseElevation;
+        }
+
+        if (
+          Object.prototype.hasOwnProperty.call(action.roofSystem, 'pitch')
+          && mergedRoofSystem.trussAttachmentId
+          && !Object.prototype.hasOwnProperty.call(action.roofSystem, 'pitchSource')
+          && Number(action.roofSystem.pitch?.slope ?? roofSystem.pitch?.slope) !== Number(roofSystem.pitch?.slope)
+        ) {
+          mergedRoofSystem.pitchSource = 'manual';
         }
 
         return mergedRoofSystem;
@@ -204,6 +240,70 @@ function projectReducer(state, action) {
         updatedAt: new Date().toISOString(),
         roofSystem: null,
       });
+
+    case 'TRUSS_SYSTEM_ADD':
+      return updateTrussSystems(state, (trussSystems) => [...trussSystems, action.trussSystem]);
+
+    case 'TRUSS_SYSTEM_UPDATE':
+      return updateTrussSystems(state, (trussSystems) => (
+        trussSystems.map((trussSystem) => {
+          if (trussSystem.id !== action.trussSystem.id) return trussSystem;
+          const nextFloorId = action.trussSystem.floorId ?? trussSystem.floorId;
+          return {
+            ...trussSystem,
+            ...action.trussSystem,
+            trussInstances: (action.trussSystem.trussInstances || trussSystem.trussInstances || []).map((trussInstance) => ({
+              ...trussInstance,
+              floorId: nextFloorId,
+            })),
+          };
+        })
+      ));
+
+    case 'TRUSS_SYSTEM_DELETE':
+      return updateTrussSystems(state, (trussSystems) => (
+        trussSystems.filter((trussSystem) => trussSystem.id !== action.trussSystemId)
+      ));
+
+    case 'TRUSS_INSTANCE_ADD':
+      return updateTrussSystems(state, (trussSystems) => (
+        trussSystems.map((trussSystem) => (
+          trussSystem.id === action.trussSystemId
+            ? {
+                ...trussSystem,
+                trussInstances: [...(trussSystem.trussInstances || []), action.trussInstance],
+              }
+            : trussSystem
+        ))
+      ));
+
+    case 'TRUSS_INSTANCE_UPDATE':
+      return updateTrussSystems(state, (trussSystems) => (
+        trussSystems.map((trussSystem) => (
+          trussSystem.id === action.trussSystemId
+            ? {
+                ...trussSystem,
+                trussInstances: (trussSystem.trussInstances || []).map((trussInstance) => (
+                  trussInstance.id === action.trussInstance.id
+                    ? { ...trussInstance, ...action.trussInstance, floorId: trussSystem.floorId }
+                    : trussInstance
+                )),
+              }
+            : trussSystem
+        ))
+      ));
+
+    case 'TRUSS_INSTANCE_DELETE':
+      return updateTrussSystems(state, (trussSystems) => (
+        trussSystems.map((trussSystem) => (
+          trussSystem.id === action.trussSystemId
+            ? {
+                ...trussSystem,
+                trussInstances: (trussSystem.trussInstances || []).filter((trussInstance) => trussInstance.id !== action.trussInstanceId),
+              }
+            : trussSystem
+        ))
+      ));
 
     case 'PARAPET_ADD':
       return updateRoofSystem(state, (roofSystem) => (
@@ -366,21 +466,42 @@ function projectReducer(state, action) {
       return replaceFloors(state, [...state.project.floors, action.floor]);
 
     case 'FLOOR_UPDATE':
-      return updateFloor(state, action.floor.id, (floor) => {
-        const mergedFloor = {
-          ...floor,
-          ...action.floor,
-        };
-        const nextElevation = getFloorElevation(mergedFloor);
-        const deltaElevation = nextElevation - getFloorElevation(floor);
+      return applyProjectUpdate(state, (() => {
+        let elevationDelta = 0;
+        const nextFloors = state.project.floors.map((floor) => {
+          if (floor.id !== action.floor.id) return floor;
+
+          const mergedFloor = {
+            ...floor,
+            ...action.floor,
+          };
+          const nextElevation = getFloorElevation(mergedFloor);
+          elevationDelta = nextElevation - getFloorElevation(floor);
+          return {
+            ...shiftFloorAbsoluteElements({
+              ...mergedFloor,
+              elevation: getFloorElevation(floor),
+            }, elevationDelta),
+            elevation: nextElevation,
+          };
+        });
+
+        const nextTrussSystems = (state.project.trussSystems || []).map((trussSystem) => (
+          trussSystem.floorId === action.floor.id
+            ? {
+                ...trussSystem,
+                baseElevation: (trussSystem.baseElevation ?? 0) + elevationDelta,
+              }
+            : trussSystem
+        ));
+
         return {
-          ...shiftFloorAbsoluteElements({
-            ...mergedFloor,
-            elevation: getFloorElevation(floor),
-          }, deltaElevation),
-          elevation: nextElevation,
+          ...state.project,
+          updatedAt: new Date().toISOString(),
+          floors: sortFloors(nextFloors),
+          trussSystems: nextTrussSystems,
         };
-      }, true, { sort: true });
+      })());
 
     case 'FLOOR_DUPLICATE': {
       const duplicatedFloor = action.floor;
@@ -410,6 +531,7 @@ function projectReducer(state, action) {
         {
           ...state.project,
           floors: state.project.floors.filter((floor) => floor.id !== action.floorId),
+          trussSystems: (state.project.trussSystems || []).filter((trussSystem) => trussSystem.floorId !== action.floorId),
         },
         action.floorId,
         action.fallbackFloorId
@@ -795,15 +917,25 @@ function projectReducer(state, action) {
           walls: f.walls.map(w => syncWallAttachmentPoints(w, nextColumns)),
         };
       });
-    case 'COLUMN_DELETE':
+    case 'COLUMN_DELETE': {
+      const deletedCol = (f => (f.columns || []).find(c => c.id === action.columnId))(
+        state.project.floors.find(fl => fl.id === action.floorId) || {}
+      );
+      const colPoint = deletedCol ? { kind: 'point', x: deletedCol.x, y: deletedCol.y } : null;
       return updateFloor(state, action.floorId, f => ({
         ...f,
         columns: (f.columns || []).filter(c => c.id !== action.columnId),
         walls: f.walls.map(w => detachColumnAttachments(w, f.columns || [], action.columnId)),
-        beams: (f.beams || []).filter(beam => (
-          beam.startRef?.id !== action.columnId && beam.endRef?.id !== action.columnId
-        )),
+        beams: (f.beams || []).map(beam => {
+          const newStart = beam.startRef?.id === action.columnId && colPoint
+            ? { ...colPoint } : beam.startRef;
+          const newEnd = beam.endRef?.id === action.columnId && colPoint
+            ? { ...colPoint } : beam.endRef;
+          if (newStart === beam.startRef && newEnd === beam.endRef) return beam;
+          return { ...beam, startRef: newStart, endRef: newEnd };
+        }),
       }));
+    }
 
     case 'PHASE_ADD':
       return applyProjectUpdate(state, {

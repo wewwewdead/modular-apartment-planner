@@ -153,7 +153,8 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {
-            dragging: true,
+            pendingDrag: true,
+            dragging: false,
             dragType: 'move',
             startPos: modelPos,
             originalPos: modelPos,
@@ -173,6 +174,19 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
     },
 
     onMouseMove(modelPos, e, toolState, selectedId, selectedType) {
+      const DRAG_THRESHOLD_PX = 4;
+
+      if (toolState.pendingDrag && !toolState.dragging) {
+        const dx = modelPos.x - toolState.startPos.x;
+        const dy = modelPos.y - toolState.startPos.y;
+        const distPx = Math.sqrt(dx * dx + dy * dy) * viewport.zoom;
+        if (distPx < DRAG_THRESHOLD_PX) return;
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { pendingDrag: false, dragging: true },
+        });
+      }
+
       if (toolState.dragging && toolState.dragType === 'marquee') {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -509,11 +523,12 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         return;
       }
 
-      if (toolState.dragging) {
+      if (toolState.dragging || toolState.pendingDrag) {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {
             dragging: false,
+            pendingDrag: false,
             dragType: null,
             handle: null,
             handleIndex: null,
