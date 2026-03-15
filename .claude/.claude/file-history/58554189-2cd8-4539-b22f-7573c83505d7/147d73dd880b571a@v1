@@ -1,0 +1,50 @@
+# Fix: Mobile color popover hidden behind title input
+
+## Context
+On mobile (`<= 640px`), the `.color-popover` (text color / highlight picker) is invisible — clipped behind the `.content-title-input`. Root cause: the mobile `.toolbar` has `overflow-x: auto` + `flex-wrap: nowrap`, which creates an overflow clipping context that traps the absolutely-positioned popover inside it.
+
+## File to modify
+- `client/src/components/HomePage/Editor/editor.css` — `@media (max-width: 640px)` block (lines ~1064-1156)
+
+## Changes
+
+### 1. Remove horizontal scroll from `.toolbar` on mobile
+Replace the current mobile `.toolbar` rule:
+```css
+.toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    min-width: 0;
+}
+```
+With just:
+```css
+.toolbar {
+    min-width: 0;
+}
+```
+This falls back to the desktop `flex-wrap: wrap`, letting buttons wrap onto multiple rows and eliminating the overflow clipping that hides the popover.
+
+### 2. Remove the scrollbar styling (no longer scrolling)
+Delete these mobile rules (no longer applicable):
+```css
+.toolbar::-webkit-scrollbar { ... }
+.toolbar::-webkit-scrollbar-thumb { ... }
+```
+
+### 3. Remove the gradient fade pseudo-element
+Delete the `.toolbar-wrapper::after` rule — the fade hint for horizontal scroll is no longer needed.
+
+### 4. Keep everything else
+- Touch-friendly button sizes (`.toolbar-bttns`, `.is-active` padding/min-size) — keep
+- `.color-popover { bottom: calc(100% + 6px); top: auto; }` — keep (opens upward, now visible without overflow clipping)
+- All other mobile overrides — keep
+
+## Verification
+1. Open editor on a mobile viewport (< 640px wide)
+2. Click the text color "A" or highlight button in the toolbar
+3. Confirm the color popover grid appears **above** the toolbar and is fully visible/interactive
+4. Confirm toolbar buttons wrap naturally on narrow screens
+5. Confirm desktop behavior unchanged (already uses `flex-wrap: wrap`)

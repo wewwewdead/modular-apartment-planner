@@ -1,0 +1,42 @@
+# Add Badge Checkmark Next to Author Names
+
+## Context
+
+Badge rings on avatars are now working (gold for legend, purple for OG). The user also wants a **verified-style checkmark icon** shown next to author names for badged users — similar to social media verified badges.
+
+Currently there is no checkmark shown anywhere. An unused `CheckIcon` (plain polyline) exists in `Icon.tsx`, but we need a filled-circle-with-checkmark style for a proper badge look.
+
+---
+
+## Changes
+
+### 1. Add `BadgeCheckIcon` to Icon.tsx
+**File:** `apps/mobile/src/components/icons/Icon.tsx`
+- Add a new `BadgeCheckIcon` component that renders a small filled circle (badge color) with a white checkmark inside
+- Props: `size`, `badge: 'legend' | 'og'`
+- Colors: legend → `#FFD700` (gold), og → `#9B59FF` (purple)
+- Uses the existing `Svg`, `Circle`, `Path` from `react-native-svg` already imported
+
+### 2. Export `BadgeCheckIcon` from icons index
+**File:** `apps/mobile/src/components/icons/index.ts`
+- Add `BadgeCheckIcon` to exports
+
+### 3. Add checkmark next to author name in PostCard
+**File:** `apps/mobile/src/components/PostCard/PostCard.tsx`
+- Import `BadgeCheckIcon` from icons
+- After the `authorName` `<Text>`, render `<BadgeCheckIcon size={14} badge={authorBadge} />` when `authorBadge` is set
+- The `authorName` Text currently has `flex: 1` — change it to `flexShrink: 1` so the checkmark sits right after the name instead of pushing to the far right
+
+### 4. Add checkmark next to author name in PostDetailScreen
+**File:** `apps/mobile/src/screens/Home/PostDetailScreen.tsx`
+- Import `BadgeCheckIcon` from icons
+- After the author name `<Text>` (line 228), render `<BadgeCheckIcon size={16} badge={...} />` when badge is set
+
+---
+
+## Verification
+
+- Run the app on Home feed — badged users should show a colored checkmark circle right after their name (gold for legend, purple for OG)
+- Check PostDetail screen — same checkmark next to author name
+- Confirm the checkmark doesn't appear for users without a badge
+- Confirm avatar rings still render correctly alongside the checkmark

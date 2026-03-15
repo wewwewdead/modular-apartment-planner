@@ -1,0 +1,194 @@
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-51-    case 'SET_WORKSPACE_MODE':
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-52-      return {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-53-        ...clearSelectionState(state),
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-54-        workspaceMode: action.workspaceMode,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-55-        viewport: action.workspaceMode === 'sheet'
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:56:          ? { ...state.sheetViewport }
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-57-          : { ...state.modelViewport },
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-58-        toolState: {},
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-59-        statusMessage: null,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-60-      };
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-61-
+--
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-96-
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-97-    case 'SET_VIEWPORT':
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-98-      return {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-99-        ...state,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-100-        modelViewport: state.workspaceMode === 'model' ? { ...action.viewport } : state.modelViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:101:        sheetViewport: state.workspaceMode === 'sheet' ? { ...action.viewport } : state.sheetViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-102-        viewport: { ...action.viewport },
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-103-      };
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-104-
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-105-    case 'PAN':
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-106-      return {
+--
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-110-              ...state.modelViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-111-              panX: state.modelViewport.panX + action.dx,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-112-              panY: state.modelViewport.panY + action.dy,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-113-            }
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-114-          : state.modelViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:115:        sheetViewport: state.workspaceMode === 'sheet'
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-116-          ? {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:117:              ...state.sheetViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:118:              panX: state.sheetViewport.panX + action.dx,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:119:              panY: state.sheetViewport.panY + action.dy,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-120-            }
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:121:          : state.sheetViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-122-        viewport: {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-123-          ...state.viewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-124-          panX: state.viewport.panX + action.dx,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-125-          panY: state.viewport.panY + action.dy,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-126-        },
+--
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-129-    case 'ZOOM': {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-130-      const { zoom, panX, panY } = action;
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-131-      return {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-132-        ...state,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-133-        modelViewport: state.workspaceMode === 'model' ? { zoom, panX, panY } : state.modelViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:134:        sheetViewport: state.workspaceMode === 'sheet' ? { zoom, panX, panY } : state.sheetViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-135-        viewport: { zoom, panX, panY },
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-136-      };
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-137-    }
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-138-
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-139-    case 'TOGGLE_GRID':
+--
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-194-  }
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-195-}
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-196-
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-197-export function createInitialEditorState(activeFloorId) {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-198-  const modelViewport = getInitialModelViewport();
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:199:  const sheetViewport = getInitialSheetViewport();
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-200-  return {
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-201-    activeTool: TOOLS.SELECT,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-202-    selectedId: null,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-203-    selectedType: null,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-204-    toolState: {},
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-205-    workspaceMode: 'model',
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-206-    viewport: { ...modelViewport },
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-207-    modelViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx:208:    sheetViewport,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-209-    showGrid: true,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-210-    snapEnabled: true,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-211-    viewMode: 'plan',
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-212-    activeFloorId,
+C:\Users\johnm\modular apartment planner\src\app\EditorProvider.jsx-213-    activeSheetId: null,
+--
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-3-import { useEditor } from '@/app/EditorProvider';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-4-import { getAnnotationDisplayLabel } from '@/annotations/format';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-5-import { getBeamDisplayLabel } from '@/domain/beamLabels';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-6-import { getSlabDisplayLabel } from '@/domain/slabLabels';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-7-import { getStairDisplayLabel } from '@/domain/stairLabels';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx:8:import { createSheetViewport } from '@/domain/sheetModels';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-9-import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-10-import { wallLength } from '@/geometry/wallGeometry';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-11-import { getColumnAutoLabel, getColumnListLabel } from '@/domain/columnLabels';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-12-import { duplicateColumn } from '@/domain/columnModels';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-13-import { beamLength } from '@/geometry/beamGeometry';
+--
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-761-
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-762-  const addViewport = () => {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-763-    try {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-764-      const sourceFloorId = activeFloorId || project.floors?.[0]?.id || null;
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-765-      const sourceView = 'plan';
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx:766:      const viewportBase = createSheetViewport(sourceView, sourceFloorId, { scale: 100 });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-767-
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-768-      let rect;
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-769-      try {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-770-        const source = resolveSheetViewportSource(project, viewportBase);
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-771-        rect = getDefaultViewportRect(sheet, source, viewportBase.scale);
+--
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-774-        rect = { x: 20, y: 20, width: 160, height: 100 };
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-775-      }
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-776-
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-777-      const viewport = { ...viewportBase, ...rect };
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-778-      dispatch({ type: 'SHEET_VIEWPORT_ADD', sheetId: sheet.id, viewport });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx:779:      editorDispatch({ type: 'SELECT_OBJECT', id: viewport.id, objectType: 'sheetViewport' });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-780-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Viewport added.' });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-781-    } catch (err) {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-782-      console.error('Failed to add viewport:', err);
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-783-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Failed to add viewport.' });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-784-    }
+--
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-938-
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-939-  const handleDelete = () => {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-940-    if (!selectedId) return;
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-941-    if (selectedType === 'sheet') {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-942-      dispatch({ type: 'SHEET_DELETE', sheetId: selectedId });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx:943:    } else if (selectedType === 'sheetViewport' && sheet) {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-944-      dispatch({ type: 'SHEET_VIEWPORT_DELETE', sheetId: sheet.id, viewportId: selectedId });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-945-    } else if (selectedType === 'slab') {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-946-      dispatch({ type: 'SLAB_DELETE', floorId: activeFloorId, slabId: selectedId });
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-947-    } else if (selectedType === 'wall') {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-948-      dispatch({ type: 'WALL_DELETE', floorId: activeFloorId, wallId: selectedId });
+--
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-973-  if (selectedId && workspaceMode === 'sheet' && sheet) {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-974-    if (selectedType === 'sheet') {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-975-      if (sheet.id === selectedId) {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-976-        content = <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} u={u} />;
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-977-      }
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx:978:    } else if (selectedType === 'sheetViewport') {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-979-      const viewport = (sheet.viewports || []).find((entry) => entry.id === selectedId);
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-980-      if (viewport) {
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-981-        content = <SheetViewportProperties sheet={sheet} viewport={viewport} project={project} dispatch={dispatch} u={u} />;
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-982-      }
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-983-    }
+--
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1054-        <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1055-      )}
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1056-      {content}
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1057-      {selectedId && (
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1058-        <button className={styles.deleteBtn} onClick={handleDelete}>
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx:1059:          Delete {selectedType === 'sheetViewport' ? 'viewport' : selectedType}
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1060-        </button>
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1061-      )}
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1062-    </div>
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1063-  );
+C:\Users\johnm\modular apartment planner\src\ui\PropertiesPanel.jsx-1064-}
+--
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-10-    projectNameOverride: options.projectNameOverride ?? '',
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-11-    viewports: (options.viewports || []).map((viewport) => ({ ...viewport })),
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-12-  };
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-13-}
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-14-
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js:15:export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, options = {}) {
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-16-  return {
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-17-    id: generateId('viewport'),
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-18-    sourceView,
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-19-    sourceFloorId,
+C:\Users\johnm\modular apartment planner\src\domain\sheetModels.js-20-    sourceRefId: options.sourceRefId ?? null,
+--
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-54-    }
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-55-
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-56-    if (!sheet || !scene) return;
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-57-
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-58-    const point = getSheetPos(event);
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx:59:    const handleHit = selectedType === 'sheetViewport' && selectedId
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-60-      ? hitTestViewportHandle(point, scene.viewports.filter((entry) => entry.id === selectedId), 6 / viewport.zoom)
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-61-      : null;
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-62-
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-63-    if (handleHit) {
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-64-      dragState.current = {
+--
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-71-      return;
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-72-    }
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-73-
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-74-    const viewportHit = hitTestViewport(point, scene.viewports);
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-75-    if (viewportHit) {
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx:76:      editorDispatch({ type: 'SELECT_OBJECT', id: viewportHit.id, objectType: 'sheetViewport' });
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-77-      dragState.current = {
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-78-        mode: 'move',
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-79-        viewportId: viewportHit.id,
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-80-        origin: point,
+C:\Users\johnm\modular apartment planner\src\renderers\SheetCanvas.jsx-81-        initialViewport: sheet.viewports.find((entry) => entry.id === viewportHit.id),
+--
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-89-        stroke={selectedType === 'sheet' && selectedId === sheet.id ? '#0f8f74' : '#4c5b70'}
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-90-        strokeWidth={selectedType === 'sheet' && selectedId === sheet.id ? 1 : 0.7}
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-91-      />
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-92-      <TitleBlock titleBlock={scene.titleBlock} />
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-93-      {scene.viewports.map((viewport) => {
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx:94:        const isSelected = selectedType === 'sheetViewport' && selectedId === viewport.id;
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-95-        return (
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-96-          <g
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-97-            key={viewport.id}
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-98-            className="sheet-viewport"
+C:\Users\johnm\modular apartment planner\src\renderers\SheetRenderer.jsx-99-            transform={viewport.rotation ? `rotate(${viewport.rotation}, ${viewport.x + viewport.width / 2}, ${viewport.y + viewport.height / 2})` : undefined}

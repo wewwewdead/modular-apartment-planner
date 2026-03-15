@@ -1,0 +1,76 @@
+# Fix: `.newsfeed-header` not sticking to top on scroll
+
+## Context
+The `.newsfeed-header` (feed tab bar with For You / Following / Stories) has `position: fixed` but is **missing `top: 0`** in all breakpoints. Without an explicit `top`, a fixed element defaults to its static position in the document flow — so when the user scrolls, the header drifts off-screen instead of staying pinned at the top.
+
+Additionally, the scroll handler in `PostCards.jsx` has a stale closure bug that causes `showHeaders` to toggle unpredictably.
+
+## Root Causes
+
+### 1. Missing `top: 0` (CSS)
+**File:** `client/src/components/HomePage/home.css`
+
+`.newsfeed-header` is declared 4 times (base + 3 media queries). None of them set `top`:
+
+| Breakpoint | Line | Has `top`? |
+|---|---|---|
+| Base (desktop) | 23 | No (`display: none` anyway) |
+| `max-width: 768px` | 342 | **No** |
+| `max-width: 428px` | 404 | **No** |
+| `max-width: 480px` | 466 | **No** |
+
+**Fix:** Add `top: 0` to every `.newsfeed-header` rule that has `display: flex`.
+
+### 2. Stale closure in scroll handler (JS)
+**File:** `client/src/components/HomePage/postCards/PostCards.jsx` — lines 382–399
+
+```js
+useEffect(() => {
+    const scroll = (e) => {
+        setShowHeaders(!showHeaders)        // ← captures stale showHeaders
+        if(timeOutRef.current) clearTimeout(timeOutRef.current);
+        timeOutRef.current = setTimeout(() => {
+            setShowHeaders(showHeaders)     // ← captures stale showHeaders
+        }, 100);
+    }
+    document.addEventListener('scroll', scroll, true);
+    ...
+}, [])  // ← empty deps, so showHeaders is always the initial value
+```
+
+The handler closes over the initial `showHeaders` value and never sees updates. This causes unpredictable toggling.
+
+**Fix:** Use functional updater `setShowHeaders(prev => !prev)` and `setShowHeaders(true)` in the timeout, so the handler doesn't depend on the outer variable. The pattern should be: hide on scroll, show after 500ms idle (matching the Bookmarks scroll handler).
+
+## Changes
+
+### 1. `client/src/components/HomePage/home.css`
+Add `top: 0` to **each** `.newsfeed-header` rule that has `display: flex`:
+- Line ~342 (768px breakpoint): add `top: 0;`
+- Line ~404 (428px breakpoint): add `top: 0;`
+- Line ~466 (480px breakpoint): add `top: 0;`
+
+### 2. `client/src/components/HomePage/postCards/PostCards.jsx`
+Replace the scroll effect (lines 382–399) with a correct implementation:
+```js
+useEffect(() => {
+    const scroll = () => {
+        setShowHeaders(false);
+        if (timeOutRef.current) clearTimeout(timeOutRef.current);
+        timeOutRef.current = setTimeout(() => {
+            setShowHeaders(true);
+        }, 500);
+    };
+    document.addEventListener('scroll', scroll, true);
+    return () => {
+        if (timeOutRef.current) clearTimeout(timeOutRef.current);
+        document.removeEventListener('scroll', scroll, true);
+    };
+}, []);
+```
+
+## Verification
+1. Open the app on mobile viewport (< 480px) or resize to ≤ 768px
+2. Scroll down — the `.newsfeed-header` should hide briefly then reappear **pinned at the top of the viewport**
+3. Stop scrolling — header should fade back in at the very top after ~500ms
+4. Verify the tab underline still works on For You / Following

@@ -1,0 +1,81 @@
+# Premium Fixture Visual Enhancement
+
+## Context
+The current fixture rendering uses flat-colored polygons with basic single-stroke internal details (e.g. two circles for burners, one rectangle for a sink). This looks functional but utilitarian. The goal is to give fixtures a refined, architectural-CAD-quality appearance with subtle gradients, shadow depth, richer internal drawings with stroke hierarchy, and more detailed toolbar icons — all while staying within the existing warm/earthy design language.
+
+## Design Direction
+**Refined Architectural** — professional floor plan aesthetics with:
+- Subtle top-to-bottom gradients replacing flat fills (warm earth tones preserved)
+- Soft drop shadow on each fixture for subtle lift
+- Three-tier stroke hierarchy: primary detail (#6B5E4F, 1.2px), secondary (#9E9283, 0.5px), highlight (white 0.35 opacity)
+- Water-related fixtures get a subtle blue tint in basins
+- More detailed internal geometry (4-burner cooktop, cushion dividers on sofa, flush button on toilet, etc.)
+
+---
+
+## Files to Modify (5 total, 1 new)
+
+### 1. NEW: `src/renderers/FixtureDefs.jsx`
+SVG `<defs>` component with shared gradients and a drop shadow filter. Rendered once inside SvgCanvas before FixtureRenderer.
+
+**Gradients** (one per fixture type, using `gradientUnits="objectBoundingBox"`):
+
+| Fixture | Type | Stops |
+|---|---|---|
+| kitchenTop | linearGradient ↓ | `#F0E4CE` → `#D8C5A4` |
+| toilet | linearGradient ↓ | `#EAF3F8` → `#C2D8E6` |
+| lavatory | radialGradient | `#EDF5F9` (center) → `#C4D9E8` (edge) |
+| table | linearGradient ↓ | `#EDE5D8` → `#D0C4B0` |
+| tv | linearGradient ↓ | `#444444` → `#1A1A1A` |
+| sofa | linearGradient ↓ | `#D8CABC` → `#B8A898` |
+
+**Shadow filter** `id="fixture-shadow"`:
+- `feDropShadow` with `dx=0 dy=30 stdDeviation=25 floodColor=rgba(0,0,0,0.10)`
+- At default zoom (0.1), 25mm stdDeviation ≈ 2.5px blur — very subtle lift
+
+### 2. `src/renderers/SvgCanvas.jsx` (2-line change)
+- Import `FixtureDefs` (line ~29)
+- Render `<FixtureDefs />` before `<SlabRenderer>` at line 321, inside the plan-view branch
+
+### 3. `src/renderers/FixtureRenderer.jsx` (major rewrite of details)
+
+**Outline polygon changes:**
+- Fill: `url(#grad-${fixtureType})` instead of flat hex colors
+- Stroke: `#8A7D6B` (warm taupe) at strokeWidth 1.5 (was #666 at 1)
+- Wrap each fixture `<g>` with `filter="url(#fixture-shadow)"`
+
+**Enhanced FixtureDetails per type:**
+
+- **kitchenTop**: 4 burners in 2×2 grid (each with outer ring + inner ring), rounded sink with subtle blue tint fill + white highlight edge + drain circle, countertop seam line, faucet dot
+- **toilet**: Rounded cistern with inner highlight + flush button rect, bowl ellipse with blue tint + inner seat rim ellipse, seat hinge dots
+- **lavatory**: Outer basin ellipse with blue tint, inner bowl highlight ellipse, drain dot, faucet dots + spout line
+- **table**: Inner highlight rect (bevel), 4 legs with outer ring + filled center, subtle grain lines
+- **tv**: Inner bezel rect, power LED dot (green), stand mount line + base bar
+- **sofa**: Rounded backrest rect, two armrest rects, 3 seat cushion rects, cushion seam dash lines
+
+All use the three-tier stroke hierarchy for depth.
+
+### 4. `src/renderers/FixturePreview.jsx` (small enhancement)
+- Add type-specific preview fill colors (currently one brown for all):
+  - kitchenTop: `rgba(232,213,183,0.25)`, toilet/lavatory: `rgba(180,210,230,0.25)`, table: `rgba(224,212,192,0.25)`, tv: `rgba(51,51,51,0.20)`, sofa: `rgba(200,184,168,0.25)`
+- Update dash pattern from `"4 2"` to `"6 3"` for more refined look
+
+### 5. `src/ui/ToolbarIcons.jsx` (6 icon functions)
+More architecturally detailed icons while keeping 20×20 viewBox and stroke-based style:
+
+- **KitchenTopIcon**: 4 burners (small circles) + rounded sink + drain dot
+- **ToiletIcon**: Cistern + flush line + bowl ellipse + inner seat rim
+- **LavatoryIcon**: Counter rect + basin ellipse + faucet line + drain dot
+- **TableIcon**: Outer rect + 4 leg rings with center dots
+- **TVIcon**: Screen rect + inner bezel + stand mount/base + power LED dot
+- **SofaIcon**: Outer rect + backrest line + armrest lines + cushion divider lines
+
+---
+
+## Verification
+1. `npm run dev`
+2. Place each of the 6 fixture types on the canvas — confirm gradient fills, subtle shadow, and detailed internal drawings
+3. Hover toolbar fixture buttons — confirm icons are more detailed and readable
+4. Use fixture placement tool — confirm preview polygon uses type-specific coloring
+5. Zoom in/out — confirm `vectorEffect="non-scaling-stroke"` keeps strokes crisp at all zoom levels
+6. Rotate fixtures (R key during placement) — confirm details rotate correctly

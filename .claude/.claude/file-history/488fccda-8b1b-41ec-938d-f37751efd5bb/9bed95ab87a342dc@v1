@@ -1,0 +1,84 @@
+# Fix: Reaction Picker Closes Before Mouse Reaches Icons
+
+## Context
+
+When hovering over the reaction button, the ReactionPicker appears 8px above the button container (`bottom: calc(100% + 8px)`). Moving the mouse upward from the button to the picker crosses an 8px gap where the cursor is not over any child of `.reaction-button-container`, which fires `onMouseLeave` and immediately closes the picker.
+
+## Root Cause
+
+- `ReactionButton.jsx:18-24` — `handleMouseLeave` calls `setShowPicker(false)` immediately with no delay
+- `reactions.css:5` — `.reaction-picker` has `bottom: calc(100% + 8px)` creating an 8px dead zone between button and picker
+
+## Fix (2 changes)
+
+### 1. `client/src/components/Reactions/reactions.css`
+
+Add a `::after` pseudo-element on `.reaction-picker` that extends the picker's hit area downward by 12px, bridging the gap:
+
+```css
+.reaction-picker::after {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 0;
+    right: 0;
+    height: 12px;
+}
+```
+
+### 2. `client/src/components/Reactions/ReactionButton.jsx`
+
+Add a 150ms delay to `handleMouseLeave` so that if the mouse re-enters the picker (a child of the container), the close is cancelled:
+
+- Add a `leaveTimerRef` ref
+- In `handleMouseEnter`: clear the leave timer
+- In `handleMouseLeave`: set a 150ms timeout before closing (instead of closing immediately)
+- Cleanup: clear leave timer on unmount
+
+**Before:**
+```js
+const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+    }
+    setShowPicker(false);
+}, []);
+```
+
+**After:**
+```js
+const handleMouseEnter = useCallback(() => {
+    if (leaveTimerRef.current) {
+        clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+    }
+    hoverTimerRef.current = setTimeout(() => {
+        setShowPicker(true);
+    }, 300);
+}, []);
+
+const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+    }
+    leaveTimerRef.current = setTimeout(() => {
+        setShowPicker(false);
+    }, 150);
+}, []);
+```
+
+## Files Modified
+
+1. `client/src/components/Reactions/reactions.css` — add `::after` gap bridge
+2. `client/src/components/Reactions/ReactionButton.jsx` — add leave delay + cancel logic
+
+## Verification
+
+1. Hover over reaction button → picker appears after 300ms
+2. Move mouse upward to picker → picker stays open (no flicker)
+3. Select a reaction → picker closes, reaction applies
+4. Move mouse away from picker → picker closes after 150ms
+5. Quick hover + leave (without reaching picker) → picker never opens (300ms entry timer cancelled)
+6. On mobile: long-press still works to open picker

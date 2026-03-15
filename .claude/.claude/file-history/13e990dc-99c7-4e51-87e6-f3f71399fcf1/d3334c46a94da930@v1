@@ -1,0 +1,83 @@
+# Fix: Repost Feature — 3 Post-Deployment Bugs
+
+## Context
+The repost feature was implemented across 14 files but has 3 bugs after testing:
+1. Repost card shows caption but no embedded original post content
+2. Notification says "Unknown notification" instead of "Reposted your post"
+3. Server logs `invalid input syntax for type uuid: "undefined"` (3 times on page refresh)
+
+All three bugs stem from 2 root causes.
+
+---
+
+## Root Cause 1: Self-Referential Join Fails in PostgREST
+
+The Supabase `.select()` join syntax:
+```
+repost_source:journals!repost_source_journal_id(...)
+```
+doesn't work reliably for self-referential FKs. PostgREST may not resolve the FK hint `journals!repost_source_journal_id` correctly, causing the query to error with UUID parse failures. This causes both Bug 1 (no `repost_source` data) and Bug 3 (UUID errors in 3-4 feed queries).
+
+**Fix:** Remove the self-join from all 4 `.select()` queries. Instead, after the main query completes, collect the `repost_source_journal_id` values from repost journals and fetch them in a single separate query, then attach the data.
+
+### File: `server/services/getService.js`
+
+**Step 1** — Remove the `repost_source:journals!repost_source_journal_id(...)` block from these 4 functions' `.select()` strings:
+- `getJournalsService()` (line 617-620)
+- `getJournalByIdService()` (line 859-862)
+- `getUserJournalsService()` (line 934-937)
+- `getVisitedUserJournalsService()` (line 1028-1031)
+
+**Step 2** — Add a shared helper function `attachRepostSources(journals)` that:
+1. Filters journals where `is_repost === true && repost_source_journal_id != null`
+2. Collects unique `repost_source_journal_id` values
+3. Fetches them in one query: `supabase.from('journals').select('id, title, content, post_type, canvas_doc, created_at, users(id, name, image_url, badge)').in('id', sourceIds)`
+4. Maps each journal's `repost_source` to the fetched data (or `null` if not found)
+5. Returns the enriched journals array
+
+**Step 3** — Call `attachRepostSources()` after the main query in each of the 4 functions, before building the response.
+
+For `getJournalByIdService()` (returns a single journal, not array), handle as a single-item case.
+
+---
+
+## Root Cause 2: Notifications `type` Column Constraint
+
+The `notifications` table likely has a CHECK constraint or ENUM on the `type` column that was created before the repost feature. The allowed values probably only include: `like`, `comment`, `reply`, `follow`, `constellation_request`, `constellation_accepted`. The insert of `type: 'repost'` either fails silently or gets rejected, so the notification has no valid type — causing "Unknown notification" on the frontend.
+
+**Fix (SQL — user must run in Supabase SQL Editor):**
+```sql
+-- Check existing constraint
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'notifications'::regclass AND contype = 'c';
+
+-- Drop old constraint and add updated one with 'repost'
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+  CHECK (type IN ('like', 'comment', 'reply', 'follow', 'repost', 'constellation_request', 'constellation_accepted'));
+```
+
+No code changes needed for Bug 2 — `formatNoficationType.js` and `notificationsCards.jsx` already have the 'repost' entries.
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `server/services/getService.js` | Remove self-join from 4 queries, add `attachRepostSources()` helper |
+
+## SQL to Run (Supabase SQL Editor)
+
+Update `notifications.type` CHECK constraint to include `'repost'`.
+
+---
+
+## Verification
+
+1. Run the SQL in Supabase to update the constraint
+2. Restart server, refresh feed page — UUID errors should be gone from console
+3. Repost a post — repost card should show embedded original content (author, title, text)
+4. Check notifications — should say "Reposted your post" with the repost icon
+5. Verify normal (non-repost) cards are unaffected

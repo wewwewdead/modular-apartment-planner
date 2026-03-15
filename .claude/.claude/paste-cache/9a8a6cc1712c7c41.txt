@@ -1,0 +1,21 @@
+<div
+                                    className="cv-repost-embedded"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        const src = postData.repostSource;
+                                        const srcParsed = ParseContent(src.content);
+                                        viewContent(
+                                            e,
+                                            src.content,
+                                            srcParsed?.wholeText || '',
+                                            src.title,
+                                            src.users?.id,
+                                            src.users?.name,
+                                            src.users?.image_url,
+                                            src.created_at,
+                                            src.id,
+                                            false, 0, false, 0, 0,
+                                            src.users?.badge
+                                        );
+                                    }}
+                                >

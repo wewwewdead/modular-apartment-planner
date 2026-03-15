@@ -1,0 +1,99 @@
+import { useRef, useEffect, useCallback } from 'react';
+import * as THREE from 'three';
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { buildSketchPreviewRoot } from './buildSketchPreview';
+import { createPreviewViewport } from '@/three/viewer/createPreviewViewport';
+import { disposeScene } from '@/three/viewer/disposeScene';
+import styles from './SketchPreviewPanel.module.css';
+
+export default function SketchPreviewPanel() {
+  const containerRef = useRef(null);
+  const viewportRef = useRef(null);
+  const rootRef = useRef(null);
+
+  const { project } = useSketch();
+  const { selectedId } = useSketchEditor();
+
+  // Initialize viewport
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const viewport = createPreviewViewport(container);
+    viewportRef.current = viewport;
+
+    return () => {
+      if (rootRef.current) {
+        disposeScene(rootRef.current, { disposeMaterials: true });
+        rootRef.current = null;
+      }
+      viewport.dispose();
+      viewportRef.current = null;
+    };
+  }, []);
+
+  // Update scene when parts change
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    // Dispose old root
+    if (rootRef.current) {
+      disposeScene(rootRef.current, { disposeMaterials: true });
+    }
+
+    const root = buildSketchPreviewRoot(project.parts, selectedId);
+    rootRef.current = root;
+
+    // Compute bounds from parts
+    const box = new THREE.Box3();
+    root.updateMatrixWorld(true);
+    box.expandByObject(root);
+
+    if (box.isEmpty()) {
+      box.set(
+        new THREE.Vector3(-500, 0, -300),
+        new THREE.Vector3(500, 800, 300)
+      );
+    }
+
+    const bounds = {
+      min: { x: box.min.x, y: box.min.y, z: box.min.z },
+      max: { x: box.max.x, y: box.max.y, z: box.max.z },
+    };
+
+    viewport.setWorld(root, bounds, 0);
+  }, [project.parts, selectedId]);
+
+  // ResizeObserver
+  useEffect(() => {
+    const container = containerRef.current;
+    const viewport = viewportRef.current;
+    if (!container || !viewport) return;
+
+    const observer = new ResizeObserver(() => viewport.resize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    viewportRef.current?.resetView();
+  }, []);
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>
+        <span>3D Preview</span>
+        <button className={styles.resetBtn} onClick={handleResetView} title="Reset view">
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path d="M2 8a6 6 0 1 1 1.2 3.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <path d="M2 12V8h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      <div ref={containerRef} className={styles.viewport} />
+      <div className={styles.footer}>Orbit: drag | Zoom: scroll</div>
+    </div>
+  );
+}

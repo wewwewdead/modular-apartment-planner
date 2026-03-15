@@ -1,0 +1,227 @@
+import { useRef, useCallback, useEffect, useState } from 'react';
+import { useEditor } from '@/app/EditorProvider';
+import { useProject } from '@/app/ProjectProvider';
+import { useEditorTool } from '@/editor/useEditorTool';
+import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
+import { TOOLS } from '@/editor/tools';
+import GridRenderer from './GridRenderer';
+import WallRenderer from './WallRenderer';
+import DoorRenderer from './DoorRenderer';
+import WindowRenderer from './WindowRenderer';
+import RoomRenderer from './RoomRenderer';
+import DimensionRenderer from './DimensionRenderer';
+import SelectionOverlay from './SelectionOverlay';
+import WallPreview from './WallPreview';
+import DoorWindowPreview from './DoorWindowPreview';
+import styles from './SvgCanvas.module.css';
+
+function screenToModel(screenX, screenY, viewport, svgRect) {
+  const x = (screenX - svgRect.left - viewport.panX) / viewport.zoom;
+  const y = (screenY - svgRect.top - viewport.panY) / viewport.zoom;
+  return { x, y };
+}
+
+export default function SvgCanvas() {
+  const svgRef = useRef(null);
+  const isPanning = useRef(false);
+  const lastPanPos = useRef({ x: 0, y: 0 });
+  const spaceHeld = useRef(false);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+
+  const { project, dispatch, getFloor } = useProject();
+  const editor = useEditor();
+  const {
+    activeTool, selectedId, selectedType, toolState,
+    viewport, showGrid, snapEnabled, activeFloorId,
+    dispatch: editorDispatch,
+  } = editor;
+
+  const floor = getFloor(activeFloorId);
+
+  const tool = useEditorTool({
+    activeTool,
+    dispatch,
+    editorDispatch,
+    getFloor,
+    activeFloorId,
+    viewport,
+    snapEnabled,
+    selectedId,
+    selectedType,
+    toolState,
+  });
+
+  const getModelPos = useCallback((e) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    return screenToModel(e.clientX, e.clientY, viewport, rect);
+  }, [viewport]);
+
+  const handleMouseDown = useCallback((e) => {
+    // Middle mouse or space+left for pan
+    if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
+      isPanning.current = true;
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      return;
+    }
+
+    const modelPos = getModelPos(e);
+    tool.onMouseDown(modelPos, e);
+  }, [getModelPos, tool]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (isPanning.current) {
+      const dx = e.clientX - lastPanPos.current.x;
+      const dy = e.clientY - lastPanPos.current.y;
+      editorDispatch({ type: 'PAN', dx, dy });
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    const modelPos = getModelPos(e);
+    setCursorPos(modelPos);
+    tool.onMouseMove(modelPos, e);
+  }, [getModelPos, tool, editorDispatch]);
+
+  const handleMouseUp = useCallback((e) => {
+    if (isPanning.current) {
+      isPanning.current = false;
+      return;
+    }
+    const modelPos = getModelPos(e);
+    tool.onMouseUp(modelPos, e);
+  }, [getModelPos, tool]);
+
+  const handleDoubleClick = useCallback((e) => {
+    const modelPos = getModelPos(e);
+    tool.onDoubleClick(modelPos, e);
+  }, [getModelPos, tool]);
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const direction = e.deltaY < 0 ? 1 : -1;
+    const factor = direction > 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.zoom * factor));
+
+    // Zoom centered on cursor
+    const newPanX = mouseX - (mouseX - viewport.panX) * (newZoom / viewport.zoom);
+    const newPanY = mouseY - (mouseY - viewport.panY) * (newZoom / viewport.zoom);
+
+    editorDispatch({ type: 'ZOOM', zoom: newZoom, panX: newPanX, panY: newPanY });
+  }, [viewport, editorDispatch]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === ' ') {
+        spaceHeld.current = true;
+        e.preventDefault();
+      }
+
+      // Tool shortcuts
+      if (!e.ctrlKey && !e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'v':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SELECT });
+            return;
+          case 'w':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.WALL });
+            return;
+          case 'd':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.DOOR });
+            return;
+          case 'n':
+            editorDispatch({ type: 'SET_TOOL', tool: TOOLS.WINDOW });
+            return;
+        }
+      }
+
+      tool.onKeyDown(e);
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === ' ') {
+        spaceHeld.current = false;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [tool, editorDispatch]);
+
+  // Prevent default context menu on SVG
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const prevent = (e) => e.preventDefault();
+    svg.addEventListener('contextmenu', prevent);
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('contextmenu', prevent);
+      svg.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
+  const cursor = spaceHeld.current ? 'grab' : tool.getCursor();
+  const zoomPercent = Math.round(viewport.zoom * 1000);
+
+  return (
+    <div className={styles.canvasContainer}>
+      <svg
+        ref={svgRef}
+        className={styles.svg}
+        style={{ cursor }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onDoubleClick={handleDoubleClick}
+      >
+        <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
+          {showGrid && <GridRenderer />}
+          {showGrid && (
+            <rect
+              x={-100000} y={-100000}
+              width={200000} height={200000}
+              fill="url(#grid-major)"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+          {floor && (
+            <>
+              <RoomRenderer rooms={floor.rooms} />
+              <WallRenderer walls={floor.walls} />
+              <DoorRenderer doors={floor.doors} walls={floor.walls} />
+              <WindowRenderer windows={floor.windows} walls={floor.walls} />
+              <DimensionRenderer walls={floor.walls} />
+              <SelectionOverlay
+                selectedId={selectedId}
+                selectedType={selectedType}
+                floor={floor}
+                zoom={viewport.zoom}
+              />
+              <WallPreview toolState={toolState} activeTool={activeTool} />
+              <DoorWindowPreview
+                toolState={toolState}
+                activeTool={activeTool}
+                walls={floor.walls}
+              />
+            </>
+          )}
+        </g>
+      </svg>
+      <div className={styles.statusBar}>
+        <span>X: {Math.round(cursorPos.x)} mm</span>
+        <span>Y: {Math.round(cursorPos.y)} mm</span>
+        <span>Zoom: {zoomPercent}%</span>
+        <span>Tool: {activeTool}</span>
+      </div>
+    </div>
+  );
+}

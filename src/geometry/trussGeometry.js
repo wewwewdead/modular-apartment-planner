@@ -29,15 +29,50 @@ const DETAIL_SPAN_OFFSET = 860;
 const DETAIL_RISE_OUTSET = 760;
 const DETAIL_PURLIN_OFFSET = 260;
 const DETAIL_PURLIN_START_OFFSET = 520;
-const DETAIL_WEB_TAG_OFFSET = 260;
-const DETAIL_WEB_TAG_TANGENT_SHIFT = 72;
-const DETAIL_TOP_CHORD_TAG_OFFSET = 320;
-const DETAIL_TAG_OUTSET = 220;
+const DETAIL_WEB_TAG_OFFSET = 420;
+const DETAIL_WEB_TAG_TANGENT_SHIFT = 96;
+const DETAIL_TOP_CHORD_TAG_OFFSET = 500;
+const DETAIL_TAG_OUTSET = 280;
 const DETAIL_TAG_HEIGHT = 150;
-const DETAIL_TAG_FONT_SIZE = 96;
-const DETAIL_TAG_LINE_HEIGHT = 116;
-const DETAIL_TAG_MASK_PADDING_X = 44;
-const DETAIL_TAG_MASK_PADDING_Y = 22;
+const DETAIL_TAG_FONT_SIZE = 110;
+const DETAIL_TAG_LINE_HEIGHT = 134;
+const DETAIL_TAG_MASK_PADDING_X = 64;
+const DETAIL_TAG_MASK_PADDING_Y = 36;
+const DETAIL_TAG_GAP = 60;
+const DETAIL_TAG_OFFSETS = [
+  { x: 0, y: 0 },
+  // ring 1
+  { x: 0, y: -250 },
+  { x: 0, y: 250 },
+  { x: 500, y: 0 },
+  { x: -500, y: 0 },
+  // ring 2
+  { x: 500, y: -250 },
+  { x: -500, y: -250 },
+  { x: 500, y: 250 },
+  { x: -500, y: 250 },
+  // ring 3
+  { x: 0, y: -500 },
+  { x: 0, y: 500 },
+  { x: 800, y: 0 },
+  { x: -800, y: 0 },
+  // ring 4
+  { x: 800, y: -250 },
+  { x: -800, y: -250 },
+  { x: 800, y: 250 },
+  { x: -800, y: 250 },
+  { x: 500, y: -500 },
+  { x: -500, y: -500 },
+  { x: 500, y: 500 },
+  { x: -500, y: 500 },
+  // ring 5
+  { x: 0, y: -750 },
+  { x: 0, y: 750 },
+  { x: 0, y: -1000 },
+  { x: 0, y: 1000 },
+  { x: 800, y: -500 },
+  { x: -800, y: -500 },
+];
 
 function normalizeMaterial(material = 'timber') {
   return material === 'metal' ? 'metal' : 'timber';
@@ -755,6 +790,54 @@ function extendDetailBounds(detailBounds, dimensions = [], tags = []) {
   };
 }
 
+function boundsOverlap(a, b, gap) {
+  if (!a || !b) return false;
+  const halfGap = gap / 2;
+  return (
+    a.minX - halfGap < b.maxX + halfGap &&
+    a.maxX + halfGap > b.minX - halfGap &&
+    a.minY - halfGap < b.maxY + halfGap &&
+    a.maxY + halfGap > b.minY - halfGap
+  );
+}
+
+function applyDetailTagCollisionOffsets(tags = [], fixedObstacles = []) {
+  const placed = fixedObstacles.filter(Boolean);
+
+  return [...tags]
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0))
+    .map((tag) => {
+      for (const offset of DETAIL_TAG_OFFSETS) {
+        const candidate = {
+          ...tag,
+          position: {
+            x: tag.position.x + offset.x,
+            y: tag.position.y + offset.y,
+          },
+          leaderLine: tag.leaderLine
+            ? {
+                start: tag.leaderLine.start,
+                end: {
+                  x: tag.leaderLine.end.x + offset.x,
+                  y: tag.leaderLine.end.y + offset.y,
+                },
+              }
+            : null,
+        };
+        const candidateBounds = estimateTagBounds(candidate);
+        if (!candidateBounds) continue;
+        if (!placed.some((obs) => boundsOverlap(candidateBounds, obs, DETAIL_TAG_GAP))) {
+          placed.push(candidateBounds);
+          return candidate;
+        }
+      }
+
+      const bounds = estimateTagBounds(tag);
+      if (bounds) placed.push(bounds);
+      return tag;
+    });
+}
+
 function resolveDetailCrestPoint(roofOutline = []) {
   if (!roofOutline.length) {
     return { x: 0, z: 0 };
@@ -863,9 +946,12 @@ function buildTrussDetailDimensions(instanceGeometry) {
     const sorted = [...attachments].sort((a, b) => (a.distanceAlong || 0) - (b.distanceAlong || 0));
     if (!sorted.length) continue;
     const purlinSideOffset = side === 'right' ? DETAIL_PURLIN_OFFSET : -DETAIL_PURLIN_OFFSET;
-    const purlinStartPoint = side === 'right'
-      ? (roofOutline[roofOutline.length - 1] || ridge)
-      : (roofOutline[0] || ridge);
+    const matchingRun = (instanceGeometry.topChordRuns || [])
+      .find((run) => (run.side || run.id) === side);
+    const purlinStartPoint = matchingRun?.points?.[0]
+      || (side === 'right'
+        ? (roofOutline[roofOutline.length - 1] || ridge)
+        : (roofOutline[0] || ridge));
 
     const purlinStartDimension = createDimensionFigure({
       id: `${instanceGeometry.instance.id}_detail_purlin_start_${side}`,
@@ -911,7 +997,7 @@ function buildTrussDetailDimensions(instanceGeometry) {
       `${instanceGeometry.instance.id}_detail_pitch`,
       [`Pitch ${Number(metrics.pitch || 0).toFixed(1)}%`],
       { x: ridge.x, y: -ridge.z - 220 },
-      { sourceId: instanceGeometry.instance.id }
+      { sourceId: instanceGeometry.instance.id, priority: 3 }
     ),
     createDetailTag(
       `${instanceGeometry.instance.id}_detail_bearing_start`,
@@ -921,6 +1007,7 @@ function buildTrussDetailDimensions(instanceGeometry) {
         sourceId: instanceGeometry.instance.id,
         textAnchor: 'end',
         measurementValue: metrics.bearingStart || 0,
+        priority: 2,
       }
     ),
     createDetailTag(
@@ -931,6 +1018,7 @@ function buildTrussDetailDimensions(instanceGeometry) {
         sourceId: instanceGeometry.instance.id,
         textAnchor: 'start',
         measurementValue: metrics.bearingEnd || 0,
+        priority: 2,
       }
     )
   );
@@ -943,12 +1031,14 @@ function buildTrussDetailDimensions(instanceGeometry) {
 
 function buildTrussDetailWebTags(lineSegments, instanceGeometry) {
   const spanMidpoint = (instanceGeometry?.metrics?.span || 0) / 2;
-  let webIndex = 0;
 
-  return lineSegments
-    .filter((segment) => segment.memberType === 'web' && segment.start && segment.end)
-    .map((segment) => {
-      webIndex += 1;
+  const webSegments = lineSegments
+    .filter((segment) => segment.memberType === 'web' && segment.start && segment.end);
+  const totalWebs = webSegments.length;
+
+  return webSegments
+    .map((segment, index) => {
+      const webIndex = index + 1;
 
       const start = createDetailPoint(segment.start);
       const end = createDetailPoint(segment.end);
@@ -957,21 +1047,22 @@ function buildTrussDetailWebTags(lineSegments, instanceGeometry) {
       const length = Math.hypot(dx, dy);
       if (length <= 1) return null;
 
-      const midpoint = {
-        x: (start.x + end.x) / 2,
-        y: (start.y + end.y) / 2,
+      const t = totalWebs <= 1 ? 0.5 : 0.3 + (index / (totalWebs - 1)) * 0.4;
+      const anchor = {
+        x: start.x + dx * t,
+        y: start.y + dy * t,
       };
       let offset = { x: 0, y: 0 };
 
       if (Math.abs(dx) <= 1e-6) {
         offset = {
-          x: midpoint.x < spanMidpoint ? -DETAIL_WEB_TAG_OFFSET : DETAIL_WEB_TAG_OFFSET,
+          x: anchor.x < spanMidpoint ? -DETAIL_WEB_TAG_OFFSET : DETAIL_WEB_TAG_OFFSET,
           y: 0,
         };
       } else {
         const normal = { x: -dy / length, y: dx / length };
         const tangent = { x: dx / length, y: dy / length };
-        const outwardNormal = selectOutwardNormal(normal, midpoint, spanMidpoint);
+        const outwardNormal = selectOutwardNormal(normal, anchor, spanMidpoint);
         const tangentShift = (webIndex % 2 === 0 ? 1 : -1) * DETAIL_WEB_TAG_TANGENT_SHIFT;
         offset = {
           x: (outwardNormal.x * DETAIL_WEB_TAG_OFFSET) + (tangent.x * tangentShift),
@@ -983,8 +1074,8 @@ function buildTrussDetailWebTags(lineSegments, instanceGeometry) {
         `${instanceGeometry.instance.id}_detail_web_${webIndex}`,
         [`W${webIndex} ${formatMeasurement(length)}`],
         {
-          x: midpoint.x + offset.x,
-          y: midpoint.y + offset.y,
+          x: anchor.x + offset.x,
+          y: anchor.y + offset.y,
         },
         {
           angle: 0,
@@ -992,10 +1083,10 @@ function buildTrussDetailWebTags(lineSegments, instanceGeometry) {
           sourceId: segment.id,
           measurementValue: length,
           leaderLine: {
-            start: midpoint,
+            start: anchor,
             end: {
-              x: midpoint.x + (offset.x * 0.72),
-              y: midpoint.y + (offset.y * 0.72),
+              x: anchor.x + (offset.x * 0.72),
+              y: anchor.y + (offset.y * 0.72),
             },
           },
         }
@@ -1057,6 +1148,7 @@ function buildTrussDetailTopChordTags(instanceGeometry) {
           sourceType: 'truss_top_chord',
           sourceId: run.id,
           measurementValue: length,
+          priority: 1,
           leaderLine: {
             start: midpoint,
             end: {
@@ -1154,10 +1246,20 @@ export function buildTrussDetailScene(trussSystem, trussInstanceId = null) {
   const detailAnnotations = buildTrussDetailDimensions(activeInstance);
   const topChordTags = buildTrussDetailTopChordTags(activeInstance);
   const webTags = buildTrussDetailWebTags(lineSegments, activeInstance);
+
+  const dimensionObstacles = detailAnnotations.dimensions
+    .map((fig) => estimateDimensionBounds(fig))
+    .filter(Boolean);
+  const allTags = [...detailAnnotations.tags, ...topChordTags, ...webTags];
+  const resolvedTags = applyDetailTagCollisionOffsets(allTags, dimensionObstacles);
+  const resolvedFixedTags = resolvedTags.filter((t) => t.sourceType === 'truss_detail');
+  const resolvedTopChordTags = resolvedTags.filter((t) => t.sourceType === 'truss_top_chord');
+  const resolvedWebTags = resolvedTags.filter((t) => t.sourceType === 'truss_web');
+
   const bounds = extendDetailBounds(
     activeInstance.detailBounds,
     detailAnnotations.dimensions,
-    [...detailAnnotations.tags, ...topChordTags, ...webTags]
+    resolvedTags
   );
 
   return {
@@ -1167,9 +1269,9 @@ export function buildTrussDetailScene(trussSystem, trussInstanceId = null) {
     lineSegments,
     purlinMarkers,
     dimensions: detailAnnotations.dimensions,
-    tags: detailAnnotations.tags,
-    topChordTags,
-    webTags,
+    tags: resolvedFixedTags,
+    topChordTags: resolvedTopChordTags,
+    webTags: resolvedWebTags,
     bounds,
   };
 }

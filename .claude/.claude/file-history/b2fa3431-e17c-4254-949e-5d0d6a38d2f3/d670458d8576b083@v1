@@ -1,0 +1,164 @@
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useInView } from 'react-intersection-observer';
+import { useAuth } from '../../../Context/useAuth';
+import { useMyStories } from '../hooks/useStoryData';
+import { useDeleteStory } from '../hooks/useStoryMutations';
+import { motion, AnimatePresence } from 'framer-motion';
+import { BeatLoader } from 'react-spinners';
+import './StoryDashboard.css';
+
+const STATUS_LABELS = {
+    ongoing: 'Ongoing',
+    completed: 'Completed',
+    hiatus: 'Hiatus',
+};
+
+const StoryDashboard = () => {
+    const { session } = useAuth();
+    const token = session?.access_token;
+    const navigate = useNavigate();
+
+    const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useMyStories(token);
+    const stories = data?.pages?.flatMap(page => page.data) || [];
+    const deleteMutation = useDeleteStory(token);
+
+    const { ref: sentinelRef, inView } = useInView();
+    useEffect(() => {
+        if (inView && hasNextPage && !isFetchingNextPage) {
+            fetchNextPage();
+        }
+    }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    const handleDelete = (e, storyId, title) => {
+        e.stopPropagation();
+        if (window.confirm(`Delete "${title}"? This cannot be undone.`)) {
+            deleteMutation.mutate(storyId);
+        }
+    };
+
+    const getTotalWords = (chapters) => {
+        if (!chapters) return 0;
+        return chapters.reduce((sum, ch) => sum + (ch.word_count || 0), 0);
+    };
+
+    const getPublishedCount = (chapters) => {
+        if (!chapters) return 0;
+        return chapters.filter(ch => ch.status === 'published').length;
+    };
+
+    if (isLoading) {
+        return (
+            <div className="story-dashboard">
+                <div className="story-dashboard-loading">
+                    <BeatLoader size={10} color="var(--text-muted)" />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="story-dashboard">
+            <div className="story-dashboard-header">
+                <button className="story-dashboard-back" onClick={() => navigate(-1)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="var(--text-secondary)">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                </button>
+                <h2 className="story-dashboard-title">My Stories</h2>
+                <button
+                    className="story-dashboard-new-btn"
+                    onClick={() => navigate('/home/stories/new')}
+                >
+                    + New Story
+                </button>
+            </div>
+
+            {(!isLoading && stories.length === 0) ? (
+                <div className="story-dashboard-empty">
+                    <p>You haven't written any stories yet.</p>
+                    <button
+                        className="story-dashboard-new-btn"
+                        onClick={() => navigate('/home/stories/new')}
+                    >
+                        Write Your First Story
+                    </button>
+                </div>
+            ) : (
+                <div className="story-dashboard-list">
+                    <AnimatePresence>
+                        {stories.map((story) => (
+                            <motion.div
+                                key={story.id}
+                                className="story-dashboard-card"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                onClick={() => navigate(`/home/stories/${story.id}/manage`)}
+                            >
+                                <div className="story-dashboard-card-cover">
+                                    {story.cover_url ? (
+                                        <img src={story.cover_url} alt={story.title} loading="lazy" />
+                                    ) : (
+                                        <div className="story-dashboard-card-cover-placeholder">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="var(--text-muted)">
+                                                <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"/>
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="story-dashboard-card-info">
+                                    <h3 className="story-dashboard-card-title">{story.title}</h3>
+                                    <div className="story-dashboard-card-meta">
+                                        <span className={`story-status-badge story-status-${story.status}`}>
+                                            {STATUS_LABELS[story.status] || story.status}
+                                        </span>
+                                        <span className="story-meta-dot">&middot;</span>
+                                        <span>{getPublishedCount(story.chapters)}/{(story.chapters || []).length} chapters</span>
+                                        <span className="story-meta-dot">&middot;</span>
+                                        <span>{getTotalWords(story.chapters).toLocaleString()} words</span>
+                                    </div>
+                                    <div className="story-dashboard-card-stats">
+                                        <span>{story.read_count || 0} reads</span>
+                                        <span>{story.vote_count || 0} votes</span>
+                                    </div>
+                                </div>
+                                <div className="story-dashboard-card-actions">
+                                    <button
+                                        className="story-action-btn"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(`/home/stories/${story.id}/edit`);
+                                        }}
+                                        title="Edit story details"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="var(--text-secondary)">
+                                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                        </svg>
+                                    </button>
+                                    <button
+                                        className="story-action-btn story-action-btn-danger"
+                                        onClick={(e) => handleDelete(e, story.id, story.title)}
+                                        title="Delete story"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                    <div ref={sentinelRef} style={{ height: 1 }} />
+                    {isFetchingNextPage && (
+                        <div className="story-dashboard-loading">
+                            <BeatLoader size={10} color="var(--text-muted)" />
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default StoryDashboard;

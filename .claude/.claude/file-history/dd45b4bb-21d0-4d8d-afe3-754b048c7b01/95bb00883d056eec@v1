@@ -1,0 +1,3 @@
+# 3D Preview: Don't Reset Camera on Plan Edits — COMPLETED
+
+Fix applied in `src/three/viewer/createPreviewViewport.js`. Camera only auto-fits on first `setWorld()` call; subsequent plan edits preserve camera position. User confirmed working.

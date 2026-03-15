@@ -1,0 +1,47 @@
+# Fix: Reading Time Always Shows "1 min read" on Feed Cards
+
+## Context
+Reading time on feed cards (PostCards, Bookmarks, ExplorePage) always displays "1 min read" because `CalculateText()` is called with `preview_text` — a 215-character truncated preview (~35 words). At 150 WPM, `Math.ceil(35/150)` = 1, always. ContentView works correctly because it uses the full `wholeText`.
+
+## Approach
+Store `reading_time` (integer minutes) in the `journals` table, computed from the full text at write time. Feed cards read the stored value instead of recalculating from truncated preview.
+
+## Changes
+
+### 1. Database — Add `reading_time` column
+- Add `reading_time` (integer, default 1) to `journals` table
+- SQL migration file: `server/sql/reading_time.sql`
+
+### 2. Server — Compute at write time
+**`server/services/uploadService.js`**
+- In `uploadTextService` (~line 262): compute `reading_time` from `parseData.wholeText`, add to insert payload
+- In `updateJournalService` (~line 423): compute `reading_time` from `parseData.wholeText`, add to update payload
+- Helper: inline calculation — `Math.ceil((text.trim().split(/\s+/).length) / 150) || 1`
+
+### 3. Server — Include in feed queries
+**`server/services/getService.js`** (line 36-51)
+- Add `reading_time` to `JOURNAL_METADATA_SELECT` string
+
+### 4. Client — Use stored value on cards
+**`client/src/components/HomePage/postCards/PostCards.jsx`** (line 867)
+- Replace `CalculateText(previewText)` with `journal.reading_time ? \`${journal.reading_time} ${journal.reading_time > 1 ? 'mins' : 'min'} read\` : CalculateText(previewText)`
+- Fallback to old calculation for posts that haven't been backfilled yet
+
+**`client/src/components/Bookmarks/Bookmarks.jsx`** (line ~232)
+- Same change: use stored `reading_time` with fallback
+
+**`client/src/components/HomePage/explore/ExplorePage.jsx`** (lines ~112, ~173, ~593)
+- Same change: use stored `reading_time` with fallback
+
+### 5. Backfill script
+**`server/scripts/backfillReadingTime.js`** (new file)
+- Iterate all journals with `reading_time IS NULL` or `reading_time = 1`
+- Parse `content`, compute from `wholeText`, update row
+- Pattern: follow existing `server/scripts/backfillPreviews.js`
+
+## Verification
+1. Run the SQL migration to add the column
+2. Run the backfill script — spot-check a few posts to confirm reading times > 1 min
+3. Create/edit a post and verify `reading_time` is set correctly in DB
+4. Check feed cards show varied reading times (not all "1 min read")
+5. ContentView still works (it uses `wholeText` directly, unaffected)

@@ -1,0 +1,59 @@
+import { serializeProject } from './serialize';
+import { deserializeProject } from './deserialize';
+
+const INDEX_KEY = 'apartment-planner-projects';
+const PROJECT_PREFIX = 'apartment-planner-project-';
+
+function getIndex() {
+  try {
+    const raw = localStorage.getItem(INDEX_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveIndex(index) {
+  localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+}
+
+export function saveProject(project) {
+  const serialized = serializeProject(project);
+  const key = PROJECT_PREFIX + project.id;
+  localStorage.setItem(key, JSON.stringify(serialized));
+
+  // Update index
+  const index = getIndex();
+  const existing = index.findIndex(p => p.id === project.id);
+  const entry = { id: project.id, name: project.name, savedAt: serialized.savedAt };
+
+  if (existing >= 0) {
+    index[existing] = entry;
+  } else {
+    index.push(entry);
+  }
+  saveIndex(index);
+
+  return serialized.savedAt;
+}
+
+export function loadProject(projectId) {
+  const key = PROJECT_PREFIX + projectId;
+  const raw = localStorage.getItem(key);
+  if (!raw) throw new Error('Project not found');
+
+  const json = JSON.parse(raw);
+  return deserializeProject(json);
+}
+
+export function listProjects() {
+  return getIndex();
+}
+
+export function deleteProject(projectId) {
+  const key = PROJECT_PREFIX + projectId;
+  localStorage.removeItem(key);
+
+  const index = getIndex().filter(p => p.id !== projectId);
+  saveIndex(index);
+}

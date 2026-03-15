@@ -1,0 +1,265 @@
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-342-    try {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-343-        const {count: postCount} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:344:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-345-            .select('id', {count: 'exact', head: true})
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-346-            .eq('user_id', userId);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-347-        const home = userHomeCoords(userId);
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-354-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-355-    let {error} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:356:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-357-    .insert(insertPayload);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-358-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-359-    if(error){
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-366-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-367-            const retry = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:368:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-369-            .insert(fallbackPayload);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-370-            error = retry.error;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-371-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-403-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-404-    const {data: existingJournal, error: existingJournalError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:405:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-406-    .select('id, user_id, content, title, post_type, canvas_doc')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-407-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-408-    .eq('user_id', userId)
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-484-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-485-    const {data, error} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:486:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-487-    .update(journalData)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-488-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-489-    .eq('user_id', userId)
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-511-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-512-    const {data: journal, error: fetchError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:513:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-514-        .select('id, user_id, is_repost')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-515-        .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-516-        .eq('user_id', userId)
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-531-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-532-    const {error: updateError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:533:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-534-        .update({repost_caption: trimmedCaption || null})
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-535-        .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-536-        .eq('user_id', userId);
+--
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-186-
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-187-    const {error: errorDeletingData} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js:188:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-189-    .delete()
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-190-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-191-    .eq('user_id', userId)
+--
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-21-
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-22-    const {data: journal, error: journalError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:23:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-24-    .select('id, user_id, title, post_type, canvas_doc, privacy')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-25-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-26-    .maybeSingle();
+--
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-76-
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-77-    let insertResult = await supabase
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:78:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-79-    .insert(remixPayload)
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-80-    .select('id, title, post_type, created_at')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-81-    .single();
+--
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-86-        if(missingRemixColumns){
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-87-            insertResult = await supabase
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:88:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-89-            .insert({
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-90-                user_id: userId,
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-91-                title: normalizedTitle,
+--
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-8-    // Verify starIdA belongs to sender
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-9-    const { data: starA, error: errorStarA } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js:10:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-11-        .select('id, user_id')
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-12-        .eq('id', starIdA)
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-13-        .maybeSingle();
+--
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-23-    // Get starIdB owner
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-24-    const { data: starB, error: errorStarB } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js:25:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-26-        .select('id, user_id')
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-27-        .eq('id', starIdB)
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-28-        .maybeSingle();
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-49-    // Get all users who have public posts with embeddings
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-50-    const { data: users, error: usersErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:51:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-52-        .select('user_id')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-53-        .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-54-        .not('embeddings', 'is', null);
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-63-        // Compute mean embedding via RPC or manual fetch
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-64-        const { data: posts, error: postsErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:65:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-66-            .select('embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-67-            .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-68-            .eq('privacy', 'public')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-346-        // Fetch this user's public posts with embeddings
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-347-        const { data: posts, error: postsErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:348:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-349-            .select('id, embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-350-            .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-351-            .eq('privacy', 'public')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-398-
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-399-            const { error: updateErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:400:                .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-401-                .update({ settled_x: settledX, settled_y: settledY })
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-402-                .eq('id', post.id);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-403-
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-418-        // 1. Recompute this user's centroid
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-419-        const { data: posts } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:420:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-421-            .select('embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-422-            .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-423-            .eq('privacy', 'public')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-507-
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-508-        const { data: userPosts } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:509:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-510-            .select('id, embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-511-            .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-512-            .eq('privacy', 'public')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-568-
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-569-            await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:570:                .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-571-                .update({
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-572-                    settled_x: Math.round((baseX + pullX) * 100) / 100,
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-573-                    settled_y: Math.round((baseY + pullY) * 100) / 100
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-112-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-113-    const insertCommentPromise = supabase
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:114:    .from('comments')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-115-    .insert(
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-116-        {
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-117-            comment: comments,
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-247-    // Fetch source journal
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-248-    const {data: sourceJournal, error: errorSourceJournal} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:249:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-250-        .select('id, title, user_id, privacy, is_repost, repost_source_journal_id')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-251-        .eq('id', sourceJournalId)
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-252-        .maybeSingle();
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-276-    if(sourceJournal.is_repost && sourceJournal.repost_source_journal_id){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-277-        const {data: originalJournal, error: errorOriginal} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:278:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-279-            .select('id, title, user_id, privacy')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-280-            .eq('id', sourceJournal.repost_source_journal_id)
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-281-            .maybeSingle();
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-302-    // Check for duplicate repost
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-303-    const {data: existingRepost, error: errorExisting} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:304:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-305-        .select('id')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-306-        .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-307-        .eq('repost_source_journal_id', ultimateSourceId)
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-321-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-322-    const {data: insertedRepost, error: errorInsertRepost} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:323:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-324-        .insert({
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-325-            user_id: userId,
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-326-            is_repost: true,
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-47-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-48-    const { data: sources, error } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:49:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-50-        .select('id, title, content, post_type, canvas_doc, created_at, users(id, name, image_url, badge)')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-51-        .in('id', sourceIds);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-52-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-111-const loadUniversePostsFallback = async(minX, maxX, minY, maxY, limit) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-112-    const settledQuery = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:113:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-114-        .select(UNIVERSE_POST_SELECT)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-115-        .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-116-        .not('settled_x', 'is', null)
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-124-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-125-    const unsettledQuery = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:126:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-127-        .select(UNIVERSE_POST_SELECT)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-128-        .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-129-        .is('settled_x', null)
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-643-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-644-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:645:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-646-    .select(`
+C:\Users\johnm\iskrib_v3\server\services\getService.js-647-        *, users(*),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-648-        like_count: likes(count),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-737-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-738-    const {data: journals, error: journalsError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:739:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-740-        .select(`
+C:\Users\johnm\iskrib_v3\server\services\getService.js-741-            *,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-742-            users(*),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-813-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-814-    const baseQuery = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:815:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-816-        .select(`
+C:\Users\johnm\iskrib_v3\server\services\getService.js-817-            *,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-818-            users(*),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-882-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-883-    const { data: journal, error: journalError } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:884:        .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-885-        .select(`
+C:\Users\johnm\iskrib_v3\server\services\getService.js-886-            *,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-887-            users(*),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-955-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-956-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:957:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-958-    .select(`
+C:\Users\johnm\iskrib_v3\server\services\getService.js-959-        *,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-960-        users(name, image_url, user_email, id, badge),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1047-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1048-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1049:    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1050-    .select(`
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1051-        *,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1052-        users(name, image_url, user_email, id, badge),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1163-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1164-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1165:        .from('comments')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1166-        .select('*, users(name, image_url, id, badge)')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1167-        .eq('post_id', postId)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1168-        .is('parent_id', null)
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1414-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1415-                const {data: journals, error: errorJournals} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1416:                    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1417-                    .select(selectColumns)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1418-                    .in('id', matchIds)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1419-                    .eq('privacy', 'public');
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1451-    const [titleResult, contentResult] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1452-        supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1453:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1454-            .select(selectColumns)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1455-            .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1456-            .ilike('title', `%${escapedQuery}%`)
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1459-            .limit(parsedLimit + 1),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1460-        supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1461:            .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1462-            .select(selectColumns)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1463-            .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1464-            .ilike('content', `%${escapedQuery}%`)

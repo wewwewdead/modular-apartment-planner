@@ -1,0 +1,145 @@
+import { projectPartToView } from '../../domain/viewProjection';
+import { projectDimensionPoint } from '../../renderers/DimensionRenderer';
+import { createDimensionFigure, hitTestDimensionFigure } from '@/annotations/dimensions';
+import { snapPoint } from '../snap';
+import { SKETCH_GRID_MINOR } from '../../domain/defaults';
+
+export function createSketchSelectHandler({ dispatch, editorDispatch, project, activeView, viewport, snapEnabled }) {
+  function hitTestDimensions(modelPos) {
+    const tolerance = 8 / viewport.zoom;
+    const dims = project.parts.filter((p) => p.type === 'dimension');
+
+    for (let i = dims.length - 1; i >= 0; i--) {
+      const dim = dims[i];
+      const start2D = projectDimensionPoint(dim.startPoint, activeView);
+      const end2D = projectDimensionPoint(dim.endPoint, activeView);
+
+      const figure = createDimensionFigure({
+        id: dim.id,
+        startPoint: start2D,
+        endPoint: end2D,
+        mode: 'aligned',
+        offset: dim.offset || 200,
+        source: 'manual',
+      });
+
+      if (figure && hitTestDimensionFigure(modelPos, figure, tolerance)) {
+        return { id: dim.id, type: 'part' };
+      }
+    }
+    return null;
+  }
+
+  function hitTestParts(modelPos) {
+    const tolerance = 6 / viewport.zoom;
+    const parts = project.parts.filter((p) => p.type !== 'dimension');
+
+    // Iterate in reverse for top-most first
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      const { svgX, svgY, svgWidth, svgHeight } = projectPartToView(part, activeView);
+
+      if (
+        modelPos.x >= svgX - tolerance &&
+        modelPos.x <= svgX + svgWidth + tolerance &&
+        modelPos.y >= svgY - tolerance &&
+        modelPos.y <= svgY + svgHeight + tolerance
+      ) {
+        return { id: part.id, type: 'part' };
+      }
+    }
+    return null;
+  }
+
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      // Try dimensions first (they render on top)
+      const dimHit = hitTestDimensions(modelPos);
+      if (dimHit) {
+        editorDispatch({ type: 'SELECT_OBJECT', id: dimHit.id, objectType: dimHit.type });
+        return;
+      }
+
+      const hit = hitTestParts(modelPos);
+      if (hit) {
+        editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { dragging: true, startPos: modelPos, dragPartId: hit.id },
+        });
+        return;
+      }
+
+      editorDispatch({ type: 'DESELECT' });
+    },
+
+    onMouseMove(modelPos, e, toolState, selectedId) {
+      if (!toolState.dragging || !toolState.startPos || !toolState.dragPartId) return;
+
+      const part = project.parts.find((p) => p.id === toolState.dragPartId);
+      if (!part || part.type === 'dimension') return;
+
+      const dx = modelPos.x - toolState.startPos.x;
+      const dy = modelPos.y - toolState.startPos.y;
+
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+
+      // Compute position delta based on view
+      const pos = { ...part.position };
+      switch (activeView) {
+        case 'top':
+          pos.x += dx;
+          pos.y += dy;
+          break;
+        case 'front':
+          pos.x += dx;
+          pos.z -= dy;
+          break;
+        case 'side':
+          pos.y += dx;
+          pos.z -= dy;
+          break;
+      }
+
+      // Snap final position if enabled
+      if (snapEnabled) {
+        const snapped = snapPoint(pos, SKETCH_GRID_MINOR);
+        pos.x = snapped.x;
+        pos.y = snapped.y;
+      }
+
+      dispatch({
+        type: 'PART_UPDATE',
+        part: { id: toolState.dragPartId, position: pos },
+      });
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { startPos: modelPos },
+      });
+    },
+
+    onMouseUp(modelPos, e, toolState) {
+      if (toolState.dragging) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { dragging: false, startPos: null, dragPartId: null },
+        });
+      }
+    },
+
+    onKeyDown(e, toolState, selectedId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        dispatch({ type: 'PART_DELETE', partId: selectedId });
+        editorDispatch({ type: 'DESELECT' });
+      }
+    },
+
+    getCursor(toolState) {
+      if (toolState?.dragging) return 'grabbing';
+      return 'default';
+    },
+  };
+}

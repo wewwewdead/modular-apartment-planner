@@ -1,0 +1,6 @@
+export async function runGrading({ data } = {}) {
+  return {
+    success: false,
+    message: 'Grade encoding is not yet configured. Please set up portal credentials via /onboard.',
+  }
+}

@@ -1,0 +1,86 @@
+# Gilas Restructure — Steps 1 & 2
+
+## Context
+Restructure the monolithic `index.js` WhatsApp bot into a modular architecture for "Gilas" — a Filipino-themed AI teacher assistant. Replace raw `fetch` with the `ollama` JS library, externalize config, add the Gilas Taglish persona, and scaffold Puppeteer automation.
+
+## Target File Structure
+```
+gilas/
+  .env                     # NEW — environment variables
+  .gitignore               # NEW
+  config.js                # NEW — config loader + Gilas system prompt
+  index.js                 # MODIFIED — uses ollama lib + config + typing indicator
+  services/
+    automation.js           # NEW — Puppeteer syncGrades stub
+  package.json             # MODIFIED (by npm install)
+  auth_info/               # UNTOUCHED
+```
+
+## Step 1: Install Dependencies
+
+```bash
+npm install ollama puppeteer dotenv
+```
+
+Adds three deps alongside existing baileys/pino/qrcode-terminal.
+
+## Step 2: Create New Files
+
+### `.gitignore`
+```
+node_modules/
+auth_info/
+.env
+```
+
+### `.env`
+```env
+OLLAMA_MODEL=llama3.2
+OLLAMA_HOST=http://127.0.0.1:11434
+```
+Uses `127.0.0.1` (not `localhost`) to avoid Windows IPv6 issue.
+
+### `config.js`
+- `import 'dotenv/config'` to load `.env` (ESM-compatible side-effect import)
+- Export `config` object: `config.ollama.model`, `config.ollama.host` (with defaults)
+- Export `SYSTEM_PROMPT` — Gilas persona in Taglish: polite, uses po/opo, teacher-focused, concise for WhatsApp
+
+### `services/automation.js`
+- Export `syncGrades({ teacherId, section })` — async stub returning `{ success: false, message: '...' }`
+- Placeholder for future Puppeteer-based grade portal automation
+
+## Step 2: Modify `index.js`
+
+Key changes from current code:
+
+| What | Before | After |
+|------|--------|-------|
+| Ollama call | Raw `fetch` to URL | `ollama.chat()` via `ollama` library |
+| Config | Hardcoded constants | Imported from `config.js` |
+| System prompt | Generic English | Gilas Taglish persona from `config.js` |
+| Thinking indicator | Emoji reaction (🤔) | `sendPresenceUpdate('composing', jid)` |
+| Error message | Generic English | Taglish: "Pasensya na po, Teacher..." |
+| Clear message | "Conversation cleared." | "Conversation cleared po!" |
+| Connect log | "Connected to WhatsApp!" | "Gilas connected to WhatsApp!" |
+
+**Preserved (no changes):**
+- `/` prefix command system
+- `/clear` command
+- Self-message processing (no `fromMe` filter)
+- `chatHistories` Map with 50-message rolling window
+- `auth_info` folder path
+- Reconnection logic
+
+## Files to Create/Modify
+1. `C:\Users\johnm\gilas\.gitignore` — **CREATE**
+2. `C:\Users\johnm\gilas\.env` — **CREATE**
+3. `C:\Users\johnm\gilas\config.js` — **CREATE**
+4. `C:\Users\johnm\gilas\services\automation.js` — **CREATE**
+5. `C:\Users\johnm\gilas\index.js` — **MODIFY** (full rewrite)
+
+## Verification
+1. Run `npm install ollama puppeteer dotenv` (confirm no errors)
+2. Run `node index.js` — should print "Gilas connected to WhatsApp!"
+3. Send `/hello` from WhatsApp — should see typing indicator, then Taglish response
+4. Send `/clear` — should reply "Conversation cleared po!"
+5. Check terminal logs show `[jid] > message` and `[jid] < response`

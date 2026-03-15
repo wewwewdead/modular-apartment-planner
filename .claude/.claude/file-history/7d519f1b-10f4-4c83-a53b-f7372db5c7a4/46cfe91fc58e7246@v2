@@ -1,0 +1,1725 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Konva from "konva";
+import { Image as KonvaImage, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { BarLoader } from "react-spinners";
+import { useQueryClient } from "@tanstack/react-query";
+import { saveJournal, saveJournalImage } from "../../../../API/Api";
+import { useAuth } from "../../../Context/useAuth";
+import { parseCanvasDoc } from "../../../utils/canvasDoc";
+import PieMenu from "./PieMenu";
+import styles from "./CanvasEditor.module.css";
+import "./canvas.css";
+
+const FONT_BRUSHES = {
+    serif: {label: "Typewriter", fontFamily: "\"Courier New\", \"Lucida Console\", monospace", fontStyle: "normal", preview: "Ink Tape"},
+    handwritten: {label: "Brush Script", fontFamily: "\"Comic Sans MS\", \"Bradley Hand\", cursive", fontStyle: "normal", preview: "Wild Brush"},
+    bold: {label: "Street Bold", fontFamily: "\"Trebuchet MS\", \"Gill Sans\", sans-serif", fontStyle: "bold", preview: "Tagline"},
+    serifDisplay: {label: "Poster Serif", fontFamily: "Georgia, \"Times New Roman\", serif", fontStyle: "normal", preview: "Headline"}
+};
+
+const FONT_STYLE_MAP = {
+    serif: "serif",
+    handwritten: "handwritten",
+    bold: "bold",
+    mono: "serif",
+    serifDisplay: "serifDisplay"
+};
+
+const GRID_SIZE = 24;
+const CANVAS_MAX_WIDTH = 560;
+const MOBILE_BREAKPOINT = 820;
+const MIN_VIEWPORT_SCALE = 0.85;
+const MAX_VIEWPORT_SCALE = 3;
+const OBJECT_LIFT_MULTIPLIER = 1.03;
+
+const COLOR_PALETTES = [
+    {label: "Pastels", colors: ["#f8c8dc", "#f9e2af", "#b7e4c7", "#bde0fe", "#d7c3ff"]},
+    {label: "Earth", colors: ["#8c5e3c", "#b7794b", "#5a6d4d", "#4d6f75", "#2f3e46"]},
+    {label: "Neon", colors: ["#ff2d55", "#ff7a00", "#f7ff00", "#00e5ff", "#8a2be2"]}
+];
+
+const DEFAULT_DOODLE_COLOR = COLOR_PALETTES[2].colors[0];
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const createId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const randomPlacement = () => ({
+    rotation: (Math.random() - 0.5) * 10,
+    xOffset: (Math.random() - 0.5) * 0.06,
+    yOffset: (Math.random() - 0.5) * 0.06
+});
+
+const sanitizeNormalizedPoints = (rawPoints) => {
+    if(!Array.isArray(rawPoints)){
+        return [];
+    }
+
+    const numericPoints = rawPoints
+        .map((point) => Number(point))
+        .filter((point) => !Number.isNaN(point))
+        .map((point) => clamp(point, 0, 1));
+
+    if(numericPoints.length < 2){
+        return [];
+    }
+
+    return numericPoints.length % 2 === 0 ? numericPoints : numericPoints.slice(0, -1);
+};
+
+const getStageHeight = (width, aspectRatio) => (aspectRatio === "4:5" ? Math.round(width * 1.25) : width);
+
+const getLegacyFontStyle = (fontStyle) => {
+    if(fontStyle === "mono"){
+        return "serif";
+    }
+    return FONT_STYLE_MAP[fontStyle] ? fontStyle : "serif";
+};
+
+const getSnippetMetrics = (snippet, stageWidth) => {
+    const sizeScale = Number.isFinite(snippet.sizeScale) ? snippet.sizeScale : 1;
+    const styleKey = FONT_STYLE_MAP[snippet.fontStyle] || "serif";
+    const baseFontSize = styleKey === "bold" ? 34 : styleKey === "handwritten" ? 32 : 30;
+    const fontSize = clamp(baseFontSize * sizeScale, 18, 92);
+    const estimatedWidth = Math.max(120, Math.min(stageWidth * 0.78, Math.round((snippet.text.length || 1) * fontSize * 0.58)));
+    const charsPerLine = Math.max(8, Math.floor(estimatedWidth / (fontSize * 0.56)));
+    const lineCount = Math.max(1, Math.ceil((snippet.text.length || 1) / charsPerLine));
+    const height = Math.max(68, Math.round(lineCount * fontSize * 1.14 + 18));
+    return {width: estimatedWidth, height, fontSize};
+};
+
+const constrainViewport = (candidate, stageWidth, stageHeight) => {
+    const scale = clamp(candidate?.scale || 1, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
+    const scaledWidth = stageWidth * scale;
+    const scaledHeight = stageHeight * scale;
+    let minX = Math.min(0, stageWidth - scaledWidth);
+    let maxX = 0;
+    let minY = Math.min(0, stageHeight - scaledHeight);
+    let maxY = 0;
+
+    if(scaledWidth <= stageWidth){
+        const centeredX = (stageWidth - scaledWidth) / 2;
+        minX = centeredX;
+        maxX = centeredX;
+    }
+    if(scaledHeight <= stageHeight){
+        const centeredY = (stageHeight - scaledHeight) / 2;
+        minY = centeredY;
+        maxY = centeredY;
+    }
+
+    return {
+        scale,
+        x: clamp(candidate?.x || 0, minX, maxX),
+        y: clamp(candidate?.y || 0, minY, maxY)
+    };
+};
+
+const getTouchGeometry = (nativeEvent, stage) => {
+    const touches = nativeEvent?.touches;
+    if(!stage || !touches || touches.length < 2){
+        return null;
+    }
+
+    const bounds = stage.container()?.getBoundingClientRect();
+    if(!bounds){
+        return null;
+    }
+
+    const first = touches[0];
+    const second = touches[1];
+    const firstPoint = {x: first.clientX - bounds.left, y: first.clientY - bounds.top};
+    const secondPoint = {x: second.clientX - bounds.left, y: second.clientY - bounds.top};
+
+    return {
+        center: {x: (firstPoint.x + secondPoint.x) / 2, y: (firstPoint.y + secondPoint.y) / 2},
+        distance: Math.hypot(secondPoint.x - firstPoint.x, secondPoint.y - firstPoint.y)
+    };
+};
+
+const useLoadedImage = (src) => {
+    const [image, setImage] = useState(null);
+
+    useEffect(() => {
+        if(!src){
+            setImage(null);
+            return;
+        }
+
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => setImage(img);
+        img.onerror = () => setImage(null);
+        img.src = src;
+
+        return () => {
+            img.onload = null;
+            img.onerror = null;
+        };
+    }, [src]);
+
+    return image;
+};
+
+const CanvasImageNode = ({
+    canvasImage,
+    stageWidth,
+    stageHeight,
+    isSelected,
+    isDragging,
+    onSelect,
+    onDragStart,
+    onDragEnd,
+    canInteract,
+    preventTouchDefault,
+    isBeingRemoved
+}) => {
+    const loadedImage = useLoadedImage(canvasImage?.src);
+    const objectWidth = clamp((canvasImage?.width || 0.3) * stageWidth, 56, stageWidth * 0.95);
+    const objectHeight = clamp((canvasImage?.height || 0.3) * stageHeight, 56, stageHeight * 0.95);
+    const x = clamp((canvasImage?.x || 0) * stageWidth, 0, Math.max(0, stageWidth - objectWidth));
+    const y = clamp((canvasImage?.y || 0) * stageHeight, 0, Math.max(0, stageHeight - objectHeight));
+    const liftMultiplier = isDragging ? OBJECT_LIFT_MULTIPLIER + 0.02 : isSelected ? OBJECT_LIFT_MULTIPLIER : 1;
+    const baseScaleX = canvasImage?.scaleX === -1 ? -1 : 1;
+
+    return (
+        <>
+            <KonvaImage
+                name={canvasImage?.id}
+                x={x}
+                y={y}
+                width={objectWidth}
+                height={objectHeight}
+                image={loadedImage}
+                draggable={canInteract && !isBeingRemoved}
+                rotation={canvasImage?.rotation || 0}
+                scaleX={baseScaleX * liftMultiplier}
+                scaleY={liftMultiplier}
+                shadowColor="rgba(0,0,0,0.3)"
+                shadowBlur={isSelected || isDragging ? 16 : 8}
+                shadowOffsetY={isSelected || isDragging ? 6 : 3}
+                preventDefault={preventTouchDefault}
+                onClick={canInteract ? onSelect : undefined}
+                onTap={canInteract ? onSelect : undefined}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+            />
+            {isSelected && (
+                <Rect
+                    x={x}
+                    y={y}
+                    width={objectWidth}
+                    height={objectHeight}
+                    stroke="#68d391"
+                    strokeWidth={1.7}
+                    dash={[6, 4]}
+                    rotation={canvasImage?.rotation || 0}
+                    listening={false}
+                />
+            )}
+        </>
+    );
+};
+
+const MINIMAP_WIDTH = 110;
+
+const CanvasMinimap = ({viewport, stageWidth, stageHeight, viewportWidth, viewportHeight, fitScale, isDark, updateViewport}) => {
+    const containerRef = useRef(null);
+    const dragRef = useRef(null);
+
+    const miniH = Math.round(MINIMAP_WIDTH * stageHeight / stageWidth);
+    const rectW = MINIMAP_WIDTH / viewport.scale;
+    const rectH = miniH / viewport.scale;
+    const rectX = -viewport.x * MINIMAP_WIDTH / (viewportWidth * viewport.scale);
+    const rectY = -viewport.y * miniH / (viewportHeight * viewport.scale);
+
+    const minimapToViewport = useCallback((mx, my) => {
+        const cx = mx * stageWidth / MINIMAP_WIDTH;
+        const cy = my * stageHeight / miniH;
+        return {
+            scale: viewport.scale,
+            x: viewportWidth / 2 - cx * fitScale * viewport.scale,
+            y: viewportHeight / 2 - cy * fitScale * viewport.scale
+        };
+    }, [viewport.scale, stageWidth, stageHeight, miniH, viewportWidth, viewportHeight, fitScale]);
+
+    const handleBackgroundClick = (e) => {
+        if(dragRef.current?.didDrag) return;
+        const rect = containerRef.current?.getBoundingClientRect();
+        if(!rect) return;
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        updateViewport(minimapToViewport(mx, my));
+    };
+
+    const handleRectMouseDown = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const startClientX = e.clientX;
+        const startClientY = e.clientY;
+        const startRectX = rectX;
+        const startRectY = rectY;
+        dragRef.current = {didDrag: false};
+
+        const onMove = (moveEvent) => {
+            dragRef.current.didDrag = true;
+            const dx = moveEvent.clientX - startClientX;
+            const dy = moveEvent.clientY - startClientY;
+            const newRectX = startRectX + dx;
+            const newRectY = startRectY + dy;
+            updateViewport({
+                scale: viewport.scale,
+                x: -newRectX * viewportWidth * viewport.scale / MINIMAP_WIDTH,
+                y: -newRectY * viewportHeight * viewport.scale / miniH
+            });
+        };
+
+        const onUp = () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            setTimeout(() => { dragRef.current = null; }, 0);
+        };
+
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+    };
+
+    return (
+        <div
+            ref={containerRef}
+            className={`${styles.minimapContainer} ${isDark ? styles.minimapDark : ""}`}
+            style={{width: MINIMAP_WIDTH, height: miniH}}
+            onClick={handleBackgroundClick}
+        >
+            <div
+                className={styles.minimapViewport}
+                style={{
+                    left: clamp(rectX, 0, MINIMAP_WIDTH - Math.max(rectW, 4)),
+                    top: clamp(rectY, 0, miniH - Math.max(rectH, 4)),
+                    width: Math.max(rectW, 4),
+                    height: Math.max(rectH, 4)
+                }}
+                onMouseDown={handleRectMouseDown}
+            />
+        </div>
+    );
+};
+
+const CanvasEditor = ({title, onCloseOnSave, addUploadedImagePath, initialCanvasDoc = null, remixSource = null}) => {
+    const {session, user} = useAuth();
+    const queryClient = useQueryClient();
+    const shellRef = useRef(null);
+    const ambientLightRef = useRef(null);
+    const stageFrameRef = useRef(null);
+    const stageRef = useRef(null);
+    const hasHydratedInitialDocRef = useRef(false);
+    const snippetInputRef = useRef(null);
+    const doodlePointsRef = useRef([]);
+    const viewportRef = useRef({scale: 1, x: 0, y: 0});
+    const pinchStateRef = useRef({isActive: false, lastDistance: 0, lastCenter: null});
+    const [shellWidth, setShellWidth] = useState(CANVAS_MAX_WIDTH);
+
+    const [activeTool, setActiveTool] = useState("select");
+    const [isSnippetComposerOpen, setIsSnippetComposerOpen] = useState(false);
+    const [snippetInput, setSnippetInput] = useState("");
+    const [selectedObject, setSelectedObject] = useState(null);
+    const [draggingObject, setDraggingObject] = useState(null);
+    const [isSending, setIsSending] = useState(false);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const [doodleColor, setDoodleColor] = useState(DEFAULT_DOODLE_COLOR);
+    const [doodleSize, setDoodleSize] = useState(2.8);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [currentDoodlePoints, setCurrentDoodlePoints] = useState([]);
+    const [canvasMeta, setCanvasMeta] = useState({
+        aspectRatio: "1:1",
+        gridEnabled: true,
+        snapEnabled: true,
+        theme: "light"
+    });
+    const [snippets, setSnippets] = useState([]);
+    const [images, setImages] = useState([]);
+    const [doodles, setDoodles] = useState([]);
+    const [viewport, setViewport] = useState({scale: 1, x: 0, y: 0});
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [isMobileDockOpen, setIsMobileDockOpen] = useState(false);
+    const [animatingRemovalId, setAnimatingRemovalId] = useState(null);
+    const [doodleRedoStack, setDoodleRedoStack] = useState([]);
+    const multiTapRef = useRef({fingerCount: 0, timestamp: 0});
+    const longPressRef = useRef(null);
+    const [pieMenu, setPieMenu] = useState({isOpen: false, position: null, items: []});
+
+    const updateSnippet = (snippetId, updater) => {
+        setSnippets((prev) => prev.map((snippet) => {
+            if(snippet.id !== snippetId){
+                return snippet;
+            }
+            const nextValue = typeof updater === "function" ? updater(snippet) : updater;
+            return {...snippet, ...nextValue};
+        }));
+    };
+
+    const updateImage = (imageId, updater) => {
+        setImages((prev) => prev.map((image) => {
+            if(image.id !== imageId){
+                return image;
+            }
+            const nextValue = typeof updater === "function" ? updater(image) : updater;
+            return {...image, ...nextValue};
+        }));
+    };
+
+    useEffect(() => {
+        if(hasHydratedInitialDocRef.current || !initialCanvasDoc){
+            return;
+        }
+
+        const parsedDoc = parseCanvasDoc(initialCanvasDoc);
+        setCanvasMeta((prev) => ({
+            ...prev,
+            aspectRatio: parsedDoc?.meta?.aspectRatio === "4:5" ? "4:5" : "1:1",
+            gridEnabled: Boolean(parsedDoc?.meta?.gridEnabled),
+            theme: parsedDoc?.meta?.theme === "dark" ? "dark" : "light"
+        }));
+        setSnippets((parsedDoc?.snippets || []).map((snippet) => ({
+            ...snippet,
+            id: snippet.id || createId("snippet"),
+            fontStyle: getLegacyFontStyle(snippet.fontStyle),
+            zIndex: Number.isFinite(snippet?.zIndex) ? snippet.zIndex : 0
+        })));
+        setImages((parsedDoc?.images || []).map((image) => ({
+            ...image,
+            id: image.id || createId("image"),
+            zIndex: Number.isFinite(image?.zIndex) ? image.zIndex : 0
+        })));
+        setDoodles((parsedDoc?.doodles || []).map((doodle) => ({
+            ...doodle,
+            id: doodle.id || createId("doodle"),
+            points: sanitizeNormalizedPoints(doodle.points)
+        })));
+        hasHydratedInitialDocRef.current = true;
+    }, [initialCanvasDoc]);
+
+    useEffect(() => {
+        const getContentWidth = () => {
+            const element = shellRef.current;
+            if(!element){
+                return CANVAS_MAX_WIDTH;
+            }
+            const computedStyle = getComputedStyle(element);
+            const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0;
+            const paddingRight = parseFloat(computedStyle.paddingRight) || 0;
+            return Math.max(0, element.clientWidth - paddingLeft - paddingRight);
+        };
+
+        const updateShellWidth = () => {
+            setShellWidth(getContentWidth());
+        };
+
+        updateShellWidth();
+        window.addEventListener("resize", updateShellWidth);
+
+        let resizeObserver = null;
+        if(typeof ResizeObserver !== "undefined" && shellRef.current){
+            resizeObserver = new ResizeObserver(updateShellWidth);
+            resizeObserver.observe(shellRef.current);
+        }
+
+        return () => {
+            window.removeEventListener("resize", updateShellWidth);
+            if(resizeObserver){
+                resizeObserver.disconnect();
+            }
+        };
+    }, []);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+        const syncViewport = () => setIsMobileViewport(mediaQuery.matches);
+        syncViewport();
+
+        if(typeof mediaQuery.addEventListener === "function"){
+            mediaQuery.addEventListener("change", syncViewport);
+            return () => mediaQuery.removeEventListener("change", syncViewport);
+        }
+
+        mediaQuery.addListener(syncViewport);
+        return () => mediaQuery.removeListener(syncViewport);
+    }, []);
+
+    useEffect(() => {
+        if(isMobileViewport){
+            setIsMobileDockOpen(false);
+            return;
+        }
+        setIsMobileDockOpen(true);
+    }, [isMobileViewport]);
+
+    useEffect(() => {
+        if(!isSnippetComposerOpen){
+            return;
+        }
+        const frame = window.requestAnimationFrame(() => snippetInputRef.current?.focus());
+        return () => window.cancelAnimationFrame(frame);
+    }, [isSnippetComposerOpen]);
+
+    useEffect(() => {
+        if(activeTool !== "doodle"){
+            doodlePointsRef.current = [];
+            setCurrentDoodlePoints([]);
+            setIsDrawing(false);
+        }
+    }, [activeTool]);
+
+    const viewportWidth = useMemo(() => Math.max(280, Math.min(CANVAS_MAX_WIDTH, shellWidth)), [shellWidth]);
+    const viewportHeight = getStageHeight(viewportWidth, canvasMeta.aspectRatio);
+    const stageWidth = CANVAS_MAX_WIDTH;
+    const stageHeight = getStageHeight(stageWidth, canvasMeta.aspectRatio);
+    const fitScale = viewportWidth > 0 ? viewportWidth / stageWidth : 1;
+    const fitOffsetX = (viewportWidth - stageWidth * fitScale) / 2;
+    const fitOffsetY = (viewportHeight - stageHeight * fitScale) / 2;
+
+    const updateViewport = (updater) => {
+        setViewport((prev) => {
+            const nextValue = typeof updater === "function" ? updater(prev) : updater;
+            const constrained = constrainViewport(nextValue, viewportWidth, viewportHeight);
+            viewportRef.current = constrained;
+            return constrained;
+        });
+    };
+
+    useEffect(() => {
+        viewportRef.current = viewport;
+    }, [viewport]);
+
+    useEffect(() => {
+        setViewport((prev) => constrainViewport(prev, viewportWidth, viewportHeight));
+    }, [viewportWidth, viewportHeight]);
+
+    useEffect(() => {
+        const safePixelRatio = clamp(window.devicePixelRatio || 1, 1, 2.5);
+        const stage = stageRef.current;
+        if(!stage){
+            return;
+        }
+
+        const previousRatio = Konva.pixelRatio;
+        Konva.pixelRatio = safePixelRatio;
+        stage.getLayers().forEach((layer) => {
+            const canvas = layer?.getCanvas?.();
+            if(canvas?.setPixelRatio){
+                canvas.setPixelRatio(safePixelRatio);
+            }
+        });
+        stage.batchDraw();
+        return () => {
+            Konva.pixelRatio = previousRatio;
+        };
+    }, [viewportWidth, viewportHeight]);
+
+    const getNextZIndex = () => {
+        const allZ = [
+            ...snippets.map((snippet) => snippet.zIndex || 0),
+            ...images.map((image) => image.zIndex || 0)
+        ];
+        return allZ.length ? Math.max(...allZ) + 1 : 0;
+    };
+
+    const sortedObjects = useMemo(() => {
+        const snippetObjects = snippets.map((snippet) => ({kind: "snippet", payload: snippet}));
+        const imageObjects = images.map((image) => ({kind: "image", payload: image}));
+        return [...snippetObjects, ...imageObjects].sort((a, b) => (a.payload?.zIndex || 0) - (b.payload?.zIndex || 0));
+    }, [snippets, images]);
+
+    const selectedSnippet = selectedObject?.kind === "snippet"
+        ? snippets.find((snippet) => snippet.id === selectedObject.id) || null
+        : null;
+    const canEditObjects = activeTool === "select";
+    const isDoodleMode = activeTool === "doodle";
+    const shouldPreventTouchDefault = isDoodleMode;
+    const hasCanvasContent = snippets.length > 0 || images.length > 0 || doodles.length > 0;
+    const showContextPanel = isSnippetComposerOpen || isDoodleMode || (selectedObject && activeTool === "select");
+
+    const addSnippet = () => {
+        const trimmed = snippetInput.trim();
+        if(!trimmed){
+            return;
+        }
+
+        const jitter = randomPlacement();
+        const snippet = {
+            id: createId("snippet"),
+            text: trimmed,
+            x: clamp(0.16 + jitter.xOffset, 0.02, 0.82),
+            y: clamp(0.2 + jitter.yOffset, 0.02, 0.82),
+            rotation: jitter.rotation,
+            fontStyle: "serif",
+            scaleX: 1,
+            sizeScale: 1,
+            zIndex: getNextZIndex()
+        };
+        setSnippets((prev) => [...prev, snippet]);
+        setSelectedObject({kind: "snippet", id: snippet.id});
+        setSnippetInput("");
+        setIsSnippetComposerOpen(false);
+        setActiveTool("select");
+    };
+
+    const addImageFromFile = () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.onchange = async(event) => {
+            const file = event.target.files?.[0];
+            if(!file){
+                return;
+            }
+
+            setIsUploadingImage(true);
+            try {
+                const dimensions = await new Promise((resolve) => {
+                    const tempImg = new window.Image();
+                    const objectUrl = URL.createObjectURL(file);
+                    tempImg.onload = () => {
+                        resolve({
+                            width: tempImg.naturalWidth || 1200,
+                            height: tempImg.naturalHeight || 800
+                        });
+                        URL.revokeObjectURL(objectUrl);
+                    };
+                    tempImg.onerror = () => {
+                        resolve({width: 1200, height: 800});
+                        URL.revokeObjectURL(objectUrl);
+                    };
+                    tempImg.src = objectUrl;
+                });
+
+                const formdata = new FormData();
+                formdata.append("image", file);
+                const uploaded = await saveJournalImage(session?.access_token, formdata);
+                const imageSrc = uploaded?.img_url;
+                if(!imageSrc){
+                    return;
+                }
+
+                const filePath = imageSrc.split("/journal-images/").pop();
+                if(filePath && addUploadedImagePath){
+                    addUploadedImagePath(filePath);
+                }
+
+                const ratio = dimensions.width / dimensions.height;
+                const baseWidth = 0.34;
+                const rawHeight = ratio > 0 ? baseWidth / ratio : 0.24;
+                const imgJitter = randomPlacement();
+                const imageObject = {
+                    id: createId("image"),
+                    src: imageSrc,
+                    x: clamp(0.18 + imgJitter.xOffset, 0.02, 0.82),
+                    y: clamp(0.24 + imgJitter.yOffset, 0.02, 0.82),
+                    width: clamp(baseWidth, 0.14, 0.8),
+                    height: clamp(rawHeight, 0.12, 0.8),
+                    rotation: imgJitter.rotation,
+                    scaleX: 1,
+                    zIndex: getNextZIndex()
+                };
+                setImages((prev) => [...prev, imageObject]);
+                setSelectedObject({kind: "image", id: imageObject.id});
+                setActiveTool("select");
+            } catch (error) {
+                console.error("Canvas image upload failed:", error);
+            } finally {
+                setIsUploadingImage(false);
+            }
+        };
+
+        input.click();
+    };
+
+    const bringToFront = () => {
+        if(!selectedObject){
+            return;
+        }
+        const nextZ = getNextZIndex();
+        if(selectedObject.kind === "snippet"){
+            updateSnippet(selectedObject.id, {zIndex: nextZ});
+        } else {
+            updateImage(selectedObject.id, {zIndex: nextZ});
+        }
+    };
+
+    const sendToBack = () => {
+        if(!selectedObject){
+            return;
+        }
+        const allZ = [
+            ...snippets.map((snippet) => snippet.zIndex || 0),
+            ...images.map((image) => image.zIndex || 0)
+        ];
+        const minZ = allZ.length ? Math.min(...allZ) - 1 : -1;
+        if(selectedObject.kind === "snippet"){
+            updateSnippet(selectedObject.id, {zIndex: minZ});
+        } else {
+            updateImage(selectedObject.id, {zIndex: minZ});
+        }
+    };
+
+    const removeSelectedObject = () => {
+        if(!selectedObject || animatingRemovalId){
+            return;
+        }
+        const targetId = selectedObject.id;
+        const targetKind = selectedObject.kind;
+        setAnimatingRemovalId(targetId);
+        setSelectedObject(null);
+
+        const stage = stageRef.current;
+        const node = stage?.findOne(`#${targetId}`) || stage?.findOne((n) => n.name() === targetId);
+
+        const doRemove = () => {
+            if(targetKind === "snippet"){
+                setSnippets((prev) => prev.filter((s) => s.id !== targetId));
+            } else {
+                setImages((prev) => prev.filter((img) => img.id !== targetId));
+            }
+            setAnimatingRemovalId(null);
+        };
+
+        if(node){
+            node.to({
+                duration: 0.3,
+                scaleX: 0,
+                scaleY: 0,
+                opacity: 0,
+                rotation: (node.rotation() || 0) + 15,
+                onFinish: doRemove
+            });
+        } else {
+            doRemove();
+        }
+    };
+
+    const resizeSelectedObject = (direction) => {
+        if(!selectedObject){
+            return;
+        }
+        const resizeFactor = direction === "up" ? 1.1 : 0.9;
+        if(selectedObject.kind === "snippet"){
+            updateSnippet(selectedObject.id, (snippet) => ({
+                sizeScale: clamp((snippet.sizeScale || 1) * resizeFactor, 0.6, 2.5)
+            }));
+        } else {
+            updateImage(selectedObject.id, (image) => ({
+                width: clamp((image.width || 0.3) * resizeFactor, 0.08, 0.95),
+                height: clamp((image.height || 0.3) * resizeFactor, 0.08, 1.15)
+            }));
+        }
+    };
+
+    const rotateSelectedObject = (delta) => {
+        if(!selectedObject){
+            return;
+        }
+        if(selectedObject.kind === "snippet"){
+            updateSnippet(selectedObject.id, (snippet) => ({rotation: (snippet.rotation || 0) + delta}));
+        } else {
+            updateImage(selectedObject.id, (image) => ({rotation: (image.rotation || 0) + delta}));
+        }
+    };
+
+    const flipSelectedObject = () => {
+        if(!selectedObject){
+            return;
+        }
+        if(selectedObject.kind === "snippet"){
+            updateSnippet(selectedObject.id, (snippet) => ({scaleX: snippet.scaleX === -1 ? 1 : -1}));
+        } else {
+            updateImage(selectedObject.id, (image) => ({scaleX: image.scaleX === -1 ? 1 : -1}));
+        }
+    };
+
+    const duplicateSelectedObject = () => {
+        if(!selectedObject) return;
+        const jitter = randomPlacement();
+        if(selectedObject.kind === "snippet"){
+            const source = snippets.find((s) => s.id === selectedObject.id);
+            if(!source) return;
+            const clone = {
+                ...source,
+                id: createId("snippet"),
+                x: clamp((source.x || 0) + 0.04 + jitter.xOffset * 0.5, 0.02, 0.88),
+                y: clamp((source.y || 0) + 0.04 + jitter.yOffset * 0.5, 0.02, 0.88),
+                rotation: (source.rotation || 0) + jitter.rotation * 0.3,
+                zIndex: getNextZIndex()
+            };
+            setSnippets((prev) => [...prev, clone]);
+            setSelectedObject({kind: "snippet", id: clone.id});
+        } else {
+            const source = images.find((img) => img.id === selectedObject.id);
+            if(!source) return;
+            const clone = {
+                ...source,
+                id: createId("image"),
+                x: clamp((source.x || 0) + 0.04 + jitter.xOffset * 0.5, 0.02, 0.88),
+                y: clamp((source.y || 0) + 0.04 + jitter.yOffset * 0.5, 0.02, 0.88),
+                rotation: (source.rotation || 0) + jitter.rotation * 0.3,
+                zIndex: getNextZIndex()
+            };
+            setImages((prev) => [...prev, clone]);
+            setSelectedObject({kind: "image", id: clone.id});
+        }
+    };
+
+    const buildPieMenuItems = () => {
+        if(isDoodleMode){
+            return [
+                {label: "Undo", icon: "\u21A9", action: undoLastDoodle},
+                {label: "Redo", icon: "\u21AA", action: redoLastDoodle},
+                {label: "Clear", icon: "\u2715", action: clearDoodles, isDelete: true}
+            ];
+        }
+        if(!selectedObject) return [];
+        return [
+            {label: "Delete", icon: "\u2715", action: removeSelectedObject, isDelete: true},
+            {label: "Duplicate", icon: "\u2750", action: duplicateSelectedObject},
+            {label: "Front", icon: "\u2191", action: bringToFront},
+            {label: "Back", icon: "\u2193", action: sendToBack},
+            {label: "A+", icon: "A+", action: () => resizeSelectedObject("up")},
+            {label: "A\u2013", icon: "A\u2013", action: () => resizeSelectedObject("down")},
+            {label: "Rotate", icon: "\u21BB", action: () => rotateSelectedObject(15)},
+            {label: "Flip", icon: "\u21C4", action: flipSelectedObject}
+        ];
+    };
+
+    const openPieMenu = (x, y) => {
+        const items = buildPieMenuItems();
+        if(items.length === 0) return;
+        setPieMenu({isOpen: true, position: {x, y}, items});
+    };
+
+    const closePieMenu = () => setPieMenu({isOpen: false, position: null, items: []});
+
+    const getPointerInCanvasSpace = (stage) => {
+        const pointer = stage?.getPointerPosition();
+        if(!pointer){
+            return null;
+        }
+        const activeViewport = viewportRef.current;
+        const totalScale = fitScale * activeViewport.scale;
+        const totalX = fitOffsetX + activeViewport.x;
+        const totalY = fitOffsetY + activeViewport.y;
+        return {
+            x: clamp((pointer.x - totalX) / totalScale, 0, stageWidth),
+            y: clamp((pointer.y - totalY) / totalScale, 0, stageHeight)
+        };
+    };
+
+    const getNormalizedPointer = (stage) => {
+        const worldPointer = getPointerInCanvasSpace(stage);
+        if(!worldPointer){
+            return null;
+        }
+        return {
+            x: stageWidth > 0 ? worldPointer.x / stageWidth : 0,
+            y: stageHeight > 0 ? worldPointer.y / stageHeight : 0
+        };
+    };
+
+    const cancelDrawingSession = () => {
+        doodlePointsRef.current = [];
+        setCurrentDoodlePoints([]);
+        setIsDrawing(false);
+    };
+
+    const maybeBeginPinchGesture = (event) => {
+        const nativeEvent = event?.evt;
+        const stage = event?.target?.getStage?.();
+        const gesture = getTouchGeometry(nativeEvent, stage);
+        if(!gesture || gesture.distance < 6){
+            return false;
+        }
+        if(nativeEvent?.cancelable){
+            nativeEvent.preventDefault();
+        }
+        pinchStateRef.current = {
+            isActive: true,
+            lastDistance: gesture.distance,
+            lastCenter: gesture.center
+        };
+        cancelDrawingSession();
+        return true;
+    };
+
+    const maybeHandlePinchMove = (event) => {
+        const nativeEvent = event?.evt;
+        const stage = event?.target?.getStage?.();
+        const gesture = getTouchGeometry(nativeEvent, stage);
+        if(!gesture){
+            return false;
+        }
+        if(nativeEvent?.cancelable){
+            nativeEvent.preventDefault();
+        }
+
+        const pinchState = pinchStateRef.current;
+        if(!pinchState.isActive){
+            pinchStateRef.current = {
+                isActive: true,
+                lastDistance: gesture.distance,
+                lastCenter: gesture.center
+            };
+            return true;
+        }
+
+        const lastDistance = pinchState.lastDistance || gesture.distance;
+        const distanceRatio = gesture.distance / Math.max(lastDistance, 1);
+        const currentViewport = viewportRef.current;
+        const nextScale = clamp(currentViewport.scale * distanceRatio, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
+        const anchorCenter = pinchState.lastCenter || gesture.center;
+        const currentTotalScale = fitScale * currentViewport.scale;
+        const currentTotalX = fitOffsetX + currentViewport.x;
+        const currentTotalY = fitOffsetY + currentViewport.y;
+        const nextTotalScale = fitScale * nextScale;
+        const worldPoint = {
+            x: (anchorCenter.x - currentTotalX) / currentTotalScale,
+            y: (anchorCenter.y - currentTotalY) / currentTotalScale
+        };
+        updateViewport({
+            scale: nextScale,
+            x: gesture.center.x - worldPoint.x * nextTotalScale - fitOffsetX,
+            y: gesture.center.y - worldPoint.y * nextTotalScale - fitOffsetY
+        });
+        pinchStateRef.current = {
+            isActive: true,
+            lastDistance: gesture.distance,
+            lastCenter: gesture.center
+        };
+        return true;
+    };
+
+    const maybeCompletePinchGesture = (event) => {
+        if(!pinchStateRef.current.isActive){
+            return false;
+        }
+        const activeTouches = event?.evt?.touches?.length || 0;
+        if(activeTouches >= 2){
+            return true;
+        }
+        pinchStateRef.current = {isActive: false, lastDistance: 0, lastCenter: null};
+        cancelDrawingSession();
+        return true;
+    };
+
+    const animateDropNode = (node, targetScaleX, targetScaleY = 1, isSelected = false) => {
+        if(!node){
+            return;
+        }
+        node.to({
+            duration: 0.36,
+            easing: Konva.Easings.ElasticEaseOut,
+            scaleX: targetScaleX,
+            scaleY: targetScaleY,
+            shadowBlur: isSelected ? 16 : 8,
+            shadowOffsetY: isSelected ? 6 : 3
+        });
+    };
+
+    const handleCanvasPointerDown = (event) => {
+        if(isMobileViewport && isMobileDockOpen){
+            setIsMobileDockOpen(false);
+        }
+        closePieMenu();
+
+        const nativeEvent = event?.evt;
+        const touchCount = nativeEvent?.touches?.length || 0;
+        if(touchCount >= 2){
+            multiTapRef.current = {fingerCount: touchCount, timestamp: Date.now()};
+        }
+
+        if(maybeBeginPinchGesture(event)){
+            return;
+        }
+        if(activeTool === "doodle" && nativeEvent?.cancelable){
+            nativeEvent.preventDefault();
+        }
+
+        clearTimeout(longPressRef.current);
+        if(touchCount <= 1){
+            const stageForLp = event?.target?.getStage?.();
+            const container = stageForLp?.container();
+            longPressRef.current = setTimeout(() => {
+                if(!container) return;
+                const rect = container.getBoundingClientRect();
+                const cx = (nativeEvent?.touches?.[0]?.clientX ?? nativeEvent?.clientX ?? 0) - rect.left;
+                const cy = (nativeEvent?.touches?.[0]?.clientY ?? nativeEvent?.clientY ?? 0) - rect.top;
+                openPieMenu(cx, cy);
+            }, 400);
+        }
+
+        const stage = event?.target?.getStage?.();
+        if(!stage){
+            return;
+        }
+
+        if(activeTool === "doodle"){
+            const pointer = getNormalizedPointer(stage);
+            if(!pointer){
+                return;
+            }
+            setSelectedObject(null);
+            const initialPoints = [pointer.x, pointer.y];
+            doodlePointsRef.current = initialPoints;
+            setCurrentDoodlePoints(initialPoints);
+            setIsDrawing(true);
+            return;
+        }
+
+        if(event.target === stage){
+            setSelectedObject(null);
+        }
+    };
+
+    const handleCanvasPointerMove = (event) => {
+        clearTimeout(longPressRef.current);
+
+        if(maybeHandlePinchMove(event)){
+            return;
+        }
+
+        const nativeEvent = event?.evt;
+        if(activeTool === "doodle" && nativeEvent?.cancelable){
+            nativeEvent.preventDefault();
+        }
+        if(activeTool !== "doodle" || !isDrawing){
+            return;
+        }
+
+        const stage = event?.target?.getStage?.();
+        const pointer = getNormalizedPointer(stage);
+        if(!pointer){
+            return;
+        }
+
+        const nextPoints = [...doodlePointsRef.current, pointer.x, pointer.y];
+        doodlePointsRef.current = nextPoints;
+        setCurrentDoodlePoints(nextPoints);
+    };
+
+    const handleCanvasPointerUp = (event) => {
+        clearTimeout(longPressRef.current);
+        if(maybeCompletePinchGesture(event)){
+            const tap = multiTapRef.current;
+            if(tap.fingerCount >= 2 && Date.now() - tap.timestamp < 300){
+                if(tap.fingerCount === 2){
+                    undoLastDoodle();
+                } else if(tap.fingerCount >= 3){
+                    redoLastDoodle();
+                }
+            }
+            multiTapRef.current = {fingerCount: 0, timestamp: 0};
+            return;
+        }
+        multiTapRef.current = {fingerCount: 0, timestamp: 0};
+        if(activeTool !== "doodle"){
+            return;
+        }
+
+        const points = sanitizeNormalizedPoints(doodlePointsRef.current);
+        if(points.length >= 4){
+            setDoodles((prev) => [...prev, {
+                id: createId("doodle"),
+                points,
+                color: doodleColor,
+                size: doodleSize
+            }]);
+            setDoodleRedoStack([]);
+        }
+        cancelDrawingSession();
+    };
+
+    const undoLastDoodle = () => {
+        setDoodles((prev) => {
+            if(prev.length === 0) return prev;
+            setDoodleRedoStack((stack) => [...stack, prev[prev.length - 1]]);
+            return prev.slice(0, -1);
+        });
+    };
+    const redoLastDoodle = () => {
+        setDoodleRedoStack((stack) => {
+            if(stack.length === 0) return stack;
+            const restored = stack[stack.length - 1];
+            setDoodles((prev) => [...prev, restored]);
+            return stack.slice(0, -1);
+        });
+    };
+    const clearDoodles = () => {
+        setDoodles([]);
+        setDoodleRedoStack([]);
+        cancelDrawingSession();
+    };
+
+    const handleDragStartSnippet = (snippet, event) => {
+        if(!canEditObjects){
+            return;
+        }
+        setDraggingObject({kind: "snippet", id: snippet.id});
+        setSelectedObject({kind: "snippet", id: snippet.id});
+        setIsSnippetComposerOpen(false);
+        event.target.moveToTop();
+    };
+
+    const handleDragStartImage = (image, event) => {
+        if(!canEditObjects){
+            return;
+        }
+        setDraggingObject({kind: "image", id: image.id});
+        setSelectedObject({kind: "image", id: image.id});
+        setIsSnippetComposerOpen(false);
+        event.target.moveToTop();
+    };
+
+    const handleDragEndSnippet = (snippet, event) => {
+        const metrics = getSnippetMetrics(snippet, stageWidth);
+        const maxX = Math.max(0, stageWidth - metrics.width);
+        const maxY = Math.max(0, stageHeight - metrics.height);
+        let nextX = clamp(event.target.x(), 0, maxX);
+        let nextY = clamp(event.target.y(), 0, maxY);
+
+        if(canvasMeta.snapEnabled){
+            nextX = clamp(Math.round(nextX / GRID_SIZE) * GRID_SIZE, 0, maxX);
+            nextY = clamp(Math.round(nextY / GRID_SIZE) * GRID_SIZE, 0, maxY);
+        }
+
+        updateSnippet(snippet.id, {
+            x: stageWidth > 0 ? nextX / stageWidth : 0,
+            y: stageHeight > 0 ? nextY / stageHeight : 0
+        });
+
+        setDraggingObject(null);
+        const baseScaleX = snippet.scaleX === -1 ? -1 : 1;
+        animateDropNode(event.target, baseScaleX * OBJECT_LIFT_MULTIPLIER, OBJECT_LIFT_MULTIPLIER, true);
+    };
+
+    const handleDragEndImage = (image, event) => {
+        const objectWidth = clamp((image?.width || 0.3) * stageWidth, 56, stageWidth * 0.95);
+        const objectHeight = clamp((image?.height || 0.3) * stageHeight, 56, stageHeight * 0.95);
+        const maxX = Math.max(0, stageWidth - objectWidth);
+        const maxY = Math.max(0, stageHeight - objectHeight);
+        let nextX = clamp(event.target.x(), 0, maxX);
+        let nextY = clamp(event.target.y(), 0, maxY);
+
+        if(canvasMeta.snapEnabled){
+            nextX = clamp(Math.round(nextX / GRID_SIZE) * GRID_SIZE, 0, maxX);
+            nextY = clamp(Math.round(nextY / GRID_SIZE) * GRID_SIZE, 0, maxY);
+        }
+
+        updateImage(image.id, {
+            x: stageWidth > 0 ? nextX / stageWidth : 0,
+            y: stageHeight > 0 ? nextY / stageHeight : 0
+        });
+
+        setDraggingObject(null);
+        const baseScaleX = image.scaleX === -1 ? -1 : 1;
+        animateDropNode(event.target, baseScaleX * OBJECT_LIFT_MULTIPLIER, OBJECT_LIFT_MULTIPLIER, true);
+    };
+
+    const zoomAtPoint = useCallback((anchor, delta) => {
+        const currentViewport = viewportRef.current;
+        const nextScale = clamp(currentViewport.scale + delta, MIN_VIEWPORT_SCALE, MAX_VIEWPORT_SCALE);
+        const currentTotalScale = fitScale * currentViewport.scale;
+        const currentTotalX = fitOffsetX + currentViewport.x;
+        const currentTotalY = fitOffsetY + currentViewport.y;
+        const nextTotalScale = fitScale * nextScale;
+        const worldPoint = {
+            x: (anchor.x - currentTotalX) / currentTotalScale,
+            y: (anchor.y - currentTotalY) / currentTotalScale
+        };
+        updateViewport({
+            scale: nextScale,
+            x: anchor.x - worldPoint.x * nextTotalScale - fitOffsetX,
+            y: anchor.y - worldPoint.y * nextTotalScale - fitOffsetY
+        });
+    }, [fitScale, fitOffsetX, fitOffsetY, updateViewport]);
+
+    const zoomByStep = (direction) => {
+        const center = {x: viewportWidth / 2, y: viewportHeight / 2};
+        zoomAtPoint(center, direction === "in" ? 0.14 : -0.14);
+    };
+
+    const resetViewport = () => updateViewport({scale: 1, x: 0, y: 0});
+
+    useEffect(() => {
+        const frame = stageFrameRef.current;
+        if(!frame) return;
+
+        const onWheel = (e) => {
+            e.preventDefault();
+            const rect = frame.getBoundingClientRect();
+            const anchor = {x: e.clientX - rect.left, y: e.clientY - rect.top};
+            const delta = e.deltaY < 0 ? 0.1 : -0.1;
+            zoomAtPoint(anchor, delta);
+        };
+
+        frame.addEventListener("wheel", onWheel, {passive: false});
+        return () => frame.removeEventListener("wheel", onWheel);
+    }, [zoomAtPoint]);
+
+    const saveCanvas = async() => {
+        if(!title || !hasCanvasContent){
+            return;
+        }
+
+        const canvasDoc = {
+            version: 1,
+            meta: {
+                aspectRatio: canvasMeta.aspectRatio,
+                gridEnabled: canvasMeta.gridEnabled,
+                theme: canvasMeta.theme
+            },
+            snippets: snippets.map((snippet) => ({
+                id: snippet.id,
+                text: snippet.text,
+                x: Number(snippet.x.toFixed(5)),
+                y: Number(snippet.y.toFixed(5)),
+                rotation: Number((snippet.rotation || 0).toFixed(2)),
+                fontStyle: snippet.fontStyle === "serifDisplay" ? "serif" : snippet.fontStyle,
+                scaleX: snippet.scaleX === -1 ? -1 : 1,
+                sizeScale: Number((snippet.sizeScale || 1).toFixed(3)),
+                zIndex: snippet.zIndex || 0
+            })),
+            images: images.map((image) => ({
+                id: image.id,
+                src: image.src,
+                x: Number((image.x || 0).toFixed(5)),
+                y: Number((image.y || 0).toFixed(5)),
+                width: Number((image.width || 0.3).toFixed(5)),
+                height: Number((image.height || 0.3).toFixed(5)),
+                rotation: Number((image.rotation || 0).toFixed(2)),
+                scaleX: image.scaleX === -1 ? -1 : 1,
+                zIndex: image.zIndex || 0
+            })),
+            doodles: doodles.map((doodle) => ({
+                id: doodle.id,
+                points: sanitizeNormalizedPoints(doodle.points).map((point) => Number(point.toFixed(5))),
+                color: doodle.color || DEFAULT_DOODLE_COLOR,
+                size: Number((doodle.size || 2.8).toFixed(3))
+            }))
+        };
+
+        try {
+            setIsSending(true);
+            const formdata = new FormData();
+            formdata.append("title", title);
+            formdata.append("post_type", "canvas");
+            formdata.append("canvas_doc", JSON.stringify(canvasDoc));
+            if(remixSource?.journalId){
+                formdata.append("remix_source_journal_id", remixSource.journalId);
+                formdata.append("is_remix", "true");
+            }
+            await saveJournal(session?.access_token, formdata);
+
+            queryClient.invalidateQueries({queryKey: ["journals"]});
+            queryClient.invalidateQueries({queryKey: ["userJournals", user?.userData?.[0]?.id]});
+            queryClient.invalidateQueries({queryKey: ["canvasGallery"]});
+            onCloseOnSave();
+        } catch (error) {
+            console.error("Error saving canvas journal:", error);
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    const openSnippetComposer = () => {
+        setActiveTool("select");
+        setIsSnippetComposerOpen((prev) => !prev);
+        setSelectedObject(null);
+    };
+
+    const layerTransform = {
+        x: fitOffsetX + viewport.x,
+        y: fitOffsetY + viewport.y,
+        scaleX: fitScale * viewport.scale,
+        scaleY: fitScale * viewport.scale
+    };
+
+    const handleAmbientMove = (e) => {
+        const el = ambientLightRef.current;
+        if(!el) return;
+        const rect = el.parentElement?.getBoundingClientRect();
+        if(!rect) return;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const x = ((clientX - rect.left) / rect.width * 100).toFixed(1);
+        const y = ((clientY - rect.top) / rect.height * 100).toFixed(1);
+        el.style.setProperty("--cursor-x", `${x}%`);
+        el.style.setProperty("--cursor-y", `${y}%`);
+        el.style.setProperty("--cursor-opacity", "1");
+    };
+
+    const handleAmbientLeave = () => {
+        const el = ambientLightRef.current;
+        if(el) el.style.setProperty("--cursor-opacity", "0");
+    };
+
+    const contextPanelContent = (() => {
+        if(isSnippetComposerOpen){
+            return (
+                <>
+                    <span className={styles.contextPanelHeader}>Add Text</span>
+                    <div className={styles.snippetComposer}>
+                        <input
+                            ref={snippetInputRef}
+                            value={snippetInput}
+                            onChange={(event) => setSnippetInput(event.target.value)}
+                            onKeyDown={(event) => {
+                                if(event.key === "Enter"){
+                                    event.preventDefault();
+                                    addSnippet();
+                                }
+                                if(event.key === "Escape"){
+                                    setIsSnippetComposerOpen(false);
+                                }
+                            }}
+                            className={styles.snippetInput}
+                            placeholder="Type text to place on canvas..."
+                            maxLength={220}
+                        />
+                        <div className={styles.snippetActions}>
+                            <button type="button" className={styles.secondaryButton} onClick={addSnippet} disabled={!snippetInput.trim()}>
+                                Add
+                            </button>
+                            <button type="button" className={styles.secondaryButton} onClick={() => setIsSnippetComposerOpen(false)}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </>
+            );
+        }
+        if(isDoodleMode){
+            return (
+                <>
+                    <span className={styles.contextPanelHeader}>Doodle</span>
+                    <div className={styles.paletteWrap}>
+                        {COLOR_PALETTES.map((group) => (
+                            <div key={group.label} className={styles.paletteGroup}>
+                                <span className={styles.paletteLabel}>{group.label}</span>
+                                <div className={styles.colorSwatches}>
+                                    {group.colors.map((color) => (
+                                        <button
+                                            key={color}
+                                            type="button"
+                                            className={`${styles.colorSwatch} ${doodleColor.toLowerCase() === color.toLowerCase() ? styles.colorSwatchActive : ""}`}
+                                            onClick={() => setDoodleColor(color)}
+                                            title={`Use ${color} doodle color`}
+                                            aria-label={`Select doodle color ${color}`}
+                                            style={{backgroundColor: color}}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        <label className={styles.customColorLabel}>
+                            Custom
+                            <input
+                                type="color"
+                                value={doodleColor}
+                                onChange={(event) => setDoodleColor(event.target.value)}
+                                className={styles.colorInput}
+                                title="Custom doodle color"
+                            />
+                        </label>
+                    </div>
+                    <input
+                        type="range"
+                        min={1}
+                        max={10}
+                        step={0.2}
+                        value={doodleSize}
+                        onChange={(event) => setDoodleSize(Number(event.target.value))}
+                        className={styles.sizeRange}
+                        aria-label="Doodle size"
+                    />
+                    <div className={styles.toolbarRow}>
+                        <button type="button" className={styles.secondaryButton} onClick={undoLastDoodle} disabled={doodles.length === 0}>
+                            Undo
+                        </button>
+                        <button type="button" className={styles.secondaryButton} onClick={redoLastDoodle} disabled={doodleRedoStack.length === 0}>
+                            Redo
+                        </button>
+                        <button type="button" className={styles.secondaryButton} onClick={clearDoodles} disabled={doodles.length === 0 && !isDrawing}>
+                            Clear
+                        </button>
+                    </div>
+                    <span className={styles.toolHint}>Draw directly on wall</span>
+                </>
+            );
+        }
+        if(selectedObject && activeTool === "select"){
+            return (
+                <>
+                    <span className={styles.contextPanelHeader}>Selection</span>
+                    <div className={styles.selectionPanel}>
+                        {selectedSnippet && (
+                            <div className={styles.styleCarousel}>
+                                {Object.entries(FONT_BRUSHES).map(([styleKey, styleValue]) => {
+                                    const isActive = selectedSnippet.fontStyle === styleKey;
+                                    return (
+                                        <button
+                                            key={styleKey}
+                                            type="button"
+                                            className={`${styles.fontChip} ${isActive ? styles.fontChipActive : ""}`}
+                                            onClick={() => updateSnippet(selectedSnippet.id, {fontStyle: styleKey})}
+                                        >
+                                            <span className={styles.fontChipLabel}>{styleValue.label}</span>
+                                            <span
+                                                className={styles.fontChipPreview}
+                                                style={{
+                                                    fontFamily: styleValue.fontFamily,
+                                                    fontStyle: styleValue.fontStyle
+                                                }}
+                                            >
+                                                {styleValue.preview}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <div className={styles.toolbarRow}>
+                            <button type="button" className={styles.secondaryButton} onClick={() => resizeSelectedObject("down")}>A−</button>
+                            <button type="button" className={styles.secondaryButton} onClick={() => resizeSelectedObject("up")}>A+</button>
+                            <button type="button" className={styles.secondaryButton} onClick={() => rotateSelectedObject(-8)}>↺</button>
+                            <button type="button" className={styles.secondaryButton} onClick={() => rotateSelectedObject(8)}>↻</button>
+                        </div>
+                        <div className={styles.toolbarRow}>
+                            <button type="button" className={styles.secondaryButton} onClick={flipSelectedObject}>Flip</button>
+                            <button type="button" className={styles.secondaryButton} onClick={bringToFront}>Front</button>
+                            <button type="button" className={styles.secondaryButton} onClick={sendToBack}>Back</button>
+                            <button type="button" className={styles.secondaryButton} onClick={removeSelectedObject}>Remove</button>
+                        </div>
+                    </div>
+                </>
+            );
+        }
+        return null;
+    })();
+
+    return (
+        <div className={styles.editorRoot}>
+            {remixSource?.journalId && (
+                <div className={styles.remixBanner}>
+                    Remixing {remixSource?.authorName ? `${remixSource.authorName}'s` : "a"} canvas
+                </div>
+            )}
+
+            <div className={styles.editorLayout}>
+                {/* ── Left sidebar toolbar ── */}
+                <div className={`${styles.sideToolbar} ${isMobileViewport && isMobileDockOpen ? styles.sideToolbarOpen : ""}`}>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${activeTool === "select" && !isSnippetComposerOpen ? styles.toolButtonActive : ""}`}
+                        onClick={() => { setActiveTool("select"); setIsSnippetComposerOpen(false); }}
+                        title="Select"
+                    >
+                        ⇲
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${isSnippetComposerOpen ? styles.toolButtonActive : ""}`}
+                        onClick={openSnippetComposer}
+                        title="Add Text"
+                    >
+                        Aa
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${isUploadingImage ? styles.toolButtonActive : ""}`}
+                        onClick={addImageFromFile}
+                        disabled={isUploadingImage}
+                        title="Add Image"
+                    >
+                        ▦
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${activeTool === "doodle" ? styles.toolButtonActive : ""}`}
+                        onClick={() => { setIsSnippetComposerOpen(false); setActiveTool("doodle"); }}
+                        title="Doodle"
+                    >
+                        ✎
+                    </button>
+
+                    <div className={styles.sideToolSeparator} />
+
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${canvasMeta.aspectRatio === "4:5" ? styles.toolButtonActive : ""}`}
+                        onClick={() => setCanvasMeta((prev) => ({...prev, aspectRatio: prev.aspectRatio === "1:1" ? "4:5" : "1:1"}))}
+                        title={`Aspect: ${canvasMeta.aspectRatio}`}
+                    >
+                        {canvasMeta.aspectRatio === "1:1" ? "⬜" : "▯"}
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${canvasMeta.gridEnabled ? styles.toolButtonActive : ""}`}
+                        onClick={() => setCanvasMeta((prev) => ({...prev, gridEnabled: !prev.gridEnabled}))}
+                        title="Grid"
+                    >
+                        ⊞
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${canvasMeta.snapEnabled ? styles.toolButtonActive : ""}`}
+                        onClick={() => setCanvasMeta((prev) => ({...prev, snapEnabled: !prev.snapEnabled}))}
+                        title="Snap"
+                    >
+                        ⊡
+                    </button>
+                    <button
+                        type="button"
+                        className={`${styles.sideToolButton} ${canvasMeta.theme === "dark" ? styles.toolButtonActive : ""}`}
+                        onClick={() => setCanvasMeta((prev) => ({...prev, theme: prev.theme === "dark" ? "light" : "dark"}))}
+                        title={canvasMeta.theme === "dark" ? "Dark theme" : "Light theme"}
+                    >
+                        ◐
+                    </button>
+                </div>
+
+                {/* ── Mobile sidebar toggle tab ── */}
+                {isMobileViewport && (
+                    <button
+                        type="button"
+                        className={styles.sideToolbarToggle}
+                        onClick={() => setIsMobileDockOpen((prev) => !prev)}
+                        aria-label={isMobileDockOpen ? "Close toolbar" : "Open toolbar"}
+                    >
+                        {isMobileDockOpen ? "✕" : "≡"}
+                    </button>
+                )}
+
+                {/* ── Canvas column (stage + loader + footer) ── */}
+                <div className={styles.canvasColumn}>
+                    <div
+                        ref={shellRef}
+                        className={`${styles.stageShell} ${canvasMeta.theme === "dark" ? styles.isDark : ""} ${activeTool === "doodle" ? styles.isDoodleActive : ""}`}
+                        onMouseMove={handleAmbientMove}
+                        onTouchMove={handleAmbientMove}
+                        onMouseLeave={handleAmbientLeave}
+                        onTouchEnd={handleAmbientLeave}
+                    >
+                        <div ref={ambientLightRef} className={styles.ambientLight} />
+                        <div
+                            ref={stageFrameRef}
+                            className={styles.stageFrame}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                openPieMenu(e.clientX - rect.left, e.clientY - rect.top);
+                            }}
+                        >
+                            <Stage
+                                ref={stageRef}
+                                width={viewportWidth}
+                                height={viewportHeight}
+                                preventDefault={activeTool === "doodle"}
+                                style={{touchAction: activeTool === "doodle" ? "none" : "pan-y"}}
+                                onMouseDown={handleCanvasPointerDown}
+                                onTouchStart={handleCanvasPointerDown}
+                                onMouseMove={handleCanvasPointerMove}
+                                onTouchMove={handleCanvasPointerMove}
+                                onMouseUp={handleCanvasPointerUp}
+                                onTouchEnd={handleCanvasPointerUp}
+                                onTouchCancel={handleCanvasPointerUp}
+                                onMouseLeave={handleCanvasPointerUp}
+                                className={`${styles.stage} ${styles.stageEditor}`}
+                            >
+                                {canvasMeta.gridEnabled && (
+                                    <Layer listening={false} {...layerTransform} opacity={clamp((viewport.scale - 0.8) / 0.5, 0.15, 1)}>
+                                        {Array.from({length: Math.floor(stageWidth / GRID_SIZE) + 1}).map((_, index) => (
+                                            <Rect
+                                                key={`grid-v-${index}`}
+                                                x={index * GRID_SIZE}
+                                                y={0}
+                                                width={1}
+                                                height={stageHeight}
+                                                fill={canvasMeta.theme === "dark" ? "rgba(235,235,235,0.08)" : "rgba(24,24,24,0.09)"}
+                                            />
+                                        ))}
+                                        {Array.from({length: Math.floor(stageHeight / GRID_SIZE) + 1}).map((_, index) => (
+                                            <Rect
+                                                key={`grid-h-${index}`}
+                                                x={0}
+                                                y={index * GRID_SIZE}
+                                                width={stageWidth}
+                                                height={1}
+                                                fill={canvasMeta.theme === "dark" ? "rgba(235,235,235,0.08)" : "rgba(24,24,24,0.09)"}
+                                            />
+                                        ))}
+                                    </Layer>
+                                )}
+
+                                <Layer listening={false} {...layerTransform}>
+                                    {doodles.map((doodle) => (
+                                        <Line
+                                            key={doodle.id}
+                                            points={(doodle.points || []).map((point, index) => (
+                                                index % 2 === 0 ? point * stageWidth : point * stageHeight
+                                            ))}
+                                            stroke={doodle.color || DEFAULT_DOODLE_COLOR}
+                                            strokeWidth={Number(doodle.size) || 2.8}
+                                            lineCap="round"
+                                            lineJoin="round"
+                                            tension={0.35}
+                                        />
+                                    ))}
+                                    {isDrawing && currentDoodlePoints.length >= 2 && (
+                                        <Line
+                                            points={currentDoodlePoints.map((point, index) => (
+                                                index % 2 === 0 ? point * stageWidth : point * stageHeight
+                                            ))}
+                                            stroke={doodleColor}
+                                            strokeWidth={doodleSize}
+                                            lineCap="round"
+                                            lineJoin="round"
+                                            tension={0.35}
+                                        />
+                                    )}
+                                </Layer>
+
+                                <Layer {...layerTransform}>
+                                    {sortedObjects.map((object) => {
+                                        if(object.kind === "snippet"){
+                                            const snippet = object.payload;
+                                            const metrics = getSnippetMetrics(snippet, stageWidth);
+                                            const styleKey = FONT_STYLE_MAP[snippet.fontStyle] || "serif";
+                                            const brush = FONT_BRUSHES[styleKey] || FONT_BRUSHES.serif;
+                                            const snippetX = clamp(snippet.x * stageWidth, 0, Math.max(0, stageWidth - metrics.width));
+                                            const snippetY = clamp(snippet.y * stageHeight, 0, Math.max(0, stageHeight - metrics.height));
+                                            const isSelected = selectedObject?.kind === "snippet" && selectedObject?.id === snippet.id;
+                                            const isDragging = draggingObject?.kind === "snippet" && draggingObject?.id === snippet.id;
+                                            const liftMultiplier = isDragging ? OBJECT_LIFT_MULTIPLIER + 0.02 : isSelected ? OBJECT_LIFT_MULTIPLIER : 1;
+                                            const baseScaleX = snippet.scaleX === -1 ? -1 : 1;
+
+                                            return (
+                                                <Text
+                                                    key={snippet.id}
+                                                    name={snippet.id}
+                                                    x={snippetX}
+                                                    y={snippetY}
+                                                    width={metrics.width}
+                                                    height={metrics.height}
+                                                    text={snippet.text}
+                                                    fontFamily={brush.fontFamily}
+                                                    fontStyle={brush.fontStyle}
+                                                    fontSize={metrics.fontSize}
+                                                    fill={canvasMeta.theme === "dark" ? "#f8f7f1" : "#151513"}
+                                                    align="center"
+                                                    verticalAlign="middle"
+                                                    padding={8}
+                                                    wrap="word"
+                                                    draggable={canEditObjects}
+                                                    rotation={snippet.rotation || 0}
+                                                    scaleX={baseScaleX * liftMultiplier}
+                                                    scaleY={liftMultiplier}
+                                                    stroke={isSelected ? "#68d391" : "transparent"}
+                                                    strokeWidth={isSelected ? 1.2 : 0}
+                                                    preventDefault={shouldPreventTouchDefault}
+                                                    shadowColor={canvasMeta.theme === "dark" ? "rgba(0,0,0,0.58)" : "rgba(0,0,0,0.22)"}
+                                                    shadowBlur={isSelected || isDragging ? 16 : 6}
+                                                    shadowOffsetY={isSelected || isDragging ? 6 : 2}
+                                                    onClick={canEditObjects ? (() => {
+                                                        setSelectedObject({kind: "snippet", id: snippet.id});
+                                                        setIsSnippetComposerOpen(false);
+                                                    }) : undefined}
+                                                    onTap={canEditObjects ? (() => {
+                                                        setSelectedObject({kind: "snippet", id: snippet.id});
+                                                        setIsSnippetComposerOpen(false);
+                                                    }) : undefined}
+                                                    onDragStart={canEditObjects ? ((event) => handleDragStartSnippet(snippet, event)) : undefined}
+                                                    onDragEnd={canEditObjects ? ((event) => handleDragEndSnippet(snippet, event)) : undefined}
+                                                />
+                                            );
+                                        }
+
+                                        const image = object.payload;
+                                        const isSelected = selectedObject?.kind === "image" && selectedObject?.id === image.id;
+                                        const isDragging = draggingObject?.kind === "image" && draggingObject?.id === image.id;
+                                        return (
+                                            <CanvasImageNode
+                                                key={image.id}
+                                                canvasImage={image}
+                                                stageWidth={stageWidth}
+                                                stageHeight={stageHeight}
+                                                isSelected={isSelected}
+                                                isDragging={isDragging}
+                                                isBeingRemoved={animatingRemovalId === image.id}
+                                                canInteract={canEditObjects}
+                                                preventTouchDefault={shouldPreventTouchDefault}
+                                                onSelect={canEditObjects ? (() => {
+                                                    setSelectedObject({kind: "image", id: image.id});
+                                                    setIsSnippetComposerOpen(false);
+                                                }) : undefined}
+                                                onDragStart={canEditObjects ? ((event) => handleDragStartImage(image, event)) : undefined}
+                                                onDragEnd={canEditObjects ? ((event) => handleDragEndImage(image, event)) : undefined}
+                                            />
+                                        );
+                                    })}
+                                </Layer>
+                            </Stage>
+                        </div>
+                        <PieMenu
+                            isOpen={pieMenu.isOpen}
+                            position={pieMenu.position}
+                            items={pieMenu.items}
+                            onClose={closePieMenu}
+                            isDark={canvasMeta.theme === "dark"}
+                        />
+                        <div className={styles.stageHud}>
+                            <button type="button" className={styles.hudZoomButton} onClick={() => zoomByStep("out")} aria-label="Zoom out">−</button>
+                            <span className={styles.zoomBadge} onClick={viewport.scale !== 1 ? resetViewport : undefined} style={viewport.scale !== 1 ? {cursor: "pointer"} : undefined}>
+                                {Math.round(viewport.scale * 100)}%
+                            </span>
+                            <button type="button" className={styles.hudZoomButton} onClick={() => zoomByStep("in")} aria-label="Zoom in">+</button>
+                        </div>
+                        {viewport.scale > 1 && !isMobileViewport && (
+                            <CanvasMinimap
+                                viewport={viewport}
+                                stageWidth={stageWidth}
+                                stageHeight={stageHeight}
+                                viewportWidth={viewportWidth}
+                                viewportHeight={viewportHeight}
+                                fitScale={fitScale}
+                                isDark={canvasMeta.theme === "dark"}
+                                updateViewport={updateViewport}
+                            />
+                        )}
+                    </div>
+
+                    <div className={styles.loaderWrapper}>
+                        {(isSending || isUploadingImage) && <BarLoader loading width={"100%"} height={3} color="#ff6b3d" speedMultiplier={0.7} />}
+                    </div>
+
+                    <div className={styles.editorFooter}>
+                        <span className={styles.wordCount}>
+                            {snippets.length} {snippets.length === 1 ? "text block" : "text blocks"} · {images.length} {images.length === 1 ? "image" : "images"} · {doodles.length} {doodles.length === 1 ? "doodle" : "doodles"}
+                        </span>
+                        <button
+                            type="button"
+                            disabled={!title || !hasCanvasContent || isSending}
+                            onClick={saveCanvas}
+                            className={`${styles.shareButton} ${(!title || !hasCanvasContent || isSending) ? styles.shareButtonDisabled : ""}`}
+                        >
+                            Share
+                        </button>
+                    </div>
+                </div>
+
+                {/* ── Right context panel ── */}
+                {showContextPanel && contextPanelContent && (
+                    <div className={styles.contextPanel}>
+                        {contextPanelContent}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+export default CanvasEditor;

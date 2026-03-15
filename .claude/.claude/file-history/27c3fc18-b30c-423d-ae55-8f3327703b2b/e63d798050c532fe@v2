@@ -1,0 +1,161 @@
+export type ProfileBgGradient = {
+  type: 'gradient';
+  colors: string[];
+  locations: number[];
+  angle: number;
+  fallbackColor: string;
+};
+
+export type ProfileBgImage = {
+  type: 'image';
+  uri: string;
+};
+
+export type ProfileBgNone = {type: 'none'};
+
+export type ParsedProfileBg = ProfileBgGradient | ProfileBgImage | ProfileBgNone;
+
+/**
+ * Converts a CSS angle (degrees) to LinearGradient start/end points.
+ * CSS: 0deg = bottom-to-top, 90deg = left-to-right, etc.
+ */
+export function cssAngleToGradientPoints(angleDeg: number): {
+  start: {x: number; y: number};
+  end: {x: number; y: number};
+} {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  const dx = Math.cos(rad);
+  const dy = Math.sin(rad);
+  return {
+    start: {x: 0.5 - dx * 0.5, y: 0.5 - dy * 0.5},
+    end: {x: 0.5 + dx * 0.5, y: 0.5 + dy * 0.5},
+  };
+}
+
+/**
+ * Parse a CSS linear-gradient() string into colors, locations, and angle.
+ */
+export function parseCssLinearGradient(
+  str: string,
+): {colors: string[]; locations: number[]; angle: number} | null {
+  const match = str.match(/linear-gradient\((.+)\)/s);
+  if (!match) return null;
+
+  const inner = match[1].trim();
+
+  // Extract angle — e.g. "90deg"
+  const angleMatch = inner.match(/^(\d+)deg\s*,/);
+  const angle = angleMatch ? parseInt(angleMatch[1], 10) : 180;
+
+  // Everything after the angle
+  const stopsStr = angleMatch
+    ? inner.slice(angleMatch[0].length).trim()
+    : inner;
+
+  // Split color stops on commas that are NOT inside parentheses
+  const stops: {color: string; location: number}[] = [];
+  let depth = 0;
+  let current = '';
+  for (let i = 0; i < stopsStr.length; i++) {
+    const ch = stopsStr[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth--;
+    else if (ch === ',' && depth === 0) {
+      const parsed = parseColorStop(current.trim());
+      if (parsed) stops.push(parsed);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  // Last stop
+  const lastParsed = parseColorStop(current.trim());
+  if (lastParsed) stops.push(lastParsed);
+
+  if (stops.length === 0) return null;
+
+  return {
+    colors: stops.map(s => s.color),
+    locations: stops.map(s => s.location),
+    angle,
+  };
+}
+
+function parseColorStop(
+  str: string,
+): {color: string; location: number} | null {
+  if (!str) return null;
+
+  // Match "rgba(R,G,B,A) N%" or "rgb(R,G,B) N%" or "#hex N%"
+  const percentMatch = str.match(/^(.+?)\s+(\d+(?:\.\d+)?)%$/);
+  if (percentMatch) {
+    return {
+      color: percentMatch[1].trim(),
+      location: parseFloat(percentMatch[2]) / 100,
+    };
+  }
+
+  // Color without explicit position — will be auto-distributed
+  return {color: str, location: -1};
+}
+
+/**
+ * Extract the URL from a CSS url(...) value.
+ */
+export function extractImageUrl(str: string): string | null {
+  const match = str.match(/url\(\s*['"]?(.*?)['"]?\s*\)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Parse the `users.background` DB field into an RN-compatible result.
+ */
+export function parseProfileBackground(
+  bg: Record<string, string> | null | undefined,
+): ParsedProfileBg {
+  if (!bg || Object.keys(bg).length === 0) {
+    return {type: 'none'};
+  }
+
+  // Image background — has url() in backgroundImage
+  if (bg.backgroundImage && bg.backgroundImage.includes('url(')) {
+    const uri = extractImageUrl(bg.backgroundImage);
+    if (uri) {
+      return {type: 'image', uri};
+    }
+  }
+
+  // Gradient background — has linear-gradient in backgroundImage
+  if (bg.backgroundImage && bg.backgroundImage.includes('linear-gradient')) {
+    const parsed = parseCssLinearGradient(bg.backgroundImage);
+    if (parsed) {
+      // Auto-distribute any stops that have location = -1
+      const {colors, locations, angle} = parsed;
+      const distributed = distributeLocations(locations);
+      return {
+        type: 'gradient',
+        colors,
+        locations: distributed,
+        angle,
+        fallbackColor: bg.background || colors[0] || '#000',
+      };
+    }
+  }
+
+  return {type: 'none'};
+}
+
+/** Evenly distribute any stops with location -1 */
+function distributeLocations(locations: number[]): number[] {
+  const result = [...locations];
+  const n = result.length;
+  if (n <= 1) return result.map((_, i) => (n === 1 ? 0 : i));
+
+  // Fill in -1 values with even spacing
+  for (let i = 0; i < n; i++) {
+    if (result[i] === -1) {
+      result[i] = i / (n - 1);
+    }
+  }
+  return result;
+}

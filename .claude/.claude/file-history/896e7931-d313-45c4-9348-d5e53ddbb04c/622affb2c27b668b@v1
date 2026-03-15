@@ -1,0 +1,38 @@
+# Fix Toast Visibility & Centering
+
+## Context
+The milestone and freeze toasts were moved inside `.center-bar-holder-container` and changed to `position: sticky`, but they're not visible. The root cause: `sticky` doesn't work here because the scrolling happens on the **parent** (`.home-parent-container` has `overflow-y: auto`), not on the container itself. The toasts end up in the normal document flow, pushed to the top of the flex column, invisible above the fold or behind content.
+
+## Fix
+
+**Strategy:** Use `position: fixed` so toasts always float above everything, and calculate `left` to center them within the content column at each breakpoint (matching the existing `.center-bar-holder-container` dimensions).
+
+### Files to change (2)
+
+---
+
+### 1. `client/src/components/Streak/StreakMilestoneToast.css`
+
+Both `.streak-milestone-toast` and `.streak-freeze-toast`:
+- Change `position: sticky` → `position: fixed`
+- Change `z-index: 999` → `z-index: 9999` (above editor overlays, profile editor at 140)
+- Change `left: 50%` → calculated center of content column per breakpoint:
+  - Desktop: container is `left: 250px`, `width: 750px` → center at `left: calc(250px + 375px)` = `625px`
+  - Tablet (≤768px): `left: 200px`, `width: 550px` → `left: calc(200px + 275px)` = `475px`
+  - Mobile (≤480px): container is full-width → `left: 50%` (viewport center)
+- Keep `transform: translateX(-50%)` — works with all the above
+- Keep `bottom: 24px`
+
+Add media queries for tablet/mobile `left` values.
+
+### 2. `client/src/components/HomePage/Home.jsx`
+
+No JSX changes needed — toasts stay inside `.center-bar-holder-container` in the DOM. `position: fixed` makes them float relative to the viewport regardless of DOM position.
+
+---
+
+## Verification
+1. Publish a post (with the forced `milestone: 30` still in uploadController) → toast should appear floating at bottom-center of the content column
+2. Scroll the feed — toast should stay fixed in place
+3. Resize to tablet/mobile — toast should stay centered within the content area
+4. Click toast to dismiss

@@ -1,0 +1,78 @@
+import { createPanel } from '../partModels';
+
+const shelfTemplate = {
+  type: 'shelf',
+  label: 'Shelf Unit',
+  description: 'Tall shelving with adjustable shelf count',
+  parameters: [
+    { key: 'width', label: 'Width', type: 'number', default: 800, min: 200, max: 3000, step: 10, suffix: 'mm' },
+    { key: 'depth', label: 'Depth', type: 'number', default: 300, min: 100, max: 1000, step: 10, suffix: 'mm' },
+    { key: 'height', label: 'Height', type: 'number', default: 1800, min: 400, max: 3000, step: 10, suffix: 'mm' },
+    { key: 'sideThickness', label: 'Side Thickness', type: 'number', default: 18, min: 6, max: 50, step: 1, suffix: 'mm' },
+    { key: 'shelfThickness', label: 'Shelf Thickness', type: 'number', default: 18, min: 6, max: 50, step: 1, suffix: 'mm' },
+    { key: 'shelfCount', label: 'Shelves', type: 'integer', default: 4, min: 1, max: 15, step: 1, suffix: '' },
+    { key: 'hasBack', label: 'Back Panel', type: 'boolean', default: true },
+  ],
+  generate(params) {
+    const { width, depth, height, sideThickness, shelfThickness, shelfCount, hasBack } = params;
+    const innerWidth = width - 2 * sideThickness;
+    const parts = [];
+
+    // Left side
+    parts.push(createPanel({
+      name: 'Left Side',
+      width: sideThickness,
+      depth,
+      thickness: height,
+      material: 'plywood',
+      position: { x: 0, y: 0, z: 0 },
+    }));
+
+    // Right side
+    parts.push(createPanel({
+      name: 'Right Side',
+      width: sideThickness,
+      depth,
+      thickness: height,
+      material: 'plywood',
+      position: { x: width - sideThickness, y: 0, z: 0 },
+    }));
+
+    // Shelves (evenly spaced including top and bottom)
+    const totalShelves = shelfCount + 2; // +2 for top and bottom
+    const spacing = height / (totalShelves - 1);
+
+    for (let i = 0; i < totalShelves; i++) {
+      const z = spacing * i;
+      const isTopOrBottom = i === 0 || i === totalShelves - 1;
+      parts.push(createPanel({
+        name: isTopOrBottom ? (i === 0 ? 'Bottom' : 'Top') : `Shelf ${i}`,
+        width: innerWidth,
+        depth,
+        thickness: shelfThickness,
+        material: 'plywood',
+        position: { x: sideThickness, y: 0, z },
+      }));
+    }
+
+    // Optional back panel
+    if (hasBack) {
+      parts.push(createPanel({
+        name: 'Back',
+        width,
+        depth: Math.max(6, sideThickness / 2),
+        thickness: height,
+        material: 'plywood',
+        position: { x: 0, y: depth - Math.max(6, sideThickness / 2), z: 0 },
+        fill: 'rgba(120, 120, 120, 0.06)',
+      }));
+    }
+
+    return {
+      parts,
+      name: `Shelf ${width}×${height}`,
+    };
+  },
+};
+
+export default shelfTemplate;

@@ -1,0 +1,23 @@
+export default function RoomRenderer({ rooms }) {
+  return (
+    <g className="rooms">
+      {rooms.map(room => (
+        <text
+          key={room.id}
+          data-id={room.id}
+          data-type="room"
+          x={room.labelPosition.x}
+          y={room.labelPosition.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="var(--color-text-secondary)"
+          fontSize={200}
+          fontFamily="var(--font-ui)"
+          style={{ pointerEvents: 'all', cursor: 'move' }}
+        >
+          {room.name}
+        </text>
+      ))}
+    </g>
+  );
+}

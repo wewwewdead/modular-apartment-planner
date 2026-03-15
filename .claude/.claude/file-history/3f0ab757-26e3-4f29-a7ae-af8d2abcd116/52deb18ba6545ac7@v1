@@ -1,0 +1,73 @@
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import React from 'react';
+
+import { CartDetailScreen } from '../screens/cart/CartDetailScreen';
+import { HistoryScreen } from '../screens/history/HistoryScreen';
+import { HomeScreen } from '../screens/home/HomeScreen';
+import { LoadingScreen } from '../screens/LoadingScreen';
+import { MenuScreen } from '../screens/menu/MenuScreen';
+import { OnboardingFlow } from '../screens/onboarding/OnboardingFlow';
+import { PaywallScreen } from '../screens/paywall/PaywallScreen';
+import { VaultScreen } from '../screens/vault/VaultScreen';
+import { useAppStore } from '../state/useAppStore';
+import { colors } from '../theme/colors';
+import { RootStackParamList } from './types';
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const navigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: colors.canvas,
+    card: colors.surface,
+    text: colors.ink,
+    border: colors.line,
+    primary: colors.brand,
+  },
+};
+
+export function RootNavigator() {
+  const isBootstrapping = useAppStore(state => state.isBootstrapping);
+  const appState = useAppStore(state => state.appState);
+  const errorMessage = useAppStore(state => state.errorMessage);
+
+  if (isBootstrapping) {
+    return <LoadingScreen message="Bootstrapping the Grock React Native workspace..." />;
+  }
+
+  if (errorMessage) {
+    return <LoadingScreen message={errorMessage} />;
+  }
+
+  if (!appState) {
+    return <LoadingScreen message="No app state loaded." />;
+  }
+
+  if (!appState.preferences.hasCompletedOnboarding) {
+    return <OnboardingFlow />;
+  }
+
+  return (
+    <NavigationContainer theme={navigationTheme}>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: colors.canvas },
+          headerTintColor: colors.ink,
+          headerTitleStyle: { fontWeight: '700' },
+          contentStyle: { backgroundColor: colors.canvas },
+        }}
+      >
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Vault" component={VaultScreen} options={{ title: 'Vault' }} />
+        <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'History' }} />
+        <Stack.Screen name="Menu" component={MenuScreen} options={{ title: 'Menu' }} />
+        <Stack.Screen name="Paywall" component={PaywallScreen} options={{ title: 'Grock Pro' }} />
+        <Stack.Screen name="CartDetail" component={CartDetailScreen} options={{ title: 'Cart' }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}

@@ -1,0 +1,139 @@
+# iskrib_v3 Improvement Plan: Security, Code Quality, Performance
+
+## Context
+The codebase has grown organically with 80+ API functions, 950+ line route file with inline handlers, inconsistent error patterns, and some security gaps. This plan addresses the highest-impact issues across security, DRY/code quality, and performance in incremental, independently-testable phases.
+
+---
+
+## Phase 1: Security Fixes (quick, targeted)
+
+### 1A. Fix `addBookmarkController` error response shape
+- **File:** `server/controller/interactController.js:39`
+- Change `res.status(500).json('Failed to add bookmarks')` → `res.status(500).json({error: 'Failed to add bookmarks'})`
+
+### 1B. Fix `updateUserDataController` to propagate service error status
+- **File:** `server/controller/uploadController.js:46-48`
+- Add `const status = error?.status || 500` and use `error?.error ||` in message (matches pattern in same file line 126, 140, 155)
+
+### 1C. Fix `extractBearerToken` fallthrough
+- **File:** `server/middleware/auth.js:12`
+- Change `return trimmed` → `return ""` (reject headers without `Bearer ` prefix)
+
+### 1D. Fix null pointer in `getFollowsData` error logging
+- **File:** `server/routes/routes.js:236`
+- Add optional chaining: `errorFollowers?.message, errorFollowings?.message, errorIsfollowing?.message`
+
+### 1E. Add auth + UUID validation to `getFollowsData`
+- **File:** `server/routes/routes.js:205`
+- Add `optionalAuth` middleware, validate UUID format, use `req.userId` instead of trusting `loggedInUserId` query param
+
+### 1F. Tighten username regex
+- **Files:** `server/services/uploadService.js:42`, `server/routes/routes.js:866`
+- New regex: `/^[a-z0-9](?:[a-z0-9]*(?:-[a-z0-9]+)*)?$/` (no leading/trailing/consecutive hyphens)
+
+### 1G. CORS: exclude localhost in production
+- **File:** `server/server.js:521`
+- Add `NODE_ENV` check so fallback only includes `localhost:5173` in development
+
+---
+
+## Phase 2: Backend Infrastructure (new utilities, no existing code changes)
+
+### 2A. Create `AppError` class
+- **New file:** `server/utils/AppError.js`
+- `class AppError extends Error { constructor(status, message) }` — replaces `throw {status, error}` pattern, provides stack traces
+
+### 2B. Create `asyncHandler` controller wrapper
+- **New file:** `server/utils/controllerHandler.js`
+- Wraps async handlers with try/catch, reads `error.status` and `error.error || error.message` — eliminates identical try/catch in ~40 controllers
+
+### 2C. Create shared validation utilities
+- **New file:** `server/utils/validation.js`
+- `UUID_REGEX`, `isValidUuid()`, `USERNAME_REGEX`, `isValidUsername()`, `RESERVED_USERNAMES` set
+- Eliminates duplicated regex/arrays in `uploadService.js` and `routes.js`
+
+---
+
+## Phase 3: Backend DRY Refactor
+
+### 3A. Deduplicate notification handlers (highest value)
+- **New files:** `server/services/notificationService.js`, `server/controller/notificationController.js`
+- Single `getNotificationsService(userId, {limit, before, unreadOnly})` replaces two ~100-line near-identical inline handlers (`getNotifications` routes.js:278-376, `getUnreadNotification` routes.js:399-495)
+- Move `NOTIFICATION_JOURNAL_SELECT`, `NOTIFICATION_OPINION_SELECT`, `decorateNotificationMedia`, `parseLimitWithinRange` out of routes.js
+
+### 3B. Extract remaining inline route handlers to controllers
+- Extract `getFollowsData`, `getCountNotifications`, `readNotification`, `deleteNotification`, `addViews`, `updatePrivacy`, `addOpinion`, `getOpinions`, `getMyOpinions`, `getUserOpinions`, `submitReply`, `getPostReplies`, `check-username`, `update-username`, `streak/:userId`
+- New controller files: `notificationController.js`, `opinionController.js`, `followController.js`
+- Each uses `asyncHandler` wrapper from Phase 2B
+
+### 3C. Migrate services to `AppError`
+- Replace `throw {status, error}` → `throw new AppError(status, message)` in:
+  - `interactService.js` (13 sites)
+  - `uploadService.js` (~10 sites)
+  - Other services incrementally
+
+### 3D. Remove commented-out code
+- Delete `getLikedPosts` block in `Api.js:1012-1031`
+- Clean scattered `// console.log` if full line
+
+---
+
+## Phase 4: Client API DRY Refactor
+
+### 4A. Create API helper factory
+- **New file:** `client/API/apiHelpers.js`
+- Helpers: `authHeaders(token, contentType)`, `jsonRequest(url, options, fallback)`, `authedJsonRequest(token, method, path, body, fallback)`, `authedFormRequest(...)`, `publicGet(path, fallback)`, `authedGet(token, path, fallback)`
+- Reuses existing `apiRequest` from `client/src/utils/apiRequest.js`
+
+### 4B. Refactor `Api.js` using helpers
+- Each of 80+ functions collapses from ~15 lines to ~1-3 lines
+- Example: `clickLike = (token, body) => authedJsonRequest(token, 'POST', '/like', body, 'error adding like')`
+- Estimated reduction: ~1169 → ~350-400 lines (65-70%)
+- Migrate in groups: auth/profile → journals → feeds → interactions → notifications → opinions → search → misc
+
+### 4C. Apply same to `StoryApi.js`
+
+---
+
+## Phase 5: Performance — Database Indexes & Query Consolidation
+
+### 5A. Add composite indexes for interaction lookups
+- **New SQL:** `server/sql/interaction_indexes.sql`
+```sql
+CREATE INDEX IF NOT EXISTS idx_likes_user_journal ON public.likes(user_id, journal_id);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user_journal ON public.bookmarks(user_id, journal_id);
+CREATE INDEX IF NOT EXISTS idx_reactions_user_journal ON public.reactions(user_id, journal_id);
+```
+- Impact: Every feed load queries these 3 tables with `user_id + journal_id` filters
+
+### 5B. Consolidate `getFollowsData` into single RPC
+- **New SQL:** `server/sql/follow_counts.sql` — `get_follow_data(p_user_id, p_logged_in_user_id)` returns followers_count, following_count, is_following in one query
+- Replaces 3 parallel Supabase queries
+
+### 5C. Consolidate notification count into single RPC
+- **New SQL:** `get_unread_notification_count(p_user_id)` — returns sum of unread notifications + notification_opinions
+- This endpoint is polled frequently for the badge count
+
+---
+
+## Verification
+
+After each phase:
+1. **Phase 1:** Test auth flows, bookmark toggle, profile edit, follow data, username update. Verify CORS in dev still works
+2. **Phase 2:** No behavior changes — just new utility files. Run server to confirm imports work
+3. **Phase 3:** Test notifications (all/unread), opinions CRUD, follows, views, privacy toggle, username endpoints. Verify response shapes match existing
+4. **Phase 4:** Test all API calls from the frontend — likes, comments, bookmarks, feeds, notifications, search, stories. Verify no regressions
+5. **Phase 5:** Run SQL migrations in Supabase. Verify feed loads, follow counts, notification counts still return correct data
+
+---
+
+## Implementation Order
+
+| PR | Phases | Risk | Description |
+|----|--------|------|-------------|
+| 1 | 1A-1G | Low | Security fixes (targeted, no new files) |
+| 2 | 2A-2C | Low | New utility files (AppError, asyncHandler, validation) |
+| 3 | 5A | Low | SQL indexes (no code changes) |
+| 4 | 3A-3D | Medium | Backend DRY (notification dedup, route extraction, AppError migration) |
+| 5 | 4A-4C | Medium | Client API DRY (apiHelpers + Api.js refactor) |
+| 6 | 5B-5C | Medium | SQL RPCs (follow counts, notification counts) |

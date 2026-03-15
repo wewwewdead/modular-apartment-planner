@@ -1,0 +1,101 @@
+# Share Profile to Social Media
+
+## Context
+When a user shares their profile link to Facebook or Twitter, social crawlers can't execute JavaScript, so they only see default meta tags from `index.html`. We need server-side share routes (like the existing `/share/post/:journalId` pattern) that serve pre-rendered HTML with OG meta tags showing the user's **username, background picture, profile picture, and bio**.
+
+## Changes
+
+### 1. Server — Profile Share Image Route
+**File:** `server/server.js` (add before the post share image route at line 447)
+
+Add `GET /share/u/:username/image`:
+- Import `getUserByUsernameService` from `./services/getUserDataService.js`
+- Fetch user data via `getUserByUsernameService(username)`
+- Generate a **1200x630 composite JPEG** using Sharp:
+  - **Base layer:** User's background image (extracted from `background.backgroundImage` url pattern) or a default dark gradient
+  - **Dark overlay:** Semi-transparent black rect for text readability
+  - **Avatar:** Circular profile picture (180px), centered horizontally near top
+  - **Text overlay (SVG):** Display name, @username, truncated bio, "iskrib.com" branding
+- Reuse existing helpers: `evaluateShareImageCandidate`, `fetchRemoteImageBuffer`, `isSafeRemoteImageUrl`
+- On any failure → redirect 302 to `DEFAULT_OG_IMAGE_URL`
+- Cache headers: `public, max-age=3600`
+
+### 2. Server — Profile Share HTML Route
+**File:** `server/server.js` (add after the image route)
+
+Add `GET /share/u/:username`:
+- Fetch user data via `getUserByUsernameService(username)`
+- Serve HTML with OG meta tags:
+  - `og:type` = `"profile"`
+  - `og:title` = `"{name}'s Profile | Iskryb"`
+  - `og:description` = user's bio or fallback
+  - `og:image` = `/share/u/:username/image` (the composite image)
+  - `og:url` = `https://iskrib.com/u/:username`
+  - `twitter:card` = `"summary_large_image"`
+  - Matching `twitter:title`, `twitter:description`, `twitter:image`
+- JavaScript redirect + meta refresh fallback to `/u/:username`
+- Follow exact same HTML structure as existing post share route (line 530-586)
+
+### 3. Server — API Redirect Aliases
+**File:** `server/server.js` (add after line 595)
+
+Add redirect aliases (same pattern as post share):
+```
+GET /api/share/u/:username/image → 301 → /share/u/:username/image
+GET /api/share/u/:username       → 301 → /share/u/:username
+```
+
+### 4. Client — getProfileShareUrl Utility
+**File:** `client/src/utils/getShareUrl.js`
+
+Add named export `getProfileShareUrl(username)`:
+- Same pattern as existing `getShareUrl(journalId)` but builds `/share/u/:username` URL
+- Keep existing default export unchanged
+
+### 5. Client — Share Button on Own Profile
+**File:** `client/src/components/ProfilePage/components/ProfileHeroSection.jsx`
+
+- Add `useState` for `showShareMenu`
+- Import `ShareMenu` and `getProfileShareUrl`
+- Add a share icon button in `.profile-actions-row` (after the font-picker button)
+- On click: toggle `ShareMenu` with the profile share URL
+- Reuse existing `ShareMenu` component (Copy link, Share to X, Share to Facebook, Native Share)
+
+### 6. Client — Share Button on Visited Profile
+**File:** `client/src/components/VisitProfile/VisitProfile.jsx`
+
+- Add `showShareMenu` state
+- Import `ShareMenu` and `getProfileShareUrl`
+- Add share button in `.visited-profile-actions-row` next to the Follow button
+- Style: small circular glass-morphism button matching existing action buttons
+
+### 7. Client — Share Button CSS
+**File:** `client/src/components/VisitProfile/visitProfile.css`
+
+Add `.visit-profile-share-btn` class:
+- 36x36 circular button, `var(--bg-glass)` background, backdrop-filter blur
+- Hover: slight lift + opacity change
+
+## Files Modified
+| File | Change |
+|------|--------|
+| `server/server.js` | Add profile share image route, HTML route, API redirects, import `getUserByUsernameService` |
+| `client/src/utils/getShareUrl.js` | Add `getProfileShareUrl` named export |
+| `client/src/components/ProfilePage/components/ProfileHeroSection.jsx` | Add share button with `ShareMenu` |
+| `client/src/components/VisitProfile/VisitProfile.jsx` | Add share button with `ShareMenu` |
+| `client/src/components/VisitProfile/visitProfile.css` | Add `.visit-profile-share-btn` style |
+
+## Key Reusable Pieces (already exist)
+- `ShareMenu` component (`client/src/components/ShareMenu/ShareMenu.jsx`) — Copy link, X, Facebook, Native Share
+- `evaluateShareImageCandidate()`, `fetchRemoteImageBuffer()`, `isSafeRemoteImageUrl()` — server image safety
+- `normalizeWhitespace()`, `toPreviewText()`, `escHtml()`, `getRequestOrigin()` — server string helpers
+- `convertToOgJpeg()` — Sharp JPEG conversion (reuse pattern, not function directly since we composite)
+
+## Verification
+1. Start server, visit `http://localhost:3000/share/u/{your-username}` — should see HTML with correct OG tags then redirect
+2. Visit `http://localhost:3000/share/u/{your-username}/image` — should see a 1200x630 JPEG with background, avatar, name, @username, bio
+3. Test with user who has: background image, no background, gradient background
+4. Test with user who has no profile picture (should show fallback)
+5. On the profile page, click share button → ShareMenu appears with Copy link, X, Facebook options
+6. On a visited profile, click share button → same ShareMenu
+7. Paste share URL into Facebook/Twitter debugger tools to verify OG preview renders correctly

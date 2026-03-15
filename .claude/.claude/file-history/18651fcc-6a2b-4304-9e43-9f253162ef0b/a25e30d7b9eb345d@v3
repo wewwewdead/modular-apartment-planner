@@ -1,0 +1,42 @@
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import './StreakMilestoneToast.css';
+
+const MESSAGES = {
+    7: "1 week streak! You're on fire!",
+    14: "2 weeks strong! Unstoppable!",
+    30: "30 days! A whole month of writing!",
+    50: "50 day streak! Legend in the making!",
+    100: "100 DAYS! Absolute legend!",
+};
+
+const StreakMilestoneToast = ({ milestone, onDismiss }) => {
+    useEffect(() => {
+        if (!milestone) return;
+        const timer = setTimeout(() => onDismiss?.(), 5000);
+        return () => clearTimeout(timer);
+    }, [milestone, onDismiss]);
+
+    if (!milestone) return null;
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                className="streak-milestone-toast"
+                initial={{ opacity: 0, y: 60 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+                onClick={onDismiss}
+            >
+                <span className="streak-milestone-flame">🔥</span>
+                <div className="streak-milestone-text">
+                    <span className="streak-milestone-count">{milestone} Day Streak!</span>
+                    <span className="streak-milestone-msg">{MESSAGES[milestone]}</span>
+                </div>
+            </motion.div>
+        </AnimatePresence>
+    );
+};
+
+export default StreakMilestoneToast;

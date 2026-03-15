@@ -1,0 +1,189 @@
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js:75:export const handleClickProfile = (navigate) => {
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-76-    return(e, loggedInUserId, clickedUserId, clickedUsername) =>{
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-77-        if(loggedInUserId === clickedUserId){
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-78-            navigate('/profile');
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-79-        } else if(clickedUsername){
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-80-            navigate(`/u/${clickedUsername}`, {
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-81-                state: {
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-82-                    userId: clickedUserId
+C:\Users\johnm\iskrib_v3\client\helpers\handleClicks.js-83-                }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:10:import { handleCLickContent, handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-11-import { useNavigate } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-12-import { useInView } from 'react-intersection-observer';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-13-import { useRef } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-14-import VerifiedBadge from '../Badge/VerifiedBadge';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-15-import formatPostDate from '../../../helpers/formatDateString';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-16-import { handleImageFallback } from '../../utils/handleImageFallback';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-17-
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-18-const Bookmarks = () =>{
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:33:    const handleclickUserProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-34-
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-35-    const handleClickBookmarkSettings = (e, journalId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-36-        e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-37-        setBookmarkIdSettings(journalId === bookmarkIdSettings ? null : journalId)
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-38-    }
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-39-
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-40-    const handleBackLocation = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-41-        e.stopPropagation();
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:20:import { handleClickProfile, handleCLickContent } from "../../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-21-import { getFollowsData, getJournalById } from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-22-import { useQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-23-import VerifiedBadge from "../../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-24-import { getCanvasWholeText, parseCanvasDoc } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-25-import RepostModal from "../../RepostModal/RepostModal";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-26-import ShareMenu from "../../ShareMenu/ShareMenu";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-27-import getShareUrl from "../../../utils/getShareUrl";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-28-import usePostSeo from "../../../seo/usePostSeo";
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:183:    const handleclickUserProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-184-    const viewContent = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-185-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-186-    const mutateViews = useAddViewsMutation(session);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-187-    const mutationLike = useLikeMutation(session, user?.userData?.[0]?.id);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-188-    const handleClickLike = async (e, journalId, receiverId, senderImageUrl, sendername, senderEmail) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-189-        e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-190-        if(likeInFlightRef.current){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-191-            return;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:17:import { handleClickProfile, handleCLickContent } from "../../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-18-import formatPostDate from "../../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-19-import { handleImageFallback } from "../../../utils/handleImageFallback";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-20-import { getCanvasPreview } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-21-import CanvasPreview from "./CanvasPreview/CanvasPreview";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-22-import RepostModal from "../../RepostModal/RepostModal";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-23-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-24-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-25-const PostCards = () => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:51:    const handleClickUserProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-52-    const clickContent = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-53-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-54-    const mutateViews = useAddViewsMutation(session)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-55-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-56-    const handleClickUserProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-57-        e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-58-        if(!session){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-59-            return openAuthModal();
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:6:import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-7-import { useNavigate } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-8-import { motion, AnimatePresence } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-9-import VerifiedBadge from "../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-10-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-11-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-12-const incrementReplyCount = (old, parentId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-13-    if (!old || !Array.isArray(old.pages)) return old;
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-14-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:47:    const clickProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-48-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-49-    const {data, isLoading, fetchNextPage, hasNextPage, isFetchinNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-50-        queryKey: ['getPostReplies', comments.id],
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-51-        queryFn: ({pageParam = null, queryKey}) => getPostReplies(queryKey[1], 5, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-52-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-53-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-54-                const lastReply = lastPage?.data[lastPage?.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-55-                return lastReply.id;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:31:import { handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-32-import styles from './Universe.module.css';
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-33-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-34-const SECTOR_SIZE = 2000;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-35-const ENABLE_SETTLED_RPC_SAVE = import.meta.env.VITE_ENABLE_UNIVERSE_SETTLE_SAVE === 'true';
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-36-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-37-const Universe = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-38-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-39-    const location = useLocation();
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:1044:                                    onClick={(e) => handleClickProfile(navigate)(e, userId, selectedGalaxy.userId)}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1045-                                >
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1046-                                    Visit Profile
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1047-                                </button>
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1048-                                <button
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1049-                                    className={styles.galaxyPreviewExploreBtn}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1050-                                    onClick={handleExploreGalaxy}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1051-                                >
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-1052-                                    Explore Galaxy
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:9:import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-10-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-11-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-12-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-13-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-14-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-15-const VisitedProfileOpinions = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-16-    const {ref, inView} = useInView({threshold: 0, rootMargin: '200px'})
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-17-    const location = useLocation();
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:38:    const handleClickOpionionsProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-39-    const handleClickOpionionsProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-40-        if(!session){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-41-            e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-42-            return openAuthModal();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-43-        }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-44-        handleClickOpionionsProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-45-    };
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-46-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:9:import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-10-import OpinionEditor from "./OpinionsEditor";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-11-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-12-import VerifiedBadge from "../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-13-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-14-const OpinionsPage = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-15-    const [showHeaders, setShowHeaders] = useState(true);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-16-    const [showWriteContainer, setShowWriteContainer] = useState(true);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-17-    const {ref, inView} = useInView({threshold: 0.5, rootMargin: '200px'});
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:72:    const handleClickOpinionProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-73-    const handleClickOpinionProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-74-        if(!session){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-75-            e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-76-            return openAuthModal();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-77-        }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-78-        handleClickOpinionProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-79-    };
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-80-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:5:import { handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-6-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-7-import { BarLoader, MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-8-import VerifiedBadge from '../Badge/VerifiedBadge';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-9-import { useEffect } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-10-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-11-const SidebarOpinions = ({openEditor}) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-12-    const {user, session, openAuthModal} = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-13-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:20:    const handleClickOpionionsProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-21-    const handleClickOpionionsProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-22-        if(!session){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-23-            e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-24-            return openAuthModal();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-25-        }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-26-        handleClickOpionionsProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-27-    };
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-28-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:9:import { handleClickProfile } from "../../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-10-import VerifiedBadge from "../../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-11-import { getCanvasPreview } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-12-import CanvasPreview from "../postCards/CanvasPreview/CanvasPreview";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-13-import CalculateText from "../postCards/calculateReadingTime";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-14-import "./gallery.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-15-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-16-const CANVAS_GALLERY_PAGE_SIZE = 5;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-17-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:21:    const handleClickUserProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-22-    const userId = user?.userData?.[0]?.id || null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-23-    const [sortMode, setSortMode] = useState('hottest');
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-24-    const {ref: inViewRef, inView} = useInView({threshold: 0.1});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-25-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-26-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-27-        data,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-28-        isLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-29-        isFetching,

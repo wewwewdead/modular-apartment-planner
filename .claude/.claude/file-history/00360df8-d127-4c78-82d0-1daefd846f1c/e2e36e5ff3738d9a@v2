@@ -1,0 +1,71 @@
+import { createSketchObject, createShape } from './sketchModels';
+
+export function buildDemoTable(layerId) {
+  const object = createSketchObject('Office Desk', 'table');
+
+  // Tabletop: 1200mm x 600mm, centered at origin area
+  const tabletop = createShape('rect', {
+    layerId,
+    x: 50000,
+    y: 50000,
+    width: 120000,
+    height: 60000,
+    fill: 'rgba(184, 134, 11, 0.06)',
+    stroke: '#1E2433',
+    strokeWidth: 2,
+  });
+
+  // Leg dimensions
+  const legW = 4000;
+  const legH = 4000;
+  const inset = 3000;
+
+  const topLeft = createShape('rect', {
+    layerId,
+    x: 50000 + inset,
+    y: 50000 + inset,
+    width: legW,
+    height: legH,
+    fill: '#1E2433',
+    stroke: '#1E2433',
+    strokeWidth: 1,
+  });
+
+  const topRight = createShape('rect', {
+    layerId,
+    x: 50000 + 120000 - inset - legW,
+    y: 50000 + inset,
+    width: legW,
+    height: legH,
+    fill: '#1E2433',
+    stroke: '#1E2433',
+    strokeWidth: 1,
+  });
+
+  const bottomLeft = createShape('rect', {
+    layerId,
+    x: 50000 + inset,
+    y: 50000 + 60000 - inset - legH,
+    width: legW,
+    height: legH,
+    fill: '#1E2433',
+    stroke: '#1E2433',
+    strokeWidth: 1,
+  });
+
+  const bottomRight = createShape('rect', {
+    layerId,
+    x: 50000 + 120000 - inset - legW,
+    y: 50000 + 60000 - inset - legH,
+    width: legW,
+    height: legH,
+    fill: '#1E2433',
+    stroke: '#1E2433',
+    strokeWidth: 1,
+  });
+
+  const shapes = [tabletop, topLeft, topRight, bottomLeft, bottomRight];
+  object.shapeIds = shapes.map((s) => s.id);
+
+  return { object, shapes };
+}

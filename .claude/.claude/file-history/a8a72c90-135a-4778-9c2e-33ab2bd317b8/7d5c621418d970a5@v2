@@ -1,0 +1,166 @@
+import React, {useState} from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {AuthStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
+
+export function ForgotPasswordScreen({navigation}: Props) {
+  const {colors, isDark} = useTheme();
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const onSubmit = async () => {
+    if (email.trim().length < 5) return;
+    try {
+      setLoading(true);
+      // Use Supabase directly for password reset
+      const {createClient} = await import('@supabase/supabase-js');
+      const {MOBILE_ENV} = await import('../../config/env');
+      if (MOBILE_ENV.SUPABASE_URL && MOBILE_ENV.SUPABASE_ANON_KEY) {
+        const supabase = createClient(
+          MOBILE_ENV.SUPABASE_URL,
+          MOBILE_ENV.SUPABASE_ANON_KEY,
+        );
+        await supabase.auth.resetPasswordForEmail(email.trim());
+      }
+      setSent(true);
+    } catch {
+      Alert.alert('Error', 'Failed to send reset email. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = [
+    styles.input,
+    {
+      backgroundColor: isDark ? colors.bgElevated : colors.bgPrimary,
+      borderColor:
+        focusedField === 'email' ? colors.accentAmber : colors.borderCard,
+      color: colors.textPrimary,
+    },
+  ];
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.container}>
+          <View style={styles.brandSection}>
+            <Text style={[styles.brandText, {color: colors.textHeading}]}>
+              Reset Password
+            </Text>
+            <Text style={[styles.tagline, {color: colors.textSecondary}]}>
+              {sent
+                ? 'Check your email for a reset link'
+                : "Enter your email and we'll send you a reset link"}
+            </Text>
+          </View>
+
+          {!sent ? (
+            <View style={styles.form}>
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, {color: colors.textMuted}]}>
+                  EMAIL
+                </Text>
+                <TextInput
+                  placeholder="Enter your email"
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoComplete="email"
+                  returnKeyType="go"
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
+                  onSubmitEditing={onSubmit}
+                  style={inputStyle}
+                />
+              </View>
+
+              <PrimaryButton
+                label="Send Reset Link"
+                onPress={onSubmit}
+                loading={loading}
+                disabled={email.trim().length < 5}
+              />
+            </View>
+          ) : null}
+
+          <PrimaryButton
+            label="Back to Login"
+            onPress={() => navigation.navigate('Login')}
+            kind="secondary"
+          />
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.lg,
+  },
+  brandSection: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  brandText: {
+    fontFamily: fonts.heading.bold,
+    fontSize: 24,
+    letterSpacing: -0.3,
+  },
+  tagline: {
+    fontFamily: fonts.serif.regular,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  form: {
+    gap: spacing.lg,
+  },
+  fieldGroup: {
+    gap: spacing.xs,
+  },
+  label: {
+    ...typeScale.label,
+    marginLeft: spacing.xs,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontFamily: fonts.ui.regular,
+  },
+});

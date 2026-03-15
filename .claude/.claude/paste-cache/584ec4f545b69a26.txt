@@ -1,0 +1,224 @@
+You are helping me build a desktop-first web app for creating apartment blueprints.
+
+Tech stack requirements:
+- Frontend: React + Vite
+- Language: JavaScript only, no TypeScript
+- Styling: simple CSS or CSS modules, no Tailwind unless I explicitly ask
+- 2D drawing: SVG-first approach
+- 3D preview: prepare architecture for Three.js later, but do not overbuild it now
+- Persistence for now: localStorage only
+- Future-ready architecture: Node.js backend later, Supabase later, but do not implement backend yet
+- The app must be modular, clean, scalable, and easy to extend
+
+Important:
+This is NOT a full CAD clone.
+This is a custom apartment blueprint web app for my own use.
+It should behave like a component-based blueprint generator/editor.
+
+Core product idea:
+I want to model an apartment using reusable objects/components, similar to OOP.
+Each apartment component has its own properties and blueprint-related output.
+Examples of components:
+- Floor
+- Room
+- Wall
+- Door
+- Window
+- Column
+- Beam
+- Slab
+- Stair
+
+Main architectural rule:
+Use one source of truth.
+The app should store structured model data, then derive geometry and views from that data.
+Do not manually duplicate drawing logic for every view.
+
+High-level app goals:
+1. Create and edit a floor plan in 2D
+2. Define walls, rooms, doors, and windows as structured objects
+3. Show measurements and dimensions
+4. Support blueprint-style output
+5. Be extensible later for elevations, sections, isometric view, and 3D preview
+6. Save/load projects from localStorage
+7. Keep architecture ready for future Node.js API and Supabase integration
+
+Core design philosophy:
+- Domain-driven structure
+- Component-based data model
+- Geometry derived from model data
+- SVG rendering for blueprint clarity
+- Desktop-first UX
+- Clean separation between:
+  - domain/model layer
+  - geometry layer
+  - rendering layer
+  - editor/UI layer
+  - persistence layer
+
+What I want in version 1:
+Build an MVP of a one-floor apartment blueprint editor with:
+- Project creation
+- One floor
+- Wall drawing
+- Wall thickness
+- Room labeling
+- Door placement
+- Window placement
+- Basic dimensions/measurements
+- Select/move/edit objects
+- Local save/load using localStorage
+- SVG-based blueprint canvas
+- Right-side properties panel
+- Left-side project/component panel
+- Top toolbar for tools/actions
+
+Do not build these yet unless I explicitly ask:
+- Full 3D modeling
+- Full CAD constraints
+- Structural engineering calculations
+- Multi-user collaboration
+- Supabase integration
+- Node.js server
+- Advanced export pipeline
+- Complex snapping system beyond basic useful snapping
+- Mobile-first layout
+
+I want the project structured in a scalable way.
+Use this folder structure as guidance:
+
+src/
+  app/
+  domain/
+  geometry/
+  annotations/
+  renderers/
+  editor/
+  persistence/
+  ui/
+  styles/
+
+Architecture expectations:
+
+1. Domain layer
+Create reusable JavaScript classes or factory-based models for:
+- Project
+- Floor
+- Wall
+- Room
+- Door
+- Window
+
+Each object should contain only meaningful data and small domain methods.
+Example:
+- Wall should know start point, end point, thickness
+- Room should know boundary and computed area
+- Door/Window should be associated with a wall
+
+2. Geometry layer
+Create pure utility modules for:
+- point math
+- line distance
+- wall length
+- rectangle/polygon helpers
+- room area calculation
+- wall outline generation from centerline + thickness
+Keep geometry independent from React.
+
+3. Renderer layer
+Use SVG rendering for the 2D blueprint editor.
+Render:
+- walls
+- room labels
+- doors
+- windows
+- dimensions
+Keep rendering components separate from domain logic.
+
+4. Editor layer
+Create tool-based editor logic:
+- select tool
+- wall draw tool
+- door placement tool
+- window placement tool
+- dimension tool placeholder
+Support selection, dragging, editing, and simple snapping.
+
+5. Persistence layer
+Implement save/load from localStorage.
+Store project data as JSON.
+Design serialization cleanly so I can later swap localStorage for backend persistence.
+
+6. UI layout
+Desktop-first app layout:
+- Top toolbar
+- Left sidebar for project structure / components
+- Center drawing workspace
+- Right properties panel
+- Optional bottom status/info bar
+
+Implementation rules:
+- Keep components small and readable
+- Use functional React components
+- Use hooks appropriately
+- Avoid unnecessary complexity
+- Avoid overengineering
+- Write code that I can understand and continue myself
+- Add comments only where they are genuinely helpful
+- Prefer plain JavaScript clarity over abstraction-heavy patterns
+
+State management:
+For now, use React state and context or a simple store pattern if needed.
+Do not introduce Redux unless absolutely necessary.
+Keep UI state separate from project/model state as much as possible.
+
+MVP interaction expectations:
+- Draw a wall by clicking start and end points
+- Walls have thickness
+- Rooms can be represented initially by closed wall boundaries or simple labeled areas
+- Doors/windows can be placed on walls with simple offsets
+- Selecting an object should show editable properties in the right panel
+- Zoom/pan can be basic if needed, but prioritize editing first
+
+Measurement expectations:
+- Show wall lengths
+- Show room area if possible
+- Store all model dimensions in real units internally, preferably millimeters
+- Scale is a display/output concern, not the source model
+
+Future readiness:
+Architect the code so I can later add:
+- Multi-floor support
+- Elevation generation
+- Section generation
+- Isometric view
+- 3D preview via Three.js
+- Node.js backend
+- Supabase storage/auth
+- Export to PDF/SVG/PNG
+
+Coding task for you:
+Generate the initial project structure and implement the first working MVP foundation.
+
+I want you to:
+1. Create the project file/folder structure
+2. Build the base layout
+3. Define the domain models
+4. Implement basic wall drawing in SVG
+5. Add object selection
+6. Add a properties panel
+7. Add localStorage save/load
+8. Keep code modular and ready for iteration
+
+When you respond:
+- First explain the implementation plan briefly
+- Then generate the code step by step
+- Prefer creating files in a logical order
+- Make sure the app runs
+- Do not leave placeholders that break the app
+- If a feature is not implemented yet, stub it cleanly without breaking the project
+
+Important mindset:
+This is a blueprint editor for apartment planning, not a generic drawing toy and not a full CAD product.
+Favor practical architecture over fancy abstractions.
+Help me build something I can actually grow.

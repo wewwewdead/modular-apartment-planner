@@ -1,0 +1,93 @@
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../Context/useAuth';
+import { useUserStories } from '../../Stories/hooks/useStoryData';
+import { motion } from 'framer-motion';
+import { MoonLoader } from 'react-spinners';
+import './ProfileStoriesSection.css';
+
+const STATUS_LABELS = { ongoing: 'Ongoing', completed: 'Completed', hiatus: 'Hiatus' };
+
+const ProfileStoriesSection = () => {
+    const { user, session } = useAuth();
+    const token = session?.access_token;
+    const userId = user?.userData?.[0]?.id;
+    const navigate = useNavigate();
+
+    const { data, isLoading } = useUserStories(userId, token);
+    const stories = Array.isArray(data) ? data : (data?.stories || []);
+
+    if (isLoading) {
+        return (
+            <div className="profile-postcards-loading-container">
+                <MoonLoader loading={true} color="var(--loader-color)" size={20} speedMultiplier={0.5} />
+            </div>
+        );
+    }
+
+    return (
+        <div className="profile-stories-section">
+            <div className="profile-stories-header-row">
+                <h2 className="profile-stories-heading">
+                    Stories <span className="profile-stories-count">({stories.length})</span>
+                </h2>
+            </div>
+
+            {!stories.length ? (
+                <div className="profile-stories-empty">
+                    <svg className="profile-stories-empty-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"/>
+                    </svg>
+                    <p className="profile-stories-empty-text">No stories yet.</p>
+                </div>
+            ) : (
+                <div className="profile-stories-list">
+                    {stories.map((story, index) => (
+                        <motion.div
+                            key={story.id}
+                            className="profile-story-card"
+                            initial={{ opacity: 0, y: 12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, ease: 'easeOut', delay: index * 0.04 }}
+                            onClick={() => navigate(`/home/stories/${story.id}`)}
+                        >
+                            <div className="profile-story-cover">
+                                {story.cover_url ? (
+                                    <img src={story.cover_url} alt={story.title} loading="lazy" />
+                                ) : (
+                                    <div className="profile-story-cover-placeholder">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="var(--text-muted)" opacity="0.4">
+                                            <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z" />
+                                        </svg>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="profile-story-body">
+                                <h3 className="profile-story-title">{story.title}</h3>
+                                {story.description && (
+                                    <p className="profile-story-description">{story.description}</p>
+                                )}
+                                <div className="profile-story-meta">
+                                    <span className={`profile-story-badge profile-story-badge-${story.status}`}>
+                                        {STATUS_LABELS[story.status] || story.status}
+                                    </span>
+                                    <span className="profile-story-stats">
+                                        {story.vote_count || 0} votes &middot; {story.read_count || 0} reads
+                                    </span>
+                                </div>
+                                {story.tags && story.tags.length > 0 && (
+                                    <div className="profile-story-tags">
+                                        {story.tags.slice(0, 3).map(tag => (
+                                            <span key={tag} className="profile-story-tag">{tag}</span>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default ProfileStoriesSection;

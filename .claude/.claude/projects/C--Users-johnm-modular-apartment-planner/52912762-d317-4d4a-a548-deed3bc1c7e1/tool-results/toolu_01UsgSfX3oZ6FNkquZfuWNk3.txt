@@ -1,0 +1,1289 @@
+     1→import { add, rotate, scale } from './point';
+     2→import { distanceToSegment } from './line';
+     3→import { createDimensionFigure } from '@/annotations/dimensions';
+     4→import { formatMeasurement } from '@/annotations/format';
+     5→import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS, createMeasurementMetadata } from '@/annotations/policy';
+     6→import { DRAWING_GRAPHICS } from '@/sheets/standards';
+     7→import { buildTrussCopyOrigins, resolveTrussLayout } from '@/truss/layout';
+     8→import { buildTrussProfile } from '@/truss/profile';
+     9→import { getTopChordRunLength, sampleTopChordRunMidpoint } from '@/truss/curveSampling';
+    10→import { buildTrussPurlinAttachments, createDetailPurlinMarker } from '@/truss/purlins';
+    11→import {
+    12→  getDisplayedAxis,
+    13→  getSafeAxis,
+    14→  normalizePlanLengthScale,
+    15→  normalizePlanOffset,
+    16→  normalizeSignedRotationDegrees,
+    17→  projectAlongAxis,
+    18→  transformPlanPoint,
+    19→} from '@/truss/systemTransform';
+    20→
+    21→const DETAIL_PADDING_X = 800;
+    22→const DETAIL_PADDING_Z = 900;
+    23→const DEFAULT_CHORD_THICKNESS = 90;
+    24→const DEFAULT_WEB_THICKNESS = 60;
+    25→const DEFAULT_PURLIN_MARKER_LENGTH = 180;
+    26→const DETAIL_OVERHANG_OFFSET = 260;
+    27→const DETAIL_PANEL_OFFSET = 520;
+    28→const DETAIL_SPAN_OFFSET = 860;
+    29→const DETAIL_RISE_OUTSET = 760;
+    30→const DETAIL_PURLIN_OFFSET = 260;
+    31→const DETAIL_PURLIN_START_OFFSET = 520;
+    32→const DETAIL_WEB_TAG_OFFSET = 320;
+    33→const DETAIL_WEB_TAG_TANGENT_SHIFT = 96;
+    34→const DETAIL_TOP_CHORD_TAG_OFFSET = 400;
+    35→const DETAIL_TAG_OUTSET = 280;
+    36→const DETAIL_TAG_HEIGHT = 150;
+    37→const DETAIL_TAG_FONT_SIZE = 110;
+    38→const DETAIL_TAG_LINE_HEIGHT = 134;
+    39→const DETAIL_TAG_MASK_PADDING_X = 64;
+    40→const DETAIL_TAG_MASK_PADDING_Y = 36;
+    41→const DETAIL_TAG_GAP = 40;
+    42→const DETAIL_TAG_OFFSETS = [
+    43→  { x: 0, y: 0 },
+    44→  { x: 0, y: -200 },
+    45→  { x: 0, y: 200 },
+    46→  { x: 0, y: -400 },
+    47→  { x: 0, y: 400 },
+    48→  { x: 250, y: 0 },
+    49→  { x: -250, y: 0 },
+    50→  { x: 250, y: -200 },
+    51→  { x: -250, y: -200 },
+    52→  { x: 250, y: 200 },
+    53→  { x: -250, y: 200 },
+    54→  { x: 0, y: -600 },
+    55→  { x: 0, y: 600 },
+    56→];
+    57→
+    58→function normalizeMaterial(material = 'timber') {
+    59→  return material === 'metal' ? 'metal' : 'timber';
+    60→}
+    61→
+    62→function getTrussMemberMaterialKey(memberType, material = 'timber') {
+    63→  const normalizedMaterial = normalizeMaterial(material);
+    64→  if (memberType === 'web') return `trussWeb_${normalizedMaterial}`;
+    65→  return `trussChord_${normalizedMaterial}`;
+    66→}
+    67→
+    68→function getPurlinMaterialKey(material = 'timber') {
+    69→  return `trussPurlin_${normalizeMaterial(material)}`;
+    70→}
+    71→
+    72→function createBounds(points = []) {
+    73→  if (!points.length) {
+    74→    return {
+    75→      minX: 0,
+    76→      maxX: 1000,
+    77→      minY: 0,
+    78→      maxY: 1000,
+    79→      minElevation: 0,
+    80→      maxElevation: 1000,
+    81→    };
+    82→  }
+    83→
+    84→  return {
+    85→    minX: Math.min(...points.map((point) => point.x)),
+    86→    maxX: Math.max(...points.map((point) => point.x)),
+    87→    minY: Math.min(...points.map((point) => point.y)),
+    88→    maxY: Math.max(...points.map((point) => point.y)),
+    89→    minElevation: Math.min(...points.map((point) => point.elevation ?? 0)),
+    90→    maxElevation: Math.max(...points.map((point) => point.elevation ?? 0)),
+    91→  };
+    92→}
+    93→
+    94→function centerOfBounds(bounds) {
+    95→  return {
+    96→    x: (bounds.minX + bounds.maxX) / 2,
+    97→    y: (bounds.minY + bounds.maxY) / 2,
+    98→  };
+    99→}
+   100→
+   101→function pointFromLocal(structuralStartPoint, spanDirection, localPoint, baseElevation) {
+   102→  const planPoint = add(structuralStartPoint, scale(spanDirection, localPoint.x));
+   103→  return {
+   104→    x: planPoint.x,
+   105→    y: planPoint.y,
+   106→    elevation: baseElevation + localPoint.z,
+   107→  };
+   108→}
+   109→
+   110→function createCopyGeometry(trussSystem, instance, profile, layout, origin, index) {
+   111→  const structuralStartPoint = add(origin, scale(layout.spanDirection, -(profile.metrics.span / 2)));
+   112→  const structuralEndPoint = add(origin, scale(layout.spanDirection, profile.metrics.span / 2));
+   113→  const overallStartPoint = add(structuralStartPoint, scale(layout.spanDirection, -profile.metrics.overhangStart));
+   114→  const overallEndPoint = add(structuralEndPoint, scale(layout.spanDirection, profile.metrics.overhangEnd));
+   115→  const nodeMap = new Map(profile.nodes.map((node) => [node.id, node]));
+   116→  const baseElevation = trussSystem.baseElevation || 0;
+   117→
+   118→  const worldNodes = profile.nodes.map((node) => ({
+   119→    ...node,
+   120→    planPoint: add(structuralStartPoint, scale(layout.spanDirection, node.x)),
+   121→    worldPoint: pointFromLocal(structuralStartPoint, layout.spanDirection, node, baseElevation),
+   122→  }));
+   123→  const members = profile.members.map((member) => {
+   124→    const startNode = nodeMap.get(member.startNodeId);
+   125→    const endNode = nodeMap.get(member.endNodeId);
+   126→    return {
+   127→      ...member,
+   128→      startNode,
+   129→      endNode,
+   130→      startWorld: pointFromLocal(structuralStartPoint, layout.spanDirection, startNode, baseElevation),
+   131→      endWorld: pointFromLocal(structuralStartPoint, layout.spanDirection, endNode, baseElevation),
+   132→    };
+   133→  });
+   134→  const purlinAttachments = (profile.purlinAttachments || []).map((attachment) => ({
+   135→    ...attachment,
+   136→    planPoint: add(structuralStartPoint, scale(layout.spanDirection, attachment.localPoint.x)),
+   137→    worldPoint: pointFromLocal(structuralStartPoint, layout.spanDirection, attachment.localPoint, baseElevation),
+   138→  }));
+   139→
+   140→  return {
+   141→    id: `${instance.id}_copy_${index}`,
+   142→    index,
+   143→    origin,
+   144→    structuralStartPoint,
+   145→    structuralEndPoint,
+   146→    overallStartPoint,
+   147→    overallEndPoint,
+   148→    worldNodes,
+   149→    members,
+   150→    purlinAttachments,
+   151→  };
+   152→}
+   153→
+   154→function normalizePlanVector(vector) {
+   155→  const magnitude = Math.sqrt((vector.x * vector.x) + (vector.y * vector.y));
+   156→  if (magnitude <= 1e-6) {
+   157→    return { x: 1, y: 0 };
+   158→  }
+   159→  return {
+   160→    x: vector.x / magnitude,
+   161→    y: vector.y / magnitude,
+   162→  };
+   163→}
+   164→
+   165→function createPlanMarker(centerPoint, axis, length = DEFAULT_PURLIN_MARKER_LENGTH) {
+   166→  return {
+   167→    start: add(centerPoint, scale(axis, -(length / 2))),
+   168→    end: add(centerPoint, scale(axis, length / 2)),
+   169→  };
+   170→}
+   171→
+   172→function createPurlinSegment(id, trussSystem, instance, startWorld, endWorld, purlinSystem, side = null, copyIds = []) {
+   173→  const material = normalizeMaterial(purlinSystem?.material || 'timber');
+   174→  return {
+   175→    id,
+   176→    side,
+   177→    copyIds,
+   178→    startWorld,
+   179→    endWorld,
+   180→    thickness: Math.max(purlinSystem?.depth || 1, 1),
+   181→    crossSection: {
+   182→      height: Math.max(purlinSystem?.depth || 1, 1),
+   183→      width: Math.max(purlinSystem?.width || 1, 1),
+   184→    },
+   185→    materialKey: getPurlinMaterialKey(material),
+   186→    metadata: {
+   187→      sourceId: instance.id,
+   188→      trussSystemId: trussSystem.id,
+   189→      floorId: trussSystem.floorId,
+   190→      memberType: 'purlin',
+   191→      purlinSide: side,
+   192→      material,
+   193→    },
+   194→    bounds: {
+   195→      minX: Math.min(startWorld.x, endWorld.x),
+   196→      maxX: Math.max(startWorld.x, endWorld.x),
+   197→      minY: Math.min(startWorld.y, endWorld.y),
+   198→      maxY: Math.max(startWorld.y, endWorld.y),
+   199→      minElevation: Math.min(startWorld.elevation, endWorld.elevation),
+   200→      maxElevation: Math.max(startWorld.elevation, endWorld.elevation),
+   201→    },
+   202→  };
+   203→}
+   204→
+   205→function offsetWorldPoint(worldPoint, axis, distance) {
+   206→  if (!worldPoint || Math.abs(distance) <= 1e-6) return worldPoint;
+   207→  return {
+   208→    ...worldPoint,
+   209→    x: worldPoint.x + (axis.x * distance),
+   210→    y: worldPoint.y + (axis.y * distance),
+   211→  };
+   212→}
+   213→
+   214→function buildInstancePurlinGeometry(trussSystem, instanceGeometry, purlinSystem) {
+   215→  if (!purlinSystem?.enabled) {
+   216→    return {
+   217→      purlinRuns: [],
+   218→      purlinMarkers: [],
+   219→      purlinSegments: [],
+   220→    };
+   221→  }
+   222→
+   223→  const attachmentGroups = new Map();
+   224→  for (const copy of instanceGeometry.copies) {
+   225→    for (const attachment of copy.purlinAttachments || []) {
+   226→      if (!attachmentGroups.has(attachment.id)) {
+   227→        attachmentGroups.set(attachment.id, []);
+   228→      }
+   229→      attachmentGroups.get(attachment.id).push({
+   230→        ...attachment,
+   231→        copyId: copy.id,
+   232→        copyIndex: copy.index,
+   233→      });
+   234→    }
+   235→  }
+   236→
+   237→  const layoutAxis = normalizePlanVector({
+   238→    x: instanceGeometry.layoutLineEndPoint.x - instanceGeometry.layoutLineStartPoint.x,
+   239→    y: instanceGeometry.layoutLineEndPoint.y - instanceGeometry.layoutLineStartPoint.y,
+   240→  });
+   241→  const purlinRuns = [];
+   242→  const purlinMarkers = [];
+   243→  const purlinSegments = [];
+   244→  const overhangStart = Math.max(Number(purlinSystem?.overhangStart || 0), 0);
+   245→  const overhangEnd = Math.max(Number(purlinSystem?.overhangEnd || 0), 0);
+   246→
+   247→  for (const [attachmentId, attachmentPoints] of attachmentGroups.entries()) {
+   248→    const sortedPoints = [...attachmentPoints].sort((a, b) => a.copyIndex - b.copyIndex);
+   249→    if (sortedPoints.length >= 2) {
+   250→      const firstPoint = sortedPoints[0];
+   251→      const lastPoint = sortedPoints[sortedPoints.length - 1];
+   252→      const runPoints = [
+   253→        ...(overhangStart > 1e-6
+   254→          ? [add(firstPoint.planPoint, scale(layoutAxis, -overhangStart))]
+   255→          : []),
+   256→        ...sortedPoints.map((point) => point.planPoint),
+   257→        ...(overhangEnd > 1e-6
+   258→          ? [add(lastPoint.planPoint, scale(layoutAxis, overhangEnd))]
+   259→          : []),
+   260→      ];
+   261→      const segments = sortedPoints.slice(0, -1).map((startPoint, index) => {
+   262→        const endPoint = sortedPoints[index + 1];
+   263→        const startWorld = index === 0
+   264→          ? offsetWorldPoint(startPoint.worldPoint, layoutAxis, -overhangStart)
+   265→          : startPoint.worldPoint;
+   266→        const endWorld = index === sortedPoints.length - 2
+   267→          ? offsetWorldPoint(endPoint.worldPoint, layoutAxis, overhangEnd)
+   268→          : endPoint.worldPoint;
+   269→
+   270→        return createPurlinSegment(
+   271→          `${instanceGeometry.instance.id}_${attachmentId}_${index}`,
+   272→          trussSystem,
+   273→          instanceGeometry.instance,
+   274→          startWorld,
+   275→          endWorld,
+   276→          purlinSystem,
+   277→          startPoint.side,
+   278→          [startPoint.copyId, endPoint.copyId]
+   279→        );
+   280→      }).filter(Boolean);
+   281→      purlinRuns.push({
+   282→        id: `${instanceGeometry.instance.id}_${attachmentId}_run`,
+   283→        side: firstPoint.side,
+   284→        points: runPoints,
+   285→        attachments: sortedPoints,
+   286→        segments,
+   287→      });
+   288→      purlinSegments.push(...segments);
+   289→      continue;
+   290→    }
+   291→
+   292→    if (sortedPoints.length === 1) {
+   293→      const marker = createPlanMarker(sortedPoints[0].planPoint, layoutAxis);
+   294→      purlinMarkers.push({
+   295→        id: `${instanceGeometry.instance.id}_${attachmentId}_marker`,
+   296→        side: sortedPoints[0].side,
+   297→        center: sortedPoints[0].planPoint,
+   298→        ...marker,
+   299→      });
+   300→    }
+   301→  }
+   302→
+   303→  return {
+   304→    purlinRuns,
+   305→    purlinMarkers,
+   306→    purlinSegments,
+   307→  };
+   308→}
+   309→
+   310→function rotateWorldPoint(worldPoint, transform) {
+   311→  const rotatedPlanPoint = transformPlanPoint(worldPoint, transform);
+   312→  return {
+   313→    ...worldPoint,
+   314→    x: rotatedPlanPoint.x,
+   315→    y: rotatedPlanPoint.y,
+   316→  };
+   317→}
+   318→
+   319→function transformCopyGeometry(copy, transform) {
+   320→  const worldNodes = copy.worldNodes.map((node) => ({
+   321→    ...node,
+   322→    planPoint: transformPlanPoint(node.planPoint, transform),
+   323→    worldPoint: rotateWorldPoint(node.worldPoint, transform),
+   324→  }));
+   325→  const members = copy.members.map((member) => ({
+   326→    ...member,
+   327→    startWorld: rotateWorldPoint(member.startWorld, transform),
+   328→    endWorld: rotateWorldPoint(member.endWorld, transform),
+   329→  }));
+   330→  const purlinAttachments = (copy.purlinAttachments || []).map((attachment) => ({
+   331→    ...attachment,
+   332→    planPoint: transformPlanPoint(attachment.planPoint, transform),
+   333→    worldPoint: rotateWorldPoint(attachment.worldPoint, transform),
+   334→  }));
+   335→
+   336→  return {
+   337→    ...copy,
+   338→    origin: transformPlanPoint(copy.origin, transform),
+   339→    structuralStartPoint: transformPlanPoint(copy.structuralStartPoint, transform),
+   340→    structuralEndPoint: transformPlanPoint(copy.structuralEndPoint, transform),
+   341→    overallStartPoint: transformPlanPoint(copy.overallStartPoint, transform),
+   342→    overallEndPoint: transformPlanPoint(copy.overallEndPoint, transform),
+   343→    worldNodes,
+   344→    members,
+   345→    purlinAttachments,
+   346→  };
+   347→}
+   348→
+   349→function transformInstanceGeometry(instanceGeometry, transform, baseElevation) {
+   350→  const copies = instanceGeometry.copies.map((copy) => transformCopyGeometry(copy, transform));
+   351→  const planPoints = copies.flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint]);
+   352→
+   353→  return {
+   354→    ...instanceGeometry,
+   355→    copies,
+   356→    layoutLineStartPoint: transformPlanPoint(instanceGeometry.instance.startPoint, transform),
+   357→    layoutLineEndPoint: transformPlanPoint(instanceGeometry.instance.endPoint, transform),
+   358→    planBounds: createBounds(planPoints.map((point) => ({
+   359→      x: point.x,
+   360→      y: point.y,
+   361→      elevation: baseElevation,
+   362→    }))),
+   363→  };
+   364→}
+   365→
+   366→function buildRawTrussInstanceGeometry(trussSystem, instance) {
+   367→  const layout = resolveTrussLayout(instance);
+   368→  const profile = buildTrussProfile(instance);
+   369→  const purlinAttachments = buildTrussPurlinAttachments(profile, trussSystem?.purlinSystem);
+   370→  const copies = buildTrussCopyOrigins(instance).map((copy) => {
+   371→    const layoutOffset = (
+   372→      ((copy.origin.x ?? 0) - (instance.startPoint?.x ?? 0)) * layout.axis.x
+   373→    ) + (
+   374→      ((copy.origin.y ?? 0) - (instance.startPoint?.y ?? 0)) * layout.axis.y
+   375→    );
+   376→    const copyProfile = buildTrussProfile(instance, undefined, {
+   377→      layoutOffset,
+   378→      supportLength: layout.supportLength,
+   379→    });
+   380→    const copyPurlinAttachments = buildTrussPurlinAttachments(copyProfile, trussSystem?.purlinSystem);
+   381→
+   382→    return createCopyGeometry(trussSystem, instance, {
+   383→      ...copyProfile,
+   384→      purlinAttachments: copyPurlinAttachments,
+   385→    }, layout, copy.origin, copy.index);
+   386→  });
+   387→
+   388→  const planPoints = copies.flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint]);
+   389→  const detailPoints = [
+   390→    ...profile.roofOutline.map((point) => ({ x: point.x, y: 0, elevation: point.z })),
+   391→    ...profile.bottomOutline.map((point) => ({ x: point.x, y: 0, elevation: point.z })),
+   392→    ...purlinAttachments.map((attachment) => ({
+   393→      x: attachment.localPoint.x,
+   394→      y: 0,
+   395→      elevation: attachment.localPoint.z,
+   396→    })),
+   397→  ];
+   398→
+   399→  return {
+   400→    instance,
+   401→    trussType: profile.trussType,
+   402→    metrics: profile.metrics,
+   403→    nodes: profile.nodes,
+   404→    members: profile.members,
+   405→    roofOutline: profile.roofOutline,
+   406→    bottomOutline: profile.bottomOutline,
+   407→    topChordRuns: profile.topChordRuns || [],
+   408→    purlinAttachments,
+   409→    copies,
+   410→    layoutLineStartPoint: instance.startPoint,
+   411→    layoutLineEndPoint: instance.endPoint,
+   412→    planBounds: createBounds(planPoints.map((point) => ({
+   413→      x: point.x,
+   414→      y: point.y,
+   415→      elevation: trussSystem.baseElevation || 0,
+   416→    }))),
+   417→    detailBounds: {
+   418→      minX: Math.min(...detailPoints.map((point) => point.x)) - DETAIL_PADDING_X,
+   419→      maxX: Math.max(...detailPoints.map((point) => point.x)) + DETAIL_PADDING_X,
+   420→      minZ: Math.min(...detailPoints.map((point) => point.elevation), 0) - DETAIL_PADDING_Z,
+   421→      maxZ: Math.max(...detailPoints.map((point) => point.elevation), 0) + DETAIL_PADDING_Z,
+   422→    },
+   423→  };
+   424→}
+   425→
+   426→function createSystemTransform(trussSystem, rawInstances, baseElevation) {
+   427→  const rawPlanPoints = rawInstances.flatMap((instanceGeometry) => (
+   428→    instanceGeometry.copies.flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint])
+   429→  ));
+   430→  const rawBounds = createBounds(rawPlanPoints.map((point) => ({
+   431→    x: point.x,
+   432→    y: point.y,
+   433→    elevation: baseElevation,
+   434→  })));
+   435→  const rawPivot = centerOfBounds(rawBounds);
+   436→  const primaryAxis = getSafeAxis(rawInstances[0]
+   437→    ? {
+   438→        x: rawInstances[0].layoutLineEndPoint.x - rawInstances[0].layoutLineStartPoint.x,
+   439→        y: rawInstances[0].layoutLineEndPoint.y - rawInstances[0].layoutLineStartPoint.y,
+   440→      }
+   441→    : { x: 1, y: 0 });
+   442→  const projectedAlongs = rawPlanPoints.map((point) => projectAlongAxis(point, rawPivot, primaryAxis));
+   443→  const startAlong = projectedAlongs.length ? Math.min(...projectedAlongs) : 0;
+   444→  const endAlong = projectedAlongs.length ? Math.max(...projectedAlongs) : 0;
+   445→  const rawLength = Math.max(endAlong - startAlong, 0);
+   446→  const resizable = rawLength > 1e-6 && rawInstances.every((instanceGeometry) => {
+   447→    const instanceAxis = getSafeAxis({
+   448→      x: instanceGeometry.layoutLineEndPoint.x - instanceGeometry.layoutLineStartPoint.x,
+   449→      y: instanceGeometry.layoutLineEndPoint.y - instanceGeometry.layoutLineStartPoint.y,
+   450→    });
+   451→    return Math.abs(Math.abs((instanceAxis.x * primaryAxis.x) + (instanceAxis.y * primaryAxis.y)) - 1) <= 1e-3;
+   452→  });
+   453→  const rotationDegrees = normalizeSignedRotationDegrees(trussSystem?.planRotationOffsetDegrees || 0);
+   454→  const translation = normalizePlanOffset(trussSystem?.planOffset);
+   455→  const lengthScale = normalizePlanLengthScale(trussSystem?.planLengthScale);
+   456→
+   457→  return {
+   458→    rawPivot,
+   459→    pivot: {
+   460→      x: rawPivot.x + translation.x,
+   461→      y: rawPivot.y + translation.y,
+   462→    },
+   463→    axis: primaryAxis,
+   464→    displayAxis: getDisplayedAxis({ axis: primaryAxis, rotationDegrees }),
+   465→    translation,
+   466→    lengthScale,
+   467→    rawLength,
+   468→    currentLength: rawLength * lengthScale,
+   469→    startAlong,
+   470→    endAlong,
+   471→    startHandlePoint: transformPlanPoint(
+   472→      {
+   473→        x: rawPivot.x + (primaryAxis.x * startAlong),
+   474→        y: rawPivot.y + (primaryAxis.y * startAlong),
+   475→      },
+   476→      {
+   477→        rawPivot,
+   478→        axis: primaryAxis,
+   479→        rotationDegrees,
+   480→        translation,
+   481→        lengthScale,
+   482→      }
+   483→    ),
+   484→    endHandlePoint: transformPlanPoint(
+   485→      {
+   486→        x: rawPivot.x + (primaryAxis.x * endAlong),
+   487→        y: rawPivot.y + (primaryAxis.y * endAlong),
+   488→      },
+   489→      {
+   490→        rawPivot,
+   491→        axis: primaryAxis,
+   492→        rotationDegrees,
+   493→        translation,
+   494→        lengthScale,
+   495→      }
+   496→    ),
+   497→    resizable,
+   498→    rotationDegrees,
+   499→  };
+   500→}
+   501→
+   502→function createSegmentDescriptor(id, trussSystem, instance, member, copy) {
+   503→  const material = normalizeMaterial(instance?.material || 'timber');
+   504→  return {
+   505→    id,
+   506→    kind: 'trussInstance',
+   507→    geometry: 'segment3d',
+   508→    start: {
+   509→      x: member.startWorld.x,
+   510→      y: member.startWorld.elevation,
+   511→      z: member.startWorld.y,
+   512→    },
+   513→    end: {
+   514→      x: member.endWorld.x,
+   515→      y: member.endWorld.elevation,
+   516→      z: member.endWorld.y,
+   517→    },
+   518→    thickness: member.memberType === 'web' ? DEFAULT_WEB_THICKNESS : DEFAULT_CHORD_THICKNESS,
+   519→    materialKey: getTrussMemberMaterialKey(member.memberType, material),
+   520→    metadata: {
+   521→      sourceId: instance.id,
+   522→      trussSystemId: trussSystem.id,
+   523→      floorId: trussSystem.floorId,
+   524→      copyId: copy.id,
+   525→      memberType: member.memberType,
+   526→      material,
+   527→    },
+   528→    bounds: {
+   529→      minX: Math.min(member.startWorld.x, member.endWorld.x),
+   530→      maxX: Math.max(member.startWorld.x, member.endWorld.x),
+   531→      minY: Math.min(member.startWorld.y, member.endWorld.y),
+   532→      maxY: Math.max(member.startWorld.y, member.endWorld.y),
+   533→      minElevation: Math.min(member.startWorld.elevation, member.endWorld.elevation),
+   534→      maxElevation: Math.max(member.startWorld.elevation, member.endWorld.elevation),
+   535→    },
+   536→  };
+   537→}
+   538→
+   539→function createPurlinSegmentDescriptor(segment, trussSystem, instance) {
+   540→  return {
+   541→    id: segment.id,
+   542→    kind: 'trussInstance',
+   543→    geometry: 'segment3d',
+   544→    start: {
+   545→      x: segment.startWorld.x,
+   546→      y: segment.startWorld.elevation,
+   547→      z: segment.startWorld.y,
+   548→    },
+   549→    end: {
+   550→      x: segment.endWorld.x,
+   551→      y: segment.endWorld.elevation,
+   552→      z: segment.endWorld.y,
+   553→    },
+   554→    thickness: segment.thickness,
+   555→    crossSection: segment.crossSection,
+   556→    materialKey: segment.materialKey,
+   557→    metadata: {
+   558→      ...segment.metadata,
+   559→      sourceId: instance.id,
+   560→      trussSystemId: trussSystem.id,
+   561→      floorId: trussSystem.floorId,
+   562→    },
+   563→    bounds: segment.bounds,
+   564→  };
+   565→}
+   566→
+   567→function createDetailPoint(point) {
+   568→  return {
+   569→    x: point.x,
+   570→    y: -point.z,
+   571→  };
+   572→}
+   573→
+   574→function detailPolylineLength(points = []) {
+   575→  let total = 0;
+   576→  for (let index = 0; index < points.length - 1; index += 1) {
+   577→    total += Math.hypot(points[index + 1].x - points[index].x, points[index + 1].y - points[index].y);
+   578→  }
+   579→  return total;
+   580→}
+   581→
+   582→function worldSegmentLength(startWorld, endWorld) {
+   583→  if (!startWorld || !endWorld) return 0;
+   584→  return Math.hypot(
+   585→    endWorld.x - startWorld.x,
+   586→    endWorld.y - startWorld.y,
+   587→    (endWorld.elevation || 0) - (startWorld.elevation || 0)
+   588→  );
+   589→}
+   590→
+   591→function measurePurlinRunLength(run = null) {
+   592→  if (!run) return 0;
+   593→  if (run.segments?.length) {
+   594→    return run.segments.reduce((total, segment) => (
+   595→      total + worldSegmentLength(segment.startWorld, segment.endWorld)
+   596→    ), 0);
+   597→  }
+   598→  return detailPolylineLength(run.points || []);
+   599→}
+   600→
+   601→function detailPolylineMidpoint(points = []) {
+   602→  if (!points.length) return { x: 0, y: 0 };
+   603→  if (points.length === 1) return points[0];
+   604→
+   605→  const totalLength = detailPolylineLength(points);
+   606→  if (totalLength <= 1e-6) {
+   607→    return {
+   608→      x: (points[0].x + points[points.length - 1].x) / 2,
+   609→      y: (points[0].y + points[points.length - 1].y) / 2,
+   610→    };
+   611→  }
+   612→
+   613→  let remaining = totalLength / 2;
+   614→  for (let index = 0; index < points.length - 1; index += 1) {
+   615→    const start = points[index];
+   616→    const end = points[index + 1];
+   617→    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+   618→    if (remaining <= segmentLength || index === points.length - 2) {
+   619→      const ratio = segmentLength <= 1e-6 ? 0 : remaining / segmentLength;
+   620→      return {
+   621→        x: start.x + ((end.x - start.x) * ratio),
+   622→        y: start.y + ((end.y - start.y) * ratio),
+   623→      };
+   624→    }
+   625→    remaining -= segmentLength;
+   626→  }
+   627→
+   628→  return points[points.length - 1];
+   629→}
+   630→
+   631→function createDetailTag(id, textLines, position, options = {}) {
+   632→  const lines = (textLines || []).filter(Boolean);
+   633→  if (!lines.length) return null;
+   634→
+   635→  return {
+   636→    id,
+   637→    type: 'tag',
+   638→    trustLevel: options.trustLevel ?? ANNOTATION_TRUST_LEVELS.INFORMATIONAL,
+   639→    semanticRole: options.semanticRole ?? ANNOTATION_SEMANTIC_ROLES.MEASUREMENT,
+   640→    sourceType: options.sourceType ?? 'truss_detail',
+   641→    sourceId: options.sourceId ?? null,
+   642→    position,
+   643→    angle: options.angle ?? 0,
+   644→    textLines: lines,
+   645→    textAnchor: options.textAnchor ?? 'middle',
+   646→    priority: options.priority ?? 0,
+   647→    measurementMeta: Number.isFinite(options.measurementValue)
+   648→      ? createMeasurementMetadata(options.measurementValue)
+   649→      : null,
+   650→    fontSize: options.fontSize ?? DETAIL_TAG_FONT_SIZE,
+   651→    lineHeight: options.lineHeight ?? DETAIL_TAG_LINE_HEIGHT,
+   652→    mask: options.mask ?? true,
+   653→    maskPaddingX: options.maskPaddingX ?? DETAIL_TAG_MASK_PADDING_X,
+   654→    maskPaddingY: options.maskPaddingY ?? DETAIL_TAG_MASK_PADDING_Y,
+   655→    leaderLine: options.leaderLine ?? null,
+   656→  };
+   657→}
+   658→
+   659→function normalizeTagAngle(angleDeg = 0) {
+   660→  return angleDeg > 90 || angleDeg < -90 ? angleDeg + 180 : angleDeg;
+   661→}
+   662→
+   663→function estimateTextWidth(text, fontSize) {
+   664→  return Math.max(fontSize * 1.2, String(text || '').length * fontSize * 0.58);
+   665→}
+   666→
+   667→function estimateDimensionBounds(figure) {
+   668→  if (!figure) return null;
+   669→
+   670→  const points = [
+   671→    figure.lineStart,
+   672→    figure.lineEnd,
+   673→    ...figure.extensionLines.flatMap((line) => [line.start, line.end]),
+   674→    ...figure.arrowheads.flatMap((arrow) => [arrow.left, arrow.tip, arrow.right]),
+   675→  ].filter(Boolean);
+   676→  const fontSize = DRAWING_GRAPHICS.annotation.textSize;
+   677→  const width = estimateTextWidth(figure.text?.value, fontSize) + DRAWING_GRAPHICS.annotation.textMaskPaddingX;
+   678→  const height = fontSize + DRAWING_GRAPHICS.annotation.textMaskPaddingY;
+   679→  const textPosition = figure.text?.position || { x: 0, y: 0 };
+   680→  const textRadius = Math.sqrt((width * width) + (height * height)) / 2;
+   681→
+   682→  points.push(
+   683→    { x: textPosition.x - textRadius, y: textPosition.y - textRadius },
+   684→    { x: textPosition.x + textRadius, y: textPosition.y + textRadius }
+   685→  );
+   686→
+   687→  return {
+   688→    minX: Math.min(...points.map((point) => point.x)),
+   689→    maxX: Math.max(...points.map((point) => point.x)),
+   690→    minY: Math.min(...points.map((point) => point.y)),
+   691→    maxY: Math.max(...points.map((point) => point.y)),
+   692→  };
+   693→}
+   694→
+   695→function estimateTagBounds(tag) {
+   696→  if (!tag) return null;
+   697→
+   698→  const fontSize = Number(tag.fontSize || DETAIL_TAG_FONT_SIZE);
+   699→  const lineHeight = Number(tag.lineHeight || DETAIL_TAG_LINE_HEIGHT);
+   700→  const maskPaddingX = Number(tag.maskPaddingX ?? DETAIL_TAG_MASK_PADDING_X);
+   701→  const maskPaddingY = Number(tag.maskPaddingY ?? DETAIL_TAG_MASK_PADDING_Y);
+   702→  const maxLineLength = Math.max(...tag.textLines.map((line) => String(line || '').length), 1);
+   703→  const width = (maxLineLength * fontSize * 0.58) + Math.max(maskPaddingX, fontSize * 0.5);
+   704→  const height = Math.max(lineHeight, tag.textLines.length * lineHeight) + maskPaddingY;
+   705→  const minX = tag.textAnchor === 'start'
+   706→    ? tag.position.x
+   707→    : (tag.textAnchor === 'end' ? tag.position.x - width : tag.position.x - (width / 2));
+   708→  const maxX = tag.textAnchor === 'start'
+   709→    ? tag.position.x + width
+   710→    : (tag.textAnchor === 'end' ? tag.position.x : tag.position.x + (width / 2));
+   711→  const minY = tag.position.y - (height / 2);
+   712→  const maxY = tag.position.y + (height / 2);
+   713→  const angle = Number(tag.angle || 0);
+   714→  const corners = [
+   715→    { x: minX, y: minY },
+   716→    { x: maxX, y: minY },
+   717→    { x: maxX, y: maxY },
+   718→    { x: minX, y: maxY },
+   719→  ].map((corner) => rotate(corner, tag.position, angle));
+   720→
+   721→  return {
+   722→    minX: Math.min(...corners.map((point) => point.x)),
+   723→    maxX: Math.max(...corners.map((point) => point.x)),
+   724→    minY: Math.min(...corners.map((point) => point.y)),
+   725→    maxY: Math.max(...corners.map((point) => point.y)),
+   726→  };
+   727→}
+   728→
+   729→function selectOutwardNormal(normal, midpoint, spanMidpoint) {
+   730→  const preferred = midpoint.x < spanMidpoint
+   731→    ? { x: -1, y: 0 }
+   732→    : { x: 1, y: 0 };
+   733→  const alignment = (normal.x * preferred.x) + (normal.y * preferred.y);
+   734→
+   735→  return alignment >= 0
+   736→    ? normal
+   737→    : { x: -normal.x, y: -normal.y };
+   738→}
+   739→
+   740→function extendDetailBounds(detailBounds, dimensions = [], tags = []) {
+   741→  const bounds = {
+   742→    minX: detailBounds.minX,
+   743→    maxX: detailBounds.maxX,
+   744→    minY: -detailBounds.maxZ,
+   745→    maxY: -detailBounds.minZ,
+   746→  };
+   747→
+   748→  for (const figure of dimensions) {
+   749→    const figureBounds = estimateDimensionBounds(figure);
+   750→    if (!figureBounds) continue;
+   751→    bounds.minX = Math.min(bounds.minX, figureBounds.minX);
+   752→    bounds.maxX = Math.max(bounds.maxX, figureBounds.maxX);
+   753→    bounds.minY = Math.min(bounds.minY, figureBounds.minY);
+   754→    bounds.maxY = Math.max(bounds.maxY, figureBounds.maxY);
+   755→  }
+   756→
+   757→  for (const tag of tags) {
+   758→    const tagBounds = estimateTagBounds(tag);
+   759→    if (!tagBounds) continue;
+   760→    bounds.minX = Math.min(bounds.minX, tagBounds.minX);
+   761→    bounds.maxX = Math.max(bounds.maxX, tagBounds.maxX);
+   762→    bounds.minY = Math.min(bounds.minY, tagBounds.minY);
+   763→    bounds.maxY = Math.max(bounds.maxY, tagBounds.maxY);
+   764→  }
+   765→
+   766→  return {
+   767→    minX: bounds.minX,
+   768→    maxX: bounds.maxX,
+   769→    minZ: -bounds.maxY,
+   770→    maxZ: -bounds.minY,
+   771→  };
+   772→}
+   773→
+   774→function boundsOverlap(a, b, gap) {
+   775→  if (!a || !b) return false;
+   776→  const halfGap = gap / 2;
+   777→  return (
+   778→    a.minX - halfGap < b.maxX + halfGap &&
+   779→    a.maxX + halfGap > b.minX - halfGap &&
+   780→    a.minY - halfGap < b.maxY + halfGap &&
+   781→    a.maxY + halfGap > b.minY - halfGap
+   782→  );
+   783→}
+   784→
+   785→function applyDetailTagCollisionOffsets(tags = [], fixedObstacles = []) {
+   786→  const placed = fixedObstacles.filter(Boolean);
+   787→
+   788→  return [...tags]
+   789→    .sort((a, b) => (b.priority || 0) - (a.priority || 0))
+   790→    .map((tag) => {
+   791→      for (const offset of DETAIL_TAG_OFFSETS) {
+   792→        const candidate = {
+   793→          ...tag,
+   794→          position: {
+   795→            x: tag.position.x + offset.x,
+   796→            y: tag.position.y + offset.y,
+   797→          },
+   798→          leaderLine: tag.leaderLine
+   799→            ? {
+   800→                start: tag.leaderLine.start,
+   801→                end: {
+   802→                  x: tag.leaderLine.end.x + offset.x,
+   803→                  y: tag.leaderLine.end.y + offset.y,
+   804→                },
+   805→              }
+   806→            : null,
+   807→        };
+   808→        const candidateBounds = estimateTagBounds(candidate);
+   809→        if (!candidateBounds) continue;
+   810→        if (!placed.some((obs) => boundsOverlap(candidateBounds, obs, DETAIL_TAG_GAP))) {
+   811→          placed.push(candidateBounds);
+   812→          return candidate;
+   813→        }
+   814→      }
+   815→
+   816→      const bounds = estimateTagBounds(tag);
+   817→      if (bounds) placed.push(bounds);
+   818→      return tag;
+   819→    });
+   820→}
+   821→
+   822→function resolveDetailCrestPoint(roofOutline = []) {
+   823→  if (!roofOutline.length) {
+   824→    return { x: 0, z: 0 };
+   825→  }
+   826→
+   827→  const maxZ = Math.max(...roofOutline.map((point) => point.z));
+   828→  const crestPoints = roofOutline.filter((point) => Math.abs(point.z - maxZ) <= 1e-6);
+   829→  const averageX = crestPoints.reduce((sum, point) => sum + point.x, 0) / Math.max(crestPoints.length, 1);
+   830→
+   831→  return {
+   832→    x: averageX,
+   833→    z: maxZ,
+   834→  };
+   835→}
+   836→
+   837→function buildTrussDetailDimensions(instanceGeometry) {
+   838→  const metrics = instanceGeometry.metrics || {};
+   839→  const roofOutline = instanceGeometry.roofOutline || [];
+   840→  const bottomOutline = instanceGeometry.bottomOutline || [];
+   841→  const ridge = resolveDetailCrestPoint(roofOutline);
+   842→  const roofMaxX = Math.max(...roofOutline.map((point) => point.x), metrics.span || 0);
+   843→  const startEaveX = roofOutline[0]?.x ?? 0;
+   844→  const endEaveX = roofOutline[roofOutline.length - 1]?.x ?? (metrics.span || 0);
+   845→  const dimensions = [];
+   846→  const tags = [];
+   847→
+   848→  const spanDimension = createDimensionFigure({
+   849→    id: `${instanceGeometry.instance.id}_detail_span`,
+   850→    startPoint: createDetailPoint({ x: 0, z: 0 }),
+   851→    endPoint: createDetailPoint({ x: metrics.span || 0, z: 0 }),
+   852→    mode: 'horizontal',
+   853→    offset: DETAIL_SPAN_OFFSET,
+   854→    label: `Span ${formatMeasurement(metrics.span || 0)}`,
+   855→    source: 'derived',
+   856→    sourceType: 'truss_detail',
+   857→    sourceId: instanceGeometry.instance.id,
+   858→  });
+   859→  if (spanDimension) dimensions.push(spanDimension);
+   860→
+   861→  const riseDimension = createDimensionFigure({
+   862→    id: `${instanceGeometry.instance.id}_detail_rise`,
+   863→    startPoint: createDetailPoint({ x: ridge.x, z: 0 }),
+   864→    endPoint: createDetailPoint(ridge),
+   865→    mode: 'vertical',
+   866→    offset: (roofMaxX - ridge.x) + DETAIL_RISE_OUTSET,
+   867→    label: `Rise ${formatMeasurement(metrics.rise || 0)}`,
+   868→    source: 'derived',
+   869→    sourceType: 'truss_detail',
+   870→    sourceId: instanceGeometry.instance.id,
+   871→  });
+   872→  if (riseDimension) dimensions.push(riseDimension);
+   873→
+   874→  const startOverhang = createDimensionFigure({
+   875→    id: `${instanceGeometry.instance.id}_detail_overhang_start`,
+   876→    startPoint: createDetailPoint({ x: -Math.max(metrics.overhangStart || 0, 0), z: 0 }),
+   877→    endPoint: createDetailPoint({ x: 0, z: 0 }),
+   878→    mode: 'horizontal',
+   879→    offset: DETAIL_OVERHANG_OFFSET,
+   880→    label: `OH A ${formatMeasurement(metrics.overhangStart || 0)}`,
+   881→    source: 'derived',
+   882→    sourceType: 'truss_detail',
+   883→    sourceId: instanceGeometry.instance.id,
+   884→  });
+   885→  if (startOverhang) dimensions.push(startOverhang);
+   886→
+   887→  const endOverhang = createDimensionFigure({
+   888→    id: `${instanceGeometry.instance.id}_detail_overhang_end`,
+   889→    startPoint: createDetailPoint({ x: metrics.span || 0, z: 0 }),
+   890→    endPoint: createDetailPoint({ x: (metrics.span || 0) + Math.max(metrics.overhangEnd || 0, 0), z: 0 }),
+   891→    mode: 'horizontal',
+   892→    offset: DETAIL_OVERHANG_OFFSET,
+   893→    label: `OH B ${formatMeasurement(metrics.overhangEnd || 0)}`,
+   894→    source: 'derived',
+   895→    sourceType: 'truss_detail',
+   896→    sourceId: instanceGeometry.instance.id,
+   897→  });
+   898→  if (endOverhang) dimensions.push(endOverhang);
+   899→
+   900→  if (bottomOutline.length >= 2) {
+   901→    bottomOutline.slice(0, -1).forEach((startPoint, index) => {
+   902→      const endPoint = bottomOutline[index + 1];
+   903→      const panelDimension = createDimensionFigure({
+   904→        id: `${instanceGeometry.instance.id}_detail_panel_${index}`,
+   905→        startPoint: createDetailPoint(startPoint),
+   906→        endPoint: createDetailPoint(endPoint),
+   907→        mode: 'horizontal',
+   908→        offset: DETAIL_PANEL_OFFSET,
+   909→        label: `P${index + 1} ${formatMeasurement(endPoint.x - startPoint.x)}`,
+   910→        source: 'derived',
+   911→        sourceType: 'truss_detail',
+   912→        sourceId: instanceGeometry.instance.id,
+   913→      });
+   914→      if (panelDimension) dimensions.push(panelDimension);
+   915→    });
+   916→  }
+   917→
+   918→  const purlinGroups = new Map();
+   919→  for (const attachment of instanceGeometry.purlinAttachments || []) {
+   920→    const key = attachment.side || 'default';
+   921→    if (!purlinGroups.has(key)) {
+   922→      purlinGroups.set(key, []);
+   923→    }
+   924→    purlinGroups.get(key).push(attachment);
+   925→  }
+   926→  for (const [side, attachments] of purlinGroups.entries()) {
+   927→    const sorted = [...attachments].sort((a, b) => (a.distanceAlong || 0) - (b.distanceAlong || 0));
+   928→    if (!sorted.length) continue;
+   929→    const purlinSideOffset = side === 'right' ? DETAIL_PURLIN_OFFSET : -DETAIL_PURLIN_OFFSET;
+   930→    const purlinStartPoint = side === 'right'
+   931→      ? (roofOutline[roofOutline.length - 1] || ridge)
+   932→      : (roofOutline[0] || ridge);
+   933→
+   934→    const purlinStartDimension = createDimensionFigure({
+   935→      id: `${instanceGeometry.instance.id}_detail_purlin_start_${side}`,
+   936→      startPoint: createDetailPoint(purlinStartPoint),
+   937→      endPoint: createDetailPoint(sorted[0].localPoint),
+   938→      mode: 'aligned',
+   939→      offset: side === 'right' ? DETAIL_PURLIN_START_OFFSET : -DETAIL_PURLIN_START_OFFSET,
+   940→      label: `Purlin Start ${formatMeasurement(sorted[0].distanceAlong || 0)}`,
+   941→      source: 'derived',
+   942→      sourceType: 'truss_detail',
+   943→      sourceId: instanceGeometry.instance.id,
+   944→    });
+   945→    if (purlinStartDimension) {
+   946→      dimensions.push(purlinStartDimension);
+   947→    }
+   948→
+   949→    if (sorted.length < 2) {
+   950→      if (purlinStartDimension) break;
+   951→      continue;
+   952→    }
+   953→
+   954→    const purlinDimension = createDimensionFigure({
+   955→      id: `${instanceGeometry.instance.id}_detail_purlin_${side}`,
+   956→      startPoint: createDetailPoint(sorted[0].localPoint),
+   957→      endPoint: createDetailPoint(sorted[1].localPoint),
+   958→      mode: 'aligned',
+   959→      offset: purlinSideOffset,
+   960→      label: `Purlin ${formatMeasurement(sorted[1].distanceAlong - sorted[0].distanceAlong)}`,
+   961→      source: 'derived',
+   962→      sourceType: 'truss_detail',
+   963→      sourceId: instanceGeometry.instance.id,
+   964→    });
+   965→    if (purlinDimension) {
+   966→      dimensions.push(purlinDimension);
+   967→      break;
+   968→    }
+   969→
+   970→    if (purlinStartDimension) break;
+   971→  }
+   972→
+   973→  tags.push(
+   974→    createDetailTag(
+   975→      `${instanceGeometry.instance.id}_detail_pitch`,
+   976→      [`Pitch ${Number(metrics.pitch || 0).toFixed(1)}%`],
+   977→      { x: ridge.x, y: -ridge.z - 220 },
+   978→      { sourceId: instanceGeometry.instance.id, priority: 3 }
+   979→    ),
+   980→    createDetailTag(
+   981→      `${instanceGeometry.instance.id}_detail_bearing_start`,
+   982→      ['Bearing A', formatMeasurement(metrics.bearingStart || 0)],
+   983→      { x: startEaveX - DETAIL_TAG_OUTSET, y: -180 },
+   984→      {
+   985→        sourceId: instanceGeometry.instance.id,
+   986→        textAnchor: 'end',
+   987→        measurementValue: metrics.bearingStart || 0,
+   988→        priority: 2,
+   989→      }
+   990→    ),
+   991→    createDetailTag(
+   992→      `${instanceGeometry.instance.id}_detail_bearing_end`,
+   993→      ['Bearing B', formatMeasurement(metrics.bearingEnd || 0)],
+   994→      { x: endEaveX + DETAIL_TAG_OUTSET, y: -180 },
+   995→      {
+   996→        sourceId: instanceGeometry.instance.id,
+   997→        textAnchor: 'start',
+   998→        measurementValue: metrics.bearingEnd || 0,
+   999→        priority: 2,
+  1000→      }
+  1001→    )
+  1002→  );
+  1003→
+  1004→  return {
+  1005→    dimensions: dimensions.filter(Boolean),
+  1006→    tags: tags.filter(Boolean),
+  1007→  };
+  1008→}
+  1009→
+  1010→function buildTrussDetailWebTags(lineSegments, instanceGeometry) {
+  1011→  const spanMidpoint = (instanceGeometry?.metrics?.span || 0) / 2;
+  1012→  let webIndex = 0;
+  1013→
+  1014→  return lineSegments
+  1015→    .filter((segment) => segment.memberType === 'web' && segment.start && segment.end)
+  1016→    .map((segment) => {
+  1017→      webIndex += 1;
+  1018→
+  1019→      const start = createDetailPoint(segment.start);
+  1020→      const end = createDetailPoint(segment.end);
+  1021→      const dx = end.x - start.x;
+  1022→      const dy = end.y - start.y;
+  1023→      const length = Math.hypot(dx, dy);
+  1024→      if (length <= 1) return null;
+  1025→
+  1026→      const midpoint = {
+  1027→        x: (start.x + end.x) / 2,
+  1028→        y: (start.y + end.y) / 2,
+  1029→      };
+  1030→      let offset = { x: 0, y: 0 };
+  1031→
+  1032→      if (Math.abs(dx) <= 1e-6) {
+  1033→        offset = {
+  1034→          x: midpoint.x < spanMidpoint ? -DETAIL_WEB_TAG_OFFSET : DETAIL_WEB_TAG_OFFSET,
+  1035→          y: 0,
+  1036→        };
+  1037→      } else {
+  1038→        const normal = { x: -dy / length, y: dx / length };
+  1039→        const tangent = { x: dx / length, y: dy / length };
+  1040→        const outwardNormal = selectOutwardNormal(normal, midpoint, spanMidpoint);
+  1041→        const tangentShift = (webIndex % 2 === 0 ? 1 : -1) * DETAIL_WEB_TAG_TANGENT_SHIFT;
+  1042→        offset = {
+  1043→          x: (outwardNormal.x * DETAIL_WEB_TAG_OFFSET) + (tangent.x * tangentShift),
+  1044→          y: (outwardNormal.y * DETAIL_WEB_TAG_OFFSET) + (tangent.y * tangentShift),
+  1045→        };
+  1046→      }
+  1047→
+  1048→      return createDetailTag(
+  1049→        `${instanceGeometry.instance.id}_detail_web_${webIndex}`,
+  1050→        [`W${webIndex} ${formatMeasurement(length)}`],
+  1051→        {
+  1052→          x: midpoint.x + offset.x,
+  1053→          y: midpoint.y + offset.y,
+  1054→        },
+  1055→        {
+  1056→          angle: 0,
+  1057→          sourceType: 'truss_web',
+  1058→          sourceId: segment.id,
+  1059→          measurementValue: length,
+  1060→          leaderLine: {
+  1061→            start: midpoint,
+  1062→            end: {
+  1063→              x: midpoint.x + (offset.x * 0.72),
+  1064→              y: midpoint.y + (offset.y * 0.72),
+  1065→            },
+  1066→          },
+  1067→        }
+  1068→      );
+  1069→    })
+  1070→    .filter(Boolean);
+  1071→}
+  1072→
+  1073→function buildTopChordRuns(instanceGeometry) {
+  1074→  return (instanceGeometry?.topChordRuns || [])
+  1075→    .map((run) => {
+  1076→      const points = (run.points || []).filter((point) => (
+  1077→        Number.isFinite(point?.x) && Number.isFinite(point?.z)
+  1078→      ));
+  1079→      if (points.length < 2) return null;
+  1080→      return {
+  1081→        id: run.id || run.side || 'main',
+  1082→        measurementCurve: run.measurementCurve || null,
+  1083→        points,
+  1084→        start: points[0],
+  1085→        end: points[points.length - 1],
+  1086→      };
+  1087→    })
+  1088→    .filter(Boolean);
+  1089→}
+  1090→
+  1091→function buildTrussDetailTopChordTags(instanceGeometry) {
+  1092→  return buildTopChordRuns(instanceGeometry)
+  1093→    .map((run, index) => {
+  1094→      const midpointSample = sampleTopChordRunMidpoint(run);
+  1095→      if (!midpointSample?.point || !midpointSample?.tangent) return null;
+  1096→
+  1097→      const detailTangent = {
+  1098→        x: midpointSample.tangent.x,
+  1099→        y: -midpointSample.tangent.z,
+  1100→      };
+  1101→      const tangentLength = Math.hypot(detailTangent.x, detailTangent.y);
+  1102→      const length = getTopChordRunLength(run);
+  1103→      if (length <= 1 || tangentLength <= 1e-6) return null;
+  1104→
+  1105→      const midpoint = {
+  1106→        x: midpointSample.point.x,
+  1107→        y: -midpointSample.point.z,
+  1108→      };
+  1109→      const outwardNormal = {
+  1110→        x: detailTangent.y / tangentLength,
+  1111→        y: -detailTangent.x / tangentLength,
+  1112→      };
+  1113→
+  1114→      return createDetailTag(
+  1115→        `${instanceGeometry.instance.id}_detail_top_chord_${run.id}`,
+  1116→        [`TC${index + 1} ${formatMeasurement(length)}`],
+  1117→        {
+  1118→          x: midpoint.x + (outwardNormal.x * DETAIL_TOP_CHORD_TAG_OFFSET),
+  1119→          y: midpoint.y + (outwardNormal.y * DETAIL_TOP_CHORD_TAG_OFFSET),
+  1120→        },
+  1121→        {
+  1122→          angle: 0,
+  1123→          sourceType: 'truss_top_chord',
+  1124→          sourceId: run.id,
+  1125→          measurementValue: length,
+  1126→          priority: 1,
+  1127→          leaderLine: {
+  1128→            start: midpoint,
+  1129→            end: {
+  1130→              x: midpoint.x + (outwardNormal.x * DETAIL_TOP_CHORD_TAG_OFFSET * 0.78),
+  1131→              y: midpoint.y + (outwardNormal.y * DETAIL_TOP_CHORD_TAG_OFFSET * 0.78),
+  1132→            },
+  1133→          },
+  1134→        }
+  1135→      );
+  1136→    })
+  1137→    .filter(Boolean);
+  1138→}
+  1139→
+  1140→export function getTrussInstanceLabel(trussSystem, instance, index = 0) {
+  1141→  const profile = buildTrussProfile(instance);
+  1142→  return `${trussSystem?.name || 'Truss System'} · ${profile.trussType.name} ${index + 1}`;
+  1143→}
+  1144→
+  1145→export function buildTrussInstanceGeometry(trussSystem, instance) {
+  1146→  const sourceSystem = trussSystem && (trussSystem.trussInstances || []).some((entry) => entry.id === instance?.id)
+  1147→    ? trussSystem
+  1148→    : {
+  1149→        ...(trussSystem || {}),
+  1150→        trussInstances: instance ? [instance] : [],
+  1151→      };
+  1152→  const systemGeometry = buildTrussSystemGeometry(sourceSystem);
+  1153→  return systemGeometry.instances.find((entry) => entry.instance.id === instance?.id) || null;
+  1154→}
+  1155→
+  1156→export function buildTrussSystemGeometry(trussSystem) {
+  1157→  const baseElevation = trussSystem?.baseElevation || 0;
+  1158→  const rawInstances = (trussSystem?.trussInstances || []).map((instance) => buildRawTrussInstanceGeometry(trussSystem, instance));
+  1159→  const transform = createSystemTransform(trussSystem, rawInstances, baseElevation);
+  1160→  const instances = rawInstances
+  1161→    .map((instanceGeometry) => transformInstanceGeometry(instanceGeometry, transform, baseElevation))
+  1162→    .map((instanceGeometry) => ({
+  1163→      ...instanceGeometry,
+  1164→      ...buildInstancePurlinGeometry(trussSystem, instanceGeometry, trussSystem?.purlinSystem),
+  1165→    }));
+  1166→  const allPlanPoints = instances.flatMap((entry) => ([
+  1167→    ...entry.copies.flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint]),
+  1168→    ...(entry.purlinSegments || []).flatMap((segment) => ([
+  1169→      { x: segment.startWorld.x, y: segment.startWorld.y },
+  1170→      { x: segment.endWorld.x, y: segment.endWorld.y },
+  1171→    ])),
+  1172→  ]));
+  1173→  const purlinSegments = instances.flatMap((entry) => entry.purlinSegments || []);
+  1174→
+  1175→  return {
+  1176→    trussSystem,
+  1177→    transform,
+  1178→    instances,
+  1179→    purlinSegments,
+  1180→    planBounds: createBounds(allPlanPoints.map((point) => ({
+  1181→      x: point.x,
+  1182→      y: point.y,
+  1183→      elevation: baseElevation,
+  1184→    }))),
+  1185→  };
+  1186→}
+  1187→
+  1188→export function buildFloorTrussGeometry(trussSystems = []) {
+  1189→  const systems = trussSystems.map((trussSystem) => buildTrussSystemGeometry(trussSystem));
+  1190→  const allPoints = systems.flatMap((system) => ([
+  1191→    ...system.instances.flatMap((entry) => entry.copies.flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint])),
+  1192→    ...system.purlinSegments.flatMap((segment) => ([
+  1193→      { x: segment.startWorld.x, y: segment.startWorld.y },
+  1194→      { x: segment.endWorld.x, y: segment.endWorld.y },
+  1195→    ])),
+  1196→  ]));
+  1197→
+  1198→  return {
+  1199→    systems,
+  1200→    bounds: createBounds(allPoints.map((point) => ({ x: point.x, y: point.y, elevation: 0 }))),
+  1201→  };
+  1202→}
+  1203→
+  1204→export function buildTrussDetailScene(trussSystem, trussInstanceId = null) {
+  1205→  const systemGeometry = buildTrussSystemGeometry(trussSystem);
+  1206→  const activeInstance = trussInstanceId
+  1207→    ? systemGeometry.instances.find((entry) => entry.instance.id === trussInstanceId)
+  1208→    : systemGeometry.instances[0] || null;
+  1209→  if (!activeInstance) return null;
+  1210→
+  1211→  const nodeMap = new Map(activeInstance.nodes.map((node) => [node.id, node]));
+  1212→  const lineSegments = activeInstance.members.map((member) => ({
+  1213→    id: member.id,
+  1214→    memberType: member.memberType,
+  1215→    start: nodeMap.get(member.startNodeId),
+  1216→    end: nodeMap.get(member.endNodeId),
+  1217→  }));
+  1218→  const purlinMarkers = (activeInstance.purlinAttachments || [])
+  1219→    .map((attachment) => createDetailPurlinMarker(attachment))
+  1220→    .filter(Boolean);
+  1221→  const detailAnnotations = buildTrussDetailDimensions(activeInstance);
+  1222→  const topChordTags = buildTrussDetailTopChordTags(activeInstance);
+  1223→  const webTags = buildTrussDetailWebTags(lineSegments, activeInstance);
+  1224→
+  1225→  const dimensionObstacles = detailAnnotations.dimensions
+  1226→    .map((fig) => estimateDimensionBounds(fig))
+  1227→    .filter(Boolean);
+  1228→  const allTags = [...detailAnnotations.tags, ...topChordTags, ...webTags];
+  1229→  const resolvedTags = applyDetailTagCollisionOffsets(allTags, dimensionObstacles);
+  1230→  const resolvedFixedTags = resolvedTags.filter((t) => t.sourceType === 'truss_detail');
+  1231→  const resolvedTopChordTags = resolvedTags.filter((t) => t.sourceType === 'truss_top_chord');
+  1232→  const resolvedWebTags = resolvedTags.filter((t) => t.sourceType === 'truss_web');
+  1233→
+  1234→  const bounds = extendDetailBounds(
+  1235→    activeInstance.detailBounds,
+  1236→    detailAnnotations.dimensions,
+  1237→    resolvedTags
+  1238→  );
+  1239→
+  1240→  return {
+  1241→    title: getTrussInstanceLabel(trussSystem, activeInstance.instance),
+  1242→    instanceGeometry: activeInstance,
+  1243→    nodeMap,
+  1244→    lineSegments,
+  1245→    purlinMarkers,
+  1246→    dimensions: detailAnnotations.dimensions,
+  1247→    tags: resolvedFixedTags,
+  1248→    topChordTags: resolvedTopChordTags,
+  1249→    webTags: resolvedWebTags,
+  1250→    bounds,
+  1251→  };
+  1252→}
+  1253→
+  1254→export function getTrussSystemPurlinTotalLength(trussSystemOrGeometry) {
+  1255→  const systemGeometry = trussSystemOrGeometry?.instances && trussSystemOrGeometry?.trussSystem
+  1256→    ? trussSystemOrGeometry
+  1257→    : buildTrussSystemGeometry(trussSystemOrGeometry);
+  1258→
+  1259→  return Math.max(
+  1260→    0,
+  1261→    ...systemGeometry.instances.flatMap((entry) => (
+  1262→      (entry.purlinRuns || []).map((run) => measurePurlinRunLength(run))
+  1263→    ))
+  1264→  );
+  1265→}
+  1266→
+  1267→export function buildTrussPreviewObjects(trussSystem) {
+  1268→  return buildTrussSystemGeometry(trussSystem).instances.flatMap((entry) => ([
+  1269→    ...entry.copies.flatMap((copy) => copy.members.map((member) => createSegmentDescriptor(
+  1270→      `${entry.instance.id}_${copy.index}_${member.id}`,
+  1271→      trussSystem,
+  1272→      entry.instance,
+  1273→      member,
+  1274→      copy
+  1275→    ))),
+  1276→    ...(entry.purlinSegments || []).map((segment) => createPurlinSegmentDescriptor(segment, trussSystem, entry.instance)),
+  1277→  ]));
+  1278→}
+  1279→
+  1280→export function hitTestTrussInstance(trussSystem, instance, point, tolerance) {
+  1281→  const geometry = buildTrussInstanceGeometry(trussSystem, instance);
+  1282→  for (const copy of geometry.copies) {
+  1283→    if (distanceToSegment(point, copy.overallStartPoint, copy.overallEndPoint) <= tolerance) {
+  1284→      return true;
+  1285→    }
+  1286→  }
+  1287→  return false;
+  1288→}
+  1289→

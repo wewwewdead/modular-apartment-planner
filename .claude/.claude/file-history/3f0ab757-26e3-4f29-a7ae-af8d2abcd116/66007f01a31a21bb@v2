@@ -1,0 +1,51 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+
+interface StoreGroupToggleProps {
+  grouped: boolean;
+  onToggle: () => void;
+}
+
+export function StoreGroupToggle({ grouped, onToggle }: StoreGroupToggleProps) {
+  return (
+    <AnimatedPressable
+      onPress={onToggle}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: grouped }}
+      accessibilityLabel="Group items by store"
+    >
+      <View style={[styles.toggle, grouped && styles.toggleActive]}>
+        <Text style={[styles.text, grouped && styles.textActive]}>
+          {grouped ? 'By Store' : 'All Items'}
+        </Text>
+      </View>
+    </AnimatedPressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  toggle: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  toggleActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandLight,
+  },
+  text: {
+    ...typography.caption,
+    color: colors.mutedInk,
+    fontWeight: '700',
+  },
+  textActive: {
+    color: colors.ink,
+  },
+});

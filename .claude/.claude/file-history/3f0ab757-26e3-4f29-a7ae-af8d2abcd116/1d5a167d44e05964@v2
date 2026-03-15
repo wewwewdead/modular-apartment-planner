@@ -1,0 +1,21 @@
+import React from 'react';
+
+import { ProgressBar } from '../../../components/ProgressBar';
+import { colors } from '../../../theme/colors';
+
+interface CartMiniProgressProps {
+  fulfilledCount: number;
+  totalCount: number;
+}
+
+export function CartMiniProgress({ fulfilledCount, totalCount }: CartMiniProgressProps) {
+  const progress = totalCount > 0 ? fulfilledCount / totalCount : 0;
+  return (
+    <ProgressBar
+      progress={progress}
+      color={colors.success}
+      height={4}
+      accessibilityLabel={`${fulfilledCount} of ${totalCount} items fulfilled`}
+    />
+  );
+}

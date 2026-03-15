@@ -1,0 +1,140 @@
+/**
+ * Drawing plane geometry - pure functions, no React/Three.js dependencies.
+ * A drawing plane defines a 2D coordinate system embedded in 3D space.
+ */
+
+/** Ground plane at Z=0 (domain coords: XY plane) */
+export const GROUND_PLANE = Object.freeze({
+  origin: { x: 0, y: 0, z: 0 },
+  normal: { x: 0, y: 0, z: 1 },
+  up: { x: 0, y: 1, z: 0 },
+  uAxis: { x: 1, y: 0, z: 0 },
+  vAxis: { x: 0, y: 1, z: 0 },
+  sourcePartId: null,
+  sourceFace: null,
+});
+
+/**
+ * Given a part and a face ID, compute a drawing plane sitting on that face.
+ * Face IDs: '+x', '-x', '+y', '-y', '+z', '-z'
+ */
+export function faceToDrawingPlane(part, faceId) {
+  const { position } = part;
+  const dims = getPartDimensions(part);
+
+  // Center of the part in domain coords
+  const cx = position.x + dims.width / 2;
+  const cy = position.y + dims.depth / 2;
+  const cz = position.z + dims.height / 2;
+
+  let origin, normal, up, uAxis, vAxis;
+
+  switch (faceId) {
+    case '+z': // top face
+      origin = { x: position.x, y: position.y, z: position.z + dims.height };
+      normal = { x: 0, y: 0, z: 1 };
+      uAxis = { x: 1, y: 0, z: 0 };
+      vAxis = { x: 0, y: 1, z: 0 };
+      up = { x: 0, y: 1, z: 0 };
+      break;
+    case '-z': // bottom face
+      origin = { x: position.x, y: position.y, z: position.z };
+      normal = { x: 0, y: 0, z: -1 };
+      uAxis = { x: 1, y: 0, z: 0 };
+      vAxis = { x: 0, y: 1, z: 0 };
+      up = { x: 0, y: 1, z: 0 };
+      break;
+    case '+x': // right face
+      origin = { x: position.x + dims.width, y: position.y, z: position.z };
+      normal = { x: 1, y: 0, z: 0 };
+      uAxis = { x: 0, y: 1, z: 0 };
+      vAxis = { x: 0, y: 0, z: 1 };
+      up = { x: 0, y: 0, z: 1 };
+      break;
+    case '-x': // left face
+      origin = { x: position.x, y: position.y, z: position.z };
+      normal = { x: -1, y: 0, z: 0 };
+      uAxis = { x: 0, y: 1, z: 0 };
+      vAxis = { x: 0, y: 0, z: 1 };
+      up = { x: 0, y: 0, z: 1 };
+      break;
+    case '+y': // back face
+      origin = { x: position.x, y: position.y + dims.depth, z: position.z };
+      normal = { x: 0, y: 1, z: 0 };
+      uAxis = { x: 1, y: 0, z: 0 };
+      vAxis = { x: 0, y: 0, z: 1 };
+      up = { x: 0, y: 0, z: 1 };
+      break;
+    case '-y': // front face
+      origin = { x: position.x, y: position.y, z: position.z };
+      normal = { x: 0, y: -1, z: 0 };
+      uAxis = { x: 1, y: 0, z: 0 };
+      vAxis = { x: 0, y: 0, z: 1 };
+      up = { x: 0, y: 0, z: 1 };
+      break;
+    default:
+      return { ...GROUND_PLANE };
+  }
+
+  return { origin, normal, up, uAxis, vAxis, sourcePartId: part.id, sourceFace: faceId };
+}
+
+/**
+ * Project a 3D point onto a plane, returning local (u, v) coordinates.
+ */
+export function projectToPlane(point3d, plane) {
+  const dx = point3d.x - plane.origin.x;
+  const dy = point3d.y - plane.origin.y;
+  const dz = point3d.z - plane.origin.z;
+  const u = dx * plane.uAxis.x + dy * plane.uAxis.y + dz * plane.uAxis.z;
+  const v = dx * plane.vAxis.x + dy * plane.vAxis.y + dz * plane.vAxis.z;
+  return { u, v };
+}
+
+/**
+ * Convert local (u, v) on a plane back to 3D world coordinates.
+ */
+export function planeLocalToWorld(u, v, plane) {
+  return {
+    x: plane.origin.x + u * plane.uAxis.x + v * plane.vAxis.x,
+    y: plane.origin.y + u * plane.uAxis.y + v * plane.vAxis.y,
+    z: plane.origin.z + u * plane.uAxis.z + v * plane.vAxis.z,
+  };
+}
+
+/**
+ * Map a Three.js face normal (approximate) to a canonical face ID.
+ * Three.js coords: x=domain x, y=domain z, z=domain y
+ */
+export function identifyFace(threeNormal) {
+  const ax = Math.abs(threeNormal.x);
+  const ay = Math.abs(threeNormal.y);
+  const az = Math.abs(threeNormal.z);
+
+  if (ay >= ax && ay >= az) {
+    return threeNormal.y > 0 ? '+z' : '-z'; // Three.js Y = domain Z
+  }
+  if (ax >= ay && ax >= az) {
+    return threeNormal.x > 0 ? '+x' : '-x';
+  }
+  return threeNormal.z > 0 ? '+y' : '-y'; // Three.js Z = domain Y
+}
+
+/**
+ * Get uniform dimensions for any part type.
+ */
+function getPartDimensions(part) {
+  switch (part.type) {
+    case 'panel':
+      return { width: part.width, depth: part.depth, height: part.thickness };
+    case 'leg':
+      return { width: part.width, depth: part.depth, height: part.height };
+    case 'frame': {
+      const w = part.axis === 'y' ? part.width : part.length;
+      const d = part.axis === 'y' ? part.length : part.width;
+      return { width: w, depth: d, height: part.height };
+    }
+    default:
+      return { width: part.width || 100, depth: part.depth || 100, height: part.height || part.thickness || 18 };
+  }
+}

@@ -1,0 +1,42 @@
+# Plan: Don't delete beams when a column is deleted
+
+## Context
+Currently, when a user deletes a column, all beams connected to that column are also cascade-deleted. The user wants beams to survive column deletion. The challenge is that beams reference columns via `startRef`/`endRef` objects (`{ kind: 'column', id }`) — if the referenced column no longer exists, the beam can't resolve its endpoint and won't render.
+
+**Solution:** When a column is deleted, convert any beam refs pointing to that column into a `{ kind: 'point', x, y }` ref, preserving the beam at the column's last known position. Update the geometry layer to handle `kind: 'point'` refs alongside `kind: 'column'` refs.
+
+## Changes
+
+### 1. `src/app/ProjectProvider.jsx` (~line 900)
+In the `COLUMN_DELETE` case, replace the beam filter with a map that converts refs:
+
+```js
+case 'COLUMN_DELETE': {
+  const deletedCol = (f.columns || []).find(c => c.id === action.columnId);
+  const colPoint = deletedCol ? { kind: 'point', x: deletedCol.x, y: deletedCol.y } : null;
+  // Map beams: convert refs to the deleted column into point refs
+  beams: (f.beams || []).map(beam => {
+    const newStart = beam.startRef?.id === action.columnId && colPoint ? { ...colPoint } : beam.startRef;
+    const newEnd = beam.endRef?.id === action.columnId && colPoint ? { ...colPoint } : beam.endRef;
+    if (newStart === beam.startRef && newEnd === beam.endRef) return beam;
+    return { ...beam, startRef: newStart, endRef: newEnd };
+  }),
+}
+```
+
+### 2. `src/geometry/beamGeometry.js`
+Update `resolveBeamAxis` and `getBeamRenderData` to handle `kind: 'point'` refs:
+
+- Add a `resolveRefPosition(ref, columns)` helper that returns `{ point, column }` — for `kind: 'column'` it looks up the column and returns its center; for `kind: 'point'` it returns `{ x: ref.x, y: ref.y }` directly with `column: null`.
+- Update `resolveBeamAxis` to use the new helper, requiring at least two valid positions (not necessarily two columns).
+- Update `getBeamRenderData` to skip trimming when a column is null (free points don't need trimming against a column outline).
+
+### 3. Serialization / Deserialization
+Check `src/persistence/serialize.js` and `src/persistence/deserialize.js` — beam refs are plain objects, so `kind: 'point'` refs should serialize/deserialize correctly without changes since they're just `{ kind, x, y }`.
+
+## Verification
+1. Run the app, place two columns, connect them with a beam
+2. Delete one column — the beam should remain visible, with the deleted end staying at its last position
+3. Delete the other column — the beam should still render as a free-floating beam
+4. Save and reload — the beam with point refs should persist correctly
+5. Check 3D preview, sections, elevations — beam should still appear

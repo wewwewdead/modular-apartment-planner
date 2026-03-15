@@ -1,0 +1,199 @@
+# Rocket Mode (Pseudo-3D Pilot POV) — Implementation Plan
+
+## Context
+The Universe is currently a 2D strategic view with pan/zoom. This adds a first-person "Rocket Mode" where stars fly toward the camera using `pos / z` projection, creating a pseudo-3D cockpit experience. Entry point: click a galaxy → "Explore Galaxy" button → warp transition → pilot POV.
+
+## Files to Create
+
+### 1. `client/src/components/Universe/hooks/useRocketMode.js`
+Core simulation hook. All per-frame state lives in **refs** (no React re-renders). A single `requestAnimationFrame` loop drives everything.
+
+**Constants:**
+- `MAX_SPEED = 12`, `ACCEL = 0.25`, `BRAKE = 0.15`, `FRICTION = 0.985`
+- `TURN_RATE = 0.035` rad/frame
+- `MIN_Z = 0.5`, `MAX_Z = 800`, `SPAWN_Z_RANGE = 400`
+- `SORT_INTERVAL = 5` (re-sort every 5 frames)
+- `STRETCH_FACTOR = 2.5`, `FADE_FACTOR = 0.6` (hyper-jump distortion)
+- `TARGET_DIST_MAX = 150`, `TARGET_Z_MIN = 2` (targeting bracket thresholds)
+
+**Refs (mutable, never trigger renders):**
+- `rocketPos {x,y}` — world position
+- `heading` — radians (0=right, -PI/2=up)
+- `velocity` — scalar speed
+- `starsRef[]` — `{ postId, worldX, worldY, z, color, colorRgb, radius, title, authorName, post }`
+- `sortedIndicesRef[]` — indices sorted by z descending (far → near)
+- `keysRef {w,s,a,d}` — boolean key state
+- `targetIndexRef` — index of closest star to screen center
+- `frameRef` — frame counter for sort interval
+- `layerRef` — Konva Layer for `batchDraw()`
+
+**`enter(galaxyPosts, galaxyCenter, stageSize)`:**
+1. Set `rocketPos` to galaxy center, `heading = -PI/2`, `velocity = 0`
+2. Build `starsRef` from galaxyPosts — assign random z in `[MIN_Z, MAX_Z]` using seeded RNG
+3. Parse each star's color hex → `{r,g,b}` using `parseHex()` (same as WormholeLayer pattern)
+4. Compute `getStarRadius(likeCount)` from `starUtils.js`
+5. Initial sort → `sortedIndicesRef`
+6. Register keydown/keyup listeners
+7. Start rAF loop
+
+**rAF `tick()` loop (runs every frame):**
+1. **Heading**: A/D → `heading -= / += TURN_RATE`
+2. **Velocity**: W → accelerate (capped at MAX_SPEED), S → brake, else → `*= FRICTION`
+3. **Position**: `rocketPos += cos(heading)*velocity, sin(heading)*velocity`
+4. **Z update**: For each star: `star.z -= velocity * 0.5`
+   - If `z < MIN_Z` → **recycle**: reset z to `MAX_Z - random*SPAWN_Z_RANGE`, scatter worldX/Y around rocketPos ± 2000
+5. **Sort** (every `SORT_INTERVAL` frames): sort `sortedIndicesRef` by `starsRef[i].z` descending
+6. **Target detection**: find star closest to screen center with `z > TARGET_Z_MIN`
+7. Call `layerRef.current.batchDraw()`
+
+**`project(star, cx, cy)` — projection function:**
+```
+relX = star.worldX - rocketPos.x
+relY = star.worldY - rocketPos.y
+// Rotate so "forward" (heading direction) maps to screen-up
+cosH = cos(-heading + PI/2), sinH = sin(-heading + PI/2)
+rotX = relX*cosH - relY*sinH
+rotY = relX*sinH + relY*cosH
+projX = cx + rotX / star.z
+projY = cy + rotY / star.z
+scale = 1 / star.z
+```
+
+**`exit()`:** cancel rAF, remove key listeners, set active = false
+
+**Returns:** `{ enter, exit, layerRef, starsRef, sortedIndicesRef, rocketPos, heading, velocity, targetIndexRef, screenCenter, project, isActive, getTargetedPost, getSpeedRatio }`
+
+---
+
+### 2. `client/src/components/Universe/layers/RocketLayer.jsx`
+Single `<Layer>` → single `<Shape sceneFunc>` (follows WormholeLayer / DeepSpaceLayer pattern). No individual Konva nodes per star.
+
+**sceneFunc rendering order:**
+1. **Speed lines** (behind stars, when `speedRatio > 0.4`):
+   - 30 radial lines from screen center outward
+   - Length & opacity scale with speedRatio
+   - `strokeStyle = rgba(180,210,255, lineAlpha*0.3)`
+
+2. **Stars** (iterate `sortedIndicesRef` — painter's algorithm, far drawn first):
+   - Call `project()` for screen position
+   - Viewport cull: skip if outside screen ± 200px buffer
+   - `baseRadius = star.radius * scale * 40` (amplify for visibility), skip if < 0.3
+   - **Hyper-jump distortion**: `stretchX = 1 + speedRatio * 2.5`, `opacity = max(0.1, 1 - speedRatio * 0.6)`
+   - `ctx.save()` → `ctx.translate(projX, projY)` → `ctx.scale(stretchX, 1)`
+   - Outer glow: radial gradient `0→color@50%opacity, 0.4→color@15%, 1→transparent`
+   - Core: white circle at `radius * 0.4`, `opacity * 0.9`
+   - `ctx.restore()`
+
+3. **Targeting bracket** (on the targeted star, not stretched):
+   - 4 corner L-shapes (dashed, pulsing cyan)
+   - `bracketSize = max(drawR * stretchX * 4, 18)`
+   - Pulse: `0.6 + 0.4 * sin(time * 0.004)`
+
+Props: `{ rocketMode }` — the hook return object. `React.memo`, `listening={false}`, `perfectDrawEnabled={false}`.
+
+---
+
+### 3. `client/src/components/Universe/components/RocketHUD.jsx`
+HTML overlay (not Konva) — reads hook refs at **10 Hz** via `setInterval(100ms)` to update text.
+
+**Elements:**
+- Speed bar: bottom-center, glass morphism panel with gradient fill bar
+- Target info: below screen center — star title, author, "Press ENTER to read" prompt (pulsing)
+- Controls hint: bottom-right — `W/S Throttle`, `A/D Turn`, `ENTER Read`, `ESC Exit`
+- Exit button: top-left, glass morphism (same pattern as `.backButton`)
+
+**Key bindings (registered in useEffect):**
+- `Enter` / `Space` → `onInteract()` (read targeted star)
+- `Escape` → `onExit()` (return to strategic mode)
+
+Props: `{ rocketMode, onExit, onInteract }`
+
+---
+
+## Files to Modify
+
+### 4. `client/src/components/Universe/Universe.jsx`
+
+**New imports:**
+```js
+import useRocketMode from './hooks/useRocketMode';
+import RocketLayer from './layers/RocketLayer';
+import RocketHUD from './components/RocketHUD';
+```
+
+**New state** (after line 59):
+```js
+const [universeMode, setUniverseMode] = useState('strategic');
+const [rocketWarpIn, setRocketWarpIn] = useState(false);
+```
+
+**Instantiate hook** (after line 78):
+```js
+const rocketMode = useRocketMode();
+```
+
+**New handlers:**
+- `handleExploreGalaxy`: filter `postArray` by `selectedGalaxy.userId`, set `rocketWarpIn=true`, after 800ms timeout set `universeMode='pilot'` and call `rocketMode.enter()`
+- `handleExitRocket`: call `rocketMode.exit()`, set `universeMode='strategic'`
+- `handleRocketInteract`: get targeted post from `rocketMode.getTargetedPost()`, navigate to `/home/post/${post.id}`
+
+**Galaxy preview panel** (~line 867): Add "Explore Galaxy" button after "Visit Profile" button
+
+**Stage conditional rendering:**
+- `{...stageEvents}` only when `universeMode === 'strategic'` (disable camera drag/zoom in pilot mode)
+- Strategic layers (MidGalaxy, Nebula, Wormhole, Constellation, Interactive): wrap in `{universeMode === 'strategic' && (<>...</>)}`
+- DeepSpaceLayer: always visible (background in both modes)
+- `{universeMode === 'pilot' && <RocketLayer rocketMode={rocketMode} />}`
+
+**UI conditional rendering:**
+- Back button, link mode button, distance tracker, minimap, preview panels: wrap in `{universeMode === 'strategic' && (...)}`
+- `{universeMode === 'pilot' && <RocketHUD ... />}`
+- `{rocketWarpIn && <div className={styles.rocketWarpIn} />}`
+
+**ESC handler** (~line 646): Add guard `if (universeMode !== 'strategic') return;`
+
+---
+
+### 5. `client/src/components/Universe/Universe.module.css`
+
+**Append new classes:**
+- `.rocketHud` — absolute inset, z-index 1020, pointer-events none
+- `.rocketSpeedBar` — bottom-center, flex row, glass morphism panel
+- `.rocketSpeedTrack` / `.rocketSpeedFill` — 160px gradient bar (blue→pink)
+- `.rocketTarget` — centered below crosshair, star name + author + pulsing prompt
+- `.rocketControls` — bottom-right, monospace hints
+- `.rocketExitBtn` — top-left, glass morphism button (matches `.backButton` pattern)
+- `.galaxyPreviewExploreBtn` — orange accent button in galaxy preview
+- `.rocketWarpIn` — radial gradient overlay with 1s scale-up animation
+- `@keyframes rocketWarpInAnim` — 0% opacity:0 scale:1 → 40% opacity:1 → 100% opacity:0 scale:3
+- `@keyframes rocketPromptPulse` — opacity oscillation for "Press ENTER" text
+- `@media (max-width: 600px)` — shrink speed bar, hide controls hint, adjust exit button
+
+---
+
+## Reused Existing Code
+- `getStarColor(userId)` from `starUtils.js:26` — star colors
+- `getStarRadius(likeCount)` from `starUtils.js:31` — star sizes
+- `parseHex()` pattern from `WormholeLayer.jsx:12` — hex → {r,g,b}
+- `batchDraw()` rAF pattern from WormholeLayer, NebulaLayer
+- Single `<Shape sceneFunc>` pattern from DeepSpaceLayer, MidGalaxyLayer
+- Glass morphism CSS pattern from `.previewPanel`, `.backButton`
+
+## Implementation Order
+1. `useRocketMode.js` — core hook (independently testable)
+2. `RocketLayer.jsx` — rendering layer
+3. `RocketHUD.jsx` — HTML overlay
+4. `Universe.module.css` — append styles
+5. `Universe.jsx` — wire everything together
+
+## Verification
+1. Navigate to Universe, click any galaxy, verify "Explore Galaxy" button appears in galaxy preview panel
+2. Click "Explore Galaxy" — verify warp overlay animation plays for ~1s
+3. After warp: strategic layers hidden, rocket layer visible with stars in 3D projection
+4. Press W — stars should fly toward camera (z decreasing), speed bar fills
+5. Press A/D — view rotates left/right
+6. At high speed — verify stars stretch horizontally (scaleX) and fade (opacity decrease)
+7. Verify targeting bracket appears on closest star to screen center
+8. Press Enter with target — verify navigation to `/home/post/{id}`
+9. Press ESC — verify return to strategic mode with all layers restored
+10. Mobile: verify exit button is accessible, no JS errors without keyboard

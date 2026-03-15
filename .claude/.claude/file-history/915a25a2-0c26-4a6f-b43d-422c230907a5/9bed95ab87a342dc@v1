@@ -1,0 +1,242 @@
+# Semantic Linking & Discovery System
+
+## Context
+
+iskrib already has strong semantic infrastructure: pgvector embeddings (384-dim gte-small), galaxy centroids (per-user mean embeddings), galaxy edges (user-to-user similarity), wormholes, and constellations. But none of this is surfaced to users as "recommendations." The goal is to build a discovery layer that makes the platform feel like it *understands your thinking* — even with a small dataset (200–10K posts). This is a perception-first design: optimize for psychological impact, not ML sophistication.
+
+---
+
+## Phase 1 — Related Ideas Engine (build now)
+
+### 1. New SQL RPC: `find_related_posts`
+
+**File to create:** `server/sql/discovery.sql`
+
+A purpose-built function that takes a source post ID and returns ranked related posts using a composite score:
+- **70% semantic similarity** (cosine distance via pgvector — the core "this system gets me" signal)
+- **15% engagement** (normalized hot score — surfaces validated content)
+- **15% recency** (decay over 180 days — keeps results fresh)
+
+Key design choices:
+- Excludes the source post and reposts
+- Penalizes same-author posts by 15% (still shown, but cross-pollination is prioritized)
+- Over-fetches 4x candidates, then ranks by composite score for diversity
+- Dynamic similarity floor based on dataset size: `0.25` at <500 posts, `0.30` at <2K, `0.35` at 5K+
+- Returns user profile data (name, avatar, badge, username) to avoid N+1 queries
+
+```sql
+CREATE OR REPLACE FUNCTION public.find_related_posts(
+    source_post_id UUID,
+    match_count INT DEFAULT 8,
+    similarity_floor FLOAT DEFAULT 0.30,
+    recency_days INT DEFAULT 180
+)
+RETURNS TABLE (
+    id UUID, title TEXT, content JSONB, post_type TEXT, canvas_doc JSONB,
+    created_at TIMESTAMPTZ, user_id UUID, user_name TEXT, user_image_url TEXT,
+    user_badge TEXT, username TEXT, semantic_similarity FLOAT,
+    hot_score BIGINT, composite_score FLOAT
+)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+```
+
+### 2. Backend Service + Controller
+
+**File to create:** `server/services/discoveryService.js`
+
+```
+getRelatedPostsService(journalId)
+├── Call getDynamicFloor() — counts public posts, returns threshold
+├── Call find_related_posts RPC
+├── Determine confidence tier from top result's similarity:
+│   ├── high   (≥ 0.55)
+│   ├── medium (≥ 0.40)
+│   ├── low    (≥ 0.30)
+│   └── none   (no results)
+├── Apply display count cap:
+│   ├── high → up to 5 results
+│   ├── medium → up to 3 results
+│   └── low → up to 2 results (never show just 1)
+└── Return { posts, confidence, topSimilarity }
+```
+
+**File to create:** `server/controller/discoveryController.js`
+
+Thin controller wrapping the service, following existing patterns (try/catch, status codes).
+
+### 3. Route
+
+**File to modify:** `server/routes/routes.js`
+
+Add: `router.get('/journal/:journalId/related', getRelatedPostsController)`
+
+No auth required (public posts only). Optionally pass userId for interaction flags in Phase 2.
+
+### 4. Client API
+
+**File to modify:** `client/API/Api.js`
+
+Add `getRelatedPosts(journalId)` — standard fetch with error handling.
+
+### 5. RelatedPosts Component
+
+**File to create:** `client/src/components/Discovery/RelatedPosts.jsx`
+**File to create:** `client/src/components/Discovery/RelatedPosts.css`
+
+Uses React Query with 10-minute staleTime. Renders below the post body in ContentView.
+
+#### Microcopy (confidence-based section headers):
+
+| Confidence | Threshold | Label | Max shown |
+|---|---|---|---|
+| high | ≥ 0.55 | "Ideas in the same orbit" | 5 |
+| medium | ≥ 0.40 | "You might also explore" | 3 |
+| low | ≥ 0.30 | "More from the community" | 2 |
+| none | — | *(section not rendered)* | 0 |
+
+"Ideas in the same orbit" uses the existing universe/galaxy/star metaphor — brand-aligned, feels intentional.
+
+#### Perception rules:
+- **Never show 1 result** — a single recommendation looks fragile. Below 2, show nothing.
+- **Never show similarity scores** — numbers break the illusion. A "78% match" feels algorithmic. A well-placed card with a relevant title feels like serendipity.
+- **Never show "No related posts"** — the section simply doesn't exist. The user never knows it could have been there.
+- **Stagger animation** — cards fade in with 60ms delay each (Framer Motion, already in project). Feels like ideas "emerging from thought."
+- **Skeleton loading** — 3 shimmer rectangles while loading, priming the user to expect content.
+
+#### Each card shows:
+- Title (truncated ~60 chars)
+- Author name + small avatar (20px)
+- Time ago
+- Subtle colored accent line (brighter = higher similarity, no numbers)
+
+### 6. Integration Point
+
+**File to modify:** `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+
+Insert `<RelatedPosts journalId={postData?.journalId} />` after the `</article>` closing tag (line 649), before the toast notification block. This places related posts after the full post content + actions but before the overlay elements.
+
+---
+
+## Phase 2 — Similar Thinkers Engine (build 1–2 weeks later)
+
+### Backend
+
+Add to `server/services/discoveryService.js`:
+
+```
+getSimilarThinkersService(userId)
+├── Query galaxy_edges for user, sorted by similarity DESC
+├── Filter: other user must have ≥ 3 posts (enough signal)
+├── Enrich with user profiles from users table
+├── Confidence: high (≥ 0.50), medium (≥ 0.35), low (≥ 0.25)
+└── Return top 5 { thinkers, confidence }
+```
+
+Route: `GET /user/:userId/similar-thinkers`
+
+### Frontend
+
+**File to create:** `client/src/components/Discovery/SimilarThinkers.jsx`
+
+Horizontal scroll of small user cards on visited profile pages.
+
+Microcopy:
+- Viewing someone else: *"Writers in [username]'s constellation"* (high) / *"Writers with similar perspectives"* (medium)
+- Viewing own profile: *"Minds that think like yours"*
+
+Suppressed when user has < 3 posts.
+
+---
+
+## Phase 3 — Cold Start Amplification (build when needed)
+
+### Topic Scaffolding (Phase 3a)
+
+Add `topic_hints TEXT[]` column to journals. Pre-compute ~40 topic centroid embeddings at server start (embed strings like "existential philosophy", "poetry and prose", "mental health and growth" using the same gte-small model). When semantic similarity is weak, fall back to topic-filtered posts: "More posts about [topic]."
+
+Cost: zero ongoing (one-time embedding of label strings, stored as JSON).
+
+### Writing Prompts (Phase 3b)
+
+`prompts` table with curated prompts + embeddings. When no related posts are found, suggest a prompt: *"No one has explored this angle yet. Be the first."* Turns the empty state into a creative invitation.
+
+### Adaptive Threshold (Phase 3c — already in Phase 1)
+
+Dynamic similarity floor adjusts with growth:
+- <500 posts → 0.25 (permissive — show anything plausibly related)
+- 500–2K → 0.30
+- 2K+ → 0.35
+
+---
+
+## Confidence Filtering Strategy
+
+### Fallback chain (never show random):
+
+```
+1. find_related_posts with dynamic floor
+2. If < 2 results → try floor - 0.05
+3. If still < 2 → show nothing
+```
+
+**Never show random posts.** A wrong recommendation is worse than no recommendation. The system should only speak when it has something meaningful to say.
+
+### gte-small similarity ranges (empirical):
+
+| Relationship | Cosine similarity |
+|---|---|
+| Same topic, same author | 0.80–0.95 |
+| Similar themes, different authors | 0.50–0.70 |
+| Adjacent topics (e.g. "grief" ↔ "loss") | 0.35–0.50 |
+| Unrelated | 0.05–0.25 |
+
+---
+
+## Files Summary
+
+### Create
+| File | Purpose |
+|---|---|
+| `server/sql/discovery.sql` | `find_related_posts` RPC function |
+| `server/services/discoveryService.js` | Related posts + similar thinkers logic |
+| `server/controller/discoveryController.js` | Thin controller |
+| `client/src/components/Discovery/RelatedPosts.jsx` | Related posts UI |
+| `client/src/components/Discovery/RelatedPosts.css` | Styles (glass morphism, stagger animations) |
+
+### Modify
+| File | Change |
+|---|---|
+| `server/routes/routes.js` | Add `GET /journal/:journalId/related` |
+| `client/API/Api.js` | Add `getRelatedPosts()` function |
+| `client/src/components/HomePage/ContentViewer/ContentView.jsx` | Render `<RelatedPosts>` after `</article>` |
+
+### Reference (do not modify)
+| File | Why |
+|---|---|
+| `server/sql/galaxy_gravity.sql` | RPC pattern reference |
+| `server/sql/semantic_search.sql` | Existing pgvector patterns |
+| `server/utils/GenerateEmbeddings.js` | Embedding pipeline |
+| `server/services/getService.js` | `attachUserInteractionFlags` pattern |
+
+---
+
+## What NOT to Build
+
+- **No recommendation queue/worker** — the RPC runs in ~50–100ms for <10K posts
+- **No collaborative filtering** — not enough interaction data yet; embedding similarity is a stronger signal at small scale
+- **No topic extraction ML** — fixed centroid approach is 95% as good, zero cost
+- **No "dislike recommendation" button** — negative feedback loops need large data to learn from
+- **No separate caching layer** — React Query's staleTime handles client caching; Supabase handles server-side
+
+---
+
+## Verification Plan
+
+1. Deploy `find_related_posts` RPC in Supabase SQL editor
+2. Test with: `SELECT * FROM find_related_posts('<existing-post-uuid>');` — verify results return with composite scores
+3. Start server, hit `GET /journal/<id>/related` — verify JSON response with posts array and confidence tier
+4. Open a post in the app — verify RelatedPosts section appears below the post body
+5. Test with a post that has weak matches — verify section is hidden (not "no results found")
+6. Test with a canvas post — verify it still works (canvas posts have embeddings from snippet text)
+7. Check stagger animation renders smoothly
+8. Verify clicking a related post navigates correctly

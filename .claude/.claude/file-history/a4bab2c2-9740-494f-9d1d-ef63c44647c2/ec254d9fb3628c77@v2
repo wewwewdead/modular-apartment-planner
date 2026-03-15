@@ -1,0 +1,219 @@
+import React, {useCallback, useMemo, useState} from 'react';
+import {ActivityIndicator, Image, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {ProfileHeroSection} from './ProfileHeroSection';
+import {ProfileTabBar, type ProfileTab} from './ProfileTabBar';
+import {ProfileWritingsTab} from './ProfileWritingsTab';
+import {ProfileStoriesTab} from './ProfileStoriesTab';
+import {ProfileOpinionsTab} from './ProfileOpinionsTab';
+import {ProfileMediaTab} from './ProfileMediaTab';
+import {fonts} from '../../theme/typography';
+import {spacing} from '../../theme/spacing';
+import {
+  parseProfileBackground,
+  cssAngleToGradientPoints,
+} from '../../lib/utils/profileBackground';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Profile'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+export function ProfileScreen({navigation}: Props) {
+  const {user} = useAuth();
+  const {colors} = useTheme();
+  const [activeTab, setActiveTab] = useState<ProfileTab>('writings');
+
+  const userDataQuery = useQuery({
+    queryKey: ['profile', user?.id],
+    enabled: Boolean(user?.id),
+    queryFn: () => mobileApi.getUserData(user?.id ?? ''),
+  });
+
+  const streakQuery = useQuery({
+    queryKey: ['streak', user?.id],
+    enabled: Boolean(user?.id),
+    queryFn: () => mobileApi.getStreak(user?.id ?? ''),
+  });
+
+  const profile = userDataQuery.data?.userData?.[0] ?? null;
+  const streak = streakQuery.data?.currentStreak;
+  const longestStreak = streakQuery.data?.longestStreak;
+
+  const parsedBg = useMemo(
+    () => parseProfileBackground(profile?.background),
+    [profile?.background],
+  );
+
+  const onSettingsPress = useCallback(() => {
+    navigation.navigate('Settings');
+  }, [navigation]);
+
+  const onEditProfile = useCallback(() => {
+    navigation.navigate('EditProfile');
+  }, [navigation]);
+
+  const onFollowersPress = useCallback(() => {
+    if (user?.id) {
+      navigation.navigate('FollowList', {userId: user.id, tab: 'followers'});
+    }
+  }, [navigation, user?.id]);
+
+  const onFollowingPress = useCallback(() => {
+    if (user?.id) {
+      navigation.navigate('FollowList', {userId: user.id, tab: 'following'});
+    }
+  }, [navigation, user?.id]);
+
+  const backdropElement = useMemo(() => {
+    if (parsedBg.type === 'gradient') {
+      const {start, end} = cssAngleToGradientPoints(parsedBg.angle);
+      return (
+        <LinearGradient
+          colors={parsedBg.colors}
+          locations={parsedBg.locations}
+          start={start}
+          end={end}
+          style={[StyleSheet.absoluteFill, styles.backdrop]}
+        />
+      );
+    }
+    if (parsedBg.type === 'image') {
+      const dominantArr = profile?.dominant_colors
+        ? profile.dominant_colors.split(',').map(c => c.trim())
+        : null;
+      const secondaryArr = profile?.secondary_colors
+        ? profile.secondary_colors.split(',').map(c => c.trim())
+        : null;
+      const hasGradientOverlay =
+        dominantArr && dominantArr.length > 0 && secondaryArr && secondaryArr.length > 0;
+      return (
+        <View style={[StyleSheet.absoluteFill, styles.backdrop]}>
+          {hasGradientOverlay && (
+            <LinearGradient
+              colors={[...dominantArr, ...secondaryArr]}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          <Image
+            source={{uri: parsedBg.uri}}
+            blurRadius={40}
+            style={[StyleSheet.absoluteFill, {opacity: 0.3}]}
+            resizeMode="cover"
+          />
+        </View>
+      );
+    }
+    return null;
+  }, [parsedBg, profile?.dominant_colors, profile?.secondary_colors]);
+
+  if (userDataQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.loaderColor} size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const headerComponent = (
+    <View>
+      <ProfileHeroSection
+        profile={profile}
+        streak={streak}
+        longestStreak={longestStreak}
+        email={user?.email}
+        onEditProfile={onEditProfile}
+        onSettingsPress={onSettingsPress}
+        onFollowersPress={onFollowersPress}
+        onFollowingPress={onFollowingPress}
+      />
+      {/* Quick links */}
+      <View style={styles.quickLinks}>
+        <Pressable onPress={() => navigation.navigate('Drafts')}>
+          <Text style={[styles.quickLink, {color: colors.accentAmber}]}>Drafts</Text>
+        </Pressable>
+        <Pressable onPress={() => navigation.navigate('Analytics')}>
+          <Text style={[styles.quickLink, {color: colors.accentAmber}]}>Analytics</Text>
+        </Pressable>
+      </View>
+      <ProfileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <View style={styles.tabSpacer} />
+    </View>
+  );
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, {backgroundColor: colors.bgPrimary}]}
+      edges={['top']}>
+      {backdropElement}
+
+      {activeTab === 'writings' ? (
+        <ProfileWritingsTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+        />
+      ) : activeTab === 'stories' ? (
+        <ProfileStoriesTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+        />
+      ) : activeTab === 'opinions' ? (
+        <ProfileOpinionsTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+          isOwnProfile
+        />
+      ) : activeTab === 'media' ? (
+        <ProfileMediaTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+          isOwnProfile
+        />
+      ) : (
+        <ProfileStoriesTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickLinks: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  quickLink: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 13,
+  },
+  tabSpacer: {
+    height: 12,
+  },
+  backdrop: {
+    opacity: 0.15,
+    transform: [{scale: 1.4}],
+  },
+});

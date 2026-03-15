@@ -1,0 +1,33 @@
+# Fix Properties Panel X-Axis Overflow
+
+## Context
+The properties panel (`.panel` class, 280px wide) has content overflowing on the x-axis. Users have to scroll horizontally to see all content, which shouldn't happen. The panel should contain all its content within its fixed width.
+
+## Root Causes
+1. **`.panel` CSS** — has `overflow-y: auto` but no `overflow-x` rule, so x-overflow defaults to `visible`
+2. **`InputField.jsx`** — the label has `flex: 0 0 80px` (fixed 80px) which combined with `gap: 8px`, padding, input, and suffix can exceed 280px minus panel padding. The input uses `flex: 1` but there's no `min-width: 0` to allow it to shrink below its content size (a flexbox gotcha)
+3. **Inline `<select>` rows** in DoorProperties/WindowProperties have the same 80px label + flex layout
+
+## Files to Change
+
+| File | Change |
+|------|--------|
+| `src/ui/PropertiesPanel.module.css` | Add `overflow-x: hidden` to `.panel`, add `min-width: 0` utility |
+| `src/ui/InputField.jsx` | Add `min-width: 0` on the input and its flex container so they shrink properly |
+
+## Change 1: `PropertiesPanel.module.css`
+
+In `.panel`:
+```css
+overflow-x: hidden;
+```
+
+## Change 2: `InputField.jsx`
+
+On the outer flex container (the `<div>` with `flex: 1`), add `min-width: 0` so the flex child can shrink below its content width. Also add `min-width: 0` on the `<input>` itself.
+
+## Verification
+1. `npx vite build` — no errors
+2. Open app, select a wall — all fields fit within the panel, no horizontal scroll
+3. Switch to m units — longer decimal values still fit
+4. Resize browser narrow — panel stays 280px, no overflow

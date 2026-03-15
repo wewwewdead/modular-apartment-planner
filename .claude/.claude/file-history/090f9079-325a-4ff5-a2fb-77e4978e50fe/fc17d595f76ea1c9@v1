@@ -1,0 +1,34 @@
+# Fix: ExplorePage content overflowing center-bar-holder-container
+
+## Context
+The explore page content overflows/clips because the `<motion.div>` wrapper around `<Outlet>` in Home.jsx has no width or height — it's an unsized intermediate div that breaks the layout chain. The `overflow-y: auto` on `.center-bar-holder-container` (already added) isn't enough because the motion.div doesn't fill its parent.
+
+## Root Cause
+In `client/src/components/HomePage/Home.jsx` (lines 328-338), the `<AnimatePresence>` + `<motion.div>` wrapping the `<Outlet>` has no width, height, or flex properties. This unsized div prevents child content from properly filling `.center-bar-holder-container`.
+
+## Fix
+
+### File: `client/src/components/HomePage/Home.jsx` (line 329)
+Add `style={{ width: '100%', height: '100%' }}` to the `<motion.div>`:
+
+```jsx
+<motion.div
+    key={location.pathname}
+    initial={{ opacity: 0, y: 8 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+    style={{ width: '100%', height: '100%' }}
+>
+```
+
+This ensures the motion.div fills `.center-bar-holder-container` so child pages (ExplorePage, PostCards, ContentView, etc.) can properly size and scroll within it.
+
+### File: `client/src/components/HomePage/home.css`
+Already done (previous edit): `overflow-y: auto` added to `.center-bar-holder-container` at all 4 breakpoints.
+
+## Verification
+- `/home/explore` — hero card, runners, interest sections all visible and scrollable
+- `/home` (feed) — feed still scrolls correctly
+- `/home/post/:id` — content view still works
+- Resize to mobile — same behavior, no clipping

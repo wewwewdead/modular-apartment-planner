@@ -1,0 +1,20 @@
+# Fix: reading_time always showing "1 min" on Explore page
+
+## Context
+`reading_time` is persisted on the `journals` table at write time, but the `get_monthly_hottest_journals` RPC doesn't return it. The client falls back to `CalculateText(previewText)` which computes reading time from the short preview excerpt — always ~1 min.
+
+## Changes
+
+### 1. SQL RPC — `server/sql/scalability_fixes.sql` (line ~101-157)
+- Add `reading_time int` to the `returns table(...)` definition
+- Add `j.reading_time` to the SELECT
+
+### 2. Service reshape — `server/services/getService.js` (line ~764-787)
+- Add `reading_time: row.reading_time || 1` to the journal object mapping
+
+### 3. Re-run the SQL
+- Execute the updated `get_monthly_hottest_journals` function in Supabase SQL editor
+
+## Verification
+- Deploy the updated SQL function
+- Visit Explore page → hero card and runner cards should show correct reading times (not all "1 min")

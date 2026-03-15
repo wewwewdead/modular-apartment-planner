@@ -1,0 +1,71 @@
+# Cursor-Based Pagination for Prompt Responses Modal
+
+## Context
+The `PromptResponsesModal` currently receives all responses at once (up to 10). We need to add cursor-based pagination so the modal fetches 5 responses at a time with a "See more" button to load more. This follows the existing codebase pattern (Comments, Bookmarks, Journals) using `created_at` cursors, fetch+1 strategy, and `useInfiniteQuery`.
+
+## Files to Change
+
+### 1. Backend Service — `server/services/promptService.js` (lines 44-67)
+- Add `before` cursor parameter to `getPromptResponsesService(promptId, limit, before)`
+- Change `.limit(limit)` → `.limit(limit + 1)` (fetch+1 strategy)
+- Add `.lt('created_at', before)` when cursor provided
+- Add `.order('id', { ascending: false })` as secondary sort for stable pagination
+- Return `{ responses: slicedData, hasMore, count }` — keep `count` only on first page (when no cursor)
+
+### 2. Backend Controller — `server/controller/promptController.js` (lines 16-28)
+- Extract `limit` and `before` from `req.query`
+- Pass them to service: `getPromptResponsesService(promptId, limit, before)`
+
+### 3. Client API — `client/API/Api.js` (lines 1477-1487)
+- Add `cursor` and `limit` params: `getPromptResponses(promptId, cursor, limit)`
+- Build URL with query string: `?limit=5` + `&before=${cursor}` when cursor exists
+
+### 4. Dashboard Briefing — `client/src/components/DashboardBriefing/DashboardBriefing.jsx`
+- Keep existing `useQuery` for initial briefing data (avatars + count) — no change needed since it still returns `count` and first page of responses
+
+### 5. Prompt Section — `client/src/components/DashboardBriefing/PromptSection.jsx`
+- Pass `promptId` to `PromptResponsesModal` (needed for its own `useInfiniteQuery`)
+
+### 6. Modal — `client/src/components/DashboardBriefing/PromptResponsesModal.jsx`
+- Add `useInfiniteQuery` with `queryKey: ['promptResponsesModal', promptId]`
+- `getNextPageParam`: if `lastPage.hasMore`, cursor = last item's `created_at` ISO string
+- Flatten pages: `data?.pages?.flatMap(p => p.responses)`
+- Use `count` from first page for header display
+- Replace static list with paginated list + "See more" button at bottom when `hasNextPage`
+- Show a small loader (MoonLoader or text) when `isFetchingNextPage`
+
+### 7. CSS — `client/src/components/DashboardBriefing/DashboardBriefing.css`
+- Add `.prompt-responses-see-more` button styles (centered, subtle, matches app style)
+
+## Pattern Reference (from Bookmarks)
+```
+// Client API
+const url = cursor
+    ? `${BASE_URL}/endpoint?limit=${limit}&before=${cursor}`
+    : `${BASE_URL}/endpoint?limit=${limit}`;
+
+// Backend service
+let query = supabase.from('table').select('...', { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(parsedLimit + 1);
+if (before) query = query.lt('created_at', before);
+const hasMore = data.length > parsedLimit;
+const sliced = hasMore ? data.slice(0, parsedLimit) : data;
+
+// useInfiniteQuery
+getNextPageParam: (lastPage) => {
+    if (lastPage?.hasMore) {
+        const last = lastPage.responses[lastPage.responses.length - 1];
+        return new Date(last.created_at).toISOString();
+    }
+    return undefined;
+}
+```
+
+## Verification
+1. Open modal → see first 5 responses + "See more" button (if more exist)
+2. Click "See more" → 5 more load below, button remains if still more
+3. When all loaded → "See more" button disappears
+4. Count in header stays accurate (total count, not page count)
+5. No duplicate entries between pages

@@ -1,0 +1,99 @@
+import React from 'react';
+import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTheme} from '../theme/ThemeProvider';
+import {fonts, typeScale} from '../theme/typography';
+import {spacing, radii, shadows} from '../theme/spacing';
+
+type PrimaryButtonProps = {
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  kind?: 'primary' | 'secondary' | 'danger';
+  icon?: React.ReactNode;
+};
+
+export function PrimaryButton({
+  label,
+  onPress,
+  loading,
+  disabled,
+  kind = 'primary',
+  icon,
+}: PrimaryButtonProps) {
+  const {colors, isDark} = useTheme();
+  const isDisabled = loading || disabled;
+
+  const bgColor =
+    kind === 'danger'
+      ? colors.danger
+      : kind === 'secondary'
+        ? 'transparent'
+        : isDark
+          ? colors.accentAmber
+          : colors.accentDark;
+
+  const textColor =
+    kind === 'danger'
+      ? '#FFFFFF'
+      : kind === 'secondary'
+        ? colors.textSecondary
+        : isDark
+          ? '#1A1612'
+          : colors.bgPrimary;
+
+  const borderColor =
+    kind === 'secondary' ? colors.borderLight : 'transparent';
+
+  return (
+    <Pressable
+      disabled={isDisabled}
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.button,
+        {backgroundColor: bgColor, borderColor},
+        kind === 'secondary' && styles.secondary,
+        kind !== 'secondary' && shadows(colors).button,
+        isDisabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
+      ]}>
+      {loading ? (
+        <ActivityIndicator color={textColor} size="small" />
+      ) : (
+        <View style={styles.inner}>
+          {icon}
+          <Text style={[styles.label, {color: textColor}]}>{label}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  button: {
+    borderRadius: radii.md,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  secondary: {
+    borderWidth: 1,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  pressed: {
+    opacity: 0.85,
+    transform: [{translateY: -1}],
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  label: {
+    ...typeScale.button,
+  },
+});

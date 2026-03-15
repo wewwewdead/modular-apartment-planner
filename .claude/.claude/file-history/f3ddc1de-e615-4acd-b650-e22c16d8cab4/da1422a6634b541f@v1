@@ -1,0 +1,123 @@
+# UI Enhancement Plan: Productivity Platform Aesthetic
+
+## Context
+The modular apartment planner has a functional but generic UI (Inter font, standard blue accent, flat white/gray surfaces). The goal is to elevate it to a polished productivity platform feel — simple, calm, and professional — without changing any behavior. Think Linear/Figma-level polish for an architectural tool.
+
+## Design Direction
+**Architectural Precision Meets Modern Craft.** Warm-neutral palette, distinctive typography, teal accent color (evokes architectural patina), subtle depth via shadows, refined micro-interactions. No flashy effects — just intentional, cohesive refinement.
+
+---
+
+## Files to Modify (13 files, CSS-first approach)
+
+### Phase 1: Foundation
+
+**1. `index.html`** — Update font imports
+- Replace Inter with **DM Sans** (400, 500, 600) + **JetBrains Mono** (400)
+- DM Sans: geometric sans with more character than Inter, excellent small-size readability
+- JetBrains Mono: precision monospace for coordinates/measurements (replaces Courier New)
+
+**2. `src/styles/variables.css`** — Replace all design tokens
+- **Palette shift**: warm neutrals instead of cold grays
+  - Canvas bg: `#FFFFFF` → `#FAFAF8` (warm off-white)
+  - Panel bg: `#F9FAFB` → `#F3F3F0` (warm gray)
+  - Borders: `#D0D5DD` → `#DDDDD8` (warm border)
+  - Text primary: `#1D2939` → `#1A1D23`, secondary: `#667085` → `#6B7080`
+- **Accent**: `#2B7FFF` (generic blue) → `#0D7C66` (teal — distinctive, architectural)
+- **New tokens**: `--color-text-tertiary`, `--color-surface-elevated`, `--color-border-subtle`, `--color-accent-subtle`, `--color-danger-subtle`
+- **Shadow system**: `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-overlay`
+- **Radii**: sm `4px→5px`, md `6px→8px`, add `--radius-lg: 12px`
+- **Transitions**: add `--ease-out`, `--duration-fast`, `--duration-normal`
+- **Fonts**: `--font-ui: 'DM Sans'`, `--font-blueprint: 'JetBrains Mono'`
+
+**3. `src/styles/reset.css`** — Add `select { font: inherit; color: inherit; }`
+
+**4. `src/styles/global.css`** — Add polish layers
+- Custom thin scrollbars (6px, transparent track, subtle thumb)
+- `::selection` highlight in teal tint
+- `:focus-visible` with teal outline ring
+- `text-rendering: optimizeLegibility`
+- Global `input:not([readonly]):focus` and `select:focus` styles (teal border + glow ring)
+- Modal keyframe animations (`modalOverlayIn`, `modalDialogIn`)
+
+### Phase 2: Chrome (CSS Module updates)
+
+**5. `src/ui/Toolbar.module.css`** — Refined toolbar
+- Subtle `box-shadow` on bottom edge for depth
+- Button height `32px→30px`, subtler group separators using `--color-border-subtle`
+- Active press: `transform: scale(0.97)` micro-interaction
+- Toggle active: teal-tinted background + teal text (instead of plain gray)
+- Dirty indicator: `6px` dot with gentle pulse animation
+- `letter-spacing: 0.01em` on buttons
+
+**6. `src/ui/Sidebar.module.css`** — Refined sidebar
+- Padding `12px→16px`, gap `12px→16px` (more breathing room)
+- Section title: `11px→10.5px` with `letter-spacing: 0.06em` (more refined uppercase)
+- Count badges: pill-shaped with subtle background (`rgba(0,0,0,0.04)`, `border-radius: 10px`)
+- Project name input: focus state with teal border + glow ring
+- Selected items: teal-tinted background, `font-weight: 500`
+- Section header hover: subtle background highlight
+- Item transitions on hover/select
+
+**7. `src/ui/PropertiesPanel.module.css`** — Refined properties
+- Padding `12px→16px`
+- Subtitle gets `border-top: 1px solid var(--color-border-subtle)` for section separation
+- Title: `letter-spacing: -0.01em` (tighter tracking for authority)
+- Color hex values: use `--font-blueprint` monospace
+- Delete button: 30px height, scale micro-interaction
+- Unit button hover/active transitions
+- `background: white` → `var(--color-surface-elevated)` throughout
+
+**8. `src/app/App.module.css`** — Layout depth
+- Canvas area: subtle `inset box-shadow` (makes canvas feel recessed between panels)
+- Toolbar: `z-index: 10` (shadow renders above canvas)
+
+**9. `src/renderers/SvgCanvas.module.css`** — Status bar polish
+- Height `24px→26px`, gap `16px→24px`, padding to `16px`
+- `user-select: none`
+- `letter-spacing: 0.02em`
+- Subtle `inset box-shadow` at top
+- Status message: fade-in-up animation, uses UI font with `font-weight: 500`
+
+### Phase 3: Components (JSX inline style updates)
+
+**10. `src/ui/InputField.jsx`** — Smarter inputs
+- Numeric inputs (`type === 'number'`): use `fontFamily: 'var(--font-blueprint)'` for precision alignment
+- Suffix: smaller (`10px`), tertiary color, monospace font
+- Editable bg: `'var(--color-surface-elevated)'` instead of `'white'`
+- Row margin: `8px→6px` for denser property lists
+
+**11. `src/ui/Modal.jsx`** — Premium modal
+- Overlay: darker warm black `rgba(10, 12, 15, 0.45)` + `backdropFilter: blur(4px)`
+- Dialog: warm bg `#FAFAF8`, `--radius-lg` (12px), `--shadow-overlay`, 1px border
+- Title: `letter-spacing: -0.01em`
+- Entry animation via CSS keyframes (scale from 96% + slide up 8px)
+
+**12. `src/app/App.jsx`** — Load modal cards
+- Project cards: `--radius-md`, `var(--color-surface-elevated)` bg
+- Load button: `font-weight: 500`
+- Delete button: teal-ified danger tint (`--color-danger-subtle` bg, `--color-danger` text)
+- Cancel button: `font-weight: 500`, elevated surface bg
+
+**13. `src/ui/PropertiesPanel.jsx`** — Select elements
+- All `<select>` inline styles: use `var(--color-surface-elevated)` bg, CSS variable borders/radii
+
+---
+
+## What Does NOT Change
+- All event handlers, state management, business logic
+- Layout grid structure (toolbar/sidebar/canvas/properties)
+- Component hierarchy, props, rendering logic
+- SVG rendering, coordinate systems, tool system
+- Keyboard shortcuts, persistence, undo/redo
+- Panel collapse behavior
+
+## Verification
+1. Run `npm run dev` and visually inspect all panels, toolbar, sidebar, properties
+2. Check that DM Sans and JetBrains Mono load correctly
+3. Verify teal accent on active toolbar buttons, selected sidebar items, focused inputs
+4. Test modal open animation (Load Project dialog)
+5. Confirm status bar readability with new monospace font
+6. Check custom scrollbar in sidebar/properties when content overflows
+7. Verify disabled button states remain visually distinct
+8. Test dark-on-teal contrast for accessibility (white on `#0D7C66` ≈ 5.5:1, passes WCAG AA)

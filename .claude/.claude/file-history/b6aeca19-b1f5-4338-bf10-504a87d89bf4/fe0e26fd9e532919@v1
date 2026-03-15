@@ -1,0 +1,72 @@
+# Follow Notification Feature
+
+## Context
+The follow system works (toggle follow/unfollow in `interactService.js`), and `formatNoficationType.js` already maps `follow: 'Follows you'` — but the backend never actually creates a notification when someone follows a user. The notification card also has no icon or rendering branch for `follow` type. This change wires it all up end-to-end.
+
+## Files to Modify
+
+### 1. `server/services/interactService.js` (lines 395-410) — Create notification on follow
+In the `addFollowsService` `else` branch (new follow), after the successful INSERT into `follows`, add a notification INSERT:
+
+```js
+// Only notify if not self-follow
+if (followerId !== followingId) {
+    await supabase
+        .from('notifications')
+        .insert({
+            sender_id: followerId,
+            receiver_id: followingId,
+            type: 'follow',
+            read: false
+        });
+}
+```
+
+- `journal_id` is omitted (null) — the notification query uses `journals!journal_id(...)` which returns null gracefully for missing FKs (same pattern as constellation notifications)
+- No deduplication needed — matches the pattern of other notification types (likes, etc.)
+
+### 2. `client/src/components/Notifications/notificationsCards.jsx` — Add icon + rendering
+
+**a) Add follow icon to `iconArray` (after the `opinion_reply` entry, ~line 72):**
+```jsx
+{
+    type: 'follow',
+    icon:
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="30px" height="30px" fill="var(--accent-amber)">
+            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+        </svg>,
+},
+```
+Uses `var(--accent-amber)` to match the warm design system.
+
+**b) Add follow branch in click handler (`handleReadNotif`, ~line 114):**
+Before the `else` fallback (the journal parse logic), add:
+```js
+} else if (notification?.type === 'follow') {
+    navigate(`/visitProfile?userId=${notification?.sender_id}`);
+```
+This navigates to the follower's profile when clicked.
+
+**c) Add follow branch in notification content rendering (~line 323):**
+After the `constellation_accepted` branch and before the `isOpinion` branch, add:
+```jsx
+) : displayType === 'follow' ? (
+    <div className="notification-content-text">
+        <p className="notif-content-sliced-text">started following you</p>
+    </div>
+```
+No journal preview needed — just a simple text message.
+
+### 3. No changes needed
+- `client/helpers/formatNoficationType.js` — already has `follow: 'Follows you'`
+- Notification retrieval query — handles null `journal_id` gracefully
+- Notification count endpoint — counts all types from `notifications` table
+
+## Verification
+1. Start dev server, log in as User A
+2. Visit User B's profile and click Follow
+3. Log in as User B → check Notifications
+4. Confirm: follow notification appears with amber person+ icon, sender name, "Follows you" type text, "started following you" content
+5. Click the notification → navigates to User A's profile
+6. Unfollow and re-follow → new notification created (no crash, no duplication issue)
+7. Check that self-follow scenario doesn't create notification (if UI allows it)

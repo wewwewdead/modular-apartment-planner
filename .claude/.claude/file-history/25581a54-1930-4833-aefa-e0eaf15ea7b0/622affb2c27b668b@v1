@@ -1,0 +1,27 @@
+# Show Up To 10 Inline Avatars in Prompt Responses
+
+## Context
+The avatar strip in `.dashboard-prompt-responses` currently caps at 5 unique avatars (`.slice(0, 5)`). The user wants up to **10** unique profile avatars displayed inline. The CSS already handles the overlapping inline layout correctly (`display: flex`, `margin-left: -8px`), so this is just a JS slice change.
+
+## File to Change
+
+### `client/src/components/DashboardBriefing/PromptSection.jsx` (line 11)
+Change the avatar slice from 5 → 10:
+
+```js
+// Before
+}).slice(0, 5);
+
+// After
+}).slice(0, 10);
+```
+
+### No other changes needed
+- CSS already handles any number of inline overlapping avatars
+- Backend, modal, controller, API — unchanged
+
+## Verification
+1. Have 10+ unique users respond to Today's Prompt
+2. Dashboard avatar strip shows up to 10 overlapping profile pictures inline
+3. With fewer than 10 unique respondents, all show correctly
+4. Avatars remain overlapping with negative margin, not stacked vertically

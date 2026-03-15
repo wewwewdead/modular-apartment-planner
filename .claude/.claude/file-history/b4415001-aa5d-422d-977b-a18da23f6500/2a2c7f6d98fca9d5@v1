@@ -1,0 +1,44 @@
+# Fix: "structure of query does not match function result type" on For You feed
+
+## Context
+The `get_for_you_feed` Supabase RPC function fails with a PostgreSQL type mismatch error. The RETURNS TABLE declares `views INT` and count columns as `INT`, but the actual `journals.views` column may be `BIGINT` in the database. The working `get_monthly_hottest_journals` function (in `scalability_fixes.sql`) uses `BIGINT` with explicit casts — the for-you feed should follow the same pattern.
+
+## Root Cause
+In `server/sql/personalized_feed.sql`, the `get_for_you_feed` function:
+- Declares `views INT`, `like_count INT`, `reaction_count INT`, `comment_count INT`, `bookmark_count INT` in RETURNS TABLE
+- Selects `j.views`, `j.cached_reaction_count`, etc. **without explicit type casts**
+- PostgreSQL plpgsql strictly validates return types — any implicit type promotion causes the error
+
+The working `get_monthly_hottest_journals` avoids this by declaring everything as `BIGINT` and casting explicitly (e.g., `coalesce(j.views, 0)::bigint`).
+
+## Fix — `server/sql/personalized_feed.sql`
+
+### 1. `get_for_you_feed` RETURNS TABLE — change INT → BIGINT for views/counts (lines 44, 53-56)
+```sql
+views BIGINT,        -- was INT
+...
+like_count BIGINT,   -- was INT
+reaction_count BIGINT,
+comment_count BIGINT,
+bookmark_count BIGINT,
+```
+
+### 2. CTE `candidates` SELECT — add explicit casts (lines 103, 112-115)
+```sql
+coalesce(j.views, 0)::bigint AS views,     -- was j.views
+...
+j.cached_reaction_count::bigint AS like_count,
+j.cached_reaction_count::bigint AS reaction_count,
+j.cached_comment_count::bigint AS comment_count,
+j.cached_bookmark_count::bigint AS bookmark_count,
+```
+
+### 3. Same fix for `get_interest_posts` (lines 191, 197-199, 232, 237-239)
+Apply the same BIGINT changes to keep both functions consistent.
+
+## After code change
+Re-run the updated `personalized_feed.sql` in the Supabase SQL editor to deploy the fixed function.
+
+## Verification
+1. Run the SQL in Supabase SQL editor (no errors)
+2. Visit the For You page in the app — feed loads without the 500 error

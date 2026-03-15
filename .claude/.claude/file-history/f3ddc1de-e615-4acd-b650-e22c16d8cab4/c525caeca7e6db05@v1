@@ -1,0 +1,96 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-height);
+  background: var(--color-panel-bg);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-md);
+  gap: var(--space-sm);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-sm);
+}
+
+.group + .group {
+  border-left: 1px solid var(--color-border);
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.iconBtn {
+  width: 32px;
+  padding: 0;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: transparent;
+}
+
+.active {
+  background: var(--color-accent);
+  color: white;
+}
+
+.active:hover {
+  background: var(--color-accent-hover);
+}
+
+.separator {
+  width: 1px;
+  height: 24px;
+  background: var(--color-border);
+  margin: 0 var(--space-xs);
+}
+
+.toggleBtn {
+  composes: btn;
+  opacity: 0.6;
+}
+
+.toggleBtn.toggleActive {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.dirtyIndicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  margin-right: var(--space-xs);
+}

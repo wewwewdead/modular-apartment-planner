@@ -1,0 +1,71 @@
+import React from 'react';
+import { Layer, Group, Text } from 'react-konva';
+import StarGroup from '../components/StarGroup';
+import { getStarColor, getStarRadius } from '../utils/starUtils';
+
+const GalaxyLabel = React.memo(({ x, y, name, zoom }) => {
+    // Inverse-scale so the label stays a constant screen size
+    const invZoom = 1 / zoom;
+    return (
+        <Group x={x} y={y} scaleX={invZoom} scaleY={invZoom} listening={false}>
+            <Text
+                text={name}
+                fontSize={14}
+                fill="rgba(255,255,255,0.45)"
+                fontStyle="600"
+                fontFamily="inherit"
+                align="center"
+                width={200}
+                offsetX={100}
+                y={-24}
+                listening={false}
+                perfectDrawEnabled={false}
+            />
+        </Group>
+    );
+});
+
+GalaxyLabel.displayName = 'GalaxyLabel';
+
+const InteractiveLayer = React.memo(({ layerProps, posts, galaxies, zoom, showTitles, pulsingId, onStarClick }) => {
+    return (
+        <Layer {...layerProps}>
+            {/* Galaxy name labels (behind stars) */}
+            {galaxies?.map((g) => (
+                <GalaxyLabel
+                    key={g.userId}
+                    x={g.x}
+                    y={g.y}
+                    name={g.name}
+                    zoom={zoom}
+                />
+            ))}
+            {posts.map((post) => {
+                const postUserId = post.users?.id;
+                const color = getStarColor(postUserId);
+                const likeCount = Array.isArray(post.likes) && post.likes[0]?.count != null
+                    ? post.likes[0].count
+                    : 0;
+                const radius = getStarRadius(likeCount);
+
+                return (
+                    <StarGroup
+                        key={post.id}
+                        x={post.universe_x}
+                        y={post.universe_y}
+                        radius={radius}
+                        color={color}
+                        title={post.title}
+                        showTitle={showTitles}
+                        isPulsing={pulsingId === post.id}
+                        onClick={() => onStarClick(post)}
+                    />
+                );
+            })}
+        </Layer>
+    );
+});
+
+InteractiveLayer.displayName = 'InteractiveLayer';
+
+export default InteractiveLayer;

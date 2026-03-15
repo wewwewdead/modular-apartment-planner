@@ -1,0 +1,38 @@
+import supabase from "./supabase.js";
+
+export const getTodaysPromptService = async () => {
+    const { count, error: countErr } = await supabase
+        .from('writing_prompts')
+        .select('id', { count: 'exact', head: true });
+
+    if (countErr || !count) return null;
+
+    const now = new Date();
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+    const index = dayOfYear % count;
+
+    const { data, error } = await supabase
+        .from('writing_prompts')
+        .select('*')
+        .order('id', { ascending: true })
+        .range(index, index)
+        .single();
+
+    if (error) return null;
+    return data;
+};
+
+export const getPromptResponsesService = async (promptId, limit = 10) => {
+    if (!promptId) return { responses: [], count: 0 };
+
+    const { data, error, count } = await supabase
+        .from('journals')
+        .select('id, title, created_at, user_id, users(id, name, image_url, badge)', { count: 'exact' })
+        .eq('prompt_id', promptId)
+        .eq('privacy', 'public')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+    if (error) return { responses: [], count: 0 };
+    return { responses: data || [], count: count || 0 };
+};

@@ -1,0 +1,233 @@
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:3:import { useQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:16:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:18:    const {data: authData, isLoading: isAuthLoading} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:25:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:55:    const {data: userData, isLoading} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:59:            staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:63:    const {data: notifCount, isLoading: isLoadingNotifCount} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:67:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:2:import { useMutation, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:52:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:152:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:249:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:280:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:301:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:341:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:384:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:395:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:2:import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:7:    const { data: prompt, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:10:        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:11:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:14:    const { data: responsesData } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:18:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:19:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:5:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:47:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:48:    const {data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:60:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:61:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:5:import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:36:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:49:    const {data, isLoading, fetchNextPage, hasNextPage, isFetchinNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:60:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:62:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:7:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:34:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:43:    const {data, fetchNextPage, hasNextPage, isLoading, isFetchingNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:54:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:55:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:108:    const {data, isLoading, isFetchinNextPage, hasNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:120:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:121:        staleTime: 1000 * 60 * 2
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx:1:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx:1:import { useQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx:115:    const { data, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx:119:        staleTime: 10 * 60 * 1000,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:150:    const {data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:162:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:163:        staleTime: 1000 * 60 * 2
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:2:import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:8:    const { data } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:12:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:13:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:8:import { useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:69:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:2:import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:32:    const { data, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:36:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:37:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:18:    const {data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:29:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:31:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx:3:import { useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx:33:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:1:import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:35:    const { data: usernameData, isLoading: isLoadingByUsername } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:39:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:40:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:140:    const {data, isLoading} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:144:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:145:        staleTime: 1000 * 60 * 10
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:156:    const{data: followsData, isLoading: isLoadingFollowsData} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:159:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:162:        refetchOnWindowFocus: false
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:3:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:28:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:39:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:40:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:5:import { useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:13:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:1:import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:24:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:28:    const {isLoading, data, fetchNextPage, isFetchingNextPage, hasNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:39:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:40:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:2:import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:39:    const { data: recapData, isLoading: recapLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:43:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:44:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:47:    const { data: prompt, isLoading: promptLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:50:        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:51:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:54:    const { data: responsesData } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:58:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:59:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:1:import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:12:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:22:    const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:33:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:34:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:22:    const {data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:33:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:35:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:1:import { useQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:12:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:21:    const { data, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:24:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:27:        refetchOnWindowFocus: false
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:1:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:29:    const {data, isLoading, fetchNextPage, isFetchingNextPage, hasNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:40:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:41:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx:5:import { useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx:42:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:3:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:21:    const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:28:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:29:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:3:import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:12:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:19:    const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:25:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:26:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:9:import { useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:39:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:3:import { useQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:213:    const { data: feedData, isLoading: isLoadingFeed } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:216:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:217:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:220:    const { data: interestData } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:223:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:224:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:233:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:237:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:238:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:244:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:248:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:249:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:255:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:259:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:260:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:25:import { useQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:102:    const { data: fetchedJournalData, isLoading: isLoadingJournalById } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:106:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:107:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:174:    const { data: followsData, isLoading: isLoadingFollows } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:177:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:1:import { useQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:27:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:31:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:32:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:1:import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:5:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:9:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:10:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:16:import { useQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:49:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:4:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:80:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:88:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:89:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:1:import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:5:    return useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:17:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:18:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:23:    return useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:35:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:36:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:41:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:45:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:46:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:51:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:55:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:56:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:61:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:65:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:66:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:71:    return useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:83:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:84:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:89:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:93:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:94:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:1:import { useMutation, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:16:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:26:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:37:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:47:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:58:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:70:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:81:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:91:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:118:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:129:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx:3:import { useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx:15:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:4:import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:174:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:184:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:185:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:194:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:204:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:205:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:215:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:225:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:226:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:235:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:239:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:240:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:246:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:250:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:251:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:259:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:263:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:264:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:270:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:274:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:275:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:3:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:27:    const {data: journalData, isLoading: isLoadingJournals, isFetchingNextPage, fetchNextPage, hasNextPage,} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:39:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:40:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:5:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:21:    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:94:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:106:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:107:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:20:import { useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:24:    const queryClient = useQueryClient();

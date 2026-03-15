@@ -1,0 +1,51 @@
+# WhatsApp + Ollama Personal AI Agent
+
+## Context
+Convert the existing WhatsApp bot at `C:\Users\johnm\gilas` into a personal AI assistant. Messages prefixed with `/` are sent to a local Ollama instance (llama3.1:8b), and the LLM response is sent back via WhatsApp. This lets the user chat with a local LLM from their phone for free.
+
+## Key Decisions
+- **Model:** `llama3.1:8b` via Ollama
+- **Self-chat handling:** Only messages starting with `/` are processed (avoids infinite reply loops)
+- **No new dependencies:** Ollama exposes a REST API at `http://localhost:11434`, use native `fetch`
+
+## Changes to `C:\Users\johnm\gilas\index.js`
+
+### 1. Add Ollama chat function
+- Call `POST http://localhost:11434/api/chat` with model `llama3.1:8b`
+- Send `stream: false` for simplicity (wait for full response)
+- Maintain a per-chat conversation history (Map keyed by remoteJid) so the LLM has context
+- Add a system prompt defining the assistant's behavior
+
+### 2. Update message handler
+- Remove `if (msg.key.fromMe) continue` — we need to process self-messages
+- Only process messages where `text.startsWith('/')`
+- Strip the `/` prefix before sending to Ollama
+- Log the user message and LLM response to terminal
+- Send the LLM response back via WhatsApp
+- Add a "thinking..." reaction or status while Ollama processes (optional, nice UX)
+
+### 3. Add `/clear` command
+- Resets conversation history for the current chat
+- Confirms with a "Conversation cleared" reply
+
+## Flow
+```
+User sends "/what is gravity" on WhatsApp
+  → Bot receives message
+  → Strips "/" prefix → "what is gravity"
+  → Sends to Ollama llama3.1:8b with conversation history
+  → Gets response
+  → Sends response back to WhatsApp
+  → Logs both to terminal
+```
+
+## Files Modified
+- `C:\Users\johnm\gilas\index.js` — the only file that changes
+
+## Verification
+1. Make sure Ollama is running (`ollama serve`)
+2. Make sure llama3.1:8b is pulled (`ollama pull llama3.1:8b`)
+3. Run `npm start` in the gilas directory
+4. Send `/hello` to yourself on WhatsApp
+5. Confirm the bot replies with the LLM's response
+6. Send `/clear` to reset conversation history

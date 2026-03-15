@@ -1,0 +1,177 @@
+import { createWall } from '@/domain/models';
+import { distance } from '@/geometry/point';
+import { nearestPointOnSegment } from '@/geometry/line';
+import { SNAP_DISTANCE_PX, MIN_WALL_LENGTH } from '@/domain/defaults';
+import { columnSnapPoints, columnEdges } from '@/geometry/columnGeometry';
+
+function snapToWalls(modelPos, walls, snapDistModel, chainStart, columns) {
+  let best = null;
+  let bestDist = snapDistModel;
+
+  // Snap to chain start to close loop (highest priority)
+  if (chainStart) {
+    const d = distance(modelPos, chainStart);
+    if (d < bestDist) {
+      best = chainStart;
+      bestDist = d;
+    }
+  }
+
+  // Snap to wall endpoints
+  for (const wall of walls) {
+    for (const pt of [wall.start, wall.end]) {
+      const d = distance(modelPos, pt);
+      if (d < bestDist) {
+        best = pt;
+        bestDist = d;
+      }
+    }
+  }
+
+  // Snap to column points (center + corners)
+  for (const column of (columns || [])) {
+    for (const pt of columnSnapPoints(column)) {
+      const d = distance(modelPos, pt);
+      if (d < bestDist) {
+        best = pt;
+        bestDist = d;
+      }
+    }
+  }
+
+  // If no discrete point found, try snapping to nearest point on column edges
+  if (!best) {
+    for (const column of (columns || [])) {
+      for (const edge of columnEdges(column)) {
+        const { point, t } = nearestPointOnSegment(modelPos, edge.start, edge.end);
+        if (t <= 0.001 || t >= 0.999) continue;
+        const d = distance(modelPos, point);
+        if (d < bestDist) {
+          best = point;
+          bestDist = d;
+        }
+      }
+    }
+  }
+
+  // If no endpoint found, try snapping to nearest point on wall segments
+  if (!best) {
+    for (const wall of walls) {
+      const { point, t } = nearestPointOnSegment(modelPos, wall.start, wall.end);
+      if (t <= 0.001 || t >= 0.999) continue; // too close to endpoints, already covered
+      const d = distance(modelPos, point);
+      if (d < bestDist) {
+        best = point;
+        bestDist = d;
+      }
+    }
+  }
+
+  return best;
+}
+
+function constrainAngle(start, end, shiftHeld) {
+  if (!shiftHeld) return end;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const angle = Math.atan2(dy, dx);
+  const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return {
+    x: start.x + Math.cos(snapAngle) * len,
+    y: start.y + Math.sin(snapAngle) * len,
+  };
+}
+
+export function createWallDrawHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      const floor = getFloor(activeFloorId);
+      const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
+      const shiftHeld = e.shiftKey;
+
+      let snapped = modelPos;
+      if (snapEnabled) {
+        const snapPt = snapToWalls(modelPos, floor.walls, snapDistModel, toolState.chainStart, floor.columns);
+        if (snapPt) snapped = { ...snapPt };
+      }
+      if (shiftHeld && toolState.start) {
+        snapped = constrainAngle(toolState.start, snapped, true);
+      }
+
+      if (!toolState.start) {
+        // First click: set start
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { start: snapped, chainStart: snapped, preview: null },
+        });
+      } else {
+        // Second+ click: create wall and chain
+        const endPt = snapped;
+
+        const len = distance(toolState.start, endPt);
+        if (len < MIN_WALL_LENGTH) return;
+
+        const wall = createWall(toolState.start, endPt);
+        dispatch({ type: 'WALL_ADD', floorId: activeFloorId, wall });
+
+        // Check if we snapped back to chain start (close loop)
+        if (toolState.chainStart && distance(endPt, toolState.chainStart) < snapDistModel) {
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: { start: null, chainStart: null, preview: null },
+          });
+        } else {
+          // Chain: end becomes new start
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: { start: endPt, preview: null },
+          });
+        }
+      }
+    },
+
+    onMouseMove(modelPos, e, toolState) {
+      if (!toolState.start) return;
+      let preview = modelPos;
+
+      const floor = getFloor(activeFloorId);
+      const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
+      if (snapEnabled) {
+        const snapPt = snapToWalls(modelPos, floor.walls, snapDistModel, toolState.chainStart, floor.columns);
+        if (snapPt) preview = { ...snapPt };
+      }
+      if (e.shiftKey) {
+        preview = constrainAngle(toolState.start, preview, true);
+      }
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { preview },
+      });
+    },
+
+    onDoubleClick(modelPos, e, toolState) {
+      // Finish chain
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { start: null, chainStart: null, preview: null },
+      });
+    },
+
+    onKeyDown(e, toolState) {
+      if (e.key === 'Escape') {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { start: null, chainStart: null, preview: null },
+        });
+      }
+    },
+
+    getCursor(toolState) {
+      return 'crosshair';
+    },
+  };
+}

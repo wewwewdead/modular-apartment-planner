@@ -1,0 +1,244 @@
+# Psychological Engagement Features — Build Plan
+
+## Context
+
+10 active mutual friends, word-of-mouth growth. Four features chosen to create daily pull, social comparison, and emotional investment. Each feature is independent and can be built one at a time.
+
+**Build order:** Streaks → Daily Prompts → Emoji Reactions → Weekly Recap
+
+Streaks and Prompts are additive (no existing code migration). Reactions replaces the like system (bigger migration). Recap is built last so it queries whatever the final engagement table is (likes or reactions).
+
+---
+
+## Feature 1: Writing Streaks
+
+**Psychology:** Loss aversion — once you have a 14-day streak you'll post even when you don't feel like it.
+
+### Database
+
+New table `writing_streaks`:
+
+```sql
+CREATE TABLE writing_streaks (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    current_streak INTEGER NOT NULL DEFAULT 0,
+    longest_streak INTEGER NOT NULL DEFAULT 0,
+    last_publish_date DATE DEFAULT NULL,
+    freeze_available BOOLEAN NOT NULL DEFAULT FALSE,
+    freeze_last_granted DATE DEFAULT NULL,
+    freeze_used_date DATE DEFAULT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+All dates are UTC. Streak freeze: 1 per week, auto-consumed if user misses exactly 1 day.
+
+### Backend
+
+| File | Change |
+|------|--------|
+| `server/sql/streaks.sql` | **New** — CREATE TABLE |
+| `server/services/streakService.js` | **New** — `getStreakService(userId)`, `recordPublishForStreak(userId)` |
+| `server/routes/routes.js` | Add `GET /api/streak/:userId` (public) |
+| `server/services/uploadService.js` | After `uploadJournalContentService` (line 248) succeeds → call `recordPublishForStreak(userId)` (non-fatal try/catch) |
+| `server/routes/routes.js` | In the inline `/addOpinion` handler (line 1009) → call `recordPublishForStreak` after insert |
+| `server/services/chapterService.js` | In `updateChapterService` when `status` transitions to `'published'` for the first time → call `recordPublishForStreak` |
+
+**`recordPublishForStreak` logic:**
+1. Get today's UTC date
+2. If no row exists → INSERT with `current_streak=1`
+3. If `last_publish_date === today` → no-op (already published today)
+4. If gap = 1 day → `current_streak += 1`
+5. If gap = 2 days AND `freeze_available` → auto-use freeze, `current_streak += 1`
+6. If gap > 1 (no freeze) → `current_streak = 1` (reset)
+7. Update `longest_streak = MAX(longest, current)`, `last_publish_date = today`
+8. Return `{ streakData, milestone }` where milestone is `7|14|30|50|100|null`
+
+### Frontend
+
+| File | Change |
+|------|--------|
+| `client/API/Api.js` | Add `getStreak(userId)` |
+| `client/src/components/Streak/useStreakData.js` | **New** — React Query hook |
+| `client/src/components/Streak/StreakBadge.jsx` | **New** — Flame SVG + count. Visual tiers: 1-6 ember (amber), 7-13 burning (orange), 14-29 blazing (red glow), 30-99 inferno (pulse), 100+ legendary (gold sparkle). Uses `filter: drop-shadow()` like VerifiedBadge |
+| `client/src/components/Streak/StreakBadge.css` | **New** — `@keyframes streak-pulse` animation |
+| `client/src/components/Streak/StreakMilestoneToast.jsx` | **New** — Framer Motion toast + CSS confetti for milestones |
+| `client/src/components/Streak/StreakMilestoneToast.css` | **New** |
+| `client/src/components/SideBar/Sidebar.jsx` | Add `<StreakBadge>` next to name in user card |
+| `client/src/components/ProfilePage/components/ProfileHeroSection.jsx` | Add `<StreakBadge>` in name row |
+| `client/src/components/VisitProfile/Visitprofile.jsx` | Add `<StreakBadge>` in visited profile hero |
+| `client/src/components/HomePage/Home.jsx` | Fetch streak data, pass down, render milestone toast |
+
+### Edge cases
+- Multiple publishes/day: only first counts (checks `last_publish_date === today`)
+- Reposts: do NOT count (only `uploadJournalContentService` path)
+- Editing existing journal: does NOT count (only new journal insert path)
+- Draft chapters: only count on first `status → published` transition
+
+---
+
+## Feature 2: Daily Writing Prompts
+
+**Psychology:** Shared ritual — gives everyone a reason to open the app and a common topic to riff on.
+
+### Database
+
+```sql
+CREATE TABLE writing_prompts (
+    id SERIAL PRIMARY KEY,
+    prompt_text TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE journals ADD COLUMN IF NOT EXISTS prompt_id INTEGER
+    REFERENCES writing_prompts(id) ON DELETE SET NULL;
+
+CREATE INDEX idx_journals_prompt_id ON journals(prompt_id) WHERE prompt_id IS NOT NULL;
+```
+
+Seed with ~150 prompts. Rotation: `dayOfYear % promptCount`, ordered by `id ASC` — deterministic, no cron needed, all users see the same prompt each day.
+
+### Backend
+
+| File | Change |
+|------|--------|
+| `server/sql/writing_prompts.sql` | **New** — CREATE TABLE + ALTER journals |
+| `server/sql/seed_prompts.sql` | **New** — 150 INSERT statements |
+| `server/services/promptService.js` | **New** — `getTodaysPromptService()`, `getPromptResponsesService(promptId)` |
+| `server/controller/promptController.js` | **New** — thin wrappers |
+| `server/routes/routes.js` | Add: `GET /api/prompt/today`, `GET /api/prompt/:promptId/responses` |
+| `server/services/uploadService.js` | Accept optional `prompt_id` param in `uploadJournalContentService`, include in Supabase insert |
+| `server/controller/uploadController.js` | Extract `prompt_id` from `req.body`, pass to service |
+
+### Frontend
+
+| File | Change |
+|------|--------|
+| `client/API/Api.js` | Add `getTodaysPrompt()`, `getPromptResponses(promptId)` |
+| `client/src/components/DailyPrompt/DailyPromptCard.jsx` | **New** — Shows today's prompt + "Write your take" button + mini avatar row of responses |
+| `client/src/components/DailyPrompt/DailyPromptCard.css` | **New** |
+| `client/src/components/DailyPrompt/PromptBadge.jsx` | **New** — Small badge on post cards that have a `prompt_id` |
+| `client/src/components/HomePage/postCards/PostCards.jsx` | Render `<DailyPromptCard>` at top of feed (before journals list). Show `<PromptBadge>` on cards with `prompt_id`. Wire "Write your take" to `handleOpenTextEditor` with promptId context |
+| `client/src/components/HomePage/Editor/Editor.jsx` | Accept `promptId` in launch config, pass to RichTextEditor |
+| `client/src/components/HomePage/Editor/RichTextEditor.jsx` | Accept `promptId` prop, append `prompt_id` to FormData in `handleClickSave` |
+
+---
+
+## Feature 3: Emoji Reactions
+
+**Psychology:** Variable reward — you don't know WHICH reaction you'll get. 10x lower friction than comments, becomes social language.
+
+**Set:** 🔥 fire (amazing) · ❤️ heart (love) · 🤯 mind-blown · 👏 clap (well said) · 😂 laugh · 😢 sad (moving)
+
+One reaction per user per post. Same emoji = toggle off. Different emoji = switch.
+
+### Database
+
+```sql
+CREATE TABLE reactions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    journal_id UUID NOT NULL REFERENCES journals(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    reaction_type TEXT NOT NULL CHECK (reaction_type IN ('fire','heart','mind_blown','clap','laugh','sad')),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (journal_id, user_id)
+);
+
+ALTER TABLE journals ADD COLUMN IF NOT EXISTS cached_reaction_count INT NOT NULL DEFAULT 0;
+
+-- Trigger to maintain cached_reaction_count (same pattern as likes trigger)
+-- Migrate existing likes → reactions with type='heart'
+-- Backfill cached_reaction_count
+-- RPC: get_post_reactions(journal_id) → returns [{reaction_type, count, reactors}]
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reaction_type TEXT;
+```
+
+### Backend
+
+| File | Change |
+|------|--------|
+| `server/sql/reactions.sql` | **New** — table, triggers, migration from likes, RPC |
+| `server/services/reactionService.js` | **New** — `toggleReaction(journalId, receiverId, senderId, reactionType)`, `getPostReactions(journalId)` |
+| `server/controller/reactionController.js` | **New** — thin wrappers |
+| `server/routes/routes.js` | Add `POST /api/reaction`, `GET /api/reactions/:journalId` |
+| `server/services/getService.js` | Change `JOURNAL_WITH_COUNTS_SELECT`: `likes(count)` → `reactions(count)`. Change `userHasLiked` queries → `userReaction` queries returning `reaction_type` string |
+| `server/services/interactService.js` | Keep `likeService` temporarily, redirect to `toggleReaction('heart')` for backward compat |
+| `server/sql/scalability_fixes.sql` | Hot score: `cached_like_count` → `cached_reaction_count` |
+| `server/sql/discovery.sql` | Same substitution in `find_related_posts` |
+
+### Frontend
+
+| File | Change |
+|------|--------|
+| `client/src/utils/reactionConfig.js` | **New** — shared constants: types, emojis, colors, labels |
+| `client/src/components/Reactions/ReactionPicker.jsx` | **New** — floating emoji picker popup (hover 300ms on desktop, long-press 500ms on mobile). Framer Motion spring entrance. Each emoji scales 1.4x on hover |
+| `client/src/components/Reactions/ReactionButton.jsx` | **New** — replaces like button. Quick tap = toggle heart (or current reaction off). Hold = open picker |
+| `client/src/components/Reactions/ReactionSummary.jsx` | **New** — per-type breakdown `🔥3 ❤️2 👏1` shown on ContentView only (not feed cards) |
+| `client/src/components/Reactions/reactions.css` | **New** — picker pill, emoji hover animations, summary chips |
+| `client/src/utils/useMutation.js` | Add `useReactionMutation` (replaces `useLikeMutation`). Same optimistic update pattern but manages `user_reaction` string + `reaction_count` |
+| `client/API/Api.js` | Add `toggleReaction(token, body)`, `getPostReactions(journalId)` |
+| `client/src/components/HomePage/postCards/PostCards.jsx` | Replace like heart button with `<ReactionButton>`. Update data refs: `has_liked` → `user_reaction`, `like_count` → `reaction_count` |
+| `client/src/components/HomePage/ContentViewer/ContentView.jsx` | Same replacement + add `<ReactionSummary>` below action bar |
+| `client/src/components/HomePage/postCards/ProfilePostCards/ProfilePostCards.jsx` | Update `viewContent` data field refs |
+| `client/src/components/HomePage/postCards/ProfilePostCards/VisitedProfilePostCards.jsx` | Same |
+| `client/src/components/Notifications/notificationsCards.jsx` | Handle `type: 'reaction'`, render emoji from `reaction_type` column |
+| `client/helpers/formatNoficationType.js` | Add `reaction: 'Reacted to your post'` |
+
+### Migration strategy
+1. SQL: create `reactions` table, migrate `likes` → `reactions` (type='heart'), backfill `cached_reaction_count`
+2. Backend: add new service/routes, update getService query selects
+3. Frontend: swap like button → reaction button, update data field names
+4. Cleanup: drop `likes` table, remove `cached_like_count`, remove old `useLikeMutation`
+
+---
+
+## Feature 4: Weekly Recap
+
+**Psychology:** Spotify Wrapped energy — stats reflected back trigger pride, nostalgia, and social comparison.
+
+### Database
+
+No new table. Computed on-demand via RPC (10 users = instant):
+
+```sql
+CREATE FUNCTION get_weekly_recap(p_user_id UUID, p_week_start TIMESTAMPTZ)
+RETURNS JSONB
+```
+
+Returns:
+- **Personal:** posts_written, total_words (est.), reactions_received, views_received, best_post
+- **Group:** total_posts, most_active_writer (name + avatar + count), most_reacted_post
+
+Week boundary: Monday 00:00 UTC → Sunday 23:59 UTC. Note: if Emoji Reactions is built first, this RPC queries `reactions` table instead of `likes`.
+
+### Backend
+
+| File | Change |
+|------|--------|
+| `server/sql/weekly_recap.sql` | **New** — RPC function |
+| `server/services/recapService.js` | **New** — calls RPC with current week's Monday |
+| `server/controller/recapController.js` | **New** — thin wrapper |
+| `server/routes/routes.js` | Add `GET /api/recap/weekly` (requireAuth) |
+
+### Frontend
+
+| File | Change |
+|------|--------|
+| `client/API/Api.js` | Add `getWeeklyRecap(token)` |
+| `client/src/components/WeeklyRecap/WeeklyRecapCard.jsx` | **New** — dismissible card at top of feed. Collapsed: "Your Week: 3 posts, 1.2K words, 15 reactions". Expandable to full stats + group highlights. Dismissal stored in `localStorage` per week key |
+| `client/src/components/WeeklyRecap/WeeklyRecapCard.css` | **New** — gradient background (amber/sage), glass border, Framer Motion entrance |
+| `client/src/components/HomePage/postCards/PostCards.jsx` | Render `<WeeklyRecapCard>` at top of feed (before DailyPromptCard) |
+
+---
+
+## Verification (per feature)
+
+**Streaks:** Publish a post → check sidebar/profile shows flame + count. Publish next day → streak increments. Skip a day → streak resets (or freeze used). Hit day 7 → milestone toast with confetti.
+
+**Prompts:** Load home feed → prompt card appears at top. Click "Write your take" → editor opens with prompt context. Save → post shows prompt badge. Prompt card shows response count.
+
+**Reactions:** Hover like button → picker appears with 6 emojis. Select fire → button shows 🔥 + count updates. Open ContentView → see per-type breakdown. Check notification shows "reacted 🔥 to your post". Quick tap toggles heart.
+
+**Recap:** Load home feed on any day → recap card appears at top. Shows personal stats + group highlights. Click dismiss → card hidden. Refresh → stays hidden (localStorage). New week → reappears.

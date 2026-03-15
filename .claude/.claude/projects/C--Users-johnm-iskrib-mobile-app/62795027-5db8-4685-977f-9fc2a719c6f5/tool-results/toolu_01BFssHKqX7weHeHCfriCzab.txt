@@ -1,0 +1,1435 @@
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-104-storyRouter.post('/stories/:storyId/progress', requireAuth, saveProgressController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-105-storyRouter.get('/stories/:storyId/progress', requireAuth, getProgressController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-106-
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:107:export default storyRouter;
+--
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-96-    return res.send(xml);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-97-});
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-98-
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:99:export default sitemapRouter;
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-194-    return parsed;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-195-};
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-196-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:197:export const imageUploader = async(file, userId, bucket) =>{
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-198-    if(!file){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-199-        throw new Error('no file received');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-200-    }
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1380-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1381-});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1382-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1383:export default router;
+--
+C:\Users\johnm\iskrib_v3\server\utils\urlUtils.js:1:export const SITE_URL = 'https://iskrib.com';
+C:\Users\johnm\iskrib_v3\server\utils\urlUtils.js-2-
+C:\Users\johnm\iskrib_v3\server\utils\urlUtils.js:3:export const makePostUrl = (journalId, title = '') => {
+C:\Users\johnm\iskrib_v3\server\utils\urlUtils.js-4-    const slug = title
+C:\Users\johnm\iskrib_v3\server\utils\urlUtils.js-5-        ? title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+C:\Users\johnm\iskrib_v3\server\utils\urlUtils.js-6-        : '';
+--
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-82-    return embedding;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-83-}
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-84-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:85:export default GenerateEmbeddings;
+--
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-50-                    const textNodes = node.children?.filter((child) => child.type === "text") || [];
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-51-                    const paragraphText = textNodes.map((child) => child.text).join(" "); //join all the array of text into one text form
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-52-
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js:53:                    if(paragraphText.trim()) parsedData.text.push(paragraphText);
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-54-
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-55-                    const imageNodes = node.children?.filter((child) => child.type === 'image') || [];
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-56-
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-57-                    imageNodes.forEach((img) => {
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-58-                        const imageData = {src: img.src, width: img.width, height: img.height};
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js:59:                        parsedData.images.push(imageData)
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-60-                        if(!parsedData.firstImage) parsedData.firstImage = imageData;
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-61-                    })
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-62-                }
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-63-
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-64-                if (node.type === "image") {
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-65-                    const imageData = { src: node.src, width: node.width, height: node.height };
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js:66:                    parsedData.images.push(imageData);
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-67-                    if (!parsedData.firstImage) parsedData.firstImage = imageData;
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-68-                 }
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-69-
+--
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-89-            };
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-90-        }
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-91-}
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js:92:export default ParseContent;
+C:\Users\johnm\iskrib_v3\server\utils\parseData.js-93-
+--
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-6-    reorderChaptersService,
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-7-} from "../services/chapterService.js";
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-8-
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js:9:export const createChapterController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-10-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-11-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-12-    const { title } = req.body;
+--
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-19-    }
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-20-};
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-21-
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js:22:export const getChapterController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-23-    const { storyId, chapterId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-24-    const userId = req.userId || null;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-25-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-31-    }
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-32-};
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-33-
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js:34:export const updateChapterController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-35-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-36-    const { storyId, chapterId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-37-    const { title, content, status } = req.body;
+--
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-44-    }
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-45-};
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-46-
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js:47:export const deleteChapterController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-48-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-49-    const { storyId, chapterId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-50-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-56-    }
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-57-};
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-58-
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js:59:export const reorderChaptersController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-60-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-61-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\chapterController.js-62-    const { chapterOrder } = req.body;
+--
+C:\Users\johnm\iskrib_v3\server\server.js-49-
+C:\Users\johnm\iskrib_v3\server\server.js-50-        const downloads = [];
+C:\Users\johnm\iskrib_v3\server\server.js-51-        if (!existsSync(FONT_PATH)) {
+C:\Users\johnm\iskrib_v3\server\server.js:52:            downloads.push(
+C:\Users\johnm\iskrib_v3\server\server.js-53-                fetch('https://cdn.jsdelivr.net/npm/@vintproykt/dejavu-fonts-ttf@2.37.0/ttf/DejaVuSans.ttf')
+C:\Users\johnm\iskrib_v3\server\server.js-54-                    .then(r => { if (!r.ok) throw new Error(`Font fetch failed: ${r.status}`); return r.arrayBuffer(); })
+C:\Users\johnm\iskrib_v3\server\server.js-55-                    .then(buf => writeFileSync(FONT_PATH, Buffer.from(buf)))
+C:\Users\johnm\iskrib_v3\server\server.js-56-            );
+C:\Users\johnm\iskrib_v3\server\server.js-57-        }
+C:\Users\johnm\iskrib_v3\server\server.js-58-        if (!existsSync(FONT_BOLD_PATH)) {
+C:\Users\johnm\iskrib_v3\server\server.js:59:            downloads.push(
+C:\Users\johnm\iskrib_v3\server\server.js-60-                fetch('https://cdn.jsdelivr.net/npm/@vintproykt/dejavu-fonts-ttf@2.37.0/ttf/DejaVuSans-Bold.ttf')
+C:\Users\johnm\iskrib_v3\server\server.js-61-                    .then(r => { if (!r.ok) throw new Error(`Bold font fetch failed: ${r.status}`); return r.arrayBuffer(); })
+C:\Users\johnm\iskrib_v3\server\server.js-62-                    .then(buf => writeFileSync(FONT_BOLD_PATH, Buffer.from(buf)))
+--
+C:\Users\johnm\iskrib_v3\server\server.js-237-
+C:\Users\johnm\iskrib_v3\server\server.js-238-            const nodeType = String(node.type || node.__type || '').trim().toLowerCase();
+C:\Users\johnm\iskrib_v3\server\server.js-239-            if (nodeType === 'text' && typeof node.text === 'string') {
+C:\Users\johnm\iskrib_v3\server\server.js:240:                texts.push(node.text);
+C:\Users\johnm\iskrib_v3\server\server.js-241-            }
+C:\Users\johnm\iskrib_v3\server\server.js-242-
+C:\Users\johnm\iskrib_v3\server\server.js-243-            const isImageNode = nodeType === 'image' || nodeType.endsWith('image') || nodeType.includes('image');
+--
+C:\Users\johnm\iskrib_v3\server\server.js-748-
+C:\Users\johnm\iskrib_v3\server\server.js-749-        if (avatarComposite) {
+C:\Users\johnm\iskrib_v3\server\server.js-750-            const avatarLeft = Math.round((DEFAULT_OG_IMAGE_WIDTH - avatarSize) / 2);
+C:\Users\johnm\iskrib_v3\server\server.js:751:            composites.push({ input: avatarComposite, top: 100, left: avatarLeft });
+C:\Users\johnm\iskrib_v3\server\server.js-752-        }
+C:\Users\johnm\iskrib_v3\server\server.js-753-
+C:\Users\johnm\iskrib_v3\server\server.js-754-        const finalImage = await sharp(baseLayer)
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-1-import { getBookmarksService, getCanvasGalleryService, getCommentsService, getFollowingFeedService, getJournalByIdService, getJournalsService, getMonthlyHottestJournalsService, getOpinionReplyService, getProfileMediaService, getUniversePostsService, getUserJournalsService, getViewOpinionService, getVisitedUserJournalsService, searchJournalsService, searchUsersService } from "../services/getService.js";
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-3-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:4:export const getJournalsController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-5-    const {limit= 5, before, userId} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-6-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-7-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-13-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-14-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-15-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:16:export const getUserJournalsController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-17-    const {limit = 5, before} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-18-    const userId = req.userId || req.query.userId;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-19-
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-27-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-28-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-29-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:30:export const getVisitedUserJournalsController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-31-    const {limit = 5, before, userId, loggedInUserId} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-32-    
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-33-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-39-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-40-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-41-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:42:export const getViewOpinionController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-43-    const {postId, userId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-44-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-45-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-51-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-52-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-53-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:54:export const getCommentsController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-55-    const {postId, parentId, limit = 10, before} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-56-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-57-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-63-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-64-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-65-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:66:export const getReplyOpinionsController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-67-    const {parentId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-68-    const {limit, cursor} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-69-
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-77-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-78-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-79-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:80:export const getBookmarksController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-81-    const {before, limit} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-82-    const userId = req.userId || req.query.userId;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-83-
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-91-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-92-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-93-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:94:export const getJournalByIdController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-95-    const { journalId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-96-    const { userId } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-97-
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-107-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-108-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-109-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:110:export const searchJournalsController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-111-    const {query = '', limit = 10, userId} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-112-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-113-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-119-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-120-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-121-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:122:export const searchUsersController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-123-    const {query = '', limit = 10} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-124-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-125-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-131-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-132-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-133-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:134:export const getFollowingFeedController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-135-    const { limit = 5, before } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-136-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-137-
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-145-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-146-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-147-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:148:export const getMonthlyHottestJournalsController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-149-    const {limit = 10, userId} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-150-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-151-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-157-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-158-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-159-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:160:export const getCanvasGalleryController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-161-    const {limit = 36, userId, sort = 'hottest', cursor = null} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-162-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-163-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-169-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-170-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-171-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:172:export const getUniversePostsController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-173-    const {minX, maxX, minY, maxY, limit = 200} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-174-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-175-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-181-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-182-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-183-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:184:export const getProfileMediaController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-185-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-186-    const {limit = 5, cursor = null} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-187-
+--
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-194-    }
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-195-}
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-196-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:197:export const getVisitedProfileMediaController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-198-    const {userId, limit = 5, cursor = null} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-199-
+C:\Users\johnm\iskrib_v3\server\controller\getController.js-200-    if(!userId){
+--
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-1-import { addBoorkmarkSetvice, addCommentService, addFollowsService, likeService, repostService, uploadOpinionReplyService } from "../services/interactService.js";
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js:3:export const likeController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-4-    const {journalId, receiverId,} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-5-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-6-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-13-    }
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-14-}
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-15-
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js:16:export const addCommentController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-17-    const {comments, postId, receiverId, parentId} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-18-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-19-
+--
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-27-    }
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-28-}
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-29-
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js:30:export const addBoorkmarkController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-31-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-32-    const {journalId} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-33-
+--
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-40-    }
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-41-}
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-42-
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js:43:export const addOpinionReplyController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-44-    const {parent_id} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-45-    const {opinion} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-46-    const userId = req.userId;
+--
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-53-        return res.status(500).json({error: 'Failed to upload opinion reply'})
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-54-    }
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-55-}
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js:56:export const repostController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-57-    const {sourceJournalId, caption} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-58-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-59-
+--
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-67-    }
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-68-}
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-69-
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js:70:export const addFollowController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-71-    const {followingId} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-72-    const followerId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\interactController.js-73-
+--
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js-2-    createCanvasRemixService
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js-3-} from "../services/canvasService.js";
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js-4-
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js:5:export const createCanvasRemixController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js-6-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js-7-    const {sourceJournalId, titleOverride} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\canvasController.js-8-
+--
+C:\Users\johnm\iskrib_v3\server\controller\checkUserController.js-1-import { checkUserService } from "../services/checkUserService.js";
+C:\Users\johnm\iskrib_v3\server\controller\checkUserController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\checkUserController.js:3:export const checkUserController = async (req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\checkUserController.js-4-    const {userId} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\checkUserController.js-5-     try {
+C:\Users\johnm\iskrib_v3\server\controller\checkUserController.js-6-        const data = await checkUserService(userId);
+--
+C:\Users\johnm\iskrib_v3\server\controller\getUserDataController.js-1-import { getUserDataService } from "../services/getUserDataService.js";
+C:\Users\johnm\iskrib_v3\server\controller\getUserDataController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\getUserDataController.js:3:export const getUserDataController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\getUserDataController.js-4-    const {userId} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\getUserDataController.js-5-
+C:\Users\johnm\iskrib_v3\server\controller\getUserDataController.js-6-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-10-    updateFreedomWallItemService
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-11-} from "../services/freedomWallService.js";
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-12-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:13:export const getCurrentFreedomWallWeekController = async(_req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-14-    try {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-15-        const response = await getCurrentFreedomWallWeekService();
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-16-        return res.status(200).json(response);
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-20-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-21-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-22-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:23:export const getFreedomWallWeeksController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-24-    const {limit} = req.query || {};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-25-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-26-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-32-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-33-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-34-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:35:export const getFreedomWallItemsController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-36-    const {weekId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-37-    const {limit = 200, cursor = null, types = ""} = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-38-
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-45-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-46-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-47-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:48:export const createFreedomWallItemController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-49-    const {weekId, itemType, payload, zIndex = 0} = req.body || {};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-50-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-51-
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-64-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-65-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-66-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:67:export const updateFreedomWallItemController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-68-    const {itemId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-69-    const {payload, zIndex} = req.body || {};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-70-    const userId = req.userId;
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-83-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-84-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-85-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:86:export const deleteFreedomWallItemController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-87-    const {itemId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-88-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-89-
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-99-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-100-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-101-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:102:export const getFreedomWallStickersController = async(_req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-103-    try {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-104-        const response = await getFreedomWallStickersService();
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-105-        return res.status(200).json(response);
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-109-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-110-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-111-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:112:export const reportFreedomWallItemController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-113-    const {itemId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-114-    const reporterUserId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-115-
+--
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-125-    }
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-126-};
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-127-
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js:128:export const clearMyFreedomWallDoodlesController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-129-    const {weekId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-130-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\freedomWallController.js-131-
+--
+C:\Users\johnm\iskrib_v3\server\controller\turnstileController.js-1-import { verfifyTurnstileService } from "../services/turnstileService.js";
+C:\Users\johnm\iskrib_v3\server\controller\turnstileController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\turnstileController.js:3:export const verfifyTurnstileController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\turnstileController.js-4-    const {token} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\turnstileController.js-5-    try {
+C:\Users\johnm\iskrib_v3\server\controller\turnstileController.js-6-        await verfifyTurnstileService(token);
+--
+C:\Users\johnm\iskrib_v3\server\controller\recapController.js-1-import { getWeeklyRecapService } from '../services/recapService.js';
+C:\Users\johnm\iskrib_v3\server\controller\recapController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\recapController.js:3:export const getWeeklyRecapController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\recapController.js-4-    try {
+C:\Users\johnm\iskrib_v3\server\controller\recapController.js-5-        const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\recapController.js-6-        const recap = await getWeeklyRecapService(userId);
+--
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-1-import { getTodaysPromptService, getPromptResponsesService } from "../services/promptService.js";
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js:3:export const getTodaysPromptController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-4-    try {
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-5-        const prompt = await getTodaysPromptService();
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-6-        if (!prompt) {
+--
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-13-    }
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-14-};
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-15-
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js:16:export const getPromptResponsesController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-17-    try {
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-18-        const { promptId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\promptController.js-19-        if (!promptId) {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-9-    getProgressService,
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-10-} from "../services/storyInteractService.js";
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-11-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:12:export const toggleVoteController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-13-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-14-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-15-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-21-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-22-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-23-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:24:export const toggleLibraryController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-25-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-26-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-27-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-33-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-34-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-35-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:36:export const getMyLibraryController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-37-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-38-    const { limit, before } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-39-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-45-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-46-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-47-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:48:export const getCommentsController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-49-    const { chapterId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-50-    const { paragraph_index } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-51-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-57-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-58-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-59-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:60:export const getCommentCountsController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-61-    const { chapterId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-62-    try {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-63-        const counts = await getCommentCountsService(chapterId);
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-68-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-69-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-70-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:71:export const addCommentController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-72-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-73-    const { chapterId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-74-    const { comment, paragraph_index, paragraph_fingerprint, parent_id } = req.body;
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-81-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-82-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-83-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:84:export const saveProgressController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-85-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-86-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-87-    const { chapter_id, scroll_position } = req.body;
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-94-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-95-};
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-96-
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js:97:export const getProgressController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-98-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-99-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js-100-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-1-import { toggleReactionService, getPostReactionsService } from "../services/reactionService.js";
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js:3:export const toggleReactionController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-4-    try {
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-5-        const { journalId, receiverId, reactionType } = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-6-        const senderId = req.userId;
+--
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-18-    }
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-19-};
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-20-
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js:21:export const getPostReactionsController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-22-    try {
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-23-        const { journalId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\reactionController.js-24-        if (!journalId) {
+--
+C:\Users\johnm\iskrib_v3\server\controller\discoveryController.js-1-import { getRelatedPostsService } from "../services/discoveryService.js";
+C:\Users\johnm\iskrib_v3\server\controller\discoveryController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\discoveryController.js:3:export const getRelatedPostsController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\discoveryController.js-4-    const { journalId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\discoveryController.js-5-    try {
+C:\Users\johnm\iskrib_v3\server\controller\discoveryController.js-6-        const result = await getRelatedPostsService(journalId);
+--
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-1-import { deleteJournalContentService, deleteJournalImageService, deleteProfileMediaImageService } from "../services/deleteService.js";
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js:3:export const deleteJournalImageController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-4-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-5-    const {filepath} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-6-
+--
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-14-
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-15-}
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-16-
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js:17:export const deleteJournalContent = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-18-    const {journalId} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-19-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-20-
+--
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-27-    }
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-28-}
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-29-
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js:30:export const deleteProfileMediaImageController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-31-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-32-    const {bucket, path, url} = req.body || {};
+C:\Users\johnm\iskrib_v3\server\controller\deleteController.js-33-
+--
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-5-    deleteConstellationService,
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-6-} from "../services/constellationService.js";
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-7-
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js:8:export const requestConstellationController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-9-    const { starIdA, starIdB, label } = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-10-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-11-
+--
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-19-    }
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-20-};
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-21-
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js:22:export const respondConstellationController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-23-    const { constellationId, accept } = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-24-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-25-
+--
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-33-    }
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-34-};
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-35-
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js:36:export const getViewportConstellationsController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-37-    const { postIds } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-38-
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-39-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-53-    }
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-54-};
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-55-
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js:56:export const deleteConstellationController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-57-    const { id } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-58-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\constellationController.js-59-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-581-    return hydrated.filter(Boolean);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-582-};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-583-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:584:export const getProfileMediaService = async(userId, limit = PROFILE_MEDIA_LIMIT_DEFAULT, cursor = null) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-585-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-586-        throw {status: 400, error: 'userId is undefined'};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-587-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-616-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-617-            if(result.error){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-618-                console.error(`supabase storage list error on ${result.bucket}:`, result.error);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:619:                unavailableBuckets.push(result.bucket);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-620-                return;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-621-            }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-622-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:623:            pending.push(...result.items);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-624-        });
+C:\Users\johnm\iskrib_v3\server\services\getService.js-625-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-626-        if(chunkResults.every((result) => result.items.length === 0)){
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-639-        const neededItemsCount = parsedLimit - hydratedSelectedItems.length;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-640-        const fallbackCandidates = remainingItems.splice(0, neededItemsCount);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-641-        const hydratedFallbackItems = await hydrateMediaItems(fallbackCandidates);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:642:        hydratedSelectedItems.push(...hydratedFallbackItems);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-643-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-644-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-645-    const hasMore = remainingItems.length > 0 || PROFILE_MEDIA_BUCKETS.some((bucket) => !exhausted[bucket]);
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-661-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-662-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-663-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:664:export const getUniversePostsService = async(minX, maxX, minY, maxY, limit = UNIVERSE_POST_LIMIT_DEFAULT) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-665-    const parsedMinX = parseFiniteNumber(minX, 'minX');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-666-    const parsedMaxX = parseFiniteNumber(maxX, 'maxX');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-667-    const parsedMinY = parseFiniteNumber(minY, 'minY');
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-717-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-718-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-719-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:720:export const getJournalsService = async(limit, userId, before) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-721-    if(isNaN(limit) || limit > 20 || limit < 1){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-722-        console.error('limit should be intiger, not below 1 and higher than 20');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-723-        throw {status: 400, error: 'limit should be intiger, not below 1 and higher than 20'};
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-814-    return journalData;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-815-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-816-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:817:export const getFollowingFeedService = async(limit, userId, before) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-818-    if (!userId) {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-819-        throw { status: 401, error: 'authentication required' };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-820-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-889-    return { data: slicedData, hasMore };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-890-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-891-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:892:export const getMonthlyHottestJournalsService = async(limit, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-893-    if(isNaN(limit) || limit < 1 || limit > 10){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-894-        throw {status: 400, error: 'limit should be an integer between 1 and 10'};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-895-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-948-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-949-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-950-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:951:export const getCanvasGalleryService = async(limit = CANVAS_GALLERY_LIMIT_DEFAULT, userId, sort = 'hottest', cursor = null) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-952-    if(isNaN(limit) || limit < 1 || limit > CANVAS_GALLERY_LIMIT_MAX){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-953-        throw {status: 400, error: `limit should be an integer between 1 and ${CANVAS_GALLERY_LIMIT_MAX}`};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-954-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1036-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1037-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1038-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1039:export const getJournalByIdService = async (journalId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1040-    if (!journalId) {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1041-        console.error('journalId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1042-        throw { status: 400, error: 'journalId is undefined' };
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1105-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1106-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1107-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1108:export const getUserJournalsService = async(limit, before, userId) =>{
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1109-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1110-        console.error('userid is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1111-        throw {status: 400, error: 'userid is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1201-    return journalData;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1202-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1203-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1204:export const getVisitedUserJournalsService = async(limit, before, userId, loggedInUserId) =>{
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1205-    if(!userId || !loggedInUserId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1206-        console.error('userid or loggedInUserId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1207-        throw {status: 400, error:'userid or loggedInUserId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1298-    return data;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1299-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1300-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1301:export const getViewOpinionService = async(postId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1302-    if(!postId || !userId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1303-        console.error('postId OR userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1304-        throw {status: 400, error: 'postId or userId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1321-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1322-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1323-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1324:export const getCommentsService = async(postId, limit, before, parentId) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1325-    if(!postId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1326-        console.error('postId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1327-        throw {status:400, error: 'postId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1367-    return {comments: slicedData, hasMore: hasMore};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1368-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1369-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1370:export const getOpinionReplyService = async(parentId, limit, before) =>{
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1371-    if(!parentId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1372-        console.error('parentId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1373-        throw {status: 400, error: 'parentId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1405-    return {data: slicedData, hasMore: hasMore};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1406-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1407-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1408:export const getBookmarksService = async(userId, before, limit) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1409-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1410-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1411-        throw {status: 400, error: 'userId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1502-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1503-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1504-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1505:export const searchUsersService = async(query, limit = 10) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1506-    const normalizedQuery = normalizeSearchQuery(query);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1507-    if(!normalizedQuery || normalizedQuery.length < SEARCH_QUERY_MIN_LENGTH){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1508-        throw {status: 400, error: `query should be at least ${SEARCH_QUERY_MIN_LENGTH} characters`};
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1553-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1554-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1555-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1556:export const searchJournalsService = async(query, limit, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1557-    const normalizedQuery = normalizeSearchQuery(query);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1558-    if(!normalizedQuery || normalizedQuery.length < SEARCH_QUERY_MIN_LENGTH){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1559-        throw {status: 400, error: `query should be at least ${SEARCH_QUERY_MIN_LENGTH} characters`};
+--
+C:\Users\johnm\iskrib_v3\server\services\recapService.js-16-    return monday.toISOString();
+C:\Users\johnm\iskrib_v3\server\services\recapService.js-17-}
+C:\Users\johnm\iskrib_v3\server\services\recapService.js-18-
+C:\Users\johnm\iskrib_v3\server\services\recapService.js:19:export const getWeeklyRecapService = async (userId) => {
+C:\Users\johnm\iskrib_v3\server\services\recapService.js-20-    const weekStart = getCurrentWeekMonday();
+C:\Users\johnm\iskrib_v3\server\services\recapService.js-21-
+C:\Users\johnm\iskrib_v3\server\services\recapService.js-22-    const { data, error } = await supabase.rpc('get_weekly_recap', {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-8-    getUserStoriesService,
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-9-} from "../services/storyService.js";
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-10-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:11:export const createStoryController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-12-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-13-    const { title, description, status, privacy, tags } = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-14-    const coverFile = req.file || null;
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-21-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-22-};
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-23-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:24:export const getStoriesController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-25-    const { limit, before, status, tag } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-26-    const userId = req.userId || null;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-27-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-33-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-34-};
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-35-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:36:export const getStoryByIdController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-37-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-38-    const userId = req.userId || null;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-39-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-45-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-46-};
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-47-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:48:export const updateStoryController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-49-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-50-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-51-    const { title, description, status, privacy, tags } = req.body;
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-59-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-60-};
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-61-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:62:export const deleteStoryController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-63-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-64-    const { storyId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-65-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-71-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-72-};
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-73-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:74:export const getMyStoriesController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-75-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-76-    const { limit, before } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-77-    try {
+--
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-83-    }
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-84-};
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-85-
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js:86:export const getUserStoriesController = async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-87-    const { userId: targetUserId } = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-88-    const { limit, before } = req.query;
+C:\Users\johnm\iskrib_v3\server\controller\storyController.js-89-    try {
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-1-import supabase from "./supabase.js";
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-2-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:3:export const likeService = async(journalId, receiverId, senderId) =>{
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-4-    if(!journalId || !receiverId){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-5-        console.error('journalId or receiverId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-6-        throw {status: 400, error: 'journalId or receiverId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-86-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-87-}
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-88-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:89:export const addCommentService = async(userId, comments, postId, receiverId, parentId) => {
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-90-    if(!comments || !postId || !receiverId){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-91-        console.error('comments || postId || receiverId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-92-        throw {status: 400, error: 'comments || postId || receiverId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-138-    return {message: 'success'};
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-139-}
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-140-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:141:export const addBoorkmarkSetvice = async(userId, journalId) =>{
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-142-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-143-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-144-        throw {status: 400, error: 'userId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-186-    }
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-187-}
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-188-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:189:export const uploadOpinionReplyService = async(parent_id, opinion, user_id) =>{
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-190-    if(!parent_id || !user_id){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-191-        console.error('parentid or userid is undefined');
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-192-        throw {status: 400, error:'parentid or userid is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-236-    return {message: 'success'};
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-237-}
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-238-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:239:export const repostService = async(sourceJournalId, caption, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-240-    if(!sourceJournalId || !userId){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-241-        throw {status: 400, error: 'sourceJournalId or userId is undefined'};
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-242-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-362-    return {message: 'repost created', repostId: insertedRepost.id, sourceJournalId: ultimateSourceId};
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-363-}
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-364-
+C:\Users\johnm\iskrib_v3\server\services\interactService.js:365:export const addFollowsService = async(followerId, followingId) => {
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-366-    if(!followerId || !followingId){
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-367-        console.error('followerId or followingId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\interactService.js-368-        throw {status: 400, error: 'followerId or followingId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-1-import supabase from "./supabase.js"
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-2-
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js:3:export const getUserByUsernameService = async(username) => {
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-4-    if(!username || typeof username !== 'string'){
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-5-        throw {status: 400, message: 'username is required'};
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-6-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-52-    };
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-53-}
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-54-
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js:55:export const getUserDataService = async(userId) =>{
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-56-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-57-        throw {status: 400, message: 'userid is undefined'}
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-58-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-4- * Get today's writing prompt.
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-5- * Uses dayOfYear % promptCount for deterministic rotation.
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-6- */
+C:\Users\johnm\iskrib_v3\server\services\promptService.js:7:export const getTodaysPromptService = async () => {
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-8-    // Get total prompt count
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-9-    const { count, error: countErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-10-        .from('writing_prompts')
+--
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-41-/**
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-42- * Get journals that responded to a specific prompt.
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-43- */
+C:\Users\johnm\iskrib_v3\server\services\promptService.js:44:export const getPromptResponsesService = async (promptId, limit = 5, before = null) => {
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-45-    if (!promptId) return { responses: [], count: 0 };
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-46-
+C:\Users\johnm\iskrib_v3\server\services\promptService.js-47-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 5, 1), 50);
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-82-    return parsedData;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-83-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-84-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:85:export const uploadUserDataService = async(bio, name, image, userId, userEmail, username) =>{
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-86-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-87-        throw {status: 400, error: 'userId is undefined'};
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-88-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-146-    return true;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-147-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-148-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:149:export const updateUserDataService = async(name, bio, profileBg, dominantColors, secondaryColors, profileFontColor, userId, image) =>{
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-150-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-151-        console.error('userId is undefined')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-152-        throw {status: 400, error:'userId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-199-    return data;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-200-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-201-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:202:export const uploadBackgroundService = async(userId, image) => {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-203-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-204-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-205-        throw {status: 400, error: 'userId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-219-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-220-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-221-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:222:export const uploadJournalImageService = async(image, userId) =>{
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-223-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-224-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-225-        throw{status: 400, error: 'userId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-245-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-246-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-247-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:248:export const uploadJournalContentService = async(
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-249-    content,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-250-    title,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-251-    userId,
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-404-    return { success: true, streakResult };
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-405-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-406-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:407:export const updateJournalService = async(content, title, journalId, userId, postType = null, canvasDocInput = null) => {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-408-    if(!journalId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-409-        console.error('journalid is undefined');
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-410-        throw {status: 400, error: 'journalId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-512-    return true;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-513-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-514-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:515:export const updateRepostCaptionService = async(journalId, userId, caption) => {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-516-    if(!journalId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-517-        throw {status: 400, error: 'journalId is undefined'};
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-518-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-559-    return true;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-560-}
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-561-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:562:export const addReplyOpinionService = async(reply, parentId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-563-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-564-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-565-        throw {status: 400, error: 'userId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\controller\updateFontColorController.js-1-import { updateFontColorService } from "../services/updateFontColorService.js";
+C:\Users\johnm\iskrib_v3\server\controller\updateFontColorController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\updateFontColorController.js:3:export const updateFont = async(req, res)=>{
+C:\Users\johnm\iskrib_v3\server\controller\updateFontColorController.js-4-    const {fontColor} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\updateFontColorController.js-5-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\updateFontColorController.js-6-
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-1-import { uploadUserDataService, updateUserDataService, uploadBackgroundService, uploadJournalImageService, uploadJournalContentService, updateJournalService, addReplyOpinionService, updateRepostCaptionService } from "../services/uploadService.js";
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-2-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:3:export const uploadUserDataController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-4-    const {bio, name, username} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-5-    const file = req.file;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-6-    const userId = req.userId;
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-16-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-17-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-18-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:19:export const updateUserDataController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-20-    const {
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-21-        name,
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-22-        bio,
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-50-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-51-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-52-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:53:export const uploadProfileBgController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-54-    const userId = req.userId || req.body?.userId;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-55-    const file = req.file;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-56-
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-63-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-64-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-65-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:66:export const uploadJournalImageController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-67-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-68-    const image = req.file;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-69-
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-77-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-78-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-79-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:80:export const uploadJournalContentController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-81-    const {
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-82-        content,
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-83-        title,
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-103-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-104-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-105-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:106:export const updateJournalController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-107-    const {content, title, journalId, post_type: postType, canvas_doc: canvasDoc} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-108-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-109-
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-116-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-117-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-118-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:119:export const updateRepostCaptionController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-120-    const {journalId, caption} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-121-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-122-
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-130-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-131-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-132-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:133:export const addReplyOpinionController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-134-    const {reply} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-135-    const {parent_id} = req.params;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-136-    const userId = req.userId;
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-45-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-46-// Step 1: Recompute all galaxy centroids
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-47-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:48:export async function recomputeAllCentroids() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-49-    // Get all users who have public posts with embeddings
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-50-    const { data: users, error: usersErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-51-        .from('journals')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-114-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-115-// Step 2: Recompute galaxy edges (similarity between centroids)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-116-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:117:export async function recomputeGalaxyEdges() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-118-    const { data: centroids, error } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-119-        .from('galaxy_centroids')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-120-        .select('user_id, mean_embedding')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-145-                const [userA, userB] = a.user_id < b.user_id
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-146-                    ? [a.user_id, b.user_id]
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-147-                    : [b.user_id, a.user_id];
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:148:                edges.push({ user_a: userA, user_b: userB, similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-149-            }
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-150-        }
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-151-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-173-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-174-// Step 3: Force-directed galaxy position settle
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-175-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:176:export async function settleGalaxyPositions() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-177-    const { data: centroids, error: centErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-178-        .from('galaxy_centroids')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-179-        .select('user_id, post_count');
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-311-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-312-// Step 4: Settle star (post) positions within galaxies
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-313-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:314:export async function settleStarPositions() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-315-    const { data: centroids, error: centErr } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-316-        .from('galaxy_centroids')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-317-        .select('user_id, galaxy_x, galaxy_y, mean_embedding')
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-336-    for (const e of (edges || [])) {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-337-        if (!neighbors.has(e.user_a)) neighbors.set(e.user_a, []);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-338-        if (!neighbors.has(e.user_b)) neighbors.set(e.user_b, []);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:339:        neighbors.get(e.user_a).push({ userId: e.user_b, similarity: e.similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:340:        neighbors.get(e.user_b).push({ userId: e.user_a, similarity: e.similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-341-    }
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-342-
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-343-    let totalUpdated = 0;
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-411-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-412-// Step 5: Incremental settle for a single user
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-413-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:414:export async function incrementalSettleForUser(userId) {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-415-    if (!userId) return;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-416-
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-417-    try {
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-484-                    const [userA, userB] = userId < other.user_id
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-485-                        ? [userId, other.user_id]
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-486-                        : [other.user_id, userId];
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:487:                    newEdges.push({ user_a: userA, user_b: userB, similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-488-                }
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-489-            }
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-490-
+--
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-584-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-585-// Full settle orchestrator
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-586-// ══════════════════════════════════════════════════════════════════════
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:587:export async function runFullSettle() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-588-    console.log('[galaxy-settle] Starting full settle...');
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-589-    const start = Date.now();
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js-590-
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js-57-    const grouped = {};
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js-58-    for(const post of posts){
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js-59-        if(!grouped[post.user_id]) grouped[post.user_id] = [];
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:60:        grouped[post.user_id].push(post);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js-61-    }
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js-62-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js-63-    let updated = 0;
+--
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-5-/**
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-6- * Get a user's current streak data.
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-7- */
+C:\Users\johnm\iskrib_v3\server\services\streakService.js:8:export const getStreakService = async (userId) => {
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-9-    if (!userId) return null;
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-10-
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-11-    const { data, error } = await supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-55- * Called after a new journal/opinion/chapter is published.
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-56- * Returns { streakData, milestone } where milestone is 7|14|30|50|100|null.
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-57- */
+C:\Users\johnm\iskrib_v3\server\services\streakService.js:58:export const recordPublishForStreak = async (userId) => {
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-59-    if (!userId) return { streakData: null, milestone: null };
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-60-
+C:\Users\johnm\iskrib_v3\server\services\streakService.js-61-    const today = getUTCDateString();
+--
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-8- * - Different emoji = switch reaction
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-9- * - No existing = add reaction
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-10- */
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js:11:export const toggleReactionService = async (journalId, receiverId, senderId, reactionType) => {
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-12-    if (!journalId || !senderId) {
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-13-        throw { status: 400, error: 'journalId and senderId are required' };
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-14-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-127-/**
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-128- * Get detailed reactions breakdown for a post.
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-129- */
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js:130:export const getPostReactionsService = async (journalId) => {
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-131-    if (!journalId) {
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-132-        throw { status: 400, error: 'journalId is required' };
+C:\Users\johnm\iskrib_v3\server\services\reactionService.js-133-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-16-`;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-17-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-18-// ── Vote toggle ──
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:19:export const toggleVoteService = async (storyId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-20-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-21-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-22-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-82-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-83-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-84-// ── Library toggle ──
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:85:export const toggleLibraryService = async (storyId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-86-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-87-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-88-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-120-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-121-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-122-// ── My Library ──
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:123:export const getMyLibraryService = async (userId, limit, before) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-124-    if (!userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-125-        throw { status: 400, error: 'userId is required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-126-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-197-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-198-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-199-// ── Comments ──
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:200:export const getCommentsService = async (chapterId, paragraphIndex) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-201-    if (!chapterId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-202-        throw { status: 400, error: 'chapterId is required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-203-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-233-            const replyMap = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-234-            replies.forEach(r => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-235-                if (!replyMap[r.parent_id]) replyMap[r.parent_id] = [];
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:236:                replyMap[r.parent_id].push(r);
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-237-            });
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-238-            comments.forEach(c => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-239-                c.replies = replyMap[c.id] || [];
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-244-    return comments || [];
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-245-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-246-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:247:export const getCommentCountsService = async (chapterId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-248-    if (!chapterId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-249-        throw { status: 400, error: 'chapterId is required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-250-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-270-    return counts;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-271-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-272-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:273:export const addCommentService = async (chapterId, userId, comment, paragraphIndex, paragraphFingerprint, parentId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-274-    if (!chapterId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-275-        throw { status: 400, error: 'chapterId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-276-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-305-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-306-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-307-// ── Reading Progress ──
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:308:export const saveProgressService = async (storyId, userId, chapterId, scrollPosition) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-309-    if (!storyId || !userId || !chapterId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-310-        throw { status: 400, error: 'storyId, userId, and chapterId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-311-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-354-    return data;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-355-};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-356-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:357:export const getProgressService = async (storyId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-358-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-359-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-360-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\updateFontColorService.js-1-import supabase from "./supabase.js"
+C:\Users\johnm\iskrib_v3\server\services\updateFontColorService.js-2-
+C:\Users\johnm\iskrib_v3\server\services\updateFontColorService.js:3:export const updateFontColorService = async(fontColor, userId) =>{
+C:\Users\johnm\iskrib_v3\server\services\updateFontColorService.js-4-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\updateFontColorService.js-5-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\updateFontColorService.js-6-        throw {status: 400, error: 'userId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-41-    return data;
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-42-};
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-43-
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:44:export const createChapterService = async (storyId, userId, title) => {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-45-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-46-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-47-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-77-    return data;
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-78-};
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-79-
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:80:export const getChapterService = async (storyId, chapterId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-81-    if (!storyId || !chapterId) {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-82-        throw { status: 400, error: 'storyId and chapterId are required' };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-83-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-149-    };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-150-};
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-151-
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:152:export const updateChapterService = async (storyId, chapterId, userId, updates) => {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-153-    if (!storyId || !chapterId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-154-        throw { status: 400, error: 'storyId, chapterId, and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-155-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-220-    return data;
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-221-};
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-222-
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:223:export const deleteChapterService = async (storyId, chapterId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-224-    if (!storyId || !chapterId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-225-        throw { status: 400, error: 'storyId, chapterId, and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-226-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-241-    return { message: 'chapter deleted' };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-242-};
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-243-
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:244:export const reorderChaptersService = async (storyId, userId, chapterOrder) => {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-245-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-246-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-247-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\turnstileService.js-1-
+C:\Users\johnm\iskrib_v3\server\services\turnstileService.js:2:export const verfifyTurnstileService = async(token) =>{
+C:\Users\johnm\iskrib_v3\server\services\turnstileService.js-3-    if(!token) {
+C:\Users\johnm\iskrib_v3\server\services\turnstileService.js-4-        throw {status: 400, message: 'No token provided'}
+C:\Users\johnm\iskrib_v3\server\services\turnstileService.js-5-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\checkUserService.js-1-import supabase from "./supabase.js"
+C:\Users\johnm\iskrib_v3\server\services\checkUserService.js:2:export const checkUserService = async(userId) =>{
+C:\Users\johnm\iskrib_v3\server\services\checkUserService.js-3-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\checkUserService.js-4-        throw {status: 400, error: 'userId is undefined'}
+C:\Users\johnm\iskrib_v3\server\services\checkUserService.js-5-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-46-    return map;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-47-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-48-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:49:export const createStoryService = async (userId, title, description, status, privacy, tags, coverFile) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-50-    if (!userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-51-        throw { status: 400, error: 'userId is undefined' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-52-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-109-    return stripEmbedding(data);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-110-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-111-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:112:export const getStoriesService = async (limit, before, status, tag, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-113-    const parsedLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 20);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-114-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-115-    let query = supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-171-    return { data: sliced, hasMore };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-172-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-173-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:174:export const getStoryByIdService = async (storyId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-175-    if (!storyId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-176-        throw { status: 400, error: 'storyId is required' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-177-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-241-    };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-242-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-243-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:244:export const updateStoryService = async (storyId, userId, updates, coverFile) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-245-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-246-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-247-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-321-    return stripEmbedding(data);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-322-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-323-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:324:export const deleteStoryService = async (storyId, userId) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-325-    if (!storyId || !userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-326-        throw { status: 400, error: 'storyId and userId are required' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-327-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-352-    return { message: 'story deleted' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-353-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-354-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:355:export const getMyStoriesService = async (userId, limit, before) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-356-    if (!userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-357-        throw { status: 400, error: 'userId is required' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-358-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-387-    return { data: sliced.map(stripEmbedding), hasMore };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-388-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-389-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:390:export const getUserStoriesService = async (targetUserId, limit, before) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-391-    if (!targetUserId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-392-        throw { status: 400, error: 'userId is required' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-393-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-1-import supabase from "./supabase.js";
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-2-
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js:3:export const requestConstellationService = async (senderId, starIdA, starIdB, label) => {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-4-    if (!senderId || !starIdA || !starIdB) {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-5-        throw { status: 400, error: 'senderId, starIdA, and starIdB are required' };
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-6-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-85-    return { message: 'constellation request sent', constellationId: constellation.id };
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-86-};
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-87-
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js:88:export const respondConstellationService = async (userId, constellationId, accept) => {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-89-    if (!userId || !constellationId) {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-90-        throw { status: 400, error: 'userId and constellationId are required' };
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-91-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-150-    return { message: accept ? 'constellation accepted' : 'constellation declined' };
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-151-};
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-152-
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js:153:export const getViewportConstellationsService = async (postIds) => {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-154-    if (!Array.isArray(postIds) || postIds.length === 0) {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-155-        return [];
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-156-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-167-    return data || [];
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-168-};
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-169-
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js:170:export const deleteConstellationService = async (userId, constellationId) => {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-171-    if (!userId || !constellationId) {
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-172-        throw { status: 400, error: 'userId and constellationId are required' };
+C:\Users\johnm\iskrib_v3\server\services\constellationService.js-173-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\supabase.js-7-    process.env.SUPABASE_URL,
+C:\Users\johnm\iskrib_v3\server\services\supabase.js-8-    process.env.SUPABASE_SERVICE_ROLE,
+C:\Users\johnm\iskrib_v3\server\services\supabase.js-9-)
+C:\Users\johnm\iskrib_v3\server\services\supabase.js:10:export default supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-50-    return normalizedCandidateUrl.endsWith(`/${bucket}/${path}`);
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-51-};
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-52-
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js:53:export const deleteJournalImageService = async(userId, filepath) =>{
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-54-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-55-        console.error('userId is undefined');
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-56-        throw {status: 400, error:'userId is undefined'};
+--
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-73-    return true;
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-74-}
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-75-
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js:76:export const deleteProfileMediaImageService = async(userId, bucket, path, url = "") => {
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-77-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-78-        console.error("userId is undefined");
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-79-        throw {status: 400, error: "userId is undefined"};
+--
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-173-    };
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-174-};
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-175-
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js:176:export const deleteJournalContentService = async(journalId, userId) =>{
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-177-    if(!journalId){
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-178-        console.error('journalid is undefined')
+C:\Users\johnm\iskrib_v3\server\services\deleteService.js-179-        throw {status: 400, error:' journalId is undefined'}
+--
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-46-    return journal;
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-47-}
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-48-
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:49:export const createCanvasRemixService = async({sourceJournalId, userId, titleOverride = ''}) => {
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-50-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-51-        throw {status: 401, error: 'userId is undefined'};
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-52-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-247-    users(id, name, image_url, badge)
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-248-`;
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-249-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:250:export const getCurrentFreedomWallWeekService = async() => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-251-    let {data: activeWeek, error: activeWeekError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-252-        .from("freedom_wall_weeks")
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-253-        .select("*")
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-291-    return {week: activeWeek};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-292-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-293-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:294:export const getFreedomWallWeeksService = async(limit) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-295-    const parsedLimit = parseWeeksLimit(limit);
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-296-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-297-    const {data: weeks, error: weeksError} = await supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-308-    return {weeks: weeks || []};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-309-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-310-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:311:export const getFreedomWallItemsService = async(weekId, limit, cursor, types) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-312-    if(!weekId){
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-313-        throw {status: 400, error: "weekId is required"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-314-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-354-    };
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-355-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-356-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:357:export const createFreedomWallItemService = async({weekId, itemType, payload, zIndex = 0, userId}) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-358-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-359-        throw {status: 401, error: "not authorized"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-360-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-393-    return {item: createdItem};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-394-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-395-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:396:export const updateFreedomWallItemService = async({itemId, payload, zIndex, userId}) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-397-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-398-        throw {status: 401, error: "not authorized"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-399-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-456-    return {item: updatedItem};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-457-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-458-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:459:export const deleteFreedomWallItemService = async({itemId, userId}) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-460-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-461-        throw {status: 401, error: "not authorized"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-462-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-502-    return {message: "deleted", itemId: itemId};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-503-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-504-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:505:export const reportFreedomWallItemService = async({itemId, reporterUserId}) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-506-    if(!reporterUserId){
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-507-        throw {status: 401, error: "not authorized"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-508-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-549-    };
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-550-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-551-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:552:export const clearMyFreedomWallDoodlesService = async({weekId, userId}) => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-553-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-554-        throw {status: 401, error: "not authorized"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-555-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-581-    };
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-582-};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-583-
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:584:export const getFreedomWallStickersService = async() => {
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-585-    const {data: stickers, error: stickersError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-586-        .from("freedom_wall_stickers")
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js-587-        .select("id, name, asset_url, is_active, created_at")
+--
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-30-    return null;
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-31-}
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-32-
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js:33:export async function getRelatedPostsService(journalId) {
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-34-    const dynamicFloor = await getDynamicFloor();
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-35-
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-36-    // First attempt with dynamic floor

@@ -1,0 +1,295 @@
+# Constellations Feature — Implementation Plan
+
+## Context
+
+The Universe view currently displays posts as stars grouped into per-user galaxies with wormhole connections between semantically similar posts. This plan adds **Constellations** — user-created links between stars belonging to different users. This turns the Universe from a solo experience into a collaborative one where users can form "digital monuments" together.
+
+**Key decisions:**
+- Notification-based approval flow (request → accept/decline)
+- Custom spring constraint in existing force-based gravity system (no Matter.js)
+- Toggle button in Universe UI for "Link Mode"
+- Full scope: DB, API, rendering, physics, notifications, multi-chain, minimap
+
+---
+
+## Phase 1: Database Schema
+
+**Run in Supabase SQL editor**
+
+### 1.1 Create `constellations` table
+
+```sql
+CREATE TABLE constellations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    star_id_a UUID NOT NULL REFERENCES journals(id) ON DELETE CASCADE,
+    star_id_b UUID NOT NULL REFERENCES journals(id) ON DELETE CASCADE,
+    user_id_a UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    user_id_b UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    label TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT different_users CHECK (user_id_a != user_id_b),
+    CONSTRAINT different_stars CHECK (star_id_a != star_id_b),
+    CONSTRAINT unique_star_pair UNIQUE (star_id_a, star_id_b)
+);
+
+CREATE INDEX idx_const_star_a ON constellations(star_id_a);
+CREATE INDEX idx_const_star_b ON constellations(star_id_b);
+CREATE INDEX idx_const_status ON constellations(status);
+```
+
+### 1.2 Add `constellation_id` to `notifications`
+
+```sql
+ALTER TABLE notifications
+ADD COLUMN constellation_id UUID REFERENCES constellations(id) ON DELETE CASCADE DEFAULT NULL;
+```
+
+### 1.3 RPC for viewport constellation fetch
+
+```sql
+CREATE OR REPLACE FUNCTION get_viewport_constellations(post_ids UUID[])
+RETURNS TABLE (
+    id UUID, star_id_a UUID, star_id_b UUID,
+    user_id_a UUID, user_id_b UUID,
+    label TEXT, status TEXT, created_at TIMESTAMPTZ
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT c.id, c.star_id_a, c.star_id_b, c.user_id_a, c.user_id_b,
+           c.label, c.status, c.created_at
+    FROM constellations c
+    WHERE c.status = 'accepted'
+      AND (c.star_id_a = ANY(post_ids) OR c.star_id_b = ANY(post_ids));
+END;
+$$ LANGUAGE plpgsql STABLE;
+```
+
+---
+
+## Phase 2: Backend API
+
+### 2.1 Create `server/services/constellationService.js`
+
+Four service functions following the `interactService.js` pattern:
+
+| Function | Logic |
+|----------|-------|
+| `requestConstellationService(senderId, starIdA, starIdB, label)` | Validate starIdA belongs to senderId (query journals), get starIdB's owner as receiverId, check no existing pair, insert into `constellations` with status='pending', insert notification with type='constellation_request' + constellation_id |
+| `respondConstellationService(userId, constellationId, accept)` | Fetch constellation, verify userId === user_id_b and status === 'pending', update status to 'accepted'/'declined', if accepted insert notification type='constellation_accepted' to user_id_a |
+| `getViewportConstellationsService(postIds)` | Call `supabase.rpc('get_viewport_constellations', { post_ids: postIds })` |
+| `deleteConstellationService(userId, constellationId)` | Verify user is participant, delete row |
+
+### 2.2 Create `server/controller/constellationController.js`
+
+Thin wrappers matching the pattern in `interactController.js`. Each extracts params from `req.body`/`req.params`, calls service, returns JSON.
+
+### 2.3 Register routes in `server/routes/routes.js`
+
+```
+POST   /constellation/request    → requireAuth → requestConstellationController
+POST   /constellation/respond    → requireAuth → respondConstellationController
+GET    /constellation/viewport   → getViewportConstellationsController
+DELETE /constellation/:id        → requireAuth → deleteConstellationController
+```
+
+### 2.4 Add client API functions in `client/API/Api.js`
+
+Four new exports: `requestConstellation`, `respondConstellation`, `getViewportConstellations`, `deleteConstellation` — all using the existing `fetch` + Bearer token pattern.
+
+---
+
+## Phase 3: Physics — Constellation Spring Constraint
+
+### 3.1 Add to `client/src/components/Universe/utils/cosmicPhysics.js`
+
+New exported function `computeConstellationPullOffsets(constellations, starPositions, options)`:
+- For each accepted constellation link, compute a spring force between the two star positions
+- Spring with rest length (~200px), moderate stiffness (~0.03)
+- Accumulate force offsets per star, clamp max magnitude to 120
+- Returns `Map<postId, {dx, dy}>`
+
+### 3.2 Integrate into position pipeline in `Universe.jsx`
+
+Split `getComputedStarPosition` into two functions:
+1. `getBaseStarPosition(post)` — base + galaxy displacement + existing pull offsets (no constellation)
+2. `getComputedStarPosition(post)` — adds constellation pull offsets on top
+
+Compute `constellationPullOffsets` as a `useMemo` from base positions + constellation data. This avoids circular dependency (constellation offsets are computed from pre-constellation positions).
+
+---
+
+## Phase 4: Visual Rendering
+
+### 4.1 Create `client/src/components/Universe/layers/ConstellationLayer.jsx`
+
+Following the `WormholeLayer.jsx` pattern (Layer + Shape + sceneFunc + requestAnimationFrame):
+
+- **Accepted links**: Solid glowing line (outer glow at 0.08 alpha, inner line at 0.35 alpha) with an animated energy pulse (bright dot traveling along the line). Distinct from wormhole dashed lines.
+- **Pending links** (for current user only): Dim dashed line (0.12 alpha)
+- **Label**: Konva Text at midpoint (if label is non-empty), inverted zoom scale for readability
+- Color per link from `STAR_COLORS` palette, assigned consistently per chain
+
+### 4.2 Hoist `computedStarPositions` from InteractiveLayer to Universe.jsx
+
+Currently computed at `InteractiveLayer.jsx:69`. Move this `useMemo` up to `Universe.jsx` so both `ConstellationLayer` and `InteractiveLayer` can share it as a prop. Pass it down to both layers.
+
+### 4.3 Register ConstellationLayer in Universe.jsx Stage
+
+Insert between WormholeLayer and InteractiveLayer at parallax factor 1.0:
+
+```jsx
+<ConstellationLayer
+    layerProps={getLayerProps(1.0)}
+    constellations={constellations}
+    computedStarPositions={computedStarPositions}
+    zoom={zoom}
+/>
+```
+
+---
+
+## Phase 5: Link Mode UI
+
+### 5.1 Create `client/src/components/Universe/hooks/useConstellationLinkMode.js`
+
+State: `isLinkMode`, `firstStar`, `isSubmitting`
+
+Methods:
+- `toggleLinkMode()` — toggles mode, resets selection on exit
+- `cancelLinkMode()` — exits mode
+- `handleStarClickInLinkMode(post)` — first click must be user's own star, second click must be another user's star, then calls `requestConstellation` API
+
+### 5.2 Add UI elements in `Universe.jsx`
+
+- **Toggle button** (top area, offset right of back button): Shows "Link Stars" normally, "Select your star..." / "Select second star..." when active. Glass morphism styling, blue glow when active.
+- **Status indicator bar** (top-center): Shows instruction text + Cancel button when in link mode.
+- **ESC key handler**: `useEffect` with `keydown` listener to cancel link mode.
+- **Star click intercept**: Modify `handleStarClick` to route through `handleStarClickInLinkMode` when `isLinkMode` is true.
+
+### 5.3 Add CSS in `Universe.module.css`
+
+- `.linkModeButton` — glass morphism button matching `.backButton` style
+- `.linkModeActive` — blue glow border/shadow variant
+- `.linkModeIndicator` — centered floating bar with instruction text
+- `.linkModeCancel` — small cancel button inside indicator
+- Mobile responsive adjustments
+
+---
+
+## Phase 6: Notification Integration
+
+### 6.1 Update `client/helpers/formatNoficationType.js`
+
+Add two new entries:
+- `constellation_request: 'Wants to link stars with you'`
+- `constellation_accepted: 'Accepted your constellation link'`
+
+### 6.2 Update `client/src/components/Notifications/notificationsCards.jsx`
+
+- Add constellation icons to `iconArray` (link/chain icon SVG)
+- For `constellation_request` type notifications, render Accept/Decline buttons below the notification content
+- Call `respondConstellation` API on button click
+- For `constellation_accepted`, just display as informational (no action buttons)
+
+### 6.3 Update notification query in `server/routes/routes.js`
+
+In the `/getNotifications` route, add `constellation_id` to the select so the client can access the constellation data for respond actions.
+
+### 6.4 Add `useRespondConstellationMutation` in `client/src/utils/useMutation.js`
+
+React Query mutation that calls `respondConstellation` and invalidates `['getNotifications']` on settle.
+
+---
+
+## Phase 7: Data Fetching in Universe
+
+### 7.1 Add constellation state to `Universe.jsx`
+
+```javascript
+const [constellations, setConstellations] = useState([]);
+```
+
+### 7.2 Fetch alongside viewport posts
+
+In the existing debounced fetch effect (line 269), after receiving post data, call `getViewportConstellations` with the visible post IDs. Store accepted constellations in state. Separate request keeps the feature decoupled.
+
+---
+
+## Phase 8: Multi-Star Chains
+
+### 8.1 Create `client/src/components/Universe/utils/constellationUtils.js`
+
+- `computeConstellationChains(constellations)` — union-find algorithm to group links into connected components (chains)
+- `assignChainColors(chains, STAR_COLORS)` — maps each chain to a consistent color family so all links in a chain share the same color
+
+### 8.2 Use in ConstellationLayer
+
+Pass chain color assignments to the rendering logic so chains are visually cohesive.
+
+---
+
+## Phase 9: Minimap Integration
+
+### 9.1 Update `client/src/components/Universe/components/UniverseMinimap.jsx`
+
+- Accept new props: `constellations`, `computedStarPositions`
+- In the canvas draw effect, after drawing galaxy dots, draw thin blue lines between constellation-linked star positions (using `worldToMinimap` helper)
+
+---
+
+## Files Summary
+
+### New files to create
+| File | Purpose |
+|------|---------|
+| `server/services/constellationService.js` | Backend CRUD for constellations + notification creation |
+| `server/controller/constellationController.js` | Route handlers |
+| `client/src/components/Universe/layers/ConstellationLayer.jsx` | Konva rendering layer for constellation lines |
+| `client/src/components/Universe/hooks/useConstellationLinkMode.js` | Link mode state management |
+| `client/src/components/Universe/utils/constellationUtils.js` | Chain detection (union-find) + color assignment |
+
+### Existing files to modify
+| File | Changes |
+|------|---------|
+| `server/routes/routes.js` | Register 4 constellation endpoints, update notification select |
+| `client/API/Api.js` | Add 4 constellation API functions |
+| `client/src/components/Universe/utils/cosmicPhysics.js` | Add `computeConstellationPullOffsets` |
+| `client/src/components/Universe/Universe.jsx` | Constellation state, data fetching, link mode integration, position hoisting, ConstellationLayer registration, ESC handler |
+| `client/src/components/Universe/layers/InteractiveLayer.jsx` | Remove `computedStarPositions` useMemo (hoisted to parent), receive as prop |
+| `client/src/components/Universe/Universe.module.css` | Link mode button, indicator, active state styles |
+| `client/src/components/Universe/components/UniverseMinimap.jsx` | Accept constellation props, draw lines |
+| `client/helpers/formatNoficationType.js` | Add constellation_request, constellation_accepted |
+| `client/src/components/Notifications/notificationsCards.jsx` | Constellation icons, Accept/Decline buttons |
+| `client/src/utils/useMutation.js` | Add `useRespondConstellationMutation` |
+
+---
+
+## Implementation Order
+
+1. Database schema (SQL)
+2. Backend service + controller + routes
+3. Client API functions
+4. Hoist `computedStarPositions` from InteractiveLayer → Universe.jsx
+5. Constellation data fetching in Universe.jsx
+6. Physics: `computeConstellationPullOffsets` + position pipeline integration
+7. ConstellationLayer visual rendering
+8. Link mode hook + UI (toggle button, indicator, ESC, star click intercept)
+9. Notification integration (formatter, cards, mutation, backend query)
+10. Multi-chain grouping (union-find + chain colors)
+11. Minimap constellation lines
+12. CSS styling + mobile responsive
+
+---
+
+## Verification
+
+1. **DB**: Run SQL in Supabase, verify table/RPC creation
+2. **API**: Test endpoints with curl/Postman — create request, respond, fetch viewport, delete
+3. **Link mode**: Toggle on, click own star, click other user's star — verify request created in DB + notification sent
+4. **Notifications**: Open notification page, verify constellation_request shows with Accept/Decline buttons. Accept → verify status updated, constellation_accepted notification sent back
+5. **Rendering**: After accepting, verify glowing line appears between linked stars in Universe view
+6. **Physics**: Linked stars should gently pull toward each other (spring constraint)
+7. **Chains**: Link 3+ stars in sequence, verify same color family applied
+8. **Minimap**: Verify thin lines drawn on minimap for active constellations
+9. **Edge cases**: Delete a journal that's part of a constellation (CASCADE), decline a request, link mode cancel with ESC

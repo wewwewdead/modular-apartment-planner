@@ -1,0 +1,43 @@
+# Plan: Fix Section Cut Arrow Crash in Sheet Viewport
+
+## Context
+After adding a viewport to a sheet, `SheetCanvas` crashes with:
+```
+sources.js:19  Uncaught TypeError: Cannot read properties of undefined (reading 'x')
+```
+
+The crash path: `SheetCanvas.jsx:33` → `buildSheetScene` → `resolveSheetViewportSource` → `buildPlanSource` → `collectPlanPoints` → `boundsFromPoints`.
+
+**Root cause:** In `src/sheets/sources.js:62`, `collectPlanPoints` accesses section cut arrow properties that don't exist:
+```javascript
+points.push(renderData.arrow.tip, renderData.arrow.left, renderData.arrow.right);
+```
+But `sectionCutArrow()` (in `src/geometry/sectionCutGeometry.js:54-59`) returns:
+```javascript
+{ shaftStart, shaftEnd, headA, headB }
+```
+The properties `.tip`, `.left`, `.right` are all `undefined`. When `boundsFromPoints` tries to read `.x` from these, it crashes.
+
+The previous fix (try-catch in `PropertiesPanel.jsx addViewport`) is already applied and is fine — it prevents the button click from silently failing. But the rendering crash is the real bug.
+
+## Changes
+
+### 1. `src/sheets/sources.js` — line 62: fix arrow property names
+
+**Before:**
+```javascript
+points.push(renderData.arrow.tip, renderData.arrow.left, renderData.arrow.right);
+```
+
+**After:**
+```javascript
+points.push(renderData.arrow.shaftStart, renderData.arrow.shaftEnd, renderData.arrow.headA, renderData.arrow.headB);
+```
+
+This matches the actual shape returned by `sectionCutArrow()` and is consistent with how `SectionCutRenderer.jsx` and `SectionCutPreview.jsx` use these properties.
+
+## Verification
+1. Create a sheet via Sidebar → "Add Sheet"
+2. Click "Add viewport" in the Properties Panel
+3. A viewport rectangle should appear on the sheet canvas without console errors
+4. Add a section cut to the floor plan, then verify the sheet viewport still renders correctly

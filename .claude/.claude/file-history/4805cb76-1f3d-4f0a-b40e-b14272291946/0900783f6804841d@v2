@@ -1,0 +1,138 @@
+import { createWall } from '@/domain/models';
+import { distance } from '@/geometry/point';
+import { SNAP_DISTANCE_PX, MIN_WALL_LENGTH } from '@/domain/defaults';
+
+function snapToEndpoints(modelPos, walls, snapDistModel, chainStart) {
+  let best = null;
+  let bestDist = snapDistModel;
+
+  // Snap to chain start to close loop
+  if (chainStart) {
+    const d = distance(modelPos, chainStart);
+    if (d < bestDist) {
+      best = chainStart;
+      bestDist = d;
+    }
+  }
+
+  for (const wall of walls) {
+    for (const pt of [wall.start, wall.end]) {
+      const d = distance(modelPos, pt);
+      if (d < bestDist) {
+        best = pt;
+        bestDist = d;
+      }
+    }
+  }
+  return best;
+}
+
+function constrainAngle(start, end, shiftHeld) {
+  if (!shiftHeld) return end;
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const angle = Math.atan2(dy, dx);
+  const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+  const len = Math.sqrt(dx * dx + dy * dy);
+  return {
+    x: start.x + Math.cos(snapAngle) * len,
+    y: start.y + Math.sin(snapAngle) * len,
+  };
+}
+
+export function createWallDrawHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      const floor = getFloor(activeFloorId);
+      const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
+      const shiftHeld = e.shiftKey;
+
+      let snapped = modelPos;
+      if (snapEnabled) {
+        const snapPt = snapToEndpoints(modelPos, floor.walls, snapDistModel, toolState.chainStart);
+        if (snapPt) snapped = { ...snapPt };
+      }
+      snapped = constrainAngle(toolState.start || snapped, snapped, shiftHeld && toolState.start);
+      if (toolState.start && shiftHeld) {
+        snapped = constrainAngle(toolState.start, snapped, true);
+      }
+
+      if (!toolState.start) {
+        // First click: set start
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { start: snapped, chainStart: snapped, preview: null },
+        });
+      } else {
+        // Second+ click: create wall and chain
+        let endPt = snapped;
+        if (shiftHeld) {
+          endPt = constrainAngle(toolState.start, snapped, true);
+        }
+
+        const len = distance(toolState.start, endPt);
+        if (len < MIN_WALL_LENGTH) return;
+
+        const wall = createWall(toolState.start, endPt);
+        dispatch({ type: 'WALL_ADD', floorId: activeFloorId, wall });
+
+        // Check if we snapped back to chain start (close loop)
+        if (toolState.chainStart && distance(endPt, toolState.chainStart) < snapDistModel) {
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: { start: null, chainStart: null, preview: null },
+          });
+        } else {
+          // Chain: end becomes new start
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: { start: endPt, preview: null },
+          });
+        }
+      }
+    },
+
+    onMouseMove(modelPos, e, toolState) {
+      if (!toolState.start) return;
+      let preview = modelPos;
+      if (e.shiftKey) {
+        preview = constrainAngle(toolState.start, modelPos, true);
+      }
+
+      const floor = getFloor(activeFloorId);
+      const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
+      if (snapEnabled) {
+        const snapPt = snapToEndpoints(preview, floor.walls, snapDistModel, toolState.chainStart);
+        if (snapPt) preview = { ...snapPt };
+      }
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { preview },
+      });
+    },
+
+    onDoubleClick(modelPos, e, toolState) {
+      // Finish chain
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { start: null, chainStart: null, preview: null },
+      });
+    },
+
+    onKeyDown(e, toolState) {
+      if (e.key === 'Escape') {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { start: null, chainStart: null, preview: null },
+        });
+      }
+    },
+
+    getCursor(toolState) {
+      return 'crosshair';
+    },
+  };
+}

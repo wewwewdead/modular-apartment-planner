@@ -1,0 +1,38 @@
+.layout {
+  display: grid;
+  grid-template-rows: var(--toolbar-height) 1fr;
+  grid-template-columns:
+    var(--layout-sidebar-width, var(--sidebar-width))
+    1fr
+    var(--layout-properties-width, var(--properties-width));
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "sidebar canvas properties";
+  height: 100%;
+  width: 100%;
+}
+
+.toolbar {
+  grid-area: toolbar;
+  z-index: 10;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.canvas {
+  grid-area: canvas;
+  min-width: 0;
+  box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.04), inset -1px 0 3px rgba(0, 0, 0, 0.04);
+}
+
+.properties {
+  grid-area: properties;
+}
+
+.panelHidden {
+  display: none;
+}

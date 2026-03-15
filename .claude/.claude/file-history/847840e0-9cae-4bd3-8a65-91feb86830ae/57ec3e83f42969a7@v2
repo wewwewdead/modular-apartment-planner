@@ -1,0 +1,66 @@
+.mention-dropdown {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(12px);
+    overflow: hidden;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.mention-dropdown::-webkit-scrollbar {
+    width: 4px;
+}
+.mention-dropdown::-webkit-scrollbar-thumb {
+    background: var(--accent-amber);
+    border-radius: 4px;
+}
+
+.mention-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+
+.mention-dropdown-item:hover,
+.mention-dropdown-item--active {
+    background-color: var(--bg-pill);
+}
+
+.mention-dropdown-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.mention-dropdown-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.mention-dropdown-name {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mention-dropdown-username {
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    font-weight: 400;
+    color: var(--accent-amber);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

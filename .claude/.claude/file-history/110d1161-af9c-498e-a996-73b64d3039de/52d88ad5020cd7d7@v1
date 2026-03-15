@@ -1,0 +1,31 @@
+# Fix: Icon not visible in ThreePreviewPanel expand button
+
+## Context
+The fullscreen toggle feature was just implemented. The expand/collapse button in the ThreePreviewPanel header (`.button` class, selector `._button_15ip8_56`) renders an `ExpandIcon`/`CollapseIcon` SVG, but the icon is invisible because it has no sizing.
+
+**Root cause:** `ToolbarIcons.jsx` `I` component defaults to `className="icon"` (a plain string), but the `.icon` class that sizes icons (18x18px) lives in `Toolbar.module.css` — CSS Modules scopes it, so the plain `"icon"` class matches nothing. The SVG renders at 0x0.
+
+The SvgCanvas expand button works fine because `SvgCanvas.module.css` already has `.expandBtn svg { width: 14px; height: 14px; }`.
+
+## Fix
+
+**File: `src/three/viewer/ThreePreviewPanel.module.css`**
+
+Add an SVG sizing rule inside `.button`:
+
+```css
+.button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+```
+
+This targets the SVG child of any `.button` in the panel. The "Reset View" button has no SVG child so it's unaffected.
+
+## Verification
+1. `npm run dev` — open app
+2. Verify the expand icon is now visible in the 3D Preview header next to "Reset View"
+3. Verify "Reset View" button text still renders correctly (no visual regression)
+4. Click the expand button — panel maximizes, icon switches to collapse
+5. Click collapse — split view restores

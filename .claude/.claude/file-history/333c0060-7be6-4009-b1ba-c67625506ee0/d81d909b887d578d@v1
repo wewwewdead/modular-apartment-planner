@@ -1,0 +1,324 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { ListPlugin } from "@lexical/react/LexicalListPlugin";
+import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
+import { HorizontalRulePlugin } from "@lexical/react/LexicalHorizontalRulePlugin";
+import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
+import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
+import { TRANSFORMERS } from "@lexical/markdown";
+import { CodeHighlightPlugin } from "./plugins/CodeHighlightPlugin";
+import { AutoLinkPlugin } from "./plugins/AutoLinkPlugin";
+import FloatingLinkEditor from "./plugins/FloatingLinkEditor";
+import FloatingSelectionToolbar from "./plugins/FloatingSelectionToolbar";
+import PasteImagePlugin from "./plugins/PasteImagePlugin";
+import ImagePlugin from "./nodes/Plugins/ImagePlugin";
+import MentionPlugin from "./nodes/Plugins/MentionPlugin";
+
+import { saveJournal, saveDraft, publishDraft } from "../../../../API/Api";
+import { useAuth } from "../../../Context/useAuth";
+import { useQueryClient } from '@tanstack/react-query';
+
+import { BarLoader } from "react-spinners";
+import { $getRoot } from "lexical";
+
+
+class ErrorBoundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return <div>Error: {this.state.error.message}</div>;
+    }
+    return this.props.children;
+  }
+}
+
+/* theme for mapping css classes to lexical rols */
+const theme = {
+    paragraph: 'editor-paragraph',
+    heading: 'editor-heading',
+}
+
+const formatTimeAgo = (date) => {
+    if (!date) return '';
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
+};
+
+const EditorInner = ({title, onclose, onCloseOnSave, addUploadImagesPath, setWordCount, wordCount, promptId = null, draftId = null, onDraftIdCreated, editorStateRef}) => {
+    const [editor] = useLexicalComposerContext();
+    const [editorState, setEditorState] = useState(null);
+    const [hasContent, setHasContent] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+
+    // Draft state
+    const draftIdRef = useRef(draftId);
+    const [saveStatus, setSaveStatus] = useState(draftId ? 'saved' : null); // null | 'saving' | 'saved' | 'unsaved'
+    const [lastSavedAt, setLastSavedAt] = useState(draftId ? new Date() : null);
+    const [hasChanges, setHasChanges] = useState(false);
+    const saveTimerRef = useRef(null);
+    const [, forceUpdate] = useState(0);
+
+    // Expose saveTimerRef to parent so it can cancel pending auto-saves
+    useEffect(() => {
+        if (editorStateRef) {
+            editorStateRef.current.saveTimerRef = saveTimerRef;
+        }
+    }, [editorStateRef]);
+
+    const {session, user} = useAuth();
+
+    const queryClient = useQueryClient();
+    const userId = user?.userData?.[0]?.id || null;
+
+    // Keep draftIdRef in sync
+    useEffect(() => {
+        draftIdRef.current = draftId;
+    }, [draftId]);
+
+    // Tick the "saved X ago" display every 30s
+    useEffect(() => {
+        if (!lastSavedAt) return;
+        const interval = setInterval(() => forceUpdate(n => n + 1), 30000);
+        return () => clearInterval(interval);
+    }, [lastSavedAt]);
+
+    const invalidateCreatedJournalQueries = useCallback(async() => {
+        const invalidations = [
+            queryClient.invalidateQueries({queryKey: ['journals'], refetchType: 'active'}),
+            queryClient.invalidateQueries({queryKey: ['journals-following'], refetchType: 'active'}),
+            queryClient.invalidateQueries({queryKey: ['journals-for-you'], refetchType: 'active'}),
+            queryClient.invalidateQueries({queryKey: ['journals-search'], refetchType: 'active'}),
+            queryClient.invalidateQueries({queryKey: ['journals-suggestions'], refetchType: 'active'}),
+            queryClient.invalidateQueries({queryKey: ['journal-drafts'], refetchType: 'active'}),
+        ];
+
+        if(userId){
+            invalidations.push(
+                queryClient.invalidateQueries({queryKey: ['userJournals', userId], refetchType: 'active'}),
+                queryClient.invalidateQueries({queryKey: ['streak', userId], refetchType: 'active'})
+            );
+        }
+
+        await Promise.allSettled(invalidations);
+    }, [queryClient, userId]);
+
+    const handleSaveDraft = useCallback(async(showFeedback = true) => {
+        if (!editorState || !session?.access_token) return;
+        if (showFeedback) setSaveStatus('saving');
+
+        try {
+            const result = await saveDraft(session.access_token, {
+                content: editorState,
+                title: title || '',
+                draftId: draftIdRef.current || null,
+                prompt_id: promptId || null,
+            });
+
+            if (result?.id && !draftIdRef.current) {
+                draftIdRef.current = result.id;
+                if (onDraftIdCreated) onDraftIdCreated(result.id);
+            }
+
+            setHasChanges(false);
+            setSaveStatus('saved');
+            setLastSavedAt(new Date());
+            if (editorStateRef) {
+                editorStateRef.current = { ...editorStateRef.current, hasChanges: false };
+            }
+            queryClient.invalidateQueries({queryKey: ['journal-drafts'], refetchType: 'active'});
+        } catch (error) {
+            console.error('Failed to save draft:', error);
+            setSaveStatus('unsaved');
+        }
+    }, [editorState, session?.access_token, title, promptId, onDraftIdCreated, queryClient]);
+
+    // Auto-save every 30 seconds when there are changes
+    useEffect(() => {
+        if (!hasChanges || !editorState) return;
+
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            handleSaveDraft(false);
+        }, 30000);
+
+        return () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        };
+    }, [editorState, hasChanges, handleSaveDraft]);
+
+    const handleClickPublish = async(e, title) => {
+        e.stopPropagation();
+        setIsSending(true);
+
+        try {
+            // If we have a draft, publish it
+            if (draftIdRef.current) {
+                // Save latest content first
+                await saveDraft(session.access_token, {
+                    content: editorState,
+                    title: title || '',
+                    draftId: draftIdRef.current,
+                });
+
+                await publishDraft(session.access_token, draftIdRef.current);
+            } else {
+                // Direct publish (no draft exists) — use existing save-journal flow
+                const formdata = new FormData();
+                if(title && editorState){
+                    formdata.append('title', title);
+                    formdata.append('content', editorState);
+                }
+                if(promptId){
+                    formdata.append('prompt_id', promptId);
+                }
+                await saveJournal(session?.access_token, formdata);
+            }
+
+            await invalidateCreatedJournalQueries();
+            setHasContent(false);
+            onCloseOnSave();
+            addUploadImagesPath([]);
+        } catch (error) {
+            console.error("Error publishing journal:", error);
+        } finally {
+            setIsSending(false);
+        }
+    }
+
+    const onchange = useCallback((state) => {
+        const jsonb = JSON.stringify(state.toJSON());
+        setEditorState(jsonb)
+        setHasChanges(true);
+        if (saveStatus === 'saved') setSaveStatus('unsaved');
+
+        state.read(() => {
+            const root = $getRoot();
+
+            const children = root.getChildren();
+
+            const hasEnoughParagraphNodes = children.length > 1
+            const hasParargraphSize = children[0]?.__size > 0
+
+            const hasContent = hasParargraphSize || hasEnoughParagraphNodes
+            setHasContent(hasContent);
+
+            // Calculate word count
+            const text = root.getTextContent().trim();
+            const words = text ? text.split(/\s+/).length : 0;
+            setWordCount(words);
+
+            // Expose state to parent via ref
+            if (editorStateRef) {
+                editorStateRef.current = { ...editorStateRef.current, hasChanges: true, hasContent, editorState: jsonb, title };
+            }
+        })
+    }, [setWordCount, saveStatus])
+
+    const renderSaveStatus = () => {
+        if (!saveStatus) return null;
+
+        let statusText = '';
+        let statusClass = 'editor-save-status';
+
+        switch (saveStatus) {
+            case 'saving':
+                statusText = 'Saving...';
+                statusClass += ' editor-save-status--saving';
+                break;
+            case 'saved':
+                statusText = lastSavedAt ? `Saved ${formatTimeAgo(lastSavedAt)}` : 'Saved';
+                statusClass += ' editor-save-status--saved';
+                break;
+            case 'unsaved':
+                statusText = 'Unsaved changes';
+                statusClass += ' editor-save-status--unsaved';
+                break;
+            default:
+                return null;
+        }
+
+        return <span className={statusClass}>{statusText}</span>;
+    };
+
+    return(
+        <>
+        {/* Bar loader directly under toolbar */}
+        <div className="editor-loader-wrapper">
+            {isSending && (
+                <BarLoader loading={isSending} width={'100%'} height={3} color="var(--accent-purple)" speedMultiplier={0.7}/>
+            )}
+        </div>
+
+        {/* Editor content area */}
+        <div className="editor-shell">
+            <RichTextPlugin
+            contentEditable={
+            <ContentEditable
+            className="editor-input"
+            aria-placeholder="Write your thoughts here..."
+            placeholder={<div className="editor-placeholder">Write your thoughts here...</div>}/>
+            }
+            ErrorBoundary={LexicalErrorBoundary}
+            />
+
+            <ImagePlugin addUploadedImagePath={addUploadImagesPath}/>
+            <MentionPlugin/>
+            <HistoryPlugin/>
+            <OnChangePlugin onChange={onchange}/>
+            <ListPlugin/>
+            <CheckListPlugin/>
+            <HorizontalRulePlugin/>
+            <LinkPlugin validateUrl={(url) => {
+                try { return Boolean(new URL(url)); } catch { return false; }
+            }}/>
+            <AutoLinkPlugin/>
+            <CodeHighlightPlugin/>
+            <MarkdownShortcutPlugin transformers={TRANSFORMERS}/>
+            <FloatingLinkEditor/>
+            <FloatingSelectionToolbar/>
+            <PasteImagePlugin addUploadedImagePath={addUploadImagesPath} token={session?.access_token}/>
+
+        </div>
+
+        {/* Footer: word count + save status + buttons */}
+        <div className='editor-footer'>
+            <div className="editor-footer-left">
+                <span className="editor-word-count">
+                    {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                </span>
+                {renderSaveStatus()}
+            </div>
+            <div className="editor-footer-actions">
+                <button
+                    disabled={!hasContent || isSending}
+                    onClick={() => handleSaveDraft(true)}
+                    className={hasContent && !isSending ? 'editor-draft-bttn' : 'editor-draft-bttn-disabled'}
+                >
+                    Save Draft
+                </button>
+                <button
+                    disabled={!title || !hasContent || isSending}
+                    onClick={(e) => handleClickPublish(e, title)}
+                    className={title && hasContent && !isSending ? 'editor-save-bttn' : 'editor-save-bttn-disabled'}
+                >
+                    Publish
+                </button>
+            </div>
+        </div>
+        </>
+    )
+}
+
+export default EditorInner;

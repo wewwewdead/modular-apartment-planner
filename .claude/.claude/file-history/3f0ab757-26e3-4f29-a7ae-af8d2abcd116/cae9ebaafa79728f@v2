@@ -1,0 +1,39 @@
+import React from 'react';
+import { FlatList, StyleSheet } from 'react-native';
+
+import { Chip } from '../../../components/Chip';
+import { Category } from '../../../domain/models';
+import { spacing } from '../../../theme/spacing';
+
+interface CategoryChipRowProps {
+  categories: Category[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}
+
+export function CategoryChipRow({ categories, selectedId, onSelect }: CategoryChipRowProps) {
+  return (
+    <FlatList
+      horizontal
+      data={[{ uid: '', name: 'All', emoji: null } as Category, ...categories]}
+      keyExtractor={item => item.uid}
+      renderItem={({ item }) => (
+        <Chip
+          label={item.emoji ? `${item.emoji} ${item.name}` : item.name}
+          selected={selectedId === item.uid}
+          onPress={() => onSelect(item.uid)}
+          accessibilityLabel={`Filter by ${item.name}`}
+        />
+      )}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.content}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  content: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+});

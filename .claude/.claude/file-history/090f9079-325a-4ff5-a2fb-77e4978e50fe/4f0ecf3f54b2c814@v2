@@ -1,0 +1,1398 @@
+
+.opinions-loading-container{
+    display: flex;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+}
+.side-bar-opinions-parent-container{
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: column;
+    align-items: center;
+    width: 98%;
+    height: 100%;
+    gap: 0.8rem;
+}
+.signal-container{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    height: fit-content;
+    width: 90%;
+    margin-top: 1rem;
+    padding: 0.8rem;
+    border: 0.7px solid  rgba(151, 151, 151, 0.168);
+    gap: 0.8rem;
+    background-color: #D4A853;
+    border-radius: 15px;
+}
+.signal-header{
+    font-weight: 780;
+    font-size: 1.1rem;
+    line-height: 1.4rem;
+    padding: 0;
+    margin: 0;
+}
+.write-opinions-bttn {
+  cursor: pointer;
+  border: none;
+  padding: 0.5rem 0.8rem;
+  color: rgb(255, 255, 255);
+  font-weight: 650;
+  border-radius: 15px;
+  background-color: rgb(4, 20, 29);
+  transition: ease-in-out 0.2s;
+}
+.write-opinions-bttn:hover{
+    background-color: #B8862D;
+}
+
+.latest-opinions-container{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 90%;
+    padding: 0.8rem;
+    border: 0.7px solid  rgba(151, 151, 151, 0.168);
+    gap: 0.8rem;
+    height: 480px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+.latest-opinions-container::-webkit-scrollbar{
+    width: 5px;
+}
+.latest-opinions-container::-webkit-scrollbar-thumb{
+    background: var(--accent-amber);
+    border-radius: 4px;
+}
+.latest-opinions-container::-webkit-scrollbar-track{
+    background-color: var(--bg-pill);
+}
+
+.latest-opinions-header{
+    font-weight: 780;
+    font-family: var(--font-ui);
+    color: var(--text-heading);
+}
+
+/* ── Opinion Editor (oe-) ── */
+.oe-backdrop {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(12px);
+    z-index: 130;
+}
+
+.oe-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(480px, 90%);
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    transition: box-shadow 0.25s ease;
+}
+
+.oe-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.15rem;
+    border-bottom: 1px solid var(--border-card);
+}
+.oe-title {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-ui);
+    font-size: 0.88rem;
+    font-weight: 650;
+    color: var(--text-heading);
+    letter-spacing: -0.01rem;
+}
+.oe-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+.oe-close-btn:hover {
+    background-color: var(--bg-pill);
+    color: var(--text-heading);
+}
+
+.oe-body {
+    padding: 0.75rem 1.15rem;
+}
+.oe-textarea {
+    width: 100%;
+    min-height: 120px;
+    border: none;
+    background-color: transparent;
+    color: var(--text-body);
+    font-family: var(--font-serif);
+    font-size: 0.92rem;
+    line-height: 1.7;
+    letter-spacing: 0.005rem;
+    resize: none;
+    padding: 0;
+    box-sizing: border-box;
+}
+.oe-textarea::placeholder {
+    color: var(--text-faint);
+}
+.oe-textarea:focus {
+    outline: none;
+}
+
+.oe-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1.15rem 0.85rem 1.15rem;
+    border-top: 1px solid var(--border-card);
+}
+.oe-char-count {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-faint);
+    letter-spacing: 0.01rem;
+    transition: color 0.15s ease;
+}
+.oe-char-warn {
+    color: var(--accent-amber, #f59e0b);
+}
+.oe-char-limit {
+    color: rgb(255, 116, 116);
+}
+
+.oe-save-btn {
+    border: none;
+    padding: 0.35rem 1.15rem;
+    border-radius: 20px;
+    background-color: var(--accent-amber);
+    color: #ffffff;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.oe-save-btn:hover {
+    opacity: 0.88;
+}
+.oe-save-btn:active {
+    transform: scale(0.97);
+}
+.oe-save-disabled {
+    cursor: default;
+    user-select: none;
+    opacity: 0.4;
+}
+.oe-save-disabled:hover {
+    opacity: 0.4;
+}
+
+.oe-loader {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 0 0 12px 12px;
+}
+
+.sidebar-opinions-cards-container{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: fit-content;
+    gap: 0;
+}
+
+.opinions-card-container{
+    display: flex;
+    flex-direction: column;
+    width: 95%;
+    height: 80vh;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    position: relative;
+    top: 130px;
+    padding-bottom: 8rem;
+}
+.opinions-card{
+    display: flex;
+    flex-direction: column;
+    width: 95%;
+    height: fit-content;
+    gap: 1rem;
+}
+
+.opinions-profile{
+    width: 30px;
+    height: 30px;
+    object-fit: cover;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.opinions-username{
+    font-weight: 780;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+}
+.opinions-username:hover{
+    text-decoration: underline;
+}
+.opinions-user-email{
+    padding: 0;
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 560;
+    color: rgb(117, 127, 132);
+}
+.opinions-user-metadata{
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+}
+.opinion-username{
+    font-weight: 680;
+    margin: 0;
+    padding: 0;
+}
+.opinions-page-content{
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    font-weight: 400;
+    color: rgb(80, 80, 80);
+    line-height: 1.2rem;
+    font-size: 0.8rem;
+    border-radius: 15px;
+    padding: 0.8rem;
+    background-color: rgba(212, 168, 83, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05),
+                0 1px 4px rgba(0, 0, 0, 0.05);
+}
+/* The larger circle */
+.opinions-page-content::before {
+    content: "";
+    position: absolute;
+    bottom: -15px;
+    left: 30px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: rgba(212, 168, 83, 0.25);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+/* The smaller circle */
+.opinions-page-content::after {
+    content: "";
+    position: absolute;
+    bottom: -20px;
+    left: 20px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: rgba(212, 168, 83, 0.2);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+.opinion-reply-button{
+    position: absolute;
+    bottom: -25px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 10px;
+    background-color: rgba(212, 168, 83, 0.25);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05),
+                0 1px 4px rgba(0, 0, 0, 0.05);
+    gap: 0.2rem;
+    color: rgb(80, 80, 80);
+}
+.mobile-write-opinions{
+    display: flex;
+    position: fixed;
+    width: 100%;
+    height: 120px;
+    gap: 0.5rem;
+    border-bottom: 0.7px solid #0000001b;
+    background-color: #ffffff;
+    z-index: 131;
+
+}
+.write-profile-container{
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: fit-content;
+    height: 100%;
+    padding: 0rem 0 0 0.2rem;
+}
+.write-profile{
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.opinion-input-container{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    width: 100%;
+    height: 100%;
+}
+.mobile-input-opinion{
+    width: 95%;
+    height: 80%;
+    padding: 0.4rem;
+    border: none;
+    background-color: rgb(255, 255, 255);
+    color: #000000;
+    font-family: "Nunito", sans-serif;
+    font-size: 1.2rem;
+}
+.mobile-input-opinion:focus{
+    outline: none;
+}
+
+.my-opinions-content{
+    position: relative;
+    margin: 0;
+    font-weight: 400;
+    color: rgb(80, 80, 80);
+    line-height: 1.2rem;
+    font-size: 0.8rem;
+    border-radius: 15px;
+    padding: 0.8rem 1rem;
+    background-color: rgba(212, 168, 83, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.see-fullpage-bttn{
+    cursor: pointer;
+    font-weight: 650;
+    font-size: 0.78rem;
+    color: var(--accent-amber);
+    font-family: var(--font-ui);
+    text-decoration: underline;
+}
+
+/* ── Write Opinion FAB ── */
+.write-opinion-fab {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 6.5rem;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 54px;
+    height: 54px;
+    background: linear-gradient(135deg, var(--accent-amber), #C49A3E);
+    border: none;
+    border-radius: 50%;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18),
+                0 1.5px 6px rgba(0, 0, 0, 0.10),
+                0 0 18px rgba(212, 168, 83, 0.35);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.opinions-page-parent-container{
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    position: relative;
+    width: 100%;
+    top: 60px;
+    height: 100dvh;
+    gap: 0;
+    padding: 1rem 0 0rem 0;
+}
+.opinions-page-no-opinions{
+    display: flex;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+}
+.icon-glyph{
+    padding: 0.5rem;
+}
+.is-sending-opinion-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 98%;
+    height: 100%;
+    z-index: 130;
+    background-color: rgba(255, 255, 255, 0.089);
+    backdrop-filter: blur(25px);
+}
+.opinions-in-view{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 400px;
+    width: 100%;
+    padding: 2rem 0;
+}
+
+.visited-profile-opinions-container{
+    display: flex;
+    justify-content: flex-start;
+    gap: 0;
+    flex-wrap: wrap;
+    width: 90%;
+    padding: 1rem;
+    height: fit-content;
+    margin-top: 1rem;
+    background-color: rgba(255, 255, 255, 0.23);
+    backdrop-filter: blur(25px);
+    border-radius: 20px;
+    border: 0.7px solid rgba(151, 151, 151, 0.168);
+    margin-bottom: 4rem;
+}
+
+.visited-profile-opinion-card{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: fit-content;
+    gap: 1rem;
+}
+
+.visited-profile-opinion-content{
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    font-weight: 500;
+    color: rgb(80, 80, 80);
+    line-height: 1.2rem;
+    font-size: 1rem;
+    border-radius: 15px;
+    padding: 0.8rem;
+    background-color: rgba(212, 168, 83, 0.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05),
+                0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* The larger circle */
+.visited-profile-opinion-content::before {
+    content: "";
+    position: absolute;
+    bottom: -15px;
+    left: 30px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: rgba(212, 168, 83, 0.15);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+/* The smaller circle */
+.visited-profile-opinion-content::after {
+    content: "";
+    position: absolute;
+    bottom: -20px;
+    left: 20px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: rgba(212, 168, 83, 0.12);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+.visited-user-opinions-inview{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 10px;
+}
+
+.my-opinions-container{
+    display: flex;
+    justify-content: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    width: 90%;
+    padding: 1rem;
+    height: fit-content;
+    margin-top: 1rem;
+    background-color: rgba(255, 255, 255, 0.23);
+    backdrop-filter: blur(25px);
+    border-radius: 20px;
+    border: 0.7px solid rgba(151, 151, 151, 0.168);
+    margin-bottom: 4rem;
+}
+.opinions-visited-user-metadata{
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.4rem;
+}
+.my-opinions-inview-container{
+    display: flex;
+    width: 100%;
+    height: 10px;
+}
+/* ── Avatar Badge Rings ── */
+.so-avatar-container,
+.so-avatar-outer,
+.ov-avatar-container,
+.rc-avatar-container,
+.opinions-profile-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+.avatar-ring-legend {
+    border: 2px solid #FFD700;
+    box-shadow:
+        0 0 6px 1px rgba(255, 215, 0, 0.5),
+        0 0 12px 2px rgba(255, 215, 0, 0.35),
+        0 0 20px 4px rgba(255, 215, 0, 0.2);
+    animation: glow-legend 2s ease-in-out infinite alternate;
+}
+.avatar-ring-og {
+    border: 2px solid #9B59FF;
+    box-shadow:
+        0 0 6px 1px rgba(155, 89, 255, 0.5),
+        0 0 12px 2px rgba(155, 89, 255, 0.35),
+        0 0 20px 4px rgba(155, 89, 255, 0.2);
+    animation: glow-og 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow-legend {
+    from {
+        box-shadow:
+            0 0 6px 1px rgba(255, 215, 0, 0.5),
+            0 0 12px 2px rgba(255, 215, 0, 0.35),
+            0 0 20px 4px rgba(255, 215, 0, 0.2);
+    }
+    to {
+        box-shadow:
+            0 0 8px 2px rgba(255, 215, 0, 0.6),
+            0 0 16px 4px rgba(255, 215, 0, 0.4),
+            0 0 24px 6px rgba(255, 215, 0, 0.25);
+    }
+}
+
+@keyframes glow-og {
+    from {
+        box-shadow:
+            0 0 6px 1px rgba(155, 89, 255, 0.5),
+            0 0 12px 2px rgba(155, 89, 255, 0.35),
+            0 0 20px 4px rgba(155, 89, 255, 0.2);
+    }
+    to {
+        box-shadow:
+            0 0 8px 2px rgba(155, 89, 255, 0.6),
+            0 0 16px 4px rgba(155, 89, 255, 0.4),
+            0 0 24px 6px rgba(155, 89, 255, 0.25);
+    }
+}
+.so-avatar-outer.avatar-ring-legend,
+.so-avatar-outer.avatar-ring-og {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    height: auto;
+}
+.so-avatar-outer.avatar-ring-legend .so-avatar,
+.so-avatar-outer.avatar-ring-og .so-avatar {
+    width: 36px;
+    height: 36px;
+}
+
+/* ── Sidebar Opinion Card (so-) — Borderless Timeline ── */
+.so-card-wrapper {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border-card);
+    padding: 0;
+    margin-bottom: 0;
+    transition: background-color 0.15s ease;
+}
+.so-card-wrapper:hover {
+    background-color: rgba(128, 128, 128, 0.03);
+}
+.so-avatar-outer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background-color: transparent;
+    cursor: pointer;
+}
+.so-avatar-outer .so-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border-card);
+}
+/* Small avatar variant for replies */
+.so-avatar-outer--sm {
+    width: 28px;
+    height: 28px;
+}
+.so-avatar-outer--sm .so-avatar,
+.so-avatar--sm {
+    width: 28px;
+    height: 28px;
+}
+
+.so-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    box-sizing: border-box;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 1rem 0.75rem;
+    color: var(--text-primary);
+    box-shadow: none;
+    transition: none;
+}
+.so-card:hover {
+    box-shadow: none;
+}
+
+/* Parent card variant for detail view */
+.so-card--parent {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 16px;
+    padding: 1.25rem;
+    box-shadow: var(--shadow-card-sm);
+}
+.so-card--parent:hover {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+}
+
+.visited-profile-opinions-container .so-card {
+    border: none;
+    box-shadow: none;
+}
+
+.so-card-content{
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+}
+.so-card--profile{
+    background-color: var(--bg-card);
+}
+.so-card--profile::before{
+    content: none;
+}
+.so-card--profile .so-username,
+.so-card--profile .so-body,
+.so-card--profile .ov-date{
+    color: inherit;
+}
+
+/* ── New header row (flat inline) ── */
+.so-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.so-dot {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.so-date {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.so-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    cursor: pointer;
+}
+.so-username {
+    font-family: var(--font-ui);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.so-username:hover {
+    color: var(--accent-amber);
+}
+
+.so-body {
+    font-family: var(--font-serif);
+    font-size: clamp(1.02rem, 0.96rem + 0.25vw, 1.2rem);
+    line-height: 1.45;
+    color: var(--text-primary);
+    cursor: pointer;
+    margin-left: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+    display: block;
+    padding-top: 0.25rem;
+}
+/* Larger body for parent card in detail view */
+.so-body--parent {
+    font-size: clamp(1.08rem, 1rem + 0.3vw, 1.3rem);
+    line-height: 1.55;
+}
+
+/* ── Action row ── */
+.so-action-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-left: 0;
+    padding-top: 0.25rem;
+}
+.so-reply-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background-color: transparent;
+    border: none;
+    border-radius: 20px;
+    padding: 0.3rem 0.75rem;
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.so-reply-btn:hover {
+    color: var(--accent-amber);
+    background-color: rgba(212, 168, 83, 0.08);
+}
+
+.opinions-page-parent-container .so-card-wrapper {
+    width: min(720px, 92%);
+    margin: 0 auto;
+}
+
+/* ── Opinion Viewer (ov-) — kept for MyOpinions.jsx ── */
+.ov-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    padding: 1.15rem;
+    gap: 0.75rem;
+    box-sizing: border-box;
+    transition: box-shadow 0.25s ease;
+    margin-bottom: 1rem;
+}
+.ov-card:hover {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+}
+
+.ov-user-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.ov-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.ov-username {
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.ov-username:hover {
+    color: var(--accent-amber);
+    text-decoration: underline;
+}
+.ov-dot {
+    color: var(--text-separator);
+    font-size: 0.8rem;
+    line-height: 1;
+}
+.ov-date {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: var(--text-faint);
+}
+
+.ov-body {
+    font-family: var(--font-serif);
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: var(--text-body);
+    cursor: pointer;
+}
+
+.ov-meta-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border-card);
+}
+.ov-reply-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background-color: var(--bg-pill);
+    border-radius: 10px;
+    padding: 0.2rem 0.6rem;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--accent-amber);
+    cursor: pointer;
+}
+.ov-full-date {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: var(--text-faint);
+}
+
+/* ── Opinion Viewer stats + divider ── */
+.ov-stats-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding-top: 0.35rem;
+}
+.ov-stats-row .ov-reply-count {
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+.ov-stats-row .so-dot {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+}
+.ov-stats-row .ov-full-date {
+    font-size: 0.75rem;
+}
+.ov-divider {
+    width: 100%;
+    height: 1px;
+    background-color: var(--border-card);
+    margin: 0.35rem 0;
+}
+
+/* ── Reply composer (ov-composer) ── */
+.ov-composer {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    padding-top: 0.35rem;
+}
+.ov-composer-input-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.ov-reply-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.25rem;
+}
+.ov-reply-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+.ov-reply-input {
+    flex: 1;
+    min-height: 1.4rem;
+    outline: none;
+    border: none;
+    border-bottom: 1px solid var(--border-card);
+    background-color: transparent;
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    font-style: normal;
+    color: var(--text-primary);
+    padding-bottom: 0.25rem;
+    resize: none;
+    transition: border-color 0.2s ease;
+}
+.ov-reply-input::placeholder {
+    color: var(--text-faint);
+}
+.ov-reply-input:focus {
+    border-bottom: 1px solid var(--border-card);
+}
+
+.ov-composer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    overflow: hidden;
+}
+.ov-char-count {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-faint);
+}
+
+.ov-btn-row {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    overflow: hidden;
+}
+.ov-btn-cancel {
+    cursor: pointer;
+    background-color: transparent;
+    border: 1px solid var(--border-card);
+    color: var(--text-primary);
+    border-radius: 20px;
+    padding: 0.35rem 1rem;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
+}
+.ov-btn-cancel:hover {
+    background-color: var(--bg-hover);
+}
+.ov-btn-submit {
+    cursor: pointer;
+    border: none;
+    padding: 0.35rem 1rem;
+    border-radius: 20px;
+    background-color: var(--accent-amber);
+    color: #ffffff;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: opacity 0.15s ease;
+}
+.ov-btn-submit:hover {
+    opacity: 0.88;
+}
+.ov-btn-submit.ov-btn-disabled {
+    cursor: default;
+    user-select: none;
+    opacity: 0.45;
+}
+
+/* ── Reply Card (rc-) — Avatar-column thread ── */
+.rc-thread {
+    padding-left: calc(var(--depth, 0) * 1rem);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.rc-reply {
+    display: flex;
+    gap: 0.65rem;
+    padding: 0.65rem 0;
+}
+
+.rc-avatar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 32px;
+    flex-shrink: 0;
+}
+.rc-connector {
+    flex: 1;
+    width: 2px;
+    background-color: var(--border-card);
+    border-radius: 1px;
+    margin-top: 0.35rem;
+    transition: background-color 0.2s ease;
+}
+.rc-reply:hover .rc-connector {
+    background-color: var(--accent-amber);
+}
+.rc-connector--hidden {
+    visibility: hidden;
+}
+
+.rc-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.rc-user-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.rc-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.rc-username {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-heading);
+}
+.rc-dot {
+    color: var(--text-separator);
+    font-size: 0.75rem;
+    line-height: 1;
+}
+.rc-date {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: var(--text-faint);
+}
+
+.rc-body {
+    font-family: var(--font-serif);
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: var(--text-body);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.rc-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.15rem;
+}
+.rc-show-replies {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--accent-amber);
+    transition: opacity 0.15s ease;
+}
+.rc-show-replies:hover {
+    opacity: 0.8;
+}
+.rc-reply-btn {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: color 0.15s ease;
+}
+.rc-reply-btn:hover {
+    color: var(--accent-amber);
+}
+
+.rc-inline-composer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    overflow: hidden;
+    padding-top: 0.25rem;
+}
+
+.rc-load-more {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0.35rem 0;
+    margin-top: 0.25rem;
+    margin-left: calc(32px + 0.65rem);
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--accent-amber);
+    transition: opacity 0.15s ease;
+}
+.rc-load-more:hover {
+    opacity: 0.8;
+}
+
+@media(max-width: 480px){
+    .visited-profile-opinion-content{
+        font-weight: 400;
+        font-size: 0.8rem;
+    }
+    .visited-profile-opinions-container{
+        width: 95%;
+        padding: 0.65rem;
+        margin-bottom: 4rem;
+        height: fit-content;
+    }
+    .opinions-page-parent-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+        top: 60px;
+        height: 100dvh;
+        gap: 0;
+        padding: 1rem 0 0rem 0;
+    }
+
+    .oe-card {
+        width: min(420px, 92%);
+        border-radius: 10px;
+    }
+    .oe-header {
+        padding: 0.7rem 0.85rem;
+    }
+    .oe-title {
+        font-size: 0.82rem;
+    }
+    .oe-body {
+        padding: 0.6rem 0.85rem;
+    }
+    .oe-textarea {
+        min-height: 100px;
+        font-size: 0.85rem;
+    }
+    .oe-footer {
+        padding: 0.5rem 0.85rem 0.7rem 0.85rem;
+    }
+    .oe-save-btn {
+        font-size: 0.72rem;
+        padding: 0.3rem 0.9rem;
+    }
+
+    .so-card--parent {
+        padding: 0.85rem;
+        border-radius: 12px;
+    }
+
+    .opinions-page-parent-container .so-card-wrapper {
+        width: 92%;
+    }
+
+    /* ── Sidebar Opinion Card mobile ── */
+    .so-card-wrapper {
+        width: 100%;
+        padding: 0;
+        margin-bottom: 0;
+    }
+    .so-avatar-outer {
+        width: 30px;
+        height: 30px;
+    }
+    .so-avatar-outer .so-avatar {
+        width: 30px;
+        height: 30px;
+    }
+    .so-avatar-outer.avatar-ring-legend,
+    .so-avatar-outer.avatar-ring-og {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
+        height: auto;
+    }
+    .so-avatar-outer.avatar-ring-legend .so-avatar,
+    .so-avatar-outer.avatar-ring-og .so-avatar {
+        width: 30px;
+        height: 30px;
+    }
+    .so-card {
+        padding: 0.75rem 0.6rem;
+    }
+    .so-avatar {
+        width: 30px;
+        height: 30px;
+    }
+    .so-username {
+        font-size: 0.82rem;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .so-body {
+        font-size: 1rem;
+        line-height: 1.35;
+        margin-left: 0;
+    }
+    .so-action-row {
+        margin-left: 0;
+    }
+    .so-reply-btn {
+        font-size: 0.78rem;
+    }
+
+    /* ── Opinion Viewer mobile ── */
+    .ov-card {
+        border-radius: 10px;
+        padding: 0.85rem;
+        gap: 0.55rem;
+    }
+    .ov-avatar {
+        width: 28px;
+        height: 28px;
+    }
+    .ov-username {
+        font-size: 0.78rem;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .ov-body {
+        font-size: 0.85rem;
+        line-height: 1.6;
+    }
+    .ov-reply-avatar {
+        width: 24px;
+        height: 24px;
+    }
+    .ov-reply-input {
+        font-size: 0.78rem;
+    }
+    .ov-btn-cancel,
+    .ov-btn-submit {
+        font-size: 0.72rem;
+        padding: 0.3rem 0.8rem;
+    }
+
+    /* ── Reply Card mobile ── */
+    .rc-reply {
+        gap: 0.45rem;
+    }
+    .rc-thread {
+        padding-left: calc(var(--depth, 0) * 0.5rem);
+    }
+    .rc-avatar-col {
+        width: 24px;
+    }
+    .rc-avatar-col .so-avatar-outer {
+        width: 24px;
+        height: 24px;
+    }
+    .rc-avatar-col .so-avatar-outer .so-avatar {
+        width: 24px;
+        height: 24px;
+    }
+    .rc-avatar {
+        width: 18px;
+        height: 18px;
+    }
+    .rc-username {
+        font-size: 0.72rem;
+        max-width: 100px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .rc-body {
+        font-size: 0.8rem;
+    }
+    .rc-show-replies,
+    .rc-reply-btn {
+        font-size: 0.68rem;
+    }
+    .rc-load-more {
+        font-size: 0.7rem;
+        margin-left: calc(24px + 0.65rem);
+    }
+
+    /* ── Write Opinion FAB mobile ── */
+    .write-opinion-fab {
+        right: 1.25rem;
+        bottom: 6.5rem;
+        width: 54px;
+        height: 54px;
+    }
+}
+@media(max-width: 432px){
+    .oe-card {
+        width: 92%;
+    }
+
+    .write-opinion-fab {
+        right: 1rem;
+        bottom: 6rem;
+        width: 50px;
+        height: 50px;
+    }
+}

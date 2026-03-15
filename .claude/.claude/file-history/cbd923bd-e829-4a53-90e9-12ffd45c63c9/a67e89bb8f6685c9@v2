@@ -1,0 +1,47 @@
+function formatMm(value) {
+  return `${Math.round(value)} mm`;
+}
+
+export function getSketchPartInspection(project, selectedId) {
+  if (!selectedId) return null;
+
+  const part = project.parts.find((p) => p.id === selectedId);
+  if (!part) return null;
+
+  // Skip non-visible types
+  if (part.type === 'dimension' || part.type === 'cutout' || part.type === 'hole') return null;
+
+  const title = part.name || `Part (${part.type})`;
+  const assembly = part.assemblyId
+    ? project.assemblies.find((a) => a.id === part.assemblyId)
+    : null;
+  const subtitle = assembly ? assembly.name : 'Unassigned';
+
+  const rows = [];
+
+  switch (part.type) {
+    case 'panel':
+      rows.push({ label: 'Width', value: formatMm(part.width) });
+      rows.push({ label: 'Depth', value: formatMm(part.depth) });
+      rows.push({ label: 'Thickness', value: formatMm(part.thickness) });
+      break;
+    case 'leg':
+      rows.push({ label: 'Width', value: formatMm(part.width) });
+      rows.push({ label: 'Depth', value: formatMm(part.depth) });
+      rows.push({ label: 'Height', value: formatMm(part.height) });
+      if (part.profile) rows.push({ label: 'Profile', value: part.profile });
+      break;
+    case 'frame':
+      rows.push({ label: 'Length', value: formatMm(part.length) });
+      rows.push({ label: 'Width', value: formatMm(part.width) });
+      rows.push({ label: 'Height', value: formatMm(part.height) });
+      if (part.axis) rows.push({ label: 'Axis', value: part.axis.toUpperCase() });
+      break;
+    default:
+      if (part.width) rows.push({ label: 'Width', value: formatMm(part.width) });
+      if (part.depth) rows.push({ label: 'Depth', value: formatMm(part.depth) });
+      if (part.height) rows.push({ label: 'Height', value: formatMm(part.height) });
+  }
+
+  return { id: part.id, title, subtitle, rows };
+}

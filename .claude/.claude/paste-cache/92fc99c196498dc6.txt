@@ -1,0 +1,33 @@
+Add attachments and constraints to Sketch Studio.
+
+Main goal:
+Allow users to customize generated object assemblies like tables, cabinets, desks, and shelves without breaking geometric consistency.
+
+Requirements:
+- keep Sketch separate from Floorplan
+- keep dimensions as the source of truth
+- keep geometry generation modular and separate from React
+
+Add attachment support for:
+- attach part to face
+- attach part to edge
+- center part on parent axis
+- inset from edge
+- flush with surface
+
+Add practical constraints for:
+- align left/right/top/bottom
+- center horizontally/vertically
+- equal spacing for repeated parts
+- fixed offset from reference edge
+
+Behavior requirements:
+- attachments and constraints must update geometry predictably
+- orthographic views and 3D preview must remain consistent with the same source model
+- generated objects such as tables and cabinets should remain editable through these relationships
+- do not overbuild a full CAD constraint solver yet
+- focus on practical, robust, assembly-oriented relationships
+
+UI requirements:
+- expose attachments/constraints in the properties panel or part editing workflow
+- make them understandable and useful for object assembly editing

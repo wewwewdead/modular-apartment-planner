@@ -1,0 +1,116 @@
+# Remove Universe Feature
+
+## Context
+
+Removing the Universe page and all related code (constellations, galaxy settle, star positioning). The feature is largely self-contained, but has tendrils in a few shared files (uploadService, routes, notifications, nav links) that need surgical cleanup.
+
+## Files to DELETE entirely
+
+| File / Folder | What it is |
+|---|---|
+| `client/src/components/Universe/` | Entire folder — 27 files (component, layers, hooks, utils, CSS module) |
+| `server/controller/constellationController.js` | Constellation CRUD controller |
+| `server/services/constellationService.js` | Constellation DB service |
+| `server/services/galaxySettleService.js` | Force-directed graph layout engine |
+| `server/scripts/runGalaxySettle.js` | Galaxy settle CLI script |
+| `server/scripts/backfillUniverseCoords.js` | Backfill universe_x/y script |
+| `server/sql/constellations.sql` | Constellation table DDL (reference only) |
+| `server/sql/galaxy_gravity.sql` | Galaxy tables/RPCs DDL (reference only) |
+
+## Files to EDIT (surgical removals)
+
+### 1. `client/src/App.jsx`
+- **Line 37**: Remove `const Universe = lazy(...)` import
+- **Line 156**: Remove `<Route path='/universe' element={<Universe/>}/>`
+
+### 2. `client/src/components/HomePage/Home.jsx`
+- **Lines 94–111**: Remove the `universeLink` object
+- **Lines 199–200**: Remove `universeLink` from the `links` arrays (both guest and auth)
+
+### 3. `client/src/components/mobileNavLink/MobileNavLink.jsx`
+- **Lines 64–83**: Remove the Universe nav link object from `navLinks` array
+
+### 4. `client/src/components/ProfilePage/constants/profileSidebarLinks.jsx`
+- **Lines 35–52**: Remove the Universe link object from the returned array
+
+### 5. `client/API/Api.js`
+- Remove 5 functions (~lines 1115–1205): `requestConstellation`, `respondConstellation`, `getViewportConstellations`, `deleteConstellation`, `getUniversePosts`
+
+### 6. `client/src/utils/useMutation.js`
+- **Line 3**: Remove `respondConstellation` from the import
+- **Lines 422–455**: Remove entire `useRespondConstellationMutation` export
+
+### 7. `client/src/components/Notifications/notificationsCards.jsx`
+- **Line 12**: Remove `useRespondConstellationMutation` from import
+- **Lines 80–92**: Remove `constellation_request` and `constellation_accepted` icon objects from `iconArray`
+- **Lines 335–384**: Remove the constellation notification onClick handler and constellation display blocks. The `constellation_request`/`constellation_accepted` cases should fall through to a no-op or generic "notification unavailable" instead of crashing (these notification types may still exist in the DB). Simplest approach: let them render nothing — they'll fall to the `: null` default naturally once the JSX branches are removed.
+- Remove `mutationRespondConstellation` hook call (find and remove the line that calls `useRespondConstellationMutation`)
+
+### 8. `server/routes/routes.js`
+- **Line 15**: Remove constellation controller import
+- **Line 12**: Remove `getUniversePostsController` from the getController import
+- **Lines 102, 113**: Remove `constellation_id` and `constellations!constellation_id(...)` from `NOTIFICATION_JOURNAL_SELECT` string
+- **Line 272**: Remove `router.get('/universe/posts', ...)` route
+- **Lines 1317–1320**: Remove all 4 constellation routes
+
+### 9. `server/controller/getController.js`
+- **Line 1**: Remove `getUniversePostsService` from the import
+- **Lines 172–182**: Remove `getUniversePostsController` export
+
+### 10. `server/services/getService.js`
+- Remove `getUniversePostsService` export and all universe helper functions: `normalizeUniversePost`, `loadUniversePostsViaRpc`, `loadUniversePostsFallback`, `getUniverseCentroids`, `getUniverseEdges`, `getUniverseSimilarPairs`, `getUniverseStarPulls`
+
+### 11. `server/services/uploadService.js`
+- **Line 6**: Remove `import { incrementalSettleForUser } from "./galaxySettleService.js"`
+- **Lines 11–33**: Remove `simpleHash`, `userHomeCoords`, `spiralLayout` helper functions
+- **Lines 349–360**: Remove the universe coordinate computation block (the `postCount` query + `userHomeCoords` + `spiralLayout` + setting `universe_x`/`universe_y`)
+- **Lines 386–393**: Remove the `incrementalSettleForUser` call block
+
+## Supabase SQL to DROP
+
+Run this in the Supabase SQL Editor. The order matters (foreign keys first).
+
+```sql
+-- 1. Drop RPC functions that reference these tables
+DROP FUNCTION IF EXISTS get_viewport_constellations(uuid[]);
+DROP FUNCTION IF EXISTS get_universe_posts_viewport(double precision, double precision, double precision, double precision, integer);
+DROP FUNCTION IF EXISTS find_similar_post_pairs(uuid[], double precision, integer);
+DROP FUNCTION IF EXISTS get_star_galaxy_pulls(uuid[], double precision, integer);
+DROP FUNCTION IF EXISTS find_wormhole_pairs(double precision, double precision, integer);
+
+-- 2. Drop constellation table (it has FK to journals and users)
+DROP TABLE IF EXISTS constellations;
+
+-- 3. Drop galaxy tables
+DROP TABLE IF EXISTS galaxy_edges;
+DROP TABLE IF EXISTS galaxy_centroids;
+
+-- 4. Drop the index on settled coords
+DROP INDEX IF EXISTS journals_settled_coords_idx;
+
+-- 5. Remove universe/settle columns from journals table
+ALTER TABLE journals DROP COLUMN IF EXISTS universe_x;
+ALTER TABLE journals DROP COLUMN IF EXISTS universe_y;
+ALTER TABLE journals DROP COLUMN IF EXISTS settled_x;
+ALTER TABLE journals DROP COLUMN IF EXISTS settled_y;
+
+-- 6. Remove constellation_id column from notifications table
+ALTER TABLE notifications DROP COLUMN IF EXISTS constellation_id;
+```
+
+## Implementation Order
+
+1. Delete the `client/src/components/Universe/` folder
+2. Edit all client files (App.jsx, Home.jsx, MobileNavLink.jsx, profileSidebarLinks.jsx, Api.js, useMutation.js, notificationsCards.jsx)
+3. Delete standalone server files (constellationController, constellationService, galaxySettleService, scripts)
+4. Edit shared server files (routes.js, getController.js, getService.js, uploadService.js)
+5. Provide SQL migration for the user to run in Supabase
+
+## Verification
+
+1. `npm run dev` in `client/` — app starts, no import errors
+2. Navigate sidebar links — no Universe link in desktop sidebar, mobile nav, or profile sidebar
+3. `/universe` route returns 404 / blank (no crash)
+4. Create a new post — upload succeeds without universe coord errors
+5. Open notifications — constellation notifications render gracefully (empty or hidden, no crash)
+6. Run SQL in Supabase SQL Editor — tables and columns dropped cleanly

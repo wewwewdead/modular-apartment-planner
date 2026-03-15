@@ -1,0 +1,66 @@
+import { useEffect } from "react";
+import { ensureMeta, ensureJsonLd, ensureLink, removeElementById } from "./seoUtils.js";
+import { SITE_URL } from "./seoConfig.js";
+
+const PROFILE_SEO_IDS = [
+  "profile-seo-og-type",
+  "profile-seo-og-title",
+  "profile-seo-og-description",
+  "profile-seo-og-image",
+  "profile-seo-og-url",
+  "profile-seo-twitter-title",
+  "profile-seo-twitter-description",
+  "profile-seo-twitter-image",
+  "profile-seo-person-ld",
+  "profile-seo-canonical",
+];
+
+const useProfileSeo = (userData, username) => {
+  useEffect(() => {
+    if (!userData?.name) return;
+
+    const displayName = userData.name;
+    const title = `${displayName}'s Profile | Iskryb`;
+    const description = userData.bio || `View ${displayName}'s journals and opinions on Iskryb.`;
+    const profileUrl = username ? `${SITE_URL}/u/${username}` : "";
+    const ogImage = userData.image_url || `${SITE_URL}/assets/no-image.png`;
+
+    document.title = title;
+
+    ensureMeta("seo-description", "name", "description", description);
+
+    ensureMeta("profile-seo-og-type", "property", "og:type", "profile");
+    ensureMeta("profile-seo-og-title", "property", "og:title", title);
+    ensureMeta("profile-seo-og-description", "property", "og:description", description);
+    ensureMeta("profile-seo-og-image", "property", "og:image", ogImage);
+    if (profileUrl) {
+      ensureMeta("profile-seo-og-url", "property", "og:url", profileUrl);
+    }
+
+    ensureMeta("profile-seo-twitter-title", "name", "twitter:title", title);
+    ensureMeta("profile-seo-twitter-description", "name", "twitter:description", description);
+    ensureMeta("profile-seo-twitter-image", "name", "twitter:image", ogImage);
+
+    if (profileUrl) {
+      ensureLink("profile-seo-canonical", "canonical", profileUrl);
+    }
+
+    const personLd = {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      name: displayName,
+    };
+    if (profileUrl) personLd.url = profileUrl;
+    if (userData.image_url) personLd.image = userData.image_url;
+    if (userData.bio) personLd.description = userData.bio;
+
+    ensureJsonLd("profile-seo-person-ld", personLd);
+
+    return () => {
+      document.title = "Iskryb | Social Journaling and Opinions";
+      PROFILE_SEO_IDS.forEach(removeElementById);
+    };
+  }, [userData?.name, userData?.bio, userData?.image_url, username]);
+};
+
+export default useProfileSeo;

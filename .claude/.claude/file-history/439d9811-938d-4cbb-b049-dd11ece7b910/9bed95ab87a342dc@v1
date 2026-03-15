@@ -1,0 +1,143 @@
+# Dashboard Briefing — Unified Recap + Prompt Card
+
+## Context
+
+The WeeklyRecapCard and DailyPromptCard currently render as two separate stacked cards at the top of the PostCards feed. They look disconnected and don't fit the `.postcards-parent-container` styling cohesively. The goal is to merge them into a single unified "dashboard briefing" card with a polished editorial feel that matches iskrib's warm, sophisticated design system.
+
+---
+
+## Design Direction
+
+**Aesthetic:** Editorial morning briefing — a single clean card with a gold left-accent bar, warm neutrals, and internal sections. Matches the existing Playfair Display / Outfit / Lora typography stack and the warm amber/sage palette.
+
+**Layout:** Side-by-side on desktop (recap stats left, prompt right, thin vertical divider). Stacked on mobile. Graceful degradation — if recap is dismissed or absent, prompt fills full width.
+
+---
+
+## New Files
+
+### 1. `client/src/components/DashboardBriefing/DashboardBriefing.jsx`
+
+Orchestrator component that replaces separate WeeklyRecapCard + DailyPromptCard renders in PostCards.
+
+- Manages recap dismiss state (same localStorage `getWeekKey()` pattern from WeeklyRecapCard)
+- Fetches recap data via `getWeeklyRecap` (React Query, same keys)
+- Imports `RecapSection` and `PromptSection` as sub-components
+- Receives `onWriteResponse` prop, passes through to PromptSection
+- Optionally shows StreakBadge in the header (reuses `useStreakData` hook)
+- Returns null if neither section has data
+
+**Header:** "Today" label (Playfair Display 15px) + formatted date + optional streak badge + dismiss X button (only when recap showing)
+
+**Grid:** CSS grid — `1fr auto 1.2fr` on desktop (recap | divider | prompt), single column on mobile
+
+**Visibility logic:**
+| Scenario | Result |
+|---|---|
+| Recap + prompt available | Two-column layout |
+| Recap dismissed, prompt available | Single-column prompt only |
+| Recap available, no prompt | Single-column recap only |
+| Neither available | Returns null |
+
+### 2. `client/src/components/DashboardBriefing/RecapSection.jsx`
+
+Presentational component extracted from WeeklyRecapCard internals. Receives `personal` and `group` data as props.
+
+- Compact horizontal stat row: `3 posts · 1.2K words · 8 reactions · 42 views` (baseline-aligned, not stacked columns)
+- Click stat row to expand details (own `expanded` state + AnimatePresence)
+- Expanded area: best post, community total, most active writer, most reacted post (same content as current)
+
+### 3. `client/src/components/DashboardBriefing/PromptSection.jsx`
+
+Presentational component extracted from DailyPromptCard internals. Receives `prompt`, `responsesData`, `onWriteResponse` props.
+
+- Data fetching moved up to parent DashboardBriefing
+- Sub-header: bulb icon + "Today's Prompt" + category pill
+- Prompt text in Lora serif 15px
+- Footer: "Write your take" button + response avatars
+
+### 4. `client/src/components/DashboardBriefing/DashboardBriefing.css`
+
+All dashboard styles in one file. Key rules:
+
+```
+.dashboard-briefing
+  - bg: var(--bg-card)
+  - border: 1px solid var(--border-card)
+  - border-left: 3px solid var(--accent-amber)  ← editorial accent
+  - border-radius: 14px
+  - box-shadow: var(--shadow-card-sm)
+  - width: 100%
+
+.dashboard-briefing-header
+  - flex, space-between
+  - padding: 14px 20px 0
+
+.dashboard-briefing-grid
+  - display: grid
+  - grid-template-columns: 1fr auto 1.2fr  (desktop)
+  - grid-template-columns: 1fr  (mobile ≤480px)
+
+.dashboard-divider
+  - 1px vertical line (desktop) / horizontal line (mobile)
+  - var(--border-card) color
+
+.dashboard-stat-row
+  - flex, baseline-aligned, gap 16px
+  - stat values: Outfit 18px 700 weight
+  - stat labels: Outfit 11px 500 weight, lowercase
+
+.dashboard-prompt-text
+  - Lora serif 15px (14px on mobile)
+```
+
+---
+
+## Modified Files
+
+### 5. `client/src/components/HomePage/postCards/PostCards.jsx`
+
+**Lines ~689-698:** Replace:
+```jsx
+{!isSearchMode && session && <WeeklyRecapCard />}
+{!isSearchMode && session && <DailyPromptCard onWriteResponse={...} />}
+```
+With:
+```jsx
+{!isSearchMode && session && <DashboardBriefing onWriteResponse={...} />}
+```
+
+Update imports: remove WeeklyRecapCard + DailyPromptCard, add DashboardBriefing.
+
+---
+
+## Existing Code Reused (no changes needed)
+
+- `client/API/Api.js` — `getWeeklyRecap()`, `getTodaysPrompt()`, `getPromptResponses()`
+- `client/src/components/Streak/useStreakData.js` — hook for streak data
+- `client/src/components/Streak/StreakBadge.jsx` — renders in dashboard header
+- `client/src/components/Context/useAuth.js` — session + user data
+
+---
+
+## Animation
+
+- **Dashboard entry:** `opacity: 0, y: -10` → `opacity: 1, y: 0` (0.35s easeOut)
+- **Recap dismiss:** AnimatePresence exit on recap section (opacity fade + width/height collapse)
+- **Recap expand/collapse:** Same `height: 0 → auto` pattern as current WeeklyRecapCard
+- **Full exit:** `opacity: 0, y: -15` (0.25s) when both sections become null
+
+---
+
+## Verification
+
+1. Log in → home feed loads → dashboard card appears at top with gold left border
+2. Desktop: recap stats on left, prompt on right, thin divider between
+3. Mobile (≤480px): stacked — recap on top, prompt below, horizontal divider
+4. Click recap stat row → details expand with best post + community stats
+5. Click "Write your take" → editor opens with prompt context (same as before)
+6. Click X dismiss → recap section disappears, prompt fills full width
+7. Refresh → recap stays dismissed (localStorage), prompt-only layout persists
+8. New week → recap reappears
+9. If no prompt data → recap-only layout
+10. If no recap + no prompt → card not rendered at all

@@ -1,0 +1,46 @@
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { buildDemoTable } from '../domain/demoObject';
+import styles from './SketchEmptyState.module.css';
+
+export default function SketchEmptyState() {
+  const { dispatch, project } = useSketch();
+  const { activeLayerId, dispatch: editorDispatch } = useSketchEditor();
+
+  const handleStartDrawing = () => {
+    editorDispatch({ type: 'DISMISS_EMPTY_STATE' });
+    editorDispatch({ type: 'SET_TOOL', tool: 'rectangle' });
+  };
+
+  const handleDemoObject = () => {
+    const layerId = activeLayerId || project.layers[0]?.id;
+    if (!layerId) return;
+
+    const { object, shapes } = buildDemoTable(layerId);
+
+    for (const shape of shapes) {
+      dispatch({ type: 'SHAPE_ADD', layerId, shape });
+    }
+    dispatch({ type: 'OBJECT_ADD', object });
+    editorDispatch({ type: 'SET_ACTIVE_OBJECT', objectId: object.id });
+  };
+
+  return (
+    <div className={styles.overlay}>
+      <div className={styles.card}>
+        <h2 className={styles.title}>Start designing</h2>
+        <p className={styles.subtitle}>
+          Draw shapes to design standalone objects like tables, chairs, and cabinets
+        </p>
+        <div className={styles.actions}>
+          <button className={styles.btnPrimary} onClick={handleStartDrawing}>
+            Start Drawing
+          </button>
+          <button className={styles.btnSecondary} onClick={handleDemoObject}>
+            Try Demo Object
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

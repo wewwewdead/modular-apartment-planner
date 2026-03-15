@@ -1,0 +1,149 @@
+# Elevation-Aware Stairs Connected to Landings in 3D
+
+## Context
+
+Landings and stair-landing attachments are already implemented (plan view, drag, snap, persistence all work). The problem is in 3D rendering:
+
+1. **Stairs always render at floor level** — `createStairDescriptor` hardcodes `baseElevation: floorLevel` regardless of landing attachments
+2. **Landing 3D box ignores auto-elevation** — `buildLandingObjects` uses `landing.elevation || 0`, but `landing.elevation` defaults to 0. The auto-computed elevation from `computeLandingElevation()` is only shown in the UI, never used in 3D.
+3. **Result**: In a multi-run staircase (stair1 → landing → stair2), the landing and stair2 both sit at floor level in 3D instead of at the correct height.
+
+### Expected 3D behavior for L-shaped staircase
+- **Stair 1**: starts at floor level, climbs up → `baseElevation = floorLevel` (correct already)
+- **Landing**: at elevation = stair1's totalRise (e.g., 3150mm) → needs auto-elevation in 3D
+- **Stair 2**: starts at landing surface, climbs further → `baseElevation = floorLevel + 3150`
+
+## Approach
+
+Introduce a `resolveLandingElevation(landing, stairs, floorLevel)` helper that returns the effective elevation for a landing: manual override if set, otherwise auto-computed from connected stairs. Use this consistently in both landing 3D rendering and stair base elevation.
+
+## Files to Modify
+
+### 1. `src/three/scene/objectBuilders.js` — Main change
+
+**Add helper** (before `createStairDescriptor`):
+```js
+function resolveLandingElevation(landing, stairs, floorLevel) {
+  if (landing.elevation) return landing.elevation;
+  return computeLandingElevation(landing, stairs, floorLevel) - floorLevel;
+}
+```
+Returns the **relative** elevation above floor level. Falls back to auto-computed.
+
+**Import** `computeLandingElevation` from `@/geometry/landingGeometry`.
+
+**Modify `buildFloorPreviewObjects`**: Pre-compute a resolved elevation map for all landings, pass it to both `buildLandingObjects` and `buildStairObjects`.
+
+```js
+export function buildFloorPreviewObjects(floor) {
+  const floorLevel = getFloorElevation(floor);
+  const landings = floor.landings || [];
+  const stairs = floor.stairs || [];
+
+  // Resolve each landing's effective elevation once
+  const landingElevationMap = new Map(
+    landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorLevel)])
+  );
+
+  const wallContexts = buildWallPreviewContexts(floor, floorLevel);
+  return [
+    ...buildSlabObjects(floor),
+    ...buildWallObjects(wallContexts),
+    ...buildColumnObjects(floor, floorLevel),
+    ...buildBeamObjects(floor),
+    ...buildStairObjects(floor, floorLevel, landings, landingElevationMap),
+    ...buildLandingObjects(floor, floorLevel, landingElevationMap),
+    ...buildDoorObjects(wallContexts),
+    ...buildWindowObjects(wallContexts),
+  ];
+}
+```
+
+**Modify `buildLandingObjects`**: Use resolved elevation instead of `landing.elevation || 0`.
+
+```js
+function buildLandingObjects(floor, floorLevel, landingElevationMap) {
+  return (floor.landings || []).map((landing) => createBoxDescriptor(
+    landing.id, 'landing',
+    { x: landing.position.x, y: landing.position.y },
+    { x: landing.width, y: landing.thickness ?? 200, z: landing.depth },
+    floorLevel + (landingElevationMap.get(landing.id) || 0),
+    (landing.rotation || 0) * Math.PI / 180,
+    { sourceId: landing.id, floorId: floor.id }
+  ));
+}
+```
+
+**Modify `buildStairObjects`**: Accept landings + elevation map, pass to descriptor.
+
+```js
+function buildStairObjects(floor, floorLevel, landings, landingElevationMap) {
+  return (floor.stairs || [])
+    .map((stair) => createStairDescriptor(stair, floorLevel, floor.id, landings, landingElevationMap))
+    .filter(Boolean);
+}
+```
+
+**Modify `createStairDescriptor`**: Resolve base elevation from start landing attachment.
+
+```js
+function createStairDescriptor(stair, floorLevel, floorId, landings, landingElevationMap) {
+  const renderData = getStairRenderData(stair);
+  if (!renderData?.outline?.length) return null;
+
+  // If stair starts at a landing, its base is that landing's elevation
+  let baseElevation = floorLevel;
+  if (stair.startLandingAttachment) {
+    const elev = landingElevationMap?.get(stair.startLandingAttachment.landingId);
+    if (elev != null) {
+      baseElevation = floorLevel + elev;
+    }
+  }
+
+  return {
+    id: stair.id,
+    kind: 'stair',
+    geometry: 'stair',
+    startPoint: { ...stair.startPoint },
+    width: stair.width,
+    numberOfRisers: stair.numberOfRisers,
+    riserHeight: stair.riserHeight,
+    treadDepth: stair.treadDepth,
+    angle: renderData.angle,
+    baseElevation,
+    materialKey: 'stair',
+    metadata: { sourceId: stair.id, floorId },
+    bounds: createBoundsFromPoints(
+      renderData.outline,
+      baseElevation,
+      baseElevation + renderData.totalRise
+    ),
+  };
+}
+```
+
+### No other files need changes
+
+- `buildPreviewObjects.js` — `createStairObject` already positions at `descriptor.baseElevation` (line 91). No change needed.
+- `landingGeometry.js` — `computeLandingElevation` already works correctly. No change needed.
+- `models.js` — No model changes needed.
+- `deserialize.js` — No persistence changes needed.
+
+## Edge Cases
+
+1. **No attachment**: `startLandingAttachment` is null → falls through to `floorLevel`. Unchanged behavior.
+2. **Deleted landing**: Attachment cleared to null by `LANDING_DELETE` reducer. Falls through.
+3. **Landing elevation 0 with no connected stairs**: `computeLandingElevation` returns `floorLevel`, so relative = 0. Correct.
+4. **Manual elevation override**: `landing.elevation` is truthy → used directly, bypassing auto-compute. Both landing box and stair align.
+5. **Both ends attached**: Start attachment determines base. End attachment doesn't affect base.
+
+## Verification
+
+1. Place stair1 from floor → landing edge snaps end
+2. Place stair2 from landing (different edge) → start snaps
+3. Open 3D preview:
+   - Stair1 starts at floor, climbs to landing
+   - Landing slab sits at stair1's total rise height
+   - Stair2 starts at landing surface, climbs further
+4. Manually change landing elevation in Properties Panel → both landing box and stair2 move in 3D
+5. Delete landing → stair2 drops back to floor level in 3D

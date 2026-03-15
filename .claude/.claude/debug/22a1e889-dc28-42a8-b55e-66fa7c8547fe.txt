@@ -1,0 +1,2022 @@
+2026-02-24T12:54:42.976Z [DEBUG] Aborting: tool=ExitPlanMode isAbort=undefined hasFeedback=false isSubagent=false
+2026-02-24T12:54:42.976Z [DEBUG] ExitPlanMode tool permission denied
+2026-02-24T12:54:42.978Z [DEBUG] [useDeferredValue] Messages deferred by 2 (187→189)
+2026-02-24T12:54:43.011Z [DEBUG] High write ratio: blit=0, write=24002 (100.0% writes), screen=436x120
+2026-02-24T12:54:43.011Z [DEBUG] Full reset (scrollback changes): scrollbackRows=542, firstChangeY=430
+  prev: "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────"
+  next: "✽ Reticulating… (1m 58s)                                                                                                "
+2026-02-24T12:54:43.020Z [DEBUG] [useDeferredValue] Messages deferred by 2 (187→189)
+2026-02-24T12:54:43.025Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-24T12:54:43.025Z [DEBUG] Getting matching hook commands for SessionEnd with query: clear
+2026-02-24T12:54:43.025Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:43.025Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-02-24T12:54:43.025Z [DEBUG] Cleared all session hooks for session 0e784c00-3f5c-4ed1-a933-636745c2b5ea
+2026-02-24T12:54:43.026Z [DEBUG] Getting matching hook commands for SessionStart with query: clear
+2026-02-24T12:54:43.026Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:43.026Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-02-24T12:54:43.026Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T12:54:43.026Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T12:54:43.027Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T12:54:43.027Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T12:54:43.030Z [DEBUG] Applying permission update: Setting mode to 'acceptEdits'
+2026-02-24T12:54:43.030Z [DEBUG] FileHistory: Added snapshot for 8c9b6d53-c5f6-40d1-b970-6428e2b5ee4c, tracking 0 files
+2026-02-24T12:54:43.216Z [DEBUG] High write ratio: blit=0, write=23990 (100.0% writes), screen=436x120
+2026-02-24T12:54:43.257Z [DEBUG] High write ratio: blit=0, write=24010 (100.0% writes), screen=436x120
+2026-02-24T12:54:43.259Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T12:54:43.259Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-24T12:54:43.259Z [DEBUG] Loading skills from: managed=C:\ProgramData\ClaudeCode\.claude\skills, user=C:\Users\johnm\.claude\skills, project=[]
+2026-02-24T12:54:43.259Z [DEBUG] getPluginSkills: Processing 3 enabled plugins
+2026-02-24T12:54:43.259Z [DEBUG] Checking plugin example-skills: skillsPath=exists, skillsPaths=12 paths
+2026-02-24T12:54:43.259Z [DEBUG] Attempting to load skills from plugin example-skills default skillsPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills
+2026-02-24T12:54:43.263Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.6b4; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:54:43.264Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:54:43.264Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:54:43.264Z [DEBUG] Loaded 16 skills from plugin example-skills default directory
+2026-02-24T12:54:43.264Z [DEBUG] Attempting to load skills from plugin example-skills skillsPaths: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-02-24T12:54:43.264Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art for plugin example-skills
+2026-02-24T12:54:43.264Z [DEBUG] Loaded 1 commands from plugin feature-dev default directory
+2026-02-24T12:54:43.264Z [DEBUG] Total plugin commands loaded: 1
+2026-02-24T12:54:43.264Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art
+2026-02-24T12:54:43.264Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines for plugin example-skills
+2026-02-24T12:54:43.264Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:54:43.265Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines
+2026-02-24T12:54:43.265Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design for plugin example-skills
+2026-02-24T12:54:43.265Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-02-24T12:54:43.265Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design
+2026-02-24T12:54:43.265Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring for plugin example-skills
+2026-02-24T12:54:43.266Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring
+2026-02-24T12:54:43.266Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design for plugin example-skills
+2026-02-24T12:54:43.266Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design
+2026-02-24T12:54:43.266Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms for plugin example-skills
+2026-02-24T12:54:43.266Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-24T12:54:43.266Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-24T12:54:43.266Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-24T12:54:43.267Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms
+2026-02-24T12:54:43.267Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder for plugin example-skills
+2026-02-24T12:54:43.267Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder
+2026-02-24T12:54:43.267Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator for plugin example-skills
+2026-02-24T12:54:43.267Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator
+2026-02-24T12:54:43.267Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator for plugin example-skills
+2026-02-24T12:54:43.267Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator
+2026-02-24T12:54:43.267Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory for plugin example-skills
+2026-02-24T12:54:43.267Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory
+2026-02-24T12:54:43.267Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder for plugin example-skills
+2026-02-24T12:54:43.267Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder
+2026-02-24T12:54:43.267Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing for plugin example-skills
+2026-02-24T12:54:43.268Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-02-24T12:54:43.268Z [DEBUG] Checking plugin feature-dev: skillsPath=none, skillsPaths=0 paths
+2026-02-24T12:54:43.268Z [DEBUG] Checking plugin frontend-design: skillsPath=exists, skillsPaths=0 paths
+2026-02-24T12:54:43.268Z [DEBUG] Attempting to load skills from plugin frontend-design default skillsPath: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\aa296ec81e8c\skills
+2026-02-24T12:54:43.268Z [DEBUG] Loaded 1 skills from plugin frontend-design default directory
+2026-02-24T12:54:43.268Z [DEBUG] Total plugin skills loaded: 17
+2026-02-24T12:54:43.268Z [DEBUG] getSkills returning: 0 skill dir commands, 17 plugin skills, 3 bundled skills
+2026-02-24T12:54:43.271Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937683271
+2026-02-24T12:54:43.271Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:54:43.276Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:54:43.276Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:54:43.276Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937683271 to C:\Users\johnm\.claude.json
+2026-02-24T12:54:43.277Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:54:43.291Z [DEBUG] autocompact: tokens=1483 threshold=167000 effectiveWindow=180000
+2026-02-24T12:54:43.291Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:54:43.294Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937683294
+2026-02-24T12:54:43.294Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:54:43.297Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:54:43.297Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:54:43.297Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937683294 to C:\Users\johnm\.claude.json
+2026-02-24T12:54:43.297Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:54:43.310Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:54:43.310Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:54:43.310Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:54:43.310Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:54:43.340Z [DEBUG] High write ratio: blit=0, write=6023 (100.0% writes), screen=142x120
+2026-02-24T12:54:43.340Z [DEBUG] Full reset (scrollback changes): scrollbackRows=407, firstChangeY=8
+  prev: "│ Add Infinite Scroll Pagination to Profile Stories (5 per fetch)                                                      │"
+  next: "│ Add Infinite Scroll to StoryDashboard & StoryLibrary (5 per fetch)                                                   │"
+2026-02-24T12:54:43.403Z [DEBUG] [FileIndex] ripgrep: 844 files in 376ms
+2026-02-24T12:54:43.405Z [DEBUG] [FileIndex] cache refresh completed in 379ms (rust index)
+2026-02-24T12:54:43.542Z [DEBUG] [claudeai-mcp] Fetched 0 servers
+2026-02-24T12:54:43.546Z [DEBUG] Checking for native installer update to version 2.1.52
+2026-02-24T12:54:43.547Z [DEBUG] Version 2.1.52 already installed, updating symlink
+2026-02-24T12:54:43.547Z [DEBUG] Successfully updated to version 2.1.52
+2026-02-24T12:54:44.119Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:54:45.563Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:54:46.029Z [DEBUG] [useDeferredValue] Messages deferred by 1 (1→2)
+2026-02-24T12:54:46.061Z [DEBUG] High write ratio: blit=0, write=6013 (100.0% writes), screen=142x120
+2026-02-24T12:54:46.551Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-02-24T12:54:46.559Z [DEBUG] High write ratio: blit=0, write=6048 (100.0% writes), screen=144x120
+2026-02-24T12:54:46.587Z [DEBUG] High write ratio: blit=0, write=6120 (100.0% writes), screen=146x120
+2026-02-24T12:54:47.011Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:47.013Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:47.013Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:47.013Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:47.015Z [DEBUG] [useDeferredValue] Messages deferred by 1 (3→4)
+2026-02-24T12:54:47.021Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:47.021Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:47.021Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:47.022Z [DEBUG] [useDeferredValue] Messages deferred by 1 (3→4)
+2026-02-24T12:54:47.031Z [DEBUG] High write ratio: blit=0, write=6156 (100.0% writes), screen=147x120
+2026-02-24T12:54:47.467Z [DEBUG] [useDeferredValue] Messages deferred by 3 (4→7)
+2026-02-24T12:54:47.474Z [DEBUG] High write ratio: blit=0, write=6156 (100.0% writes), screen=147x120
+2026-02-24T12:54:47.475Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:47.476Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:47.476Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:47.476Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:47.478Z [DEBUG] [useDeferredValue] Messages deferred by 4 (4→8)
+2026-02-24T12:54:47.483Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:47.483Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:47.483Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:47.483Z [DEBUG] [useDeferredValue] Messages deferred by 4 (4→8)
+2026-02-24T12:54:47.492Z [DEBUG] High write ratio: blit=0, write=6162 (100.0% writes), screen=147x120
+2026-02-24T12:54:47.852Z [DEBUG] [useDeferredValue] Messages deferred by 3 (8→11)
+2026-02-24T12:54:47.860Z [DEBUG] High write ratio: blit=0, write=6162 (100.0% writes), screen=147x120
+2026-02-24T12:54:47.860Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:47.862Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:47.862Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:47.862Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:47.863Z [DEBUG] [useDeferredValue] Messages deferred by 4 (8→12)
+2026-02-24T12:54:47.868Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:47.868Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:47.868Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:47.869Z [DEBUG] [useDeferredValue] Messages deferred by 4 (8→12)
+2026-02-24T12:54:47.879Z [DEBUG] High write ratio: blit=0, write=6162 (100.0% writes), screen=147x120
+2026-02-24T12:54:47.897Z [DEBUG] High write ratio: blit=0, write=6165 (100.0% writes), screen=147x120
+2026-02-24T12:54:48.250Z [DEBUG] [useDeferredValue] Messages deferred by 3 (12→15)
+2026-02-24T12:54:48.254Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:48.256Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:48.256Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:48.256Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:48.257Z [DEBUG] [useDeferredValue] Messages deferred by 4 (12→16)
+2026-02-24T12:54:48.265Z [DEBUG] High write ratio: blit=0, write=6165 (100.0% writes), screen=147x120
+2026-02-24T12:54:48.267Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:48.267Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:48.267Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:48.267Z [DEBUG] [useDeferredValue] Messages deferred by 4 (12→16)
+2026-02-24T12:54:48.294Z [DEBUG] High write ratio: blit=0, write=6170 (100.0% writes), screen=147x120
+2026-02-24T12:54:48.667Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:48.669Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:48.669Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:48.669Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:48.670Z [DEBUG] [useDeferredValue] Messages deferred by 4 (16→20)
+2026-02-24T12:54:48.678Z [DEBUG] High write ratio: blit=0, write=6170 (100.0% writes), screen=147x120
+2026-02-24T12:54:48.680Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:48.680Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:48.680Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:48.681Z [DEBUG] [useDeferredValue] Messages deferred by 4 (16→20)
+2026-02-24T12:54:48.707Z [DEBUG] High write ratio: blit=0, write=6148 (100.0% writes), screen=147x120
+2026-02-24T12:54:49.094Z [DEBUG] [useDeferredValue] Messages deferred by 3 (20→23)
+2026-02-24T12:54:49.102Z [DEBUG] High write ratio: blit=0, write=6148 (100.0% writes), screen=147x120
+2026-02-24T12:54:49.103Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:49.104Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:49.104Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:49.104Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:49.106Z [DEBUG] [useDeferredValue] Messages deferred by 4 (20→24)
+2026-02-24T12:54:49.111Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:49.111Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:49.111Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:49.111Z [DEBUG] [useDeferredValue] Messages deferred by 4 (20→24)
+2026-02-24T12:54:49.120Z [DEBUG] High write ratio: blit=0, write=6177 (100.0% writes), screen=147x120
+2026-02-24T12:54:49.571Z [DEBUG] [useDeferredValue] Messages deferred by 3 (24→27)
+2026-02-24T12:54:49.579Z [DEBUG] High write ratio: blit=0, write=6177 (100.0% writes), screen=147x120
+2026-02-24T12:54:49.579Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:49.581Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:49.581Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:49.581Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:49.582Z [DEBUG] [useDeferredValue] Messages deferred by 4 (24→28)
+2026-02-24T12:54:49.588Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:49.588Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:49.588Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:49.588Z [DEBUG] [useDeferredValue] Messages deferred by 4 (24→28)
+2026-02-24T12:54:49.597Z [DEBUG] High write ratio: blit=0, write=6189 (100.0% writes), screen=147x120
+2026-02-24T12:54:50.037Z [DEBUG] [useDeferredValue] Messages deferred by 3 (28→31)
+2026-02-24T12:54:50.045Z [DEBUG] High write ratio: blit=0, write=6189 (100.0% writes), screen=147x120
+2026-02-24T12:54:50.046Z [DEBUG] [useDeferredValue] Messages deferred by 3 (28→31)
+2026-02-24T12:54:50.053Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:54:50.055Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:54:50.055Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:50.055Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:54:50.056Z [DEBUG] [useDeferredValue] Messages deferred by 1 (31→32)
+2026-02-24T12:54:50.063Z [DEBUG] High write ratio: blit=0, write=6189 (100.0% writes), screen=147x120
+2026-02-24T12:54:50.067Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:54:50.067Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:50.067Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:54:50.067Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:54:50.067Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:54:50.067Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:54:50.067Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:54:50.071Z [DEBUG] Sending 19 skills via attachment (initial, 19 total sent)
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:algorithmic-art" (userFacingName="algorithmic-art")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:brand-guidelines" (userFacingName="brand-guidelines")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:canvas-design" (userFacingName="canvas-design")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:doc-coauthoring" (userFacingName="doc-coauthoring")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:docx" (userFacingName="docx")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:frontend-design" (userFacingName="frontend-design")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:internal-comms" (userFacingName="internal-comms")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:mcp-builder" (userFacingName="mcp-builder")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:pdf" (userFacingName="pdf")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:pptx" (userFacingName="pptx")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:skill-creator" (userFacingName="skill-creator")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:slack-gif-creator" (userFacingName="slack-gif-creator")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:theme-factory" (userFacingName="theme-factory")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:web-artifacts-builder" (userFacingName="web-artifacts-builder")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:webapp-testing" (userFacingName="webapp-testing")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "example-skills:xlsx" (userFacingName="xlsx")
+2026-02-24T12:54:50.071Z [DEBUG] Skill prompt: showing "frontend-design:frontend-design" (userFacingName="frontend-design")
+2026-02-24T12:54:50.072Z [DEBUG] autocompact: tokens=42875 threshold=167000 effectiveWindow=180000
+2026-02-24T12:54:50.072Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:54:50.074Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937690074
+2026-02-24T12:54:50.074Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:54:50.079Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:54:50.079Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:54:50.079Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937690074 to C:\Users\johnm\.claude.json
+2026-02-24T12:54:50.080Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:54:50.090Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:54:50.090Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:54:50.090Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:54:50.090Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:54:50.092Z [DEBUG] [useDeferredValue] Messages deferred by 5 (31→36)
+2026-02-24T12:54:50.100Z [DEBUG] High write ratio: blit=0, write=6189 (100.0% writes), screen=147x120
+2026-02-24T12:54:50.134Z [DEBUG] High write ratio: blit=0, write=6185 (100.0% writes), screen=147x120
+2026-02-24T12:54:52.921Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:54:53.708Z [DEBUG] [useDeferredValue] Messages deferred by 1 (36→37)
+2026-02-24T12:54:53.743Z [DEBUG] High write ratio: blit=0, write=6185 (100.0% writes), screen=147x120
+2026-02-24T12:54:54.410Z [DEBUG] [useDeferredValue] Messages deferred by 1 (37→38)
+2026-02-24T12:54:54.418Z [DEBUG] High write ratio: blit=0, write=6210 (100.0% writes), screen=147x120
+2026-02-24T12:54:54.464Z [DEBUG] High write ratio: blit=0, write=6276 (100.0% writes), screen=150x120
+2026-02-24T12:54:55.908Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T12:54:55.909Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T12:54:55.909Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:54:55.909Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T12:54:55.915Z [DEBUG] [useDeferredValue] Messages deferred by 1 (38→39)
+2026-02-24T12:54:55.923Z [DEBUG] High write ratio: blit=0, write=6232 (100.0% writes), screen=148x120
+2026-02-24T12:54:55.940Z [DEBUG] High write ratio: blit=0, write=6310 (100.0% writes), screen=151x120
+2026-02-24T12:54:55.974Z [DEBUG] High write ratio: blit=0, write=6310 (100.0% writes), screen=151x120
+2026-02-24T12:54:56.249Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T12:54:56.249Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:54:56.249Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T12:54:56.250Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:54:56.250Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:54:56.250Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:54:56.250Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:54:56.250Z [DEBUG] autocompact: tokens=48082 threshold=167000 effectiveWindow=180000
+2026-02-24T12:54:56.250Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:54:56.253Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937696253
+2026-02-24T12:54:56.253Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:54:56.255Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:54:56.255Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:54:56.255Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937696253 to C:\Users\johnm\.claude.json
+2026-02-24T12:54:56.255Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:54:56.265Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:54:56.265Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:54:56.265Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:54:56.265Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:54:56.267Z [DEBUG] [useDeferredValue] Messages deferred by 4 (39→43)
+2026-02-24T12:54:56.275Z [DEBUG] High write ratio: blit=0, write=6310 (100.0% writes), screen=151x120
+2026-02-24T12:54:56.294Z [DEBUG] High write ratio: blit=0, write=6310 (100.0% writes), screen=151x120
+2026-02-24T12:55:00.439Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:55:01.734Z [DEBUG] [useDeferredValue] Messages deferred by 1 (43→44)
+2026-02-24T12:55:01.767Z [DEBUG] High write ratio: blit=0, write=6452 (100.0% writes), screen=153x120
+2026-02-24T12:55:08.239Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:08.240Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:08.240Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:08.240Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:08.249Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\server\services\storyService.js
+2026-02-24T12:55:08.250Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\server\services\storyService.js.tmp.15104.1771937708250
+2026-02-24T12:55:08.250Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:08.253Z [DEBUG] Temp file written successfully, size: 14068 bytes
+2026-02-24T12:55:08.253Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:08.253Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\server\services\storyService.js.tmp.15104.1771937708250 to C:\Users\johnm\iskrib_v3\server\services\storyService.js
+2026-02-24T12:55:08.253Z [DEBUG] File C:\Users\johnm\iskrib_v3\server\services\storyService.js written atomically
+2026-02-24T12:55:08.256Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:08.256Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:08.256Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:08.257Z [DEBUG] [useDeferredValue] Messages deferred by 1 (44→45)
+2026-02-24T12:55:08.267Z [DEBUG] High write ratio: blit=0, write=6452 (100.0% writes), screen=153x120
+2026-02-24T12:55:08.294Z [DEBUG] High write ratio: blit=0, write=6492 (100.0% writes), screen=155x120
+2026-02-24T12:55:08.591Z [DEBUG] [useDeferredValue] Messages deferred by 3 (45→48)
+2026-02-24T12:55:08.596Z [DEBUG] [useDeferredValue] Messages deferred by 3 (45→48)
+2026-02-24T12:55:08.631Z [DEBUG] High write ratio: blit=0, write=6492 (100.0% writes), screen=155x120
+2026-02-24T12:55:08.647Z [DEBUG] High write ratio: blit=0, write=9731 (100.0% writes), screen=199x120
+2026-02-24T12:55:11.107Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:11.108Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:11.108Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:11.108Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:11.115Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\server\controller\storyController.js
+2026-02-24T12:55:11.115Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\server\controller\storyController.js.tmp.15104.1771937711115
+2026-02-24T12:55:11.115Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:11.118Z [DEBUG] Temp file written successfully, size: 3555 bytes
+2026-02-24T12:55:11.119Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:11.119Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\server\controller\storyController.js.tmp.15104.1771937711115 to C:\Users\johnm\iskrib_v3\server\controller\storyController.js
+2026-02-24T12:55:11.119Z [DEBUG] File C:\Users\johnm\iskrib_v3\server\controller\storyController.js written atomically
+2026-02-24T12:55:11.121Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:11.121Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:11.121Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:11.122Z [DEBUG] [useDeferredValue] Messages deferred by 1 (48→49)
+2026-02-24T12:55:11.138Z [DEBUG] High write ratio: blit=0, write=9731 (100.0% writes), screen=199x120
+2026-02-24T12:55:11.154Z [DEBUG] High write ratio: blit=0, write=9776 (100.0% writes), screen=201x120
+2026-02-24T12:55:11.592Z [DEBUG] [useDeferredValue] Messages deferred by 3 (49→52)
+2026-02-24T12:55:11.616Z [DEBUG] High write ratio: blit=0, write=9776 (100.0% writes), screen=201x120
+2026-02-24T12:55:11.661Z [DEBUG] High write ratio: blit=0, write=10632 (100.0% writes), screen=214x120
+2026-02-24T12:55:25.567Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:25.569Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:25.569Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:25.569Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:25.574Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js
+2026-02-24T12:55:25.576Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js.tmp.15104.1771937725576
+2026-02-24T12:55:25.576Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:25.579Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-24T12:55:25.580Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:25.580Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js.tmp.15104.1771937725576 to C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js
+2026-02-24T12:55:25.580Z [DEBUG] File C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js written atomically
+2026-02-24T12:55:25.583Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:25.583Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:25.583Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:25.584Z [DEBUG] [useDeferredValue] Messages deferred by 4 (52→56)
+2026-02-24T12:55:25.606Z [DEBUG] High write ratio: blit=0, write=10653 (100.0% writes), screen=214x120
+2026-02-24T12:55:25.719Z [DEBUG] High write ratio: blit=0, write=16128 (100.0% writes), screen=295x120
+2026-02-24T12:55:27.388Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:27.390Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:27.390Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:27.390Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:27.397Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js
+2026-02-24T12:55:27.398Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js.tmp.15104.1771937727398
+2026-02-24T12:55:27.398Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:27.401Z [DEBUG] Temp file written successfully, size: 3882 bytes
+2026-02-24T12:55:27.401Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:27.401Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js.tmp.15104.1771937727398 to C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js
+2026-02-24T12:55:27.402Z [DEBUG] File C:\Users\johnm\iskrib_v3\server\controller\storyInteractController.js written atomically
+2026-02-24T12:55:27.404Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:27.404Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:27.404Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:27.406Z [DEBUG] [useDeferredValue] Messages deferred by 4 (56→60)
+2026-02-24T12:55:27.441Z [DEBUG] High write ratio: blit=0, write=16128 (100.0% writes), screen=295x120
+2026-02-24T12:55:27.490Z [DEBUG] High write ratio: blit=0, write=17037 (100.0% writes), screen=310x120
+2026-02-24T12:55:31.517Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:31.519Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:31.519Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:31.519Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:31.528Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\API\StoryApi.js
+2026-02-24T12:55:31.529Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\API\StoryApi.js.tmp.15104.1771937731529
+2026-02-24T12:55:31.529Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:31.533Z [DEBUG] Temp file written successfully, size: 11182 bytes
+2026-02-24T12:55:31.533Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:31.533Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\API\StoryApi.js.tmp.15104.1771937731529 to C:\Users\johnm\iskrib_v3\client\API\StoryApi.js
+2026-02-24T12:55:31.534Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\API\StoryApi.js written atomically
+2026-02-24T12:55:31.537Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:31.537Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:31.537Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:31.538Z [DEBUG] [useDeferredValue] Messages deferred by 1 (60→61)
+2026-02-24T12:55:31.581Z [DEBUG] High write ratio: blit=0, write=17037 (100.0% writes), screen=310x120
+2026-02-24T12:55:31.638Z [DEBUG] High write ratio: blit=0, write=17068 (100.0% writes), screen=312x120
+2026-02-24T12:55:31.817Z [DEBUG] [useDeferredValue] Messages deferred by 3 (61→64)
+2026-02-24T12:55:31.851Z [DEBUG] High write ratio: blit=0, write=17068 (100.0% writes), screen=312x120
+2026-02-24T12:55:31.852Z [DEBUG] [useDeferredValue] Messages deferred by 3 (61→64)
+2026-02-24T12:55:31.909Z [DEBUG] High write ratio: blit=0, write=18178 (100.0% writes), screen=330x120
+2026-02-24T12:55:34.421Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:34.422Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:34.422Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:34.423Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:34.425Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\API\StoryApi.js.tmp.15104.1771937734425
+2026-02-24T12:55:34.425Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:34.431Z [DEBUG] Temp file written successfully, size: 11343 bytes
+2026-02-24T12:55:34.431Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:34.431Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\API\StoryApi.js.tmp.15104.1771937734425 to C:\Users\johnm\iskrib_v3\client\API\StoryApi.js
+2026-02-24T12:55:34.432Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\API\StoryApi.js written atomically
+2026-02-24T12:55:34.435Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:34.435Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:34.435Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:34.436Z [DEBUG] [useDeferredValue] Messages deferred by 1 (64→65)
+2026-02-24T12:55:34.477Z [DEBUG] High write ratio: blit=0, write=18178 (100.0% writes), screen=330x120
+2026-02-24T12:55:34.514Z [DEBUG] High write ratio: blit=0, write=18209 (100.0% writes), screen=332x120
+2026-02-24T12:55:34.981Z [DEBUG] [useDeferredValue] Messages deferred by 3 (65→68)
+2026-02-24T12:55:35.019Z [DEBUG] High write ratio: blit=0, write=18209 (100.0% writes), screen=332x120
+2026-02-24T12:55:35.020Z [DEBUG] [useDeferredValue] Messages deferred by 3 (65→68)
+2026-02-24T12:55:35.081Z [DEBUG] High write ratio: blit=0, write=19319 (100.0% writes), screen=350x120
+2026-02-24T12:55:39.836Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:39.837Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:39.837Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:39.837Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:39.842Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js
+2026-02-24T12:55:39.843Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js.tmp.15104.1771937739843
+2026-02-24T12:55:39.843Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:39.846Z [DEBUG] Temp file written successfully, size: 3415 bytes
+2026-02-24T12:55:39.846Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:39.846Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js.tmp.15104.1771937739843 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js
+2026-02-24T12:55:39.847Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js written atomically
+2026-02-24T12:55:39.849Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:39.849Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:39.849Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:39.851Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:55:39.851Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:55:39.851Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:55:39.851Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:55:39.851Z [DEBUG] autocompact: tokens=52387 threshold=167000 effectiveWindow=180000
+2026-02-24T12:55:39.851Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:55:39.855Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937739855
+2026-02-24T12:55:39.855Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:39.858Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:55:39.858Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:39.858Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937739855 to C:\Users\johnm\.claude.json
+2026-02-24T12:55:39.858Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:55:39.870Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:55:39.870Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:55:39.870Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:55:39.870Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:55:39.872Z [DEBUG] [useDeferredValue] Messages deferred by 4 (68→72)
+2026-02-24T12:55:39.909Z [DEBUG] High write ratio: blit=0, write=19319 (100.0% writes), screen=350x120
+2026-02-24T12:55:39.972Z [DEBUG] High write ratio: blit=0, write=22560 (100.0% writes), screen=393x120
+2026-02-24T12:55:44.820Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:55:45.350Z [DEBUG] [useDeferredValue] Messages deferred by 1 (72→73)
+2026-02-24T12:55:45.383Z [DEBUG] High write ratio: blit=0, write=22562 (100.0% writes), screen=393x120
+2026-02-24T12:55:45.420Z [DEBUG] High write ratio: blit=0, write=22621 (100.0% writes), screen=395x120
+2026-02-24T12:55:48.871Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:48.874Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:48.874Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:48.874Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:48.881Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx
+2026-02-24T12:55:48.883Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937748883
+2026-02-24T12:55:48.883Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:48.885Z [DEBUG] Temp file written successfully, size: 8024 bytes
+2026-02-24T12:55:48.886Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:48.886Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937748883 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx
+2026-02-24T12:55:48.887Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx written atomically
+2026-02-24T12:55:48.890Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:48.890Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:48.890Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:48.891Z [DEBUG] [useDeferredValue] Messages deferred by 1 (73→74)
+2026-02-24T12:55:48.940Z [DEBUG] High write ratio: blit=0, write=22621 (100.0% writes), screen=395x120
+2026-02-24T12:55:49.015Z [DEBUG] High write ratio: blit=0, write=22693 (100.0% writes), screen=397x120
+2026-02-24T12:55:49.017Z [DEBUG] [useDeferredValue] Messages deferred by 3 (74→77)
+2026-02-24T12:55:49.065Z [DEBUG] High write ratio: blit=0, write=22693 (100.0% writes), screen=397x120
+2026-02-24T12:55:49.123Z [DEBUG] High write ratio: blit=0, write=23278 (100.0% writes), screen=405x120
+2026-02-24T12:55:51.574Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:51.576Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:51.576Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:51.576Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:51.579Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937751579
+2026-02-24T12:55:51.579Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:51.583Z [DEBUG] Temp file written successfully, size: 8380 bytes
+2026-02-24T12:55:51.583Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:51.583Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937751579 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx
+2026-02-24T12:55:51.583Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx written atomically
+2026-02-24T12:55:51.587Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:51.587Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:51.587Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:51.588Z [DEBUG] [useDeferredValue] Messages deferred by 1 (77→78)
+2026-02-24T12:55:51.629Z [DEBUG] High write ratio: blit=0, write=23278 (100.0% writes), screen=405x120
+2026-02-24T12:55:51.671Z [DEBUG] High write ratio: blit=0, write=23350 (100.0% writes), screen=407x120
+2026-02-24T12:55:51.765Z [DEBUG] [useDeferredValue] Messages deferred by 3 (78→81)
+2026-02-24T12:55:51.804Z [DEBUG] High write ratio: blit=0, write=23350 (100.0% writes), screen=407x120
+2026-02-24T12:55:51.854Z [DEBUG] High write ratio: blit=0, write=24779 (100.0% writes), screen=426x120
+2026-02-24T12:55:52.927Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:52.930Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:52.930Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:52.930Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:52.933Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937752933
+2026-02-24T12:55:52.933Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:52.939Z [DEBUG] Temp file written successfully, size: 8382 bytes
+2026-02-24T12:55:52.939Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:52.939Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937752933 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx
+2026-02-24T12:55:52.940Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx written atomically
+2026-02-24T12:55:52.944Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:52.944Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:52.944Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:52.945Z [DEBUG] [useDeferredValue] Messages deferred by 4 (81→85)
+2026-02-24T12:55:52.991Z [DEBUG] High write ratio: blit=0, write=24780 (100.0% writes), screen=426x120
+2026-02-24T12:55:53.045Z [DEBUG] High write ratio: blit=0, write=25319 (100.0% writes), screen=437x120
+2026-02-24T12:55:55.806Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:55:55.808Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:55:55.808Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:55:55.808Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:55:55.811Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937755811
+2026-02-24T12:55:55.811Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:55.812Z [DEBUG] Temp file written successfully, size: 8700 bytes
+2026-02-24T12:55:55.813Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:55.813Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx.tmp.15104.1771937755811 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx
+2026-02-24T12:55:55.813Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryDashboard\StoryDashboard.jsx written atomically
+2026-02-24T12:55:55.817Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:55:55.817Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:55:55.817Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:55:55.820Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:55:55.820Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:55:55.820Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:55:55.820Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:55:55.821Z [DEBUG] autocompact: tokens=54095 threshold=167000 effectiveWindow=180000
+2026-02-24T12:55:55.822Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:55:55.827Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937755827
+2026-02-24T12:55:55.827Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:55:55.830Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:55:55.830Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:55:55.830Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937755827 to C:\Users\johnm\.claude.json
+2026-02-24T12:55:55.831Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:55:55.843Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:55:55.843Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:55:55.843Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:55:55.844Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:55:55.846Z [DEBUG] [useDeferredValue] Messages deferred by 5 (85→90)
+2026-02-24T12:55:55.887Z [DEBUG] High write ratio: blit=0, write=25319 (100.0% writes), screen=437x120
+2026-02-24T12:55:55.957Z [DEBUG] High write ratio: blit=0, write=26249 (100.0% writes), screen=452x120
+2026-02-24T12:55:57.844Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:55:58.322Z [DEBUG] [useDeferredValue] Messages deferred by 1 (90→91)
+2026-02-24T12:55:58.373Z [DEBUG] High write ratio: blit=0, write=26281 (100.0% writes), screen=454x120
+2026-02-24T12:56:02.451Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:56:02.452Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:56:02.452Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:02.452Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:56:02.459Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx
+2026-02-24T12:56:02.460Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937762460
+2026-02-24T12:56:02.460Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:02.462Z [DEBUG] Temp file written successfully, size: 6462 bytes
+2026-02-24T12:56:02.462Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:02.462Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937762460 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx
+2026-02-24T12:56:02.463Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx written atomically
+2026-02-24T12:56:02.466Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:56:02.466Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:02.466Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:56:02.468Z [DEBUG] [useDeferredValue] Messages deferred by 4 (91→95)
+2026-02-24T12:56:02.510Z [DEBUG] High write ratio: blit=0, write=26281 (100.0% writes), screen=454x120
+2026-02-24T12:56:02.515Z [DEBUG] [useDeferredValue] Messages deferred by 4 (91→95)
+2026-02-24T12:56:02.570Z [DEBUG] High write ratio: blit=0, write=26936 (100.0% writes), screen=464x120
+2026-02-24T12:56:04.702Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:56:04.704Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:56:04.704Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:04.704Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:56:04.706Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937764706
+2026-02-24T12:56:04.706Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:04.711Z [DEBUG] Temp file written successfully, size: 6818 bytes
+2026-02-24T12:56:04.711Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:04.711Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937764706 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx
+2026-02-24T12:56:04.712Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx written atomically
+2026-02-24T12:56:04.714Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:56:04.714Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:04.714Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:56:04.716Z [DEBUG] [useDeferredValue] Messages deferred by 4 (95→99)
+2026-02-24T12:56:04.759Z [DEBUG] High write ratio: blit=0, write=26936 (100.0% writes), screen=464x120
+2026-02-24T12:56:04.761Z [DEBUG] [useDeferredValue] Messages deferred by 4 (95→99)
+2026-02-24T12:56:04.765Z [DEBUG] [useDeferredValue] Messages deferred by 4 (95→99)
+2026-02-24T12:56:04.827Z [DEBUG] High write ratio: blit=0, write=28391 (100.0% writes), screen=485x120
+2026-02-24T12:56:05.171Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:56:05.172Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:56:05.172Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:05.172Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:56:05.175Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937765175
+2026-02-24T12:56:05.175Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:05.179Z [DEBUG] Temp file written successfully, size: 6820 bytes
+2026-02-24T12:56:05.179Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:05.179Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937765175 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx
+2026-02-24T12:56:05.180Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx written atomically
+2026-02-24T12:56:05.182Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:56:05.182Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:05.182Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:56:05.184Z [DEBUG] [useDeferredValue] Messages deferred by 4 (99→103)
+2026-02-24T12:56:05.228Z [DEBUG] High write ratio: blit=0, write=28391 (100.0% writes), screen=485x120
+2026-02-24T12:56:05.277Z [DEBUG] High write ratio: blit=0, write=28952 (100.0% writes), screen=496x120
+2026-02-24T12:56:06.658Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T12:56:06.660Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T12:56:06.660Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:06.660Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T12:56:06.662Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937766662
+2026-02-24T12:56:06.662Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:06.667Z [DEBUG] Temp file written successfully, size: 7136 bytes
+2026-02-24T12:56:06.667Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:06.667Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx.tmp.15104.1771937766662 to C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx
+2026-02-24T12:56:06.668Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryLibrary\StoryLibrary.jsx written atomically
+2026-02-24T12:56:06.671Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T12:56:06.671Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:06.671Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T12:56:06.672Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:56:06.672Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:56:06.672Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:56:06.672Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:56:06.673Z [DEBUG] autocompact: tokens=55441 threshold=167000 effectiveWindow=180000
+2026-02-24T12:56:06.673Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:56:06.676Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937766676
+2026-02-24T12:56:06.676Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:06.678Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:56:06.678Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:06.678Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937766676 to C:\Users\johnm\.claude.json
+2026-02-24T12:56:06.678Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:56:06.689Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:56:06.689Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:56:06.689Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:56:06.689Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:56:06.691Z [DEBUG] [useDeferredValue] Messages deferred by 4 (103→107)
+2026-02-24T12:56:06.733Z [DEBUG] High write ratio: blit=0, write=28952 (100.0% writes), screen=496x120
+2026-02-24T12:56:06.815Z [DEBUG] High write ratio: blit=0, write=29878 (100.0% writes), screen=511x120
+2026-02-24T12:56:09.718Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:56:10.886Z [DEBUG] [useDeferredValue] Messages deferred by 1 (107→108)
+2026-02-24T12:56:10.926Z [DEBUG] High write ratio: blit=0, write=29913 (100.0% writes), screen=513x120
+2026-02-24T12:56:10.928Z [DEBUG] [useDeferredValue] Messages deferred by 1 (107→108)
+2026-02-24T12:56:10.992Z [DEBUG] High write ratio: blit=0, write=30030 (100.0% writes), screen=515x120
+2026-02-24T12:56:11.530Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:56:11.532Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:56:11.532Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:11.532Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:56:11.534Z [DEBUG] [useDeferredValue] Messages deferred by 1 (108→109)
+2026-02-24T12:56:11.573Z [DEBUG] High write ratio: blit=0, write=30030 (100.0% writes), screen=515x120
+2026-02-24T12:56:11.579Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:56:11.579Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:11.579Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:56:11.580Z [DEBUG] [useDeferredValue] Messages deferred by 1 (108→109)
+2026-02-24T12:56:11.630Z [DEBUG] High write ratio: blit=0, write=30086 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.101Z [DEBUG] [useDeferredValue] Messages deferred by 3 (109→112)
+2026-02-24T12:56:12.142Z [DEBUG] High write ratio: blit=0, write=30086 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.143Z [DEBUG] [useDeferredValue] Messages deferred by 3 (109→112)
+2026-02-24T12:56:12.215Z [DEBUG] High write ratio: blit=0, write=30086 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.232Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:56:12.233Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:56:12.233Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:12.233Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:56:12.236Z [DEBUG] [useDeferredValue] Messages deferred by 1 (112→113)
+2026-02-24T12:56:12.284Z [DEBUG] High write ratio: blit=0, write=30086 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.287Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:56:12.287Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:12.287Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:56:12.288Z [DEBUG] [useDeferredValue] Messages deferred by 1 (112→113)
+2026-02-24T12:56:12.357Z [DEBUG] High write ratio: blit=0, write=30099 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.698Z [DEBUG] [useDeferredValue] Messages deferred by 3 (113→116)
+2026-02-24T12:56:12.738Z [DEBUG] High write ratio: blit=0, write=30099 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.739Z [DEBUG] [useDeferredValue] Messages deferred by 3 (113→116)
+2026-02-24T12:56:12.807Z [DEBUG] High write ratio: blit=0, write=30099 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.838Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T12:56:12.840Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T12:56:12.840Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:12.840Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T12:56:12.842Z [DEBUG] [useDeferredValue] Messages deferred by 1 (116→117)
+2026-02-24T12:56:12.851Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T12:56:12.851Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T12:56:12.851Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T12:56:12.852Z [DEBUG] [useDeferredValue] Messages deferred by 1 (116→117)
+2026-02-24T12:56:12.891Z [DEBUG] High write ratio: blit=0, write=30099 (100.0% writes), screen=516x120
+2026-02-24T12:56:12.893Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:56:12.893Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:56:12.893Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:56:12.893Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:56:12.896Z [DEBUG] autocompact: tokens=57787 threshold=167000 effectiveWindow=180000
+2026-02-24T12:56:12.897Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:56:12.899Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937772899
+2026-02-24T12:56:12.899Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:12.904Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:56:12.904Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:12.904Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937772899 to C:\Users\johnm\.claude.json
+2026-02-24T12:56:12.905Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:56:12.915Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:56:12.916Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:56:12.916Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:56:12.916Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:56:12.917Z [DEBUG] [useDeferredValue] Messages deferred by 4 (116→120)
+2026-02-24T12:56:12.956Z [DEBUG] High write ratio: blit=0, write=30099 (100.0% writes), screen=516x120
+2026-02-24T12:56:13.004Z [DEBUG] High write ratio: blit=0, write=30095 (100.0% writes), screen=516x120
+2026-02-24T12:56:15.383Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:56:26.024Z [DEBUG] [useDeferredValue] Messages deferred by 1 (120→121)
+2026-02-24T12:56:26.081Z [DEBUG] High write ratio: blit=0, write=31672 (100.0% writes), screen=540x120
+2026-02-24T12:56:26.088Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-24T12:56:26.088Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:26.088Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T12:56:26.088Z [DEBUG] autocompact: tokens=59321 threshold=167000 effectiveWindow=180000
+2026-02-24T12:56:26.090Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:56:26.093Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937786093
+2026-02-24T12:56:26.094Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:56:26.096Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:56:26.097Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:56:26.097Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937786093 to C:\Users\johnm\.claude.json
+2026-02-24T12:56:26.097Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:56:26.115Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:56:26.115Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:56:26.115Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:56:26.115Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:56:26.119Z [DEBUG] [useDeferredValue] Messages deferred by 1 (121→122)
+2026-02-24T12:56:26.168Z [DEBUG] High write ratio: blit=0, write=31605 (100.0% writes), screen=538x120
+2026-02-24T12:56:26.223Z [DEBUG] High write ratio: blit=0, write=31624 (100.0% writes), screen=540x120
+2026-02-24T12:56:35.440Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:56:35.518Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-24T12:56:35.545Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-24T12:56:35.545Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:56:35.545Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T12:56:35.546Z [DEBUG] Forked agent [prompt_suggestion] finished: 1 messages, types=[assistant], totalUsage: input=295 output=5 cacheRead=58497 cacheCreate=546
+2026-02-24T12:56:35.546Z [DEBUG] [Speculation] enabled=false
+2026-02-24T12:57:26.186Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-24T12:57:26.186Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:57:26.186Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-24T12:58:00.519Z [DEBUG] High write ratio: blit=16440, write=25874 (61.1% writes), screen=540x120
+2026-02-24T12:58:02.477Z [DEBUG] High write ratio: blit=16440, write=25874 (61.1% writes), screen=540x120
+2026-02-24T12:58:46.818Z [DEBUG] High write ratio: blit=16440, write=25874 (61.1% writes), screen=540x120
+2026-02-24T12:58:56.241Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T12:58:56.241Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T12:58:56.241Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T12:58:56.241Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T12:58:56.242Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-24T12:58:56.242Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:58:56.242Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T12:58:56.242Z [DEBUG] FileHistory: Making snapshot for message 594b6902-44b5-41ab-b2dc-681688415546
+2026-02-24T12:58:56.275Z [DEBUG] FileHistory: Added snapshot for 594b6902-44b5-41ab-b2dc-681688415546, tracking 8 files
+2026-02-24T12:58:56.276Z [DEBUG] [useDeferredValue] Messages deferred by 2 (122→124)
+2026-02-24T12:58:56.315Z [DEBUG] High write ratio: blit=0, write=31659 (100.0% writes), screen=542x120
+2026-02-24T12:58:56.318Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T12:58:56.318Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-24T12:58:56.318Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.002; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:58:56.318Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:58:56.318Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:58:56.318Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:58:56.321Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937936321
+2026-02-24T12:58:56.321Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:58:56.323Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:58:56.323Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:58:56.323Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937936321 to C:\Users\johnm\.claude.json
+2026-02-24T12:58:56.324Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:58:56.334Z [DEBUG] autocompact: tokens=59185 threshold=167000 effectiveWindow=180000
+2026-02-24T12:58:56.334Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:58:56.336Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937936336
+2026-02-24T12:58:56.336Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:58:56.340Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:58:56.340Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:58:56.340Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937936336 to C:\Users\johnm\.claude.json
+2026-02-24T12:58:56.340Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:58:56.351Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:58:56.351Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:58:56.351Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:58:56.351Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:58:56.355Z [DEBUG] [useDeferredValue] Messages deferred by 2 (122→124)
+2026-02-24T12:58:56.407Z [DEBUG] High write ratio: blit=0, write=31700 (100.0% writes), screen=544x120
+2026-02-24T12:58:56.933Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:58:57.512Z [DEBUG] High write ratio: blit=16440, write=25940 (61.2% writes), screen=544x120
+2026-02-24T12:58:58.797Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:59:02.781Z [DEBUG] [useDeferredValue] Messages deferred by 1 (124→125)
+2026-02-24T12:59:02.833Z [DEBUG] High write ratio: blit=0, write=32199 (100.0% writes), screen=555x120
+2026-02-24T12:59:02.837Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-24T12:59:02.837Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:59:02.837Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T12:59:02.837Z [DEBUG] autocompact: tokens=59636 threshold=167000 effectiveWindow=180000
+2026-02-24T12:59:02.838Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T12:59:02.841Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771937942841
+2026-02-24T12:59:02.841Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T12:59:02.847Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T12:59:02.848Z [DEBUG] Applied original permissions to temp file
+2026-02-24T12:59:02.848Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771937942841 to C:\Users\johnm\.claude.json
+2026-02-24T12:59:02.848Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T12:59:02.861Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T12:59:02.861Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T12:59:02.861Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T12:59:02.861Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T12:59:02.914Z [DEBUG] High write ratio: blit=0, write=32164 (100.0% writes), screen=553x120
+2026-02-24T12:59:08.401Z [DEBUG] Stream started - received first chunk
+2026-02-24T12:59:08.470Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-24T12:59:08.513Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-24T12:59:08.513Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T12:59:08.513Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T12:59:08.513Z [DEBUG] Forked agent [prompt_suggestion] finished: 1 messages, types=[assistant], totalUsage: input=295 output=5 cacheRead=59171 cacheCreate=188
+2026-02-24T12:59:08.513Z [DEBUG] [Speculation] enabled=false
+2026-02-24T12:59:18.306Z [DEBUG] High write ratio: blit=16440, write=26414 (61.6% writes), screen=553x120
+2026-02-24T12:59:25.704Z [DEBUG] High write ratio: blit=16440, write=26414 (61.6% writes), screen=553x120
+2026-02-24T12:59:35.310Z [DEBUG] High write ratio: blit=16440, write=26414 (61.6% writes), screen=553x120
+2026-02-24T12:59:41.670Z [DEBUG] High write ratio: blit=16440, write=26414 (61.6% writes), screen=553x120
+2026-02-24T12:59:42.722Z [DEBUG] High write ratio: blit=16440, write=26414 (61.6% writes), screen=553x120
+2026-02-24T12:59:44.947Z [DEBUG] High write ratio: blit=16440, write=26407 (61.6% writes), screen=553x120
+2026-02-24T12:59:53.035Z [DEBUG] High write ratio: blit=16440, write=26407 (61.6% writes), screen=553x120
+2026-02-24T13:00:02.040Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:00:02.040Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:00:02.040Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:00:02.040Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:00:02.043Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-24T13:00:02.043Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:00:02.043Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:00:02.043Z [DEBUG] FileHistory: Making snapshot for message c3236545-dffb-4372-b909-0cf52d782338
+2026-02-24T13:00:02.043Z [DEBUG] FileHistory: Added snapshot for c3236545-dffb-4372-b909-0cf52d782338, tracking 8 files
+2026-02-24T13:00:02.044Z [DEBUG] [useDeferredValue] Messages deferred by 1 (125→126)
+2026-02-24T13:00:02.083Z [DEBUG] High write ratio: blit=0, write=32195 (100.0% writes), screen=555x120
+2026-02-24T13:00:02.087Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:00:02.087Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-24T13:00:02.088Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.203; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:00:02.088Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:00:02.088Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:00:02.088Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:00:02.091Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938002091
+2026-02-24T13:00:02.091Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:00:02.095Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:00:02.095Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:00:02.095Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938002091 to C:\Users\johnm\.claude.json
+2026-02-24T13:00:02.095Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:00:02.107Z [DEBUG] autocompact: tokens=59369 threshold=167000 effectiveWindow=180000
+2026-02-24T13:00:02.107Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:00:02.110Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938002110
+2026-02-24T13:00:02.110Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:00:02.113Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:00:02.113Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:00:02.113Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938002110 to C:\Users\johnm\.claude.json
+2026-02-24T13:00:02.113Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:00:02.124Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:00:02.124Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:00:02.124Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:00:02.124Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:00:02.134Z [DEBUG] [useDeferredValue] Messages deferred by 1 (125→126)
+2026-02-24T13:00:02.209Z [DEBUG] High write ratio: blit=0, write=32427 (100.0% writes), screen=558x120
+2026-02-24T13:00:02.768Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:00:02.999Z [DEBUG] High write ratio: blit=16440, write=26667 (61.9% writes), screen=558x120
+2026-02-24T13:00:05.154Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:00:17.969Z [DEBUG] [useDeferredValue] Messages deferred by 1 (126→127)
+2026-02-24T13:00:18.030Z [DEBUG] High write ratio: blit=0, write=32444 (100.0% writes), screen=558x120
+2026-02-24T13:00:18.698Z [DEBUG] [useDeferredValue] Messages deferred by 1 (127→128)
+2026-02-24T13:00:18.760Z [DEBUG] High write ratio: blit=0, write=32738 (100.0% writes), screen=563x120
+2026-02-24T13:00:18.764Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-24T13:00:18.764Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:00:18.764Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:00:18.764Z [DEBUG] autocompact: tokens=60228 threshold=167000 effectiveWindow=180000
+2026-02-24T13:00:18.766Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:00:18.769Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938018769
+2026-02-24T13:00:18.769Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:00:18.773Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:00:18.773Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:00:18.773Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938018769 to C:\Users\johnm\.claude.json
+2026-02-24T13:00:18.773Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:00:18.784Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:00:18.784Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:00:18.784Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:00:18.784Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:00:18.826Z [DEBUG] High write ratio: blit=0, write=32690 (100.0% writes), screen=561x120
+2026-02-24T13:00:18.864Z [DEBUG] High write ratio: blit=16440, write=26930 (62.1% writes), screen=561x120
+2026-02-24T13:00:21.288Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:00:21.577Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-24T13:00:21.615Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-24T13:00:21.615Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:00:21.615Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:00:21.615Z [DEBUG] Forked agent [prompt_suggestion] finished: 1 messages, types=[assistant], totalUsage: input=295 output=11 cacheRead=59372 cacheCreate=571
+2026-02-24T13:00:21.616Z [DEBUG] [Speculation] enabled=false
+2026-02-24T13:00:21.719Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:00:21.719Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:00:21.719Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:00:21.719Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:00:21.721Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-24T13:00:21.721Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:00:21.721Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:00:21.721Z [DEBUG] FileHistory: Making snapshot for message b6c98719-0823-45f6-a1ec-24d85bf7dadb
+2026-02-24T13:00:21.722Z [DEBUG] FileHistory: Added snapshot for b6c98719-0823-45f6-a1ec-24d85bf7dadb, tracking 8 files
+2026-02-24T13:00:21.722Z [DEBUG] [useDeferredValue] Messages deferred by 1 (128→129)
+2026-02-24T13:00:21.760Z [DEBUG] High write ratio: blit=0, write=32719 (100.0% writes), screen=563x120
+2026-02-24T13:00:21.762Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:00:21.763Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-24T13:00:21.763Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.314; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:00:21.763Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:00:21.763Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:00:21.763Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:00:21.764Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938021764
+2026-02-24T13:00:21.764Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:00:21.769Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:00:21.769Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:00:21.769Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938021764 to C:\Users\johnm\.claude.json
+2026-02-24T13:00:21.769Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:00:21.779Z [DEBUG] autocompact: tokens=59963 threshold=167000 effectiveWindow=180000
+2026-02-24T13:00:21.780Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:00:21.782Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938021782
+2026-02-24T13:00:21.782Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:00:21.783Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:00:21.783Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:00:21.783Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938021782 to C:\Users\johnm\.claude.json
+2026-02-24T13:00:21.784Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:00:21.794Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:00:21.795Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:00:21.795Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:00:21.795Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:00:21.796Z [DEBUG] [useDeferredValue] Messages deferred by 1 (128→129)
+2026-02-24T13:00:21.860Z [DEBUG] High write ratio: blit=0, write=32760 (100.0% writes), screen=565x120
+2026-02-24T13:00:22.879Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:00:24.439Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:00:25.245Z [DEBUG] High write ratio: blit=16440, write=27000 (62.2% writes), screen=565x120
+2026-02-24T13:00:26.893Z [DEBUG] [useDeferredValue] Messages deferred by 1 (129→130)
+2026-02-24T13:00:26.957Z [DEBUG] High write ratio: blit=0, write=33137 (100.0% writes), screen=571x120
+2026-02-24T13:00:26.961Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-24T13:00:26.961Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:00:26.961Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:00:26.961Z [DEBUG] autocompact: tokens=60329 threshold=167000 effectiveWindow=180000
+2026-02-24T13:00:26.962Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:00:26.966Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938026966
+2026-02-24T13:00:26.966Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:00:26.970Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:00:26.970Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:00:26.970Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938026966 to C:\Users\johnm\.claude.json
+2026-02-24T13:00:26.970Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:00:26.983Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:00:26.984Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:00:26.984Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:00:26.984Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:00:27.040Z [DEBUG] High write ratio: blit=0, write=33108 (100.0% writes), screen=569x120
+2026-02-24T13:00:29.598Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:00:29.722Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-24T13:00:29.791Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-24T13:00:29.791Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:00:29.791Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:00:29.791Z [DEBUG] Forked agent [prompt_suggestion] finished: 1 messages, types=[assistant], totalUsage: input=295 output=6 cacheRead=59958 cacheCreate=93
+2026-02-24T13:01:27.059Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-02-24T13:01:27.059Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:01:27.059Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-02-24T13:02:20.792Z [DEBUG] High write ratio: blit=16440, write=27348 (62.5% writes), screen=569x120
+2026-02-24T13:02:31.471Z [DEBUG] High write ratio: blit=16440, write=27348 (62.5% writes), screen=569x120
+2026-02-24T13:02:51.120Z [DEBUG] High write ratio: blit=16440, write=27348 (62.5% writes), screen=569x120
+2026-02-24T13:02:52.255Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:02:52.255Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:02:52.258Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938172258
+2026-02-24T13:02:52.258Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:52.262Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:52.262Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:52.262Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938172258 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:52.263Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:52.263Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:02:52.263Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:02:52.694Z [DEBUG] [FileIndex] ripgrep: 844 files in 431ms
+2026-02-24T13:02:52.697Z [DEBUG] [FileIndex] cache refresh completed in 442ms (rust index)
+2026-02-24T13:02:52.833Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:02:52.833Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:02:52.833Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:02:52.833Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 0ms (cache hit)
+2026-02-24T13:02:52.835Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938172835
+2026-02-24T13:02:52.835Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:52.840Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:52.840Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:52.840Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938172835 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:52.841Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:52.841Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:02:53.295Z [DEBUG] [FileIndex] ripgrep: 844 files in 454ms
+2026-02-24T13:02:53.296Z [DEBUG] [FileIndex] cache refresh completed in 463ms (rust index)
+2026-02-24T13:02:53.786Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:02:53.786Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:02:53.787Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:02:53.787Z [DEBUG] [FileIndex] generateFileSuggestions: 6 results in 1ms (cache hit)
+2026-02-24T13:02:53.788Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938173788
+2026-02-24T13:02:53.788Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:53.795Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:53.795Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:53.795Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938173788 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:53.795Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:53.795Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:02:54.035Z [DEBUG] [FileIndex] generateFileSuggestions: 5 results in 1ms (cache hit)
+2026-02-24T13:02:54.037Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938174037
+2026-02-24T13:02:54.037Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:54.042Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:54.042Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:54.042Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938174037 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:54.043Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:54.251Z [DEBUG] [FileIndex] ripgrep: 844 files in 456ms
+2026-02-24T13:02:54.252Z [DEBUG] [FileIndex] cache refresh completed in 466ms (rust index)
+2026-02-24T13:02:54.659Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-24T13:02:55.046Z [DEBUG] Checking for native installer update to version 2.1.52
+2026-02-24T13:02:55.047Z [DEBUG] Version 2.1.52 already installed, updating symlink
+2026-02-24T13:02:55.048Z [DEBUG] Successfully updated to version 2.1.52
+2026-02-24T13:02:57.534Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:02:57.534Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:02:57.536Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938177536
+2026-02-24T13:02:57.536Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:57.540Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:57.540Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:57.540Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938177536 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:57.541Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:57.541Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:02:57.541Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:02:57.913Z [DEBUG] [FileIndex] ripgrep: 844 files in 372ms
+2026-02-24T13:02:57.914Z [DEBUG] [FileIndex] cache refresh completed in 380ms (rust index)
+2026-02-24T13:02:58.488Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:02:58.488Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:02:58.493Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:02:58.493Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 5ms (cache hit)
+2026-02-24T13:02:58.495Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938178495
+2026-02-24T13:02:58.495Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:58.501Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:58.502Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:58.502Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938178495 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:58.502Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:58.502Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:02:58.738Z [DEBUG] [FileIndex] generateFileSuggestions: 6 results in 0ms (cache hit)
+2026-02-24T13:02:58.739Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938178739
+2026-02-24T13:02:58.740Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:58.742Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:58.742Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:58.742Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938178739 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:58.743Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:58.866Z [DEBUG] [FileIndex] ripgrep: 844 files in 364ms
+2026-02-24T13:02:58.867Z [DEBUG] [FileIndex] cache refresh completed in 379ms (rust index)
+2026-02-24T13:02:59.076Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:02:59.076Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:02:59.077Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:02:59.077Z [DEBUG] [FileIndex] generateFileSuggestions: 5 results in 1ms (cache hit)
+2026-02-24T13:02:59.078Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938179078
+2026-02-24T13:02:59.078Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:02:59.083Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:02:59.083Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:02:59.083Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938179078 to C:\Users\johnm\.claude.json
+2026-02-24T13:02:59.083Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:02:59.083Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:02:59.462Z [DEBUG] [FileIndex] ripgrep: 844 files in 379ms
+2026-02-24T13:02:59.464Z [DEBUG] [FileIndex] cache refresh completed in 388ms (rust index)
+2026-02-24T13:03:19.725Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:19.725Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:19.726Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:19.726Z [DEBUG] [FileIndex] generateFileSuggestions: 5 results in 1ms (cache hit)
+2026-02-24T13:03:19.727Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938199727
+2026-02-24T13:03:19.727Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:19.733Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:19.733Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:19.733Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938199727 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:19.733Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:19.733Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:20.108Z [DEBUG] [FileIndex] ripgrep: 844 files in 375ms
+2026-02-24T13:03:20.110Z [DEBUG] [FileIndex] cache refresh completed in 385ms (rust index)
+2026-02-24T13:03:20.410Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:20.410Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:20.411Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:20.411Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 1ms (cache hit)
+2026-02-24T13:03:20.412Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938200412
+2026-02-24T13:03:20.412Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:20.419Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:20.419Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:20.419Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938200412 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:20.419Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:20.419Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:20.836Z [DEBUG] [FileIndex] ripgrep: 844 files in 417ms
+2026-02-24T13:03:20.837Z [DEBUG] [FileIndex] cache refresh completed in 427ms (rust index)
+2026-02-24T13:03:20.854Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:20.854Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:20.856Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938200856
+2026-02-24T13:03:20.856Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:20.858Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:20.858Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:20.858Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938200856 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:20.858Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:20.859Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:20.859Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:21.223Z [DEBUG] [FileIndex] ripgrep: 844 files in 364ms
+2026-02-24T13:03:21.224Z [DEBUG] [FileIndex] cache refresh completed in 370ms (rust index)
+2026-02-24T13:03:22.973Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:22.973Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:22.974Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:22.974Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 1ms (cache hit)
+2026-02-24T13:03:22.975Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938202975
+2026-02-24T13:03:22.975Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:22.981Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:22.981Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:22.981Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938202975 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:22.982Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:22.982Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:23.245Z [DEBUG] [FileIndex] generateFileSuggestions: 6 results in 1ms (cache hit)
+2026-02-24T13:03:23.247Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938203247
+2026-02-24T13:03:23.247Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:23.254Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:23.254Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:23.254Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938203247 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:23.254Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:23.349Z [DEBUG] [FileIndex] ripgrep: 844 files in 367ms
+2026-02-24T13:03:23.351Z [DEBUG] [FileIndex] cache refresh completed in 378ms (rust index)
+2026-02-24T13:03:23.938Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:23.938Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:23.939Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:23.939Z [DEBUG] [FileIndex] generateFileSuggestions: 1 results in 1ms (cache hit)
+2026-02-24T13:03:23.941Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938203941
+2026-02-24T13:03:23.941Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:23.947Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:23.947Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:23.947Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938203941 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:23.947Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:23.948Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:24.279Z [DEBUG] [FileIndex] generateFileSuggestions: 0 results in 0ms (cache hit)
+2026-02-24T13:03:24.281Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938204281
+2026-02-24T13:03:24.281Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:24.284Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:24.284Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:24.284Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938204281 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:24.284Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:24.301Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-24T13:03:24.314Z [DEBUG] [FileIndex] ripgrep: 844 files in 366ms
+2026-02-24T13:03:24.315Z [DEBUG] [FileIndex] cache refresh completed in 377ms (rust index)
+2026-02-24T13:03:24.585Z [DEBUG] Checking for native installer update to version 2.1.52
+2026-02-24T13:03:24.586Z [DEBUG] Version 2.1.52 already installed, updating symlink
+2026-02-24T13:03:24.586Z [DEBUG] Successfully updated to version 2.1.52
+2026-02-24T13:03:25.167Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:25.167Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:25.167Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:25.167Z [DEBUG] [FileIndex] generateFileSuggestions: 1 results in 0ms (cache hit)
+2026-02-24T13:03:25.169Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938205169
+2026-02-24T13:03:25.169Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:25.175Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:25.175Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:25.175Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938205169 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:25.175Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:25.176Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:25.553Z [DEBUG] [FileIndex] ripgrep: 844 files in 377ms
+2026-02-24T13:03:25.554Z [DEBUG] [FileIndex] cache refresh completed in 387ms (rust index)
+2026-02-24T13:03:25.610Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:03:25.610Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:03:25.611Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:03:25.611Z [DEBUG] [FileIndex] generateFileSuggestions: 6 results in 1ms (cache hit)
+2026-02-24T13:03:25.612Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938205612
+2026-02-24T13:03:25.612Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:03:25.614Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:03:25.614Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:03:25.614Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938205612 to C:\Users\johnm\.claude.json
+2026-02-24T13:03:25.614Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:03:25.614Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:03:25.982Z [DEBUG] [FileIndex] ripgrep: 844 files in 368ms
+2026-02-24T13:03:25.983Z [DEBUG] [FileIndex] cache refresh completed in 373ms (rust index)
+2026-02-24T13:03:33.010Z [DEBUG] High write ratio: blit=16440, write=27805 (62.8% writes), screen=574x120
+2026-02-24T13:04:16.029Z [DEBUG] High write ratio: blit=16440, write=27805 (62.8% writes), screen=574x120
+2026-02-24T13:04:17.003Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:04:17.003Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:04:17.003Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:04:17.003Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 2ms (cache hit)
+2026-02-24T13:04:17.009Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938257009
+2026-02-24T13:04:17.009Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:17.013Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:17.013Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:17.013Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938257009 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:17.013Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:17.013Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:04:17.346Z [DEBUG] [FileIndex] ripgrep: 844 files in 333ms
+2026-02-24T13:04:17.347Z [DEBUG] [FileIndex] cache refresh completed in 346ms (rust index)
+2026-02-24T13:04:17.639Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:04:17.639Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:04:17.639Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:04:17.639Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 0ms (cache hit)
+2026-02-24T13:04:17.641Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938257641
+2026-02-24T13:04:17.641Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:17.644Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:17.644Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:17.644Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938257641 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:17.644Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:17.645Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:04:17.981Z [DEBUG] [FileIndex] ripgrep: 844 files in 336ms
+2026-02-24T13:04:17.982Z [DEBUG] [FileIndex] cache refresh completed in 343ms (rust index)
+2026-02-24T13:04:17.983Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:04:17.983Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:04:17.984Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938257984
+2026-02-24T13:04:17.984Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:17.986Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:17.986Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:17.986Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938257984 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:17.986Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:17.986Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:04:17.986Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:04:18.316Z [DEBUG] [FileIndex] ripgrep: 844 files in 330ms
+2026-02-24T13:04:18.317Z [DEBUG] [FileIndex] cache refresh completed in 334ms (rust index)
+2026-02-24T13:04:18.903Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:04:18.903Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:04:18.903Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:04:18.903Z [DEBUG] [FileIndex] generateFileSuggestions: 13 results in 0ms (cache hit)
+2026-02-24T13:04:18.905Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938258905
+2026-02-24T13:04:18.905Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:18.908Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:18.908Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:18.908Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938258905 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:18.909Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:18.909Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:04:19.233Z [DEBUG] [FileIndex] ripgrep: 844 files in 324ms
+2026-02-24T13:04:19.235Z [DEBUG] [FileIndex] cache refresh completed in 332ms (rust index)
+2026-02-24T13:04:21.492Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-24T13:04:21.876Z [DEBUG] Checking for native installer update to version 2.1.52
+2026-02-24T13:04:21.877Z [DEBUG] Version 2.1.52 already installed, updating symlink
+2026-02-24T13:04:21.877Z [DEBUG] Successfully updated to version 2.1.52
+2026-02-24T13:04:23.484Z [DEBUG] High write ratio: blit=16440, write=27459 (62.6% writes), screen=569x120
+2026-02-24T13:04:26.411Z [DEBUG] High write ratio: blit=16440, write=27459 (62.6% writes), screen=569x120
+2026-02-24T13:04:31.105Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:04:31.105Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:04:31.105Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:04:31.105Z [DEBUG] [FileIndex] generateFileSuggestions: 3 results in 5ms (cache hit)
+2026-02-24T13:04:31.106Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938271106
+2026-02-24T13:04:31.107Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:31.113Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:31.113Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:31.113Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938271106 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:31.114Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:31.114Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:04:31.279Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-24T13:04:31.443Z [DEBUG] [FileIndex] ripgrep: 844 files in 329ms
+2026-02-24T13:04:31.444Z [DEBUG] [FileIndex] cache refresh completed in 344ms (rust index)
+2026-02-24T13:04:31.671Z [DEBUG] Checking for native installer update to version 2.1.52
+2026-02-24T13:04:31.672Z [DEBUG] Version 2.1.52 already installed, updating symlink
+2026-02-24T13:04:31.672Z [DEBUG] Successfully updated to version 2.1.52
+2026-02-24T13:04:32.164Z [DEBUG] High write ratio: blit=16440, write=27458 (62.5% writes), screen=569x120
+2026-02-24T13:04:32.962Z [DEBUG] High write ratio: blit=16440, write=27458 (62.5% writes), screen=569x120
+2026-02-24T13:04:33.182Z [DEBUG] High write ratio: blit=16440, write=27458 (62.5% writes), screen=569x120
+2026-02-24T13:04:35.705Z [DEBUG] High write ratio: blit=16440, write=27458 (62.5% writes), screen=569x120
+2026-02-24T13:04:51.754Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:04:51.754Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:04:51.755Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:04:51.755Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:04:51.759Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-24T13:04:51.759Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:04:51.759Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:04:51.759Z [DEBUG] FileHistory: Making snapshot for message b08d29eb-0dfb-40f0-af17-031ec1486390
+2026-02-24T13:04:51.760Z [DEBUG] FileHistory: Added snapshot for b08d29eb-0dfb-40f0-af17-031ec1486390, tracking 8 files
+2026-02-24T13:04:51.760Z [DEBUG] [useDeferredValue] Messages deferred by 3 (130→133)
+2026-02-24T13:04:51.808Z [DEBUG] High write ratio: blit=0, write=33143 (100.0% writes), screen=571x120
+2026-02-24T13:04:51.810Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:04:51.810Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-24T13:04:51.811Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.481; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:04:51.811Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:04:51.811Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:04:51.811Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:04:51.813Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938291813
+2026-02-24T13:04:51.813Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:51.819Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:51.819Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:51.819Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938291813 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:51.819Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:51.833Z [DEBUG] autocompact: tokens=69441 threshold=167000 effectiveWindow=180000
+2026-02-24T13:04:51.833Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:04:51.837Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938291837
+2026-02-24T13:04:51.837Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:51.839Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:51.840Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:51.840Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938291837 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:51.840Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:51.852Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:04:51.853Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:04:51.853Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:04:51.853Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:04:51.855Z [DEBUG] [useDeferredValue] Messages deferred by 3 (130→133)
+2026-02-24T13:04:51.935Z [DEBUG] High write ratio: blit=0, write=33517 (100.0% writes), screen=576x120
+2026-02-24T13:04:52.490Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:04:52.782Z [DEBUG] High write ratio: blit=16440, write=27757 (62.8% writes), screen=576x120
+2026-02-24T13:04:56.050Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:04:56.787Z [DEBUG] [useDeferredValue] Messages deferred by 1 (133→134)
+2026-02-24T13:04:56.834Z [DEBUG] High write ratio: blit=0, write=33561 (100.0% writes), screen=578x120
+2026-02-24T13:04:56.904Z [DEBUG] High write ratio: blit=0, write=33614 (100.0% writes), screen=580x120
+2026-02-24T13:04:57.720Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T13:04:57.722Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T13:04:57.722Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:04:57.722Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T13:04:57.729Z [DEBUG] [useDeferredValue] Messages deferred by 1 (134→135)
+2026-02-24T13:04:57.783Z [DEBUG] High write ratio: blit=0, write=33570 (100.0% writes), screen=578x120
+2026-02-24T13:04:57.786Z [DEBUG] [useDeferredValue] Messages deferred by 1 (134→135)
+2026-02-24T13:04:57.842Z [DEBUG] High write ratio: blit=0, write=33570 (100.0% writes), screen=578x120
+2026-02-24T13:04:57.923Z [DEBUG] High write ratio: blit=0, write=33639 (100.0% writes), screen=581x120
+2026-02-24T13:04:58.150Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T13:04:58.150Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:04:58.150Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T13:04:58.151Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:04:58.151Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:04:58.151Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:04:58.151Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:04:58.152Z [DEBUG] autocompact: tokens=71495 threshold=167000 effectiveWindow=180000
+2026-02-24T13:04:58.152Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:04:58.155Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938298155
+2026-02-24T13:04:58.155Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:04:58.158Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:04:58.158Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:04:58.158Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938298155 to C:\Users\johnm\.claude.json
+2026-02-24T13:04:58.158Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:04:58.170Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:04:58.171Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:04:58.171Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:04:58.171Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:04:58.173Z [DEBUG] [useDeferredValue] Messages deferred by 3 (135→138)
+2026-02-24T13:04:58.223Z [DEBUG] High write ratio: blit=0, write=33639 (100.0% writes), screen=581x120
+2026-02-24T13:04:58.299Z [DEBUG] High write ratio: blit=0, write=33639 (100.0% writes), screen=581x120
+2026-02-24T13:05:00.508Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:00.554Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:01.795Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T13:05:01.797Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T13:05:01.797Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:01.797Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T13:05:01.804Z [DEBUG] [useDeferredValue] Messages deferred by 1 (138→139)
+2026-02-24T13:05:01.858Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:01.860Z [DEBUG] [useDeferredValue] Messages deferred by 1 (138→139)
+2026-02-24T13:05:01.913Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:01.996Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:02.192Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T13:05:02.192Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:05:02.192Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T13:05:02.193Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:05:02.193Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:05:02.193Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:05:02.193Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:05:02.193Z [DEBUG] autocompact: tokens=71894 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:02.193Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:02.196Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938302196
+2026-02-24T13:05:02.196Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:02.199Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:02.199Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:02.199Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938302196 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:02.200Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:02.213Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:02.213Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:02.213Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:02.213Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:02.215Z [DEBUG] [useDeferredValue] Messages deferred by 3 (139→142)
+2026-02-24T13:05:02.270Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:02.325Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:04.874Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:04.921Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:05.757Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T13:05:05.759Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T13:05:05.759Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:05.759Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T13:05:05.768Z [DEBUG] [useDeferredValue] Messages deferred by 1 (142→143)
+2026-02-24T13:05:05.815Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:05.817Z [DEBUG] [useDeferredValue] Messages deferred by 1 (142→143)
+2026-02-24T13:05:05.872Z [DEBUG] High write ratio: blit=0, write=33640 (100.0% writes), screen=581x120
+2026-02-24T13:05:05.974Z [DEBUG] High write ratio: blit=0, write=33638 (100.0% writes), screen=581x120
+2026-02-24T13:05:06.178Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T13:05:06.178Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:05:06.178Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T13:05:06.179Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:05:06.179Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:05:06.179Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:05:06.179Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:05:06.179Z [DEBUG] autocompact: tokens=72185 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:06.180Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:06.183Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938306183
+2026-02-24T13:05:06.183Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:06.185Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:06.185Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:06.185Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938306183 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:06.186Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:06.198Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:06.198Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:06.198Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:06.198Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:06.201Z [DEBUG] [useDeferredValue] Messages deferred by 3 (143→146)
+2026-02-24T13:05:06.248Z [DEBUG] High write ratio: blit=0, write=33638 (100.0% writes), screen=581x120
+2026-02-24T13:05:06.296Z [DEBUG] High write ratio: blit=0, write=33638 (100.0% writes), screen=581x120
+2026-02-24T13:05:10.161Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:10.232Z [DEBUG] High write ratio: blit=0, write=33638 (100.0% writes), screen=581x120
+2026-02-24T13:05:11.013Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T13:05:11.015Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T13:05:11.015Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:11.015Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T13:05:11.023Z [DEBUG] [useDeferredValue] Messages deferred by 1 (146→147)
+2026-02-24T13:05:11.077Z [DEBUG] High write ratio: blit=0, write=33638 (100.0% writes), screen=581x120
+2026-02-24T13:05:11.079Z [DEBUG] [useDeferredValue] Messages deferred by 1 (146→147)
+2026-02-24T13:05:11.140Z [DEBUG] High write ratio: blit=0, write=33638 (100.0% writes), screen=581x120
+2026-02-24T13:05:11.221Z [DEBUG] High write ratio: blit=0, write=33635 (100.0% writes), screen=581x120
+2026-02-24T13:05:11.417Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T13:05:11.417Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:05:11.417Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T13:05:11.418Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:05:11.418Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:05:11.418Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:05:11.418Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:05:11.419Z [DEBUG] autocompact: tokens=72731 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:11.420Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:11.423Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938311423
+2026-02-24T13:05:11.423Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:11.425Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:11.426Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:11.426Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938311423 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:11.426Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:11.439Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:11.439Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:11.439Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:11.440Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:11.443Z [DEBUG] [useDeferredValue] Messages deferred by 3 (147→150)
+2026-02-24T13:05:11.489Z [DEBUG] High write ratio: blit=0, write=33635 (100.0% writes), screen=581x120
+2026-02-24T13:05:11.535Z [DEBUG] High write ratio: blit=0, write=33635 (100.0% writes), screen=581x120
+2026-02-24T13:05:14.116Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:15.761Z [DEBUG] [useDeferredValue] Messages deferred by 1 (150→151)
+2026-02-24T13:05:15.805Z [DEBUG] High write ratio: blit=0, write=33635 (100.0% writes), screen=581x120
+2026-02-24T13:05:15.875Z [DEBUG] High write ratio: blit=0, write=33766 (100.0% writes), screen=583x120
+2026-02-24T13:05:19.551Z [DEBUG] Edit tool validation error: File has not been read yet. Read it first before writing to it.
+2026-02-24T13:05:19.551Z [DEBUG] [useDeferredValue] Messages deferred by 2 (151→153)
+2026-02-24T13:05:19.561Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:05:19.561Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:05:19.561Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:05:19.561Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:05:19.562Z [DEBUG] autocompact: tokens=73622 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:19.562Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:19.566Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938319566
+2026-02-24T13:05:19.566Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:19.572Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:19.572Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:19.572Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938319566 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:19.572Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:19.584Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:19.584Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:19.584Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:19.585Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:19.587Z [DEBUG] [useDeferredValue] Messages deferred by 3 (151→154)
+2026-02-24T13:05:19.632Z [DEBUG] High write ratio: blit=0, write=33766 (100.0% writes), screen=583x120
+2026-02-24T13:05:19.695Z [DEBUG] High write ratio: blit=0, write=33850 (100.0% writes), screen=586x120
+2026-02-24T13:05:23.261Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:23.333Z [DEBUG] High write ratio: blit=0, write=33904 (100.0% writes), screen=588x120
+2026-02-24T13:05:23.985Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:05:23.988Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:05:23.988Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:23.988Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:05:23.992Z [DEBUG] [useDeferredValue] Messages deferred by 1 (154→155)
+2026-02-24T13:05:24.042Z [DEBUG] High write ratio: blit=0, write=33869 (100.0% writes), screen=586x120
+2026-02-24T13:05:24.046Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:05:24.046Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:05:24.046Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:05:24.047Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:05:24.047Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:05:24.047Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:05:24.047Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:05:24.049Z [DEBUG] autocompact: tokens=74200 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:24.049Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:24.052Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938324052
+2026-02-24T13:05:24.052Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:24.054Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:24.054Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:24.054Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938324052 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:24.055Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:24.067Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:24.068Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:24.068Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:24.068Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:24.070Z [DEBUG] [useDeferredValue] Messages deferred by 4 (154→158)
+2026-02-24T13:05:24.119Z [DEBUG] High write ratio: blit=0, write=33869 (100.0% writes), screen=586x120
+2026-02-24T13:05:24.189Z [DEBUG] High write ratio: blit=0, write=33956 (100.0% writes), screen=589x120
+2026-02-24T13:05:26.938Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:26.994Z [DEBUG] High write ratio: blit=0, write=33956 (100.0% writes), screen=589x120
+2026-02-24T13:05:31.828Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-02-24T13:05:31.830Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-02-24T13:05:31.830Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:31.830Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-02-24T13:05:31.847Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css
+2026-02-24T13:05:31.849Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css.tmp.15104.1771938331849
+2026-02-24T13:05:31.849Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:31.852Z [DEBUG] Temp file written successfully, size: 40760 bytes
+2026-02-24T13:05:31.852Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:31.852Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css.tmp.15104.1771938331849 to C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css
+2026-02-24T13:05:31.853Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css written atomically
+2026-02-24T13:05:31.857Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-02-24T13:05:31.857Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:05:31.857Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-02-24T13:05:31.860Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:05:31.860Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:05:31.860Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:05:31.860Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:05:31.860Z [DEBUG] autocompact: tokens=75161 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:31.861Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:31.864Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938331864
+2026-02-24T13:05:31.864Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:31.867Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:31.867Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:31.867Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938331864 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:31.867Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:31.880Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:31.880Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:31.880Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:31.881Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:31.883Z [DEBUG] [useDeferredValue] Messages deferred by 4 (158→162)
+2026-02-24T13:05:31.933Z [DEBUG] High write ratio: blit=0, write=33956 (100.0% writes), screen=589x120
+2026-02-24T13:05:32.064Z [DEBUG] High write ratio: blit=0, write=35204 (100.0% writes), screen=613x120
+2026-02-24T13:05:34.300Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:37.629Z [DEBUG] [useDeferredValue] Messages deferred by 1 (162→163)
+2026-02-24T13:05:37.652Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-02-24T13:05:37.652Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:37.652Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:05:37.652Z [DEBUG] autocompact: tokens=75624 threshold=167000 effectiveWindow=180000
+2026-02-24T13:05:37.653Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:05:37.656Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938337656
+2026-02-24T13:05:37.656Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:05:37.662Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:05:37.662Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:05:37.662Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938337656 to C:\Users\johnm\.claude.json
+2026-02-24T13:05:37.663Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:05:37.674Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:05:37.675Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:05:37.675Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:05:37.675Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:05:37.677Z [DEBUG] [useDeferredValue] Messages deferred by 1 (163→164)
+2026-02-24T13:05:37.722Z [DEBUG] High write ratio: blit=0, write=35675 (100.0% writes), screen=622x120
+2026-02-24T13:05:37.778Z [DEBUG] High write ratio: blit=0, write=35692 (100.0% writes), screen=624x120
+2026-02-24T13:05:40.058Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:05:40.764Z [DEBUG] Forked agent [prompt_suggestion] received message: type=assistant
+2026-02-24T13:05:40.782Z [DEBUG] Getting matching hook commands for SubagentStop with query:
+2026-02-24T13:05:40.782Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:05:40.782Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:05:40.782Z [DEBUG] Forked agent [prompt_suggestion] finished: 1 messages, types=[assistant], totalUsage: input=295 output=20 cacheRead=75177 cacheCreate=169
+2026-02-24T13:06:12.378Z [DEBUG] High write ratio: blit=16440, write=29932 (64.5% writes), screen=624x120
+2026-02-24T13:06:14.457Z [DEBUG] High write ratio: blit=16440, write=29932 (64.5% writes), screen=624x120
+2026-02-24T13:06:49.375Z [DEBUG] High write ratio: blit=16440, write=29932 (64.5% writes), screen=624x120
+2026-02-24T13:06:59.796Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:06:59.796Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:06:59.799Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938419799
+2026-02-24T13:06:59.799Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:06:59.804Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:06:59.804Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:06:59.804Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938419799 to C:\Users\johnm\.claude.json
+2026-02-24T13:06:59.805Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:06:59.805Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:06:59.805Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:07:00.148Z [DEBUG] [FileIndex] ripgrep: 844 files in 343ms
+2026-02-24T13:07:00.150Z [DEBUG] [FileIndex] cache refresh completed in 354ms (rust index)
+2026-02-24T13:07:00.662Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:07:00.662Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:07:00.663Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:07:00.663Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 1ms (cache hit)
+2026-02-24T13:07:00.665Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938420665
+2026-02-24T13:07:00.665Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:00.670Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:00.670Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:00.670Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938420665 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:00.671Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:00.671Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:07:00.965Z [DEBUG] [FileIndex] generateFileSuggestions: 1 results in 1ms (cache hit)
+2026-02-24T13:07:00.966Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938420966
+2026-02-24T13:07:00.966Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:00.969Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:00.970Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:00.970Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938420966 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:00.970Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:01.009Z [DEBUG] [FileIndex] ripgrep: 844 files in 338ms
+2026-02-24T13:07:01.010Z [DEBUG] [FileIndex] cache refresh completed in 348ms (rust index)
+2026-02-24T13:07:03.020Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:07:03.020Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:07:03.020Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:07:03.020Z [DEBUG] [FileIndex] generateFileSuggestions: 6 results in 0ms (cache hit)
+2026-02-24T13:07:03.022Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938423022
+2026-02-24T13:07:03.022Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:03.027Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:03.027Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:03.027Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938423022 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:03.028Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:03.028Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:07:03.359Z [DEBUG] [FileIndex] ripgrep: 844 files in 331ms
+2026-02-24T13:07:03.360Z [DEBUG] [FileIndex] cache refresh completed in 340ms (rust index)
+2026-02-24T13:07:03.992Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-24T13:07:03.992Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-24T13:07:03.993Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938423993
+2026-02-24T13:07:03.993Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:03.998Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:03.998Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:03.998Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938423993 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:03.999Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:03.999Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-24T13:07:03.999Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-24T13:07:04.106Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-24T13:07:04.330Z [DEBUG] [FileIndex] ripgrep: 844 files in 331ms
+2026-02-24T13:07:04.331Z [DEBUG] [FileIndex] cache refresh completed in 339ms (rust index)
+2026-02-24T13:07:04.391Z [DEBUG] Checking for native installer update to version 2.1.52
+2026-02-24T13:07:04.392Z [DEBUG] Version 2.1.52 already installed, updating symlink
+2026-02-24T13:07:04.392Z [DEBUG] Successfully updated to version 2.1.52
+2026-02-24T13:07:44.335Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938464335
+2026-02-24T13:07:44.335Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:44.340Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:44.341Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:44.341Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938464335 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:44.341Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.729Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:07:45.729Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:07:45.729Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:07:45.729Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:07:45.732Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-02-24T13:07:45.732Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:07:45.732Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-02-24T13:07:45.732Z [DEBUG] FileHistory: Making snapshot for message a8b66c6c-dc26-45fd-9d04-8ed24cc356b5
+2026-02-24T13:07:45.747Z [DEBUG] FileHistory: Added snapshot for a8b66c6c-dc26-45fd-9d04-8ed24cc356b5, tracking 9 files
+2026-02-24T13:07:45.749Z [DEBUG] [useDeferredValue] Messages deferred by 3 (164→167)
+2026-02-24T13:07:45.792Z [DEBUG] High write ratio: blit=0, write=35717 (100.0% writes), screen=626x120
+2026-02-24T13:07:45.795Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:07:45.795Z [DEBUG] [SystemPrompt] path=simple proactive=false
+2026-02-24T13:07:45.796Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.446; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:07:45.796Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:07:45.796Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:07:45.796Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:07:45.798Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465798
+2026-02-24T13:07:45.798Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.801Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.801Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.801Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465798 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.801Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.812Z [DEBUG] autocompact: tokens=76992 threshold=167000 effectiveWindow=180000
+2026-02-24T13:07:45.814Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465814
+2026-02-24T13:07:45.814Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.816Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.816Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.816Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465814 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.817Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.827Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465827
+2026-02-24T13:07:45.827Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.829Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.829Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.829Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465827 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.830Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.840Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465840
+2026-02-24T13:07:45.840Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.842Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.842Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.842Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465840 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.842Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.852Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465852
+2026-02-24T13:07:45.852Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.855Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.855Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.855Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465852 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.855Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.856Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:07:45.867Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465867
+2026-02-24T13:07:45.867Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.870Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.870Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.870Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465867 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.870Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.881Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:07:45.881Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:07:45.881Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:07:45.882Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465882
+2026-02-24T13:07:45.882Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.887Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.887Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.887Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465882 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.887Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.897Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938465897
+2026-02-24T13:07:45.897Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:45.900Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:45.900Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:45.900Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938465897 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:45.900Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:45.909Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:07:45.912Z [DEBUG] [useDeferredValue] Messages deferred by 3 (164→167)
+2026-02-24T13:07:45.992Z [DEBUG] High write ratio: blit=0, write=35949 (100.0% writes), screen=629x120
+2026-02-24T13:07:46.384Z [DEBUG] High write ratio: blit=16440, write=30189 (64.7% writes), screen=629x120
+2026-02-24T13:07:46.460Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:07:48.671Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:07:49.629Z [DEBUG] [useDeferredValue] Messages deferred by 1 (167→168)
+2026-02-24T13:07:49.689Z [DEBUG] High write ratio: blit=0, write=36058 (100.0% writes), screen=633x120
+2026-02-24T13:07:50.619Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:07:50.621Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:07:50.621Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:07:50.621Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:07:50.623Z [DEBUG] [useDeferredValue] Messages deferred by 1 (168→169)
+2026-02-24T13:07:50.676Z [DEBUG] High write ratio: blit=0, write=36023 (100.0% writes), screen=631x120
+2026-02-24T13:07:50.680Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:07:50.680Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:07:50.680Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:07:50.682Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:07:50.682Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:07:50.683Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:07:50.683Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:07:50.683Z [DEBUG] autocompact: tokens=78503 threshold=167000 effectiveWindow=180000
+2026-02-24T13:07:50.684Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:07:50.687Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938470687
+2026-02-24T13:07:50.687Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:50.692Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:50.692Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:50.692Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938470687 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:50.693Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:50.707Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:07:50.707Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:07:50.707Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:07:50.709Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938470709
+2026-02-24T13:07:50.709Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:50.712Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:50.712Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:50.712Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938470709 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:50.713Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:50.724Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938470724
+2026-02-24T13:07:50.724Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:07:50.726Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:07:50.726Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:07:50.726Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938470724 to C:\Users\johnm\.claude.json
+2026-02-24T13:07:50.727Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:07:50.737Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:07:50.739Z [DEBUG] [useDeferredValue] Messages deferred by 4 (168→172)
+2026-02-24T13:07:50.795Z [DEBUG] High write ratio: blit=0, write=36023 (100.0% writes), screen=631x120
+2026-02-24T13:07:50.873Z [DEBUG] High write ratio: blit=0, write=36107 (100.0% writes), screen=634x120
+2026-02-24T13:07:54.086Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:07:54.952Z [DEBUG] [useDeferredValue] Messages deferred by 1 (172→173)
+2026-02-24T13:07:55.002Z [DEBUG] High write ratio: blit=0, write=36107 (100.0% writes), screen=634x120
+2026-02-24T13:07:55.071Z [DEBUG] High write ratio: blit=0, write=36151 (100.0% writes), screen=635x120
+2026-02-24T13:07:59.704Z [DEBUG] High write ratio: blit=16440, write=30391 (64.9% writes), screen=635x120
+2026-02-24T13:08:00.764Z [DEBUG] High write ratio: blit=16440, write=30391 (64.9% writes), screen=635x120
+2026-02-24T13:08:01.916Z [DEBUG] executePreToolHooks called for tool: Task
+2026-02-24T13:08:01.917Z [DEBUG] Getting matching hook commands for PreToolUse with query: Task
+2026-02-24T13:08:01.918Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:01.918Z [DEBUG] Matched 0 unique hooks for query "Task" (0 before deduplication)
+2026-02-24T13:08:01.920Z [DEBUG] Getting matching hook commands for SubagentStart with query: Explore
+2026-02-24T13:08:01.920Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:01.921Z [DEBUG] Matched 0 unique hooks for query "Explore" (0 before deduplication)
+2026-02-24T13:08:01.921Z [DEBUG] autocompact: tokens=269 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:01.921Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:01.922Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:01.923Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:01.923Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:01.923Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:01.926Z [DEBUG] [useDeferredValue] Messages deferred by 2 (173→175)
+2026-02-24T13:08:01.975Z [DEBUG] High write ratio: blit=0, write=36151 (100.0% writes), screen=635x120
+2026-02-24T13:08:01.979Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938481979
+2026-02-24T13:08:01.979Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:01.985Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:01.986Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:01.986Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938481979 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:01.986Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:01.997Z [ERROR] Error: ENOENT: no such file or directory, unlink 'C:\Users\johnm\AppData\Local\Temp\claude\C--Users-johnm-iskrib-v3\tasks\a806973babbecec5c.output'
+2026-02-24T13:08:02.073Z [DEBUG] High write ratio: blit=0, write=36312 (100.0% writes), screen=639x120
+2026-02-24T13:08:03.255Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:03.929Z [DEBUG] executePreToolHooks called for tool: Glob
+2026-02-24T13:08:03.931Z [DEBUG] Getting matching hook commands for PreToolUse with query: Glob
+2026-02-24T13:08:03.931Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:03.931Z [DEBUG] Matched 0 unique hooks for query "Glob" (0 before deduplication)
+2026-02-24T13:08:03.937Z [DEBUG] [useDeferredValue] Messages deferred by 1 (175→176)
+2026-02-24T13:08:03.991Z [DEBUG] High write ratio: blit=0, write=36339 (100.0% writes), screen=640x120
+2026-02-24T13:08:04.075Z [DEBUG] High write ratio: blit=0, write=36405 (100.0% writes), screen=640x120
+2026-02-24T13:08:04.443Z [DEBUG] Getting matching hook commands for PostToolUse with query: Glob
+2026-02-24T13:08:04.443Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:04.443Z [DEBUG] Matched 1 unique hooks for query "Glob" (1 before deduplication)
+2026-02-24T13:08:04.452Z [DEBUG] [useDeferredValue] Messages deferred by 1 (176→177)
+2026-02-24T13:08:04.516Z [DEBUG] High write ratio: blit=0, write=36405 (100.0% writes), screen=641x120
+2026-02-24T13:08:04.644Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-24T13:08:04.646Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-24T13:08:04.646Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:04.646Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-24T13:08:04.660Z [DEBUG] Session environment not yet supported on Windows
+2026-02-24T13:08:04.662Z [DEBUG] [useDeferredValue] Messages deferred by 1 (177→178)
+2026-02-24T13:08:04.754Z [DEBUG] High write ratio: blit=0, write=36412 (100.0% writes), screen=641x120
+2026-02-24T13:08:05.053Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:05.053Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.5a7; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:05.053Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:05.053Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:05.053Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:05.056Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-24T13:08:05.056Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:05.056Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-24T13:08:05.058Z [DEBUG] autocompact: tokens=13708 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:05.058Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:05.060Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:05.060Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:05.060Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:05.060Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:05.062Z [DEBUG] [useDeferredValue] Messages deferred by 1 (178→179)
+2026-02-24T13:08:05.142Z [DEBUG] High write ratio: blit=0, write=36381 (100.0% writes), screen=642x120
+2026-02-24T13:08:05.637Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:06.275Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:07.160Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:08:07.162Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:08:07.162Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:07.162Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:08:07.164Z [DEBUG] [useDeferredValue] Messages deferred by 1 (179→180)
+2026-02-24T13:08:07.169Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:08:07.169Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:07.169Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:08:07.170Z [DEBUG] [useDeferredValue] Messages deferred by 1 (179→180)
+2026-02-24T13:08:07.237Z [DEBUG] High write ratio: blit=0, write=36448 (100.0% writes), screen=642x120
+2026-02-24T13:08:07.452Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:08:07.454Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:08:07.454Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:07.454Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:08:07.458Z [DEBUG] [useDeferredValue] Messages deferred by 2 (180→182)
+2026-02-24T13:08:07.466Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:08:07.466Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:07.466Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:08:07.467Z [DEBUG] [useDeferredValue] Messages deferred by 2 (180→182)
+2026-02-24T13:08:07.554Z [DEBUG] High write ratio: blit=0, write=36402 (100.0% writes), screen=642x120
+2026-02-24T13:08:07.688Z [DEBUG] [useDeferredValue] Messages deferred by 1 (182→183)
+2026-02-24T13:08:07.699Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:08:07.702Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:08:07.702Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:07.702Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:08:07.706Z [DEBUG] [useDeferredValue] Messages deferred by 2 (182→184)
+2026-02-24T13:08:07.714Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:08:07.714Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:07.714Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:08:07.720Z [DEBUG] autocompact: tokens=24636 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:07.721Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:07.722Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:07.723Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:07.723Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:07.723Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:07.724Z [DEBUG] [useDeferredValue] Messages deferred by 3 (182→185)
+2026-02-24T13:08:07.810Z [DEBUG] High write ratio: blit=0, write=36327 (100.0% writes), screen=642x120
+2026-02-24T13:08:08.478Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:09.389Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:08:09.391Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:08:09.391Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:09.391Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:08:09.393Z [DEBUG] [useDeferredValue] Messages deferred by 1 (185→186)
+2026-02-24T13:08:09.403Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:08:09.403Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:09.403Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:08:09.405Z [DEBUG] autocompact: tokens=32272 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:09.406Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:09.407Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:09.407Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:09.407Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:09.407Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:09.408Z [DEBUG] [useDeferredValue] Messages deferred by 2 (185→187)
+2026-02-24T13:08:09.487Z [DEBUG] High write ratio: blit=0, write=36326 (100.0% writes), screen=642x120
+2026-02-24T13:08:10.748Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:11.891Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T13:08:11.893Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T13:08:11.893Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:11.893Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T13:08:11.901Z [DEBUG] [useDeferredValue] Messages deferred by 1 (187→188)
+2026-02-24T13:08:11.911Z [DEBUG] [useDeferredValue] Messages deferred by 1 (187→188)
+2026-02-24T13:08:11.967Z [DEBUG] High write ratio: blit=0, write=36424 (100.0% writes), screen=642x120
+2026-02-24T13:08:12.249Z [DEBUG] Persisted tool result to C:\Users\johnm\.claude\projects\C--Users-johnm-iskrib-v3\22a1e889-dc28-42a8-b55e-66fa7c8547fe\tool-results\toolu_014JhvC7dXk5pNPk9zq2eSL7.txt (20KB)
+2026-02-24T13:08:12.251Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T13:08:12.251Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:12.251Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T13:08:12.252Z [DEBUG] autocompact: tokens=33619 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:12.252Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:12.254Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:12.254Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:12.254Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:12.254Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:12.256Z [DEBUG] [useDeferredValue] Messages deferred by 1 (188→189)
+2026-02-24T13:08:12.352Z [DEBUG] High write ratio: blit=0, write=36358 (100.0% writes), screen=642x120
+2026-02-24T13:08:12.925Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:13.838Z [DEBUG] executePreToolHooks called for tool: Bash
+2026-02-24T13:08:13.840Z [DEBUG] Getting matching hook commands for PreToolUse with query: Bash
+2026-02-24T13:08:13.840Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:13.840Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-24T13:08:13.845Z [DEBUG] [useDeferredValue] Messages deferred by 1 (189→190)
+2026-02-24T13:08:13.849Z [DEBUG] Session environment not yet supported on Windows
+2026-02-24T13:08:13.854Z [DEBUG] [useDeferredValue] Messages deferred by 1 (189→190)
+2026-02-24T13:08:13.914Z [DEBUG] High write ratio: blit=0, write=36426 (100.0% writes), screen=642x120
+2026-02-24T13:08:14.156Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:14.156Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.b59; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:14.156Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:14.156Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:14.157Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:14.159Z [DEBUG] Getting matching hook commands for PostToolUse with query: Bash
+2026-02-24T13:08:14.159Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:14.159Z [DEBUG] Matched 0 unique hooks for query "Bash" (0 before deduplication)
+2026-02-24T13:08:14.160Z [DEBUG] autocompact: tokens=34018 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:14.160Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:14.161Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:14.161Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:14.161Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:14.161Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:14.162Z [DEBUG] [useDeferredValue] Messages deferred by 1 (190→191)
+2026-02-24T13:08:14.247Z [DEBUG] High write ratio: blit=0, write=36328 (100.0% writes), screen=642x120
+2026-02-24T13:08:14.735Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:14.738Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:15.881Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-02-24T13:08:15.882Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-02-24T13:08:15.882Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:15.882Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-02-24T13:08:15.889Z [DEBUG] [useDeferredValue] Messages deferred by 1 (191→192)
+2026-02-24T13:08:15.966Z [DEBUG] High write ratio: blit=0, write=36460 (100.0% writes), screen=642x120
+2026-02-24T13:08:16.217Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-02-24T13:08:16.217Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:16.217Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-02-24T13:08:16.219Z [DEBUG] autocompact: tokens=34666 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:16.219Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-02-24T13:08:16.220Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:16.220Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:16.220Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:16.220Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:16.221Z [DEBUG] [useDeferredValue] Messages deferred by 1 (192→193)
+2026-02-24T13:08:16.296Z [DEBUG] High write ratio: blit=0, write=36392 (100.0% writes), screen=642x120
+2026-02-24T13:08:17.187Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:29.781Z [DEBUG] Getting matching hook commands for SubagentStop with query: Explore
+2026-02-24T13:08:29.781Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:29.781Z [DEBUG] Matched 0 unique hooks for query "Explore" (0 before deduplication)
+2026-02-24T13:08:29.783Z [DEBUG] Getting matching hook commands for PostToolUse with query: Task
+2026-02-24T13:08:29.783Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:29.783Z [DEBUG] Matched 0 unique hooks for query "Task" (0 before deduplication)
+2026-02-24T13:08:29.784Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:08:29.784Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:08:29.784Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:08:29.784Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:08:29.785Z [DEBUG] autocompact: tokens=80746 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:29.785Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:08:29.788Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938509788
+2026-02-24T13:08:29.788Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:29.793Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:29.794Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:29.794Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938509788 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:29.794Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:29.806Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:29.806Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:29.806Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:29.809Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938509809
+2026-02-24T13:08:29.809Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:29.811Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:29.811Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:29.811Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938509809 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:29.811Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:29.822Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938509822
+2026-02-24T13:08:29.822Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:29.824Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:29.824Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:29.824Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938509822 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:29.825Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:29.834Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:29.838Z [DEBUG] [useDeferredValue] Messages deferred by 1 (193→194)
+2026-02-24T13:08:29.889Z [DEBUG] High write ratio: blit=0, write=36211 (100.0% writes), screen=637x120
+2026-02-24T13:08:29.960Z [DEBUG] High write ratio: blit=0, write=36275 (100.0% writes), screen=639x120
+2026-02-24T13:08:32.951Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:34.171Z [DEBUG] [useDeferredValue] Messages deferred by 1 (194→195)
+2026-02-24T13:08:34.251Z [DEBUG] High write ratio: blit=0, write=36287 (100.0% writes), screen=639x120
+2026-02-24T13:08:34.619Z [DEBUG] [useDeferredValue] Messages deferred by 1 (195→196)
+2026-02-24T13:08:34.674Z [DEBUG] High write ratio: blit=0, write=36322 (100.0% writes), screen=641x120
+2026-02-24T13:08:34.760Z [DEBUG] High write ratio: blit=0, write=36398 (100.0% writes), screen=643x120
+2026-02-24T13:08:35.155Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:08:35.157Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:08:35.157Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:35.157Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:08:35.162Z [DEBUG] [useDeferredValue] Messages deferred by 1 (196→197)
+2026-02-24T13:08:35.216Z [DEBUG] High write ratio: blit=0, write=36398 (100.0% writes), screen=643x120
+2026-02-24T13:08:35.221Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:08:35.221Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:35.221Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:08:35.222Z [DEBUG] [useDeferredValue] Messages deferred by 1 (196→197)
+2026-02-24T13:08:35.297Z [DEBUG] High write ratio: blit=0, write=36472 (100.0% writes), screen=644x120
+2026-02-24T13:08:35.670Z [DEBUG] [useDeferredValue] Messages deferred by 3 (197→200)
+2026-02-24T13:08:35.749Z [DEBUG] High write ratio: blit=0, write=36472 (100.0% writes), screen=644x120
+2026-02-24T13:08:35.835Z [DEBUG] High write ratio: blit=0, write=36472 (100.0% writes), screen=644x120
+2026-02-24T13:08:35.999Z [DEBUG] executePreToolHooks called for tool: Read
+2026-02-24T13:08:36.002Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-02-24T13:08:36.002Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:08:36.002Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-02-24T13:08:36.006Z [DEBUG] [useDeferredValue] Messages deferred by 1 (200→201)
+2026-02-24T13:08:36.065Z [DEBUG] High write ratio: blit=0, write=36472 (100.0% writes), screen=644x120
+2026-02-24T13:08:36.069Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-02-24T13:08:36.069Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:08:36.069Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-02-24T13:08:36.071Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:08:36.072Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:08:36.072Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:08:36.072Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:08:36.075Z [DEBUG] autocompact: tokens=84538 threshold=167000 effectiveWindow=180000
+2026-02-24T13:08:36.075Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:08:36.079Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938516079
+2026-02-24T13:08:36.079Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:36.081Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:36.082Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:36.082Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938516079 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:36.082Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:36.095Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:08:36.096Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:08:36.096Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:08:36.097Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938516097
+2026-02-24T13:08:36.097Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:36.099Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:36.099Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:36.099Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938516097 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:36.099Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:36.112Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938516112
+2026-02-24T13:08:36.112Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:08:36.115Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:08:36.115Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:08:36.115Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938516112 to C:\Users\johnm\.claude.json
+2026-02-24T13:08:36.115Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:08:36.128Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:08:36.130Z [DEBUG] [useDeferredValue] Messages deferred by 6 (200→206)
+2026-02-24T13:08:36.200Z [DEBUG] High write ratio: blit=0, write=36472 (100.0% writes), screen=644x120
+2026-02-24T13:08:36.287Z [DEBUG] High write ratio: blit=0, write=36465 (100.0% writes), screen=644x120
+2026-02-24T13:08:39.052Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:08:39.909Z [DEBUG] [useDeferredValue] Messages deferred by 1 (206→207)
+2026-02-24T13:08:39.964Z [DEBUG] High write ratio: blit=0, write=36465 (100.0% writes), screen=644x120
+2026-02-24T13:08:40.044Z [DEBUG] High write ratio: blit=0, write=36461 (100.0% writes), screen=645x120
+2026-02-24T13:09:01.613Z [DEBUG] executePreToolHooks called for tool: Write
+2026-02-24T13:09:01.615Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-02-24T13:09:01.615Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:09:01.615Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-02-24T13:09:01.622Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\.claude\plans\transient-squishing-comet.md
+2026-02-24T13:09:01.623Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude\plans\transient-squishing-comet.md.tmp.15104.1771938541623
+2026-02-24T13:09:01.623Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:09:01.626Z [DEBUG] Temp file written successfully, size: 3169 bytes
+2026-02-24T13:09:01.626Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:09:01.626Z [DEBUG] Renaming C:\Users\johnm\.claude\plans\transient-squishing-comet.md.tmp.15104.1771938541623 to C:\Users\johnm\.claude\plans\transient-squishing-comet.md
+2026-02-24T13:09:01.626Z [DEBUG] File C:\Users\johnm\.claude\plans\transient-squishing-comet.md written atomically
+2026-02-24T13:09:01.630Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-02-24T13:09:01.630Z [DEBUG] Found 5 hook matchers in settings
+2026-02-24T13:09:01.630Z [DEBUG] Matched 1 unique hooks for query "Write" (1 before deduplication)
+2026-02-24T13:09:01.631Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-02-24T13:09:01.631Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-02-24T13:09:01.631Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-02-24T13:09:01.631Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-02-24T13:09:01.632Z [DEBUG] autocompact: tokens=86468 threshold=167000 effectiveWindow=180000
+2026-02-24T13:09:01.632Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-02-24T13:09:01.634Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938541634
+2026-02-24T13:09:01.634Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:09:01.637Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:09:01.637Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:09:01.637Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938541634 to C:\Users\johnm\.claude.json
+2026-02-24T13:09:01.637Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:09:01.648Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.50.f15; cc_entrypoint=cli; cch=00000;
+2026-02-24T13:09:01.648Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-24T13:09:01.648Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-24T13:09:01.650Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938541650
+2026-02-24T13:09:01.650Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:09:01.653Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:09:01.653Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:09:01.653Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938541650 to C:\Users\johnm\.claude.json
+2026-02-24T13:09:01.654Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:09:01.664Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.15104.1771938541664
+2026-02-24T13:09:01.664Z [DEBUG] Preserving file permissions: 100666
+2026-02-24T13:09:01.666Z [DEBUG] Temp file written successfully, size: 10662 bytes
+2026-02-24T13:09:01.666Z [DEBUG] Applied original permissions to temp file
+2026-02-24T13:09:01.666Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.15104.1771938541664 to C:\Users\johnm\.claude.json
+2026-02-24T13:09:01.666Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-24T13:09:01.676Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-24T13:09:01.678Z [DEBUG] [useDeferredValue] Messages deferred by 4 (207→211)
+2026-02-24T13:09:01.728Z [DEBUG] High write ratio: blit=0, write=36464 (100.0% writes), screen=645x120
+2026-02-24T13:09:01.804Z [DEBUG] High write ratio: blit=0, write=36498 (100.0% writes), screen=648x120
+2026-02-24T13:09:05.493Z [DEBUG] Stream started - received first chunk
+2026-02-24T13:09:05.569Z [DEBUG] High write ratio: blit=0, write=36498 (100.0% writes), screen=648x120
+2026-02-24T13:09:05.767Z [DEBUG] executePreToolHooks called for tool: ExitPlanMode
+2026-02-24T13:09:05.769Z [DEBUG] Getting matching hook commands for PreToolUse with query: ExitPlanMode
+2026-02-24T13:09:05.769Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:09:05.769Z [DEBUG] Matched 0 unique hooks for query "ExitPlanMode" (0 before deduplication)
+2026-02-24T13:09:05.769Z [DEBUG] executePermissionRequestHooks called for tool: ExitPlanMode
+2026-02-24T13:09:05.771Z [DEBUG] Getting matching hook commands for PermissionRequest with query: ExitPlanMode
+2026-02-24T13:09:05.771Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:09:05.771Z [DEBUG] Matched 0 unique hooks for query "ExitPlanMode" (0 before deduplication)
+2026-02-24T13:09:05.771Z [DEBUG] [useDeferredValue] Messages deferred by 1 (211→212)
+2026-02-24T13:09:05.845Z [DEBUG] High write ratio: blit=0, write=39819 (100.0% writes), screen=714x120
+2026-02-24T13:09:05.849Z [DEBUG] [useDeferredValue] Messages deferred by 1 (211→212)
+2026-02-24T13:09:05.851Z [DEBUG] [useDeferredValue] Messages deferred by 1 (211→212)
+2026-02-24T13:09:05.935Z [DEBUG] High write ratio: blit=0, write=39819 (100.0% writes), screen=714x120
+2026-02-24T13:09:17.856Z [DEBUG] Getting matching hook commands for Notification with query: permission_prompt
+2026-02-24T13:09:17.856Z [DEBUG] Found 0 hook matchers in settings
+2026-02-24T13:09:17.856Z [DEBUG] Matched 0 unique hooks for query "permission_prompt" (0 before deduplication)
+2026-02-24T13:09:31.178Z [DEBUG] High write ratio: blit=16440, write=34059 (67.4% writes), screen=714x120

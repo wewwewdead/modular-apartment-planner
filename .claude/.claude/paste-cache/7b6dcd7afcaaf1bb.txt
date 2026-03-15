@@ -1,0 +1,22 @@
+ BUNDLE  ./index.js
+ ERROR  Error: Unable to resolve module react-native-svg from C:\Users\johnm\iskrib_mobile_app\apps\mobile\src\components\icons\Icon.tsx: react-native-svg could not be found within the project or in these directories:
+  node_modules
+  ..\..\node_modules
+  node_modules
+  ..\..\node_modules
+  1 | import React from 'react';
+> 2 | import Svg, {Path, G, Circle, Line, Polyline, Rect} from 'react-native-svg';
+    |                                                           ^
+  3 |
+  4 | export interface IconProps {
+  5 |   size?: number;
+    at ModuleResolver.resolveDependency (C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\node-haste\DependencyGraph\ModuleResolution.js:185:15)
+    at DependencyGraph.resolveDependency (C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\node-haste\DependencyGraph.js:256:43)
+    at C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\lib\transformHelpers.js:169:21
+    at resolveDependencies (C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\DeltaBundler\buildSubgraph.js:47:25)
+    at visit (C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\DeltaBundler\buildSubgraph.js:85:30)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Promise.all (index 0)
+    at async visit (C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\DeltaBundler\buildSubgraph.js:94:5)
+    at async Promise.all (index 10)
+    at async visit (C:\Users\johnm\iskrib_mobile_app\node_modules\metro\src\DeltaBundler\buildSubgraph.js:94:5)

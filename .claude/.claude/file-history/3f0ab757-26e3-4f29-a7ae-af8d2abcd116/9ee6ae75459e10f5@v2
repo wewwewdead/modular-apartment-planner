@@ -1,0 +1,65 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+import { Cart } from '../../../domain/models';
+import { capitalize } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+import { CartProgressRing } from './CartProgressRing';
+
+interface CartHeroProps {
+  cart: Cart;
+}
+
+const statusColor: Record<string, string> = {
+  planning: colors.info,
+  shopping: colors.brand,
+  completed: colors.success,
+};
+
+export function CartHero({ cart }: CartHeroProps) {
+  const fulfilledCount = cart.cartItems.filter(i => i.isFulfilled).length;
+  const progress = cart.cartItems.length > 0 ? fulfilledCount / cart.cartItems.length : 0;
+
+  return (
+    <Animated.View entering={FadeInDown.duration(400)} style={styles.container}>
+      <View style={styles.info}>
+        <Text style={styles.name} accessibilityRole="header">{cart.name}</Text>
+        <View style={[styles.badge, { backgroundColor: statusColor[cart.status] ?? colors.info }]}>
+          <Text style={styles.badgeText}>{capitalize(cart.status)}</Text>
+        </View>
+      </View>
+      <CartProgressRing progress={progress} />
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 16,
+  },
+  info: {
+    flex: 1,
+    gap: 8,
+  },
+  name: {
+    ...typography.headline,
+    color: colors.ink,
+    fontSize: 28,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+});

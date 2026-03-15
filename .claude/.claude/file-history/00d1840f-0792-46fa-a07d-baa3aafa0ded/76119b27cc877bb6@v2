@@ -1,0 +1,185 @@
+import * as THREE from 'three';
+import { GROUND_PLANE } from '../domain/drawingPlane';
+
+const GRID_COLOR = 0xB8860B;
+const GRID_OPACITY = 0.12;
+const PREVIEW_COLOR = 0xB8860B;
+const PREVIEW_OPACITY = 0.3;
+
+/**
+ * Three.js Group that renders:
+ * 1) A translucent grid on the active drawing plane
+ * 2) A rectangle preview during draw operations
+ */
+export function createDrawingPlaneOverlay() {
+  const group = new THREE.Group();
+  group.name = 'DrawingPlaneOverlay';
+
+  let gridMesh = null;
+  let previewMesh = null;
+
+  const gridMaterial = new THREE.MeshBasicMaterial({
+    color: GRID_COLOR,
+    transparent: true,
+    opacity: GRID_OPACITY,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+
+  const gridLineMaterial = new THREE.LineBasicMaterial({
+    color: GRID_COLOR,
+    transparent: true,
+    opacity: 0.2,
+  });
+
+  const previewMaterial = new THREE.MeshBasicMaterial({
+    color: PREVIEW_COLOR,
+    transparent: true,
+    opacity: PREVIEW_OPACITY,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+
+  const previewEdgeMaterial = new THREE.LineBasicMaterial({
+    color: PREVIEW_COLOR,
+    transparent: true,
+    opacity: 0.8,
+  });
+
+  function clearGrid() {
+    if (gridMesh) {
+      group.remove(gridMesh);
+      gridMesh.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+      });
+      gridMesh = null;
+    }
+  }
+
+  function clearPreview() {
+    if (previewMesh) {
+      group.remove(previewMesh);
+      previewMesh.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+      });
+      previewMesh = null;
+    }
+  }
+
+  return {
+    group,
+
+    /**
+     * Update the grid to display on the given drawing plane.
+     * @param {Object} plane - Drawing plane with origin, normal, uAxis, vAxis
+     * @param {number} gridSize - Grid spacing in mm (default 50)
+     * @param {number} extent - Grid extent in mm (default 2000)
+     */
+    setPlane(plane, gridSize = 50, extent = 2000) {
+      clearGrid();
+
+      const gridGroup = new THREE.Group();
+      gridGroup.name = 'PlaneGrid';
+
+      // Create grid lines
+      const halfExtent = extent;
+      const lines = [];
+      for (let i = -halfExtent; i <= halfExtent; i += gridSize) {
+        // Lines along u axis
+        lines.push(
+          planeToThree(plane, i, -halfExtent),
+          planeToThree(plane, i, halfExtent),
+        );
+        // Lines along v axis
+        lines.push(
+          planeToThree(plane, -halfExtent, i),
+          planeToThree(plane, halfExtent, i),
+        );
+      }
+
+      if (lines.length > 0) {
+        const points = lines.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const lineSegments = new THREE.LineSegments(geometry, gridLineMaterial);
+        gridGroup.add(lineSegments);
+      }
+
+      gridMesh = gridGroup;
+      group.add(gridMesh);
+    },
+
+    /**
+     * Show or update a rectangle preview on the drawing plane.
+     * @param {Object} plane - Drawing plane
+     * @param {Object} startLocal - { u, v } start corner in plane-local coords
+     * @param {Object} endLocal - { u, v } end corner in plane-local coords
+     */
+    setPreviewRect(plane, startLocal, endLocal) {
+      clearPreview();
+
+      if (!startLocal || !endLocal) return;
+
+      const u1 = Math.min(startLocal.u, endLocal.u);
+      const v1 = Math.min(startLocal.v, endLocal.v);
+      const u2 = Math.max(startLocal.u, endLocal.u);
+      const v2 = Math.max(startLocal.v, endLocal.v);
+
+      const corners = [
+        planeToThree(plane, u1, v1),
+        planeToThree(plane, u2, v1),
+        planeToThree(plane, u2, v2),
+        planeToThree(plane, u1, v2),
+      ];
+
+      // Fill quad
+      const quadGeometry = new THREE.BufferGeometry();
+      const vertices = new Float32Array([
+        corners[0].x, corners[0].y, corners[0].z,
+        corners[1].x, corners[1].y, corners[1].z,
+        corners[2].x, corners[2].y, corners[2].z,
+        corners[0].x, corners[0].y, corners[0].z,
+        corners[2].x, corners[2].y, corners[2].z,
+        corners[3].x, corners[3].y, corners[3].z,
+      ]);
+      quadGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+      const quad = new THREE.Mesh(quadGeometry, previewMaterial);
+
+      // Edge outline
+      const edgePoints = [...corners, corners[0]].map((c) => new THREE.Vector3(c.x, c.y, c.z));
+      const edgeGeometry = new THREE.BufferGeometry().setFromPoints(edgePoints);
+      const edge = new THREE.Line(edgeGeometry, previewEdgeMaterial);
+
+      const previewGroup = new THREE.Group();
+      previewGroup.name = 'DrawPreview';
+      previewGroup.add(quad);
+      previewGroup.add(edge);
+
+      previewMesh = previewGroup;
+      group.add(previewMesh);
+    },
+
+    clearPreview,
+    clearGrid,
+
+    dispose() {
+      clearGrid();
+      clearPreview();
+      gridMaterial.dispose();
+      gridLineMaterial.dispose();
+      previewMaterial.dispose();
+      previewEdgeMaterial.dispose();
+    },
+  };
+}
+
+/**
+ * Convert plane-local (u, v) to Three.js world coordinates.
+ * Domain: x=x, y=y, z=z -> Three.js: x=x, y=z, z=y
+ */
+function planeToThree(plane, u, v) {
+  const wx = plane.origin.x + u * plane.uAxis.x + v * plane.vAxis.x;
+  const wy = plane.origin.y + u * plane.uAxis.y + v * plane.vAxis.y;
+  const wz = plane.origin.z + u * plane.uAxis.z + v * plane.vAxis.z;
+  // Convert domain coords to Three.js coords
+  return { x: wx, y: wz, z: wy };
+}

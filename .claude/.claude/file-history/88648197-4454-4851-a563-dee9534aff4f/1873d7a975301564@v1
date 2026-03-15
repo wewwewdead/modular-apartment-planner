@@ -1,0 +1,56 @@
+# Fix: Walk Mode Camera Resets When Editing Objects
+
+## Context
+When the user is in walk mode and edits anything in 2D (walls, fixtures, etc.), the walk camera snaps back to the spawn position. This makes walk mode unusable during iterative editing — the user loses their position every time the project changes.
+
+## Root Cause
+The chain of events:
+
+1. User edits a wall → `project` state changes
+2. `sceneDescriptor` recalculates (`ThreePreviewPanel.jsx:33`)
+3. `walkFloorContext` recalculates (`ThreePreviewPanel.jsx:47`) — produces a **new object** every time even if the floor didn't change
+4. Effect fires: `viewport.setActiveFloorContext(walkFloorContext)` (`ThreePreviewPanel.jsx:131`)
+5. In `setActiveFloorContext` (`createPreviewViewport.js:316`):
+   ```js
+   if (navigationMode === 'walk' && (floorChanged || !walkNavigation.isLocked())) {
+     restoreWalkPose();
+   }
+   ```
+   The floor didn't change (`floorChanged` is false), but if the user isn't pointer-locked (e.g., they tabbed to the 2D editor), `!walkNavigation.isLocked()` is **true** → `restoreWalkPose()` fires
+6. No saved pose exists (pose is only saved on floor changes, line 307-309), so it falls through to the spawn position → **camera resets**
+
+## Fix
+
+### File: `src/three/viewer/createPreviewViewport.js`
+**One-line change** at line 316.
+
+Change:
+```js
+if (navigationMode === 'walk' && (floorChanged || !walkNavigation.isLocked())) {
+  restoreWalkPose();
+}
+```
+To:
+```js
+if (navigationMode === 'walk' && floorChanged) {
+  restoreWalkPose();
+}
+```
+
+### Why this is safe
+- **Floor change during walk** → pose is saved (line 307-309) then restored for the new floor. Still works.
+- **Same floor, scene rebuild** → context is updated (spawn refreshed for future "Reset Walk") but camera stays put. **This is the fix.**
+- **Entering walk mode** → handled by `setNavigationMode()` (line 127) which independently calls `restoreWalkPose()`. Not affected.
+- **"Reset Walk" button** → handled by `resetView()` (line 276-283) which calls `restoreWalkPose({ forceSpawn: true })`. Not affected.
+- **Initial mount** → `navigationMode` is `'inspect'`, so the walk branch is never entered. Not affected.
+
+The `!walkNavigation.isLocked()` condition was overly broad — it caused same-floor context updates to reset the camera whenever the user wasn't pointer-locked, which is always the case when editing in 2D.
+
+## Verification
+1. `npm run dev`
+2. Place walls, switch to 3D, enter Walk mode, fly to a position
+3. Switch to 2D, edit a wall (move/resize/add)
+4. Switch back to 3D → camera should still be at the same position
+5. Switch floors → camera should restore the saved pose for that floor (or spawn if first visit)
+6. Click "Reset Walk" → should reset to spawn position
+7. Switch between Inspect/Walk → should preserve walk position across mode switches

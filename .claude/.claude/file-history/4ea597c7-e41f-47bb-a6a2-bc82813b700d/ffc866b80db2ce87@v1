@@ -1,0 +1,154 @@
+# Iskrib Universe — Milky Way Visual Upgrade
+
+## Context
+The Universe page currently renders posts as flat colored circles with basic shadow glow on a single Konva Layer. The goal is to transform it into an immersive "Milky Way" experience with three-part glowing stars, triple-layer parallax depth, and soft nebula clouds. This requires replacing the single-layer `<Stage draggable>` architecture with a world-coordinate camera hook that drives three independent layers at different parallax speeds.
+
+---
+
+## File Tree After Implementation
+
+```
+client/src/components/Universe/
+  Universe.jsx                    ← REWRITE (slim orchestrator)
+  Universe.module.css             ← NO CHANGES
+  hooks/
+    useUniverseCamera.js          ← NEW (all camera/input logic)
+  layers/
+    DeepSpaceLayer.jsx            ← NEW (parallax 0.1 — dust + nebulae)
+    MidGalaxyLayer.jsx            ← NEW (parallax 0.4 — decorative stars)
+    InteractiveLayer.jsx          ← NEW (parallax 1.0 — post stars)
+  components/
+    StarGroup.jsx                 ← NEW (three-part double-glow star)
+    Nebula.jsx                    ← NEW (radial-gradient cloud)
+  utils/
+    starUtils.js                  ← NEW (extracted pure functions)
+    proceduralGeneration.js       ← NEW (seeded PRNG, background data)
+```
+
+---
+
+## Implementation Order
+
+### 1. `utils/starUtils.js` — Extract pure functions
+
+Move from current `Universe.jsx` top-level:
+- `STAR_COLORS`, `HOME_SCALE`, `GUEST_SCALE`
+- `simpleHash`, `userHomeCoords`, `getStarColor`, `getStarRadius`, `extractSnippet`
+- Add new helper `hexToRgba(hex, alpha)` for gradient color stops
+
+### 2. `utils/proceduralGeneration.js` — Seeded background generation
+
+- **Mulberry32 PRNG** — fast 32-bit seeded RNG so all clients render identical backgrounds
+- `generateDeepSpaceStars(count=2000, seed=42)` — tiny white dots, radius 0.5–2, opacity 0.2–0.7, spread across 100k×100k area (covers full pan range at 0.1 parallax)
+- `generateMidGalaxyStars(count=800, seed=137)` — small colored dots, radius 1–4, spread across 100k×100k
+- `generateNebulae(count=18, seed=256)` — large clouds: radius 200–800, opacity 0.03–0.09, random STAR_COLORS tint
+
+### 3. `hooks/useUniverseCamera.js` — World-coordinate camera
+
+**Architecture change:** Replace `<Stage draggable>` + screen-space `stagePos` with a world-coordinate camera model.
+
+**State:**
+- `camera {x, y}` — world coordinates of screen center
+- `zoom` — scale factor
+- `stageSize` — window dimensions
+- `isDragging` — for cursor styling
+
+**Key formulas:**
+```
+Per-layer transform:
+  layerX = screenW/2 - camera.x × parallaxFactor × zoom
+  layerY = screenH/2 - camera.y × parallaxFactor × zoom
+  layerScaleX = layerScaleY = zoom
+
+Viewport bounds (for data fetching, factor=1):
+  minX = camera.x - (screenW/2) / zoom - padding
+  maxX = camera.x + (screenW/2) / zoom + padding
+
+Zoom-to-cursor:
+  worldUnderCursor = camera + (cursor - screenCenter) / oldZoom
+  newCamera = worldUnderCursor - (cursor - screenCenter) / newZoom
+```
+
+**Drag handling:** Manual pointer tracking (Stage is NOT draggable). `onMouseDown` stores starting pointer + camera, `onMouseMove` computes delta / zoom and updates camera, `onMouseUp` clears drag. Pinch zoom cancels single-finger drag to prevent jitter.
+
+**Initial camera:** Logged-in → center on `userHomeCoords(userId)` at `HOME_SCALE`. Guest → center on `(0,0)` at `GUEST_SCALE`.
+
+**Returns:** `{ stageRef, stageSize, camera, zoom, isDragging, centerWorld, getLayerProps(factor), getViewportBounds(), stageEvents }`
+
+### 4. `components/StarGroup.jsx` — Three-part double-glow star
+
+Each post star = a `<Group>` containing 3 shapes:
+
+| Part | Shape | Key Props |
+|------|-------|-----------|
+| Outer atmosphere | `<Circle>` | `radius: r×3`, `fill: transparent`, `shadowColor: themeColor`, `shadowBlur: r×5`, `perfectDrawEnabled: false`, `shadowForStrokeEnabled: false`, `listening: false` |
+| Inner glow | `<Circle>` | `radius: r×2.2`, `fillRadialGradient` from `themeColor` → `hexToRgba(color, 0.65)` → `hexToRgba(color, 0)`, `listening: false` |
+| Bright core | `<Circle>` | `radius: r×0.5`, `fill: #ffffffee`, `shadowColor: #fff`, `shadowBlur: 4`, `hitStrokeWidth: r+12` |
+
+Title `<Text>` positioned below the inner glow radius. Whole Group wrapped in `React.memo`.
+
+### 5. `components/Nebula.jsx` — Soft radial-gradient cloud
+
+Use 4 concentric `<Circle>` shapes with `fillRadialGradient` (color → transparent), each at increasing opacity, to simulate a soft cloud glow. No Konva Blur filter needed — avoids `.cache()` memory overhead (a single blurred nebula at radius 800 would require ~18MB cached canvas).
+
+### 6. `layers/DeepSpaceLayer.jsx` — Parallax 0.1
+
+- Receives `layerProps` from `getLayerProps(0.1)`
+- `listening={false}` on the entire Layer
+- Renders nebulae first (behind), then dust stars
+- **Performance:** Dust stars rendered via a single `<Shape sceneFunc>` that batch-draws 2000 `ctx.arc()` calls — avoids 2000 React elements
+
+### 7. `layers/MidGalaxyLayer.jsx` — Parallax 0.4
+
+- Receives `layerProps` from `getLayerProps(0.4)`
+- `listening={false}` on the entire Layer
+- Renders 800 small colored stars via single `<Shape sceneFunc>` with per-star radial gradients
+
+### 8. `layers/InteractiveLayer.jsx` — Parallax 1.0
+
+- Receives `layerProps` from `getLayerProps(1.0)`
+- Maps `posts` array → `<StarGroup>` components
+- Passes `pulsingId`, `showTitles`, `onStarClick` down
+
+### 9. `Universe.jsx` — Rewrite as orchestrator
+
+Strip all camera logic and star rendering. The component becomes:
+
+```jsx
+<Stage ref={stageRef} width={w} height={h} {...stageEvents}>
+  <DeepSpaceLayer layerProps={getLayerProps(0.1)} />
+  <MidGalaxyLayer layerProps={getLayerProps(0.4)} />
+  <InteractiveLayer
+    layerProps={getLayerProps(1.0)}
+    posts={postArray}
+    showTitles={zoom > 0.5}
+    pulsingId={pulsingId}
+    onStarClick={handleStarClick}
+  />
+</Stage>
+```
+
+Stage has NO `draggable`, NO `x/y/scaleX/scaleY`. Each Layer owns its own transform via `layerProps`. Data fetching effect uses `getViewportBounds()` from the hook (triggers on camera/zoom change, 400ms debounce). Preview panel HTML overlay stays unchanged.
+
+---
+
+## Performance Safeguards
+
+- `perfectDrawEnabled={false}` and `shadowForStrokeEnabled={false}` on all star shapes
+- `listening={false}` on all decorative layers/shapes (only interactive star cores receive hits)
+- Background stars drawn via single `<Shape sceneFunc>` (1 React element for 2000 draws)
+- Nebulae use radial gradients, not Konva Blur filter (no `.cache()` memory cost)
+- `React.memo` on all layer and star components
+- `useMemo` on procedurally generated data (created once, never re-generated)
+
+---
+
+## Verification
+
+1. Navigate to `/universe` → dark canvas with visible nebula clouds and dust stars in the background
+2. Pan (drag) → deep space layer crawls slowly, mid-galaxy moves at medium speed, post stars move 1:1
+3. Zoom (scroll wheel) → all layers scale uniformly toward cursor, parallax offsets remain correct
+4. Click a star → pulse animation, preview panel appears with correct data
+5. Click "Read" → navigates to `/home/post/:id`
+6. Mobile: single-finger pan + two-finger pinch zoom both work
+7. Check FPS stays smooth with 200+ post stars + background layers (Chrome DevTools Performance tab)

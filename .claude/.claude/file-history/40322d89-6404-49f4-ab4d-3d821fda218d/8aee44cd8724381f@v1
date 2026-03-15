@@ -1,0 +1,124 @@
+# Fix Truss Detail Tag Overlapping — Round 2
+
+## Context
+
+The collision avoidance added in the previous round is insufficient. Tags still overlap because:
+1. **Offset grid too small**: Tags are ~700×170 units, but max offsets are only Y=±600, X=±250 — can barely clear 1–2 tags
+2. **Not enough candidates**: 13 positions for 13+ tags (9 webs + TC + pitch + 2 bearings) means no room when the ideal position is taken
+3. **Web tag anchors cluster**: All web tags use the member midpoint (t=0.5). When webs converge at the ridge or panel points, all midpoints cluster together, so collision avoidance starts from nearly identical positions
+
+## File to Modify
+
+### `src/geometry/trussGeometry.js`
+
+---
+
+### Change 1: Expand the offset grid (lines 41–56)
+
+Replace current 13 offsets with ~27 offsets. Y steps of 250 (> tag height 170 + gap 60) and X steps of 500 (reasonable vs tag width ~700). Arranged in expanding rings so nearest positions are tried first:
+
+```javascript
+const DETAIL_TAG_GAP = 60;
+const DETAIL_TAG_OFFSETS = [
+  { x: 0, y: 0 },
+  // ring 1
+  { x: 0, y: -250 },
+  { x: 0, y: 250 },
+  { x: 500, y: 0 },
+  { x: -500, y: 0 },
+  // ring 2
+  { x: 500, y: -250 },
+  { x: -500, y: -250 },
+  { x: 500, y: 250 },
+  { x: -500, y: 250 },
+  // ring 3
+  { x: 0, y: -500 },
+  { x: 0, y: 500 },
+  { x: 800, y: 0 },
+  { x: -800, y: 0 },
+  // ring 4
+  { x: 800, y: -250 },
+  { x: -800, y: -250 },
+  { x: 800, y: 250 },
+  { x: -800, y: 250 },
+  { x: 500, y: -500 },
+  { x: -500, y: -500 },
+  { x: 500, y: 500 },
+  { x: -500, y: 500 },
+  // ring 5
+  { x: 0, y: -750 },
+  { x: 0, y: 750 },
+  { x: 0, y: -1000 },
+  { x: 0, y: 1000 },
+  { x: 800, y: -500 },
+  { x: -800, y: -500 },
+];
+```
+
+27 candidates (vs 13 before). Y range ±1000, X range ±800. Enough to distribute 13+ tags without overlap.
+
+---
+
+### Change 2: Stagger web tag anchors along their members (lines 1026–1029)
+
+Instead of always using the member midpoint (t=0.5), distribute anchor points across the member length. This naturally separates tags even before collision avoidance runs.
+
+**Current** (line 1026–1029):
+```javascript
+const midpoint = {
+  x: (start.x + end.x) / 2,
+  y: (start.y + end.y) / 2,
+};
+```
+
+**New** — need `totalWebs` count, then compute staggered t:
+```javascript
+// Before the .map(), count total webs:
+const webSegments = lineSegments
+  .filter((segment) => segment.memberType === 'web' && segment.start && segment.end);
+const totalWebs = webSegments.length;
+
+// Inside .map(), replace midpoint with:
+const t = totalWebs <= 1 ? 0.5 : 0.3 + ((webIndex - 1) / (totalWebs - 1)) * 0.4;
+const anchor = {
+  x: start.x + dx * t,
+  y: start.y + dy * t,
+};
+```
+
+- t ranges from 0.3 → 0.7 across web members
+- For 9 webs: t = 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70
+- Tags spread along member lengths, reducing initial clustering near convergence points
+- Leader line `start` stays at `anchor` (not midpoint), which is the point being labeled
+
+This requires refactoring `buildTrussDetailWebTags` to pre-filter web segments, then map with index and total count available.
+
+---
+
+### Change 3: Increase initial tag offset distances (lines 32–34)
+
+Increase the base offsets that position tags away from their members initially:
+
+```
+DETAIL_WEB_TAG_OFFSET: 320 → 420
+DETAIL_TOP_CHORD_TAG_OFFSET: 400 → 500
+```
+
+Gives more initial separation, reducing the number of tags that need collision resolution.
+
+---
+
+### No changes needed to:
+- `applyDetailTagCollisionOffsets` function — already correct, just needs bigger grid
+- `buildTrussDetailScene` integration — already correct
+- Priority values — already set correctly
+- `boundsOverlap` / `estimateTagBounds` — working correctly
+- Any renderer files
+
+## Verification
+
+1. Open a truss with 4+ web members, switch to detail view
+2. Verify no tags overlap each other or dimension lines
+3. Verify leader lines still connect from tags back to member anchor points
+4. Verify viewport bounds expand correctly for shifted tags
+5. Test with a dense truss (6+ panel Fink/Fan) — the worst case for convergence

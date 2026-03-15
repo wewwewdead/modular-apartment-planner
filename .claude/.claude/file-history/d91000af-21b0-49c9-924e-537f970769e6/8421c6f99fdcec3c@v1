@@ -1,0 +1,305 @@
+# Multi-Workspace Platform Refactoring Plan
+
+## Context
+
+The app is currently a single-page floorplan editor with no routing. The goal is to refactor it into a multi-workspace design platform with a public homepage, two separate workspaces (Floorplan and Sketch), a playground route, and a clean shared/core architecture that supports future growth.
+
+**Current state:** ~198 files in `src/`, no routing library, React 19 + Vite 6 + Three.js, CSS Modules, localStorage persistence. Entry flows `main.jsx -> App.jsx -> ProjectProvider -> ClipboardProvider -> EditorProvider -> EditorShell`.
+
+**Target routes:** `/` (homepage), `/floorplan`, `/sketch`, `/playground`
+
+---
+
+## Phase 1: Add Routing + Vite Config
+
+**New dependency:** `react-router-dom`
+
+### 1a. Install react-router-dom
+```
+npm install react-router-dom
+```
+
+### 1b. Update `vite.config.js`
+Add new path aliases:
+```js
+'@core': path.resolve(__dirname, './src/core'),
+'@floorplan': path.resolve(__dirname, './src/modules/floorplan'),
+'@sketch': path.resolve(__dirname, './src/modules/sketch'),
+```
+Keep existing `@/` alias (used by 515 imports) — will be gradually replaced.
+
+### 1c. Create `src/routes.jsx`
+```jsx
+import { lazy, Suspense } from 'react';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
+const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'));
+const FloorplanWorkspace = lazy(() => import('./modules/floorplan'));
+const SketchWorkspace = lazy(() => import('./modules/sketch'));
+
+export const router = createBrowserRouter([
+  { path: '/', element: <Suspense><HomePage /></Suspense> },
+  { path: '/floorplan', element: <Suspense><FloorplanWorkspace /></Suspense> },
+  { path: '/sketch', element: <Suspense><SketchWorkspace /></Suspense> },
+  { path: '/playground', element: <Suspense><PlaygroundPage /></Suspense> },
+]);
+```
+
+### 1d. Update `src/main.jsx`
+Replace `<App />` with `<RouterProvider router={router} />`.
+
+### 1e. Fix `overflow: hidden` for homepage scrolling
+In `src/styles/global.css`, change the `html, body, #root` rule to allow scrolling, and add an `.editorRoot` class that re-applies `overflow: hidden; height: 100%` — applied by each workspace component.
+
+**Files modified:** `vite.config.js`, `src/main.jsx`, `src/styles/global.css`
+**Files created:** `src/routes.jsx`
+
+---
+
+## Phase 2: Create Core Module Structure
+
+Move truly shared utilities into `src/core/`. Leave **re-export shims** at old paths so existing imports don't break.
+
+### Target `src/core/` structure:
+```
+src/core/
+  geometry/
+    index.js          (barrel)
+    point.js           <- src/geometry/point.js
+    line.js            <- src/geometry/line.js
+    polygon.js         <- src/geometry/polygon.js
+    bearing.js         <- src/geometry/bearing.js
+  ui/
+    index.js
+    Modal.jsx + .module.css
+    InputField.jsx + .module.css
+    Tooltip.jsx + .module.css
+    CompassOverlay.jsx + .module.css
+    ToolbarIcons.jsx
+  persistence/
+    index.js
+    storage.js         <- src/persistence/storage.js
+    fileTransfer.js    <- src/persistence/fileTransfer.js
+    useAutosave.js     <- src/persistence/useAutosave.js
+    localStorageBackend.js
+    backendInterface.js
+    errors.js
+  domain/
+    index.js
+    ids.js             <- src/domain/ids.js
+  utils/
+    index.js
+    keyboard.js        <- src/utils/keyboard.js
+  styles/
+    global.css         (stays at src/styles/ — imported in main.jsx)
+    reset.css
+    variables.css
+```
+
+**Strategy:** For each moved file, place a re-export shim at the old path:
+```js
+// src/geometry/point.js (shim)
+export * from '@core/geometry/point';
+```
+This means zero breakage — all 515 existing `@/` imports continue working.
+
+**Files moved:** ~17 shared files
+**Shims created:** ~17 re-export files at old paths
+
+---
+
+## Phase 3: Create Floorplan Workspace Module
+
+### 3a. Create `src/modules/floorplan/FloorplanWorkspace.jsx`
+This component wraps the existing `App` component's internal logic:
+- `ProjectProvider` + `ClipboardProvider` + `AppInner` (renamed from current `App.jsx`)
+- Adds `.editorRoot` class to its root div for `overflow: hidden`
+- Accepts optional `initialProject` prop (for playground)
+
+### 3b. Create `src/modules/floorplan/index.js`
+Default export of `FloorplanWorkspace`.
+
+### 3c. Extract `AppInner` and `EditorShell` from `App.jsx`
+Move the `AppInner` and `EditorShell` components into `src/modules/floorplan/FloorplanWorkspace.jsx`. The existing `App.jsx` becomes a thin wrapper that imports from the floorplan module (or is replaced entirely by the route).
+
+**Key point:** All existing imports within `AppInner`/`EditorShell` continue using `@/` paths — they still resolve through shims. No mass import rewrite needed yet.
+
+**Files created:** `src/modules/floorplan/FloorplanWorkspace.jsx`, `src/modules/floorplan/index.js`
+**Files modified:** `src/app/App.jsx` (gutted to re-export or deleted)
+
+---
+
+## Phase 4: Scaffold Sketch Workspace
+
+### Target `src/modules/sketch/` structure:
+```
+src/modules/sketch/
+  index.js                    (default export SketchWorkspace)
+  SketchWorkspace.jsx         (providers + shell)
+  SketchWorkspace.module.css
+  domain/
+    sketchModels.js           (createSketchProject, createLayer, createShape)
+    defaults.js               (canvas size, tool defaults)
+  app/
+    SketchProvider.jsx        (useReducer: layers, shapes, undo/redo)
+    SketchEditorProvider.jsx  (viewport, tool, selection state)
+  renderers/
+    SketchCanvas.jsx          (SVG viewport + layer rendering)
+    ShapeRenderer.jsx         (renders shapes: rect, ellipse, line, path)
+    GridRenderer.jsx          (reuses core grid pattern)
+  editor/
+    tools.js                  (SELECT, RECTANGLE, ELLIPSE, LINE, PEN)
+    handlers/
+      selectHandler.js
+      rectangleHandler.js
+      lineHandler.js
+  ui/
+    SketchToolbar.jsx
+    SketchToolbar.module.css
+    SketchSidebar.jsx
+    SketchSidebar.module.css
+```
+
+### Sketch domain model (minimal scaffold):
+```js
+createSketchProject(name) -> { id, name, canvasWidth: 297000, canvasHeight: 210000, layers, createdAt, updatedAt }
+createLayer(name) -> { id, name, visible: true, locked: false, shapes: [] }
+createShape(type, props) -> { id, type, ...props }  // rect, ellipse, line, path
+```
+
+### Sketch editor state:
+- Viewport (pan, zoom) — same pattern as floorplan
+- Tool (SELECT, RECTANGLE, ELLIPSE, LINE, PEN)
+- Selection (selectedId, selectedType)
+- Active layer
+- Grid/snap toggles
+
+### Sketch workspace shell:
+```
+SketchWorkspace
+  SketchProvider
+    SketchEditorProvider
+      div.editorRoot
+        SketchToolbar
+        SketchSidebar (layers panel)
+        SketchCanvas
+```
+
+**Files created:** ~15 files in `src/modules/sketch/`
+
+---
+
+## Phase 5: Build Homepage
+
+### Aesthetic: "Technical Elegance"
+Architectural precision meets modern craft. The existing Manrope font at larger sizes, the teal/navy palette, and faint grid textures create a drafting-studio feel without cosplaying as a blueprint.
+
+### New CSS variables (add to `variables.css`):
+```css
+/* Workspace accent colors */
+--color-workspace-floorplan: #1A7A68;     /* existing teal */
+--color-workspace-floorplan-subtle: rgba(26, 122, 104, 0.08);
+--color-workspace-sketch: #B8860B;        /* warm amber/ochre */
+--color-workspace-sketch-subtle: rgba(184, 134, 11, 0.08);
+```
+
+### Homepage components:
+```
+src/pages/
+  HomePage.jsx
+  HomePage.module.css
+  PlaygroundPage.jsx
+  components/
+    NavBar.jsx + .module.css
+    HeroSection.jsx + .module.css
+    WorkspaceCards.jsx + .module.css
+    FeatureGrid.jsx + .module.css
+    FooterCTA.jsx + .module.css
+    FloorplanIllustration.jsx   (SVG: simplified top-down floorplan)
+    SketchIllustration.jsx      (SVG: furniture/object orthographic view)
+    useScrollReveal.js          (IntersectionObserver hook)
+```
+
+### Section layout:
+1. **NavBar** — fixed 56px, glassmorphic (`backdrop-filter: blur(12px)`), logo left, links + "Get Started" right
+2. **HeroSection** — viewport height, faint SVG grid background, centered: product name (56px/700), tagline (20px/400, max-width 560px), two CTAs ("Try Floorplan" primary solid, "Try Sketch" ghost amber), "or explore the playground" link below
+3. **WorkspaceCards** — max-width 1120px, 2-column grid (gap 24px), each card: white bg, 16px radius, 40px padding, SVG illustration right side, hover lifts with workspace-color border
+4. **FeatureGrid** — max-width 960px, 3-column grid, 6 features: "Millimeter precision", "Phase-based planning", "3D preview", "Sheet documentation", "Export workflows", "Keyboard-first"
+5. **FooterCTA** — panel-bg background, centered heading + CTA + copyright in JetBrains Mono 11px
+
+### Animations:
+- Staggered hero entrance using `animation-delay` (0.1s, 0.2s, 0.35s)
+- Scroll-triggered card/feature reveal via `IntersectionObserver`
+- Card hover: `translateY(-4px)` + elevated shadow
+- Respects `prefers-reduced-motion`
+
+### Responsive:
+- `> 1200px`: full layout
+- `768-1200px`: narrower cards, 2-col features, hero 44px
+- `< 768px`: stacked cards, 1-col features, hero 36px, simplified nav
+
+**Files created:** ~12 files in `src/pages/`
+**Files modified:** `src/styles/variables.css` (workspace color vars)
+
+---
+
+## Phase 6: Build Playground Page
+
+`src/pages/PlaygroundPage.jsx`:
+- Imports `FloorplanWorkspace` from `@floorplan`
+- Creates a hardcoded demo project with:
+  - 1 floor with 4 walls forming a rectangle (e.g., 6000x4000mm)
+  - 1 room detected from the walls
+  - 1 door on a wall
+  - 1 window on another wall
+  - A few fixtures (kitchen top, sofa)
+- Passes `initialProject` to `FloorplanWorkspace`
+- No save/autosave (read-only demo feel, or autosave to separate localStorage key)
+
+### FloorplanWorkspace changes:
+- Accept `initialProject` prop
+- Pass to `ProjectProvider` as initial state instead of creating a blank project
+- Accept `isPlayground` prop to disable autosave / change save behavior
+
+**Files created:** `src/pages/PlaygroundPage.jsx`
+**Files modified:** `src/modules/floorplan/FloorplanWorkspace.jsx` (add `initialProject` prop)
+
+---
+
+## Phase 7: Cleanup Re-export Shims
+
+After everything works:
+1. Update all `@/geometry/point` imports to `@core/geometry/point` (or barrel `@core/geometry`)
+2. Update all floorplan-internal imports to relative paths
+3. Delete shim files at old paths
+4. Optionally remove `@/` alias from vite.config.js
+
+This phase is mechanical find-and-replace. It can be done incrementally over time and is **not blocking** for the initial delivery.
+
+---
+
+## File Inventory Summary
+
+| Category | New Files | Modified Files |
+|----------|-----------|----------------|
+| Routing | `routes.jsx` | `main.jsx`, `vite.config.js` |
+| Core modules | ~17 files + barrels + shims | `global.css`, `variables.css` |
+| Floorplan workspace | 2-3 files | `App.jsx` (decomposed) |
+| Sketch workspace | ~15 files | — |
+| Homepage | ~12 files | — |
+| Playground | 1 file | `FloorplanWorkspace.jsx` |
+| **Total** | **~50 new files** | **~5 modified files** |
+
+---
+
+## Verification Plan
+
+1. **Route `/`** — homepage loads, all sections render, CTAs link correctly, scroll works
+2. **Route `/floorplan`** — existing editor works identically (draw walls, place doors/windows, detect rooms, undo/redo, save/load, 3D preview, phase system, sheets)
+3. **Route `/sketch`** — empty canvas renders, can pan/zoom, toolbar shows tools, can draw basic shapes
+4. **Route `/playground`** — demo floorplan loads with pre-built walls/room/door/window, can interact with it
+5. **`npm run build`** — builds without errors, code-splits correctly (homepage chunk, floorplan chunk, sketch chunk, three-vendor chunk)
+6. **Navigation** — browser back/forward works between routes, no state leaks between workspaces
+7. **Responsive** — homepage renders acceptably on mobile; workspaces remain desktop-first
+8. **Reduced motion** — homepage animations respect `prefers-reduced-motion`

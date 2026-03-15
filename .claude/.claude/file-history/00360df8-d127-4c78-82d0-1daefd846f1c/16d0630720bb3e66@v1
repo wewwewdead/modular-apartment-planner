@@ -1,0 +1,190 @@
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { createLayer } from '../domain/sketchModels';
+import styles from './SketchSidebar.module.css';
+
+function EyeIcon({ visible }) {
+  if (visible) {
+    return (
+      <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+        <path
+          d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+        <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <path
+        d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        opacity="0.3"
+      />
+      <line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function LockIcon({ locked }) {
+  if (locked) {
+    return (
+      <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+        <rect x="4" y="7" width="8" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M6 7V5a2 2 0 0 1 4 0v2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <rect x="4" y="7" width="8" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M6 7V5a2 2 0 0 1 4 0" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <path
+        d="M3 5h10M6 5V3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4.5 5l.5 8a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5l.5-8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+    </svg>
+  );
+}
+
+export default function SketchSidebar() {
+  const { project, dispatch } = useSketch();
+  const { activeLayerId, dispatch: editorDispatch } = useSketchEditor();
+
+  const handleAddLayer = () => {
+    const newLayer = createLayer(`Layer ${project.layers.length + 1}`);
+    dispatch({ type: 'LAYER_ADD', layer: newLayer });
+    editorDispatch({ type: 'SET_ACTIVE_LAYER', layerId: newLayer.id });
+  };
+
+  const handleSelectLayer = (layerId) => {
+    editorDispatch({ type: 'SET_ACTIVE_LAYER', layerId });
+  };
+
+  const handleToggleVisibility = (e, layer) => {
+    e.stopPropagation();
+    dispatch({
+      type: 'LAYER_UPDATE',
+      layer: { id: layer.id, visible: !layer.visible },
+    });
+  };
+
+  const handleToggleLock = (e, layer) => {
+    e.stopPropagation();
+    dispatch({
+      type: 'LAYER_UPDATE',
+      layer: { id: layer.id, locked: !layer.locked },
+    });
+  };
+
+  const handleDeleteLayer = (e, layerId) => {
+    e.stopPropagation();
+    if (project.layers.length <= 1) return;
+    dispatch({ type: 'LAYER_DELETE', layerId });
+
+    // If we're deleting the active layer, switch to the first remaining layer
+    if (activeLayerId === layerId) {
+      const remaining = project.layers.find((l) => l.id !== layerId);
+      if (remaining) {
+        editorDispatch({ type: 'SET_ACTIVE_LAYER', layerId: remaining.id });
+      }
+    }
+  };
+
+  return (
+    <div className={styles.sidebar}>
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderRow}>
+          <span className={styles.sectionTitle}>Layers</span>
+          <span className={styles.count}>{project.layers.length}</span>
+          <button
+            className={styles.addBtn}
+            onClick={handleAddLayer}
+            aria-label="Add Layer"
+            title="Add Layer"
+          >
+            +
+          </button>
+        </div>
+
+        <div className={styles.layerList}>
+          {project.layers.map((layer) => {
+            const isActive = layer.id === activeLayerId;
+            const shapeCount = layer.shapes.length;
+
+            return (
+              <div
+                key={layer.id}
+                className={`${styles.layerItem} ${isActive ? styles.layerItemActive : ''}`}
+                onClick={() => handleSelectLayer(layer.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectLayer(layer.id);
+                  }
+                }}
+              >
+                <div className={styles.layerInfo}>
+                  <span className={styles.layerName}>{layer.name}</span>
+                  {shapeCount > 0 && (
+                    <span className={styles.shapeCount}>{shapeCount}</span>
+                  )}
+                </div>
+                <div className={styles.layerActions}>
+                  <button
+                    className={styles.layerActionBtn}
+                    onClick={(e) => handleToggleVisibility(e, layer)}
+                    aria-label={layer.visible ? 'Hide Layer' : 'Show Layer'}
+                    title={layer.visible ? 'Hide Layer' : 'Show Layer'}
+                  >
+                    <EyeIcon visible={layer.visible} />
+                  </button>
+                  <button
+                    className={styles.layerActionBtn}
+                    onClick={(e) => handleToggleLock(e, layer)}
+                    aria-label={layer.locked ? 'Unlock Layer' : 'Lock Layer'}
+                    title={layer.locked ? 'Unlock Layer' : 'Lock Layer'}
+                  >
+                    <LockIcon locked={layer.locked} />
+                  </button>
+                  <button
+                    className={styles.layerActionBtn}
+                    onClick={(e) => handleDeleteLayer(e, layer.id)}
+                    disabled={project.layers.length <= 1}
+                    aria-label="Delete Layer"
+                    title="Delete Layer"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

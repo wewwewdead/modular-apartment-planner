@@ -1,0 +1,112 @@
+# Add Infinite Scroll to StoryDashboard & StoryLibrary (5 per fetch)
+
+## Context
+Two components inside `client/src/components/Stories/` load ALL stories at once with no pagination:
+- **StoryDashboard** — author's own stories (uses `useMyStories` → `getMyStoriesService`)
+- **StoryLibrary** — user's saved/bookmarked stories (uses `useMyLibrary` → `getMyLibraryService`)
+
+The StoryBrowser already has `useInfiniteQuery` (12/page). We need to add the same cursor-based infinite scroll pattern to these two, at 5 stories per fetch.
+
+## Part A: StoryDashboard Pagination
+
+### A1. Backend Service — `getMyStoriesService`
+**File:** `server/services/storyService.js` (line 340)
+
+Currently fetches all stories ordered by `updated_at DESC`. Add pagination:
+- Add `limit` and `before` params to signature
+- Parse limit: `Math.min(Math.max(parseInt(limit) || 5, 1), 20)`
+- Add `.limit(parsedLimit + 1)` to detect hasMore
+- Conditionally add `.lt('updated_at', before)` when cursor provided
+- Return `{ data: sliced, hasMore }` instead of plain array
+- Keep the existing `chapters(...)` join intact
+
+### A2. Backend Controller — `getMyStoriesController`
+**File:** `server/controller/storyController.js` (line 74)
+
+- Extract `{ limit, before }` from `req.query`
+- Pass to `getMyStoriesService(userId, limit, before)`
+
+### A3. Client API — `getMyStories`
+**File:** `client/API/StoryApi.js` (line 89)
+
+- Change signature to `getMyStories(token, limit = 5, before = null)`
+- Build `URLSearchParams` with `limit` and optional `before`
+- Append to fetch URL: `${BASE_URL}/stories/my?${params}`
+
+### A4. Client Hook — `useMyStories`
+**File:** `client/src/components/Stories/hooks/useStoryData.js` (line 4)
+
+- Convert from `useQuery` to `useInfiniteQuery`
+- `queryFn: ({ pageParam }) => getMyStories(token, 5, pageParam)`
+- `initialPageParam: undefined`
+- `getNextPageParam`: if `lastPage.hasMore`, return last item's `updated_at` ISO; else `undefined`
+
+### A5. Component — `StoryDashboard`
+**File:** `client/src/components/Stories/StoryDashboard/StoryDashboard.jsx`
+
+- Import `useEffect` from React and `useInView` from `react-intersection-observer`
+- Destructure `{ data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading }`
+- Flatten: `data?.pages?.flatMap(page => page.data) || []`
+- Add `useInView` sentinel + `useEffect` to auto-fetch next page
+- Add sentinel div with `BeatLoader` after the list (match existing loader choice)
+
+## Part B: StoryLibrary Pagination
+
+### B1. Backend Service — `getMyLibraryService`
+**File:** `server/services/storyInteractService.js` (line 108)
+
+Currently does a 2-step query: library entries → batch fetch stories. Add pagination to step 1:
+- Add `limit` and `before` params to signature
+- Parse limit: `Math.min(Math.max(parseInt(limit) || 5, 1), 20)`
+- Add `.limit(parsedLimit + 1)` to the `story_library` query
+- Conditionally add `.lt('added_at', before)` when cursor provided
+- After fetching stories + authors and building the ordered result, check `hasMore` from entry count
+- Return `{ data: sliced, hasMore }` instead of plain array
+
+### B2. Backend Controller — `getMyLibraryController`
+**File:** `server/controller/storyInteractController.js` (line 36)
+
+- Extract `{ limit, before }` from `req.query`
+- Pass to `getMyLibraryService(userId, limit, before)`
+
+### B3. Client API — `getMyLibrary`
+**File:** `client/API/StoryApi.js` (line 104)
+
+- Change signature to `getMyLibrary(token, limit = 5, before = null)`
+- Build `URLSearchParams` with `limit` and optional `before`
+- Append to fetch URL: `${BASE_URL}/stories/library?${params}`
+
+### B4. Client Hook — `useMyLibrary`
+**File:** `client/src/components/Stories/hooks/useStoryData.js` (line 14)
+
+- Convert from `useQuery` to `useInfiniteQuery`
+- `queryFn: ({ pageParam }) => getMyLibrary(token, 5, pageParam)`
+- `initialPageParam: undefined`
+- `getNextPageParam`: if `lastPage.hasMore`, return last item's `added_at` ISO; else `undefined`
+- Note: library entries are ordered by `added_at`, so cursor uses `added_at`
+
+### B5. Component — `StoryLibrary`
+**File:** `client/src/components/Stories/StoryLibrary/StoryLibrary.jsx`
+
+- Import `useEffect` from React and `useInView` from `react-intersection-observer`
+- Destructure `{ data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading }`
+- Flatten: `data?.pages?.flatMap(page => page.data) || []`
+- Add `useInView` sentinel + `useEffect` to auto-fetch next page
+- Add sentinel div with `BeatLoader` after the list
+
+## Files to Modify
+1. `server/services/storyService.js` — `getMyStoriesService` pagination
+2. `server/controller/storyController.js` — `getMyStoriesController` query params
+3. `server/services/storyInteractService.js` — `getMyLibraryService` pagination
+4. `server/controller/storyInteractController.js` — `getMyLibraryController` query params
+5. `client/API/StoryApi.js` — `getMyStories` + `getMyLibrary` pagination params
+6. `client/src/components/Stories/hooks/useStoryData.js` — both hooks → `useInfiniteQuery`
+7. `client/src/components/Stories/StoryDashboard/StoryDashboard.jsx` — infinite scroll UI
+8. `client/src/components/Stories/StoryLibrary/StoryLibrary.jsx` — infinite scroll UI
+
+## Verification
+1. Dashboard → only 5 stories load initially → scroll → next 5 auto-load → stops when all loaded
+2. Library → only 5 stories load initially → scroll → next 5 auto-load → stops when all loaded
+3. Empty states still work for 0 stories/library
+4. StoryDashboard delete still works (invalidates query cache)
+5. StoryLibrary remove still works (invalidates query cache)

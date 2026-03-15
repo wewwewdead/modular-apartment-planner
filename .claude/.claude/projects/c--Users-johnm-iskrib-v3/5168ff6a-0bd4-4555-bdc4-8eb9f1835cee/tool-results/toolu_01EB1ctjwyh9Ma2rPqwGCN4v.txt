@@ -1,0 +1,1583 @@
+     1→     1→.profile-page-loading-container{
+     2→     2→    position: absolute;
+     3→     3→    display: flex;
+     4→     4→    justify-content: center;
+     5→     5→    align-items: center;
+     6→     6→    background-color: var(--bg-backdrop-heavy);
+     7→     7→    backdrop-filter: blur(25px);
+     8→     8→    width: 100%;
+     9→     9→    height:100vh;
+    10→    10→    z-index: 3;
+    11→    11→}
+    12→    12→.profile-bg-picker-container{
+    13→    13→    position: absolute;
+    14→    14→    display: flex;
+    15→    15→    flex-direction: column;
+    16→    16→    justify-content: flex-start;
+    17→    17→    align-items: flex-start;
+    18→    18→    width: 400px;
+    19→    19→    height: 400px;
+    20→    20→    background-color: var(--bg-elevated);
+    21→    21→    z-index: 136;
+    22→    22→    padding: 1.25rem;
+    23→    23→    border-radius: 18px;
+    24→    24→    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border-light);
+    25→    25→    gap: 1rem;
+    26→    26→    color: var(--text-primary);
+    27→    27→}
+    28→    28→.profile-bg-picker-header{
+    29→    29→    display: flex;
+    30→    30→    justify-content: flex-start;
+    31→    31→    align-items: flex-start;
+    32→    32→    font-family: "Lexend Deca", sans-serif;
+    33→    33→    font-weight: 600;
+    34→    34→    font-size: 0.95rem;
+    35→    35→    color: var(--text-heading);
+    36→    36→}
+    37→    37→.profile-bg-color-palette{
+    38→    38→    display: flex;
+    39→    39→    justify-content: space-evenly;
+    40→    40→    width: 100%;
+    41→    41→    height: 50px;
+    42→    42→    padding: 1rem 0rem;
+    43→    43→    border: 1px solid var(--border-light);
+    44→    44→    border-radius: 10px;
+    45→    45→}
+    46→    46→.gradient-box{
+    47→    47→    width: 50px;
+    48→    48→    height: 50px;
+    49→    49→    border-radius: 10px;
+    50→    50→    cursor: pointer;
+    51→    51→    transition: transform 0.2s ease, box-shadow 0.2s ease, outline 0.2s ease;
+    52→    52→    transform: scale(1) rotate(0deg);
+    53→    53→    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    54→    54→    outline: 2px solid transparent;
+    55→    55→    outline-offset: 2px;
+    56→    56→}
+    57→    57→.gradient-box.gradient-selected{
+    58→    58→    outline-color: var(--accent-dark);
+    59→    59→}
+    60→    60→.gradient-box:hover{
+    61→    61→    transform: scale(1.08) rotate(1.5deg);
+    62→    62→    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+    63→    63→}
+    64→    64→.gradient-box:active{
+    65→    65→    transform: scale(0.97);
+    66→    66→}
+    67→    67→.profile-bg-preview{
+    68→    68→    position: relative;
+    69→    69→    display: flex;
+    70→    70→    align-items: flex-end;
+    71→    71→    justify-content: center;
+    72→    72→    width: 100%;
+    73→    73→    height: 50%;
+    74→    74→    border-radius: 10px;
+    75→    75→    gap: 1rem;
+    76→    76→}
+    77→    77→.controls{
+    78→    78→    display: flex;
+    79→    79→    justify-content: center;
+    80→    80→    align-items: center;
+    81→    81→    width: fit-content;
+    82→    82→    height: fit-content;
+    83→    83→    padding: 0.5rem;
+    84→    84→    border-radius: 10px;
+    85→    85→    background-color: var(--bg-elevated);
+    86→    86→    position: relative;
+    87→    87→    z-index: 10;
+    88→    88→    margin-bottom: 0.2rem;
+    89→    89→}
+    90→    90→
+    91→    91→.remove-bg-preview{
+    92→    92→    position: absolute;
+    93→    93→    bottom: 80%;
+    94→    94→    left: 85%;
+    95→    95→    display: flex;
+    96→    96→    justify-content: center;
+    97→    97→    align-items: center;
+    98→    98→    width: fit-content;
+    99→    99→    height: fit-content;
+   100→   100→    padding: 0.2rem;
+   101→   101→    background-color: var(--bg-backdrop-heavy);
+   102→   102→    z-index: 10;
+   103→   103→    margin-bottom: 0.2rem;
+   104→   104→    border-radius: 50%;
+   105→   105→    cursor: pointer;
+   106→   106→}
+   107→   107→.remove-bg-preview:hover{
+   108→   108→    background-color: var(--bg-elevated);
+   109→   109→}
+   110→   110→.add-bgImage-bttn{
+   111→   111→    position: absolute;
+   112→   112→    bottom: 65px;
+   113→   113→    width: 50px;
+   114→   114→    height: 50px;
+   115→   115→    border-radius: 10px;
+   116→   116→    cursor: pointer;
+   117→   117→    transition: ease-in-out 0.1s;
+   118→   118→    transform: scale(1);
+   119→   119→}
+   120→   120→.add-bgImage-bttn:hover{
+   121→   121→    transform: scale(1.1);
+   122→   122→}
+   123→   123→
+   124→   124→.cancel-save-container{
+   125→   125→    display: flex;
+   126→   126→    justify-content: space-between;
+   127→   127→    align-items: center;
+   128→   128→    width: 100%;
+   129→   129→    height: fit-content;
+   130→   130→}
+   131→   131→.cancel-button{
+   132→   132→    display: flex;
+   133→   133→    justify-content: center;
+   134→   134→    align-items: center;
+   135→   135→    padding: 0.5rem 0.8rem;
+   136→   136→    background-color: var(--bg-hover);
+   137→   137→    color: var(--text-primary);
+   138→   138→    border-radius: 10px;
+   139→   139→    cursor: pointer;
+   140→   140→    transition: background-color 0.2s ease, transform 0.15s ease;
+   141→   141→    font-weight: 600;
+   142→   142→    font-size: 0.82rem;
+   143→   143→}
+   144→   144→.save-button{
+   145→   145→    display: flex;
+   146→   146→    justify-content: center;
+   147→   147→    align-items: center;
+   148→   148→    padding: 0.5rem 0.8rem;
+   149→   149→    background-color: var(--accent-dark);
+   150→   150→    color: var(--bg-primary);
+   151→   151→    border-radius: 10px;
+   152→   152→    cursor: pointer;
+   153→   153→    transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+   154→   154→    font-weight: 600;
+   155→   155→    font-size: 0.82rem;
+   156→   156→}
+   157→   157→.save-button:hover{
+   158→   158→   background-color: var(--accent-dark-hover);
+   159→   159→   transform: translateY(-1px);
+   160→   160→   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+   161→   161→}
+   162→   162→.save-button:active{
+   163→   163→   transform: translateY(0);
+   164→   164→   box-shadow: none;
+   165→   165→}
+   166→   166→.cancel-button:hover{
+   167→   167→   background-color: var(--bg-secondary);
+   168→   168→}
+   169→   169→.cancel-button:active{
+   170→   170→   transform: scale(0.97);
+   171→   171→}
+   172→   172→
+   173→   173→
+   174→   174→.blurred-img-bg{
+   175→   175→    position: absolute;
+   176→   176→    width: 100%;
+   177→   177→    height: 100vh;
+   178→   178→    filter: blur(40px) saturate(1.2);
+   179→   179→    transform: scale(1.4);
+   180→   180→    animation: bgFadeIn 0.6s ease-out;
+   181→   181→}
+   182→   182→.blurred-gradient-bg{
+   183→   183→    position: absolute;
+   184→   184→    width: 100%;
+   185→   185→    height: 100vh;
+   186→   186→    filter: blur(100px) saturate(1.1);
+   187→   187→    transform: scale(1.4);
+   188→   188→    opacity: 0.1;
+   189→   189→    animation: bgFadeIn 0.8s ease-out;
+   190→   190→}
+   191→   191→@keyframes bgFadeIn{
+   192→   192→    from{ opacity: 0; transform: scale(1.5); }
+   193→   193→    to{ opacity: 1; transform: scale(1.4); }
+   194→   194→}
+   195→   195→.profile-parent-container{
+   196→   196→    position: relative;
+   197→   197→    display: flex;
+   198→   198→    justify-content: flex-start;
+   199→   199→    align-items: center;
+   200→   200→    width: 100%;
+   201→   201→    height: 100vh;
+   202→   202→    overflow-y: hidden;
+   203→   203→    overflow-x: hidden;
+   204→   204→}
+   205→   205→.profile-center-bar-container{
+   206→   206→    position: relative;
+   207→   207→    left: 250px;
+   208→   208→    display: flex;
+   209→   209→    flex-direction: column;
+   210→   210→    align-items: center;
+   211→   211→    width: 750px;
+   212→   212→    height: 100vh;
+   213→   213→    overflow-y: auto;
+   214→   214→}
+   215→   215→.profile-center-bar-container::-webkit-scrollbar{
+   216→   216→    display: none;
+   217→   217→}
+   218→   218→.profile-sidebar-right-holder-container{
+   219→   219→    position: fixed;
+   220→   220→    left: 1000px;
+   221→   221→    display: flex;
+   222→   222→    width: 25%;
+   223→   223→    height: 100%;
+   224→   224→    border-left: 0.7px solid var(--border-light);
+   225→   225→}
+   226→   226→.hero-section{
+   227→   227→    display: flex;
+   228→   228→    flex-direction: column;
+   229→   229→    align-items: flex-start;
+   230→   230→    justify-content: flex-start;
+   231→   231→    width: 90%;
+   232→   232→    padding: 1.4rem 1.4rem 1.2rem 1.4rem;
+   233→   233→    margin-top: 1rem;
+   234→   234→    border-radius: 20px;
+   235→   235→    gap: 0.8rem;
+   236→   236→    border: 0.7px solid var(--border-light);
+   237→   237→    transition: box-shadow 0.35s ease, border-color 0.35s ease;
+   238→   238→}
+   239→   239→.hero-section:hover{
+   240→   240→    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04);
+   241→   241→    border-color: var(--bg-glass-border);
+   242→   242→}
+   243→   243→.profile-top-row{
+   244→   244→    display: flex;
+   245→   245→    align-items: center;
+   246→   246→    justify-content: space-between;
+   247→   247→    width: 100%;
+   248→   248→}
+   249→   249→.profile-avatar-ring{
+   250→   250→    display: flex;
+   251→   251→    justify-content: center;
+   252→   252→    align-items: center;
+   253→   253→    padding: 5px;
+   254→   254→    border-radius: 50%;
+   255→   255→    border: 2px dashed currentColor;
+   256→   256→    opacity: 0.9;
+   257→   257→    position: relative;
+   258→   258→}
+   259→   259→.profile-avatar-ring.badge-ring-legend{
+   260→   260→    border: 3px solid #FFD700;
+   261→   261→    box-shadow:
+   262→   262→        0 0 10px 3px rgba(255, 215, 0, 0.5),
+   263→   263→        0 0 20px 6px rgba(255, 215, 0, 0.35),
+   264→   264→        0 0 35px 10px rgba(255, 215, 0, 0.2),
+   265→   265→        inset 0 0 12px rgba(255, 215, 0, 0.15);
+   266→   266→    opacity: 1;
+   267→   267→    animation: glow-legend-profile 2s ease-in-out infinite alternate;
+   268→   268→}
+   269→   269→.profile-avatar-ring.badge-ring-og{
+   270→   270→    border: 3px solid #9B59FF;
+   271→   271→    box-shadow:
+   272→   272→        0 0 10px 3px rgba(155, 89, 255, 0.5),
+   273→   273→        0 0 20px 6px rgba(155, 89, 255, 0.35),
+   274→   274→        0 0 35px 10px rgba(155, 89, 255, 0.2),
+   275→   275→        inset 0 0 12px rgba(155, 89, 255, 0.15);
+   276→   276→    opacity: 1;
+   277→   277→    animation: glow-og-profile 2s ease-in-out infinite alternate;
+   278→   278→}
+   279→   279→
+   280→   280→@keyframes glow-legend-profile {
+   281→   281→    from {
+   282→   282→        box-shadow:
+   283→   283→            0 0 10px 3px rgba(255, 215, 0, 0.5),
+   284→   284→            0 0 20px 6px rgba(255, 215, 0, 0.35),
+   285→   285→            0 0 35px 10px rgba(255, 215, 0, 0.2),
+   286→   286→            inset 0 0 12px rgba(255, 215, 0, 0.15);
+   287→   287→    }
+   288→   288→    to {
+   289→   289→        box-shadow:
+   290→   290→            0 0 14px 5px rgba(255, 215, 0, 0.6),
+   291→   291→            0 0 28px 10px rgba(255, 215, 0, 0.4),
+   292→   292→            0 0 45px 15px rgba(255, 215, 0, 0.25),
+   293→   293→            inset 0 0 16px rgba(255, 215, 0, 0.2);
+   294→   294→    }
+   295→   295→}
+   296→   296→
+   297→   297→@keyframes glow-og-profile {
+   298→   298→    from {
+   299→   299→        box-shadow:
+   300→   300→            0 0 10px 3px rgba(155, 89, 255, 0.5),
+   301→   301→            0 0 20px 6px rgba(155, 89, 255, 0.35),
+   302→   302→            0 0 35px 10px rgba(155, 89, 255, 0.2),
+   303→   303→            inset 0 0 12px rgba(155, 89, 255, 0.15);
+   304→   304→    }
+   305→   305→    to {
+   306→   306→        box-shadow:
+   307→   307→            0 0 14px 5px rgba(155, 89, 255, 0.6),
+   308→   308→            0 0 28px 10px rgba(155, 89, 255, 0.4),
+   309→   309→            0 0 45px 15px rgba(155, 89, 255, 0.25),
+   310→   310→            inset 0 0 16px rgba(155, 89, 255, 0.2);
+   311→   311→    }
+   312→   312→}
+   313→   313→.my-profile-image{
+   314→   314→    position: relative;
+   315→   315→    border-radius: 50%;
+   316→   316→    object-fit: cover;
+   317→   317→    width: 120px;
+   318→   318→    height: 120px;
+   319→   319→    transition: transform 0.3s ease, box-shadow 0.3s ease;
+   320→   320→}
+   321→   321→.profile-avatar-ring:hover .my-profile-image{
+   322→   322→    transform: scale(1.04);
+   323→   323→    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+   324→   324→}
+   325→   325→.profile-stats-container{
+   326→   326→    display: flex;
+   327→   327→    flex-direction: column;
+   328→   328→    align-items: flex-end;
+   329→   329→    gap: 0.15rem;
+   330→   330→    padding: 0.5rem 0.75rem;
+   331→   331→    border-radius: 14px;
+   332→   332→    background-color: var(--bg-glass);
+   333→   333→    backdrop-filter: blur(25px);
+   334→   334→    -webkit-backdrop-filter: blur(25px);
+   335→   335→    border: 0.5px solid var(--bg-glass-border);
+   336→   336→    transition: background-color 0.25s ease, box-shadow 0.25s ease;
+   337→   337→}
+   338→   338→.profile-stats-container:hover{
+   339→   339→    background-color: var(--bg-glass-border);
+   340→   340→    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+   341→   341→}
+   342→   342→.profile-stat-item{
+   343→   343→    display: flex;
+   344→   344→    align-items: baseline;
+   345→   345→    gap: 0.4rem;
+   346→   346→}
+   347→   347→.stat-number{
+   348→   348→    font-family: "Lexend Deca", sans-serif;
+   349→   349→    font-size: 1.5rem;
+   350→   350→    font-weight: 700;
+   351→   351→    letter-spacing: -0.02em;
+   352→   352→}
+   353→   353→.stat-label{
+   354→   354→    font-family: var(--font-ui);
+   355→   355→    font-size: 0.8rem;
+   356→   356→    font-weight: 500;
+   357→   357→    opacity: 0.65;
+   358→   358→}
+   359→   359→.profile-actions-row{
+   360→   360→    display: flex;
+   361→   361→    align-items: center;
+   362→   362→    gap: 0.5rem;
+   363→   363→    width: fit-content;
+   364→   364→    padding: 0.5rem 0.75rem;
+   365→   365→    border-radius: 14px;
+   366→   366→    background-color: var(--bg-glass);
+   367→   367→    backdrop-filter: blur(25px);
+   368→   368→    -webkit-backdrop-filter: blur(25px);
+   369→   369→    border: 0.5px solid var(--bg-glass-border);
+   370→   370→    transition: background-color 0.25s ease;
+   371→   371→}
+   372→   372→.profile-actions-row:hover{
+   373→   373→    background-color: var(--bg-glass-border);
+   374→   374→}
+   375→   375→.edit-profile-bttn{
+   376→   376→    display: flex;
+   377→   377→    justify-content: center;
+   378→   378→    align-items: center;
+   379→   379→    gap: 0.35rem;
+   380→   380→    padding: 0.5rem 1.2rem;
+   381→   381→    border-radius: 25px;
+   382→   382→    background-color: transparent;
+   383→   383→    color: inherit;
+   384→   384→    border: 1.5px solid currentColor;
+   385→   385→    cursor: pointer;
+   386→   386→    user-select: none;
+   387→   387→    font-family: "Lexend Deca", sans-serif;
+   388→   388→    font-weight: 500;
+   389→   389→    font-size: 0.82rem;
+   390→   390→    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+   391→   391→    opacity: 0.85;
+   392→   392→}
+   393→   393→.edit-profile-bttn:hover{
+   394→   394→    background-color: var(--bg-glass);
+   395→   395→    opacity: 1;
+   396→   396→    transform: translateY(-1px);
+   397→   397→    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+   398→   398→}
+   399→   399→.edit-profile-bttn:active{
+   400→   400→    transform: translateY(0);
+   401→   401→    box-shadow: none;
+   402→   402→}
+   403→   403→.font-selector-container{
+   404→   404→    position: absolute;
+   405→   405→    display: flex;
+   406→   406→    flex-direction: column;
+   407→   407→    justify-content: flex-start;
+   408→   408→    align-items: flex-start;
+   409→   409→    width: 200px;
+   410→   410→    height: fit-content;
+   411→   411→    background-color: var(--bg-elevated);
+   412→   412→    z-index: 136;
+   413→   413→    padding: 1rem;
+   414→   414→    border-radius: 16px;
+   415→   415→    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border-light);
+   416→   416→    gap: 1rem;
+   417→   417→    color: var(--text-primary);
+   418→   418→}
+   419→   419→.save-font-color-bttn-container{
+   420→   420→    display: flex;
+   421→   421→    justify-content: space-between;
+   422→   422→    align-items: center;
+   423→   423→    width: 100%;
+   424→   424→    height: fit-content;
+   425→   425→}
+   426→   426→.input-color{
+   427→   427→    border: none;
+   428→   428→    cursor: pointer;
+   429→   429→    border-radius: 12px;
+   430→   430→    width: 60px;
+   431→   431→    height: 60px;
+   432→   432→    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+   433→   433→    transition: transform 0.15s ease, box-shadow 0.15s ease;
+   434→   434→}
+   435→   435→.input-color:hover{
+   436→   436→    transform: scale(1.06);
+   437→   437→    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+   438→   438→}
+   439→   439→.font-color-hex-label{
+   440→   440→    font-family: var(--font-ui);
+   441→   441→    font-size: 0.72rem;
+   442→   442→    font-weight: 500;
+   443→   443→    color: var(--text-muted);
+   444→   444→    text-align: center;
+   445→   445→    margin-top: -0.4rem;
+   446→   446→}
+   447→   447→.font-picker-container{
+   448→   448→    display: flex;
+   449→   449→    justify-content: center;
+   450→   450→    align-items: center;
+   451→   451→    width: 36px;
+   452→   452→    height: 36px;
+   453→   453→    border-radius: 50%;
+   454→   454→    background-color: transparent;
+   455→   455→    border: 1.5px solid currentColor;
+   456→   456→    cursor: pointer;
+   457→   457→    user-select: none;
+   458→   458→    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+   459→   459→    opacity: 0.85;
+   460→   460→}
+   461→   461→.font-picker-container:hover{
+   462→   462→    background-color: var(--bg-glass);
+   463→   463→    opacity: 1;
+   464→   464→    transform: translateY(-1px);
+   465→   465→    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+   466→   466→}
+   467→   467→.font-picker-container:active{
+   468→   468→    transform: translateY(0);
+   469→   469→    box-shadow: none;
+   470→   470→}
+   471→   471→.layout-picker-container{
+   472→   472→    display: flex;
+   473→   473→    justify-content: center;
+   474→   474→    align-items: center;
+   475→   475→    padding: 0.5rem 0.9rem;
+   476→   476→    border-radius: 25px;
+   477→   477→    background-color: transparent;
+   478→   478→    border: 1.5px solid currentColor;
+   479→   479→    cursor: pointer;
+   480→   480→    user-select: none;
+   481→   481→    font-family: "Lexend Deca", sans-serif;
+   482→   482→    font-weight: 500;
+   483→   483→    font-size: 0.82rem;
+   484→   484→    transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+   485→   485→    opacity: 0.85;
+   486→   486→}
+   487→   487→.layout-picker-container:hover{
+   488→   488→    background-color: var(--bg-glass);
+   489→   489→    opacity: 1;
+   490→   490→    transform: translateY(-1px);
+   491→   491→    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+   492→   492→}
+   493→   493→.layout-picker-container:active{
+   494→   494→    transform: translateY(0);
+   495→   495→    box-shadow: none;
+   496→   496→}
+   497→   497→.layout-picker-container.is-active{
+   498→   498→    background-color: var(--bg-glass);
+   499→   499→    border-color: var(--accent-dark);
+   500→   500→    opacity: 1;
+   501→   501→}
+   502→   502→.profile-layout-builder-bg{
+   503→   503→    position: absolute;
+   504→   504→    inset: 0;
+   505→   505→    display: flex;
+   506→   506→    justify-content: center;
+   507→   507→    align-items: center;
+   508→   508→    background-color: var(--bg-backdrop);
+   509→   509→    backdrop-filter: blur(5px);
+   510→   510→    -webkit-backdrop-filter: blur(5px);
+   511→   511→    z-index: 140;
+   512→   512→}
+   513→   513→.profile-layout-builder-container{
+   514→   514→    display: flex;
+   515→   515→    flex-direction: column;
+   516→   516→    width: min(92vw, 380px);
+   517→   517→    border-radius: 18px;
+   518→   518→    background-color: var(--bg-elevated);
+   519→   519→    padding: 1rem;
+   520→   520→    gap: 0.8rem;
+   521→   521→    box-shadow: var(--shadow-modal);
+   522→   522→    color: var(--text-primary);
+   523→   523→}
+   524→   524→.profile-layout-builder-header{
+   525→   525→    display: flex;
+   526→   526→    flex-direction: column;
+   527→   527→    gap: 0.2rem;
+   528→   528→}
+   529→   529→.profile-layout-builder-title{
+   530→   530→    margin: 0;
+   531→   531→    font-family: "Lexend Deca", sans-serif;
+   532→   532→    font-size: 1rem;
+   533→   533→    font-weight: 700;
+   534→   534→}
+   535→   535→.profile-layout-builder-subtitle{
+   536→   536→    margin: 0;
+   537→   537→    font-family: var(--font-ui);
+   538→   538→    font-size: 0.78rem;
+   539→   539→    color: var(--text-muted);
+   540→   540→}
+   541→   541→.profile-layout-builder-list{
+   542→   542→    display: flex;
+   543→   543→    flex-direction: column;
+   544→   544→    gap: 0.5rem;
+   545→   545→}
+   546→   546→.profile-stats-container.profile-section-size-sm{
+   547→   547→    padding: 0.35rem 0.5rem;
+   548→   548→}
+   549→   549→.profile-stats-container.profile-section-size-sm .stat-number{
+   550→   550→    font-size: 1.2rem;
+   551→   551→}
+   552→   552→.profile-stats-container.profile-section-size-sm .stat-label{
+   553→   553→    font-size: 0.72rem;
+   554→   554→}
+   555→   555→.profile-stats-container.profile-section-size-lg{
+   556→   556→    padding: 0.55rem 0.8rem;
+   557→   557→}
+   558→   558→.profile-stats-container.profile-section-size-lg .stat-number{
+   559→   559→    font-size: 1.75rem;
+   560→   560→}
+   561→   561→.profile-stats-container.profile-section-size-lg .stat-label{
+   562→   562→    font-size: 0.9rem;
+   563→   563→}
+   564→   564→.profile-bio-container.profile-section-size-sm{
+   565→   565→    padding: 0.3rem 0.45rem;
+   566→   566→}
+   567→   567→.profile-bio-container.profile-section-size-sm .profile-bio{
+   568→   568→    font-size: 0.78rem;
+   569→   569→}
+   570→   570→.profile-bio-container.profile-section-size-lg{
+   571→   571→    padding: 0.55rem 0.8rem;
+   572→   572→}
+   573→   573→.profile-bio-container.profile-section-size-lg .profile-bio{
+   574→   574→    font-size: 1rem;
+   575→   575→}
+   576→   576→.profile-joined-date.profile-section-size-sm{
+   577→   577→    padding: 0.3rem 0.45rem;
+   578→   578→}
+   579→   579→.profile-joined-date.profile-section-size-sm .profile-date-joined{
+   580→   580→    font-size: 0.68rem;
+   581→   581→}
+   582→   582→.profile-joined-date.profile-section-size-lg{
+   583→   583→    padding: 0.55rem 0.8rem;
+   584→   584→}
+   585→   585→.profile-joined-date.profile-section-size-lg .profile-date-joined{
+   586→   586→    font-size: 0.85rem;
+   587→   587→}
+   588→   588→.color-input-picker{
+   589→   589→    border: none;
+   590→   590→    width: 50%;
+   591→   591→    height: 10%;
+   592→   592→    cursor: pointer;
+   593→   593→}
+   594→   594→.profile-name-container{
+   595→   595→    display: flex;
+   596→   596→    flex-direction: column;
+   597→   597→    justify-content: center;
+   598→   598→    align-items: flex-start;
+   599→   599→    width: fit-content;
+   600→   600→    height: fit-content;
+   601→   601→    gap: 0.1rem;
+   602→   602→    padding: 0.5rem 0.75rem;
+   603→   603→    border-radius: 14px;
+   604→   604→    background-color: var(--bg-glass);
+   605→   605→    backdrop-filter: blur(25px);
+   606→   606→    -webkit-backdrop-filter: blur(25px);
+   607→   607→    border: 0.5px solid var(--bg-glass-border);
+   608→   608→    transition: background-color 0.25s ease;
+   609→   609→}
+   610→   610→.profile-name-container:hover{
+   611→   611→    background-color: var(--bg-glass-border);
+   612→   612→}
+   613→   613→.profile-name-row{
+   614→   614→    display: flex;
+   615→   615→    align-items: center;
+   616→   616→    gap: 0.3rem;
+   617→   617→    flex-wrap: wrap;
+   618→   618→}
+   619→   619→.badge-pill{
+   620→   620→    display: inline-flex;
+   621→   621→    align-items: center;
+   622→   622→    justify-content: center;
+   623→   623→    padding: 0.15rem 0.6rem;
+   624→   624→    border-radius: 20px;
+   625→   625→    font-family: "Lexend Deca", sans-serif;
+   626→   626→    font-size: 0.7rem;
+   627→   627→    font-weight: 700;
+   628→   628→    letter-spacing: 0.02em;
+   629→   629→    line-height: 1.4;
+   630→   630→    user-select: none;
+   631→   631→}
+   632→   632→.badge-pill-legend{
+   633→   633→    background: linear-gradient(135deg, #FFD700, #FFA500);
+   634→   634→    color: #1a1a1a;
+   635→   635→    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.4);
+   636→   636→}
+   637→   637→.badge-pill-og{
+   638→   638→    background: linear-gradient(135deg, #9B59FF, #7B2FFF);
+   639→   639→    color: #ffffff;
+   640→   640→    box-shadow: 0 2px 8px rgba(155, 89, 255, 0.4);
+   641→   641→}
+   642→   642→.badge-pill-year{
+   643→   643→    background: linear-gradient(135deg, #3a3a3a, #555555);
+   644→   644→    color: #e0e0e0;
+   645→   645→    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+   646→   646→    border: 1px solid rgba(255, 255, 255, 0.1);
+   647→   647→}
+   648→   648→.profile-name{
+   649→   649→    margin: 0;
+   650→   650→    padding: 0;
+   651→   651→    user-select: none;
+   652→   652→    font-family: "Lexend Deca", sans-serif;
+   653→   653→    font-size: 1.55rem;
+   654→   654→    font-weight: 700;
+   655→   655→    line-height: 1.2;
+   656→   656→    letter-spacing: -0.025em;
+   657→   657→}
+   658→   658→.profile-user-handle{
+   659→   659→    margin: 0;
+   660→   660→    padding: 0;
+   661→   661→    font-family: var(--font-ui);
+   662→   662→    font-size: 0.78rem;
+   663→   663→    font-weight: 500;
+   664→   664→    opacity: 0.55;
+   665→   665→}
+   666→   666→.profile-bio-container{
+   667→   667→    display: flex;
+   668→   668→    justify-content: flex-start;
+   669→   669→    align-items: flex-start;
+   670→   670→    width: fit-content;
+   671→   671→    height: fit-content;
+   672→   672→    padding: 0.5rem 0.75rem;
+   673→   673→    border-radius: 14px;
+   674→   674→    background-color: var(--bg-glass);
+   675→   675→    backdrop-filter: blur(25px);
+   676→   676→    -webkit-backdrop-filter: blur(25px);
+   677→   677→    border: 0.5px solid var(--bg-glass-border);
+   678→   678→    transition: background-color 0.25s ease;
+   679→   679→}
+   680→   680→.profile-bio-container:hover{
+   681→   681→    background-color: var(--bg-glass-border);
+   682→   682→}
+   683→   683→.profile-bio{
+   684→   684→    margin: 0;
+   685→   685→    padding: 0;
+   686→   686→    font-family: var(--font-ui);
+   687→   687→    font-size: 0.88rem;
+   688→   688→    font-weight: 500;
+   689→   689→    line-height: 1.55;
+   690→   690→    opacity: 0.85;
+   691→   691→}
+   692→   692→.profile-joined-date{
+   693→   693→    display: flex;
+   694→   694→    align-items: center;
+   695→   695→    width: fit-content;
+   696→   696→    padding: 0.5rem 0.75rem;
+   697→   697→    border-radius: 14px;
+   698→   698→    background-color: var(--bg-glass);
+   699→   699→    backdrop-filter: blur(25px);
+   700→   700→    -webkit-backdrop-filter: blur(25px);
+   701→   701→    border: 0.5px solid var(--bg-glass-border);
+   702→   702→    transition: background-color 0.25s ease;
+   703→   703→}
+   704→   704→.profile-joined-date:hover{
+   705→   705→    background-color: var(--bg-glass-border);
+   706→   706→}
+   707→   707→.profile-date-joined{
+   708→   708→    margin: 0;
+   709→   709→    padding: 0;
+   710→   710→    user-select: none;
+   711→   711→    font-family: var(--font-ui);
+   712→   712→    font-size: 0.75rem;
+   713→   713→    font-weight: 500;
+   714→   714→    opacity: 0.5;
+   715→   715→}
+   716→   716→
+   717→   717→
+   718→   718→
+   719→   719→.edit-profile-hero-section{
+   720→   720→    display: flex;
+   721→   721→    flex-direction: column;
+   722→   722→    justify-content: flex-start;
+   723→   723→    align-items: flex-start;
+   724→   724→    height: 400px;
+   725→   725→    padding: 1rem;
+   726→   726→    border-radius: 20px;
+   727→   727→    gap: 1rem;
+   728→   728→}
+   729→   729→.profile-editor-container{
+   730→   730→    display: flex;
+   731→   731→    flex-direction: column;
+   732→   732→    width: 60%;
+   733→   733→    height: fit-content;
+   734→   734→    border-radius: 18px;
+   735→   735→    background-color: var(--bg-elevated);
+   736→   736→    padding: 1.25rem;
+   737→   737→    gap: 1rem;
+   738→   738→    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--border-light);
+   739→   739→}
+   740→   740→.profile-editor-close-button-container{
+   741→   741→    display: flex;
+   742→   742→    justify-content: flex-end;
+   743→   743→    align-items: center;
+   744→   744→    height: fit-content;
+   745→   745→}
+   746→   746→.profile-editor-close-button{
+   747→   747→    display: flex;
+   748→   748→    justify-content: center;
+   749→   749→    align-items: center;
+   750→   750→    transition: background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+   751→   751→    padding: 0.5rem;
+   752→   752→    cursor: pointer;
+   753→   753→    border-radius: 50%;
+   754→   754→    color: var(--text-secondary);
+   755→   755→}
+   756→   756→.profile-editor-close-button:hover{
+   757→   757→    background-color: var(--bg-hover);
+   758→   758→    color: var(--text-primary);
+   759→   759→    transform: rotate(90deg);
+   760→   760→}
+   761→   761→.profile-editor-close-button:active{
+   762→   762→    transform: rotate(90deg) scale(0.9);
+   763→   763→}
+   764→   764→.profile-edit-image-container{
+   765→   765→    display: flex;
+   766→   766→    position: relative;
+   767→   767→    justify-content: space-between;
+   768→   768→    align-items: flex-start;
+   769→   769→    height: fit-content;
+   770→   770→    width: 100%;
+   771→   771→    border-radius: 20px;
+   772→   772→}
+   773→   773→.add-profile-background{
+   774→   774→    display: flex;
+   775→   775→    justify-content: center;
+   776→   776→    align-items: center;
+   777→   777→    gap: 0.35rem;
+   778→   778→    padding: 0.45rem 0.8rem;
+   779→   779→    border-radius: 20px;
+   780→   780→    background-color: transparent;
+   781→   781→    border: 1.5px solid var(--border-light);
+   782→   782→    cursor: pointer;
+   783→   783→    font-family: "Lexend Deca", sans-serif;
+   784→   784→    font-weight: 500;
+   785→   785→    font-size: 0.8rem;
+   786→   786→    color: var(--text-primary);
+   787→   787→    transition: background-color 0.15s ease;
+   788→   788→}
+   789→   789→.add-profile-background:hover{
+   790→   790→    background-color: var(--bg-glass);
+   791→   791→}
+   792→   792→.profile-edit-image-child-container{
+   793→   793→    display: flex;
+   794→   794→    justify-content: center;
+   795→   795→    align-content: center;
+   796→   796→    border-radius: 20px;
+   797→   797→}
+   798→   798→.profile-edit-image-bg{
+   799→   799→    display: flex;
+   800→   800→    justify-content: center;
+   801→   801→    align-items: center;
+   802→   802→    position: absolute;
+   803→   803→    width: 130px;
+   804→   804→    height: 130px;
+   805→   805→    background-color: rgba(120, 120, 120, 0.588);
+   806→   806→    z-index: 2;
+   807→   807→    border-radius: 50%;
+   808→   808→    cursor: pointer;
+   809→   809→    opacity: 0;
+   810→   810→    transition: opacity 0.2s ease;
+   811→   811→}
+   812→   812→.profile-edit-image-child-container:hover + .profile-edit-image-bg,
+   813→   813→.profile-edit-image-container:hover .profile-edit-image-bg{
+   814→   814→    opacity: 1;
+   815→   815→}
+   816→   816→.my-profile-image-editable{
+   817→   817→    position: relative;
+   818→   818→    border-radius: 50%;
+   819→   819→    object-fit: cover;
+   820→   820→    width: 130px;
+   821→   821→    height: 130px;
+   822→   822→}
+   823→   823→.edit-profile-addImage-icon{
+   824→   824→    display: flex;
+   825→   825→    justify-content: center;
+   826→   826→    align-items: center;
+   827→   827→    padding: 0.5rem;
+   828→   828→    border-radius: 50%;
+   829→   829→    transition: ease-in-out 0.1s;
+   830→   830→}
+   831→   831→.edit-profile-addImage-icon:hover{
+   832→   832→    background-color: rgba(208, 208, 208, 0.588);
+   833→   833→}
+   834→   834→.edit-profile-input-name-container{
+   835→   835→    display: flex;
+   836→   836→    flex-direction: column;
+   837→   837→    justify-content: center;
+   838→   838→    align-items: flex-start;
+   839→   839→    width: fit-content;
+   840→   840→    height: fit-content;
+   841→   841→    border: 1px solid var(--border-light);
+   842→   842→    border-radius: 8px;
+   843→   843→    background-color: var(--bg-glass);
+   844→   844→    backdrop-filter: blur(25px);
+   845→   845→    -webkit-backdrop-filter: blur(25px);
+   846→   846→}
+   847→   847→.input-identifier-container{
+   848→   848→    display: flex;
+   849→   849→    justify-content: space-between;
+   850→   850→    width: 95%;
+   851→   851→    height: fit-content;
+   852→   852→    padding: 0 0 0 0.5rem;
+   853→   853→    font-size: 0.8rem;
+   854→   854→}
+   855→   855→.input-identifier{
+   856→   856→    display: flex;
+   857→   857→    justify-content: center;
+   858→   858→    align-items: center;
+   859→   859→}
+   860→   860→.input-identifier p{
+   861→   861→    margin: 0;
+   862→   862→    padding: 0;
+   863→   863→    font-family: "Lexend Deca", sans-serif;
+   864→   864→    font-size: 0.75rem;
+   865→   865→    font-weight: 500;
+   866→   866→    color: var(--text-secondary);
+   867→   867→}
+   868→   868→.profile-edit-name-length{
+   869→   869→    display: flex;
+   870→   870→    justify-content: center;
+   871→   871→    align-items: center;
+   872→   872→    margin-right: 0.2rem;
+   873→   873→}
+   874→   874→.profile-edit-name-length p{
+   875→   875→    margin: 0;
+   876→   876→    padding: 0;
+   877→   877→    font-size: 0.8rem;
+   878→   878→    color: var(--text-muted);
+   879→   879→}
+   880→   880→.edit-profile-input{
+   881→   881→    border: none;
+   882→   882→    background-color: transparent;
+   883→   883→    color: var(--text-primary);
+   884→   884→    padding: 0 0.5rem 0.5rem 0.5rem;
+   885→   885→    font-family: "Lexend Deca", sans-serif;
+   886→   886→    font-size: 1.5rem;
+   887→   887→    font-weight: 600;
+   888→   888→    width: fit-content;
+   889→   889→}
+   890→   890→.edit-profile-input:focus{
+   891→   891→    outline: none;
+   892→   892→}
+   893→   893→.edit-profile-input-bio-container{
+   894→   894→    display: flex;
+   895→   895→    flex-direction: column;
+   896→   896→    justify-content: flex-start;
+   897→   897→    align-items:center;
+   898→   898→    width: 100%;
+   899→   899→    height: 200px;
+   900→   900→    border: 1px solid var(--border-light);
+   901→   901→    border-radius: 8px;
+   902→   902→    background-color: var(--bg-glass);
+   903→   903→    backdrop-filter: blur(25px);
+   904→   904→    -webkit-backdrop-filter: blur(25px);
+   905→   905→}
+   906→   906→.input-bio-identifier-container{
+   907→   907→    display: flex;
+   908→   908→    justify-content: space-between;
+   909→   909→    width: 98%;
+   910→   910→    height: fit-content;
+   911→   911→}
+   912→   912→.bio-textarea{
+   913→   913→    width: 98%;
+   914→   914→    height: 100%;
+   915→   915→    resize: none;
+   916→   916→    background-color: transparent;
+   917→   917→    border: none;
+   918→   918→    color: var(--text-primary);
+   919→   919→    font-family: var(--font-ui);
+   920→   920→    font-size: 1rem;
+   921→   921→}
+   922→   922→.bio-textarea:focus{
+   923→   923→    outline: none;
+   924→   924→}
+   925→   925→.bio-identifier p{
+   926→   926→    padding: 0;
+   927→   927→    margin: 0;
+   928→   928→    font-family: "Lexend Deca", sans-serif;
+   929→   929→    font-size: 0.75rem;
+   930→   930→    font-weight: 500;
+   931→   931→    color: var(--text-secondary);
+   932→   932→}
+   933→   933→.profile-edit-bio-length{
+   934→   934→    display: flex;
+   935→   935→    justify-content: center;
+   936→   936→    height: fit-content;
+   937→   937→    width: fit-content;
+   938→   938→    align-items: center;
+   939→   939→}
+   940→   940→.profile-edit-bio-length p {
+   941→   941→    padding: 0;
+   942→   942→    margin: 0;
+   943→   943→    font-size: 0.8rem;
+   944→   944→    color: var(--text-muted);
+   945→   945→}
+   946→   946→
+   947→   947→.profile-edit-save-bttn{
+   948→   948→    display: flex;
+   949→   949→    justify-content: center;
+   950→   950→    align-items: center;
+   951→   951→    padding: 0.6rem;
+   952→   952→    border-radius: 12px;
+   953→   953→    color: var(--bg-primary);
+   954→   954→    background-color: var(--accent-dark);
+   955→   955→    cursor: pointer;
+   956→   956→    user-select: none;
+   957→   957→    font-family: "Lexend Deca", sans-serif;
+   958→   958→    font-weight: 600;
+   959→   959→    font-size: 0.9rem;
+   960→   960→    transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+   961→   961→}
+   962→   962→.profile-edit-save-bttn:hover{
+   963→   963→    background-color: var(--accent-dark-hover);
+   964→   964→    transform: translateY(-1px);
+   965→   965→    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+   966→   966→}
+   967→   967→.profile-edit-save-bttn:active{
+   968→   968→    transform: translateY(0);
+   969→   969→    box-shadow: none;
+   970→   970→}
+   971→   971→
+   972→   972→.my-profile-tablist{
+   973→   973→    display: flex;
+   974→   974→    justify-content: flex-start;
+   975→   975→    align-items: center;
+   976→   976→    gap: 0.25rem;
+   977→   977→    width: 90%;
+   978→   978→    padding: 0.5rem;
+   979→   979→    min-height: 40px;
+   980→   980→    background-color: var(--bg-glass);
+   981→   981→    backdrop-filter: blur(25px);
+   982→   982→    -webkit-backdrop-filter: blur(25px);
+   983→   983→    margin-top: 1rem;
+   984→   984→    border-radius: 14px;
+   985→   985→    border: 0.7px solid var(--border-light);
+   986→   986→    overflow-x: auto;
+   987→   987→    -webkit-overflow-scrolling: touch;
+   988→   988→    scrollbar-width: none;
+   989→   989→}
+   990→   990→.my-profile-tablist::-webkit-scrollbar{
+   991→   991→    display: none;
+   992→   992→}
+   993→   993→.tab-container{
+   994→   994→    position: relative;
+   995→   995→    display: flex;
+   996→   996→    flex-direction: column;
+   997→   997→    width: fit-content;
+   998→   998→    height: fit-content;
+   999→   999→    justify-content: center;
+  1000→  1000→    align-items: center;
+  1001→  1001→    padding: 0.5rem 1rem;
+  1002→  1002→    white-space: nowrap;
+  1003→  1003→    flex-shrink: 0;
+  1004→  1004→    margin: 0;
+  1005→  1005→    cursor: pointer;
+  1006→  1006→    user-select: none;
+  1007→  1007→    font-family: "Lexend Deca", sans-serif;
+  1008→  1008→    font-weight: 500;
+  1009→  1009→    font-size: 0.82rem;
+  1010→  1010→    border-radius: 10px;
+  1011→  1011→    transition: background-color 0.2s ease, opacity 0.2s ease;
+  1012→  1012→    opacity: 0.65;
+  1013→  1013→}
+  1014→  1014→.tab-container:hover{
+  1015→  1015→    background-color: var(--bg-glass);
+  1016→  1016→    opacity: 0.85;
+  1017→  1017→}
+  1018→  1018→.tab-indicator{
+  1019→  1019→    bottom: -2px;
+  1020→  1020→    position: absolute;
+  1021→  1021→    display: flex;
+  1022→  1022→    width: 60%;
+  1023→  1023→    height: 3px;
+  1024→  1024→    border-radius: 3px;
+  1025→  1025→    background-color: currentColor;
+  1026→  1026→    opacity: 0.8;
+  1027→  1027→    transition: width 0.25s ease, opacity 0.25s ease;
+  1028→  1028→}
+  1029→  1029→.tab-container:has(.tab-indicator){
+  1030→  1030→    opacity: 1;
+  1031→  1031→    font-weight: 600;
+  1032→  1032→}
+  1033→  1033→
+  1034→  1034→.profile-media-section{
+  1035→  1035→    width: 90%;
+  1036→  1036→    margin: 1rem 0 1.4rem;
+  1037→  1037→    padding: 0.9rem;
+  1038→  1038→    border-radius: 18px;
+  1039→  1039→    border: 0.7px solid var(--border-light);
+  1040→  1040→    background-color: var(--bg-glass);
+  1041→  1041→    backdrop-filter: blur(22px);
+  1042→  1042→    -webkit-backdrop-filter: blur(22px);
+  1043→  1043→}
+  1044→  1044→.profile-media-header-row{
+  1045→  1045→    display: flex;
+  1046→  1046→    justify-content: space-between;
+  1047→  1047→    align-items: center;
+  1048→  1048→    margin-bottom: 0.65rem;
+  1049→  1049→}
+  1050→  1050→.profile-media-heading{
+  1051→  1051→    margin: 0;
+  1052→  1052→    padding: 0;
+  1053→  1053→    font-family: "Lexend Deca", sans-serif;
+  1054→  1054→    font-size: 1.75rem;
+  1055→  1055→    font-weight: 700;
+  1056→  1056→    line-height: 1.1;
+  1057→  1057→    letter-spacing: -0.02em;
+  1058→  1058→}
+  1059→  1059→.profile-media-count{
+  1060→  1060→    font-family: var(--font-ui);
+  1061→  1061→    font-size: 1.2rem;
+  1062→  1062→    font-weight: 600;
+  1063→  1063→    opacity: 0.7;
+  1064→  1064→}
+  1065→  1065→.profile-media-warning{
+  1066→  1066→    margin: 0 0 0.5rem;
+  1067→  1067→    font-family: var(--font-ui);
+  1068→  1068→    font-size: 0.78rem;
+  1069→  1069→    opacity: 0.78;
+  1070→  1070→}
+  1071→  1071→.profile-media-empty-state{
+  1072→  1072→    margin: 0;
+  1073→  1073→    padding: 1rem 0.25rem 0.25rem;
+  1074→  1074→    font-family: var(--font-ui);
+  1075→  1075→    font-size: 0.85rem;
+  1076→  1076→    opacity: 0.75;
+  1077→  1077→}
+  1078→  1078→.profile-media-grid{
+  1079→  1079→    display: grid;
+  1080→  1080→    grid-template-columns: repeat(3, minmax(0, 1fr));
+  1081→  1081→    gap: 0.25rem;
+  1082→  1082→}
+  1083→  1083→.profile-media-grid-item{
+  1084→  1084→    position: relative;
+  1085→  1085→    width: 100%;
+  1086→  1086→    aspect-ratio: 1 / 1;
+  1087→  1087→    border-radius: 8px;
+  1088→  1088→    overflow: hidden;
+  1089→  1089→    background-color: rgba(0, 0, 0, 0.07);
+  1090→  1090→}
+  1091→  1091→.profile-media-grid-image-button{
+  1092→  1092→    width: 100%;
+  1093→  1093→    height: 100%;
+  1094→  1094→    border: none;
+  1095→  1095→    padding: 0;
+  1096→  1096→    margin: 0;
+  1097→  1097→    cursor: pointer;
+  1098→  1098→    background: transparent;
+  1099→  1099→}
+  1100→  1100→.profile-media-image{
+  1101→  1101→    width: 100%;
+  1102→  1102→    height: 100%;
+  1103→  1103→    object-fit: cover;
+  1104→  1104→    display: block;
+  1105→  1105→    transition: transform 0.2s ease, filter 0.2s ease;
+  1106→  1106→}
+  1107→  1107→.profile-media-grid-item:hover .profile-media-image{
+  1108→  1108→    transform: scale(1.03);
+  1109→  1109→    filter: saturate(1.04);
+  1110→  1110→}
+  1111→  1111→.profile-media-item-actions{
+  1112→  1112→    position: absolute;
+  1113→  1113→    top: 0.35rem;
+  1114→  1114→    right: 0.35rem;
+  1115→  1115→    z-index: 4;
+  1116→  1116→}
+  1117→  1117→.profile-media-item-settings-btn{
+  1118→  1118→    width: 28px;
+  1119→  1119→    height: 28px;
+  1120→  1120→    display: flex;
+  1121→  1121→    align-items: center;
+  1122→  1122→    justify-content: center;
+  1123→  1123→    border: none;
+  1124→  1124→    border-radius: 50%;
+  1125→  1125→    cursor: pointer;
+  1126→  1126→    color: #ffffff;
+  1127→  1127→    background-color: rgba(0, 0, 0, 0.46);
+  1128→  1128→    transition: background-color 0.15s ease;
+  1129→  1129→}
+  1130→  1130→.profile-media-item-settings-btn:hover{
+  1131→  1131→    background-color: rgba(0, 0, 0, 0.72);
+  1132→  1132→}
+  1133→  1133→.profile-media-item-settings-menu{
+  1134→  1134→    margin-top: 0.28rem;
+  1135→  1135→    min-width: 116px;
+  1136→  1136→    border-radius: 8px;
+  1137→  1137→    overflow: hidden;
+  1138→  1138→    border: 0.7px solid rgba(255, 255, 255, 0.18);
+  1139→  1139→    background-color: rgba(14, 14, 14, 0.95);
+  1140→  1140→    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  1141→  1141→}
+  1142→  1142→.profile-media-item-delete-btn{
+  1143→  1143→    width: 100%;
+  1144→  1144→    border: none;
+  1145→  1145→    padding: 0.52rem 0.65rem;
+  1146→  1146→    text-align: left;
+  1147→  1147→    font-family: var(--font-ui);
+  1148→  1148→    font-size: 0.78rem;
+  1149→  1149→    cursor: pointer;
+  1150→  1150→    color: #ffb4b4;
+  1151→  1151→    background-color: transparent;
+  1152→  1152→}
+  1153→  1153→.profile-media-item-delete-btn:hover{
+  1154→  1154→    background-color: rgba(255, 77, 77, 0.18);
+  1155→  1155→}
+  1156→  1156→.profile-media-grid-loading-item{
+  1157→  1157→    cursor: default;
+  1158→  1158→    animation: mediaPulse 1.1s ease-in-out infinite;
+  1159→  1159→}
+  1160→  1160→@keyframes mediaPulse{
+  1161→  1161→    0%{ opacity: 0.45; }
+  1162→  1162→    50%{ opacity: 0.95; }
+  1163→  1163→    100%{ opacity: 0.45; }
+  1164→  1164→}
+  1165→  1165→.profile-media-lightbox-overlay{
+  1166→  1166→    position: absolute;
+  1167→  1167→    inset: 0;
+  1168→  1168→    z-index: 180;
+  1169→  1169→    display: flex;
+  1170→  1170→    justify-content: center;
+  1171→  1171→    align-items: center;
+  1172→  1172→    background-color: rgba(0, 0, 0, 0.7);
+  1173→  1173→    backdrop-filter: blur(3px);
+  1174→  1174→    -webkit-backdrop-filter: blur(3px);
+  1175→  1175→    padding: 1rem;
+  1176→  1176→}
+  1177→  1177→.profile-media-lightbox-dialog{
+  1178→  1178→    position: relative;
+  1179→  1179→    width: min(94vw, 1100px);
+  1180→  1180→    max-height: 92vh;
+  1181→  1181→    border-radius: 14px;
+  1182→  1182→    overflow: hidden;
+  1183→  1183→    background-color: rgba(12, 12, 12, 0.92);
+  1184→  1184→    border: 0.7px solid rgba(255, 255, 255, 0.22);
+  1185→  1185→    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+  1186→  1186→}
+  1187→  1187→.profile-media-lightbox-image{
+  1188→  1188→    width: 100%;
+  1189→  1189→    max-height: 92vh;
+  1190→  1190→    object-fit: contain;
+  1191→  1191→    display: block;
+  1192→  1192→}
+  1193→  1193→.profile-media-lightbox-close{
+  1194→  1194→    position: absolute;
+  1195→  1195→    top: 0.55rem;
+  1196→  1196→    right: 0.55rem;
+  1197→  1197→    z-index: 2;
+  1198→  1198→    display: flex;
+  1199→  1199→    justify-content: center;
+  1200→  1200→    align-items: center;
+  1201→  1201→    width: 34px;
+  1202→  1202→    height: 34px;
+  1203→  1203→    border: none;
+  1204→  1204→    border-radius: 50%;
+  1205→  1205→    cursor: pointer;
+  1206→  1206→    color: #fff;
+  1207→  1207→    background-color: rgba(0, 0, 0, 0.48);
+  1208→  1208→    transition: background-color 0.15s ease;
+  1209→  1209→}
+  1210→  1210→.profile-media-lightbox-close:hover{
+  1211→  1211→    background-color: rgba(0, 0, 0, 0.72);
+  1212→  1212→}
+  1213→  1213→.profile-media-infinite-sentinel{
+  1214→  1214→    width: 100%;
+  1215→  1215→    height: 1px;
+  1216→  1216→}
+  1217→  1217→.profile-media-delete-confirm-overlay{
+  1218→  1218→    position: absolute;
+  1219→  1219→    inset: 0;
+  1220→  1220→    z-index: 190;
+  1221→  1221→    display: flex;
+  1222→  1222→    justify-content: center;
+  1223→  1223→    align-items: center;
+  1224→  1224→    background-color: rgba(0, 0, 0, 0.62);
+  1225→  1225→    backdrop-filter: blur(4px);
+  1226→  1226→    -webkit-backdrop-filter: blur(4px);
+  1227→  1227→    padding: 1rem;
+  1228→  1228→}
+  1229→  1229→.profile-media-delete-confirm-dialog{
+  1230→  1230→    width: min(92vw, 360px);
+  1231→  1231→    border-radius: 14px;
+  1232→  1232→    padding: 1rem;
+  1233→  1233→    border: 0.7px solid rgba(255, 255, 255, 0.16);
+  1234→  1234→    background-color: var(--bg-elevated);
+  1235→  1235→    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.25);
+  1236→  1236→}
+  1237→  1237→.profile-media-delete-confirm-title{
+  1238→  1238→    margin: 0;
+  1239→  1239→    font-family: "Lexend Deca", sans-serif;
+  1240→  1240→    font-size: 1rem;
+  1241→  1241→    font-weight: 700;
+  1242→  1242→    color: var(--text-primary);
+  1243→  1243→}
+  1244→  1244→.profile-media-delete-confirm-copy{
+  1245→  1245→    margin: 0.55rem 0 0;
+  1246→  1246→    font-family: var(--font-ui);
+  1247→  1247→    font-size: 0.82rem;
+  1248→  1248→    line-height: 1.45;
+  1249→  1249→    color: var(--text-secondary);
+  1250→  1250→}
+  1251→  1251→.profile-media-delete-confirm-copy span{
+  1252→  1252→    font-weight: 700;
+  1253→  1253→    color: var(--text-primary);
+  1254→  1254→}
+  1255→  1255→.profile-media-delete-confirm-error{
+  1256→  1256→    margin: 0.5rem 0 0;
+  1257→  1257→    font-family: var(--font-ui);
+  1258→  1258→    font-size: 0.78rem;
+  1259→  1259→    color: #ff5f5f;
+  1260→  1260→}
+  1261→  1261→.profile-media-delete-confirm-actions{
+  1262→  1262→    margin-top: 0.95rem;
+  1263→  1263→    display: flex;
+  1264→  1264→    justify-content: flex-end;
+  1265→  1265→    gap: 0.5rem;
+  1266→  1266→}
+  1267→  1267→.profile-media-delete-cancel-btn,
+  1268→  1268→.profile-media-delete-confirm-btn{
+  1269→  1269→    border: none;
+  1270→  1270→    border-radius: 8px;
+  1271→  1271→    padding: 0.48rem 0.78rem;
+  1272→  1272→    font-family: "Lexend Deca", sans-serif;
+  1273→  1273→    font-size: 0.78rem;
+  1274→  1274→    cursor: pointer;
+  1275→  1275→}
+  1276→  1276→.profile-media-delete-cancel-btn{
+  1277→  1277→    color: var(--text-primary);
+  1278→  1278→    background-color: var(--bg-hover);
+  1279→  1279→}
+  1280→  1280→.profile-media-delete-cancel-btn:hover{
+  1281→  1281→    background-color: var(--bg-secondary);
+  1282→  1282→}
+  1283→  1283→.profile-media-delete-confirm-btn{
+  1284→  1284→    color: #fff;
+  1285→  1285→    background-color: #d73a3a;
+  1286→  1286→}
+  1287→  1287→.profile-media-delete-confirm-btn:hover{
+  1288→  1288→    background-color: #b92929;
+  1289→  1289→}
+  1290→  1290→.profile-media-delete-cancel-btn:disabled,
+  1291→  1291→.profile-media-delete-confirm-btn:disabled{
+  1292→  1292→    cursor: not-allowed;
+  1293→  1293→    opacity: 0.6;
+  1294→  1294→}
+  1295→  1295→
+  1296→  1296→.profile-editor-bg{
+  1297→  1297→    position: absolute;
+  1298→  1298→    inset: 0;
+  1299→  1299→    display: flex;
+  1300→  1300→    justify-content: center;
+  1301→  1301→    align-items: center;
+  1302→  1302→    background-color: var(--bg-backdrop);
+  1303→  1303→    backdrop-filter: blur(5px);
+  1304→  1304→    -webkit-backdrop-filter: blur(5px);
+  1305→  1305→    z-index: 135;
+  1306→  1306→}
+  1307→  1307→.edit-profile-input-name-container:focus-within{
+  1308→  1308→    border-color: var(--accent-dark);
+  1309→  1309→    transition: border-color 0.2s ease;
+  1310→  1310→}
+  1311→  1311→.edit-profile-input-bio-container:focus-within{
+  1312→  1312→    border-color: var(--accent-dark);
+  1313→  1313→    transition: border-color 0.2s ease;
+  1314→  1314→}
+  1315→  1315→.profile-edit-save-bttn.is-saving{
+  1316→  1316→    opacity: 0.6;
+  1317→  1317→    pointer-events: none;
+  1318→  1318→    cursor: default;
+  1319→  1319→}
+  1320→  1320→.save-button.is-saving{
+  1321→  1321→    opacity: 0.6;
+  1322→  1322→    pointer-events: none;
+  1323→  1323→    cursor: default;
+  1324→  1324→}
+  1325→  1325→.profile-save-error-toast{
+  1326→  1326→    position: fixed;
+  1327→  1327→    bottom: 2rem;
+  1328→  1328→    left: 50%;
+  1329→  1329→    transform: translateX(-50%);
+  1330→  1330→    z-index: 200;
+  1331→  1331→    padding: 0.65rem 1.2rem;
+  1332→  1332→    border-radius: 10px;
+  1333→  1333→    background-color: var(--color-danger, #d73a3a);
+  1334→  1334→    color: #fff;
+  1335→  1335→    font-family: "Lexend Deca", sans-serif;
+  1336→  1336→    font-size: 0.82rem;
+  1337→  1337→    font-weight: 600;
+  1338→  1338→    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  1339→  1339→    animation: toastSlideIn 0.3s ease-out, toastFadeOut 0.3s ease-in 3.7s forwards;
+  1340→  1340→}
+  1341→  1341→@keyframes toastSlideIn{
+  1342→  1342→    from{ opacity: 0; transform: translateX(-50%) translateY(12px); }
+  1343→  1343→    to{ opacity: 1; transform: translateX(-50%) translateY(0); }
+  1344→  1344→}
+  1345→  1345→@keyframes toastFadeOut{
+  1346→  1346→    from{ opacity: 1; }
+  1347→  1347→    to{ opacity: 0; pointer-events: none; }
+  1348→  1348→}
+  1349→  1349→
+  1350→  1350→/* mobile responsive */
+  1351→  1351→@media(max-width: 768px){
+  1352→  1352→    .profile-sidebar-right-holder-container {
+  1353→  1353→        display: none;
+  1354→  1354→    }
+  1355→  1355→
+  1356→  1356→    .profile-center-bar-container {
+  1357→  1357→        position: relative;
+  1358→  1358→        left: 195px;
+  1359→  1359→        display: flex;
+  1360→  1360→        flex-direction: column;
+  1361→  1361→        align-items: center;
+  1362→  1362→        width: 550px;
+  1363→  1363→        height: 100vh;
+  1364→  1364→        overflow-y: auto;
+  1365→  1365→    }
+  1366→  1366→    .profile-media-heading{
+  1367→  1367→        font-size: 1.45rem;
+  1368→  1368→    }
+  1369→  1369→    .profile-media-count{
+  1370→  1370→        font-size: 1rem;
+  1371→  1371→    }
+  1372→  1372→}
+  1373→  1373→
+  1374→  1374→@media (max-width: 428px){
+  1375→  1375→    .profile-parent-container {
+  1376→  1376→        position: relative;
+  1377→  1377→        flex-direction: column;
+  1378→  1378→        display: flex;
+  1379→  1379→        justify-content: flex-end;
+  1380→  1380→        align-items: center;
+  1381→  1381→        width: 428px;
+  1382→  1382→        height: 100vh;
+  1383→  1383→        overflow-y: hidden;
+  1384→  1384→        overflow-x: hidden;
+  1385→  1385→    }
+  1386→  1386→    .profile-sidebar-right-holder-container {
+  1387→  1387→        display: none;
+  1388→  1388→    }
+  1389→  1389→
+  1390→  1390→    .profile-center-bar-container {
+  1391→  1391→        position: absolute;
+  1392→  1392→        left: 1px;
+  1393→  1393→        display: flex;
+  1394→  1394→        flex-direction: column;
+  1395→  1395→        justify-content: flex-start;
+  1396→  1396→        align-items: center;
+  1397→  1397→        width: 428px;
+  1398→  1398→        height: 100vh;
+  1399→  1399→    }
+  1400→  1400→    .my-profile-image {
+  1401→  1401→        width: 90px;
+  1402→  1402→        height: 90px;
+  1403→  1403→    }
+  1404→  1404→    .stat-number {
+  1405→  1405→        font-size: 1.2rem;
+  1406→  1406→    }
+  1407→  1407→    .profile-name {
+  1408→  1408→        font-size: 1.35rem;
+  1409→  1409→    }
+  1410→  1410→    .profile-media-section{
+  1411→  1411→        padding: 0.7rem;
+  1412→  1412→    }
+  1413→  1413→    .profile-media-heading{
+  1414→  1414→        font-size: 1.35rem;
+  1415→  1415→    }
+  1416→  1416→    .profile-media-count{
+  1417→  1417→        font-size: 0.95rem;
+  1418→  1418→    }
+  1419→  1419→    .profile-editor-bg {
+  1420→  1420→        position: absolute;
+  1421→  1421→        display: flex;
+  1422→  1422→        justify-content: center;
+  1423→  1423→        align-items: center;
+  1424→  1424→        background-color: var(--bg-backdrop);
+  1425→  1425→        backdrop-filter: blur(5px);
+  1426→  1426→        -webkit-backdrop-filter: blur(5px);
+  1427→  1427→        width: 100%;
+  1428→  1428→        height: 100vh;
+  1429→  1429→        z-index: 135;
+  1430→  1430→    }
+  1431→  1431→
+  1432→  1432→    .profile-editor-container {
+  1433→  1433→        display: flex;
+  1434→  1434→        flex-direction: column;
+  1435→  1435→        width: 90%;
+  1436→  1436→        height: fit-content;
+  1437→  1437→        border-radius: 15px;
+  1438→  1438→        background-color: var(--bg-elevated);
+  1439→  1439→        padding: 1rem;
+  1440→  1440→        gap: 1rem;
+  1441→  1441→    }
+  1442→  1442→    .profile-edit-image-bg {
+  1443→  1443→        display: flex;
+  1444→  1444→        justify-content: center;
+  1445→  1445→        align-items: center;
+  1446→  1446→        position: absolute;
+  1447→  1447→        width: 100px;
+  1448→  1448→        height: 100px;
+  1449→  1449→        background-color: rgba(120, 120, 120, 0.588);
+  1450→  1450→        z-index: 2;
+  1451→  1451→        border-radius: 50%;
+  1452→  1452→        cursor: pointer;
+  1453→  1453→    }
+  1454→  1454→    .my-profile-image-editable {
+  1455→  1455→        position: relative;
+  1456→  1456→        border-radius: 50%;
+  1457→  1457→        object-fit: cover;
+  1458→  1458→        width: 100px;
+  1459→  1459→        height: 100px;
+  1460→  1460→    }
+  1461→  1461→    .profile-bg-picker-container {
+  1462→  1462→        position: absolute;
+  1463→  1463→        display: flex;
+  1464→  1464→        flex-direction: column;
+  1465→  1465→        justify-content: flex-start;
+  1466→  1466→        align-items: flex-start;
+  1467→  1467→        width: 380px;
+  1468→  1468→        height: 400px;
+  1469→  1469→        background-color: var(--bg-elevated);
+  1470→  1470→        z-index: 136;
+  1471→  1471→        padding: 1rem;
+  1472→  1472→        border-radius: 20px;
+  1473→  1473→        box-shadow: var(--shadow-modal);
+  1474→  1474→        gap: 1rem;
+  1475→  1475→        color: var(--text-primary);
+  1476→  1476→    }
+  1477→  1477→}
+  1478→  1478→
+  1479→  1479→@media (max-width: 480px){
+  1480→  1480→    .profile-parent-container {
+  1481→  1481→        position: relative;
+  1482→  1482→        flex-direction: column;
+  1483→  1483→        display: flex;
+  1484→  1484→        justify-content: flex-end;
+  1485→  1485→        align-items: center;
+  1486→  1486→        width: 100%;
+  1487→  1487→        height: 100vh;
+  1488→  1488→        overflow-y: hidden;
+  1489→  1489→        overflow-x: hidden;
+  1490→  1490→    }
+  1491→  1491→    .profile-sidebar-right-holder-container {
+  1492→  1492→        display: none;
+  1493→  1493→    }
+  1494→  1494→
+  1495→  1495→    .profile-center-bar-container {
+  1496→  1496→        position: absolute;
+  1497→  1497→        left: 1px;
+  1498→  1498→        display: flex;
+  1499→  1499→        flex-direction: column;
+  1500→  1500→        justify-content: flex-start;
+  1501→  1501→        align-items: center;
+  1502→  1502→        width: 100%;
+  1503→  1503→        height: 100vh;
+  1504→  1504→    }
+  1505→  1505→    .my-profile-image {
+  1506→  1506→        width: 90px;
+  1507→  1507→        height: 90px;
+  1508→  1508→    }
+  1509→  1509→    .stat-number {
+  1510→  1510→        font-size: 1.2rem;
+  1511→  1511→    }
+  1512→  1512→    .profile-name {
+  1513→  1513→        font-size: 1.35rem;
+  1514→  1514→    }
+  1515→  1515→    .profile-media-section{
+  1516→  1516→        padding: 0.7rem;
+  1517→  1517→    }
+  1518→  1518→    .profile-media-heading{
+  1519→  1519→        font-size: 1.35rem;
+  1520→  1520→    }
+  1521→  1521→    .profile-media-count{
+  1522→  1522→        font-size: 0.95rem;
+  1523→  1523→    }
+  1524→  1524→    .profile-editor-bg {
+  1525→  1525→        position: absolute;
+  1526→  1526→        display: flex;
+  1527→  1527→        justify-content: center;
+  1528→  1528→        align-items: center;
+  1529→  1529→        background-color: var(--bg-backdrop);
+  1530→  1530→        backdrop-filter: blur(5px);
+  1531→  1531→        -webkit-backdrop-filter: blur(5px);
+  1532→  1532→        width: 100%;
+  1533→  1533→        height: 100vh;
+  1534→  1534→        z-index: 135;
+  1535→  1535→    }
+  1536→  1536→
+  1537→  1537→    .profile-editor-container {
+  1538→  1538→        display: flex;
+  1539→  1539→        flex-direction: column;
+  1540→  1540→        width: 90%;
+  1541→  1541→        height: fit-content;
+  1542→  1542→        border-radius: 15px;
+  1543→  1543→        background-color: var(--bg-elevated);
+  1544→  1544→        padding: 1rem;
+  1545→  1545→        gap: 1rem;
+  1546→  1546→    }
+  1547→  1547→    .profile-edit-image-bg {
+  1548→  1548→        display: flex;
+  1549→  1549→        justify-content: center;
+  1550→  1550→        align-items: center;
+  1551→  1551→        position: absolute;
+  1552→  1552→        width: 100px;
+  1553→  1553→        height: 100px;
+  1554→  1554→        background-color: rgba(120, 120, 120, 0.588);
+  1555→  1555→        z-index: 2;
+  1556→  1556→        border-radius: 50%;
+  1557→  1557→        cursor: pointer;
+  1558→  1558→    }
+  1559→  1559→    .my-profile-image-editable {
+  1560→  1560→        position: relative;
+  1561→  1561→        border-radius: 50%;
+  1562→  1562→        object-fit: cover;
+  1563→  1563→        width: 100px;
+  1564→  1564→        height: 100px;
+  1565→  1565→    }
+  1566→  1566→    .profile-bg-picker-container {
+  1567→  1567→        position: absolute;
+  1568→  1568→        display: flex;
+  1569→  1569→        flex-direction: column;
+  1570→  1570→        justify-content: flex-start;
+  1571→  1571→        align-items: flex-start;
+  1572→  1572→        width: 380px;
+  1573→  1573→        height: 400px;
+  1574→  1574→        background-color: var(--bg-elevated);
+  1575→  1575→        padding: 1rem;
+  1576→  1576→        border-radius: 20px;
+  1577→  1577→        box-shadow: var(--shadow-modal);
+  1578→  1578→        gap: 1rem;
+  1579→  1579→        z-index: 136;
+  1580→  1580→        color: var(--text-primary);
+  1581→  1581→    }
+  1582→  1582→}
+  1583→  1583→

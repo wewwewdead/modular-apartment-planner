@@ -1,0 +1,67 @@
+# Fix: Hottest Post Notifications Not Working
+
+## Context
+The hottest post notification system runs via a `pg_cron` job (`check_hottest_post_tracker()`) every 5 minutes. It should send `hottest_post` notifications when a post becomes #1 and `hottest_post_replaced` when the previous #1 is dethroned. The user confirms the cron job exists and runs, but notifications aren't appearing.
+
+## Root Cause: Inconsistent Hot Score Calculation
+
+The tracker function (`hottest_tracker.sql`) computes hot scores using **lateral join COUNT(*)** from raw `likes`, `comments`, `bookmarks` tables. But the Explore page RPC (`get_monthly_hottest_journals`) uses **cached columns** (`cached_reaction_count`, `cached_comment_count`, `cached_bookmark_count`).
+
+If these diverge (which they can — e.g., bulk operations, cascading deletes, or stale backfill), the tracker thinks Post A is #1 while the Explore page shows Post B. The user of Post B never gets notified because the tracker never "sees" them as #1.
+
+Additionally, since the tracker already has a row for this month (from a previous correct detection), it may return early every run because its #1 hasn't changed — even though the Explore page shows a different #1.
+
+## Fix
+
+### 1. Update `check_hottest_post_tracker()` — `server/sql/hottest_tracker.sql`
+- Replace the 3 lateral join subqueries with the denormalized cached columns (`j.cached_reaction_count`, `j.cached_comment_count`, `j.cached_bookmark_count`)
+- This makes the tracker's hot score formula identical to `get_monthly_hottest_journals`, ensuring consistency
+
+**Before (lines 52-80):**
+```sql
+select j.id, j.user_id,
+    (coalesce(j.views,0)::bigint*6) + (coalesce(lk.cnt,0)::bigint*3) + ...
+from public.journals j
+left join lateral (select count(*) as cnt from public.likes ...) lk on true
+left join lateral (select count(*) as cnt from public.comments ...) cm on true
+left join lateral (select count(*) as cnt from public.bookmarks ...) bk on true
+```
+
+**After:**
+```sql
+select j.id, j.user_id,
+    (coalesce(j.views,0)::bigint*6)
+        + (j.cached_reaction_count::bigint*3)
+        + (j.cached_comment_count::bigint*2)
+        + (j.cached_bookmark_count::bigint*2)
+from public.journals j
+where j.privacy = 'public'
+  and j.created_at >= v_month_start
+  and j.created_at < v_month_end
+order by ... desc
+limit 1;
+```
+
+### 2. Re-run the SQL in Supabase SQL Editor
+- Execute the updated `hottest_tracker.sql` to replace the function
+- The cron schedule is idempotent (unschedule + schedule), so it's safe to re-run
+
+### 3. Force a fresh check (one-time)
+- After deploying, manually reset the current month's tracker row so the next cron run re-evaluates:
+```sql
+DELETE FROM hottest_tracker WHERE month_key = to_char(now() at time zone 'UTC', 'YYYY-MM');
+```
+- Then either wait 5 minutes or trigger manually:
+```sql
+SELECT public.check_hottest_post_tracker();
+```
+
+## Files Modified
+- `server/sql/hottest_tracker.sql` — update `check_hottest_post_tracker()` to use cached columns
+
+## Verification
+1. Deploy updated SQL function
+2. Delete the current month's tracker row and run `SELECT public.check_hottest_post_tracker();`
+3. Check: `SELECT * FROM hottest_tracker WHERE month_key = to_char(now() at time zone 'UTC', 'YYYY-MM');` — should show a row
+4. Check: `SELECT * FROM notifications WHERE type IN ('hottest_post', 'hottest_post_replaced') ORDER BY created_at DESC LIMIT 5;` — should show a new notification
+5. Open the app notifications page — should see the flame icon notification

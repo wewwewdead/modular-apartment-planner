@@ -1,0 +1,101 @@
+import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
+import P from 'pino'
+import qrcode from 'qrcode-terminal'
+import { Ollama } from 'ollama'
+import { config, SYSTEM_PROMPT } from './config.js'
+
+const ollama = new Ollama({ host: config.ollama.host })
+
+// Per-chat conversation history
+const chatHistories = new Map()
+
+async function chatWithOllama(remoteJid, userMessage) {
+  if (!chatHistories.has(remoteJid)) {
+    chatHistories.set(remoteJid, [])
+  }
+  const history = chatHistories.get(remoteJid)
+
+  history.push({ role: 'user', content: userMessage })
+
+  const response = await ollama.chat({
+    model: config.ollama.model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history,
+    ],
+  })
+
+  const reply = response.message.content
+
+  history.push({ role: 'assistant', content: reply })
+
+  // Keep history from growing too large (last 50 messages)
+  if (history.length > 50) {
+    chatHistories.set(remoteJid, history.slice(-50))
+  }
+
+  return reply
+}
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: P({ level: 'silent' }),
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) qrcode.generate(qr, { small: true })
+    if (connection === 'open') console.log('Gilas connected to WhatsApp!')
+    if (connection === 'close') {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      if (shouldReconnect) startBot()
+      else console.log('Logged out. Delete auth_info folder and restart to re-link.')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      const text = msg.message?.conversation
+        || msg.message?.extendedTextMessage?.text
+        || ''
+
+      if (!text || !text.startsWith('/')) continue
+
+      const jid = msg.key.remoteJid
+
+      // /clear command — reset conversation history
+      if (text.toLowerCase().startsWith('/clear')) {
+        chatHistories.delete(jid)
+        await sock.sendMessage(jid, { text: 'Conversation cleared po!' })
+        console.log(`[${jid}] Conversation history cleared`)
+        continue
+      }
+
+      const userMessage = text.slice(1) // strip the "/" prefix
+      console.log(`[${jid}] > ${userMessage}`)
+
+      // Show typing indicator while processing
+      await sock.sendPresenceUpdate('composing', jid)
+
+      try {
+        const reply = await chatWithOllama(jid, userMessage)
+        console.log(`[${jid}] < ${reply}`)
+        await sock.sendPresenceUpdate('paused', jid)
+        await sock.sendMessage(jid, { text: reply })
+      } catch (err) {
+        console.error(`[${jid}] Ollama error:`, err.message)
+        await sock.sendPresenceUpdate('paused', jid)
+        await sock.sendMessage(jid, {
+          text: 'Pasensya na po, Teacher — may problema sa system. Subukan po ulit mamaya.',
+        })
+      }
+    }
+  })
+}
+
+startBot()

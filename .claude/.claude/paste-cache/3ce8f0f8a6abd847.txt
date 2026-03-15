@@ -1,0 +1,40 @@
+2026-02-21T12:23:48.010Z INFO messages.upsert received: type=notify count=1
+2026-02-21T12:23:48.010Z INFO Accepted fromMe operator message 3AD03D301FB1B8D72D66 in 99905888624837@lid (single-number mode).
+2026-02-21T12:23:48.011Z INFO Inbound message accepted from 99905888624837@lid (fromMe=true textPreview="can you summarize my class_50_students_scores.csv?" attachments=0).
+2026-02-21T12:23:48.011Z INFO Agent handling started for message 3AD03D301FB1B8D72D66 in 99905888624837@lid.
+2026-02-21T12:23:48.014Z INFO Agent handling completed for message 3AD03D301FB1B8D72D66 in 3ms.
+2026-02-21T12:23:48.015Z INFO Reply routing inId=3AD03D301FB1B8D72D66 strategy=dual_fallback reason=lid_to_phone_fallback primary=99905888624837@lid fallbacks=[639497868448@s.whatsapp.net].
+2026-02-21T12:23:48.229Z INFO Reply send attempt success inId=3AD03D301FB1B8D72D66 outId=3EB004D7113C3A91DF4809 target=99905888624837@lid.
+2026-02-21T12:23:48.387Z INFO messages.upsert received: type=append count=1
+2026-02-21T12:23:48.388Z INFO Observed outbound echo immediately from upsert. outId=3EB004D7113C3A91DF4809 chat=99905888624837@lid.
+2026-02-21T12:23:48.455Z INFO Reply verify inId=3AD03D301FB1B8D72D66 outId=3EB004D7113C3A91DF4809 target=99905888624837@lid verified=true.
+2026-02-21T12:23:48.455Z INFO Reply sent for message 3AD03D301FB1B8D72D66. outId=3EB004D7113C3A91DF4809 target=99905888624837@lid usedFallback=false verified=true.
+Closing session: SessionEntry {
+  _chains: {
+    BRHln2orJBGudkH3giKCAgEOGNEtcNg35fcuxAn3Apts: { chainKey: [Object], chainType: 2, messageKeys: {} },
+    'BXHCFg/CfsmeJj9TE+8NyoFf5TEtkxPcFeTArIF2cb4y': { chainKey: [Object], chainType: 1, messageKeys: {} }
+  },
+  registrationId: 879554420,
+  currentRatchet: {
+    ephemeralKeyPair: {
+      pubKey: <Buffer 05 71 c2 16 0f c2 7e c9 9e 26 3f 53 13 ef 0d ca 81 5f e5 31 2d 93 13 dc 15 e4 c0 ac 81 76 71 be 32>,
+      privKey: <Buffer 18 20 d5 5d e7 9a 5d f0 d8 2a 88 aa 9a 81 20 8c 33 bc d7 fd bb 82 7d 9d 90 a3 e7 b9 d8 f3 5f 52>
+    },
+    lastRemoteEphemeralKey: <Buffer 05 11 e5 9f 6a 2b 24 11 ae 76 41 f7 82 22 82 02 01 0e 18 d1 2d 70 d8 37 e5 f7 2e c4 09 f7 02 9b 6c>,
+    previousCounter: -1,
+    rootKey: <Buffer df 4d bb 26 25 fd 71 8d ea 2b d0 77 ea 00 d9 b9 3f 23 75 75 57 ad a6 12 51 78 a1 fb ce d2 de bf>
+  },
+  indexInfo: {
+    baseKey: <Buffer 05 bb 0e e5 53 b4 eb 3b 15 bc 5d c1 6e c0 c1 44 24 eb b7 e2 cf 50 78 bd bf 66 6a 42 60 38 7c da 1e>,
+    baseKeyType: 1,
+    closed: -1,
+    used: 1771676617826,
+    created: 1771676617826,
+    remoteIdentityKey: <Buffer 05 52 a7 f9 04 a2 82 d3 d5 02 e9 48 e3 27 be e8 98 9c b8 cf 7a 95 da e5 c7 b1 5d 11 d8 c5 81 a7 3d>
+  },
+  pendingPreKey: {
+    signedKeyId: 6915594,
+    baseKey: <Buffer 05 bb 0e e5 53 b4 eb 3b 15 bc 5d c1 6e c0 c1 44 24 eb b7 e2 cf 50 78 bd bf 66 6a 42 60 38 7c da 1e>,
+    preKeyId: 23
+  }
+}

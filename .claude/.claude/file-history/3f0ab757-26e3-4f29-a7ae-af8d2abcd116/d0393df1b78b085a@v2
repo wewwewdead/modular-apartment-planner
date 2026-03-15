@@ -1,0 +1,45 @@
+import React from 'react';
+import { StyleSheet } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+
+import { colors } from '../../theme/colors';
+
+interface TabBarIndicatorPillProps {
+  tabCount: number;
+  activeIndex: number;
+  tabWidth: number;
+}
+
+export function TabBarIndicatorPill({ tabCount, activeIndex, tabWidth }: TabBarIndicatorPillProps) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const centerOffset = (tabWidth - 64) / 2;
+    return {
+      transform: [
+        {
+          translateX: withSpring(activeIndex * tabWidth + centerOffset, {
+            damping: 20,
+            stiffness: 200,
+            mass: 0.8,
+          }),
+        },
+      ],
+    };
+  });
+
+  return <Animated.View style={[styles.pill, animatedStyle]} />;
+}
+
+const styles = StyleSheet.create({
+  pill: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    width: 64,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.brandLight,
+  },
+});

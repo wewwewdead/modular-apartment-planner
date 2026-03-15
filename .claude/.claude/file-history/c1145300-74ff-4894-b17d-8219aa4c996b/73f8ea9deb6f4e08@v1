@@ -1,0 +1,47 @@
+# Fix: Profile name update crashes with `JSON.parse("undefined")`
+
+## Context
+When users update their profile name/bio without changing the background, the backend crashes with:
+```
+SyntaxError: "undefined" is not valid JSON
+    at JSON.parse (<anonymous>)
+    at updateUserDataService (uploadService.js:163:34)
+```
+
+**Root cause:** In `MyProfile.jsx`, the FormData builder (lines 168-178) skips `null`/`undefined` values. When `croppedImage` is `null` (user didn't change background), `profileBg` is never appended to FormData. The backend receives `undefined` and calls `JSON.parse(undefined)` which fails.
+
+Username is unaffected — it's a separate field updated only via `/api/update-username`.
+
+## Changes
+
+### `server/services/uploadService.js` (~line 163-177)
+
+1. **Guard `JSON.parse`** — only parse `profileBg` when it's provided:
+   ```js
+   const parsedProfileBg = profileBg ? JSON.parse(profileBg) : undefined;
+   ```
+
+2. **Conditionally include background fields in payload** — so a name/bio-only edit doesn't overwrite existing background data:
+   ```js
+   const payload = {
+       name: name,
+       bio: bio,
+   }
+
+   if(parsedProfileBg !== undefined){
+       payload.background = parsedProfileBg;
+   }
+   if(dominantColors){
+       payload.dominant_colors = dominantColors;
+   }
+   if(secondaryColors){
+       payload.secondary_colors = secondaryColors;
+   }
+   ```
+
+## Verification
+1. Update profile name only → should save without error
+2. Update profile bio only → should save without error
+3. Update name + background image → background should still update correctly
+4. Update name + gradient background → gradient should still save correctly
+5. Confirm existing background is preserved after a name-only edit

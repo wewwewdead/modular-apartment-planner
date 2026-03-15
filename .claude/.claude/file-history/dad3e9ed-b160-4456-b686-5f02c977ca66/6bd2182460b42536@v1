@@ -1,0 +1,300 @@
+# Basic Room Support
+
+## Context
+
+Rooms partially exist in the codebase (model factory, reducer actions, text-only renderer) but lack polygon boundaries, area computation, auto-detection from walls, selection, and properties editing. This plan adds automatic room detection from wall topology, polygon rendering with area labels, and full selection/editing integration.
+
+## Files to Change
+
+| File | Action | What | Risk |
+|------|--------|------|------|
+| `src/geometry/roomDetection.js` | **CREATE** | Planar graph cycle detection algorithm | High |
+| `src/geometry/polygon.js` | MODIFY | Add `signedPolygonArea` helper | Very low |
+| `src/domain/models.js` | MODIFY | Add `points`/`area` to `createRoom` | Low |
+| `src/domain/defaults.js` | MODIFY | Add `ENDPOINT_MERGE_TOLERANCE` constant | Very low |
+| `src/app/ProjectProvider.jsx` | MODIFY | Add `ROOMS_SET` bulk-replace action | Low |
+| `src/renderers/RoomRenderer.jsx` | MODIFY | Render filled polygons + name + area labels | Medium |
+| `src/renderers/SelectionOverlay.jsx` | MODIFY | Add room selection dashed outline | Low |
+| `src/renderers/SvgCanvas.jsx` | MODIFY | Pass `selectedId` to RoomRenderer | Very low |
+| `src/editor/handlers/selectHandler.js` | MODIFY | Add room hit testing (pointInPolygon) + delete | Low |
+| `src/ui/Toolbar.jsx` | MODIFY | Add "Detect Rooms" button | Low |
+| `src/ui/Sidebar.jsx` | MODIFY | Add Rooms listing section | Low |
+| `src/ui/PropertiesPanel.jsx` | MODIFY | Add RoomProperties component | Low |
+| `src/persistence/deserialize.js` | MODIFY | Backfill `points`/`area` for old saves | Very low |
+
+---
+
+## Change 1: Add `signedPolygonArea` to `polygon.js`
+
+The existing `polygonArea` returns absolute value. Room detection needs signed area to distinguish interior faces (CW in screen coords) from the outer boundary (CCW).
+
+```js
+export function signedPolygonArea(points) {
+  let area = 0;
+  const n = points.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += points[i].x * points[j].y;
+    area -= points[j].x * points[i].y;
+  }
+  return area / 2;
+}
+```
+
+---
+
+## Change 2: Create `src/geometry/roomDetection.js`
+
+Pure geometry module — no React. Single export: `detectRooms(walls, mergeTolerance)`.
+
+### Algorithm
+
+**Step A — Build planar graph:**
+1. Collect all wall endpoints, merge nearby ones within `mergeTolerance` (default 5mm). Simple O(n²) scan — apartment plans have few walls.
+2. Build adjacency list: each wall adds two directed half-edges `(start→end)` and `(end→start)`. Skip degenerate/duplicate edges.
+
+**Step B — Sort edges by angle:**
+For each vertex, sort its adjacency by `Math.atan2(neighbor.y - vertex.y, neighbor.x - vertex.x)` ascending.
+
+**Step C — Build next-half-edge map:**
+For directed half-edge `(u→v)`: at vertex `v`, find index of `u` in `v`'s sorted adjacency. The next half-edge is `v → adjacency[v][(idx - 1 + degree) % degree]`. This traces the face to the left of the half-edge.
+
+**Step D — Trace cycles:**
+For each unvisited half-edge, follow next-pointers until returning to start. Collect vertex indices → polygon.
+
+**Step E — Filter:**
+- Discard cycles with < 3 vertices
+- Discard cycles with area < `MIN_ROOM_AREA` (100,000 mm² = 0.1 m²)
+- Compute signed area: keep only cycles where `signedPolygonArea > 0` (CW in screen Y-down coords = interior faces). The outer boundary has negative signed area and is automatically excluded.
+
+**Returns:** `Array<{ points: [{x,y}], area: number }>` — each detected room polygon with absolute area in mm².
+
+### Known Limitations (acceptable for basic support)
+- T-junctions (wall ending mid-wall without shared endpoint) are not detected as connections — users must draw walls that meet at endpoints (the snap system already encourages this)
+- No wall intersection splitting
+
+---
+
+## Change 3: Update `createRoom` in `models.js`
+
+```js
+export function createRoom(name = 'Room', points = [], color = ROOM_COLOR) {
+  const area = polygonArea(points);
+  const centroid = points.length >= 3 ? polygonCentroid(points) : { x: 0, y: 0 };
+  return {
+    id: generateId('room'),
+    name,
+    points: points.map(p => ({ x: p.x, y: p.y })),
+    labelPosition: { ...centroid },
+    color,
+    area,
+  };
+}
+```
+
+Import `polygonArea` and `polygonCentroid` from `@/geometry/polygon`. The old `labelPosition`-only signature is replaced — no existing callers to break.
+
+---
+
+## Change 4: Add `ENDPOINT_MERGE_TOLERANCE` to `defaults.js`
+
+```js
+export const ENDPOINT_MERGE_TOLERANCE = 5; // mm
+export const MIN_ROOM_AREA = 100000; // mm² (0.1 m²)
+```
+
+---
+
+## Change 5: Add `ROOMS_SET` action to `ProjectProvider.jsx`
+
+Add after the `ROOM_DELETE` case:
+
+```js
+case 'ROOMS_SET':
+  return updateFloor(state, action.floorId, f => ({
+    ...f,
+    rooms: action.rooms,
+  }));
+```
+
+This bulk-replaces all rooms on a floor — used by the detect button.
+
+---
+
+## Change 6: Rewrite `RoomRenderer.jsx`
+
+Render each room as:
+1. Filled `<polygon>` with `room.color`, `fillOpacity={0.4}`, `pointerEvents: 'all'` for click targeting
+2. Room name `<text>` at `labelPosition`, offset slightly above center
+3. Area `<text>` below name, formatted as `(area / 1_000_000).toFixed(1) + ' m²'`
+
+Text has `pointerEvents: 'none'` so clicks pass through to polygon. Accept `selectedId` prop to highlight selected room with slightly higher opacity.
+
+Only render polygon if `room.points?.length >= 3`; legacy rooms (no points) render name-only as before.
+
+---
+
+## Change 7: Room selection overlay in `SelectionOverlay.jsx`
+
+Add after the `window` case:
+
+```jsx
+if (selectedType === 'room') {
+  const room = floor.rooms.find(r => r.id === selectedId);
+  if (!room?.points?.length) return null;
+  const points = room.points.map(p => `${p.x},${p.y}`).join(' ');
+  return (
+    <polygon
+      points={points}
+      fill="none"
+      stroke="var(--color-selection)"
+      strokeWidth={2}
+      strokeDasharray="6 3"
+      vectorEffect="non-scaling-stroke"
+    />
+  );
+}
+```
+
+---
+
+## Change 8: Pass `selectedId` to RoomRenderer in `SvgCanvas.jsx`
+
+Change line 198:
+```jsx
+<RoomRenderer rooms={floor.rooms} selectedId={selectedId} />
+```
+
+---
+
+## Change 9: Room hit testing in `selectHandler.js`
+
+Add room hit test **after** walls (lower priority) in the `hitTest` function, before `return null`:
+
+```js
+for (const room of floor.rooms) {
+  if (room.points?.length >= 3 && pointInPolygon(modelPos, room.points)) {
+    return { id: room.id, type: 'room' };
+  }
+}
+```
+
+`pointInPolygon` is already imported. Also add room delete in `onKeyDown`:
+
+```js
+} else if (selectedType === 'room') {
+  dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
+}
+```
+
+---
+
+## Change 10: "Detect Rooms" button in `Toolbar.jsx`
+
+Add to the third button group (alongside Grid/Snap). The toolbar already has `useProject` (for `isDirty`) — expand destructuring to get `project`, `dispatch`, and use `useEditor` for `activeFloorId`.
+
+```jsx
+const handleDetectRooms = () => {
+  const floor = project.floors.find(f => f.id === activeFloorId);
+  if (!floor || floor.walls.length < 3) return;
+  const detected = detectRooms(floor.walls);
+  const rooms = detected.map((d, i) => createRoom(`Room ${i + 1}`, d.points));
+  dispatch({ type: 'ROOMS_SET', floorId: activeFloorId, rooms });
+};
+```
+
+Import `detectRooms` from `@/geometry/roomDetection` and `createRoom` from `@/domain/models`.
+
+---
+
+## Change 11: Rooms section in `Sidebar.jsx`
+
+Add after the Windows section, following the same pattern:
+
+```jsx
+<div className={styles.section}>
+  <div className={styles.sectionTitle}>
+    Rooms <span className={styles.count}>{floor.rooms.length}</span>
+  </div>
+  {floor.rooms.map(r => (
+    <div
+      key={r.id}
+      className={`${styles.item} ${selectedId === r.id ? styles.itemSelected : ''}`}
+      onClick={() => selectObject(r.id, 'room')}
+    >
+      {r.name}
+    </div>
+  ))}
+</div>
+```
+
+---
+
+## Change 12: Room properties in `PropertiesPanel.jsx`
+
+Add `RoomProperties` component:
+
+```jsx
+function RoomProperties({ room, dispatch, floorId }) {
+  const areaM2 = room.area ? (room.area / 1_000_000).toFixed(2) : '—';
+  const updateRoom = (updates) => {
+    dispatch({ type: 'ROOM_UPDATE', floorId, room: { id: room.id, ...updates } });
+  };
+  return (
+    <div>
+      <div className={styles.title}>Room</div>
+      <InputField label="Name" value={room.name} onChange={(v) => updateRoom({ name: v })} />
+      <InputField label="Area" suffix="m²" value={areaM2} readOnly />
+      <InputField label="Color" value={room.color} onChange={(v) => updateRoom({ color: v })} />
+    </div>
+  );
+}
+```
+
+Add room case in the `if/else` chain (~line 160) and in `handleDelete`.
+
+---
+
+## Change 13: Backward compat in `deserialize.js`
+
+After the floor validation loop, backfill missing fields:
+
+```js
+for (const floor of project.floors) {
+  if (!floor.rooms) floor.rooms = [];
+  for (const room of floor.rooms) {
+    if (!room.points) room.points = [];
+    if (room.area === undefined) room.area = 0;
+  }
+}
+```
+
+---
+
+## Implementation Order
+
+1. `polygon.js` — add `signedPolygonArea` (dependency for step 2)
+2. `defaults.js` — add constants
+3. `roomDetection.js` — create (core algorithm, pure geometry)
+4. `models.js` — update `createRoom`
+5. `ProjectProvider.jsx` — add `ROOMS_SET`
+6. `RoomRenderer.jsx` — polygon rendering
+7. `SvgCanvas.jsx` — pass `selectedId`
+8. `SelectionOverlay.jsx` — room selection
+9. `selectHandler.js` — hit testing + delete
+10. `Toolbar.jsx` — detect button
+11. `Sidebar.jsx` — room list
+12. `PropertiesPanel.jsx` — room properties
+13. `deserialize.js` — backward compat
+
+## Verification
+
+1. `npx vite build` — no errors
+2. Draw 4 walls forming a rectangle → click "Detect Rooms" → room appears with fill, name "Room 1", and area label
+3. Draw walls forming 2 adjacent rooms → detect → both rooms appear with correct areas
+4. Click a room polygon → selection overlay appears, properties panel shows name/area/color
+5. Edit room name in properties → label updates in SVG
+6. Delete room via Delete key or properties panel → room removed
+7. Sidebar shows rooms list, clicking selects
+8. Save/load project → rooms persist with polygons
+9. Load old project (rooms without `points`) → no crash, renders gracefully

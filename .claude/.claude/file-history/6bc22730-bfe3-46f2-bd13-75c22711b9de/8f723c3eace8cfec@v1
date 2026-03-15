@@ -1,0 +1,40 @@
+# Canvas Minimap / Viewport Navigator
+
+## Context
+When users zoom into the canvas (via buttons or pinch), there's no way to see where they are or quickly pan to a different area. This adds a small minimap overlay in the bottom-left corner that shows the full canvas with a draggable rectangle representing the visible area. Users can drag the rectangle to pan, or click anywhere on the minimap to jump there.
+
+## Files to Modify
+- `client/src/components/HomePage/Canvas/CanvasEditor.jsx` — add `CanvasMinimap` component + render it
+- `client/src/components/HomePage/Canvas/CanvasEditor.module.css` — add minimap styles
+
+## Implementation
+
+### 1. Add CSS classes to `CanvasEditor.module.css`
+- `.minimapContainer` — absolute positioned bottom-left of `stageShell`, 110px wide, glass morphism style, `z-index: 2`, `cursor: crosshair`, only visible when zoomed in
+- `.minimapDark` — dark theme variant
+- `.minimapViewport` — the draggable viewport rectangle, green border (`#5ad39f` matching existing selection color), semi-transparent fill, `cursor: grab`/`grabbing`
+
+### 2. Add `CanvasMinimap` component in `CanvasEditor.jsx`
+Define above `CanvasEditor` (same pattern as `CanvasImageNode`).
+
+**Props:** `viewport`, `stageWidth`, `stageHeight`, `viewportWidth`, `viewportHeight`, `fitScale`, `isDark`, `updateViewport`
+
+**Math:**
+- Minimap width = 110px, height = `110 * stageHeight / stageWidth` (adjusts for 4:5 aspect)
+- Viewport rect size: `MINI_W / viewport.scale` × `MINI_H / viewport.scale`
+- Viewport rect position: derived from `viewport.x/y` mapped to minimap coordinates
+- Drag converts minimap coords back to viewport x/y via `updateViewport()`
+
+**Drag handling:** `onMouseDown` on the rect attaches document-level `mousemove`/`mouseup` listeners (no React state, uses ref for perf). Click on minimap background jumps the viewport center to click point.
+
+### 3. Render in `CanvasEditor` JSX
+Inside `stageShell`, after `stageHud`, guarded by `viewport.scale > 1 && !isMobileViewport` (no minimap on mobile — touch drag wouldn't work well there).
+
+## Verification
+1. Zoom in with buttons → minimap appears in bottom-left with viewport rect
+2. Drag the rect → canvas pans in real-time
+3. Click minimap background → viewport jumps to that position
+4. Switch aspect ratio 1:1 ↔ 4:5 → minimap height adjusts
+5. Zoom back to 100% → minimap disappears
+6. On mobile viewport → minimap stays hidden
+7. Dark/light theme toggle → minimap styling matches

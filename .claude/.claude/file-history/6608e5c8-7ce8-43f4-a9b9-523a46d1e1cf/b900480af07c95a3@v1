@@ -1,0 +1,144 @@
+import React, { useRef, useEffect } from 'react';
+import { Group, Circle, Text } from 'react-konva';
+import Konva from 'konva';
+import { hexToRgba } from '../utils/starUtils';
+
+const StarGroup = React.memo(({ x, y, radius, color, title, showTitle, isPulsing, onClick, onPointerDown, constellationColor }) => {
+    const r = radius;
+    const groupRef = useRef(null);
+    const tweenRef = useRef(null);
+
+    useEffect(() => {
+        const node = groupRef.current;
+        if (!node) return;
+
+        // Cleanup any running tween
+        if (tweenRef.current) {
+            tweenRef.current.destroy();
+            tweenRef.current = null;
+        }
+
+        if (isPulsing) {
+            // Phase 1: elastic scale up 1 → 1.8
+            const tweenUp = new Konva.Tween({
+                node,
+                scaleX: 1.8,
+                scaleY: 1.8,
+                duration: 0.35,
+                easing: Konva.Easings.ElasticEaseOut,
+                onFinish: () => {
+                    // Phase 2: ease back down 1.8 → 1
+                    const tweenDown = new Konva.Tween({
+                        node,
+                        scaleX: 1,
+                        scaleY: 1,
+                        duration: 0.25,
+                        easing: Konva.Easings.EaseOut,
+                    });
+                    tweenRef.current = tweenDown;
+                    tweenDown.play();
+                },
+            });
+            tweenRef.current = tweenUp;
+            tweenUp.play();
+        } else {
+            // Reset to default scale
+            node.scaleX(1);
+            node.scaleY(1);
+        }
+
+        return () => {
+            if (tweenRef.current) {
+                tweenRef.current.destroy();
+                tweenRef.current = null;
+            }
+        };
+    }, [isPulsing]);
+
+    return (
+        <Group
+            ref={groupRef}
+            x={x}
+            y={y}
+        >
+            {/* Outer atmosphere — shadow glow */}
+            <Circle
+                radius={r * 3}
+                fill="transparent"
+                shadowColor={color}
+                shadowBlur={r * 5}
+                shadowOpacity={1}
+                perfectDrawEnabled={false}
+                shadowForStrokeEnabled={false}
+                listening={false}
+            />
+            {/* Constellation membership ring */}
+            {constellationColor && (
+                <Circle
+                    radius={r * 2.8}
+                    stroke={constellationColor}
+                    strokeWidth={1.2}
+                    opacity={0.35}
+                    dash={[4, 3]}
+                    perfectDrawEnabled={false}
+                    listening={false}
+                />
+            )}
+            {/* Inner glow — radial gradient */}
+            <Circle
+                radius={r * 2.2}
+                fillRadialGradientStartPoint={{ x: 0, y: 0 }}
+                fillRadialGradientEndPoint={{ x: 0, y: 0 }}
+                fillRadialGradientStartRadius={0}
+                fillRadialGradientEndRadius={r * 2.2}
+                fillRadialGradientColorStops={[
+                    0, color,
+                    0.4, hexToRgba(color, 0.65),
+                    1, hexToRgba(color, 0),
+                ]}
+                perfectDrawEnabled={false}
+                listening={false}
+            />
+            {/* Bright core */}
+            <Circle
+                radius={r * 0.5}
+                fill="#ffffffee"
+                shadowColor="#ffffff"
+                shadowBlur={4}
+                shadowOpacity={1}
+                perfectDrawEnabled={false}
+                hitStrokeWidth={r + 12}
+                onClick={onClick}
+                onTap={onClick}
+                onMouseDown={onPointerDown ? (e) => {
+                    e.cancelBubble = true;
+                    const screenX = e.evt.clientX;
+                    const screenY = e.evt.clientY;
+                    onPointerDown(screenX, screenY);
+                } : undefined}
+                onTouchStart={onPointerDown ? (e) => {
+                    e.cancelBubble = true;
+                    const touch = e.evt.touches?.[0];
+                    if (touch) onPointerDown(touch.clientX, touch.clientY);
+                } : undefined}
+            />
+            {showTitle && title && (
+                <Text
+                    text={title.length > 24 ? title.slice(0, 22) + '...' : title}
+                    y={r * 2.2 + 4}
+                    fontSize={10}
+                    fill="rgba(255,255,255,0.6)"
+                    align="center"
+                    width={120}
+                    offsetX={60}
+                    listening={false}
+                    perfectDrawEnabled={false}
+                />
+            )}
+        </Group>
+    );
+});
+
+StarGroup.displayName = 'StarGroup';
+
+export default StarGroup;

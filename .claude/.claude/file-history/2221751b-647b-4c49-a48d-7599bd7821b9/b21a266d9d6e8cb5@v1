@@ -1,0 +1,93 @@
+# Fix: Scroll Restoration Lands at Wrong Position
+
+## Problem
+The scroll restoration (implemented in the previous session) navigates to the correct chapter but lands at the wrong paragraph. Root cause: the 150ms `setTimeout` fires before Lexical has finished rendering chapter content into the DOM. At that point `document.documentElement.scrollHeight` is still small (partial render), so `docHeight * savedPosition` computes to a much smaller pixel value than intended.
+
+## Fix — Signal-based approach instead of timeout
+
+### `client/src/components/Stories/ChapterReader/ChapterReader.jsx`
+
+**1. `ReaderContent` — add `onContentReady` callback prop**
+
+After `editor.setEditorState()` runs, call `onContentReady()` to signal the parent that Lexical content is in the editor. This replaces guessing with a 150ms timer.
+
+```jsx
+const ReaderContent = ({ chapter, onContentReady }) => {
+    const [editor] = useLexicalComposerContext();
+
+    useEffect(() => {
+        if (chapter?.content && editor) {
+            try {
+                const content = typeof chapter.content === 'string'
+                    ? chapter.content
+                    : JSON.stringify(chapter.content);
+                const state = editor.parseEditorState(content);
+                editor.setEditorState(state);
+            } catch (err) {
+                console.error('Failed to load chapter content:', err);
+            }
+            editor.setEditable(false);
+            if (onContentReady) onContentReady();
+        }
+    }, [chapter?.id, editor]);
+    // ... rest unchanged
+};
+```
+
+**2. `ChapterReader` — track content readiness with state**
+
+Add `contentReady` state, pass setter as callback to `ReaderContent`:
+
+```jsx
+const [contentReady, setContentReady] = useState(false);
+```
+
+Reset it when chapter changes:
+```jsx
+useEffect(() => {
+    setContentReady(false);
+    setActiveComment(null);
+}, [chapterId]);
+```
+
+Pass to ReaderContent:
+```jsx
+<ReaderContent chapter={chapter} onContentReady={() => setContentReady(true)} />
+```
+
+**3. Replace the 150ms timeout scroll restoration with double-rAF**
+
+Wait for `contentReady` instead of `chapter`, then use double `requestAnimationFrame` (guarantees the browser has painted the Lexical DOM before measuring `scrollHeight`):
+
+```jsx
+useEffect(() => {
+    const savedPosition = location.state?.scrollPosition;
+    if (!savedPosition || hasRestoredRef.current || !contentReady) return;
+    hasRestoredRef.current = true;
+
+    // Double rAF ensures the browser has painted Lexical content
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            if (docHeight > 0) {
+                window.scrollTo({ top: docHeight * savedPosition, behavior: 'instant' });
+            }
+            navigate(location.pathname, { replace: true, state: {} });
+        });
+    });
+}, [contentReady]);
+```
+
+## Files Modified
+1. `client/src/components/Stories/ChapterReader/ChapterReader.jsx` — all changes in this one file
+
+## No changes needed
+- `StoryDetail.jsx` — already passes `scrollPosition` in navigate state (done in previous session)
+- Backend — `scroll_position` is already saved and returned correctly
+
+## Verification
+1. Open a story, read partway through a chapter, navigate away
+2. Return to story detail → click "Continue Reading"
+3. Should land at approximately the same paragraph (not the top)
+4. Refresh the page after restoration → should NOT re-scroll (state cleared)
+5. Navigate between chapters via prev/next buttons → no scroll restoration triggered

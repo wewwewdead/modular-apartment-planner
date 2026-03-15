@@ -1,0 +1,72 @@
+import React from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {ChevronRightIcon} from '../../components/icons';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'EditProfile'>;
+
+export function EditProfileScreen({navigation}: Props) {
+  const {colors} = useTheme();
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+      <View style={styles.container}>
+        <Text style={[styles.title, {color: colors.textHeading}]}>
+          Edit Profile
+        </Text>
+        <Text style={[styles.subtitle, {color: colors.textMuted}]}>
+          Coming soon
+        </Text>
+
+        <Pressable
+          style={[styles.customizeRow, {backgroundColor: colors.bgCard, borderColor: colors.borderCard}]}
+          onPress={() => navigation.navigate('ProfileCustomize')}>
+          <Text style={[styles.customizeText, {color: colors.textPrimary}]}>
+            Customize Profile
+          </Text>
+          <ChevronRightIcon size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  title: {
+    fontFamily: fonts.heading.semiBold,
+    fontSize: 20,
+  },
+  subtitle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  customizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    padding: spacing.lg,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    marginTop: spacing.xl,
+  },
+  customizeText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+});

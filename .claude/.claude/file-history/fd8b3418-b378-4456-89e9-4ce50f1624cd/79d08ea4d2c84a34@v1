@@ -1,0 +1,204 @@
+import React, { useEffect, useRef, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../../Context/useAuth';
+import { useChapter } from '../hooks/useStoryData';
+import { saveReadingProgress } from '../../../../API/StoryApi';
+import { motion } from 'framer-motion';
+import { BeatLoader } from 'react-spinners';
+
+import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
+import { ContentEditable } from '@lexical/react/LexicalContentEditable';
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { HeadingNode, QuoteNode } from '@lexical/rich-text';
+import ImageNode from '../../HomePage/Editor/nodes/ImageNode';
+
+import './ChapterReader.css';
+
+const readerTheme = {
+    paragraph: 'editor-paragraph',
+    heading: {
+        h1: 'editor-heading-h1',
+        h2: 'editor-heading-h2',
+        h3: 'editor-heading-h3',
+    },
+    quote: 'editor-quote',
+    text: {
+        bold: 'editor-text-bold',
+        italic: 'editor-text-italic',
+        underline: 'editor-text-underline',
+    },
+};
+
+const ReaderContent = ({ chapter }) => {
+    const [editor] = useLexicalComposerContext();
+
+    useEffect(() => {
+        if (chapter?.content && editor) {
+            try {
+                const content = typeof chapter.content === 'string'
+                    ? chapter.content
+                    : JSON.stringify(chapter.content);
+                const state = editor.parseEditorState(content);
+                editor.setEditorState(state);
+            } catch (err) {
+                console.error('Failed to load chapter content:', err);
+            }
+            editor.setEditable(false);
+        }
+    }, [chapter?.id, editor]);
+
+    return (
+        <RichTextPlugin
+            contentEditable={<ContentEditable className="chapter-reader-content" />}
+            ErrorBoundary={LexicalErrorBoundary}
+        />
+    );
+};
+
+const ChapterReader = () => {
+    const { storyId, chapterId } = useParams();
+    const navigate = useNavigate();
+    const { session } = useAuth();
+    const token = session?.access_token;
+
+    const { data: chapter, isLoading } = useChapter(storyId, chapterId, token);
+    const progressTimerRef = useRef(null);
+    const scrollRef = useRef(0);
+
+    // Save reading progress debounced on scroll
+    const saveProgress = useCallback(() => {
+        if (!token || !storyId || !chapterId) return;
+        saveReadingProgress(token, storyId, chapterId, scrollRef.current).catch(() => {});
+    }, [token, storyId, chapterId]);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            scrollRef.current = docHeight > 0 ? Math.min(scrollTop / docHeight, 1) : 0;
+
+            if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+            progressTimerRef.current = setTimeout(saveProgress, 3000);
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+            // Save on unmount
+            saveProgress();
+        };
+    }, [saveProgress]);
+
+    // Scroll progress bar
+    useEffect(() => {
+        const bar = document.getElementById('chapter-progress-bar');
+        if (!bar) return;
+
+        const updateBar = () => {
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+            bar.style.width = `${Math.min(pct, 100)}%`;
+        };
+
+        window.addEventListener('scroll', updateBar, { passive: true });
+        return () => window.removeEventListener('scroll', updateBar);
+    }, []);
+
+    const editorConfig = {
+        namespace: 'ChapterReader',
+        theme: readerTheme,
+        nodes: [ImageNode, HeadingNode, QuoteNode],
+        editable: false,
+        onError(error) { console.error('Lexical error:', error); },
+    };
+
+    if (isLoading) {
+        return (
+            <div className="chapter-reader">
+                <div className="chapter-reader-loading">
+                    <BeatLoader size={10} color="var(--text-muted)" />
+                </div>
+            </div>
+        );
+    }
+
+    if (!chapter) {
+        return (
+            <div className="chapter-reader">
+                <p className="chapter-reader-error">Chapter not found.</p>
+            </div>
+        );
+    }
+
+    const prevCh = chapter.prev_chapter;
+    const nextCh = chapter.next_chapter;
+
+    return (
+        <motion.div
+            className="chapter-reader"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+        >
+            {/* Progress bar */}
+            <div className="chapter-progress-track">
+                <div id="chapter-progress-bar" className="chapter-progress-fill" />
+            </div>
+
+            {/* Header */}
+            <div className="chapter-reader-header">
+                <button
+                    className="chapter-reader-back"
+                    onClick={() => navigate(`/home/stories/${storyId}`)}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="var(--text-secondary)">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                </button>
+                <div className="chapter-reader-header-info">
+                    <span className="chapter-reader-chapter-label">Chapter {chapter.chapter_number}</span>
+                    <h1 className="chapter-reader-title">{chapter.title}</h1>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="chapter-reader-body">
+                <LexicalComposer initialConfig={editorConfig}>
+                    <ReaderContent chapter={chapter} />
+                </LexicalComposer>
+            </div>
+
+            {/* Navigation */}
+            <div className="chapter-reader-nav">
+                {prevCh ? (
+                    <button
+                        className="chapter-nav-btn chapter-nav-prev"
+                        onClick={() => navigate(`/home/stories/${storyId}/chapter/${prevCh.id}`)}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                        </svg>
+                        <span>Ch. {prevCh.chapter_number}: {prevCh.title}</span>
+                    </button>
+                ) : <div />}
+                {nextCh ? (
+                    <button
+                        className="chapter-nav-btn chapter-nav-next"
+                        onClick={() => navigate(`/home/stories/${storyId}/chapter/${nextCh.id}`)}
+                    >
+                        <span>Ch. {nextCh.chapter_number}: {nextCh.title}</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                        </svg>
+                    </button>
+                ) : <div />}
+            </div>
+        </motion.div>
+    );
+};
+
+export default ChapterReader;

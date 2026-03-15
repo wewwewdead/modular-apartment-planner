@@ -1,0 +1,868 @@
+/* ── Mention node ── */
+.mention-node {
+    display: inline;
+}
+.mention-chip {
+    color: var(--accent-purple);
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 1px 2px;
+    transition: background-color 0.15s ease;
+}
+.mention-chip:hover {
+    background-color: rgba(139, 92, 246, 0.1);
+    text-decoration: underline;
+}
+.mention-chip--editing {
+    cursor: default;
+    background-color: rgba(139, 92, 246, 0.08);
+}
+.mention-chip--editing:hover {
+    text-decoration: none;
+}
+
+/* ── Mention autocomplete dropdown ── */
+.mention-dropdown {
+    position: fixed;
+    z-index: 200;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    max-height: 280px;
+    overflow-y: auto;
+    min-width: 220px;
+    max-width: 320px;
+    padding: 4px;
+    backdrop-filter: blur(12px);
+}
+.mention-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+}
+.mention-dropdown-item:hover,
+.mention-dropdown-item--selected {
+    background-color: var(--bg-secondary, rgba(139, 92, 246, 0.08));
+}
+.mention-dropdown-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+.mention-dropdown-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.mention-dropdown-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mention-dropdown-username {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Editor text formats ── */
+.editor-text-bold {
+    font-weight: bold;
+}
+.editor-text-italic {
+    font-style: italic;
+}
+.editor-text-underline {
+    text-decoration: underline;
+}
+
+/* ── Editor container variables (derived from global theme) ── */
+.editor-container {
+    --editor-bg: var(--bg-elevated);
+    --editor-surface: var(--bg-secondary);
+    --editor-text: var(--text-primary);
+    --editor-border: var(--border-light);
+    --editor-accent: var(--accent-purple);
+}
+
+/* ── Overlay backdrop ── */
+.editor-parent-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-overlay);
+    backdrop-filter: blur(25px);
+    z-index: 130;
+}
+
+/* ── Main editor card ── */
+.editor-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 720px;
+    height: 80%;
+    min-height: 0;
+    overflow: hidden;
+    background-color: var(--editor-bg);
+    color: var(--editor-text);
+    border-radius: 16px;
+    padding: 1rem 1.5rem;
+    box-shadow: var(--shadow-modal);
+}
+
+.editor-mode-shell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ── Close button row ── */
+.editor-close-bttn-container {
+    display: flex;
+    width: 100%;
+    justify-content: flex-end;
+    align-items: center;
+}
+.editor-close-bttn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.editor-close-bttn svg {
+    fill: var(--text-muted);
+    transition: fill 0.15s ease;
+}
+.editor-close-bttn:hover {
+    background-color: var(--bg-pill);
+    color: var(--editor-text);
+    transform: scale(1.05);
+}
+.editor-close-bttn:hover svg {
+    fill: var(--editor-text);
+}
+
+/* ── Title input ── */
+.content-title-input {
+    margin: 0.5rem 0;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background-color: transparent;
+    font-size: 1.75rem;
+    font-weight: 650;
+    font-family: var(--font-serif);
+    padding: 0.5rem 0.25rem;
+    color: var(--editor-text);
+    transition: border-color 0.25s ease;
+}
+.content-title-input::placeholder {
+    color: var(--text-muted);
+}
+.content-title-input:focus {
+    outline: none;
+    border-bottom-color: var(--editor-accent);
+}
+
+/* ── Toolbar (above content) ── */
+.toolbar-wrapper {
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--editor-border);
+    border-bottom: 1px solid var(--editor-border);
+    padding: 0.35rem 0;
+    margin-bottom: 0;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background-color: var(--editor-bg);
+}
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+.group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background-color: var(--editor-border);
+    margin: 0 6px;
+    flex-shrink: 0;
+}
+.toolbar-bttns {
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    justify-content: center;
+    align-items: center;
+    padding: 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    color: var(--editor-text);
+}
+.toolbar-bttns svg {
+    fill: var(--editor-text);
+    transition: fill 0.15s ease;
+}
+.toolbar-bttns:hover {
+    background-color: var(--bg-pill);
+}
+.is-active {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    padding: 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    background-color: color-mix(in srgb, var(--editor-accent) 15%, transparent);
+}
+.is-active svg {
+    fill: var(--editor-accent);
+}
+
+/* ── Color pickers ── */
+.toolbar-color-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.toolbar-color-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.35rem 0.45rem;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--editor-text);
+    transition: background-color 0.15s ease;
+}
+.toolbar-color-trigger:hover {
+    background-color: var(--bg-pill);
+}
+.toolbar-color-icon {
+    font-weight: 700;
+    font-size: 0.9rem;
+    line-height: 1;
+}
+.toolbar-color-swatch {
+    width: 16px;
+    height: 4px;
+    border-radius: 3px;
+    border: 1px solid var(--editor-border);
+}
+.color-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(6, 18px);
+    gap: 6px;
+    padding: 8px;
+    background: var(--editor-bg);
+    border: 1px solid var(--editor-border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-modal);
+    z-index: 12;
+}
+.color-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid var(--editor-border);
+    cursor: pointer;
+    background-color: transparent;
+}
+.color-swatch.is-default {
+    background-image:
+        linear-gradient(45deg, rgba(0, 0, 0, 0.15) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(0, 0, 0, 0.15) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.15) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.15) 75%);
+    background-size: 6px 6px;
+    background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+}
+.color-swatch.is-selected {
+    outline: 2px solid var(--editor-accent);
+    outline-offset: 1px;
+}
+
+/* ── Editor shell (flex-grow, scrollable) ── */
+.editor-shell {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) transparent;
+}
+.editor-shell::-webkit-scrollbar {
+    width: 6px;
+}
+.editor-shell::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 4px;
+}
+.editor-shell::-webkit-scrollbar-track {
+    background-color: transparent;
+}
+
+/* ── Editor content area ── */
+.editor-text-container {
+    white-space: pre-wrap;
+    color: var(--editor-text);
+    padding: 1rem 0.5rem;
+}
+.editor-input {
+    font-synthesis: style;
+}
+.editor-input:focus {
+    outline: none;
+}
+.editor-placeholder {
+    color: var(--text-muted);
+    overflow: hidden;
+    position: absolute;
+    top: -4px;
+    user-select: none;
+    pointer-events: none;
+    margin: 0;
+}
+.editor-paragraph {
+    margin: 0;
+}
+.editor-heading-h1 {
+    margin: 0.9rem 0 0.45rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--text-heading);
+}
+.editor-heading-h2 {
+    margin: 0.8rem 0 0.4rem;
+    font-size: 1.4rem;
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--text-heading);
+}
+.editor-heading-h3 {
+    margin: 0.7rem 0 0.35rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text-heading);
+}
+.editor-quote {
+    margin: 0.5rem 0;
+    padding: 0.3rem 0.65rem;
+    border-left: 2px solid var(--editor-accent);
+    background: color-mix(in srgb, var(--editor-accent) 5%, transparent);
+    color: var(--editor-text);
+    font-style: italic;
+}
+
+/* ── Footer bar (word count + save status + buttons) ── */
+.editor-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--editor-border);
+    margin-top: auto;
+    gap: 0.5rem;
+}
+.editor-footer-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+.editor-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+.editor-word-count {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    user-select: none;
+    padding-left: 0.25rem;
+    white-space: nowrap;
+}
+.editor-save-status {
+    font-size: 0.75rem;
+    user-select: none;
+    white-space: nowrap;
+}
+.editor-save-status--saving {
+    color: var(--text-muted);
+}
+.editor-save-status--saved {
+    color: var(--text-muted);
+}
+.editor-save-status--unsaved {
+    color: var(--accent-amber, #d4a017);
+}
+
+/* ── Bar loader positioning ── */
+.editor-loader-wrapper {
+    height: 4px;
+    flex-shrink: 0;
+}
+
+/* ── Save button ── */
+.editor-save-bttn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 1.25rem;
+    border-radius: 15px;
+    background-color: var(--editor-accent);
+    color: #ffffff;
+    font-weight: 650;
+    cursor: pointer;
+    border: none;
+    transition: background-color 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+.editor-save-bttn:hover {
+    opacity: 0.9;
+}
+.editor-save-bttn:active {
+    transform: scale(0.98);
+}
+.editor-save-bttn:focus {
+    outline: none;
+}
+.editor-save-bttn-disabled {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 1.25rem;
+    border-radius: 15px;
+    background-color: var(--bg-pill);
+    color: var(--text-muted);
+    font-weight: 650;
+    user-select: none;
+    border: none;
+    cursor: not-allowed;
+}
+.editor-save-bttn-disabled:focus {
+    outline: none;
+}
+
+/* ── Draft button ── */
+.editor-draft-bttn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 15px;
+    background-color: transparent;
+    color: var(--editor-text);
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid var(--editor-border);
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+    font-size: 0.875rem;
+}
+.editor-draft-bttn:hover {
+    background-color: var(--bg-pill);
+    border-color: var(--text-muted);
+}
+.editor-draft-bttn:active {
+    transform: scale(0.98);
+}
+.editor-draft-bttn:focus {
+    outline: none;
+}
+.editor-draft-bttn-disabled {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 15px;
+    background-color: transparent;
+    color: var(--text-muted);
+    font-weight: 600;
+    border: 1.5px solid var(--editor-border);
+    cursor: not-allowed;
+    opacity: 0.5;
+    font-size: 0.875rem;
+}
+.editor-draft-bttn-disabled:focus {
+    outline: none;
+}
+
+/* ── Image upload icon (inside toolbar) ── */
+.editor-upload-image-icon {
+    padding: 0.4rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.editor-upload-image-icon:hover {
+    background-color: var(--bg-pill);
+}
+
+/* ── Image components ── */
+.image-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    height: fit-content;
+}
+.image-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    margin: 1rem 0;
+    width: fit-content;
+    height: fit-content;
+}
+.image-actions {
+    position: absolute;
+    display: flex;
+    gap: 0.3rem;
+    top: 0;
+    right: 0;
+    margin: 0.5rem;
+    z-index: 11;
+}
+.image-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: ease-in-out 0.1s;
+    background-color: rgba(0, 0, 0, 0.35);
+}
+.image-action-btn:hover {
+    background-color: rgba(0, 0, 0, 0.55);
+}
+.dimension-display {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    top: -35px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-pill);
+    color: var(--text-muted);
+    padding: 0.4rem 0.5rem;
+    white-space: nowrap;
+    pointer-events: none;
+    font-size: 0.8rem;
+    border-radius: 4px;
+}
+
+/* ── Resize handles ── */
+.southeast-side-handle {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 50%;
+    cursor: nwse-resize;
+    z-index: 10;
+}
+.southwest-side-handle {
+    position: absolute;
+    bottom: -4px;
+    left: -4px;
+    width: 12px;
+    height: 12px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 50%;
+    cursor: nesw-resize;
+    z-index: 10;
+}
+.northeast-side-handle {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 50%;
+    cursor: sw-resize;
+    z-index: 10;
+}
+.northwest-side-handle {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    width: 12px;
+    height: 12px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 50%;
+    cursor: se-resize;
+    z-index: 10;
+}
+.east-side-handle {
+    position: absolute;
+    top: 50%;
+    right: -4px;
+    width: 8px;
+    height: 20px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 2px;
+    transform: translateY(-50%);
+    cursor: ew-resize;
+    z-index: 10;
+}
+.south-side-handle {
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    width: 20px;
+    height: 8px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 2px;
+    transform: translateX(-50%);
+    cursor: ns-resize;
+    z-index: 10;
+}
+.north-side-handle {
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 20px;
+    height: 8px;
+    background-color: var(--bg-pill);
+    border: 1px solid var(--editor-text);
+    border-radius: 2px;
+    transform: translateX(-50%);
+    cursor: nw-resize;
+    z-index: 10;
+}
+
+/* ── Image loading overlay ── */
+.image-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.45);
+    border-radius: 5px;
+    gap: 8px;
+    pointer-events: none;
+}
+.image-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top: 3px solid var(--editor-accent);
+    border-radius: 50%;
+    animation: image-spin 0.8s linear infinite;
+}
+@keyframes image-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ── Full-screen image view ── */
+.image-view {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    cursor: zoom-out;
+    box-sizing: border-box;
+}
+
+/* ── Close confirmation dialog ── */
+.editor-close-confirm-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    border-radius: 16px;
+    z-index: 20;
+}
+.editor-close-confirm-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.5rem 2rem;
+    background-color: var(--editor-bg);
+    border: 1px solid var(--editor-border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-modal);
+    max-width: 320px;
+    width: 90%;
+}
+.editor-close-confirm-message {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--editor-text);
+    text-align: center;
+    line-height: 1.4;
+}
+.editor-close-confirm-actions {
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+}
+.editor-close-confirm-discard {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    background-color: transparent;
+    color: var(--editor-text);
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: 1.5px solid var(--editor-border);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.editor-close-confirm-discard:hover {
+    background-color: var(--bg-pill);
+    border-color: var(--text-muted);
+}
+.editor-close-confirm-discard:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.editor-close-confirm-save {
+    flex: 1;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    background-color: var(--editor-accent);
+    color: #ffffff;
+    font-weight: 650;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s ease;
+}
+.editor-close-confirm-save:hover {
+    opacity: 0.9;
+}
+.editor-close-confirm-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ── Mobile responsive (overrides only) ── */
+@media (max-width: 640px) {
+    .editor-parent-container {
+        z-index: 132;
+    }
+    .editor-container {
+        width: 95%;
+        height: 95%;
+        padding: 0.75rem;
+        border-radius: 12px;
+    }
+    .toolbar {
+        justify-content: center;
+    }
+    .toolbar-bttns,
+    .is-active {
+        padding: 0.35rem;
+    }
+    .toolbar-bttns svg,
+    .is-active svg {
+        width: 18px;
+        height: 18px;
+    }
+    .toolbar-divider {
+        margin: 0 4px;
+        height: 16px;
+    }
+    .content-title-input {
+        font-size: 1.35rem;
+    }
+    .editor-save-bttn {
+        padding: 0.35rem 0.9rem;
+        font-size: 0.85rem;
+    }
+    .editor-save-bttn-disabled {
+        padding: 0.35rem 0.9rem;
+        font-size: 0.85rem;
+    }
+    .editor-draft-bttn {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+    .editor-draft-bttn-disabled {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+    }
+    .editor-footer-actions {
+        gap: 0.35rem;
+    }
+    .editor-close-confirm-overlay {
+        border-radius: 12px;
+    }
+    .editor-close-confirm-card {
+        padding: 1.25rem 1.5rem;
+        max-width: 280px;
+    }
+}

@@ -1,0 +1,69 @@
+# Fix: `.newsfeed-header` not showing on mobile
+
+## Context
+The `.newsfeed-header` (For You / Following tab bar) doesn't appear on mobile. The previous fix added `top: 0` and fixed the stale closure, but the header still doesn't show because of a **containing block problem**: the header is rendered inside a Framer Motion `motion.div` wrapper that applies `transform: translateY(...)`, which makes `position: fixed` behave like `position: absolute` relative to that transformed parent.
+
+## Root Cause
+**File:** `client/src/components/HomePage/Home.jsx` — lines 329–337
+
+```jsx
+<motion.div
+    key={location.pathname}
+    initial={{ opacity: 0, y: 8 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+>
+    <Outlet /> ← PostCards renders here, including .newsfeed-header
+</motion.div>
+```
+
+Framer Motion applies `transform: translateY(0px)` even at rest. Per CSS spec, **any `transform` on a parent creates a new containing block**, making `position: fixed` children position relative to that parent, not the viewport. The header ends up scrolling away with the content instead of being pinned.
+
+On mobile (≤480px), the `.search-nav-row` is hidden (`display: none` in postcards.css:889) and `.newsfeed-header` is the only navigation — so this bug completely removes feed navigation on mobile.
+
+## Fix — Portal the header out of the transformed parent
+
+**File:** `client/src/components/HomePage/postCards/PostCards.jsx`
+
+Use `createPortal` to render the `.newsfeed-header` directly into `#main-content` (the `center-bar-holder-container` div), bypassing the `motion.div` containing block. This lets `position: fixed; top: 0` work correctly relative to the viewport.
+
+```jsx
+import { createPortal } from 'react-dom';
+
+// Inside PostCards component, replace the current AnimatePresence block for newsfeed-header:
+const mainContent = document.getElementById('main-content');
+
+// In JSX — portal the header out of the motion.div:
+{mainContent && createPortal(
+    <AnimatePresence>
+        {!isSearchMode && showHeaders && (
+            <motion.div
+                className="newsfeed-header"
+                initial={{opacity: 0}}
+                animate={{opacity: 1, transition: {type: 'spring', stiffness: 300, damping: 25, mass: 0.8}}}
+                exit={{ opacity: 0, y: -20, transition: { duration: 0.2, ease: "easeOut" }}}
+            >
+                {header_links.map((header_link, index) => (
+                    <div key={index} className="header-links">
+                        <div onClick={() => handleClickHeaderLinks(header_link.path)} className='header-link'>
+                            {header_link.label}
+                            <div className={header_link.path === location.pathname ? "header-underline" : ''}/>
+                        </div>
+                    </div>
+                ))}
+            </motion.div>
+        )}
+    </AnimatePresence>,
+    mainContent
+)}
+```
+
+No CSS changes needed — `top: 0` was already added in the previous fix.
+
+## Verification
+1. Open the app at ≤480px viewport width
+2. The For You / Following header tabs should be visible at the top
+3. Scroll down — header hides briefly, then reappears pinned at the viewport top after ~500ms
+4. Tab switching (For You / Following) and underline indicator still work
+5. Route transitions (the subtle slide-up) still work for page content below the header

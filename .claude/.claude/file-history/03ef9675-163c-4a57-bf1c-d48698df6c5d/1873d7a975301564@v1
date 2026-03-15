@@ -1,0 +1,73 @@
+# Preserve Camera Position When Switching Walk → Inspect
+
+## Context
+When the user switches from Walk mode to Inspect mode in the 3D preview, the camera snaps back to the old inspect orbit position (or the default view). The user expects the inspect camera to start from where they were standing/looking in walk mode, so they can continue exploring from the same vantage point with orbit controls.
+
+## Root Cause
+In `setNavigationMode` (`src/three/viewer/createPreviewViewport.js:103-131`):
+
+```js
+if (navigationMode === 'walk') {
+  saveCurrentWalkPose();  // saves walk position for later walk restore
+}
+// ...
+if (navigationMode === 'inspect') {
+  if (!inspectNavigation.restoreState(inspectState)) {  // restores OLD inspect state
+    inspectNavigation.resetView();  // or resets to default orbit
+  }
+}
+```
+
+It always restores the previously saved inspect state, completely ignoring the user's current walk camera position.
+
+## Fix
+
+### File: `src/three/viewer/createPreviewViewport.js`
+
+In `setNavigationMode`, when transitioning from Walk → Inspect, derive the inspect state from the current walk camera position instead of restoring the old inspect state.
+
+**Before disabling walk**, capture the camera's position and forward direction, then compute an OrbitControls target point by projecting forward from the camera. Use `inspectNavigation.restoreState()` with this derived state.
+
+Change the inspect restoration block (lines 122-125) from:
+```js
+if (navigationMode === 'inspect') {
+  if (!inspectNavigation.restoreState(inspectState)) {
+    inspectNavigation.resetView();
+  }
+}
+```
+
+To:
+```js
+if (navigationMode === 'inspect') {
+  // Derive inspect state from walk camera position so the view doesn't jump
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  const orbitTarget = camera.position.clone().add(forward.multiplyScalar(3000));
+  const derived = {
+    position: camera.position.toArray(),
+    target: orbitTarget.toArray(),
+  };
+  if (!inspectNavigation.restoreState(derived)) {
+    inspectNavigation.resetView();
+  }
+}
+```
+
+The 3000mm projection distance places the orbit pivot at a natural room-scale distance in front of the camera — close enough for responsive orbiting, far enough to feel natural.
+
+### Why this is safe
+- **Inspect → Walk**: Unchanged. `inspectState` is still captured (line 111) and walk pose is restored (line 127).
+- **Walk → Inspect**: Now derives orbit state from the walk camera. The user stays at the same viewpoint.
+- **Inspect → Inspect / Walk → Walk**: Early return on line 105, no change.
+- **Reset View button**: Independent path (`resetView()` at line 276), not affected.
+- **`inspectState` variable**: Still captured when leaving inspect, still available if needed. We just don't use it for the Walk → Inspect transition.
+
+## Verification
+1. `npm run dev`
+2. Place some walls, switch to 3D preview
+3. Enter Walk mode, fly to a specific position
+4. Click "Inspect" button → camera should stay at approximately the same position, now with orbit controls
+5. Orbit around — the pivot point should be in front of where you were looking
+6. Switch back to Walk → should restore the walk pose
+7. Click "Reset View" in Inspect → should reset to default orbit (not the walk-derived position)

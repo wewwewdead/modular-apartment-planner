@@ -1,0 +1,73 @@
+# Nebula Bloom — Semantic Background Layer
+
+## Context
+
+The Universe canvas currently has 3 layers: DeepSpaceLayer (decorative dust/nebulae), MidGalaxyLayer (gradient stars), and InteractiveLayer (user posts/galaxies). We're adding a **4th layer** that renders large, colored nebula clouds behind each galaxy cluster, where the color is derived from the semantic meaning of that galaxy's content (via embedding vectors). This makes the universe feel alive — you can visually "see" what a region is about by its color.
+
+## Architecture
+
+### Data Flow
+```
+galaxy_centroids table (has mean_embedding vector(384))
+    → getUniverseCentroids() adds mean_embedding to select
+    → Client receives centroids with embeddings
+    → embeddingToColor() maps embedding → HSL color
+    → NebulaLayer renders colored clouds at galaxy positions
+```
+
+### New Files
+
+1. **`client/src/components/Universe/utils/embeddingToColor.js`**
+   - `embeddingToColor(embedding)` — maps a 384-dim vector to an HSL color
+   - Strategy: Normalize the first 3 dimensions → map to Hue (0-360), Saturation (40-80%), Lightness (30-60%)
+   - Fallback: If no embedding, return null (caller uses `getStarColor` from starUtils)
+
+2. **`client/src/components/Universe/layers/NebulaLayer.jsx`**
+   - New `React.memo` Konva Layer component
+   - Parallax factor: **0.85** (moves between mid-galaxy and interactive, creating depth)
+   - Renders one large nebula cloud per galaxy using a single `Shape` with `sceneFunc` (batch rendering, like DeepSpaceLayer)
+   - Each cloud: canvas radial gradient from `embeddingToColor` result → transparent
+   - Cloud radius: ~400-600px (scaled by post count if available)
+   - **Breathing animation**: `useRef` + `requestAnimationFrame` loop
+     - Scale oscillates `1.0 ↔ 1.15` via `sin()` over a 10-second period
+     - Slow rotation: `0.002 deg/frame` on each cloud (not the whole layer, so clouds stay near their galaxies)
+   - Performance: `listening={false}`, `perfectDrawEnabled={false}`
+
+### Modified Files
+
+3. **`server/services/getService.js`** — line 140
+   - Change `.select('user_id, galaxy_x, galaxy_y')` → `.select('user_id, galaxy_x, galaxy_y, mean_embedding')`
+   - `mean_embedding` is a `vector(384)` column already in the table; Supabase returns it as a JSON array
+
+4. **`client/src/components/Universe/Universe.jsx`**
+   - Add `NebulaLayer` import
+   - Pass centroids (now with `mean_embedding`) + galaxy positions to NebulaLayer
+   - Insert `<NebulaLayer>` between `<MidGalaxyLayer>` and `<InteractiveLayer>` in the Stage
+
+## Key Design Decisions
+
+### Radial Gradients over Konva.Filters.Blur
+The existing `Nebula` component (used in DeepSpaceLayer) achieves soft, gaseous clouds using `fillRadialGradient` — no bitmap blur needed. Konva.Filters.Blur requires `node.cache()` + CPU-based box blur on every redraw, which is extremely expensive for large shapes. We'll follow the existing pattern: canvas `createRadialGradient()` that fades to transparent, producing the same visual effect with hardware acceleration.
+
+### Per-cloud rotation instead of layer rotation
+Rotating the entire layer would drift nebulae away from their galaxy clusters. Instead, each cloud rotates individually around its own center, keeping the spatial correlation intact while still giving the "breathing" feel.
+
+### Batch rendering via single Shape
+Consistent with DeepSpaceLayer and MidGalaxyLayer — all nebula clouds drawn in one `Shape` `sceneFunc` call instead of individual Konva nodes. This avoids creating N Konva Circle objects and keeps the scene graph lightweight.
+
+## Implementation Steps
+
+1. **Backend**: Add `mean_embedding` to `getUniverseCentroids` select query
+2. **Util**: Create `embeddingToColor.js` with the mapping function
+3. **Component**: Create `NebulaLayer.jsx` with batch rendering + breathing animation
+4. **Integration**: Wire NebulaLayer into Universe.jsx Stage
+
+## Verification
+
+- Start the dev server (`npm run dev` in client)
+- Navigate to the Universe view
+- Confirm nebula clouds appear behind galaxy clusters with distinct colors
+- Pan/zoom to verify parallax depth effect (nebulae move slightly slower than stars)
+- Check breathing animation runs smoothly (subtle scale pulse + slow rotation)
+- Verify star clicks and galaxy clicks still work (nebula layer has `listening={false}`)
+- Check console for no errors related to missing embeddings (fallback should handle gracefully)

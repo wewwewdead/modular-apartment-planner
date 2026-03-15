@@ -1,0 +1,168 @@
+# Stair Landings — Connected Multi-Run Staircases
+
+## Context
+Stairs are currently standalone linear runs. The user wants **landings** — rectangular platforms that connect stair runs changing direction (L-shaped, U-shaped stairs). Stairs should snap to landing edges, follow when the landing moves, and landings should auto-calculate their elevation from connected stairs.
+
+## Design Decisions
+- **Separate tool** — Landing gets its own placement tool (key `L`), following the column/stair pattern
+- **Explicit attachments** — Stairs store `startLandingAttachment` / `endLandingAttachment` refs (like wall→column attachments)
+- **Both start and end snap** — Either end of a stair can snap to a landing edge
+- **Cascading moves** — Dragging a landing updates all connected stairs' positions
+- **Auto elevation** — Landing elevation auto-calculated from connected stair's total rise, with manual override
+
+## Files to Create
+
+### 1. `src/domain/landingLabels.js`
+```js
+export function getLandingDisplayLabel(landing) {
+  return `Landing ${landing.id.split('_').pop()}`;
+}
+```
+
+### 2. `src/geometry/landingGeometry.js`
+Landing geometry utilities following `stairGeometry.js` pattern:
+- `landingOutline(landing)` → 4 rotated corner points from `position`, `width`, `depth`, `rotation`
+- `landingEdges(landing)` → 4 named edges `{ name, start, end, midpoint, normal }`. Names: `'top'`/`'bottom'` (width-axis, perpendicular to 0° direction), `'left'`/`'right'` (depth-axis)
+- `landingContainsPoint(landing, point)` → `pointInPolygon` on outline
+- `landingBounds(landing)` → `{ minX, maxX, minY, maxY }`
+- `getLandingRenderData(landing)` → `{ outline, edges, bounds, center }`
+- `snapToLandingEdge(point, landings, snapDist)` → `{ point, landingId, edge }` or `null`. Checks all 4 edge midpoints of all landings, returns closest within `snapDist`
+- `syncStairLandingAttachment(stair, landings)` → returns updated stair with startPoint/endPoint synced to landing edge midpoint. Called when landing moves.
+- `computeLandingElevation(landing, stairs, floorLevel)` → derives elevation from connected stair's total rise
+
+### 3. `src/editor/handlers/landingPlaceHandler.js`
+Single-click placement (like columns):
+- `onMouseMove` → update preview position (grid-snapped)
+- `onMouseDown` → create landing at snapped position via `LANDING_ADD`, select it
+- `onKeyDown` → Escape returns to select
+- `getCursor` → `'crosshair'`
+
+### 4. `src/renderers/LandingRenderer.jsx`
+SVG plan-view: grey semi-transparent filled rectangle from `landingOutline()`, stroke `#666`. Render between stairs and columns in z-order.
+
+### 5. `src/renderers/LandingPreview.jsx`
+Dashed rectangle at cursor during landing placement tool (like `ColumnPreview`/`StairPreview`).
+
+## Files to Modify
+
+### 6. `src/domain/defaults.js` — Add landing defaults
+```js
+export const LANDING_WIDTH = 1000;
+export const LANDING_DEPTH = 1000;
+export const LANDING_THICKNESS = 200;
+```
+
+### 7. `src/domain/models.js` — Add `createLanding`, extend `createFloor` and `createStair`
+
+**`createLanding(position, width, depth, options)`** → `{ id, position, width, depth, thickness, elevation, rotation }`
+
+**`createFloor`** — add `landings: []` to returned object
+
+**`createStair`** — add fields:
+```js
+startLandingAttachment: null,   // { landingId, edge }
+endLandingAttachment: null,     // { landingId, edge }
+```
+
+### 8. `src/app/ProjectProvider.jsx` — Add LANDING reducer actions
+
+- `LANDING_ADD` — append to `floor.landings`
+- `LANDING_UPDATE` — merge updates; then call `syncStairLandingAttachment` for all stairs referencing this landing to cascade position updates
+- `LANDING_DELETE` — remove from `floor.landings`; null out any stair `startLandingAttachment`/`endLandingAttachment` referencing deleted landing
+
+### 9. `src/editor/tools.js` — Register landing tool
+Add `LANDING: 'landing'` to `TOOLS` object.
+
+### 10. `src/editor/useEditorTool.js` — Wire up handler
+Import `createLandingPlaceHandler`, add `case TOOLS.LANDING:` in switch.
+
+### 11. `src/editor/handlers/stairPlaceHandler.js` — Add landing snap on placement
+- On first click (setting start point): after grid snap, try `snapToLandingEdge()`. If hit, store `startLandingAttachment` info in tool state.
+- On second click (creating stair): compute end point, try `snapToLandingEdge()` for end point. Create stair with attachment fields set.
+
+### 12. `src/editor/handlers/selectHandler.js` — Hit test, drag, delete, stair-landing snap
+
+**Hit test**: Add landing check between stairs and rooms:
+```js
+for (const landing of (floor.landings || [])) {
+  if (landingContainsPoint(landing, modelPos)) return { id: landing.id, type: 'landing' };
+}
+```
+
+**Draggable**: Add `'landing'` to `draggableTypes`. Add move branch:
+- Compute new position, dispatch `LANDING_UPDATE` (which cascades to connected stairs)
+
+**Stair drag snap**: When moving a stair, check `snapToLandingEdge()` for start point, update `startLandingAttachment` accordingly.
+
+**Delete**: Add `landing` case dispatching `LANDING_DELETE`.
+
+### 13. `src/renderers/SvgCanvas.jsx` — Add renderers and keyboard shortcut
+- Import and render `<LandingRenderer>` after `<StairRenderer>`
+- Import and render `<LandingPreview>` with other previews
+- Add `case 'l':` keyboard shortcut for `TOOLS.LANDING`
+
+### 14. `src/renderers/SelectionOverlay.jsx` — Landing selection display
+Add `selectedType === 'landing'` branch: dashed polygon around `landingOutline()`, same pattern as stair selection overlay.
+
+### 15. `src/ui/PropertiesPanel.jsx` — LandingProperties component
+Fields: Position X/Y, Width, Depth, Thickness, Rotation, Elevation (auto-calculated with manual override), connected stairs list (read-only). Delete button.
+
+### 16. `src/ui/Toolbar.jsx` — Add to tool menu
+Add `{ tool: TOOLS.LANDING, label: 'Landing', shortcut: 'L' }` to `toolItems`.
+
+### 17. `src/ui/Sidebar.jsx` — Add landings section
+Add "Landings" collapsible section after "Stairs", listing `floor.landings` with `getLandingDisplayLabel()`.
+
+### 18. `src/three/scene/objectBuilders.js` — 3D landing descriptor
+`buildLandingObjects(floor, floorLevel)` using `createBoxDescriptor()`:
+```js
+createBoxDescriptor(landing.id, 'landing', landing.position,
+  { x: landing.width, y: landing.thickness, z: landing.depth },
+  floorLevel + landing.elevation, (landing.rotation || 0) * Math.PI / 180)
+```
+Include in `buildFloorPreviewObjects()`.
+
+### 19. `src/three/viewer/materials.js` — Landing material
+Add `landing` material: concrete-grey `0xc8cad0`, roughness 0.85.
+
+### 20. `src/persistence/deserialize.js` — Backward compat
+Backfill `floor.landings = []` if missing. Backfill `stair.startLandingAttachment`/`endLandingAttachment` to `null`.
+
+### 21. `src/domain/floorModels.js` — Floor duplication
+Add `cloneLanding()` function. Add `landings:` to `createDuplicatedFloor`. Update `cloneStair` to remap landing attachment IDs.
+
+### 22. `src/clipboard/planClipboard.js` — Clipboard support
+Add `'landings'` to `PLAN_KEYS`. Add `rebaseLanding`, `translateLanding` functions. In `insertClipboardContent`, remap landing IDs and stair attachment refs.
+
+## End-Point Snapping Detail
+The stair end point is derived: `startPoint + run * directionVector`. When snapping the end to a landing edge:
+- Compute the stair's end point from its current properties
+- Check `snapToLandingEdge()` for that point
+- If snapped, store `endLandingAttachment`
+- When the landing moves, recompute the stair direction angle to keep the end aligned (adjust `direction.angle` so end point stays on the landing edge midpoint, keeping `startPoint` and `numberOfRisers` fixed)
+
+## Implementation Order
+1. Defaults + models (`defaults.js`, `models.js`) — foundation
+2. Geometry (`landingGeometry.js`) — core calculations
+3. Labels (`landingLabels.js`) — trivial
+4. State (`ProjectProvider.jsx`) — reducer actions + cascading
+5. Tool registration (`tools.js`, `landingPlaceHandler.js`, `useEditorTool.js`)
+6. SVG rendering (`LandingRenderer.jsx`, `LandingPreview.jsx`, `SvgCanvas.jsx`)
+7. Selection + interaction (`SelectionOverlay.jsx`, `selectHandler.js`)
+8. UI (`PropertiesPanel.jsx`, `Toolbar.jsx`, `Sidebar.jsx`)
+9. 3D (`objectBuilders.js`, `materials.js`)
+10. Persistence (`deserialize.js`)
+11. Floor duplication + clipboard (`floorModels.js`, `planClipboard.js`)
+12. Stair snap integration (`stairPlaceHandler.js`, `selectHandler.js` stair drag)
+
+## Verification
+1. Place a landing with `L` key — grey rectangle appears in plan view
+2. Place a stair near landing edge — start point snaps to edge midpoint
+3. Place second stair from another edge — forms L-shaped staircase
+4. Drag the landing — both connected stairs follow
+5. Check Properties Panel — landing shows auto-calculated elevation
+6. Open 3D preview — landing renders as flat slab between stair runs
+7. Save/reload — landings and attachments persist
+8. Delete landing — connected stairs' attachments cleared
+9. Copy/paste region containing landing+stairs — IDs remapped correctly
+10. Duplicate floor — landings cloned with remapped stair refs

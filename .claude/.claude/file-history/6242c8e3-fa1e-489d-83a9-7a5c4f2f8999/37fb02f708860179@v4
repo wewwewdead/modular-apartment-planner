@@ -1,0 +1,58 @@
+import * as XLSX from 'xlsx'
+import pdf from 'pdf-parse'
+
+const SPREADSHEET_MIMES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.ms-excel',                                          // .xls
+  'application/vnd.oasis.opendocument.spreadsheet',                    // .ods
+  'application/x-vnd.oasis.opendocument.spreadsheet',                  // .ods alt
+  'text/csv',
+  'application/csv',
+  'text/tab-separated-values',                                         // .tsv
+]
+const SPREADSHEET_EXTS = ['.xlsx', '.xls', '.csv', '.ods', '.tsv']
+
+function isSpreadsheet(mimetype, filename) {
+  return SPREADSHEET_MIMES.includes(mimetype)
+    || SPREADSHEET_EXTS.some(ext => filename?.toLowerCase().endsWith(ext))
+}
+
+function isPdf(mimetype, filename) {
+  return mimetype === 'application/pdf' || filename?.toLowerCase().endsWith('.pdf')
+}
+
+export async function parseDocument(buffer, mimetype, filename) {
+  try {
+    if (isPdf(mimetype, filename)) {
+      const result = await pdf(buffer)
+      const text = result.text?.trim()
+      if (!text) {
+        return { success: false, message: 'The PDF appears to be empty or contains only images (no extractable text).' }
+      }
+      return {
+        success: true,
+        type: 'pdf',
+        text,
+        pages: result.numpages,
+      }
+    }
+
+    if (isSpreadsheet(mimetype, filename)) {
+      const workbook = XLSX.read(buffer, { type: 'buffer' })
+      const sheetName = workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
+      const data = XLSX.utils.sheet_to_json(sheet)
+      return {
+        success: true,
+        type: 'spreadsheet',
+        data,
+        sheetName,
+        rowCount: data.length,
+      }
+    }
+
+    return { success: false, message: `Unsupported file type: ${mimetype || filename}. Please send a spreadsheet (xlsx, xls, csv, ods, tsv) or PDF.` }
+  } catch (err) {
+    return { success: false, message: `Failed to parse document: ${err.message}` }
+  }
+}

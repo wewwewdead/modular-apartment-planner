@@ -1,0 +1,163 @@
+# Attachments & Constraints for Sketch Studio
+
+## Context
+
+The user wants to customize generated object assemblies (tables, cabinets, etc.) without breaking geometric consistency. **Most of the infrastructure already exists** — 5 constraint types are implemented in the resolver, constraint models with anchors are defined, and the properties panel has a working constraint add/delete UI. This plan fills the remaining gaps.
+
+---
+
+## Current State
+
+### Already Working
+| Feature | File | Status |
+|---------|------|--------|
+| `attach_face` constraint | `constraintResolver.js` | Resolves source face → target face + offset |
+| `flush_surface` constraint | `constraintResolver.js` | Source surface flush with target surface |
+| `align_edge` constraint | `constraintResolver.js` | Align source edge to target edge + offset |
+| `center_axis` constraint | `constraintResolver.js` | Centers source on target (X + Y simultaneously) |
+| `inset_edge` constraint | `constraintResolver.js` | Inset source from target edge by offset (= fixed offset) |
+| Constraint model + factory | `constraintModels.js` | `createConstraint()`, CONSTRAINT_TYPES, ANCHOR_OPTIONS |
+| Constraint UI (add/delete) | `SketchPropertiesPanel.jsx` | ConstraintsSection with form for manual parts |
+| Reducer actions | `SketchProvider.jsx` | CONSTRAINT_ADD, UPDATE, DELETE with auto-resolve |
+| Persistence | `sketchSerialize/Deserialize` | Constraints stored in `project.constraints` array |
+
+### Gaps to Fill
+| Gap | Impact |
+|-----|--------|
+| `center_axis` always locks both X and Y | Can't center horizontally only or vertically only |
+| No `equal_spacing` constraint | Can't distribute shelves/doors evenly by relationship |
+| Constraints on generated parts blocked | Managed parts show read-only panel with no constraint UI |
+| Regeneration destroys constraints | `removeObjectArtifacts` deletes parts → constraints referencing them are filtered out |
+| User labels for "fixed offset" unclear | `inset_edge` IS the fixed offset, but label doesn't convey this |
+
+---
+
+## Implementation
+
+### 1. Constraint Model Enhancements — `constraintModels.js`
+
+**Add `axis` field** to constraint model for `center_axis`:
+```js
+axis: overrides.axis || 'both'  // 'x', 'y', or 'both'
+```
+
+**Add `equal_spacing` type** with multi-part shape:
+```js
+{ value: 'equal_spacing', label: 'Equal Spacing' }
+```
+
+New factory variant for equal_spacing constraints:
+```js
+export function createEqualSpacingConstraint(overrides = {}) {
+  return {
+    id: generateId('cstr'),
+    type: 'equal_spacing',
+    partIds: overrides.partIds || [],          // parts to distribute
+    axis: overrides.axis || 'z',               // axis to distribute along
+    referencePartId: overrides.referencePartId || null,  // bounding part
+    startAnchor: overrides.startAnchor || 'bottom',
+    endAnchor: overrides.endAnchor || 'top',
+    ...overrides,
+  };
+}
+```
+
+**Rename labels** for clarity:
+- `inset_edge` → `'Inset / Fixed Offset'`
+- `attach_face` → `'Attach to Face'`
+
+### 2. Constraint Resolver Enhancements — `constraintResolver.js`
+
+**Per-axis `center_axis`**: Check `constraint.axis` field:
+- `'x'`: only center X (`newPos.x = targetPos.x + (targetExt.width - sourceExt.width) / 2`)
+- `'y'`: only center Y (`newPos.y = targetPos.y + (targetExt.depth - sourceExt.depth) / 2`)
+- `'both'` (default): current behavior (both X and Y)
+
+**`equal_spacing` resolver**: New case in switch:
+1. Gather parts by `constraint.partIds`, skip missing
+2. Get reference part bounding range on `constraint.axis` using `startAnchor`/`endAnchor`
+3. If no reference part, compute range from min/max positions of the parts themselves
+4. Account for part extents (so parts don't overlap — distribute center points evenly accounting for part size)
+5. Sort parts by current position on axis
+6. Compute even spacing: `gap = (rangeSize - totalPartSize) / (partCount + 1)`
+7. Position each part at `rangeStart + gap * (i+1) + sumOfPrecedingPartSizes`
+8. Set `positions.set(partId, newPos)` for each
+
+### 3. Constraint Preservation During Regeneration — `SketchProvider.jsx`
+
+In `rebuildManagedObject()`, before `removeObjectArtifacts`:
+
+1. **Collect constraints** referencing old parts of this object
+2. **Build role map**: `oldPartId → generatedRole` from old parts
+3. After generating new parts, **build reverse map**: `generatedRole → newPartId`
+4. **Remap constraints**: for each collected constraint, replace old part IDs with new part IDs via role matching
+5. **Re-inject remapped constraints** into the project
+
+This preserves user-added constraints across parametric regeneration as long as the template still produces parts with the same roles.
+
+Also update `removePartsAndAssemblies` to separately return orphaned constraints so `rebuildManagedObject` can intercept and remap them.
+
+### 4. Enable Constraints on Generated Parts — `SketchPropertiesPanel.jsx`
+
+In the `isManagedGeneratedPart` early return block (lines 837-867), **add ConstraintsSection** after the editing note:
+```jsx
+<ConstraintsSection part={part} project={project} dispatch={dispatch} />
+```
+
+This allows users to add constraints between generated parts without detaching the object. Constraints only affect position — they don't modify the part's dimensions, so they don't conflict with parametric control.
+
+### 5. UI for Equal Spacing — `SketchPropertiesPanel.jsx`
+
+Add an **EqualSpacingForm** component inside `ConstraintsSection`:
+- Multi-select for parts (checkboxes or shift-click list from sibling parts in same assembly)
+- Axis selector (X/Y/Z dropdown)
+- Optional reference part selector (dropdown)
+- Start/End anchor selectors (only shown when reference part is selected)
+- "Create" button dispatches `CONSTRAINT_ADD` with `createEqualSpacingConstraint()`
+
+### 6. Axis Selector for Center — `SketchPropertiesPanel.jsx`
+
+When `center_axis` is selected in the constraint form, show additional axis selector:
+```jsx
+{cType === 'center_axis' && (
+  <SelectInput label="Axis" value={centerAxis} options={[
+    { value: 'both', label: 'Both' },
+    { value: 'x', label: 'Horizontal (X)' },
+    { value: 'y', label: 'Vertical (Y)' },
+  ]} onChange={setCenterAxis} />
+)}
+```
+
+Pass `axis` field into `createConstraint()`.
+
+### 7. Reducer Updates for Equal Spacing — `SketchProvider.jsx`
+
+Update `CONSTRAINT_ADD/UPDATE/DELETE` handlers:
+- `equal_spacing` constraints reference `partIds` array instead of `sourcePartId/targetPartId`
+- Part deletion: filter `equal_spacing` constraints that reference the deleted part — remove the partId from `partIds`, delete constraint if fewer than 2 parts remain
+- `applyConstraints`: already calls `resolveConstraints()` which will handle the new type
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/modules/sketch/domain/constraintModels.js` | Add axis field, equal_spacing factory, rename labels |
+| `src/modules/sketch/domain/constraintResolver.js` | Per-axis center, equal_spacing resolver |
+| `src/modules/sketch/app/SketchProvider.jsx` | Constraint remapping in rebuild, equal_spacing cleanup on part delete |
+| `src/modules/sketch/ui/SketchPropertiesPanel.jsx` | Constraints on generated parts, equal_spacing form, center axis selector |
+
+No new files needed. No changes to renderers, views, 3D preview, sheets, or templates — the constraint system outputs positions that all downstream consumers already read.
+
+---
+
+## Verification
+
+1. **Manual parts**: Select a manual part → add each constraint type → verify position updates in canvas + 3D preview
+2. **Center axis per-axis**: Create center_axis with axis='x' → verify only X is centered, Y unchanged
+3. **Equal spacing**: Create 3 shelf parts manually → add equal_spacing constraint with Z axis + reference part → verify even distribution. Change reference part height → verify shelves redistribute
+4. **Generated parts + constraints**: Generate a cabinet → select a generated shelf part → add a constraint (e.g., flush_surface to side panel) → verify it applies. Change cabinet parameters via Apply → verify constraint survives regeneration
+5. **Constraint remapping**: Generate table → add constraint between tabletop and a manual part → regenerate table with different params → verify constraint still connects to new tabletop (same role)
+6. **Part deletion cleanup**: Delete a part that has constraints → verify constraints are removed. Delete a part from an equal_spacing group → verify constraint updates (removes part from list or deletes if <2 parts)
+7. **Views consistency**: After applying constraints, verify orthographic views (top/front/side) and 3D preview both reflect the constrained positions

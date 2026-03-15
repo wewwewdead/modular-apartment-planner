@@ -1,0 +1,29 @@
+I am building the 'Iskrib Universe' page in React (Vite, JS). The current version has basic stars, but I want a high-end, immersive "Milky Way" aesthetic.
+
+Task 1: The Andromeda Star Engine
+Update the Star component to use a "Double-Glow" technique:
+
+Core: A small, bright white/off-white Circle at the center.
+
+Inner Glow: Use a radialGradient that transitions from the star's theme color (e.g., violet, gold) at offset 0 to a transparent version of that color at offset 1.
+
+Outer Atmosphere: Apply a high shadowBlur (30px-50px) with shadowColor matching the star's theme.
+
+Optimization: Set perfectDrawEnabled: false and shadowForStrokeEnabled: false on stars to keep the FPS high.
+
+Task 2: Triple-Layer Parallax System
+Implement three distinct Konva.Layer components to create deep spatial depth:
+
+Deep Space Layer (Background): Contains tiny, static "dust" stars and faint nebula blurs. It moves at 10% of the drag speed.
+
+Mid-Galaxy Layer: Contains smaller, non-interactive stars. It moves at 40% of the drag speed.
+
+Interactive Layer (Foreground): Contains the actual Iskrib posts/stars. It moves at 100% of the drag speed and handles all clicks/zooms.
+
+Task 3: The "Nebula" Effect
+
+Create a Nebula component using large, low-opacity Circle shapes with filters={[Konva.Filters.Blur]} and a blurRadius of 100+. Scatter these behind the main post clusters to create that "Galaxy Cloud" look.
+
+Technical Requirement:
+
+Ensure the useUniverseCamera hook applies the different offsets to the x and y of each Layer during onDragMove.

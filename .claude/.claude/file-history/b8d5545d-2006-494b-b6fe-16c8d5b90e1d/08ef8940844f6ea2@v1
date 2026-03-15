@@ -1,0 +1,90 @@
+# User Search Feature Plan
+
+## Context
+Users now have a `username` column on the `users` table. We need to let users search for other users by name or username. The search UI will be integrated into the existing Explore page (`/home/explore`) as a Posts/People toggle on the search bar.
+
+## Changes
+
+### 1. Backend — Search Users Service
+**File:** `server/services/getService.js`
+
+Add `searchUsersService(query, limit)`:
+- Validate query (min 2 chars) and limit (1-20)
+- Run two parallel Supabase queries with `.ilike()` for partial match:
+  - `users.name ilike '%query%'`
+  - `users.username ilike '%query%'`
+- Select only: `id, name, username, image_url, badge`
+- Deduplicate results by user `id`
+- Return `{ data: [...], hasMore: boolean }`
+
+### 2. Backend — Search Users Controller
+**File:** `server/controller/getController.js`
+
+Add `searchUsersController(req, res)`:
+- Extract `query` and `limit` from `req.query`
+- Call `searchUsersService` and return result
+- Follow same pattern as `searchJournalsController`
+
+### 3. Backend — Register Route
+**File:** `server/routes/routes.js`
+
+Add near line 145 (next to journal search):
+```
+router.get('/users/search', searchUsersController);
+```
+No auth middleware needed (works for guests too).
+
+### 4. Client — API Function
+**File:** `client/API/Api.js`
+
+Add `searchUsers(query, limit = 10)`:
+- Call `GET /api/users/search?query=...&limit=...`
+- Return `{ data: [...], hasMore }` — same pattern as `searchJournals`
+
+### 5. Client — UserSearchResults Component
+**New file:** `client/src/components/HomePage/explore/UserSearchResults.jsx`
+
+Renders a list of user cards for search results:
+- Uses `useQuery` with key `["user-search", searchQuery]`
+- Each card shows: avatar (with badge ring), name + VerifiedBadge, @username
+- Click navigates via `handleClickProfile` from `helpers/handleClicks.js`
+- Framer Motion staggered entrance animation
+- Loading/empty/error states
+
+### 6. Client — User Search Styles
+**New file:** `client/src/components/HomePage/explore/userSearch.css`
+
+Styles for user cards and the Posts/People toggle using existing CSS variables (`--text-primary`, `--text-muted`, `--bg-hover`, `--accent-dark`, etc.)
+
+### 7. Client — Integrate into ExplorePage
+**File:** `client/src/components/HomePage/explore/ExplorePage.jsx`
+
+Changes:
+- Add `searchType` state (`"posts"` | `"people"`)
+- Add Posts/People toggle buttons below search bar (visible when search is active)
+- When `searchType === "people"`:
+  - Change placeholder to "Search people..."
+  - Suggestions dropdown shows user results (avatar + name + @username) instead of post titles
+  - Committed search renders `<UserSearchResults>` instead of journal cards
+- Add user suggestions query: `useQuery(["user-suggestions", debouncedInput], searchUsers(...))`
+- Import `handleClickProfile` for navigation on suggestion click
+
+## Files Modified
+| File | Change |
+|------|--------|
+| `server/services/getService.js` | Add `searchUsersService` |
+| `server/controller/getController.js` | Add `searchUsersController` + import |
+| `server/routes/routes.js` | Add `GET /users/search` route + import |
+| `client/API/Api.js` | Add `searchUsers` function |
+| `client/src/components/HomePage/explore/UserSearchResults.jsx` | **New** — user result cards |
+| `client/src/components/HomePage/explore/userSearch.css` | **New** — styles |
+| `client/src/components/HomePage/explore/ExplorePage.jsx` | Add toggle + user search integration |
+
+## Verification
+1. Start the server and navigate to `/home/explore`
+2. Type in the search bar — verify the Posts/People toggle appears
+3. Switch to "People" tab, type a name or username — verify user suggestions dropdown shows matching users
+4. Press Enter — verify full user search results render as cards with avatar, name, @username, badge
+5. Click a user card — verify it navigates to the correct profile page
+6. Test with a guest (not logged in) — verify search still works
+7. Test with partial matches, special characters, and empty queries

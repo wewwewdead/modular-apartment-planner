@@ -4,6 +4,10 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'node',
+    exclude: ['**/node_modules/**', '**/.claude/**'],
+  },
   build: {
     rollupOptions: {
       output: {
@@ -18,6 +22,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@core': path.resolve(__dirname, './src/core'),
+      '@floorplan': path.resolve(__dirname, './src/modules/floorplan'),
+      '@sketch': path.resolve(__dirname, './src/modules/sketch'),
     },
   },
 });

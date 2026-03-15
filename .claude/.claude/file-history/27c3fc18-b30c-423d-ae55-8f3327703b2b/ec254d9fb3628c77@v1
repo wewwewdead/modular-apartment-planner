@@ -1,0 +1,135 @@
+import React, {useCallback, useState} from 'react';
+import {ActivityIndicator, Alert, StyleSheet, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {ProfileHeroSection} from './ProfileHeroSection';
+import {ProfileTabBar, type ProfileTab} from './ProfileTabBar';
+import {ProfileWritingsTab} from './ProfileWritingsTab';
+import {ProfileStoriesTab} from './ProfileStoriesTab';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Profile'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+export function ProfileScreen({navigation}: Props) {
+  const {user, signOut} = useAuth();
+  const {colors} = useTheme();
+  const [activeTab, setActiveTab] = useState<ProfileTab>('writings');
+
+  const userDataQuery = useQuery({
+    queryKey: ['profile', user?.id],
+    enabled: Boolean(user?.id),
+    queryFn: () => mobileApi.getUserData(user?.id ?? ''),
+  });
+
+  const streakQuery = useQuery({
+    queryKey: ['streak', user?.id],
+    enabled: Boolean(user?.id),
+    queryFn: () => mobileApi.getStreak(user?.id ?? ''),
+  });
+
+  const profile = userDataQuery.data?.userData?.[0] ?? null;
+  const streak = streakQuery.data?.currentStreak;
+
+  const onSettingsPress = useCallback(() => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      {text: 'Cancel', style: 'cancel'},
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+          } catch (error) {
+            Alert.alert(
+              'Sign out failed',
+              error instanceof Error ? error.message : 'Unknown error',
+            );
+          }
+        },
+      },
+    ]);
+  }, [signOut]);
+
+  const onEditProfile = useCallback(() => {
+    navigation.navigate('EditProfile');
+  }, [navigation]);
+
+  const onFollowersPress = useCallback(() => {
+    if (user?.id) {
+      navigation.navigate('FollowList', {userId: user.id, tab: 'followers'});
+    }
+  }, [navigation, user?.id]);
+
+  const onFollowingPress = useCallback(() => {
+    if (user?.id) {
+      navigation.navigate('FollowList', {userId: user.id, tab: 'following'});
+    }
+  }, [navigation, user?.id]);
+
+  if (userDataQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.loaderColor} size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const headerComponent = (
+    <View>
+      <ProfileHeroSection
+        profile={profile}
+        streak={streak}
+        email={user?.email}
+        onEditProfile={onEditProfile}
+        onSettingsPress={onSettingsPress}
+        onFollowersPress={onFollowersPress}
+        onFollowingPress={onFollowingPress}
+      />
+      <ProfileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <View style={styles.tabSpacer} />
+    </View>
+  );
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, {backgroundColor: colors.bgPrimary}]}
+      edges={['top']}>
+      {activeTab === 'writings' ? (
+        <ProfileWritingsTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+        />
+      ) : (
+        <ProfileStoriesTab
+          userId={user?.id ?? ''}
+          headerComponent={headerComponent}
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabSpacer: {
+    height: 12,
+  },
+});

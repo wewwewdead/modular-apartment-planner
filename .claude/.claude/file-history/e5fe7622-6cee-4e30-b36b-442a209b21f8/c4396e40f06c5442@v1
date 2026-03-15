@@ -1,0 +1,216 @@
+.canvas-editor-root,
+.canvas-viewer-root {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-height: 0;
+}
+
+.canvas-editor-controls,
+.canvas-editor-selection-bar,
+.canvas-stamp-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.canvas-snippet-input {
+    flex: 1;
+    min-width: 180px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+}
+
+.canvas-snippet-input:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+}
+
+.canvas-snippet-popover {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    padding: 0.55rem;
+}
+
+.canvas-snippet-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.canvas-control-btn,
+.canvas-brush-btn,
+.canvas-select,
+.canvas-stamp-btn {
+    border: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 0.45rem 0.7rem;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.canvas-control-btn:hover,
+.canvas-brush-btn:hover,
+.canvas-stamp-btn:hover {
+    border-color: var(--accent-purple);
+}
+
+.canvas-select {
+    appearance: none;
+}
+
+.canvas-control-btn.is-active,
+.canvas-brush-btn.is-active,
+.canvas-stamp-btn.is-active {
+    border-color: var(--accent-purple);
+    background: color-mix(in srgb, var(--accent-purple) 14%, transparent);
+}
+
+.canvas-stage-shell {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    padding: 0.7rem;
+    background: #fefefe;
+    overflow: auto;
+    min-height: 220px;
+}
+
+.canvas-stage-shell.is-dark {
+    background: #151515;
+}
+
+.canvas-stage-shell.is-drop-active {
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-purple) 26%, transparent);
+}
+
+.canvas-stage-shell.is-doodle-active {
+    touch-action: none;
+    overscroll-behavior: contain;
+    overflow: hidden;
+}
+
+.canvas-stamp-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-right: 0.3rem;
+}
+
+.canvas-tool-btn {
+    border: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 999px;
+    padding: 0.3rem 0.62rem;
+    font-size: 0.72rem;
+    font-weight: 620;
+    cursor: pointer;
+}
+
+.canvas-tool-btn.is-active {
+    border-color: var(--accent-purple);
+    background: color-mix(in srgb, var(--accent-purple) 14%, transparent);
+}
+
+.canvas-tool-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.25rem;
+}
+
+.canvas-color-swatches {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.32rem;
+}
+
+.canvas-color-swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.canvas-color-swatch.is-active {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 1px;
+}
+
+.canvas-color-input {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-light);
+    border-radius: 7px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    padding: 0;
+}
+
+.canvas-size-range {
+    width: 96px;
+}
+
+.canvas-sticky-input {
+    border: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-radius: 8px;
+    padding: 0.35rem 0.55rem;
+    min-width: 130px;
+    font-size: 0.78rem;
+}
+
+.canvas-tool-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.canvas-remix-banner {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border: 1px solid color-mix(in srgb, var(--accent-purple) 38%, var(--border-light));
+    background: color-mix(in srgb, var(--accent-purple) 12%, transparent);
+    border-radius: 999px;
+    padding: 0.28rem 0.62rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 520px) {
+    .canvas-tool-controls {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .canvas-size-range {
+        width: 72px;
+    }
+
+    .canvas-color-swatch {
+        width: 20px;
+        height: 20px;
+    }
+}

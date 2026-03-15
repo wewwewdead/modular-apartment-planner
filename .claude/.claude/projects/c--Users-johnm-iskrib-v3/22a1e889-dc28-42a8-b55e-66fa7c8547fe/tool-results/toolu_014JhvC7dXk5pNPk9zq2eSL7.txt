@@ -1,0 +1,187 @@
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-44-        const container = containerRef.current;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-45-        if (!container) return;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-46-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:47:        listenersRef.current.forEach(({ el, enter, leave, click }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-48-            el.removeEventListener('mouseenter', enter);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-49-            el.removeEventListener('mouseleave', leave);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:50:            el.removeEventListener('click', click);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-51-        });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-52-        listenersRef.current = [];
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-53-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-86-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-87-                scheduleLeave(idx);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-88-            };
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:89:            const click = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-90-                clearLeaveTimer();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-91-                setHoveredIndex(idx);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-92-            };
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-93-            el.addEventListener('mouseenter', enter);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-94-            el.addEventListener('mouseleave', leave);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:95:            el.addEventListener('click', click);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:96:            listenersRef.current.push({ el, enter, leave, click });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-97-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-98-            realIndex++;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-99-        });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-125-            clearLeaveTimer();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-126-            observer.disconnect();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-127-            window.removeEventListener('resize', scanParagraphs);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:128:            listenersRef.current.forEach(({ el, enter, leave, click }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-129-                el.removeEventListener('mouseenter', enter);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-130-                el.removeEventListener('mouseleave', leave);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx:131:                el.removeEventListener('click', click);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-132-            });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-133-            listenersRef.current = [];
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ParagraphCommentLayer.jsx-134-        };
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx-134-            />
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx-135-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx-136-            <motion.div
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx:137:                className={`cp-panel ${isMobile ? 'cp-panel-mobile' : 'cp-panel-desktop'}`}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx-138-                variants={panelVariants}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx-139-                initial="initial"
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\CommentPanel.jsx-140-                animate="animate"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-55-    display: flex;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-56-    align-items: center;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-57-    justify-content: center;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:58:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-59-    transition: background-color 0.12s ease;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-60-    flex-shrink: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-61-    margin-top: 2px;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-123-    background: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-124-    color: var(--text-secondary);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-125-    font-size: 0.82rem;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:126:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-127-    transition: background-color 0.12s ease;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-128-    max-width: 48%;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-129-}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-189-    left: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-190-    right: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-191-    bottom: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:192:    pointer-events: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-193-    z-index: 1;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-194-}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-195-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-196-.pcl-badge-anchor {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-197-    position: absolute;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-198-    right: -4px;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:199:    pointer-events: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-200-    display: flex;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-201-    align-items: flex-start;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-202-    padding-top: 3px;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-207-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-208-.pcl-badge-anchor.pcl-badge-visible {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-209-    opacity: 1;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:210:    pointer-events: auto;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-211-}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-212-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-213-.pcl-badge {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-221-    backdrop-filter: blur(16px);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-222-    -webkit-backdrop-filter: blur(16px);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-223-    color: var(--text-secondary);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:224:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-225-    font-family: var(--font-ui);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-226-    font-size: 0.68rem;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-227-    font-weight: 600;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-271-        font-size: 0.64rem;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-272-    }
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-273-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:274:    /* No hover state on touch devices */
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-275-    .chapter-reader-content .editor-paragraph[data-paragraph-index]:hover {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-276-        background-color: transparent;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-277-    }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-309-    border-left: 1px solid var(--border-card);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-310-}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-311-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:312:.cp-panel-mobile {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-313-    position: fixed;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-314-    bottom: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-315-    left: 0;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-372-    border: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-373-    background: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-374-    color: var(--text-faint);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:375:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-376-    border-radius: 50%;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-377-    transition: background-color 0.15s ease, color 0.15s ease;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-378-}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-512-    border: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-513-    background: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-514-    color: var(--text-muted);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:515:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-516-    padding: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-517-    margin-left: 2px;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-518-    font-size: 0.88rem;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-557-}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-558-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-559-.cp-submit {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:560:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-561-    border: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-562-    padding: 0.4rem 1.1rem;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-563-    border-radius: 20px;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-672-    align-items: center;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-673-    justify-content: center;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-674-    border-radius: 50%;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:675:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-676-    flex-shrink: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-677-}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-678-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-691-    height: 22px;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-692-    border-radius: 50%;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-693-    object-fit: cover;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:694:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-695-    user-select: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-696-}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-697-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-700-    font-size: 0.78rem;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-701-    font-weight: 600;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-702-    color: var(--text-heading);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:703:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-704-    transition: color 0.15s ease;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-705-    white-space: nowrap;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-706-    overflow: hidden;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-748-    display: inline-flex;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-749-    align-items: center;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-750-    gap: 0.3rem;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css:751:    cursor: pointer;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-752-    background: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-753-    border: none;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterReader.css-754-    padding: 0.2rem 0.5rem;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-9-const ChapterCommentCard = ({ comment, onReply, isReply = false }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-10-    const { user } = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-11-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx:12:    const clickProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-13-    const userId = user?.userData?.[0]?.id;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-14-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-15-    const [showReplies, setShowReplies] = useState(false);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-23-                <div className="ccc-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-24-                    <div
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-25-                        className={`ccc-avatar-wrap ${comment.users?.badge === 'legend' ? 'ccc-ring-legend' : comment.users?.badge === 'og' ? 'ccc-ring-og' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx:26:                        onClick={(e) => clickProfile(e, userId, comment.user_id, comment.users?.username)}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-27-                    >
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-28-                        <img
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-29-                            className="ccc-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-33-                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-34-                    <span
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-35-                        className="ccc-name"
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx:36:                        onClick={(e) => clickProfile(e, userId, comment.user_id, comment.users?.username)}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-37-                    >
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-38-                        {comment.users?.name}
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\ChapterReader\ChapterCommentCard.jsx-39-                    </span>

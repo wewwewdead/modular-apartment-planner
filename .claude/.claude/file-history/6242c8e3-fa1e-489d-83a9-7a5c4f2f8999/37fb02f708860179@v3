@@ -1,0 +1,38 @@
+import * as XLSX from 'xlsx'
+
+export function parseDocument(buffer, mimetype, filename) {
+  try {
+    // Determine if the file is a supported spreadsheet format
+    const spreadsheetMimes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel',                                          // .xls
+      'application/vnd.oasis.opendocument.spreadsheet',                    // .ods
+      'application/x-vnd.oasis.opendocument.spreadsheet',                  // .ods alt
+      'text/csv',
+      'application/csv',
+      'text/tab-separated-values',                                         // .tsv
+    ]
+    const spreadsheetExts = ['.xlsx', '.xls', '.csv', '.ods', '.tsv']
+
+    const mimeOk = spreadsheetMimes.includes(mimetype)
+    const extOk = spreadsheetExts.some(ext => filename?.toLowerCase().endsWith(ext))
+
+    if (!mimeOk && !extOk) {
+      return { success: false, message: `Unsupported file type: ${mimetype || filename}. Please send a spreadsheet file (xlsx, xls, csv, ods, or tsv).` }
+    }
+
+    const workbook = XLSX.read(buffer, { type: 'buffer' })
+    const sheetName = workbook.SheetNames[0]
+    const sheet = workbook.Sheets[sheetName]
+    const data = XLSX.utils.sheet_to_json(sheet)
+
+    return {
+      success: true,
+      data,
+      sheetName,
+      rowCount: data.length,
+    }
+  } catch (err) {
+    return { success: false, message: `Failed to parse document: ${err.message}` }
+  }
+}

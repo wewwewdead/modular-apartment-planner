@@ -1,0 +1,365 @@
+import React, { useMemo, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+
+export function VaultScreen() {
+  const appState = useAppStore(state => state.appState);
+  const draftSelections = useAppStore(state => state.draftSelections);
+  const toggleDraftItem = useAppStore(state => state.toggleDraftItem);
+  const setDraftQuantity = useAppStore(state => state.setDraftQuantity);
+  const addCategory = useAppStore(state => state.addCategory);
+  const addItem = useAppStore(state => state.addItem);
+
+  const [search, setSearch] = useState('');
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryEmoji, setCategoryEmoji] = useState('✨');
+  const [itemName, setItemName] = useState('');
+  const [itemPrice, setItemPrice] = useState('4.99');
+  const [itemUnit, setItemUnit] = useState('each');
+  const [storeName, setStoreName] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+
+  const filteredCategories = useMemo(() => {
+    if (!appState) {
+      return [];
+    }
+
+    const query = search.trim().toLowerCase();
+    return appState.vault.categories
+      .slice()
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .filter(category =>
+        !query
+          || category.name.toLowerCase().includes(query)
+          || category.items.some(item => item.name.toLowerCase().includes(query))
+      );
+  }, [appState, search]);
+
+  if (!appState) {
+    return null;
+  }
+
+  const handleAddCategory = async () => {
+    if (!categoryName.trim()) {
+      return;
+    }
+
+    await addCategory(categoryName, categoryEmoji);
+    setCategoryName('');
+    setCategoryEmoji('✨');
+  };
+
+  const handleAddItem = async () => {
+    const price = Number(itemPrice);
+    if (!selectedCategoryId || !itemName.trim() || !storeName.trim() || !Number.isFinite(price)) {
+      return;
+    }
+
+    await addItem({
+      categoryId: selectedCategoryId,
+      name: itemName,
+      store: storeName,
+      price,
+      unit: itemUnit,
+    });
+
+    setItemName('');
+    setItemPrice('4.99');
+    setItemUnit('each');
+  };
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Vault</Text>
+      <Text style={styles.subtitle}>
+        Browse categories, add new items, and mark items for a planning cart.
+      </Text>
+
+      <TextInput
+        style={styles.input}
+        value={search}
+        onChangeText={setSearch}
+        placeholder="Search categories or items"
+        placeholderTextColor={colors.mutedInk}
+      />
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Create category</Text>
+        <View style={styles.row}>
+          <TextInput
+            style={[styles.input, styles.emojiInput]}
+            value={categoryEmoji}
+            onChangeText={setCategoryEmoji}
+            placeholder="✨"
+            placeholderTextColor={colors.mutedInk}
+          />
+          <TextInput
+            style={[styles.input, styles.flexInput]}
+            value={categoryName}
+            onChangeText={setCategoryName}
+            placeholder="Category name"
+            placeholderTextColor={colors.mutedInk}
+          />
+        </View>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={() => {
+            handleAddCategory().catch(() => undefined);
+          }}
+        >
+          <Text style={styles.primaryButtonText}>Add category</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Add item</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {appState.vault.categories.map(category => (
+            <Pressable
+              key={category.uid}
+              style={[styles.chip, selectedCategoryId === category.uid && styles.chipActive]}
+              onPress={() => setSelectedCategoryId(category.uid)}
+            >
+              <Text style={styles.chipText}>{category.emoji ?? '•'} {category.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <TextInput
+          style={styles.input}
+          value={itemName}
+          onChangeText={setItemName}
+          placeholder="Item name"
+          placeholderTextColor={colors.mutedInk}
+        />
+        <TextInput
+          style={styles.input}
+          value={storeName}
+          onChangeText={setStoreName}
+          placeholder="Store"
+          placeholderTextColor={colors.mutedInk}
+        />
+        <View style={styles.row}>
+          <TextInput
+            style={[styles.input, styles.flexInput]}
+            value={itemPrice}
+            onChangeText={setItemPrice}
+            placeholder="Price"
+            placeholderTextColor={colors.mutedInk}
+            keyboardType="decimal-pad"
+          />
+          <TextInput
+            style={[styles.input, styles.flexInput]}
+            value={itemUnit}
+            onChangeText={setItemUnit}
+            placeholder="Unit"
+            placeholderTextColor={colors.mutedInk}
+          />
+        </View>
+        <Pressable
+          style={styles.primaryButton}
+          onPress={() => {
+            handleAddItem().catch(() => undefined);
+          }}
+        >
+          <Text style={styles.primaryButtonText}>Add item to vault</Text>
+        </Pressable>
+      </View>
+
+      {filteredCategories.map(category => (
+        <View key={category.uid} style={styles.card}>
+          <Text style={styles.cardTitle}>{category.emoji ?? '•'} {category.name}</Text>
+          {category.items.length ? (
+            category.items.map(item => {
+              const quantity = draftSelections[item.id] ?? 0;
+              return (
+                <View key={item.id} style={styles.itemRow}>
+                  <View style={styles.itemMeta}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemPrice}>
+                      {item.priceOptions[0]?.store ?? 'No store'} • ${item.priceOptions[0]?.pricePerUnit.priceValue ?? 0}/{item.priceOptions[0]?.pricePerUnit.unit ?? ''}
+                    </Text>
+                  </View>
+                  <View style={styles.itemActions}>
+                    <Pressable style={styles.secondaryButton} onPress={() => toggleDraftItem(item.id)}>
+                      <Text style={styles.secondaryButtonText}>{quantity ? 'Selected' : 'Select'}</Text>
+                    </Pressable>
+                    {quantity ? (
+                      <View style={styles.quantityRow}>
+                        <Pressable
+                          style={styles.quantityButton}
+                          onPress={() => setDraftQuantity(item.id, Math.max(1, quantity - 1))}
+                        >
+                          <Text style={styles.quantityButtonText}>-</Text>
+                        </Pressable>
+                        <Text style={styles.quantityValue}>{quantity}</Text>
+                        <Pressable
+                          style={styles.quantityButton}
+                          onPress={() => setDraftQuantity(item.id, quantity + 1)}
+                        >
+                          <Text style={styles.quantityButtonText}>+</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <Text style={styles.emptyCopy}>No items in this category yet.</Text>
+          )}
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: 20,
+    gap: 16,
+  },
+  title: {
+    color: colors.ink,
+    fontSize: 30,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: colors.mutedInk,
+    lineHeight: 22,
+  },
+  card: {
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 12,
+  },
+  cardTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  emojiInput: {
+    width: 64,
+    textAlign: 'center',
+  },
+  flexInput: {
+    flex: 1,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    backgroundColor: colors.brand,
+    paddingVertical: 14,
+  },
+  primaryButtonText: {
+    color: colors.surface,
+    fontWeight: '800',
+  },
+  chipRow: {
+    gap: 10,
+  },
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  chipActive: {
+    borderColor: colors.brand,
+    backgroundColor: '#ffe4d1',
+  },
+  chipText: {
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  itemRow: {
+    gap: 10,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  itemMeta: {
+    gap: 4,
+  },
+  itemName: {
+    color: colors.ink,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  itemPrice: {
+    color: colors.mutedInk,
+  },
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  secondaryButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  secondaryButtonText: {
+    color: colors.brandDeep,
+    fontWeight: '700',
+  },
+  quantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quantityButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityButtonText: {
+    color: colors.ink,
+    fontWeight: '800',
+  },
+  quantityValue: {
+    minWidth: 18,
+    textAlign: 'center',
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  emptyCopy: {
+    color: colors.mutedInk,
+  },
+});

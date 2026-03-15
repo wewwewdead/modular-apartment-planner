@@ -1,0 +1,94 @@
+import type {CursorPage, JournalItem} from '../api/mobileApi';
+
+export const getPreviewText = (item: {preview_text?: string | null; content?: string | null}): string => {
+  if (item.preview_text) return item.preview_text;
+  return extractPlainText(item.content);
+};
+
+export const extractPlainText = (rawContent: string | null | undefined): string => {
+  if (!rawContent) return '';
+  try {
+    const parsed = JSON.parse(rawContent) as {
+      root?: {children?: Array<{children?: Array<{text?: string}>}>};
+    };
+    const parts: string[] = [];
+    parsed.root?.children?.forEach(node => {
+      node.children?.forEach(child => {
+        if (child.text) parts.push(child.text);
+      });
+    });
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch {
+    return rawContent.replace(/\s+/g, ' ').trim();
+  }
+};
+
+export const extractBannerImage = (
+  rawContent: string | null | undefined,
+  images?: string | string[] | null,
+): string | null => {
+  if (images) {
+    if (typeof images === 'string') {
+      try {
+        const parsed = JSON.parse(images);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+      } catch {
+        if (images.startsWith('http')) return images;
+      }
+    }
+    if (Array.isArray(images) && images.length > 0) return images[0];
+  }
+  if (!rawContent) return null;
+  try {
+    const parsed = JSON.parse(rawContent);
+    const findImage = (node: any): string | null => {
+      if (node.type === 'image' && node.src) return node.src;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = findImage(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findImage(parsed.root ?? parsed);
+  } catch {
+    return null;
+  }
+};
+
+export const normalizeCount = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+export const resolveCount = (
+  aggregate: Array<{count?: number}> | undefined,
+  fallback?: number,
+): number => {
+  if (Array.isArray(aggregate) && aggregate.length > 0)
+    return normalizeCount(aggregate[0]?.count);
+  return normalizeCount(fallback);
+};
+
+export const calculateReadingTime = (text: string): string => {
+  const wordPerMin = 150;
+  const words = text.trim().split(/\s+/).length;
+  const readingTime = Math.ceil(words / wordPerMin);
+  if (readingTime > 1) {
+    return `${readingTime} mins read`;
+  }
+  return `${readingTime} min read`;
+};
+
+export const getNextCursor = (
+  page: CursorPage<JournalItem>,
+  pageSize: number,
+): string | undefined => {
+  if (page.nextCursor) return page.nextCursor;
+  if (page.hasMore && page.data.length > 0)
+    return page.data[page.data.length - 1]?.created_at ?? undefined;
+  if (page.data.length >= pageSize)
+    return page.data[page.data.length - 1]?.created_at ?? undefined;
+  return undefined;
+};

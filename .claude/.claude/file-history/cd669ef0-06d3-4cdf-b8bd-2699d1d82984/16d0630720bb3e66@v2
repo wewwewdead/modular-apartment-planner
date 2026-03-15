@@ -1,0 +1,188 @@
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { createAssembly } from '../domain/assemblyModels';
+import styles from './SketchSidebar.module.css';
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <path d="M3 5h10M6 5V3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M4.5 5l.5 8a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5l.5-8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function AssemblyIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+const PART_TYPE_COLORS = {
+  panel: '#B8860B',
+  leg: '#6B8E23',
+  frame: '#4682B4',
+  cutout: '#CD5C5C',
+  hole: '#9370DB',
+  dimension: '#708090',
+};
+
+function TypeBadge({ type }) {
+  const color = PART_TYPE_COLORS[type] || '#666';
+  return (
+    <span
+      className={styles.categoryBadge}
+      style={{ color, background: `${color}22`, borderColor: `${color}44` }}
+    >
+      {type}
+    </span>
+  );
+}
+
+export default function SketchSidebar() {
+  const { project, dispatch, getPartsForAssembly } = useSketch();
+  const { activeAssemblyId, selectedId, dispatch: editorDispatch } = useSketchEditor();
+
+  const assemblies = project.assemblies || [];
+  const parts = project.parts.filter((p) => p.type !== 'dimension');
+
+  // Show parts filtered by active assembly, or all parts if none selected
+  const visibleParts = activeAssemblyId
+    ? parts.filter((p) => p.assemblyId === activeAssemblyId)
+    : parts;
+
+  const handleAddAssembly = () => {
+    const asm = createAssembly(`Assembly ${assemblies.length + 1}`);
+    dispatch({ type: 'ASSEMBLY_ADD', assembly: asm });
+    editorDispatch({ type: 'SET_ACTIVE_ASSEMBLY', assemblyId: asm.id });
+  };
+
+  const handleSelectAssembly = (assemblyId) => {
+    editorDispatch({
+      type: 'SET_ACTIVE_ASSEMBLY',
+      assemblyId: activeAssemblyId === assemblyId ? null : assemblyId,
+    });
+  };
+
+  const handleDeleteAssembly = (e, assemblyId) => {
+    e.stopPropagation();
+    dispatch({ type: 'ASSEMBLY_DELETE', assemblyId });
+    if (activeAssemblyId === assemblyId) {
+      editorDispatch({ type: 'SET_ACTIVE_ASSEMBLY', assemblyId: null });
+    }
+  };
+
+  const handleSelectPart = (partId) => {
+    editorDispatch({ type: 'SELECT_OBJECT', id: partId, objectType: 'part' });
+  };
+
+  const handleDeletePart = (e, partId) => {
+    e.stopPropagation();
+    dispatch({ type: 'PART_DELETE', partId });
+    if (selectedId === partId) {
+      editorDispatch({ type: 'DESELECT' });
+    }
+  };
+
+  return (
+    <div className={styles.sidebar}>
+      {/* Assemblies panel */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderRow}>
+          <span className={styles.sectionTitle}>Assemblies</span>
+          <span className={styles.count}>{assemblies.length}</span>
+          <button className={styles.addBtn} onClick={handleAddAssembly} aria-label="Add Assembly" title="Add Assembly">+</button>
+        </div>
+
+        <div className={styles.layerList}>
+          {assemblies.map((asm) => {
+            const isActive = asm.id === activeAssemblyId;
+            const partCount = getPartsForAssembly(asm.id).length;
+
+            return (
+              <div
+                key={asm.id}
+                className={`${styles.layerItem} ${isActive ? styles.layerItemActive : ''}`}
+                onClick={() => handleSelectAssembly(asm.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectAssembly(asm.id);
+                  }
+                }}
+              >
+                <div className={styles.layerInfo}>
+                  <AssemblyIcon />
+                  <span className={styles.layerName}>{asm.name}</span>
+                  {partCount > 0 && <span className={styles.shapeCount}>{partCount}</span>}
+                </div>
+                <div className={styles.layerActions}>
+                  <button
+                    className={styles.layerActionBtn}
+                    onClick={(e) => handleDeleteAssembly(e, asm.id)}
+                    aria-label="Delete Assembly"
+                    title="Delete Assembly"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Parts panel */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderRow}>
+          <span className={styles.sectionTitle}>
+            Parts{activeAssemblyId ? ' (filtered)' : ''}
+          </span>
+          <span className={styles.count}>{visibleParts.length}</span>
+        </div>
+
+        <div className={styles.layerList}>
+          {visibleParts.map((part) => {
+            const isSelected = part.id === selectedId;
+
+            return (
+              <div
+                key={part.id}
+                className={`${styles.layerItem} ${isSelected ? styles.layerItemActive : ''}`}
+                onClick={() => handleSelectPart(part.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectPart(part.id);
+                  }
+                }}
+              >
+                <div className={styles.layerInfo}>
+                  <TypeBadge type={part.type} />
+                  <span className={styles.layerName}>{part.name}</span>
+                </div>
+                <div className={styles.layerActions}>
+                  <button
+                    className={styles.layerActionBtn}
+                    onClick={(e) => handleDeletePart(e, part.id)}
+                    aria-label="Delete Part"
+                    title="Delete Part"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

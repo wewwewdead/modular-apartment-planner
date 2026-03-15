@@ -1,0 +1,33 @@
+Task: Implement Collaborative 'Constellations' (Linked Physics Bodies)
+
+1. The Physics Link (Matter.js):
+
+Create a function linkStars(starA, starB).
+
+Use Matter.Constraint.create({ bodyA, bodyB, stiffness: 0.1, damping: 0.05 }).
+
+This ensures that if one star is pulled by gravity, it "tows" the other star with it.
+
+2. The Visual Connection (React-Konva):
+
+Create a ConstellationLine component that takes two star positions.
+
+Use a Konva.Line with a dash array and dashOffset animation to create a "flowing energy" effect along the link.
+
+Add a Konva.Text node that follows the midpoint of the line to display the Constellation name.
+
+3. Multi-User Groups:
+
+Ensure that multiple stars can be linked into a chain or a web.
+
+If 5 stars are linked, calculate the Group Centroid so the entire "Constellation" can be treated as one massive object in the Quadtree.
+
+4. Data Persistence (Supabase):
+
+Create a constellations table that stores star_id_1, star_id_2, and the label.
+
+When the universe loads, fetch these links and re-apply the Matter.js constraints.
+
+5. Interaction:
+
+Add a "Link Mode" toggle. When active, clicking two stars creates the request/link.

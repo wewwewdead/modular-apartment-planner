@@ -1,0 +1,111 @@
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import { getWeeklyRecap } from '../../../API/Api';
+import { useAuth } from '../../Context/useAuth';
+import './WeeklyRecapCard.css';
+
+const getWeekKey = () => {
+    const now = new Date();
+    const day = now.getUTCDay();
+    const diff = day === 0 ? 6 : day - 1;
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
+    return `recap-dismissed-${monday.toISOString().slice(0, 10)}`;
+};
+
+const fmt = (n) => (!n ? '0' : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
+
+const WeeklyRecapCard = () => {
+    const { session } = useAuth();
+    const weekKey = getWeekKey();
+    const [dismissed, setDismissed] = useState(() => {
+        try { return localStorage.getItem(weekKey) === 'true'; } catch { return false; }
+    });
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['weeklyRecap', session?.access_token],
+        queryFn: () => getWeeklyRecap(session?.access_token),
+        enabled: !!session?.access_token && !dismissed,
+        staleTime: 1000 * 60 * 10,
+        refetchOnWindowFocus: false,
+    });
+
+    if (dismissed || isLoading || !data?.recap) return null;
+
+    const { personal = {}, group = {} } = data.recap;
+    if (personal.posts_written === 0 && group.total_posts === 0) return null;
+
+    const handleDismiss = (e) => {
+        e.stopPropagation();
+        try { localStorage.setItem(weekKey, 'true'); } catch { /* */ }
+        setDismissed(true);
+    };
+
+    const mostActive = group.most_active_writer;
+    const mostReacted = group.most_reacted_post;
+
+    return (
+        <AnimatePresence>
+            {!dismissed && (
+                <motion.div
+                    className="weekly-recap-card"
+                    initial={{ opacity: 0, y: -12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    <div className="recap-header">
+                        <span className="recap-label">Your Week</span>
+                        <button className="recap-dismiss-btn" onClick={handleDismiss} title="Dismiss">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="recap-stats">
+                        <div className="recap-stat">
+                            <span className="recap-stat-value">{personal.posts_written || 0}</span>
+                            <span className="recap-stat-label">posts</span>
+                        </div>
+                        <div className="recap-stat-divider" />
+                        <div className="recap-stat">
+                            <span className="recap-stat-value">{fmt(personal.total_words)}</span>
+                            <span className="recap-stat-label">words</span>
+                        </div>
+                        <div className="recap-stat-divider" />
+                        <div className="recap-stat">
+                            <span className="recap-stat-value">{fmt(personal.reactions_received)}</span>
+                            <span className="recap-stat-label">reactions</span>
+                        </div>
+                        <div className="recap-stat-divider" />
+                        <div className="recap-stat">
+                            <span className="recap-stat-value">{fmt(personal.views_received)}</span>
+                            <span className="recap-stat-label">views</span>
+                        </div>
+                    </div>
+
+                    {(mostActive?.name || mostReacted?.title) && (
+                        <div className="recap-community">
+                            <span className="recap-community-label">Community — {group.total_posts || 0} posts this week</span>
+                            {mostActive?.name && (
+                                <div className="recap-highlight">
+                                    <img src={mostActive.avatar || '/assets/profile.jpg'} alt="" className="recap-avatar" />
+                                    <span>{mostActive.name} — {mostActive.post_count} posts (most active)</span>
+                                </div>
+                            )}
+                            {mostReacted?.title && (
+                                <div className="recap-highlight">
+                                    <img src={mostReacted.author_avatar || '/assets/profile.jpg'} alt="" className="recap-avatar" />
+                                    <span>{mostReacted.title} — {mostReacted.reaction_count || 0} reactions (top post)</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
+
+export default WeeklyRecapCard;

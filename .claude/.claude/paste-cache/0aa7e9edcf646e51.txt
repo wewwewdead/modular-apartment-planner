@@ -1,0 +1,33 @@
+ Now let me edit the server routes.js - remove the 3 constants and 7 route handlers.
+
+● Update(server\routes\routes.js)
+  ⎿  Removed 23 lines
+      119      opinions!opinion_id(id, opinion, user_id, created_at),
+      120      users!sender_id(id, name, image_url, badge)
+      121  `;
+      122 -const COLLECTION_SELECT_COLUMNS = `
+      123 -    id,
+      124 -    user_id,
+      125 -    name,
+      126 -    description,
+      127 -    is_public,
+      128 -    created_at
+      129 -`;
+      130 -const COLLECTION_JOURNALS_SELECT = `
+      131 -    id,
+      132 -    journals(
+      133 -        id,
+      134 -        title,
+      135 -        created_at,
+      136 -        user_id,
+      137 -        content,
+      138 -        users(id, image_url, name, badge),
+      139 -        comments!post_id(count),
+      140 -        bookmarks!journal_id(count),
+      141 -        likes!journal_id(count)
+      142 -    )
+      143 -`;
+      144 -const NOT_COLLECTED_JOURNAL_SELECT = 'id, created_at, title, content';
+      122  const OPINION_LIST_SELECT = `
+      123      id,
+      124      user_id,

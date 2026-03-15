@@ -1,0 +1,331 @@
+import { useRef, useCallback, useEffect, useState } from 'react';
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { SKETCH_MIN_ZOOM, SKETCH_MAX_ZOOM, SKETCH_ZOOM_FACTOR } from '../domain/defaults';
+import { SKETCH_TOOL_SHORTCUTS } from '../editor/tools';
+import { createSketchSelectHandler } from '../editor/handlers/selectHandler';
+import { createRectangleHandler } from '../editor/handlers/rectangleHandler';
+import { createLineHandler } from '../editor/handlers/lineHandler';
+import GridRenderer from './GridRenderer';
+import ShapeRenderer from './ShapeRenderer';
+import SketchEmptyState from '../ui/SketchEmptyState';
+import styles from './SketchCanvas.module.css';
+
+function screenToModel(screenX, screenY, viewport, svgRect) {
+  const x = (screenX - svgRect.left - viewport.panX) / viewport.zoom;
+  const y = (screenY - svgRect.top - viewport.panY) / viewport.zoom;
+  return { x, y };
+}
+
+function useSketchTool() {
+  const { dispatch: sketchDispatch, getLayer, project } = useSketch();
+  const {
+    activeTool, viewport, snapEnabled, selectedId, selectedType,
+    toolState, activeLayerId, activeObjectId, dispatch: editorDispatch,
+  } = useSketchEditor();
+
+  // Wrap dispatch to auto-associate new shapes with the active object
+  const dispatch = useCallback((action) => {
+    sketchDispatch(action);
+    if (action.type === 'SHAPE_ADD' && activeObjectId) {
+      const obj = (project.objects || []).find((o) => o.id === activeObjectId);
+      if (obj) {
+        sketchDispatch({
+          type: 'OBJECT_UPDATE',
+          object: { id: activeObjectId, shapeIds: [...obj.shapeIds, action.shape.id] },
+        });
+      }
+    }
+  }, [sketchDispatch, activeObjectId, project.objects]);
+
+  const ctx = {
+    dispatch,
+    editorDispatch,
+    getLayer,
+    activeLayerId,
+    viewport,
+    snapEnabled,
+    selectedId,
+    selectedType,
+  };
+
+  switch (activeTool) {
+    case 'rectangle':
+      return createRectangleHandler(ctx);
+    case 'line':
+      return createLineHandler(ctx);
+    case 'select':
+    default:
+      return createSketchSelectHandler(ctx);
+  }
+}
+
+export default function SketchCanvas() {
+  const svgRef = useRef(null);
+  const isPanning = useRef(false);
+  const lastPanPos = useRef({ x: 0, y: 0 });
+  const spaceHeld = useRef(false);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+
+  const { project } = useSketch();
+  const {
+    activeTool, selectedId, toolState,
+    viewport, showGrid, activeLayerId, statusMessage, emptyStateDismissed,
+    dispatch: editorDispatch,
+  } = useSketchEditor();
+
+  const tool = useSketchTool();
+
+  const getModelPos = useCallback((e) => {
+    const rect = svgRef.current.getBoundingClientRect();
+    return screenToModel(e.clientX, e.clientY, viewport, rect);
+  }, [viewport]);
+
+  const handleMouseDown = useCallback((e) => {
+    if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
+      isPanning.current = true;
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+      return;
+    }
+
+    const modelPos = getModelPos(e);
+    tool.onMouseDown(modelPos, e, toolState);
+  }, [getModelPos, tool, toolState]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (isPanning.current) {
+      const dx = e.clientX - lastPanPos.current.x;
+      const dy = e.clientY - lastPanPos.current.y;
+      editorDispatch({ type: 'PAN', dx, dy });
+      lastPanPos.current = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    const modelPos = getModelPos(e);
+    setCursorPos(modelPos);
+    tool.onMouseMove(modelPos, e, toolState, selectedId);
+  }, [getModelPos, tool, toolState, selectedId, editorDispatch]);
+
+  const handleMouseUp = useCallback((e) => {
+    if (isPanning.current) {
+      isPanning.current = false;
+      return;
+    }
+
+    const modelPos = getModelPos(e);
+    tool.onMouseUp(modelPos, e, toolState);
+  }, [getModelPos, tool, toolState]);
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const rect = svgRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const direction = e.deltaY < 0 ? 1 : -1;
+    const factor = direction > 0 ? SKETCH_ZOOM_FACTOR : 1 / SKETCH_ZOOM_FACTOR;
+    const newZoom = Math.max(SKETCH_MIN_ZOOM, Math.min(SKETCH_MAX_ZOOM, viewport.zoom * factor));
+
+    const newPanX = mouseX - (mouseX - viewport.panX) * (newZoom / viewport.zoom);
+    const newPanY = mouseY - (mouseY - viewport.panY) * (newZoom / viewport.zoom);
+
+    editorDispatch({ type: 'ZOOM', zoom: newZoom, panX: newPanX, panY: newPanY });
+  }, [viewport, editorDispatch]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+
+      if (e.key === ' ') {
+        spaceHeld.current = true;
+        e.preventDefault();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        editorDispatch({ type: 'SET_TOOL', tool: 'select' });
+        return;
+      }
+
+      if (!e.ctrlKey && !e.metaKey) {
+        const toolKey = SKETCH_TOOL_SHORTCUTS[e.key.toLowerCase()];
+        if (toolKey) {
+          editorDispatch({ type: 'SET_TOOL', tool: toolKey });
+          return;
+        }
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        tool.onKeyDown(e, toolState, selectedId);
+        return;
+      }
+
+      tool.onKeyDown(e, toolState, selectedId);
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.key === ' ') {
+        spaceHeld.current = false;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [editorDispatch, selectedId, tool, toolState]);
+
+  // Prevent context menu & attach wheel listener
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const prevent = (e) => e.preventDefault();
+    svg.addEventListener('contextmenu', prevent);
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('contextmenu', prevent);
+      svg.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
+  // Status message auto-clear
+  useEffect(() => {
+    if (!statusMessage) return undefined;
+    const timer = window.setTimeout(() => {
+      editorDispatch({ type: 'CLEAR_STATUS_MESSAGE' });
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [statusMessage, editorDispatch]);
+
+  const cursor = spaceHeld.current ? 'grab' : tool.getCursor(toolState);
+  const zoomPercent = Math.round(viewport.zoom * 1000);
+
+  // Check if project is empty for the empty-state overlay
+  const hasShapes = project.layers.some((l) => l.shapes.length > 0);
+  const hasObjects = (project.objects || []).length > 0;
+  const showEmptyState = !hasShapes && !hasObjects && !emptyStateDismissed;
+
+  // Collect all visible shapes with their layer IDs
+  const visibleShapes = [];
+  for (const layer of project.layers) {
+    if (!layer.visible) continue;
+    for (const shape of layer.shapes) {
+      visibleShapes.push({ shape, layerId: layer.id });
+    }
+  }
+
+  // Rectangle preview
+  const rectPreview = activeTool === 'rectangle' && toolState.startPos && toolState.currentPos
+    ? {
+        x: Math.min(toolState.startPos.x, toolState.currentPos.x),
+        y: Math.min(toolState.startPos.y, toolState.currentPos.y),
+        width: Math.abs(toolState.currentPos.x - toolState.startPos.x),
+        height: Math.abs(toolState.currentPos.y - toolState.startPos.y),
+      }
+    : null;
+
+  // Line preview
+  const linePreview = activeTool === 'line' && toolState.startPos && toolState.currentPos
+    ? { start: toolState.startPos, end: toolState.currentPos }
+    : null;
+
+  return (
+    <div className={styles.canvasContainer}>
+      <svg
+        ref={svgRef}
+        className={styles.svg}
+        style={{ cursor }}
+        onPointerDown={handleMouseDown}
+        onPointerMove={handleMouseMove}
+        onPointerUp={handleMouseUp}
+      >
+        <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
+          {showGrid && <GridRenderer />}
+
+          {/* Canvas boundary indicator */}
+          <rect
+            x={0}
+            y={0}
+            width={project.canvasWidth}
+            height={project.canvasHeight}
+            fill="none"
+            stroke="var(--color-border)"
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+            strokeDasharray="8 4"
+            style={{ pointerEvents: 'none' }}
+          />
+
+          {/* Rendered shapes */}
+          {visibleShapes.map(({ shape }) => (
+            <ShapeRenderer
+              key={shape.id}
+              shape={shape}
+              isSelected={shape.id === selectedId}
+              zoom={viewport.zoom}
+            />
+          ))}
+
+          {/* Rectangle draw preview */}
+          {rectPreview && (
+            <rect
+              x={rectPreview.x}
+              y={rectPreview.y}
+              width={rectPreview.width}
+              height={rectPreview.height}
+              fill="none"
+              stroke="var(--color-workspace-sketch, #B8860B)"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray="6 3"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+
+          {/* Line draw preview */}
+          {linePreview && (
+            <line
+              x1={linePreview.start.x}
+              y1={linePreview.start.y}
+              x2={linePreview.end.x}
+              y2={linePreview.end.y}
+              stroke="var(--color-workspace-sketch, #B8860B)"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+              strokeDasharray="6 3"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+        </g>
+      </svg>
+
+      {/* Empty-state overlay */}
+      {showEmptyState && <SketchEmptyState />}
+
+      {/* Status bar */}
+      <div className={styles.statusBar} role="status" aria-live="polite">
+        <span className={styles.statusCoords}>X: {Math.round(cursorPos.x)} mm</span>
+        <span className={styles.statusCoords}>Y: {Math.round(cursorPos.y)} mm</span>
+        <span className={styles.statusContext}>Zoom: {zoomPercent}%</span>
+        <span className={styles.statusTool}>{activeTool}</span>
+        {activeLayerId && (
+          <span className={styles.statusContext}>
+            Layer: {project.layers.find((l) => l.id === activeLayerId)?.name || 'Unknown'}
+          </span>
+        )}
+      </div>
+
+      {/* Toast notifications */}
+      {statusMessage && (
+        <div className={styles.toast}>
+          {statusMessage}
+          <div className={styles.toastProgress} />
+        </div>
+      )}
+    </div>
+  );
+}

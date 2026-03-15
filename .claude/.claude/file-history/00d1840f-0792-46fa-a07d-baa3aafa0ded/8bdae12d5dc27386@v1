@@ -1,0 +1,137 @@
+import * as THREE from 'three';
+
+const WOOD_COLOR = 0xD2B48C;
+const SELECTED_TINT = 0xB8860B;
+const EDGE_COLOR = 0x333333;
+
+function createBoxMesh(width, height, depth, color) {
+  const geometry = new THREE.BoxGeometry(width, height, depth);
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.7,
+    metalness: 0.05,
+  });
+  return new THREE.Mesh(geometry, material);
+}
+
+function createCylinderMesh(diameter, height, color) {
+  const geometry = new THREE.CylinderGeometry(diameter / 2, diameter / 2, height, 16);
+  const material = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.7,
+    metalness: 0.05,
+  });
+  return new THREE.Mesh(geometry, material);
+}
+
+function addEdges(mesh) {
+  const edges = new THREE.EdgesGeometry(mesh.geometry);
+  const line = new THREE.LineSegments(
+    edges,
+    new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true, opacity: 0.3 })
+  );
+  mesh.add(line);
+}
+
+function createPanelMesh(part, isSelected) {
+  const color = isSelected ? SELECTED_TINT : WOOD_COLOR;
+  const mesh = createBoxMesh(part.width, part.thickness, part.depth, color);
+  // Three.js: x = part.x + w/2, y = part.z + h/2, z = part.y + d/2
+  mesh.position.set(
+    part.position.x + part.width / 2,
+    part.position.z + part.thickness / 2,
+    part.position.y + part.depth / 2
+  );
+  addEdges(mesh);
+  return mesh;
+}
+
+function createLegMesh(part, isSelected) {
+  const color = isSelected ? SELECTED_TINT : 0x8B7355;
+
+  if (part.profile === 'round') {
+    const mesh = createCylinderMesh(part.width, part.height, color);
+    mesh.position.set(
+      part.position.x + part.width / 2,
+      part.position.z + part.height / 2,
+      part.position.y + part.depth / 2
+    );
+    addEdges(mesh);
+    return mesh;
+  }
+
+  const mesh = createBoxMesh(part.width, part.height, part.depth, color);
+  mesh.position.set(
+    part.position.x + part.width / 2,
+    part.position.z + part.height / 2,
+    part.position.y + part.depth / 2
+  );
+  addEdges(mesh);
+  return mesh;
+}
+
+function createFrameMesh(part, isSelected) {
+  const color = isSelected ? SELECTED_TINT : 0xA0522D;
+  let w, h, d;
+
+  if (part.axis === 'y') {
+    w = part.width;
+    h = part.height;
+    d = part.length;
+  } else {
+    w = part.length;
+    h = part.height;
+    d = part.width;
+  }
+
+  const mesh = createBoxMesh(w, h, d, color);
+  mesh.position.set(
+    part.position.x + w / 2,
+    part.position.z + h / 2,
+    part.position.y + d / 2
+  );
+  addEdges(mesh);
+  return mesh;
+}
+
+function isPartSelected(part, selection) {
+  if (!selection) return false;
+  if (selection.selectedType === 'object') return part.objectId === selection.selectedId;
+  return part.id === selection.selectedId;
+}
+
+export function buildSketchPreviewRoot(parts, selection) {
+  const root = new THREE.Group();
+
+  for (const part of parts) {
+    // Skip dimension, cutout, hole in 3D for V1
+    if (part.type === 'dimension' || part.type === 'cutout' || part.type === 'hole') continue;
+
+    const isSelected = isPartSelected(part, selection);
+    let mesh;
+
+    switch (part.type) {
+      case 'panel':
+        mesh = createPanelMesh(part, isSelected);
+        break;
+      case 'leg':
+        mesh = createLegMesh(part, isSelected);
+        break;
+      case 'frame':
+        mesh = createFrameMesh(part, isSelected);
+        break;
+      default:
+        continue;
+    }
+
+    if (mesh) {
+      const previewTarget = part.objectId
+        ? { sourceId: part.objectId, kind: 'object' }
+        : { sourceId: part.id, kind: 'part' };
+      mesh.userData.previewTarget = previewTarget;
+      root.add(mesh);
+    }
+  }
+
+  return root;
+}

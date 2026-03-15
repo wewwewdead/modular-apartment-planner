@@ -1,0 +1,832 @@
+.chapter-reader {
+    width: 100%;
+    max-width: 700px;
+    box-sizing: border-box;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+}
+
+.chapter-reader-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+
+.chapter-reader-error {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 0;
+}
+
+/* Progress bar */
+.chapter-progress-track {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--border-light);
+    z-index: 100;
+}
+
+.chapter-progress-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent-purple);
+    transition: width 0.1s linear;
+}
+
+/* Header */
+.chapter-reader-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 20px 0 16px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 24px;
+}
+
+.chapter-reader-back {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.chapter-reader-back:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-reader-header-info {
+    min-width: 0;
+}
+
+.chapter-reader-chapter-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.chapter-reader-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 4px 0 0 0;
+    line-height: 1.25;
+}
+
+/* Content */
+.chapter-reader-body {
+    min-height: 300px;
+    position: relative;
+}
+
+.chapter-reader-content {
+    font-size: 1.05rem;
+    line-height: 1.85;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.chapter-reader-content .editor-paragraph {
+    margin-bottom: 1em;
+}
+
+/* Navigation */
+.chapter-reader-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 12px;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-light);
+}
+
+.chapter-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    max-width: 48%;
+}
+
+.chapter-nav-btn:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-nav-btn span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapter-nav-prev {
+    text-align: left;
+}
+
+.chapter-nav-next {
+    text-align: right;
+    margin-left: auto;
+}
+
+@media (max-width: 480px) {
+    .chapter-reader {
+        padding: 0 12px 32px;
+        padding-bottom: 5rem;
+    }
+
+    .chapter-reader-title {
+        font-size: 1.1rem;
+    }
+
+    .chapter-reader-content {
+        font-size: 0.98rem;
+        line-height: 1.75;
+    }
+
+    .chapter-reader-content .editor-paragraph[data-paragraph-index] {
+        padding: 2px 0;
+    }
+
+    .chapter-nav-btn {
+        padding: 10px 12px;
+        font-size: 0.78rem;
+    }
+}
+
+
+/* ═══════════════════════════════════════════════
+   Paragraph Comment Layer (pcl-)
+   ═══════════════════════════════════════════════ */
+
+/* Warm paragraph hover — signals commentability (JS .pcl-active only) */
+.chapter-reader-content .editor-paragraph[data-paragraph-index] {
+    transition: background-color 0.25s ease;
+    border-radius: 3px;
+}
+
+.pcl-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.pcl-badge-anchor {
+    position: absolute;
+    right: -4px;
+    pointer-events: none;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 3px;
+    padding-left: 20px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.pcl-badge-anchor.pcl-badge-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.pcl-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border: 1px solid var(--bg-glass-border);
+    border-radius: 20px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    box-shadow: var(--shadow-card-sm);
+    transition: color 0.2s ease, border-color 0.2s ease,
+                background-color 0.2s ease, box-shadow 0.2s ease,
+                transform 0.2s ease;
+}
+
+.pcl-badge:hover,
+.pcl-badge:active {
+    color: var(--accent-amber);
+    border-color: var(--accent-amber);
+    background: var(--bg-selection-active);
+    box-shadow: 0 0 0 3px var(--bg-selection), var(--shadow-card-sm);
+    transform: scale(1.06);
+}
+
+.pcl-badge-active {
+    color: var(--accent-amber);
+    border-color: rgba(212, 168, 83, 0.3);
+    background: var(--bg-selection);
+    box-shadow: 0 0 12px rgba(212, 168, 83, 0.1);
+}
+
+.pcl-badge-active:hover,
+.pcl-badge-active:active {
+    border-color: var(--accent-amber);
+    background: var(--bg-selection-active);
+    box-shadow: 0 0 0 3px var(--bg-selection-active),
+                0 0 16px rgba(212, 168, 83, 0.14);
+}
+
+.pcl-badge svg {
+    flex-shrink: 0;
+}
+
+.pcl-badge-count {
+    line-height: 1;
+    min-width: 8px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .pcl-badge {
+        padding: 4px 6px;
+        font-size: 0.64rem;
+    }
+}
+
+/* JS-driven active state — highlight only on explicit hover/click, not scroll */
+.chapter-reader-content .editor-paragraph[data-paragraph-index].pcl-active {
+    background-color: var(--bg-selection);
+}
+
+
+/* ═══════════════════════════════════════════════
+   Comment Panel (cp-)
+   ═══════════════════════════════════════════════ */
+
+.cp-backdrop {
+    position: fixed;
+    inset: 0;
+    background: var(--bg-overlay);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 200;
+}
+
+.cp-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    z-index: 201;
+    overflow: hidden;
+    box-shadow: var(--shadow-modal);
+}
+
+.cp-panel-desktop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 380px;
+    height: 100%;
+    border-left: 1px solid var(--border-card);
+}
+
+.cp-panel-mobile {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 70vh;
+    border-radius: 16px 16px 0 0;
+    border-top: 1px solid var(--border-card);
+}
+
+.cp-drag-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--text-faint);
+    margin: 10px auto 0;
+    flex-shrink: 0;
+}
+
+/* ── Header ── */
+.cp-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1.15rem;
+    border-bottom: 1px solid var(--border-card);
+    flex-shrink: 0;
+}
+
+.cp-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cp-title {
+    font-family: var(--font-ui);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    margin: 0;
+}
+
+.cp-count {
+    font-family: var(--font-ui);
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--accent-amber);
+    background: var(--bg-selection);
+    padding: 2px 7px;
+    border-radius: 10px;
+    line-height: 1.4;
+}
+
+.cp-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.cp-close:hover {
+    background: var(--bg-pill);
+    color: var(--text-heading);
+}
+
+/* ── Paragraph preview ── */
+.cp-preview {
+    display: flex;
+    gap: 12px;
+    padding: 14px 1.15rem;
+    background: var(--bg-selection);
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-card);
+}
+
+.cp-preview-bar {
+    width: 3px;
+    min-height: 100%;
+    border-radius: 2px;
+    background: var(--accent-amber);
+    flex-shrink: 0;
+}
+
+.cp-preview-text {
+    font-family: var(--font-serif);
+    font-size: 0.82rem;
+    font-style: italic;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ── Comment list ── */
+.cp-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0.5rem 0;
+}
+
+.cp-list::-webkit-scrollbar {
+    width: 5px;
+}
+
+.cp-list::-webkit-scrollbar-thumb {
+    background: var(--accent-amber);
+    border-radius: 4px;
+}
+
+.cp-list::-webkit-scrollbar-track {
+    background: var(--bg-pill);
+}
+
+.cp-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px 0;
+}
+
+/* ── Empty state ── */
+.cp-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px;
+    text-align: center;
+}
+
+.cp-empty-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-selection);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+}
+
+.cp-empty-icon svg {
+    color: var(--accent-amber);
+    opacity: 0.7;
+}
+
+.cp-empty-title {
+    font-family: var(--font-ui);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    margin: 0 0 4px;
+}
+
+.cp-empty-hint {
+    font-family: var(--font-serif);
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--text-muted);
+}
+
+/* ── Input area ── */
+.cp-input-area {
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 1.15rem;
+    border-top: 1px solid var(--border-card);
+    gap: 0.45rem;
+    flex-shrink: 0;
+}
+
+.cp-reply-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    background: var(--bg-selection);
+    border-radius: 20px;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--accent-amber);
+    align-self: flex-start;
+}
+
+.cp-reply-indicator button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-left: 2px;
+    font-size: 0.88rem;
+    line-height: 1;
+    transition: color 0.15s ease;
+}
+
+.cp-reply-indicator button:hover {
+    color: var(--text-heading);
+}
+
+.cp-input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+}
+
+.cp-textarea {
+    flex: 1;
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    background-color: var(--bg-pill);
+    color: var(--text-primary);
+    border: 1px solid var(--border-card);
+    border-radius: 10px;
+    padding: 0.55rem 0.75rem;
+    resize: none;
+    min-height: 1.4rem;
+    max-height: 80px;
+    outline: none;
+    overflow-y: auto;
+    transition: border-color 0.2s ease;
+}
+
+.cp-textarea:focus {
+    border-color: var(--accent-amber);
+}
+
+.cp-textarea::placeholder {
+    color: var(--text-faint);
+    font-style: italic;
+}
+
+.cp-submit {
+    cursor: pointer;
+    border: none;
+    padding: 0.4rem 1.1rem;
+    border-radius: 20px;
+    background-color: var(--accent-amber);
+    color: #ffffff;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease;
+}
+
+.cp-submit:hover {
+    opacity: 0.88;
+}
+
+.cp-submit:disabled {
+    cursor: default;
+    opacity: 0.4;
+}
+
+.cp-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.cp-char-count {
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-faint);
+    margin: 0;
+    transition: color 0.15s ease;
+}
+
+.cp-char-warn {
+    color: var(--accent-amber);
+    font-weight: 600;
+}
+
+.cp-char-red {
+    color: var(--color-danger);
+    font-weight: 650;
+}
+
+
+/* ═══════════════════════════════════════════════
+   Chapter Comment Card (ccc-)
+   ═══════════════════════════════════════════════ */
+
+.ccc-card {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    padding: 0.75rem 1.15rem;
+    border-bottom: 1px solid var(--border-card);
+    transition: background-color 0.15s ease;
+}
+
+.ccc-card:last-child {
+    border-bottom: none;
+}
+
+.ccc-card:hover {
+    background-color: var(--bg-pill);
+}
+
+.ccc-reply {
+    margin-left: 20px;
+    position: relative;
+    border-bottom: none;
+    padding: 0.55rem 1rem;
+}
+
+.ccc-reply:hover {
+    background-color: transparent;
+}
+
+.ccc-thread-line {
+    position: absolute;
+    left: -0.65rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: var(--border-card);
+    border-radius: 1px;
+    transition: background-color 0.2s ease;
+}
+
+.ccc-card:hover > .ccc-thread-line {
+    background-color: var(--accent-amber);
+}
+
+.ccc-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── User row ── */
+.ccc-user-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.ccc-avatar-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.ccc-ring-legend {
+    border: 2px solid #FFD700;
+    box-shadow: 0 0 8px 1px rgba(255, 215, 0, 0.3);
+}
+
+.ccc-ring-og {
+    border: 2px solid #9B59FF;
+    box-shadow: 0 0 8px 1px rgba(155, 89, 255, 0.3);
+}
+
+.ccc-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    cursor: pointer;
+    user-select: none;
+}
+
+.ccc-name {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    cursor: pointer;
+    transition: color 0.15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+
+.ccc-name:hover {
+    color: var(--accent-amber);
+    text-decoration: underline;
+}
+
+.ccc-dot {
+    color: var(--text-separator);
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+.ccc-date {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    white-space: nowrap;
+}
+
+/* ── Comment body ── */
+.ccc-body {
+    font-family: var(--font-serif);
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: var(--text-body);
+    margin: 0;
+    word-break: break-word;
+}
+
+/* ── Actions ── */
+.ccc-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding-top: 0.15rem;
+}
+
+.ccc-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.ccc-action-btn:hover {
+    color: var(--accent-amber);
+    background-color: var(--bg-pill);
+}
+
+.ccc-replies {
+    overflow: hidden;
+    padding-left: 0.5rem;
+}
+
+/* ── Mobile responsive ── */
+@media (max-width: 480px) {
+    .cp-panel-desktop {
+        width: 100%;
+    }
+
+    .cp-header {
+        padding: 0.7rem 0.85rem;
+    }
+
+    .cp-preview {
+        padding: 12px 0.85rem;
+    }
+
+    .cp-input-area {
+        padding: 0.6rem 0.85rem;
+    }
+
+    .ccc-card {
+        padding: 0.6rem 0.85rem;
+    }
+
+    .ccc-avatar {
+        width: 20px;
+        height: 20px;
+    }
+
+    .ccc-name {
+        font-size: 0.74rem;
+        max-width: 100px;
+    }
+
+    .ccc-body {
+        font-size: 0.82rem;
+        line-height: 1.55;
+    }
+
+    .ccc-date {
+        font-size: 0.65rem;
+    }
+
+    .ccc-action-btn {
+        font-size: 0.68rem;
+    }
+
+    .cp-textarea {
+        font-size: 0.82rem;
+    }
+
+    .cp-submit {
+        font-size: 0.72rem;
+        padding: 0.35rem 0.9rem;
+    }
+
+    .ccc-replies {
+        padding-left: 0;
+    }
+}

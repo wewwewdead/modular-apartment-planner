@@ -1,0 +1,648 @@
+import fs from "fs/promises";
+import path from "path";
+import crypto from "crypto";
+import mime from "mime-types";
+import pino from "pino";
+import qrcode from "qrcode-terminal";
+import makeWASocket, {
+  DisconnectReason,
+  downloadMediaMessage,
+  fetchLatestBaileysVersion,
+  useMultiFileAuthState,
+} from "@whiskeysockets/baileys";
+import { compactTimestamp } from "../tools/common.js";
+import {
+  makeInboundReplyKey,
+  makeReplyContentKey,
+  resolveReplyTargets,
+  sleep,
+} from "./reply-router.js";
+
+function unwrapMessageContainer(message) {
+  if (!message) return null;
+  if (message.ephemeralMessage?.message) {
+    return message.ephemeralMessage.message;
+  }
+  if (message.viewOnceMessage?.message) {
+    return message.viewOnceMessage.message;
+  }
+  return message;
+}
+
+function extractTextContent(message) {
+  const m = unwrapMessageContainer(message);
+  if (!m) return "";
+  if (m.conversation) return m.conversation;
+  if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
+  if (m.imageMessage?.caption) return m.imageMessage.caption;
+  if (m.documentMessage?.caption) return m.documentMessage.caption;
+  if (m.videoMessage?.caption) return m.videoMessage.caption;
+  return "";
+}
+
+function makeFileNameFromMime(messageId, contentType, mediaMime) {
+  const extFromMime = mime.extension(mediaMime || "") || null;
+  const ext = extFromMime || (contentType === "image" ? "jpg" : "bin");
+  return `${compactTimestamp()}_${messageId}.${ext}`;
+}
+
+function normalizeText(text) {
+  return String(text || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function makeChatMessageKey(chatJid, messageId) {
+  return `${chatJid || "unknown"}:${messageId || "unknown"}`;
+}
+
+function makeTextFingerprint(chatJid, text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return null;
+  return crypto
+    .createHash("sha256")
+    .update(`${chatJid || "unknown"}|${normalized}`)
+    .digest("hex");
+}
+
+function withTimeout(promise, ms, label = "operation") {
+  let timer = null;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`${label} timed out after ${ms}ms`));
+      }, ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+function textPreview(text, maxLength = 80) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "(empty)";
+  return clean.length <= maxLength ? clean : `${clean.slice(0, maxLength)}...`;
+}
+
+export class WhatsAppHandler {
+  constructor({ config, logger, agent }) {
+    this.config = config;
+    this.logger = logger;
+    this.agent = agent;
+    this.socket = null;
+    this.reconnectInProgress = false;
+    this.processedMessageCache = new Map();
+    this.botMessageIdCache = new Map();
+    this.botMessageTextCache = new Map();
+    this.outboundEchoObservedCache = new Map();
+    this.inboundReplyCompletedCache = new Map();
+    this.outboundContentPerInboundCache = new Map();
+    this.chatQueues = new Map();
+  }
+
+  async start() {
+    await this.connect();
+  }
+
+  async connect() {
+    if (this.reconnectInProgress) return;
+    this.reconnectInProgress = true;
+    try {
+      const { state, saveCreds } = await useMultiFileAuthState(
+        this.config.paths.waSession,
+      );
+      const { version } = await fetchLatestBaileysVersion();
+      this.socket = makeWASocket({
+        version,
+        auth: state,
+        browser: ["Teacher GradeBot", "Terminal", "1.0.0"],
+        logger: pino({ level: "silent" }),
+        syncFullHistory: false,
+      });
+
+      this.socket.ev.on("creds.update", saveCreds);
+      this.socket.ev.on("connection.update", async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        if (qr) {
+          this.logger.info("New WhatsApp QR received. Scan it with WhatsApp.");
+          qrcode.generate(qr, { small: true });
+        }
+        if (connection === "open") {
+          const meId = this.socket?.user?.id || "unknown";
+          const meLid = this.socket?.user?.lid || "unknown";
+          this.logger.info(`WhatsApp connected. meId=${meId} meLid=${meLid}`);
+        } else if (connection === "close") {
+          const statusCode =
+            lastDisconnect?.error?.output?.statusCode ||
+            lastDisconnect?.error?.statusCode;
+          const shouldReconnect =
+            statusCode !== DisconnectReason.loggedOut &&
+            statusCode !== 401 &&
+            statusCode !== 403;
+          this.logger.warn(
+            `WhatsApp disconnected. status=${statusCode || "unknown"} reconnect=${shouldReconnect}`,
+          );
+          if (shouldReconnect) {
+            setTimeout(() => {
+              this.connect().catch((error) => {
+                this.logger.error(`Reconnect failed: ${error.message}`);
+              });
+            }, 2000);
+          } else {
+            this.logger.error(
+              "Session logged out. Delete data/wa-session and restart for a new QR login.",
+            );
+          }
+        }
+      });
+
+      this.socket.ev.on("messages.upsert", async (upsert) => {
+        const messageCount = (upsert.messages || []).length;
+        this.logger.info(
+          `messages.upsert received: type=${upsert.type} count=${messageCount}`,
+        );
+        if (!["notify", "append"].includes(upsert.type)) return;
+        const tasks = [];
+        for (const msg of upsert.messages || []) {
+          if (this.observeOutgoingEchoFromUpsert(msg)) {
+            continue;
+          }
+          tasks.push(
+            this.enqueueByChat(msg?.key?.remoteJid, () =>
+              this.handleIncomingMessage(msg),
+            ),
+          );
+        }
+        await Promise.allSettled(tasks);
+      });
+    } finally {
+      this.reconnectInProgress = false;
+    }
+  }
+
+  enqueueByChat(chatJid, handler) {
+    const key = chatJid || "unknown";
+    const prior = this.chatQueues.get(key) || Promise.resolve();
+    const next = prior
+      .catch(() => undefined)
+      .then(handler)
+      .catch((error) => {
+        this.logger.error(
+          `Chat queue handler failed for ${key}: ${error.message || error}`,
+        );
+      })
+      .finally(() => {
+        if (this.chatQueues.get(key) === next) {
+          this.chatQueues.delete(key);
+        }
+      });
+    this.chatQueues.set(key, next);
+    return next;
+  }
+
+  observeOutgoingEchoFromUpsert(baileysMsg) {
+    const chatJid = baileysMsg?.key?.remoteJid;
+    const messageId = baileysMsg?.key?.id;
+    if (!baileysMsg?.key?.fromMe || !chatJid || !messageId) {
+      return false;
+    }
+
+    const key = makeChatMessageKey(chatJid, messageId);
+    if (!this.cacheHas(this.botMessageIdCache, key)) {
+      return false;
+    }
+
+    this.markOutboundEchoObserved(chatJid, messageId);
+    this.logger.info(
+      `Observed outbound echo immediately from upsert. outId=${messageId} chat=${chatJid}.`,
+    );
+    return true;
+  }
+
+  pruneExpiredEntries(cache) {
+    const now = Date.now();
+    for (const [key, expiresAt] of cache.entries()) {
+      if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+        cache.delete(key);
+      }
+    }
+    const maxEntries = this.config.loopGuard.maxCacheEntries;
+    if (cache.size <= maxEntries) return;
+    const overflow = cache.size - maxEntries;
+    let removed = 0;
+    for (const key of cache.keys()) {
+      cache.delete(key);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
+  }
+
+  cacheSet(cache, key, ttlMs) {
+    if (!key) return;
+    const expiresAt = Date.now() + Math.max(1000, Number(ttlMs) || 1000);
+    cache.set(key, expiresAt);
+    this.pruneExpiredEntries(cache);
+  }
+
+  cacheHas(cache, key) {
+    if (!key) return false;
+    const expiresAt = cache.get(key);
+    if (!expiresAt) return false;
+    if (expiresAt <= Date.now()) {
+      cache.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  markOutboundEchoObserved(chatJid, messageId) {
+    if (!chatJid || !messageId) return;
+    this.cacheSet(
+      this.outboundEchoObservedCache,
+      makeChatMessageKey(chatJid, messageId),
+      this.config.loopGuard.botMessageIdTtlMs,
+    );
+  }
+
+  hasOutboundEchoObserved(chatJid, messageId) {
+    if (!chatJid || !messageId) return false;
+    return this.cacheHas(
+      this.outboundEchoObservedCache,
+      makeChatMessageKey(chatJid, messageId),
+    );
+  }
+
+  hasInboundReplyCompleted(inboundKey) {
+    return this.cacheHas(this.inboundReplyCompletedCache, inboundKey);
+  }
+
+  markInboundReplyCompleted(inboundKey) {
+    this.cacheSet(
+      this.inboundReplyCompletedCache,
+      inboundKey,
+      this.config.loopGuard.processedMessageTtlMs,
+    );
+  }
+
+  async waitForDeliveryEvidence(chatJid, outboundMessageId) {
+    if (!chatJid || !outboundMessageId) return false;
+
+    const timeoutMs = Math.max(0, this.config.replyRouting.verifyTimeoutMs || 0);
+    if (this.hasOutboundEchoObserved(chatJid, outboundMessageId)) {
+      return true;
+    }
+    if (timeoutMs <= 0) return false;
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (this.hasOutboundEchoObserved(chatJid, outboundMessageId)) {
+        return true;
+      }
+      await sleep(100);
+    }
+    return this.hasOutboundEchoObserved(chatJid, outboundMessageId);
+  }
+
+  async sendReplyToTarget({ inboundKey, inboundMessageId, targetJid, replyText }) {
+    const textHash = makeTextFingerprint(targetJid, replyText);
+    const contentKey = makeReplyContentKey(inboundKey, targetJid, textHash);
+    if (this.cacheHas(this.outboundContentPerInboundCache, contentKey)) {
+      this.logger.info(
+        `Reply dedupe skipped for inId=${inboundMessageId} target=${targetJid}.`,
+      );
+      return { skipped: true, targetJid };
+    }
+
+    const sendResult = await this.socket.sendMessage(targetJid, { text: replyText });
+    const outboundId = sendResult?.key?.id || "";
+    this.rememberBotOutgoingMessage(targetJid, outboundId, replyText);
+    this.cacheSet(
+      this.outboundContentPerInboundCache,
+      contentKey,
+      this.config.loopGuard.processedMessageTtlMs,
+    );
+
+    this.logger.info(
+      `Reply send attempt success inId=${inboundMessageId} outId=${outboundId || "unknown"} target=${targetJid}.`,
+    );
+
+    return {
+      skipped: false,
+      targetJid,
+      outboundId,
+      sendResult,
+    };
+  }
+
+  async sendReplyWithRouting({
+    incomingJid,
+    inboundMessageId,
+    replyText,
+    fromMe,
+  }) {
+    const inboundKey = makeInboundReplyKey(incomingJid, inboundMessageId);
+    if (this.hasInboundReplyCompleted(inboundKey)) {
+      this.logger.info(
+        `Reply already completed for inId=${inboundMessageId}. Skipping duplicate send.`,
+      );
+      return { skipped: true, reason: "already_completed" };
+    }
+
+    const meId = this.socket?.user?.id || "";
+    const meLid = this.socket?.user?.lid || "";
+    const routing = resolveReplyTargets({
+      incomingJid,
+      fromMe,
+      meId,
+      meLid,
+      singleNumberMode: this.config.app.singleNumberMode,
+      enableFallback: this.config.replyRouting.enableFallback,
+      strategy: this.config.replyRouting.strategy,
+    });
+
+    this.logger.info(
+      `Reply routing inId=${inboundMessageId} strategy=${routing.strategy} reason=${routing.reason} primary=${routing.primary} fallbacks=[${routing.fallbacks.join(",") || "none"}].`,
+    );
+
+    const targets = [routing.primary, ...routing.fallbacks].filter(Boolean);
+    if (!targets.length) {
+      throw new Error(
+        `No valid reply target resolved for inId=${inboundMessageId}. incomingJid=${incomingJid}`,
+      );
+    }
+    let lastError = null;
+    let lastSuccess = null;
+
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (this.hasInboundReplyCompleted(inboundKey)) {
+        return {
+          skipped: true,
+          reason: "completed_during_send",
+        };
+      }
+
+      try {
+        const attempt = await this.sendReplyToTarget({
+          inboundKey,
+          inboundMessageId,
+          targetJid: target,
+          replyText,
+        });
+        if (attempt.skipped) {
+          continue;
+        }
+
+        const hasFallback =
+          this.config.replyRouting.enableFallback &&
+          routing.fallbacks.length > 0 &&
+          i === 0;
+        let verified = true;
+
+        if (hasFallback) {
+          verified = await this.waitForDeliveryEvidence(target, attempt.outboundId);
+          this.logger.info(
+            `Reply verify inId=${inboundMessageId} outId=${attempt.outboundId || "unknown"} target=${target} verified=${verified}.`,
+          );
+        }
+
+        lastSuccess = {
+          ...attempt,
+          usedFallback: i > 0,
+          verified,
+        };
+
+        if (verified || !hasFallback) {
+          this.markInboundReplyCompleted(inboundKey);
+          return lastSuccess;
+        }
+
+        this.logger.warn(
+          `No delivery evidence for primary target ${target} (inId=${inboundMessageId}). Trying fallback target.`,
+        );
+      } catch (error) {
+        lastError = error;
+        this.logger.error(
+          `Reply send attempt failed inId=${inboundMessageId} target=${target}: ${error.message}`,
+        );
+      }
+    }
+
+    if (lastSuccess) {
+      this.markInboundReplyCompleted(inboundKey);
+      return lastSuccess;
+    }
+
+    throw lastError || new Error("Failed to send reply on all candidate targets.");
+  }
+
+  rememberBotOutgoingMessage(chatJid, messageId, text) {
+    const key = makeChatMessageKey(chatJid, messageId);
+    this.cacheSet(
+      this.botMessageIdCache,
+      key,
+      this.config.loopGuard.botMessageIdTtlMs,
+    );
+    const fingerprint = makeTextFingerprint(chatJid, text);
+    this.cacheSet(
+      this.botMessageTextCache,
+      fingerprint,
+      this.config.loopGuard.botMessageTextTtlMs,
+    );
+  }
+
+  shouldSkipAsDuplicate(chatJid, messageId) {
+    const key = makeChatMessageKey(chatJid, messageId);
+    if (this.cacheHas(this.processedMessageCache, key)) {
+      return true;
+    }
+    this.cacheSet(
+      this.processedMessageCache,
+      key,
+      this.config.loopGuard.processedMessageTtlMs,
+    );
+    return false;
+  }
+
+  shouldSkipFromMeEcho(chatJid, messageId, text) {
+    const messageKey = makeChatMessageKey(chatJid, messageId);
+    const byId = this.cacheHas(this.botMessageIdCache, messageKey);
+    const byText = this.cacheHas(
+      this.botMessageTextCache,
+      makeTextFingerprint(chatJid, text),
+    );
+    if (byId || byText) {
+      this.markOutboundEchoObserved(chatJid, messageId);
+    }
+    return byId || byText;
+  }
+
+  async handleIncomingMessage(baileysMsg) {
+    try {
+      if (!baileysMsg?.key?.remoteJid) return;
+      if (baileysMsg.key.remoteJid === "status@broadcast") return;
+
+      const chatJid = baileysMsg.key.remoteJid;
+      const messageId = baileysMsg.key.id || `${Date.now()}`;
+      if (this.shouldSkipAsDuplicate(chatJid, messageId)) {
+        this.logger.info(
+          `Skipping duplicate event for message ${messageId} in ${chatJid}.`,
+        );
+        return;
+      }
+
+      const normalizedMessage = unwrapMessageContainer(baileysMsg.message);
+      const text = extractTextContent(baileysMsg.message);
+
+      if (baileysMsg.key.fromMe) {
+        if (!this.config.app.singleNumberMode) {
+          this.logger.info(
+            `Skipping fromMe message ${messageId} from ${chatJid} because SINGLE_NUMBER_MODE=false.`,
+          );
+          return;
+        }
+        if (this.shouldSkipFromMeEcho(chatJid, messageId, text)) {
+          this.logger.info(
+            `Loop guard blocked bot-echo fromMe message ${messageId} in ${chatJid}.`,
+          );
+          return;
+        }
+        this.logger.info(
+          `Accepted fromMe operator message ${messageId} in ${chatJid} (single-number mode).`,
+        );
+      }
+
+      const attachments = await this.extractAttachments(
+        baileysMsg,
+        normalizedMessage,
+      );
+
+      this.logger.info(
+        `Inbound message accepted from ${baileysMsg.key.remoteJid} (fromMe=${Boolean(baileysMsg.key.fromMe)} textPreview="${textPreview(text)}" attachments=${attachments.length}).`,
+      );
+
+      const input = {
+        userId: chatJid,
+        messageId,
+        text,
+        attachments,
+        timestamp: new Date(
+          Number(baileysMsg.messageTimestamp || Math.floor(Date.now() / 1000)) *
+            1000,
+        ).toISOString(),
+      };
+
+      const startedAt = Date.now();
+      this.logger.info(
+        `Agent handling started for message ${messageId} in ${chatJid}.`,
+      );
+      const result = await withTimeout(
+        this.agent.handleIncoming(input),
+        this.config.app.agentTimeoutMs,
+        "agent.handleIncoming",
+      );
+      this.logger.info(
+        `Agent handling completed for message ${messageId} in ${Date.now() - startedAt}ms.`,
+      );
+      if (result?.replyText) {
+        const routed = await this.sendReplyWithRouting({
+          incomingJid: chatJid,
+          inboundMessageId: messageId,
+          replyText: result.replyText,
+          fromMe: Boolean(baileysMsg.key.fromMe),
+        });
+        this.logger.info(
+          `Reply sent for message ${messageId}. outId=${routed?.outboundId || "unknown"} target=${routed?.targetJid || chatJid} usedFallback=${Boolean(routed?.usedFallback)} verified=${routed?.verified !== false}.`,
+        );
+      } else {
+        this.logger.warn(
+          `Agent returned empty reply for message ${messageId}; sending fallback guidance.`,
+        );
+        const fallbackText =
+          "I could not produce a response for that message. Please rephrase your request in one sentence.";
+        await this.sendReplyWithRouting({
+          incomingJid: chatJid,
+          inboundMessageId: messageId,
+          replyText: fallbackText,
+          fromMe: Boolean(baileysMsg.key.fromMe),
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Message handling failed: ${error.message}`);
+      try {
+        const chatJid = baileysMsg?.key?.remoteJid;
+        const inboundId = baileysMsg?.key?.id || `${Date.now()}`;
+        if (!chatJid) return;
+        const errorText =
+          "I encountered an internal error while processing your request. Please try again.";
+        await this.sendReplyWithRouting({
+          incomingJid: chatJid,
+          inboundMessageId: inboundId,
+          replyText: errorText,
+          fromMe: Boolean(baileysMsg?.key?.fromMe),
+        });
+      } catch (sendError) {
+        this.logger.error(`Failed to send error message: ${sendError.message}`);
+      }
+    }
+  }
+
+  async extractAttachments(baileysMsg, normalizedMessage) {
+    const attachments = [];
+    if (!normalizedMessage) return attachments;
+
+    if (normalizedMessage.imageMessage) {
+      const buffer = await downloadMediaMessage(
+        baileysMsg,
+        "buffer",
+        {},
+        { logger: pino({ level: "silent" }) },
+      );
+      const imageMime = normalizedMessage.imageMessage.mimetype || "image/jpeg";
+      const fileName = makeFileNameFromMime(
+        baileysMsg.key.id || "image",
+        "image",
+        imageMime,
+      );
+      const targetPath = path.join(this.config.paths.inbox, fileName);
+      await fs.writeFile(targetPath, buffer);
+      attachments.push({
+        type: "image",
+        path: targetPath,
+        mime: imageMime,
+        originalName: fileName,
+      });
+    }
+
+    if (normalizedMessage.documentMessage) {
+      const buffer = await downloadMediaMessage(
+        baileysMsg,
+        "buffer",
+        {},
+        { logger: pino({ level: "silent" }) },
+      );
+      const docMime =
+        normalizedMessage.documentMessage.mimetype ||
+        "application/octet-stream";
+      const originalName =
+        normalizedMessage.documentMessage.fileName ||
+        makeFileNameFromMime(baileysMsg.key.id || "document", "document", docMime);
+      const safeName = originalName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_");
+      const targetPath = path.join(
+        this.config.paths.inbox,
+        `${compactTimestamp()}_${safeName}`,
+      );
+      await fs.writeFile(targetPath, buffer);
+      attachments.push({
+        type: "document",
+        path: targetPath,
+        mime: docMime,
+        originalName: originalName,
+      });
+    }
+
+    return attachments;
+  }
+}

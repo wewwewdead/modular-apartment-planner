@@ -1,0 +1,184 @@
+# SEO Improvements for iskrib.com
+
+## Context
+iskrib.com is a social journaling platform (React + Vite on Render.com static hosting, Express.js API server, Supabase). The goal is to make all public content discoverable by Google to grow to 100+ active users.
+
+**Current state:** Good foundation (meta tags, OG tags, social sharing, build-time prerender for 6 static pages). But the platform's core content — individual posts and user profiles — is invisible to Google: no dynamic sitemap, generic meta tags on dynamic pages, and profile URLs use query params.
+
+---
+
+## Phase 1: Dynamic Sitemap (Highest Impact)
+
+Google can't index what it can't discover. Current sitemap has only 6 static pages — zero posts, zero profiles.
+
+### 1a. Create `server/utils/urlUtils.js`
+Extract `makePostUrl` and `SITE_URL` from `server/server.js` (lines 12, 42-47) into a shared utility.
+
+### 1b. Create `server/routes/sitemapRoutes.js`
+Three endpoints:
+
+- **`GET /api/sitemap-posts.xml`** — Query Supabase: `SELECT id, title, created_at FROM journals WHERE privacy = 'public'`. Generate XML with URLs from `makePostUrl()`. Cache 1 hour.
+- **`GET /api/sitemap-profiles.xml`** — Query: `SELECT id, username FROM users WHERE username IS NOT NULL`. URLs as `https://iskrib.com/@{username}`. Cache 1 hour.
+- **`GET /api/sitemap-index.xml`** — Sitemap index referencing `/sitemap.xml` (static) + both dynamic sitemaps.
+
+### 1c. Mount in `server/server.js`
+Import and mount `sitemapRoutes` before the existing router (before line 600).
+
+### 1d. Update `client/public/robots.txt`
+```
+User-agent: *
+Allow: /
+Disallow: /profile
+Disallow: /home/bookmark
+Disallow: /home/notifications
+Disallow: /home/collections
+Disallow: /home/contentViewer
+
+Sitemap: https://iskrib.com/api/sitemap-index.xml
+```
+
+---
+
+## Phase 2: Post Page SEO (High Impact)
+
+Every post currently shows generic "Iskryb Post" title. Each should have its actual title, excerpt, and Article structured data.
+
+### 2a. Create `client/src/seo/seoUtils.js`
+Extract `ensureMeta`, `ensureLink`, `ensureJsonLd`, `removeElementById` from `SeoManager.jsx` (lines 13-57) into a shared module.
+
+### 2b. Modify `client/src/seo/SeoManager.jsx`
+Import helpers from `seoUtils.js` instead of defining locally.
+
+### 2c. Create `client/src/seo/extractPostImage.js`
+Lightweight Lexical JSON walker to find the first image `src` for og:image.
+
+### 2d. Create `client/src/seo/usePostSeo.js`
+Hook that takes `postData` and updates:
+- Title: `"Post Title | Iskryb"`
+- Description: first ~160 chars of post text
+- og:type: `article`, og:image: first image from content
+- Article JSON-LD schema (headline, author, datePublished, publisher)
+- Cleans up on unmount
+
+### 2e. Integrate into `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+Call `usePostSeo(postData)` after the `postData` useMemo (line 106). The `postData` object already contains `title`, `wholeText`, `name`, `created_at`, `journalId`, `avatar`.
+
+### 2f. Update `client/src/seo/seoConfig.js`
+- Make `DYNAMIC_PATTERNS[].seo` support function values so canonical can include journalId
+- Update `getSeoForPath()` to call the function if `seo` is a function
+- Add pattern for `/@username` profile pages
+
+---
+
+## Phase 3: `/@username` Profile URLs (Medium-High Impact)
+
+Currently: `/visitProfile?userId={uuid}`. New: `/@username`.
+
+### 3a. Database: Add `username` column
+SQL migration to run in Supabase:
+```sql
+ALTER TABLE users ADD COLUMN username VARCHAR(50);
+CREATE UNIQUE INDEX users_username_unique ON users (lower(username));
+```
+
+### 3b. Create `server/scripts/backfillUsernames.js`
+One-time script to generate usernames for existing users:
+- Slugify their `name` (lowercase, replace spaces with hyphens, strip special chars)
+- If duplicate, append a short random suffix (e.g., `-a3f2`)
+- Update each user's `username` column
+
+### 3c. New API endpoints in `server/routes/routes.js`
+- **`GET /api/user/:username`** — Look up user by username (case-insensitive), return user data + follow counts (reuse `getUserDataService` pattern)
+- **`GET /api/check-username/:username`** — Check availability (for signup/edit)
+- **`POST /api/update-username`** (auth required) — Let users change their username with validation (3-50 chars, alphanumeric + hyphens, unique, no reserved words)
+
+### 3d. Update `server/services/uploadService.js`
+- `uploadUserDataService` (line 85): Accept `username` param, include in insert payload, validate (3-50 chars, lowercase alphanumeric + hyphens, unique)
+- `updateUserDataService` (line 122): Optionally accept username updates
+
+### 3e. Add route `/@:username` in `client/src/App.jsx`
+```jsx
+<Route path='/@:username' element={<Visitprofile/>}>
+    <Route index element={<VisitedProfilePostCards/>}/>
+    <Route path='media' element={<VisitedProfileMediaSection/>}/>
+    <Route path='collections' element={<CollectionViewer/>}/>
+    <Route path='opinions' element={<VisitedProfileOpinions/>}/>
+</Route>
+```
+Keep the existing `/visitProfile` route for backward compatibility.
+
+### 3f. Modify `client/src/components/VisitProfile/VisitProfile.jsx`
+- Add `useParams` to read `username` from URL
+- If `username` param present: fetch user by username via new `GET /api/user/:username` endpoint
+- If `userId` query param present: existing behavior (backward compat)
+- Update `tablists` to use `/@{username}` paths when username is available
+
+### 3g. Modify `client/helpers/handleClicks.js`
+Change `handleClickProfile` (line 80) to navigate to `/@{username}` instead of `/visitProfile?userId=...`. Will need the clicked user's username passed in (available from post card data).
+
+### 3h. Create `client/src/seo/useProfileSeo.js`
+Hook updating meta tags for profile pages:
+- Title: `"Username's Profile | Iskryb"`
+- Description: user's bio or generic text
+- Person JSON-LD schema
+- Cleans up on unmount
+
+### 3i. Update signup flow
+The existing setup page (`uploadUserDataController`) collects name + bio + avatar. Add a username field:
+- Auto-suggest from name (slugified)
+- Real-time availability check via `GET /api/check-username/:username`
+- Validate on submit
+
+---
+
+## Phase 4: Small Enhancements
+
+### 4a. Add googlebot meta to `client/index.html`
+```html
+<meta name="googlebot" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+```
+
+---
+
+## Files Summary
+
+### Create
+| File | Purpose |
+|------|---------|
+| `server/utils/urlUtils.js` | Shared `makePostUrl` + `SITE_URL` |
+| `server/routes/sitemapRoutes.js` | Dynamic sitemap endpoints |
+| `server/scripts/backfillUsernames.js` | One-time username backfill |
+| `client/src/seo/seoUtils.js` | Extracted DOM helpers |
+| `client/src/seo/usePostSeo.js` | Post page meta tags hook |
+| `client/src/seo/useProfileSeo.js` | Profile page meta tags hook |
+| `client/src/seo/extractPostImage.js` | Lexical image extractor |
+
+### Modify
+| File | Change |
+|------|--------|
+| `server/server.js` | Mount sitemap routes, import from urlUtils |
+| `server/routes/routes.js` | Add username endpoints (GET user by username, check availability, update username) |
+| `server/services/uploadService.js` | Accept username in user data upload/update, validate uniqueness |
+| `server/services/getUserDataService.js` | Add `getUserByUsernameService` |
+| `client/public/robots.txt` | Sitemap index URL + Disallow rules |
+| `client/src/seo/SeoManager.jsx` | Import from seoUtils.js |
+| `client/src/seo/seoConfig.js` | Function-based dynamic patterns, `/@username` pattern |
+| `client/src/components/HomePage/ContentViewer/ContentView.jsx` | Add usePostSeo |
+| `client/src/App.jsx` | Add `/@:username` route |
+| `client/src/components/VisitProfile/VisitProfile.jsx` | useParams + username lookup + useProfileSeo |
+| `client/helpers/handleClicks.js` | Navigate to `/@username` |
+| `client/index.html` | Googlebot meta tag |
+
+---
+
+## Verification
+1. Run backfill script → all existing users should have usernames
+2. `GET /api/sitemap-index.xml` → lists 3 sitemaps
+3. `GET /api/sitemap-posts.xml` → contains actual post URLs with slugs
+4. `GET /api/sitemap-profiles.xml` → contains `/@username` URLs
+5. Open a post page, inspect `<head>` → title shows actual post title, Article JSON-LD present
+6. Navigate to `/@someusername` → profile renders correctly
+7. `/visitProfile?userId=...` still works (backward compat)
+8. Signup creates username alongside name/bio
+9. Submit sitemap index to Google Search Console
+10. Use Google Rich Results Test on a post URL to validate structured data

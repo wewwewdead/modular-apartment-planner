@@ -1,0 +1,244 @@
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-45-    universe_x FLOAT, universe_y FLOAT,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-46-    user_id UUID, user_name TEXT, user_image_url TEXT, user_badge TEXT,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-47-    like_count BIGINT
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-48-)
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-49-LANGUAGE sql STABLE AS $$
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:50:    SELECT j.id, j.title, j.content, j.post_type, j.canvas_doc, j.created_at,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-51-           COALESCE(j.settled_x, j.universe_x) AS display_x,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-52-           COALESCE(j.settled_y, j.universe_y) AS display_y,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-53-           j.universe_x, j.universe_y,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-54-           u.id, u.name, u.image_url, u.badge,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql-55-           COALESCE(lc.cnt, 0)
+--
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-19-        throw {status: 400, error: 'journalId is undefined'};
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-20-    }
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-21-
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-22-    const {data: journal, error: journalError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-23-    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:24:    .select('id, user_id, title, post_type, canvas_doc, privacy')
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-25-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-26-    .maybeSingle();
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-27-
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-28-    if(journalError){
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js-29-        console.error('supabase error while fetching canvas journal', journalError.message);
+--
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-94-        return res.status(500).json({error: 'failed to upload content!'})
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-95-    }
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-96-}
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-97-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-98-export const updateJournalController = async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js:99:    const {content, title, journalId, post_type: postType, canvas_doc: canvasDoc} = req.body;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-100-    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-101-
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-102-    try {
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-103-        await updateJournalService(content, title, journalId, userId, postType, canvasDoc);
+C:\Users\johnm\iskrib_v3\server\controller\uploadController.js-104-        return res.status(200).json({message: 'journal was updated successfuly'});
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-783-            like_count: likes(count),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-784-            comment_count: comments(count),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-785-            bookmark_count: bookmarks(count)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-786-        `)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-787-        .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\getService.js:788:        .eq('post_type', 'canvas')
+C:\Users\johnm\iskrib_v3\server\services\getService.js-789-        .order('created_at', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\services\getService.js-790-        .order('id', {ascending: false});
+C:\Users\johnm\iskrib_v3\server\services\getService.js-791-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-792-    const {data: journals, error: journalsError} = isNewest
+C:\Users\johnm\iskrib_v3\server\services\getService.js-793-        ? await baseQuery.range(cursorOffset, cursorOffset + parsedLimit)
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-367-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-368-    const resolvedRequestedPostType = postType ? normalizePostType(postType) : null;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-369-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-370-    const {data: existingJournal, error: existingJournalError} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-371-    .from('journals')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:372:    .select('id, user_id, content, title, post_type, canvas_doc')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-373-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-374-    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-375-    .maybeSingle();
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-376-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-377-    if(existingJournalError){
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-32-    const likes = Math.min(likeCount || 0, 20);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-33-    return 6 + likes * 0.3;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-34-};
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-35-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-36-export const extractSnippet = (post) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js:37:    if (post.post_type === 'canvas' && post.canvas_doc?.snippets) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-38-        return post.canvas_doc.snippets
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-39-            .map(s => s?.text || '')
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-40-            .filter(Boolean)
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-41-            .join(' ')
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\starUtils.js-42-            .slice(0, 200);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1146-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1147-        try {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1148-            setIsSending(true);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1149-            const formdata = new FormData();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1150-            formdata.append("title", title);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1151:            formdata.append("post_type", "canvas");
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1152-            formdata.append("canvas_doc", JSON.stringify(canvasDoc));
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1153-            if(remixSource?.journalId){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1154-                formdata.append("remix_source_journal_id", remixSource.journalId);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1155-                formdata.append("is_remix", "true");
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1156-            }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-46-    }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-47-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-48-    const journals = useMemo(() => (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-49-        (data?.pages || [])
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-50-            .flatMap((page) => page?.data || [])
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:51:            .filter((journal) => journal?.post_type === "canvas")
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-52-    ), [data?.pages]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-53-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-54-    const handleOpenCanvas = (journalId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-55-        if(!session){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-56-            openAuthModal();
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-112-            </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-113-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-114-            {viewMode === 'grid' ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-115-                <div className="postcards-grid-view">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-116-                    {journals.map((journal) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:117:                        const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-118-                        const parsedContent = ParseContent(journal.content);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-119-                        const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-120-                        const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-121-                        const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-122-                        const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-125-                                key={journal.id}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-126-                                className={`postcards-grid-item${isCanvasPost ? ' is-canvas-card' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-127-                                initial={{ opacity: 0, scale: 0.95 }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-128-                                animate={{ opacity: 1, scale: 1 }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-129-                                transition={{ duration: 0.25, ease: 'easeOut' }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:130:                                onClick={(e) => viewContent(e, journal?.content, wholeText, journal?.title, userId, journal?.users?.name, journal?.users?.image_url, journal?.created_at, journal?.id, journal?.has_liked, journal?.comment_count?.[0].count, journal?.has_bookmarked, journal?.like_count?.[0].count, journal?.bookmark_count?.[0].count, journal?.users?.badge, journal?.post_type, journal?.canvas_doc)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-131-                            >
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-132-                                {isCanvasPost ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-133-                                    <div className="postcards-grid-img-wrap">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-134-                                        <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-135-                                    </div>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-149-                    })}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-150-                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-151-            ) : (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-152-            <div className="postcards-list-view">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-153-            {journals.map((journal, index) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:154:                const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-155-                const parsedContent = ParseContent(journal.content);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-156-                const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-157-                const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-158-                const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-159-                const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-289-            </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-290-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-291-            {viewMode === 'grid' ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-292-                <div className="postcards-grid-view">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-293-                    {journals.map((journal) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:294:                        const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-295-                        const parsedContent = ParseContent(journal?.content);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-296-                        const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-297-                        const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-298-                        const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-299-                        const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-302-                                key={journal.id}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-303-                                className={`postcards-grid-item${isCanvasPost ? ' is-canvas-card' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-304-                                initial={{ opacity: 0, scale: 0.95 }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-305-                                animate={{ opacity: 1, scale: 1 }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-306-                                transition={{ duration: 0.25, ease: 'easeOut' }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:307:                                onClick={(e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0].count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-308-                            >
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-309-                                {showEditor === journal.id && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-310-                                    <EditJournal journalData={journalData ? journalData : {}} onClose={handleClickCloseEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-311-                                )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-312-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-395-                                                        <div className={setting.className} onClick={(e) => setting.actionDelete(e, journal.id)}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-396-                                                            {setting.icon}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-397-                                                            {setting.label}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-398-                                                        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-399-                                                    )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:400:                                                    {setting.actionEdit && journal?.post_type !== 'canvas' && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-401-                                                        <div className={setting.className} onClick={(e) => setting.actionEdit(e, journal.content, journal.id, journal.title)}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-402-                                                            {setting.icon}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-403-                                                            {setting.label}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-404-                                                        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-405-                                                    )}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-425-                    })}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-426-                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-427-            ) : (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-428-            <div className="postcards-list-view">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-429-            {journals.map((journal, index) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:430:                const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-431-                const parsedContent =  ParseContent(journal?.content);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-432-                const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-433-                const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-434-                const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-435-                const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-498-                                    className="card-image-banner"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-499-                                    src={thumbnail}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-500-                                    alt={journal?.title ? `${journal.title} cover image` : "Post cover image"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-501-                                    loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-502-                                    onError={handleImageFallback}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:503:                                    onClick={(e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0].count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-504-                                />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-505-                            )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-506-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-507-                            <div className='user-profile-card-content'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-508-                                <div onClick={(e) => viewContent(
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-584-                                                        {setting.icon}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-585-                                                        {setting.label}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-586-                                                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-587-                                                )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-588-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:589:                                                {setting.actionEdit && journal?.post_type !== 'canvas' &&(
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-590-                                                    <div className={setting.className} onClick={(e) => setting.actionEdit(e, journal.content, journal.id, journal.title)}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-591-                                                        {setting.icon}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-592-                                                        {setting.label}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-593-                                                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-594-                                                )}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-517-                     : isSearchMode ? 'No matching posts found.'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-518-                     : 'No post available...'}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-519-                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-520-            )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-521-            {journals.map((journal, index) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:522:                const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-523-                const parsedContent = ParseContent(journal.content);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-524-                const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-525-                const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-526-                const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-527-                const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-551-                                className="card-image-banner"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-552-                                src={thumbnail}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-553-                                alt={journal?.title ? `${journal.title} cover image` : "Post cover image"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-554-                                loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-555-                                onError={handleImageFallback}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:556:                                onClick={(e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-557-                            />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-558-                        )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-559-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-560-                        <div className="card-content">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:561:                            <div onClick={isCanvasPost ? undefined : (e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc)} className="content-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-562-                                <div className="feed-text-content-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-563-                                    <div className="feed-title-content">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-564-                                        {isCanvasPost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-565-                                            <span className="canvas-type-badge">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-566-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-613-                                                        {icon.likeAction && icon.likeAction(isLiked)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-614-                                                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-615-                                                )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-616-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-617-                                                {icon.commentAction && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:618:                                                    <div onClick={(e) => icon.commentAction(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc)} id="card-icons" className={icon.className}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-619-                                                        {icon.label}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-620-                                                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-621-                                                )}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-622-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-623-                                            {icon.bookmarkAction && (

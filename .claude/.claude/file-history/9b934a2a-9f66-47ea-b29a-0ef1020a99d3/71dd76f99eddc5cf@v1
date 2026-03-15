@@ -1,0 +1,31 @@
+# iskrib_v3 Project Memory
+
+## Architecture
+- **Frontend:** React + Vite, HashRouter, Lexical rich text editor
+- **Backend:** Express.js on port 3000, Supabase (PostgreSQL + Storage)
+- **State:** React Query for caching, Context for auth
+- **Styling:** CSS variables, glass morphism, Framer Motion animations
+
+## Key Patterns
+- Single `<LexicalComposer>` wraps entire app in `App.jsx` (nodes: ImageNode, HeadingNode, QuoteNode)
+- New independent editors need their own `<LexicalComposer>` instance
+- API calls use `fetch` with Bearer token auth, FormData for file uploads
+- Backend validates via service layer, controllers are thin wrappers
+- Profile customization stored in `profile_layout` JSON column on `users` table
+- Image uploads: multer → Sharp (WebP) → Supabase Storage
+
+## File Locations
+- Routes: `server/routes/routes.js`
+- Upload services: `server/services/uploadService.js`
+- Client API: `client/API/Api.js`
+- Profile layout: `client/src/utils/profileLayout/`
+- Profile page: `client/src/components/ProfilePage/`
+- Visited profile: `client/src/components/VisitProfile/`
+- Editor: `client/src/components/HomePage/Editor/`
+
+## Notes Feature (Feb 2026)
+- Added customizable notes section to profile pages
+- Data in `profile_layout.notes` array, max 10 notes
+- Dedicated endpoint `POST /updateProfileLayout` (avoids name/bio validation)
+- Each note has its own LexicalComposer instance
+- Components: ProfileNotesSection, NoteContainer, NoteStyleEditor, InlineNoteEditor, ReadOnlyNoteView

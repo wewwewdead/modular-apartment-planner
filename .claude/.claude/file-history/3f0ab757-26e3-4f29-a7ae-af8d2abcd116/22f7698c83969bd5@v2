@@ -1,0 +1,51 @@
+import React from 'react';
+import { StyleSheet, Text } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+
+import { colors } from '../../theme/colors';
+import { motion } from '../../theme/motion';
+
+interface TabBarBadgeProps {
+  count: number;
+}
+
+export function TabBarBadge({ count }: TabBarBadgeProps) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(count > 0 ? 1 : 0, motion.bouncy) }],
+    opacity: withSpring(count > 0 ? 1 : 0, motion.bouncy),
+  }));
+
+  if (count <= 0) return null;
+
+  return (
+    <Animated.View
+      style={[styles.badge, animatedStyle]}
+      importantForAccessibility="no"
+    >
+      <Text style={styles.text}>{count > 99 ? '99+' : count}</Text>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  text: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+});

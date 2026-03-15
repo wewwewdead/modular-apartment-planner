@@ -1,0 +1,303 @@
+# Stories Feature - Wattpad-style Serialized Content with Paragraph Comments
+
+## Context
+Add a Wattpad-inspired "Stories" feature to iskrib allowing users to write serialized content with chapters, track reading progress, and leave **paragraph-level inline comments** on specific paragraphs while reading. This extends the platform from single posts to long-form serialized storytelling.
+
+---
+
+## Database Schema
+
+### New Tables (run in Supabase SQL editor)
+
+**`stories`** - Story metadata
+```sql
+CREATE TABLE stories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    author_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    cover_url TEXT DEFAULT NULL,
+    status TEXT NOT NULL DEFAULT 'ongoing' CHECK (status IN ('ongoing', 'completed', 'hiatus')),
+    tags TEXT[] DEFAULT '{}',
+    privacy TEXT NOT NULL DEFAULT 'public' CHECK (privacy IN ('public', 'private')),
+    read_count INTEGER NOT NULL DEFAULT 0,
+    vote_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**`chapters`** - Chapter content (Lexical JSON)
+```sql
+CREATE TABLE chapters (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    story_id UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    chapter_number INTEGER NOT NULL,
+    title TEXT NOT NULL DEFAULT 'Untitled Chapter',
+    content JSONB DEFAULT NULL,
+    word_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+    published_at TIMESTAMPTZ DEFAULT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(story_id, chapter_number)
+);
+```
+
+**`story_comments`** - Paragraph-level comments (hybrid index + fingerprint anchoring)
+```sql
+CREATE TABLE story_comments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chapter_id UUID NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    parent_id UUID DEFAULT NULL REFERENCES story_comments(id) ON DELETE CASCADE,
+    comment TEXT NOT NULL,
+    paragraph_index INTEGER NOT NULL DEFAULT -1,       -- -1 = chapter-level
+    paragraph_fingerprint TEXT DEFAULT NULL,            -- first 100 chars of paragraph text
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**`story_votes`** - Like/vote on stories
+```sql
+CREATE TABLE story_votes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    story_id UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(story_id, user_id)
+);
+```
+
+**`reading_progress`** - Track where user left off
+```sql
+CREATE TABLE reading_progress (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    story_id UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    chapter_id UUID NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+    scroll_position REAL DEFAULT 0,
+    last_read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(user_id, story_id)
+);
+```
+
+**`story_library`** - User's reading list (bookmarks for stories)
+```sql
+CREATE TABLE story_library (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    story_id UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(user_id, story_id)
+);
+```
+
+Plus indexes and auto-update triggers for `updated_at`.
+
+---
+
+## Paragraph-Level Commenting Strategy
+
+**Approach: Hybrid Index + Text Fingerprint** (best balance of performance and resilience)
+
+- When commenting: store both the paragraph's **zero-based index** and a **fingerprint** (first 100 chars of plain text)
+- When rendering: try matching by index first; if fingerprint mismatches (author edited), scan all paragraphs for fingerprint match
+- If no match found: show comment in "orphaned comments" section at chapter bottom
+- Comment counts per paragraph fetched in a single batch query and cached
+
+---
+
+## API Endpoints
+
+### Stories
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/stories` | required | Create story (multipart: cover image) |
+| GET | `/api/stories` | optional | Browse stories (paginated, filterable) |
+| GET | `/api/stories/:storyId` | optional | Story detail + chapter list |
+| PATCH | `/api/stories/:storyId` | required | Update story metadata |
+| DELETE | `/api/stories/:storyId` | required | Delete story (cascades) |
+| GET | `/api/stories/my` | required | Author's own stories (incl. private) |
+| GET | `/api/stories/user/:userId` | optional | User's public stories |
+
+### Chapters
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/stories/:storyId/chapters` | required | Create chapter |
+| GET | `/api/stories/:storyId/chapters/:chapterId` | optional | Read chapter content |
+| PATCH | `/api/stories/:storyId/chapters/:chapterId` | required | Update chapter |
+| DELETE | `/api/stories/:storyId/chapters/:chapterId` | required | Delete chapter |
+| POST | `/api/stories/:storyId/chapters/reorder` | required | Reorder chapters |
+
+### Interactions
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| POST | `/api/stories/:storyId/vote` | required | Toggle vote |
+| POST | `/api/stories/:storyId/library` | required | Toggle library |
+| GET | `/api/chapters/:chapterId/comments` | optional | Get comments (filter by paragraph_index) |
+| GET | `/api/chapters/:chapterId/comment-counts` | optional | Batch paragraph comment counts |
+| POST | `/api/chapters/:chapterId/comments` | required | Add paragraph/chapter comment |
+| POST | `/api/stories/:storyId/progress` | required | Save reading progress |
+| GET | `/api/stories/:storyId/progress` | required | Get reading progress |
+
+---
+
+## Backend Files (new)
+
+Following existing controller → service pattern:
+
+| File | Purpose |
+|------|---------|
+| `server/services/storyService.js` | Story CRUD business logic |
+| `server/services/chapterService.js` | Chapter CRUD + word count |
+| `server/services/storyInteractService.js` | Votes, library, comments, progress |
+| `server/controller/storyController.js` | Thin story route handlers |
+| `server/controller/chapterController.js` | Thin chapter route handlers |
+| `server/controller/storyInteractController.js` | Thin interaction handlers |
+| `server/routes/storyRoutes.js` | All `/api/stories/*` routes |
+| `server/sql/stories.sql` | Migration SQL |
+
+**Modified:** `server/server.js` - mount `storyRouter`
+
+Reuse existing patterns from:
+- `interactService.js` - toggle pattern (like → story_votes, bookmark → story_library)
+- `routes.js` - `requireAuth`/`optionalAuth` middleware, `imageUploader()` function
+- `uploadService.js` - cursor pagination pattern (limit+1 for hasMore)
+
+**New Supabase Storage bucket:** `story-covers`
+
+---
+
+## Frontend Components (new)
+
+```
+client/src/components/Stories/
+    StoryBrowser/
+        StoryBrowser.jsx          -- Discovery grid with filters
+        StoryCard.jsx             -- Card: cover, title, author, stats
+        StoryFilters.jsx          -- Status/tag filter bar
+    StoryDetail/
+        StoryDetail.jsx           -- Landing page: cover, description, chapters
+        ChapterList.jsx           -- Ordered chapter list
+        StoryMetaBar.jsx          -- Vote, library, share actions
+    ChapterReader/
+        ChapterReader.jsx         -- Clean reading view (own LexicalComposer)
+        ChapterNavigation.jsx     -- Prev/Next + chapter selector
+        ReadingProgressBar.jsx    -- Thin scroll progress bar at top
+        ParagraphCommentBadge.jsx -- Floating comment count on paragraph hover
+        ParagraphCommentPanel.jsx -- Slide-in panel for paragraph comments
+    StoryEditor/
+        StoryEditor.jsx           -- Create/edit story form
+        ChapterEditor.jsx         -- Chapter writing (own LexicalComposer)
+        StoryDashboard.jsx        -- Author's story list + management
+        StoryChapterManager.jsx   -- Chapter list: add, reorder, publish/draft
+    StoryComments/
+        StoryCommentCard.jsx      -- Comment card with reply support
+    hooks/
+        useStoryData.js           -- React Query hooks for stories
+        useChapterReader.js       -- Chapter fetch + progress
+        useStoryComments.js       -- Paragraph comment queries
+        useStoryMutations.js      -- Vote, library, comment mutations
+        useParagraphAnchoring.js  -- Comment-to-paragraph matching logic
+```
+
+**New API file:** `client/API/StoryApi.js`
+
+---
+
+## Route Integration
+
+Add to `App.jsx` inside `/home` route:
+```
+/home/stories                        → StoryBrowser
+/home/stories/dashboard              → StoryDashboard (author)
+/home/stories/new                    → StoryEditor (create)
+/home/stories/:storyId               → StoryDetail
+/home/stories/:storyId/edit          → StoryEditor (edit)
+/home/stories/:storyId/manage        → StoryChapterManager
+/home/stories/:storyId/chapter/:chapterId        → ChapterReader
+/home/stories/:storyId/chapter/:chapterId/edit   → ChapterEditor
+```
+
+Add to profile routes:
+```
+/profile/stories                     → User's own stories tab
+/u/:username/stories                 → Visited user's stories tab
+```
+
+Add "Stories" link to sidebar navigation.
+
+---
+
+## Key UX Flows
+
+### Reading Flow
+1. Browse stories at `/home/stories` (grid of cards with cover, title, stats)
+2. Click card → Story detail page (cover hero, description, chapter list, vote/library buttons)
+3. Click chapter or "Start Reading" → Chapter reader (clean, distraction-free)
+4. Each paragraph shows a subtle comment icon on hover (right margin)
+5. Click icon → slide-in panel with paragraph's comment thread
+6. Thin progress bar at viewport top tracks scroll position
+7. Auto-save reading progress (debounced); "Continue Reading" resumes from last position
+
+### Writing Flow
+1. "Write a Story" from sidebar or dashboard
+2. Create story: title, description, cover upload, status, tags
+3. Manage chapters: add, reorder (drag), publish/draft toggle
+4. Chapter editor: independent LexicalComposer, auto-save drafts, publish button
+
+### Paragraph Comment UX (Wattpad-style)
+- **Desktop:** Hover paragraph → faint comment icon appears on right margin with count badge
+- **Mobile:** Tap paragraph → comment icon appears
+- Click/tap icon → Panel slides in from right (desktop) or bottom sheet (mobile)
+- Panel shows: paragraph text preview at top, comment list below, input at bottom
+- Supports replies (2-level threading, same as existing comments)
+- 300 char max per comment
+
+---
+
+## Implementation Scope (Phase 1+2 First)
+
+> **Style:** Match existing glass morphism + CSS variables + Framer Motion.
+> Phases 3-5 (reading experience, paragraph comments, integration/polish) will be built in a follow-up session.
+
+### Phase 1: Database + Core Backend
+1. Create `server/sql/stories.sql` with all tables + indexes + triggers
+2. Create Supabase `story-covers` storage bucket
+3. Extract `requireAuth`/`optionalAuth`/`imageUploader` from `routes.js` for reuse
+4. Build `server/services/storyService.js` - story CRUD logic
+5. Build `server/services/chapterService.js` - chapter CRUD + word count extraction
+6. Build `server/services/storyInteractService.js` - votes, library, comments, progress
+7. Build `server/controller/storyController.js` - thin handlers
+8. Build `server/controller/chapterController.js` - thin handlers
+9. Build `server/controller/storyInteractController.js` - thin handlers
+10. Build `server/routes/storyRoutes.js` - register all routes
+11. Mount `storyRouter` in `server/server.js`
+
+### Phase 2: Story CRUD Frontend
+1. Create `client/API/StoryApi.js` with all API functions
+2. Build `StoryDashboard.jsx` + `StoryDashboard.css` - author's story list
+3. Build `StoryEditor.jsx` + `StoryEditor.css` - create/edit story form
+4. Build `StoryChapterManager.jsx` - chapter list management (add, reorder, publish/draft)
+5. Build `ChapterEditor.jsx` + `ChapterEditor.css` - chapter writing with independent LexicalComposer
+6. Build React Query hooks: `useStoryData.js`, `useStoryMutations.js`
+7. Add routes to `App.jsx` (lazy loaded) - dashboard, new, edit, manage, chapter edit
+8. Add "Stories" link to sidebar navigation
+
+### Future Phases (not in this session)
+- **Phase 3:** StoryBrowser, StoryDetail, ChapterReader, reading progress
+- **Phase 4:** Paragraph-level comments with anchoring system
+- **Phase 5:** Profile tabs, notifications, SEO, sitemap
+
+---
+
+## Verification Plan
+1. Create a story with cover image → verify in Supabase `stories` table + storage bucket
+2. Add 3 chapters, publish 2, keep 1 draft → verify chapter ordering and status
+3. Read as another user → verify reading progress saves and resumes
+4. Vote + add to library → verify toggles work (optimistic UI + DB)
+5. Comment on specific paragraphs → verify comment counts show on correct paragraphs
+6. Edit a chapter (add paragraph in middle) → verify existing comments re-anchor correctly
+7. Test mobile responsive layout for reader + comment panel
+8. Verify story appears on author's profile "Stories" tab

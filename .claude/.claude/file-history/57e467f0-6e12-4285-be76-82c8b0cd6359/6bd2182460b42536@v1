@@ -1,0 +1,48 @@
+# Add Rooms — Already Implemented, No Changes Needed
+
+## Context
+User requested room support: create from enclosed walls, room name, area calculation, centered label, area in sqm, properties panel, geometry separate from React.
+
+## Finding: Every Requirement Is Already Met
+
+The codebase already has a complete room implementation. Here's a requirement-by-requirement mapping:
+
+| Requirement | Status | Implementation |
+|-------------|--------|----------------|
+| Create rooms from closed wall boundaries | ✅ | `detectRooms()` in `src/geometry/roomDetection.js` — planar graph face extraction algorithm |
+| Each room must have a name | ✅ | `createRoom()` in `src/domain/models.js:59-70` — auto-names "Room 1", "Room 2", editable |
+| Compute area from polygon geometry | ✅ | `polygonArea()` in `src/geometry/polygon.js`, called by `createRoom()` |
+| Display name and area label in plan view | ✅ | `src/renderers/RoomRenderer.jsx` — name above centroid, area below |
+| Show area in square meters | ✅ | `(area / 1_000_000).toFixed(1) m²` in RoomRenderer |
+| Expose room properties in right panel | ✅ | `RoomProperties` in `src/ui/PropertiesPanel.jsx:174-187` — name, area (read-only), color |
+| Keep geometry logic separate from React | ✅ | `roomDetection.js` and `polygon.js` are pure JS, no React imports |
+| Don't break wall editing | ✅ | Rooms are a separate layer, rendered behind walls |
+| Structured for future doors/windows | ✅ | Doors and windows are already implemented with same pattern |
+
+### Additional features already built
+- **Room state management**: ROOM_ADD/UPDATE/DELETE/SET actions in `ProjectProvider.jsx`
+- **Room selection**: Click rooms via `pointInPolygon()` hit-test in `selectHandler.js`
+- **Selection overlay**: Dashed outline in `SelectionOverlay.jsx`
+- **Sidebar listing**: Room list with click-to-select in `Sidebar.jsx:85-98`
+- **Deletion**: Delete key + button in properties panel
+- **Persistence**: Rooms saved/loaded with backfill for old saves in `deserialize.js:22-29`
+- **Colored fill**: Light blue (`#E8F0FE`) with 40% opacity, 55% when selected
+
+### How to use it
+1. Draw walls that form closed polygons (endpoints must be within 5mm)
+2. Click **"Detect Rooms"** button in toolbar (right group, after Grid/Snap)
+3. Rooms appear as colored fills with name + area labels
+4. Click a room to select → properties panel shows name/area/color
+5. Edit name or color in the properties panel
+
+## Plan: No Code Changes Required
+
+All requested functionality exists. The recommended action is to **build and test** to verify it works at runtime:
+
+### Verification
+1. `npx vite build` — confirm no errors
+2. Open app, draw 4 walls forming a rectangle (close the polygon)
+3. Click "Detect Rooms" — a room should appear with "Room 1" and area in m²
+4. Click the room — properties panel should show name, area, color
+5. Rename the room in properties panel — label should update
+6. Check sidebar — room should appear in the Rooms section

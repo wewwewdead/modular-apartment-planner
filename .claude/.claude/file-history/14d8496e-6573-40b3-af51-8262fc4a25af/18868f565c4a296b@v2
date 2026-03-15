@@ -1,0 +1,58 @@
+import React from 'react';
+import { StyleSheet, Text } from 'react-native';
+import Animated, { FadeInUp } from 'react-native-reanimated';
+
+import { colors } from '../../../theme/colors';
+import { motion } from '../../../theme/motion';
+import { typography } from '../../../theme/typography';
+
+interface StatCardProps {
+  label: string;
+  value: string;
+  index?: number;
+}
+
+export function StatCard({ label, value, index = 0 }: StatCardProps) {
+  return (
+    <Animated.View
+      entering={FadeInUp.springify()
+        .damping(motion.entrance.damping)
+        .stiffness(motion.entrance.stiffness)
+        .mass(motion.entrance.mass)
+        .delay(Math.min(index * 50, 300))}
+      style={styles.card}
+    >
+      <Text
+        style={styles.label}
+        accessibilityRole="text"
+      >
+        {label}
+      </Text>
+      <Text
+        style={styles.value}
+        accessibilityLiveRegion="polite"
+      >
+        {value}
+      </Text>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceAlt,
+    gap: 6,
+  },
+  label: {
+    ...typography.eyebrow,
+    color: colors.mutedInk,
+  },
+  value: {
+    ...typography.numericDisplay,
+    color: colors.ink,
+    fontSize: 20,
+  },
+});

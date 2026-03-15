@@ -1,0 +1,252 @@
+# Iskrib UI Redesign Plan — "Warm Editorial" Theme
+
+## Context
+Complete visual redesign of the Iskrib web app to match the provided reference images (dark sidebar, card-based feed, bottom mobile nav). The current blue/purple accent (`#5f92ff`) is replaced with a **Warm Amber/Gold** (`#D4A853`) accent, delivering a sophisticated, literary aesthetic. All behavior, routing, state management, and component logic remain untouched — only CSS and font imports change.
+
+---
+
+## Design Direction
+
+**Aesthetic**: Warm Editorial — like candlelight on aged paper. Premium, literary, sophisticated.
+
+**Typography** (replacing current Inter/Nunito/Lexend Deca):
+- **Brand/Headings**: `"Playfair Display"` — classic editorial serif, distinctive
+- **UI text**: `"Outfit"` — clean geometric sans-serif, warm and modern
+- **Content/Body**: `"Lora"` — keep as-is (already excellent for reading)
+
+**Accent Color**: Warm Amber/Gold `#D4A853` (replaces all `#5f92ff` / `--accent-purple` usage)
+
+---
+
+## Color Palette
+
+### Light Theme (`:root`)
+```
+--bg-primary: #FAF9F6          (warm off-white)
+--bg-secondary: #F3F1ED        (warm light gray)
+--bg-hover: #EDEAE5            (warm hover)
+--bg-elevated: #FFFFFF
+--bg-card: #FEFEFE
+--bg-backdrop: rgba(250,249,246,0.75)
+--bg-backdrop-heavy: rgba(250,249,246,0.85)
+--bg-overlay: rgba(250,249,246,0.3)
+--bg-pill: rgba(120,100,80,0.06)
+--bg-glass: rgba(255,255,255,0.55)
+--bg-glass-border: rgba(200,180,150,0.2)
+
+--text-primary: #1A1612         (warm near-black)
+--text-heading: #12100D         (deep warm black)
+--text-secondary: #6B6560       (warm gray)
+--text-body: #8A8480            (warm medium)
+--text-muted: #A8A29E           (warm muted)
+--text-faint: #C0BBB5           (warm faint)
+--text-separator: #D9D4CE       (warm separator)
+
+--border-light: rgba(120,100,80,0.12)
+--border-card: rgba(120,100,80,0.08)
+
+--shadow-card: 0 1px 4px rgba(80,60,40,0.06), 0 4px 16px rgba(80,60,40,0.04)
+--shadow-modal: 0 8px 32px rgba(80,60,40,0.12)
+--shadow-card-sm: 0 1px 2px rgba(80,60,40,0.05)
+--shadow-dropdown: 0 4px 16px rgba(80,60,40,0.1), 0 0 0 1px rgba(120,100,80,0.06)
+
+--accent-purple: #C4943E        (warm amber — light mode, slightly darker for contrast)
+--accent-dark: #1A1612
+--accent-dark-hover: #3A3530
+
+--accent-sage: #8A9E7A          (warmer sage)
+--accent-amber: #D4A853         (now matches primary accent)
+
+--icon-default: #8A8480
+--icon-view: rgba(26,22,18,0.25)
+--icon-view-count: rgba(26,22,18,0.55)
+
+--bg-selection: rgba(212,168,83,0.08)
+--bg-selection-active: rgba(212,168,83,0.15)
+
+--loader-color: #C4943E
+```
+
+### Dark Theme (`[data-theme="dark"]`)
+```
+--bg-primary: #0C0C0C           (deep dark, matches reference)
+--bg-secondary: #141414
+--bg-hover: #1E1E1C
+--bg-elevated: #1A1A18
+--bg-card: #161614
+--bg-backdrop: rgba(12,12,12,0.8)
+--bg-backdrop-heavy: rgba(12,12,12,0.9)
+--bg-overlay: rgba(0,0,0,0.4)
+--bg-pill: rgba(255,240,210,0.06)
+--bg-glass: rgba(255,255,255,0.05)
+--bg-glass-border: rgba(255,240,210,0.08)
+
+--text-primary: #F0EBE3          (warm white)
+--text-heading: #F5F0E8
+--text-secondary: #B0A89E
+--text-body: #908880
+--text-muted: #6B6560
+--text-faint: #504A45
+--text-separator: #2E2A26
+
+--border-light: rgba(255,240,210,0.06)
+--border-card: rgba(255,240,210,0.04)
+
+--shadow-card: 0 2px 8px rgba(0,0,0,0.3)
+--shadow-modal: 0 8px 32px rgba(0,0,0,0.5)
+--shadow-card-sm: 0 1px 3px rgba(0,0,0,0.25)
+--shadow-dropdown: 0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,240,210,0.04)
+
+--accent-purple: #D4A853         (warm amber)
+--accent-dark: #F0EBE3
+--accent-dark-hover: #C8C0B5
+
+--accent-sage: #9AB08A
+--accent-amber: #E0BA6A
+
+--icon-default: #908880
+--icon-view: rgba(240,235,227,0.25)
+--icon-view-count: rgba(240,235,227,0.55)
+
+--bg-selection: rgba(212,168,83,0.1)
+--bg-selection-active: rgba(212,168,83,0.18)
+
+--loader-color: #D4A853
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Design System Foundation
+**Files**: `client/index.html`, `client/src/index.css`, `client/src/App.css`
+
+1. **index.html**: Add Google Fonts import for Playfair Display + Outfit (add `<link>` in `<head>`)
+2. **index.css**:
+   - Replace Google Fonts `@import` URL to include `Playfair+Display` and `Outfit` (can drop Comfortaa, Lexend Deca, Patrick Hand, Shadows Into Light, Sniglet if unused in editors)
+   - Update `:root` font-family to `"Outfit", sans-serif`
+   - Update `--font-ui` to `"Outfit", sans-serif`
+   - Replace ALL light theme CSS variable values with new palette
+   - Replace ALL dark theme CSS variable values with new palette
+   - Update link colors `#646cff`/`#535bf2` → amber variants
+3. **App.css**: Update any hardcoded colors (logo spin animation, etc.)
+
+### Phase 2: Sidebar (`client/src/components/SideBar/sidebar.css`)
+- Update `.sidebar-header` font-family to `"Playfair Display", serif`
+- Change `.theme-toggle-track.active` from `#5f92ff` → `#D4A853`
+- Change `.side-bar-logout-container` color from `var(--accent-purple)` — this now auto-maps to amber
+- Freedom Wall CTA: Keep gold styling (already close to amber aesthetic, harmonizes well)
+- Write button: `--accent-dark` variable handles this automatically
+
+### Phase 3: Feed & Cards (`client/src/components/HomePage/postCards/postcards.css`)
+**This is the largest file (971 lines).** Key changes:
+- Search bar focus: Replace `--accent-sage` green accents with amber — `rgba(212,168,83,0.1)` focus shadow
+- Search icon focus color: `#D4A853` instead of sage
+- All hardcoded `#5f92ff` instances → `#D4A853` or `var(--accent-purple)`
+- Card hover shadows: Use warm-toned shadows
+- Status pill colors: Update any blue/purple pills
+- Badge rings for Legend (keep gold) and OG (change purple `#9B59FF` → a deep amber `#B8862D` or keep distinct)
+- Hot score / flame colors: Keep warm tones (already compatible)
+
+### Phase 4: Mobile Navigation
+**Files**: `client/src/components/mobileNavLink/mobilenavlink.css`, `client/src/components/MobileSidebarLink/mobilesidebarlink.css`, `client/src/components/WriteJournalButton/writejournalbutton.css`
+
+- `.mobile-navlink-active-dot` bg: `#5f92ff` → `#D4A853`
+- `.navlink-profile-active` border: `#5f92ff` → `#D4A853`
+- `.mobile-navlink-label-active` color: `#5f92ff` → `#D4A853`
+- Mobile sidebar: Update any hardcoded accent colors
+- FAB button: Update shadow glow tint to warm amber
+
+### Phase 5: Editor & Content Viewer
+**Files**: `client/src/components/HomePage/Editor/editor.css`, `client/src/components/HomePage/ContentViewer/contentviewer.css`
+
+- Toolbar button active states: Replace blue highlights with amber
+- Editor focus states: Warm amber outlines
+- Toolbar sticky background: Uses `--bg` variables (auto-updated)
+- Content viewer: Any accent-colored links or highlights → amber
+
+### Phase 6: Profile Pages
+**Files**: `client/src/components/ProfilePage/myprofile.css` (1497 lines), `client/src/components/VisitProfile/visitProfile.css` (330 lines)
+
+- Profile hero section: Ensure gradient/background works with warm palette
+- Stats container: `--bg-glass` variables handle this
+- Edit profile button: Uses `--accent-dark` (auto-updated)
+- Badge ring animations: `@keyframes glow-legend` keep gold, `@keyframes glow-og` → update purple glow to a distinct secondary color (deep amber or warm rose)
+- Follow button: Update any blue accent references
+- Font color selector: No change needed (it's a color picker)
+- Tab underline/active states: Replace blue with amber
+
+### Phase 7: Feature Pages (6 files)
+- **explore.css**: Hero card glow, rank badge, hot score pill — update blue accents
+- **gallery.css**: "Remix this Canvas" button, sort buttons — update accent
+- **freedomWall.css**: Keep gold tones (already compatible with amber)
+- **notification.css** (560 lines): Unread badges, link colors — update blue accents
+- **bookmarks.css** (399 lines): Active states, link colors
+- **collection.css**: Collection card accents, privacy toggle
+
+### Phase 8: Comments & Opinions
+**Files**: `client/src/components/comments/comments.css`, `client/src/components/SidebarOpinions/sidebarOpinions.css`
+
+- Comment submit button: Update accent
+- Opinion cards: Update any blue accents
+- "Write opinions" CTA: Update accent
+
+### Phase 9: Auth Pages & Modals
+**Files**: `client/src/components/LoginPage/login.css`, `client/src/components/SignUpPage/signup.css`, `client/src/components/AuthModal/authmodal.css`, `client/src/components/WelcomeMessage/welcomemessage.css`
+
+- Login/Signup: Update CTA button colors from dark navy to warm amber or `--accent-dark`
+- Left panel tagline typography: Use Playfair Display for headings
+- AuthModal: Update button accent colors
+- WelcomeMessage: Update accent colors
+
+### Phase 10: Canvas & Universe
+**Files**: `client/src/components/HomePage/Canvas/canvas.css`, `canvaspreview.css`, `PieMenu.module.css`, `CanvasEditor.module.css`, `client/src/components/Universe/Universe.module.css`
+
+- Canvas editor: Update accent toolbar colors
+- Remix banner: Update purple accent → amber
+- PieMenu: Update active states
+- Universe: Keep cosmic theme (mostly isolated styles), update any shared accent refs
+
+### Phase 11: Loading & Misc
+**Files**: `client/src/components/loadingComponent/bgloader.css`
+- Loader color: `--loader-color` variable handles this automatically
+
+---
+
+## Global Find & Replace Targets
+These hardcoded values appear across multiple CSS files and must all be updated:
+
+| Current Value | New Value | Context |
+|---|---|---|
+| `#5f92ff` | `#D4A853` | Primary accent (light mode) |
+| `#7ab0ff` | `#E0BA6A` | Primary accent (dark mode) |
+| `#a2daff` | `#E0BA6A` | Header underline |
+| `#646cff` | `#C4943E` | Link color |
+| `#535bf2` | `#B8862D` | Link hover |
+| `rgba(95, 146, 255, *)` | `rgba(212, 168, 83, *)` | Selection/focus backgrounds |
+| `rgba(107, 143, 113, *)` | `rgba(212, 168, 83, *)` | Search focus (sage → amber) |
+| `#9B59FF` / `#7B2FFF` | Keep or change to `#8B6914` | OG badge (decide: keep purple distinction or unify) |
+
+---
+
+## What Does NOT Change
+- All JSX component files (no structural changes)
+- All JavaScript logic, API calls, state management
+- All routing and navigation behavior
+- All Framer Motion animation logic (only CSS timing/colors change)
+- All Lexical editor configuration
+- All Konva canvas logic
+- Freedom Wall gold color scheme (already harmonizes with amber)
+- Legend badge gold (already harmonizes)
+
+---
+
+## Verification Plan
+1. Start dev server (`npm run dev` in client folder)
+2. Test light theme: Check sidebar, feed cards, search bar, profile page
+3. Test dark theme: Toggle theme, verify all colors match the reference image aesthetic
+4. Test mobile (DevTools responsive mode at 480px): Bottom nav, FAB, mobile sidebar
+5. Test all pages: Home feed, Explore, Gallery, Freedom Wall, Profile, Notifications, Bookmarks, Collections
+6. Test editor: Open write modal, verify toolbar and editor styling
+7. Test login/signup pages: Verify form styling and CTA buttons
+8. Verify no behavior changes: Like/bookmark, search, navigation, theme toggle all still work

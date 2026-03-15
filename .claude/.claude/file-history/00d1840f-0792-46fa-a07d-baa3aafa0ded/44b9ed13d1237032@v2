@@ -1,0 +1,99 @@
+.layout {
+  display: grid;
+  grid-template-rows: var(--toolbar-height, 52px) 1fr;
+  grid-template-columns: var(--sidebar-width, 240px) 1fr 280px;
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "sidebar canvas rightpanel";
+  height: 100%;
+  width: 100%;
+}
+
+.toolbar {
+  grid-area: toolbar;
+  position: relative;
+  z-index: 10;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.canvas {
+  grid-area: canvas;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.04), inset -1px 0 3px rgba(0, 0, 0, 0.04);
+}
+
+.rightPanel {
+  grid-area: rightpanel;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.previewFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.6), rgba(243, 243, 240, 0.9)),
+    linear-gradient(180deg, #F3F3F0, #EAEAE7);
+  border-left: 1px solid var(--color-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.previewFallback::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+@media (max-width: 1200px) {}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: var(--sidebar-width, 240px) 1fr 0px;
+  }
+  .rightPanel {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .layout {
+    grid-template-columns: 0px 1fr 0px;
+  }
+  .sidebar {
+    position: fixed;
+    top: var(--toolbar-height, 52px);
+    left: 0;
+    bottom: 0;
+    z-index: 20;
+    width: var(--sidebar-width, 240px);
+    background: var(--color-panel-bg);
+    box-shadow: var(--shadow-floating);
+    transform: translateX(-100%);
+    transition: transform var(--duration-layout) var(--ease-out);
+  }
+  .rightPanel {
+    display: none;
+  }
+}

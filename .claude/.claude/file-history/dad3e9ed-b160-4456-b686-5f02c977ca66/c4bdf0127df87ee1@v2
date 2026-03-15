@@ -1,0 +1,172 @@
+import { createContext, useContext, useReducer, useCallback } from 'react';
+import { createProject } from '@/domain/models';
+
+const ProjectContext = createContext(null);
+
+function getFloor(state, floorId) {
+  return state.project.floors.find(f => f.id === floorId);
+}
+
+function updateFloor(state, floorId, updater) {
+  return {
+    ...state,
+    isDirty: true,
+    project: {
+      ...state.project,
+      updatedAt: new Date().toISOString(),
+      floors: state.project.floors.map(f =>
+        f.id === floorId ? updater(f) : f
+      ),
+    },
+  };
+}
+
+function projectReducer(state, action) {
+  switch (action.type) {
+    case 'PROJECT_NEW':
+      return {
+        project: action.project,
+        isDirty: false,
+        lastSavedAt: null,
+      };
+
+    case 'PROJECT_LOAD':
+      return {
+        project: action.project,
+        isDirty: false,
+        lastSavedAt: action.savedAt || null,
+      };
+
+    case 'PROJECT_SET_NAME':
+      return {
+        ...state,
+        isDirty: true,
+        project: {
+          ...state.project,
+          name: action.name,
+          updatedAt: new Date().toISOString(),
+        },
+      };
+
+    case 'WALL_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        walls: [...f.walls, action.wall],
+      }));
+
+    case 'WALL_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        walls: f.walls.map(w => w.id === action.wall.id ? { ...w, ...action.wall } : w),
+      }));
+
+    case 'WALL_DELETE': {
+      const wallId = action.wallId;
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        walls: f.walls.filter(w => w.id !== wallId),
+        doors: f.doors.filter(d => d.wallId !== wallId),
+        windows: f.windows.filter(w => w.wallId !== wallId),
+      }));
+    }
+
+    case 'DOOR_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        doors: [...f.doors, action.door],
+      }));
+
+    case 'DOOR_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        doors: f.doors.map(d => d.id === action.door.id ? { ...d, ...action.door } : d),
+      }));
+
+    case 'DOOR_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        doors: f.doors.filter(d => d.id !== action.doorId),
+      }));
+
+    case 'WINDOW_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        windows: [...f.windows, action.window],
+      }));
+
+    case 'WINDOW_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        windows: f.windows.map(w => w.id === action.window.id ? { ...w, ...action.window } : w),
+      }));
+
+    case 'WINDOW_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        windows: f.windows.filter(w => w.id !== action.windowId),
+      }));
+
+    case 'ROOM_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: [...f.rooms, action.room],
+      }));
+
+    case 'ROOM_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: f.rooms.map(r => r.id === action.room.id ? { ...r, ...action.room } : r),
+      }));
+
+    case 'ROOM_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: f.rooms.filter(r => r.id !== action.roomId),
+      }));
+
+    case 'ROOMS_SET':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: action.rooms,
+      }));
+
+    case 'MARK_SAVED':
+      return {
+        ...state,
+        isDirty: false,
+        lastSavedAt: new Date().toISOString(),
+      };
+
+    default:
+      return state;
+  }
+}
+
+const initialState = {
+  project: createProject(),
+  isDirty: false,
+  lastSavedAt: null,
+};
+
+export function ProjectProvider({ children }) {
+  const [state, dispatch] = useReducer(projectReducer, initialState);
+  return (
+    <ProjectContext.Provider value={{ state, dispatch }}>
+      {children}
+    </ProjectContext.Provider>
+  );
+}
+
+export function useProject() {
+  const ctx = useContext(ProjectContext);
+  if (!ctx) throw new Error('useProject must be used within ProjectProvider');
+  const { state, dispatch } = ctx;
+
+  return {
+    project: state.project,
+    isDirty: state.isDirty,
+    lastSavedAt: state.lastSavedAt,
+    dispatch,
+    getFloor: (floorId) => state.project.floors.find(f => f.id === floorId),
+  };
+}

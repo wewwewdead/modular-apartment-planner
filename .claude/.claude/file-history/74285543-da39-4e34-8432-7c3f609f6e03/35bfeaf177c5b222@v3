@@ -1,0 +1,332 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Stage, Layer, Circle, Text, Group } from 'react-konva';
+import { useNavigate } from 'react-router-dom';
+import { getUniversePosts } from '../../../API/Api';
+import styles from './Universe.module.css';
+
+const STAR_COLORS = ['#5f92ff', '#ff5fa2', '#5fffb0', '#ffd75f', '#b05fff', '#ff8a5f'];
+
+const simpleHash = (str) => {
+    let h = 0;
+    for(let i = 0; i < str.length; i++){
+        h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+    }
+    return Math.abs(h);
+};
+
+const getStarColor = (userId) => {
+    if(!userId) return STAR_COLORS[0];
+    return STAR_COLORS[simpleHash(userId) % STAR_COLORS.length];
+};
+
+const getStarRadius = (likeCount) => {
+    const likes = Math.min(likeCount || 0, 20);
+    return 6 + likes * 0.3;
+};
+
+const extractSnippet = (post) => {
+    if(post.post_type === 'canvas' && post.canvas_doc?.snippets){
+        return post.canvas_doc.snippets
+            .map(s => s?.text || '')
+            .filter(Boolean)
+            .join(' ')
+            .slice(0, 200);
+    }
+    if(typeof post.content === 'string'){
+        try {
+            const parsed = JSON.parse(post.content);
+            const extractText = (node) => {
+                if(!node) return '';
+                if(typeof node.text === 'string') return node.text;
+                if(Array.isArray(node.children)){
+                    return node.children.map(extractText).join('');
+                }
+                return '';
+            };
+            return extractText(parsed.root || parsed).slice(0, 200);
+        } catch {
+            return post.content.slice(0, 200);
+        }
+    }
+    return '';
+};
+
+const Universe = () => {
+    const navigate = useNavigate();
+    const containerRef = useRef(null);
+    const stageRef = useRef(null);
+    const debounceRef = useRef(null);
+    const lastPinchDist = useRef(null);
+
+    const [stageSize, setStageSize] = useState({width: window.innerWidth, height: window.innerHeight});
+    const initialScale = 0.05;
+    const [stagePos, setStagePos] = useState({x: window.innerWidth / 2, y: window.innerHeight / 2});
+    const [stageScale, setStageScale] = useState(initialScale);
+    const [isDragging, setIsDragging] = useState(false);
+    const [posts, setPosts] = useState(new Map());
+    const [selectedPost, setSelectedPost] = useState(null);
+    const [pulsingId, setPulsingId] = useState(null);
+
+    // Resize handler
+    useEffect(() => {
+        const handleResize = () => {
+            setStageSize({width: window.innerWidth, height: window.innerHeight});
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Compute viewport bounds in world coordinates
+    const getViewportBounds = useCallback(() => {
+        const scale = stageScale;
+        const minX = (-stagePos.x) / scale;
+        const minY = (-stagePos.y) / scale;
+        const maxX = (stageSize.width - stagePos.x) / scale;
+        const maxY = (stageSize.height - stagePos.y) / scale;
+        // Add padding for stars near edges
+        const pad = 200 / scale;
+        return {
+            minX: minX - pad,
+            maxX: maxX + pad,
+            minY: minY - pad,
+            maxY: maxY + pad
+        };
+    }, [stagePos, stageScale, stageSize]);
+
+    // Debounced fetch
+    useEffect(() => {
+        if(debounceRef.current) clearTimeout(debounceRef.current);
+
+        debounceRef.current = setTimeout(async () => {
+            const bounds = getViewportBounds();
+            try {
+                const result = await getUniversePosts(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, 200);
+                if(result?.data){
+                    setPosts(prev => {
+                        const next = new Map(prev);
+                        for(const post of result.data){
+                            next.set(post.id, post);
+                        }
+                        return next;
+                    });
+                }
+            } catch(err) {
+                console.error('Failed to fetch universe posts:', err);
+            }
+        }, 400);
+
+        return () => {
+            if(debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [stagePos, stageScale, stageSize, getViewportBounds]);
+
+    // Wheel zoom
+    const handleWheel = useCallback((e) => {
+        e.evt.preventDefault();
+        const stage = stageRef.current;
+        if(!stage) return;
+
+        const oldScale = stageScale;
+        const pointer = stage.getPointerPosition();
+        if(!pointer) return;
+
+        const scaleBy = 1.08;
+        const direction = e.evt.deltaY > 0 ? -1 : 1;
+        const newScale = Math.min(Math.max(direction > 0 ? oldScale * scaleBy : oldScale / scaleBy, 0.02), 5);
+
+        const mousePointTo = {
+            x: (pointer.x - stagePos.x) / oldScale,
+            y: (pointer.y - stagePos.y) / oldScale,
+        };
+
+        setStageScale(newScale);
+        setStagePos({
+            x: pointer.x - mousePointTo.x * newScale,
+            y: pointer.y - mousePointTo.y * newScale,
+        });
+    }, [stageScale, stagePos]);
+
+    // Touch pinch zoom
+    const handleTouchMove = useCallback((e) => {
+        const touch = e.evt;
+        if(touch.touches.length !== 2) {
+            lastPinchDist.current = null;
+            return;
+        }
+
+        const stage = stageRef.current;
+        if(!stage) return;
+
+        e.evt.preventDefault();
+
+        const t1 = touch.touches[0];
+        const t2 = touch.touches[1];
+        const dist = Math.sqrt(Math.pow(t2.clientX - t1.clientX, 2) + Math.pow(t2.clientY - t1.clientY, 2));
+
+        if(lastPinchDist.current === null){
+            lastPinchDist.current = dist;
+            return;
+        }
+
+        const oldScale = stageScale;
+        const scale = Math.min(Math.max(oldScale * (dist / lastPinchDist.current), 0.02), 5);
+        lastPinchDist.current = dist;
+
+        const center = {
+            x: (t1.clientX + t2.clientX) / 2,
+            y: (t1.clientY + t2.clientY) / 2,
+        };
+
+        const mousePointTo = {
+            x: (center.x - stagePos.x) / oldScale,
+            y: (center.y - stagePos.y) / oldScale,
+        };
+
+        setStageScale(scale);
+        setStagePos({
+            x: center.x - mousePointTo.x * scale,
+            y: center.y - mousePointTo.y * scale,
+        });
+    }, [stageScale, stagePos]);
+
+    const handleTouchEnd = useCallback(() => {
+        lastPinchDist.current = null;
+    }, []);
+
+    // Star click handler
+    const handleStarClick = useCallback((post) => {
+        setSelectedPost(post);
+        setPulsingId(post.id);
+        setTimeout(() => setPulsingId(null), 400);
+    }, []);
+
+    // Drag handlers
+    const handleDragStart = useCallback(() => setIsDragging(true), []);
+    const handleDragEnd = useCallback((e) => {
+        setIsDragging(false);
+        setStagePos({x: e.target.x(), y: e.target.y()});
+    }, []);
+
+    // Navigate to post
+    const handleReadPost = useCallback(() => {
+        if(!selectedPost) return;
+        navigate(`/home/post/${selectedPost.id}`);
+    }, [selectedPost, navigate]);
+
+    // Memoize post array from map
+    const postArray = useMemo(() => Array.from(posts.values()), [posts]);
+
+    // Determine which titles to show based on zoom
+    const showTitles = stageScale > 0.5;
+
+    // Center coordinate display
+    const centerWorld = useMemo(() => ({
+        x: Math.round((stageSize.width / 2 - stagePos.x) / stageScale),
+        y: Math.round((stageSize.height / 2 - stagePos.y) / stageScale),
+    }), [stagePos, stageScale, stageSize]);
+
+    return (
+        <div
+            ref={containerRef}
+            className={`${styles.universeContainer} ${isDragging ? styles.grabbing : ''}`}
+        >
+            <button className={styles.backButton} onClick={() => navigate('/home')}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Back
+            </button>
+
+            <div className={styles.coordsLabel}>
+                {centerWorld.x}, {centerWorld.y}
+            </div>
+
+            <Stage
+                ref={stageRef}
+                width={stageSize.width}
+                height={stageSize.height}
+                draggable
+                x={stagePos.x}
+                y={stagePos.y}
+                scaleX={stageScale}
+                scaleY={stageScale}
+                onWheel={handleWheel}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+            >
+                <Layer>
+                    {postArray.map((post) => {
+                        const userId = post.users?.id;
+                        const color = getStarColor(userId);
+                        const likeCount = Array.isArray(post.likes) && post.likes[0]?.count != null
+                            ? post.likes[0].count
+                            : 0;
+                        const radius = getStarRadius(likeCount);
+                        const isPulsing = pulsingId === post.id;
+
+                        return (
+                            <Group
+                                key={post.id}
+                                x={post.universe_x}
+                                y={post.universe_y}
+                                onClick={() => handleStarClick(post)}
+                                onTap={() => handleStarClick(post)}
+                                scaleX={isPulsing ? 1.8 : 1}
+                                scaleY={isPulsing ? 1.8 : 1}
+                            >
+                                <Circle
+                                    radius={radius}
+                                    fill={color}
+                                    shadowColor={color}
+                                    shadowBlur={16}
+                                    shadowOpacity={0.8}
+                                    hitStrokeWidth={12}
+                                />
+                                {showTitles && post.title && (
+                                    <Text
+                                        text={post.title.length > 24 ? post.title.slice(0, 22) + '...' : post.title}
+                                        y={radius + 6}
+                                        fontSize={10}
+                                        fill="rgba(255,255,255,0.6)"
+                                        align="center"
+                                        width={120}
+                                        offsetX={60}
+                                    />
+                                )}
+                            </Group>
+                        );
+                    })}
+                </Layer>
+            </Stage>
+
+            {selectedPost && (
+                <div className={styles.previewPanel}>
+                    <div className={styles.previewAuthor}>
+                        <img
+                            className={styles.previewAvatar}
+                            src={selectedPost.users?.image_url || '/assets/profile.jpg'}
+                            alt=""
+                        />
+                        <span className={styles.previewAuthorName}>
+                            {selectedPost.users?.name || 'Anonymous'}
+                        </span>
+                    </div>
+                    <div className={styles.previewTitle}>{selectedPost.title}</div>
+                    <div className={styles.previewSnippet}>{extractSnippet(selectedPost)}</div>
+                    <div className={styles.previewLikes}>
+                        {Array.isArray(selectedPost.likes) && selectedPost.likes[0]?.count
+                            ? `${selectedPost.likes[0].count} like${selectedPost.likes[0].count !== 1 ? 's' : ''}`
+                            : '0 likes'}
+                    </div>
+                    <button className={styles.previewReadBtn} onClick={handleReadPost}>
+                        Read
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Universe;

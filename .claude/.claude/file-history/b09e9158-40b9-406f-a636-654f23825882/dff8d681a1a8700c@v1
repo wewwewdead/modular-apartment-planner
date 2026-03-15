@@ -1,0 +1,55 @@
+# Remove Canvas and Universe features
+
+## Context
+The Canvas and Universe features are not needed right now. Both are lightly integrated — Canvas has a gallery screen and preview component, Universe is a placeholder shell. Removing them simplifies the app and the HomeFeed quick actions.
+
+Note: The canvas changes just added to PostDetailScreen in the previous task need to be reverted as part of this.
+
+## Files to delete
+- `apps/mobile/src/screens/Advanced/CanvasScreen.tsx`
+- `apps/mobile/src/screens/Advanced/UniverseScreen.tsx`
+- `apps/mobile/src/components/CanvasPreview/CanvasPreview.tsx`
+
+## Files to edit
+
+### 1. `apps/mobile/src/navigation/types.ts`
+- Remove `Canvas: undefined;` (line 27)
+- Remove `Universe: undefined;` (line 28)
+
+### 2. `apps/mobile/src/navigation/RootNavigator.tsx`
+- Remove import of `CanvasScreen` (line 27)
+- Remove import of `UniverseScreen` (line 28)
+- Remove `<RootStack.Screen name="Canvas" .../>` (line 299)
+- Remove `<RootStack.Screen name="Universe" .../>` (line 300)
+
+### 3. `apps/mobile/src/screens/Home/HomeFeedScreen.tsx`
+- Remove `'canvas'` and `'universe'` entries from `QUICK_ACTIONS` array (lines 52-53), leaving only `all` and `journal`
+- Remove the `if (key === 'canvas')` and `else if (key === 'universe')` branches from `handleQuickAction` (lines 167-170), simplifying to just `setActiveFilter(key)`
+
+### 4. `apps/mobile/src/screens/Home/PostDetailScreen.tsx` — revert canvas additions
+- Remove `CanvasPreview` import (line 23)
+- Remove `useWindowDimensions` from react-native import (line 11)
+- Remove `parseCanvasDoc` from journalHelpers import (line 34) — keep `extractPlainText`
+- Remove `const {width: windowWidth} = useWindowDimensions();` (line 74)
+- Remove `canvasDoc` and `isCanvas` variables (lines 166-167)
+- Revert banner section back to simple `{!isRepost && bannerImage && (<Image .../>)}`
+- Revert content body back to unconditional `<LexicalRenderer content={journal?.content} />`
+
+### 5. `apps/mobile/src/lib/api/mobileApi.ts`
+- Remove types: `CanvasDocMeta`, `CanvasSnippet`, `CanvasImage`, `CanvasDoodle`, `CanvasDoc` (lines 11-53)
+- Remove type: `UniversePost` (lines 107-112)
+- Remove `canvas_doc` and `post_type` fields from `JournalItem` (lines 59-60)
+- Remove `getCanvasGallery()` method (lines 230-249)
+- Remove `getUniversePosts()` method (lines 251-265)
+
+### 6. `apps/mobile/src/lib/utils/journalHelpers.ts`
+- Remove `CanvasDoc` from the import (line 1) — keep `CursorPage, JournalItem`
+- Remove `parseCanvasDoc()` function (lines 55-66)
+- Remove `getCanvasPlainText()` function (lines 68-79)
+
+## Verification
+- App should build with no new TypeScript errors
+- HomeFeed quick actions show only "All" and "Journals"
+- Tapping a quick action filters correctly (no dead navigation)
+- PostDetailScreen still renders regular journal posts with banner images and LexicalRenderer
+- Repost posts still render correctly

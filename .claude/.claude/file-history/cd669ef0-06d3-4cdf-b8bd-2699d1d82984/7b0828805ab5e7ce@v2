@@ -1,0 +1,54 @@
+import { useEffect } from 'react';
+import { SketchProvider, useSketch } from './app/SketchProvider';
+import { SketchEditorProvider } from './app/SketchEditorProvider';
+import SketchToolbar from './ui/SketchToolbar';
+import SketchSidebar from './ui/SketchSidebar';
+import SketchCanvas from './renderers/SketchCanvas';
+import SketchPropertiesPanel from './ui/SketchPropertiesPanel';
+import SketchPreviewPanel from './renderers/SketchPreviewPanel';
+import { saveSketchProject } from './persistence/sketchStorage';
+import styles from './SketchWorkspace.module.css';
+
+function SketchInner() {
+  const { project, isDirty, dispatch } = useSketch();
+
+  // Autosave
+  useEffect(() => {
+    if (!isDirty) return;
+    const timer = setTimeout(() => {
+      saveSketchProject(project);
+      dispatch({ type: 'MARK_SAVED' });
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isDirty, project, dispatch]);
+
+  return (
+    <SketchEditorProvider>
+      <div className={styles.layout}>
+        <div className={styles.toolbar}>
+          <SketchToolbar />
+        </div>
+        <div className={styles.sidebar}>
+          <SketchSidebar />
+        </div>
+        <div className={styles.canvas}>
+          <SketchCanvas />
+        </div>
+        <div className={styles.rightPanel}>
+          <SketchPropertiesPanel />
+          <SketchPreviewPanel />
+        </div>
+      </div>
+    </SketchEditorProvider>
+  );
+}
+
+export default function SketchWorkspace({ initialProject }) {
+  return (
+    <div className="editorRoot">
+      <SketchProvider initialProject={initialProject}>
+        <SketchInner />
+      </SketchProvider>
+    </div>
+  );
+}

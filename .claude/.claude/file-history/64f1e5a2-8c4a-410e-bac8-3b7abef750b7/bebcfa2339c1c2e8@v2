@@ -1,0 +1,122 @@
+import React, {useMemo} from 'react';
+import {FlatList, StyleSheet, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {PostCard} from '../../components/PostCard/PostCard';
+import {PostCardSkeleton} from '../../components/SkeletonLoader';
+import {EmptyState} from '../../components/EmptyState';
+import {
+  extractPlainText,
+  extractBannerImage,
+  resolveCount,
+  getNextCursor,
+} from '../../lib/utils/journalHelpers';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {spacing} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+const PAGE_SIZE = 10;
+
+interface ProfileWritingsTabProps {
+  userId: string;
+  headerComponent?: React.ReactElement;
+}
+
+export function ProfileWritingsTab({userId, headerComponent}: ProfileWritingsTabProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const query = useInfiniteQuery({
+    queryKey: ['profileWritings', userId],
+    queryFn: ({pageParam}) =>
+      mobileApi.getUserJournals(userId, pageParam ?? null, PAGE_SIZE),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => getNextCursor(lastPage, PAGE_SIZE),
+  });
+
+  const posts = useMemo(
+    () => query.data?.pages.flatMap(page => page.data ?? []) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <FlatList
+      data={posts}
+      keyExtractor={item => item.id}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={headerComponent}
+      onEndReachedThreshold={0.3}
+      onEndReached={() => {
+        if (query.hasNextPage && !query.isFetchingNextPage) {
+          query.fetchNextPage();
+        }
+      }}
+      ListEmptyComponent={
+        query.isLoading ? (
+          <View style={styles.skeletons}>
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+          </View>
+        ) : (
+          <EmptyState
+            title="No writings yet"
+            subtitle="Journal posts will appear here."
+          />
+        )
+      }
+      ListFooterComponent={
+        query.isFetchingNextPage ? (
+          <View style={styles.footer}>
+            <PostCardSkeleton />
+          </View>
+        ) : null
+      }
+      renderItem={({item}) => {
+        const preview = extractPlainText(item.content).slice(0, 180);
+        const likeCount = resolveCount(item.like_count, item.likes_count);
+        const commentCount = resolveCount(item.comment_count, item.comments_count);
+        const bookmarkCount = resolveCount(item.bookmark_count);
+        const bannerImage = extractBannerImage(item.content, (item as any).images);
+
+        return (
+          <PostCard
+            title={item.title || 'Untitled Post'}
+            bodyPreview={preview || 'No preview text available.'}
+            authorName={item.users?.name || 'Unknown author'}
+            authorAvatar={item.users?.image_url}
+            authorBadge={item.users?.badge as 'legend' | 'og' | undefined}
+            bannerImage={bannerImage}
+            postType={item.post_type ?? undefined}
+            likeCount={likeCount}
+            commentCount={commentCount}
+            bookmarkCount={bookmarkCount}
+            userReaction={item.user_reaction}
+            onPress={() =>
+              navigation.navigate('PostDetail', {journalId: item.id})
+            }
+          />
+        );
+      }}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 100,
+  },
+  skeletons: {
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  footer: {
+    paddingTop: spacing.md,
+  },
+  separator: {
+    height: spacing.md,
+  },
+});

@@ -1,0 +1,165 @@
+# Remove Gallery Page & All Canvas Feature Code
+
+## Context
+The Canvas feature (Konva.js-based visual posts) has been retired. The Gallery page exists solely to browse canvas posts. All canvas-related code — creation, viewing, previewing, remixing, and the gallery — should be fully removed from both client and server.
+
+---
+
+## 1. Delete Files (12 files)
+
+### Client — Canvas components
+- `client/src/components/HomePage/Canvas/CanvasEditor.jsx`
+- `client/src/components/HomePage/Canvas/CanvasSurface.jsx`
+- `client/src/components/HomePage/Canvas/CanvasViewer.jsx`
+- `client/src/components/HomePage/Canvas/PieMenu.jsx`
+- `client/src/components/HomePage/Canvas/canvas.css`
+- `client/src/components/HomePage/Canvas/CanvasEditor.module.css`
+- `client/src/components/HomePage/Canvas/PieMenu.module.css`
+
+### Client — Canvas preview + Gallery
+- `client/src/components/HomePage/postCards/CanvasPreview/CanvasPreview.jsx`
+- `client/src/components/HomePage/postCards/CanvasPreview/canvaspreview.css`
+- `client/src/components/HomePage/gallery/GalleryPage.jsx`
+- `client/src/components/HomePage/gallery/gallery.css`
+
+### Client — Canvas utility
+- `client/src/utils/canvasDoc.js`
+
+### Server — Canvas service + controller
+- `server/services/canvasService.js`
+- `server/controller/canvasController.js`
+
+---
+
+## 2. Edit Files — Client
+
+### `client/src/App.jsx`
+- **Line 32**: Remove `const GalleryPage = lazy(...)` import
+- **Line 118**: Remove `<Route path='gallery' element={<GalleryPage/>}/>`
+
+### `client/src/components/HomePage/Home.jsx`
+- **Lines 25-32**: Simplify `DEFAULT_EDITOR_LAUNCH_CONFIG` — remove `initialCanvasDoc` and `remixSource` keys (keep `initialMode: 'text'`, `initialTitle`, `promptId`, `promptText`)
+- **Lines 84-92**: Delete the entire `galleryLink` object
+- **Lines 163-165**: Remove `galleryLink` from both link arrays → `[homeLink, exploreLink, ...guestLinks]` / `[homeLink, exploreLink, ...authLinks]`
+- **Lines 314-328**: In the `location.state` effect, remove canvas-related fields:
+  - Remove `initialMode` line (always text now)
+  - Remove `initialCanvasDoc` line
+  - Remove `remixSource` line
+  - Simplify to just pass `initialTitle` from state
+
+### `client/src/components/HomePage/Editor/Editor.jsx`
+- **Line 6**: Remove `import CanvasEditor from '../Canvas/CanvasEditor.jsx'`
+- **Line 24**: Remove `initialMode`, `initialCanvasDoc`, `remixSource` from props (keep `onClose`, `initialTitle`, `promptId`, `promptText`)
+- **Line 27**: Remove `editorMode` state
+- **Lines 39-42**: Remove `useEffect` that sets `editorMode`
+- **Line 82**: Remove `is-canvas-mode` conditional class
+- **Lines 97-114**: Delete the entire canvas-editor-controls div (Text Post / Switch to Canvas buttons)
+- **Line 116**: Remove `is-canvas-mode` conditional class from `editor-mode-shell`
+- **Lines 118-137**: Replace the conditional render with just `<EditorInner>` (remove `editorMode === 'text'` ternary and `<CanvasEditor>` branch). Remove the `onSwitchToCanvas` prop from `<EditorInner>`.
+
+### `client/src/components/HomePage/Editor/editor.css`
+- **Line 50**: Remove `.editor-container.is-canvas-mode` rule
+- **Line 68**: Remove `.editor-mode-shell.is-canvas-mode` rule
+
+### `client/src/components/HomePage/Editor/Toolbar.jsx`
+- **Lines 327-331**: Remove the `onSwitchToCanvas` button block
+- Remove `onSwitchToCanvas` from the component's props/destructuring
+
+### `client/src/components/HomePage/Editor/RichTextEditor.jsx`
+- **Line 40**: Remove `onSwitchToCanvas` from `EditorInner` props
+- **Line 109**: Remove `onSwitchToCanvas={onSwitchToCanvas}` from `<ToolBar>` props
+
+### `client/src/components/HomePage/postCards/PostCards.jsx`
+- **Lines 22-23**: Remove `getCanvasPreview` and `CanvasPreview` imports
+- **Lines 89-133**: Remove `handleExpandCanvas` and `handleRemixCanvas` functions
+- **Line 716-**: In render, remove all `isCanvasPost` logic:
+  - Remove `isCanvasPost` variable, `canvasPreview` variable
+  - Simplify `wholeText`/`previewText`/`thumbnail` to always use `parsedContent`
+  - Remove `is-canvas-card` CSS class from card div
+  - Remove canvas `onClick`/`role`/`tabIndex`/`onKeyDown` from card
+  - Remove `<CanvasPreview>` render block
+  - Remove canvas type badge
+  - Remove canvas card actions (remix button)
+  - Remove `canvasDoc` from `viewContent` calls (simplify signature)
+
+### `client/src/components/HomePage/postCards/ProfilePostCards/ProfilePostCards.jsx`
+- **Lines 19-20**: Remove `getCanvasPreview` and `CanvasPreview` imports
+- Same pattern as PostCards: remove all `isCanvasPost` branches, canvas previews, canvas type checks, canvas-doc params from `viewContent` calls
+
+### `client/src/components/HomePage/postCards/ProfilePostCards/VisitedProfilePostCards.jsx`
+- **Lines 15-16**: Remove `getCanvasPreview` and `CanvasPreview` imports
+- Same pattern: remove all `isCanvasPost` branches and canvas rendering
+
+### `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+- **Line 19**: Remove `import CanvasViewer`
+- **Line 26**: Remove `import { getCanvasWholeText, parseCanvasDoc }`
+- **Lines 117-125**: Remove canvas doc parsing and `canvasDoc` from post data
+- **Lines 151-160**: Remove canvas inference from state post data
+- **Lines 295-311**: Remove `handleRemixCanvas` function
+- **Lines 468-469**: Remove canvas repost `<CanvasViewer>` render
+- **Lines 646-662**: Remove canvas remix action bar and canvas `<CanvasViewer>` render — keep only the text content render path
+
+### `client/API/Api.js`
+- **Lines 291-315**: Remove `getCanvasGallery` export
+- **Lines 568-580**: Remove `createCanvasRemix` export
+
+### `client/src/seo/seoConfig.js`
+- **Lines 56-65**: Remove the `/home/gallery` SEO entry
+
+---
+
+## 3. Edit Files — Server
+
+### `server/routes/routes.js`
+- **Line 12**: Remove `getCanvasGalleryController` from the import
+- **Line 14**: Remove `import { createCanvasRemixController }` entirely
+- **Line 241**: Remove `router.get('/journals/canvas/gallery', ...)`
+- **Line 263**: Remove `router.post('/canvas/remix', ...)`
+
+### `server/controller/getController.js`
+- **Line 1**: Remove `getCanvasGalleryService` from import
+- **Lines 160-170**: Remove `getCanvasGalleryController` export
+
+### `server/services/getService.js`
+- **Lines 6-8**: Remove `CANVAS_GALLERY_LIMIT_DEFAULT` and `CANVAS_GALLERY_LIMIT_MAX` constants (and the comment on line 8)
+- Remove `parseCanvasGalleryCursor` function (~line 262)
+- Remove `encodeCanvasGalleryCursor` function (~line 297)
+- Remove `getCanvasGalleryService` export (~lines 708-787)
+
+### `server/services/uploadService.js`
+- **Lines 7-17**: Remove `POST_TYPE_CANVAS`, `normalizePostType`, `parseCanvasDocInput` (lines 7-34)
+- **Lines 36-45**: Remove `extractCanvasPlainText`
+- In `uploadJournalContentService` (~line 228): Remove `canvasDocInput` param and all canvas branching (lines 259-277 + canvas_doc in insert). Always use text path.
+- In `updateJournalService` (~line 360): Remove `canvasDocInput` param, `resolvedCanvasDoc`, canvas branching. Always use text path.
+
+### `server/controller/uploadController.js`
+- **Line 85**: Remove `canvas_doc: canvasDoc` destructure from req.body
+- **Line 92**: Remove `canvasDoc` param from `uploadJournalContentService` call
+- **Line 107**: Remove `canvas_doc: canvasDoc` destructure from req.body
+- **Line 111**: Remove `canvasDoc` param from `updateJournalService` call
+
+### `server/server.js`
+- **Line 95**: Remove `/^\/journals\/canvas\/gallery$/` from `CACHEABLE_PUBLIC_ROUTE_PATTERNS`
+- **Lines 269-290**: Remove `extractFromCanvasDoc` function
+- **Lines 294, 300-302, 312-314**: In `buildShareMetaFromJournal`, remove `canvasData` usage — only use `lexicalData` for description/image fallbacks
+
+---
+
+## 4. CSS Cleanup
+
+### `client/src/components/HomePage/Editor/editor.css`
+- Remove `.editor-container.is-canvas-mode` block (line 50)
+- Remove `.editor-mode-shell.is-canvas-mode` block (line 68)
+- Remove `.canvas-editor-controls` / `.canvas-control-btn` / `.composer-mode-btn` styles if present
+
+### PostCards CSS
+- Search for and remove any `.is-canvas-card`, `.canvas-type-badge`, `.canvas-card-actions`, `.canvas-card-action-btn`, `.cv-canvas-actions` rules in postcards CSS files
+
+---
+
+## 5. Verification
+
+1. **Build**: Run `npx vite build` from `client/` — must succeed with no broken imports
+2. **Grep sweep**: Search for "canvas" and "gallery" (case-insensitive) across `client/src/`, `server/`, and `client/API/` to confirm nothing was missed
+3. **Server start**: Start the Express server and confirm no import errors
+4. **Smoke test**: Open the app, create a text post, view a post, check profile pages — all should work normally without canvas references

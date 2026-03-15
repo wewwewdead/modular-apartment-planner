@@ -1,0 +1,70 @@
+import styles from '../Universe.module.css';
+
+const PostCard = ({ post, fallbackTitle, onRead, onFlyTo }) => {
+    const avatar = post?.users?.image_url || post?.user_image_url || '/assets/profile.jpg';
+    const name = post?.users?.name || post?.user_name || 'Anonymous';
+    const title = post?.title || fallbackTitle || 'Untitled';
+
+    return (
+        <div className={styles.constellationPostCard}>
+            <div className={styles.constellationPostAuthor}>
+                <img className={styles.constellationPostAvatar} src={avatar} alt="" />
+                <span className={styles.constellationPostName}>{name}</span>
+            </div>
+            <div className={styles.constellationPostTitle}>{title}</div>
+            <div className={styles.constellationPostActions}>
+                {post && (
+                    <button className={styles.constellationPostReadBtn} onClick={() => onRead(post.id)}>
+                        Read
+                    </button>
+                )}
+                <button className={styles.constellationPostFlyBtn} onClick={onFlyTo}>
+                    Fly Here
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const ConstellationPanel = ({ constellation, posts, onClose, onReadPost, onFlyToStar }) => {
+    if (!constellation) return null;
+
+    const postA = posts.get(constellation.star_id_a);
+    const postB = posts.get(constellation.star_id_b);
+
+    return (
+        <div className={styles.constellationPanel}>
+            <button className={styles.constellationPanelClose} onClick={onClose}>
+                &times;
+            </button>
+
+            {constellation.label && (
+                <div className={styles.constellationPanelLabel}>{constellation.label}</div>
+            )}
+
+            <PostCard
+                post={postA}
+                fallbackTitle={constellation.a_title}
+                onRead={onReadPost}
+                onFlyTo={() => onFlyToStar(constellation.star_id_a)}
+            />
+
+            <div className={styles.constellationPanelDivider}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <circle cx="4" cy="8" r="2" fill="rgba(176, 95, 255, 0.6)" />
+                    <circle cx="12" cy="8" r="2" fill="rgba(176, 95, 255, 0.6)" />
+                    <line x1="6" y1="8" x2="10" y2="8" stroke="rgba(176, 95, 255, 0.4)" strokeWidth="1" />
+                </svg>
+            </div>
+
+            <PostCard
+                post={postB}
+                fallbackTitle={constellation.b_title}
+                onRead={onReadPost}
+                onFlyTo={() => onFlyToStar(constellation.star_id_b)}
+            />
+        </div>
+    );
+};
+
+export default ConstellationPanel;

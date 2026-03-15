@@ -1,0 +1,251 @@
+import { WALL_HEIGHT } from './defaults';
+import { generateId } from './ids';
+import { createAnnotationSettings, createFloor } from './models';
+
+export const DEFAULT_FLOOR_TO_FLOOR_HEIGHT = WALL_HEIGHT;
+
+function sortByLevelAndElevation(a, b) {
+  const levelIndexDiff = getFloorLevelIndex(a) - getFloorLevelIndex(b);
+  if (levelIndexDiff !== 0) return levelIndexDiff;
+
+  const elevationDiff = getFloorElevation(a) - getFloorElevation(b);
+  if (elevationDiff !== 0) return elevationDiff;
+
+  return (a.name || '').localeCompare(b.name || '');
+}
+
+function clonePoint(point) {
+  return point ? { x: point.x, y: point.y } : point;
+}
+
+function cloneAttachment(attachment, columnIdMap) {
+  if (!attachment) return null;
+
+  return {
+    ...attachment,
+    columnId: attachment.columnId ? (columnIdMap.get(attachment.columnId) || attachment.columnId) : attachment.columnId,
+  };
+}
+
+function cloneWall(wall, columnIdMap) {
+  return {
+    ...wall,
+    id: generateId('wall'),
+    start: clonePoint(wall.start),
+    end: clonePoint(wall.end),
+    startAttachment: cloneAttachment(wall.startAttachment, columnIdMap),
+    endAttachment: cloneAttachment(wall.endAttachment, columnIdMap),
+  };
+}
+
+function cloneRoom(room) {
+  return {
+    ...room,
+    id: generateId('room'),
+    points: (room.points || []).map(clonePoint),
+    labelPosition: clonePoint(room.labelPosition),
+  };
+}
+
+function cloneDoor(door, wallIdMap) {
+  return {
+    ...door,
+    id: generateId('door'),
+    wallId: wallIdMap.get(door.wallId) || door.wallId,
+  };
+}
+
+function cloneWindow(windowItem, wallIdMap) {
+  return {
+    ...windowItem,
+    id: generateId('win'),
+    wallId: wallIdMap.get(windowItem.wallId) || windowItem.wallId,
+  };
+}
+
+function cloneColumn(column) {
+  return {
+    ...column,
+    id: generateId('col'),
+  };
+}
+
+function cloneBeam(beam, columnIdMap, elevationDelta) {
+  return {
+    ...beam,
+    id: generateId('beam'),
+    startRef: beam.startRef
+      ? { ...beam.startRef, id: columnIdMap.get(beam.startRef.id) || beam.startRef.id }
+      : null,
+    endRef: beam.endRef
+      ? { ...beam.endRef, id: columnIdMap.get(beam.endRef.id) || beam.endRef.id }
+      : null,
+    floorLevel: (beam.floorLevel ?? 0) + elevationDelta,
+  };
+}
+
+function cloneStair(stair, sourceFloorId, duplicatedFloorId) {
+  return {
+    ...stair,
+    id: generateId('stair'),
+    startPoint: clonePoint(stair.startPoint),
+    direction: stair.direction ? { ...stair.direction } : { angle: 0 },
+    floorRelation: {
+      fromFloorId: stair.floorRelation?.fromFloorId === sourceFloorId ? duplicatedFloorId : (stair.floorRelation?.fromFloorId ?? duplicatedFloorId),
+      toFloorId: stair.floorRelation?.toFloorId === sourceFloorId ? duplicatedFloorId : (stair.floorRelation?.toFloorId ?? duplicatedFloorId),
+    },
+  };
+}
+
+function cloneAnnotation(annotation) {
+  return {
+    ...annotation,
+    id: generateId('anno'),
+    startPoint: clonePoint(annotation.startPoint),
+    endPoint: clonePoint(annotation.endPoint),
+  };
+}
+
+function cloneSlab(slab, floorId, elevationDelta) {
+  return {
+    ...slab,
+    id: generateId('slab'),
+    floorId,
+    boundaryPoints: (slab.boundaryPoints || []).map(clonePoint),
+    elevation: (slab.elevation ?? 0) + elevationDelta,
+  };
+}
+
+function cloneSectionCut(sectionCut) {
+  return {
+    ...sectionCut,
+    id: generateId('section'),
+    startPoint: clonePoint(sectionCut.startPoint),
+    endPoint: clonePoint(sectionCut.endPoint),
+  };
+}
+
+export function getDefaultFloorName(levelIndex = 0) {
+  if (levelIndex === 0) return 'Ground Floor';
+  if (levelIndex < 0) return `Basement ${Math.abs(levelIndex)}`;
+  return `Floor ${levelIndex}`;
+}
+
+export function getFloorLevelIndex(floor, fallbackIndex = 0) {
+  if (!floor) return fallbackIndex;
+  if (Number.isFinite(floor.levelIndex)) return floor.levelIndex;
+  if (Number.isFinite(floor.level)) return floor.level;
+  return fallbackIndex;
+}
+
+export function getFloorToFloorHeight(floor) {
+  return floor?.floorToFloorHeight ?? DEFAULT_FLOOR_TO_FLOOR_HEIGHT;
+}
+
+export function getFloorElevation(floor, fallbackIndex = 0) {
+  if (!floor) return 0;
+  if (Number.isFinite(floor.elevation)) return floor.elevation;
+  if (Number.isFinite(floor.level)) return floor.level;
+  return getFloorLevelIndex(floor, fallbackIndex) * getFloorToFloorHeight(floor);
+}
+
+export function sortFloors(floors = []) {
+  return [...floors].sort(sortByLevelAndElevation);
+}
+
+export function getOrderedFloors(projectOrFloors) {
+  const floors = Array.isArray(projectOrFloors)
+    ? projectOrFloors
+    : (projectOrFloors?.floors || []);
+  return sortFloors(floors);
+}
+
+export function getProjectFloor(project, floorId) {
+  return (project?.floors || []).find((floor) => floor.id === floorId) || null;
+}
+
+export function getDefaultActiveFloorId(project, preferredFloorId = null) {
+  const orderedFloors = getOrderedFloors(project);
+  if (!orderedFloors.length) return null;
+  if (preferredFloorId && orderedFloors.some((floor) => floor.id === preferredFloorId)) {
+    return preferredFloorId;
+  }
+  return orderedFloors[0].id;
+}
+
+export function shiftFloorElevationData(floor, deltaElevation = 0) {
+  if (!deltaElevation) return { ...floor };
+
+  return {
+    ...shiftFloorAbsoluteElements(floor, deltaElevation),
+    elevation: getFloorElevation(floor) + deltaElevation,
+  };
+}
+
+export function shiftFloorAbsoluteElements(floor, deltaElevation = 0) {
+  if (!deltaElevation) return { ...floor };
+
+  return {
+    ...floor,
+    beams: (floor.beams || []).map((beam) => ({
+      ...beam,
+      floorLevel: (beam.floorLevel ?? getFloorElevation(floor)) + deltaElevation,
+    })),
+    slabs: (floor.slabs || []).map((slab) => ({
+      ...slab,
+      elevation: (slab.elevation ?? getFloorElevation(floor)) + deltaElevation,
+    })),
+  };
+}
+
+export function createFloorAboveHighest(existingFloors = []) {
+  const orderedFloors = sortFloors(existingFloors);
+  const topFloor = orderedFloors[orderedFloors.length - 1] || null;
+  const levelIndex = topFloor ? getFloorLevelIndex(topFloor) + 1 : 0;
+  const floorToFloorHeight = topFloor ? getFloorToFloorHeight(topFloor) : DEFAULT_FLOOR_TO_FLOOR_HEIGHT;
+  const elevation = topFloor
+    ? getFloorElevation(topFloor) + getFloorToFloorHeight(topFloor)
+    : 0;
+
+  return createFloor(getDefaultFloorName(levelIndex), levelIndex, {
+    elevation,
+    floorToFloorHeight,
+  });
+}
+
+export function createDuplicatedFloor(sourceFloor) {
+  if (!sourceFloor) return null;
+
+  const sourceFloorId = sourceFloor.id;
+  const duplicatedFloorId = generateId('floor');
+  const sourceLevelIndex = getFloorLevelIndex(sourceFloor);
+  const sourceElevation = getFloorElevation(sourceFloor);
+  const floorToFloorHeight = getFloorToFloorHeight(sourceFloor);
+  const duplicatedElevation = sourceElevation + floorToFloorHeight;
+  const elevationDelta = duplicatedElevation - sourceElevation;
+
+  const columns = (sourceFloor.columns || []).map(cloneColumn);
+  const columnIdMap = new Map((sourceFloor.columns || []).map((column, index) => [column.id, columns[index].id]));
+
+  const walls = (sourceFloor.walls || []).map((wall) => cloneWall(wall, columnIdMap));
+  const wallIdMap = new Map((sourceFloor.walls || []).map((wall, index) => [wall.id, walls[index].id]));
+
+  return {
+    id: duplicatedFloorId,
+    name: getDefaultFloorName(sourceLevelIndex + 1),
+    levelIndex: sourceLevelIndex + 1,
+    elevation: duplicatedElevation,
+    floorToFloorHeight,
+    walls,
+    rooms: (sourceFloor.rooms || []).map(cloneRoom),
+    doors: (sourceFloor.doors || []).map((door) => cloneDoor(door, wallIdMap)),
+    windows: (sourceFloor.windows || []).map((windowItem) => cloneWindow(windowItem, wallIdMap)),
+    columns,
+    beams: (sourceFloor.beams || []).map((beam) => cloneBeam(beam, columnIdMap, elevationDelta)),
+    stairs: (sourceFloor.stairs || []).map((stair) => cloneStair(stair, sourceFloorId, duplicatedFloorId)),
+    annotations: (sourceFloor.annotations || []).map(cloneAnnotation),
+    annotationSettings: createAnnotationSettings(sourceFloor.annotationSettings || {}),
+    slabs: (sourceFloor.slabs || []).map((slab) => cloneSlab(slab, duplicatedFloorId, elevationDelta)),
+    sectionCuts: (sourceFloor.sectionCuts || []).map(cloneSectionCut),
+  };
+}

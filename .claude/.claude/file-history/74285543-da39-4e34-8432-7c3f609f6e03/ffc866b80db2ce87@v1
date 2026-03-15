@@ -1,0 +1,93 @@
+# Iskrib Universe Page - Implementation Plan
+
+## Context
+Build a full-screen, infinite spatial "Iskrib Universe" page where every public post appears as a glowing star on a dark canvas. Users explore by panning/zooming, click stars to preview writings, and each user's posts form a spiral pattern around their deterministic "home" coordinate. The `universe_x` and `universe_y` (float4) columns already exist on the `journals` table.
+
+---
+
+## Files to Create
+
+### 1. `client/src/components/Universe/Universe.jsx`
+Full-screen Konva `<Stage>` with HTML overlays. Key pieces:
+
+- **Pan**: `<Stage draggable>`, capture position on `onDragEnd`
+- **Zoom**: `onWheel` handler — zoom relative to mouse cursor using Konva's pointer-to-world math
+- **Mobile**: `onTouchMove` pinch-to-zoom (track two-finger distance), `onTap` for star clicks, single-finger pan via Konva's built-in draggable
+- **Stars**: `<Layer>` with `Array.from(posts.values()).map(...)` → `<Group>` per post containing `<Circle>` (star with `shadowBlur` glow) + `<Text>` (title, visible only when zoomed in)
+- **Pulse**: On star click, run `Konva.Tween` to scale up 1.8x then back to 1x
+- **Preview panel**: HTML overlay (bottom-right, glass morphism) showing author, title, snippet, "Read" button → navigates to `/home/post/:id`
+- **Back button**: HTML overlay (top-left, glass morphism) → `navigate('/home')`
+- **Debounced fetch**: `useEffect` on `stagePos`/`stageScale`/`stageSize` → 400ms debounce → call `getUniversePosts(minX, maxX, minY, maxY)` → merge into `Map<id, post>` (accumulate, never replace)
+- **Star color**: Deterministic from user ID hash, palette of 6 neon colors
+- **Star size**: Base radius 6, +0.3 per like (capped at 20 likes)
+
+### 2. `client/src/components/Universe/Universe.module.css`
+- `.universeContainer`: `position: fixed; 100vw x 100vh; background: radial-gradient(#0a0e1a → #000); touch-action: none; cursor: grab/grabbing; z-index: 1000`
+- `.backButton`: absolute top-left, glass morphism (`backdrop-filter: blur(12px)`)
+- `.previewPanel`: absolute bottom-right, 320px wide, glass morphism, scrollable
+- `.previewReadBtn`: neon blue accent border/bg
+- Mobile `@media (max-width: 600px)`: preview panel spans full width
+
+### 3. `server/scripts/backfillUniverseCoords.js`
+One-time Node script to populate `universe_x`/`universe_y` for existing posts:
+- Fetch all posts where `universe_x IS NULL`, ordered by `user_id, created_at ASC`
+- Group by user, compute home coords + spiral offset per post index
+- Update each post individually
+- Run with: `node server/scripts/backfillUniverseCoords.js`
+
+---
+
+## Files to Modify
+
+### 4. `client/src/App.jsx`
+- **Line ~37**: Add `const Universe = lazy(() => import('./components/Universe/Universe.jsx'));`
+- **Line ~121** (after `/home` route block, before `/login`): Add `<Route path='/universe' element={<Universe/>}/>`
+
+### 5. `client/src/components/HomePage/home.jsx`
+- **After line ~103** (after `freedomWallLink`): Add `universeLink` object with path `/universe`, label `'Universe'`, SVG icon (constellation dots), color toggled by `location.pathname === '/universe'`
+- **Lines ~180-182**: Insert `universeLink` into both guest and auth link arrays, after `freedomWallLink`
+
+### 6. `client/API/Api.js`
+- **Before the commented-out `getLikedPosts`**: Add `getUniversePosts(minX, maxX, minY, maxY, limit = 200)` function following existing pattern (`apiRequest`, `URLSearchParams`, `response.ok` check)
+
+### 7. `server/routes/routes.js`
+- **After line ~143** (near journal GET routes): Add `router.get('/universe/posts', optionalAuth, ...)` endpoint
+- Query: `supabase.from('journals').select('id, title, content, post_type, canvas_doc, created_at, universe_x, universe_y, users(id, name, image_url, badge), like_count: likes(count)').eq('privacy', 'public').not('universe_x', 'is', null).not('universe_y', 'is', null).gte('universe_x', minX).lte('universe_x', maxX).gte('universe_y', minY).lte('universe_y', maxY).limit(parsedLimit)`
+
+### 8. `server/services/uploadService.js`
+- **Top of file** (after imports): Add helper functions `simpleHash(str)`, `userHomeCoords(userId)`, `spiralLayout(index)`
+- **Line ~282** (before `let {error} = await supabase.from('journals').insert(insertPayload)`): Count user's existing posts, compute home + spiral offset, set `insertPayload.universe_x` and `insertPayload.universe_y`. Wrapped in try/catch so it never breaks post creation.
+
+---
+
+## Spiral Layout Algorithm
+```
+userHomeCoords(userId):
+  Split UUID in half, hash each half independently → x, y in [-25000, +25000]
+
+spiralLayout(index):
+  if index === 0 → {dx: 0, dy: 0}  (first post at home)
+  angle = index * 0.8 radians
+  radius = 30 * sqrt(index)
+  dx = radius * cos(angle), dy = radius * sin(angle)
+```
+
+---
+
+## Implementation Order
+1. Backend: Add spiral/hash helpers + coordinate assignment to `uploadService.js`
+2. Backend: Add `GET /universe/posts` endpoint to `routes.js`
+3. Backfill: Run `backfillUniverseCoords.js` to populate existing posts
+4. Client API: Add `getUniversePosts` to `Api.js`
+5. Client UI: Create `Universe.jsx` + `Universe.module.css`
+6. Wiring: Add lazy route in `App.jsx` + sidebar link in `home.jsx`
+
+## Verification
+1. Create a new post → verify it gets `universe_x`/`universe_y` values in the DB
+2. Navigate to `/universe` → verify dark canvas loads with stars
+3. Pan (drag) and zoom (scroll wheel) → verify smooth interaction
+4. Click a star → verify pulse animation + preview panel appears
+5. Click "Read" in preview → verify navigation to post
+6. Click "Back" → verify return to `/home`
+7. Test on mobile viewport → verify touch pan + pinch-to-zoom
+8. Check the spatial query returns only posts within the viewport bounds

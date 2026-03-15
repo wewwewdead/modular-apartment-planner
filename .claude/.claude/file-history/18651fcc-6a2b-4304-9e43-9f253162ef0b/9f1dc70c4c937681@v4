@@ -1,0 +1,34 @@
+import React from 'react';
+import './StreakBadge.css';
+
+const getStreakTier = (count) => {
+    if (count >= 100) return 'legendary';
+    if (count >= 30) return 'inferno';
+    if (count >= 14) return 'blazing';
+    if (count >= 7) return 'burning';
+    if (count >= 1) return 'ember';
+    return null;
+};
+
+const StreakBadge = ({ count, size = 16 }) => {
+    if (!count || count < 1) return null;
+
+    const tier = getStreakTier(count);
+
+    return (
+        <span className={`streak-badge streak-${tier}`} title={`${count} day streak`}>
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width={size}
+                height={size}
+                viewBox="0 -960 960 960"
+                className="streak-flame-icon"
+            >
+                <path d="M80-120q27-71 65-133.5T225-370q-10-26-15-52t-5-54q0-94 55-168.5T400-740q-3 42 10 81t38 72q25 33 60.5 52t77.5 22q-6-39 2-77.5t28-72.5q20-34 49.5-61T726-776q-2 48 8 93.5t31 86.5q21 41 33 85t12 91q0 30-5 58.5T790-308q10 10 19 20.5t18 21.5q31 38 55 80t43 86H80Zm242-80h316q-8-16-18-30.5T599-258l-23-22-26 14q-25 13-52.5 19.5T442-240q-21 0-40.5-4T364-256q-8 14-17.5 27.5T322-200Zm120-80q24 0 47-6t43-18q-28-26-46.5-60.5T460-438q-2 28-10.5 53.5T424-336q12 26 30 43.5t38 22.5l6 2q2 0 4-1 9-3 18.5-5.5T540-280q-25-26-41-58.5T478-404q-3 36-15.5 68.5T427-276q15 30 38.5 49.5T514-194q-17 8-35 11t-37 3Zm-2-192q13-24 19.5-51t6.5-57q-26 16-43 42.5T404-488q6 12 17 14t19 2Z" />
+            </svg>
+            <span className="streak-count">{count}</span>
+        </span>
+    );
+};
+
+export default StreakBadge;

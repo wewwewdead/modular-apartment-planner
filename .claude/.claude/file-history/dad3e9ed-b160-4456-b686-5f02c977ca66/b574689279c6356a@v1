@@ -1,0 +1,23 @@
+export function deserializeProject(json) {
+  if (!json || !json.version || !json.data) {
+    throw new Error('Invalid project data');
+  }
+  if (json.version !== 1) {
+    throw new Error(`Unsupported project version: ${json.version}`);
+  }
+
+  const project = json.data;
+
+  // Basic validation
+  if (!project.id || !project.name || !Array.isArray(project.floors)) {
+    throw new Error('Invalid project structure');
+  }
+
+  for (const floor of project.floors) {
+    if (!floor.id || !Array.isArray(floor.walls)) {
+      throw new Error('Invalid floor structure');
+    }
+  }
+
+  return { project, savedAt: json.savedAt };
+}

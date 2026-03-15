@@ -1,0 +1,219 @@
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {ActivityIndicator, Image, StyleSheet, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {useFollowMutation} from '../../hooks/useFollowMutation';
+import {ProfileHeroSection} from './ProfileHeroSection';
+import {ProfileTabBar, type ProfileTab} from './ProfileTabBar';
+import {ProfileWritingsTab} from './ProfileWritingsTab';
+import {ProfileStoriesTab} from './ProfileStoriesTab';
+import {ProfileOpinionsTab} from './ProfileOpinionsTab';
+import {ProfileMediaTab} from './ProfileMediaTab';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {
+  parseProfileBackground,
+  cssAngleToGradientPoints,
+} from '../../lib/utils/profileBackground';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'VisitProfile'>;
+
+export function VisitProfileScreen({route, navigation}: Props) {
+  const {userId} = route.params;
+  const {user, session} = useAuth();
+  const {colors} = useTheme();
+  const [activeTab, setActiveTab] = useState<ProfileTab>('writings');
+
+  // Self-redirect guard
+  useEffect(() => {
+    if (userId === user?.id) {
+      navigation.replace('Main' as any, {screen: 'Profile'});
+    }
+  }, [userId, user?.id, navigation]);
+
+  const userDataQuery = useQuery({
+    queryKey: ['profile', userId],
+    enabled: Boolean(userId) && userId !== user?.id,
+    queryFn: () => mobileApi.getUserData(userId),
+  });
+
+  const streakQuery = useQuery({
+    queryKey: ['streak', userId],
+    enabled: Boolean(userId) && userId !== user?.id,
+    queryFn: () => mobileApi.getStreak(userId),
+  });
+
+  const profile = userDataQuery.data?.userData?.[0] ?? null;
+  const streak = streakQuery.data?.currentStreak;
+  const longestStreak = streakQuery.data?.longestStreak;
+
+  // Set header title dynamically
+  useEffect(() => {
+    if (profile?.name) {
+      navigation.setOptions({title: profile.name});
+    }
+  }, [profile?.name, navigation]);
+
+  const parsedBg = useMemo(
+    () => parseProfileBackground(profile?.background),
+    [profile?.background],
+  );
+
+  const onFollowersPress = useCallback(() => {
+    navigation.navigate('FollowList', {userId, tab: 'followers'});
+  }, [navigation, userId]);
+
+  const onFollowingPress = useCallback(() => {
+    navigation.navigate('FollowList', {userId, tab: 'following'});
+  }, [navigation, userId]);
+
+  const token = session?.access_token ?? '';
+
+  const followsQuery = useQuery({
+    queryKey: ['followsData', userId],
+    enabled: Boolean(token && userId) && userId !== user?.id,
+    queryFn: () => socialApi.getFollowsData(token, userId),
+  });
+
+  const isFollowing = followsQuery.data?.isFollowing ?? false;
+  const followMutation = useFollowMutation(token, userId);
+
+  if (userId === user?.id) {
+    return null;
+  }
+
+  if (userDataQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.loaderColor} size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const followButton = (
+    <PrimaryButton
+      label={followMutation.isPending ? '...' : isFollowing ? 'Following' : 'Follow'}
+      onPress={() => followMutation.mutate()}
+      kind={isFollowing ? 'secondary' : 'primary'}
+      loading={followMutation.isPending}
+    />
+  );
+
+  const headerComponent = (
+    <View>
+      <ProfileHeroSection
+        profile={profile}
+        streak={streak}
+        longestStreak={longestStreak}
+        onFollowersPress={onFollowersPress}
+        onFollowingPress={onFollowingPress}
+        actionButton={followButton}
+      />
+      <ProfileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <View style={styles.tabSpacer} />
+    </View>
+  );
+
+  const backdropElement = useMemo(() => {
+    if (parsedBg.type === 'gradient') {
+      const {start, end} = cssAngleToGradientPoints(parsedBg.angle);
+      return (
+        <LinearGradient
+          colors={parsedBg.colors}
+          locations={parsedBg.locations}
+          start={start}
+          end={end}
+          style={[StyleSheet.absoluteFill, styles.backdrop]}
+        />
+      );
+    }
+    if (parsedBg.type === 'image') {
+      const dominantArr = profile?.dominant_colors
+        ? profile.dominant_colors.split(',').map(c => c.trim())
+        : null;
+      const secondaryArr = profile?.secondary_colors
+        ? profile.secondary_colors.split(',').map(c => c.trim())
+        : null;
+      const hasGradientOverlay =
+        dominantArr && dominantArr.length > 0 && secondaryArr && secondaryArr.length > 0;
+      return (
+        <View style={[StyleSheet.absoluteFill, styles.backdrop]}>
+          {hasGradientOverlay && (
+            <LinearGradient
+              colors={[...dominantArr, ...secondaryArr]}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          <Image
+            source={{uri: parsedBg.uri}}
+            blurRadius={40}
+            style={[StyleSheet.absoluteFill, {opacity: 0.3}]}
+            resizeMode="cover"
+          />
+        </View>
+      );
+    }
+    return null;
+  }, [parsedBg, profile?.dominant_colors, profile?.secondary_colors]);
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, {backgroundColor: colors.bgPrimary}]}
+      edges={['top']}>
+      {backdropElement}
+
+      {activeTab === 'writings' ? (
+        <ProfileWritingsTab
+          userId={userId}
+          headerComponent={headerComponent}
+        />
+      ) : activeTab === 'stories' ? (
+        <ProfileStoriesTab
+          userId={userId}
+          headerComponent={headerComponent}
+        />
+      ) : activeTab === 'opinions' ? (
+        <ProfileOpinionsTab
+          userId={userId}
+          headerComponent={headerComponent}
+        />
+      ) : activeTab === 'media' ? (
+        <ProfileMediaTab
+          userId={userId}
+          headerComponent={headerComponent}
+        />
+      ) : (
+        <ProfileStoriesTab
+          userId={userId}
+          headerComponent={headerComponent}
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabSpacer: {
+    height: 12,
+  },
+  backdrop: {
+    opacity: 0.15,
+    transform: [{scale: 1.4}],
+  },
+});

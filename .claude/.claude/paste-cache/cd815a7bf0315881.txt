@@ -1,0 +1,12 @@
+2026-02-21T13:25:33.073Z INFO Inbound message accepted from 99905888624837@lid (fromMe=true textPreview="who is the founder of spaceX?" attachments=0).
+2026-02-21T13:25:33.073Z INFO Agent handling started for message 3A2A3C2949F98C777067 in 99905888624837@lid.
+2026-02-21T13:26:03.090Z WARN Intent extraction retry 1: timeout of 30000ms exceeded
+2026-02-21T13:26:33.723Z WARN Intent extraction retry 2: timeout of 30000ms exceeded
+2026-02-21T13:26:33.727Z ERROR Intent inference failed: timeout of 30000ms exceeded
+2026-02-21T13:26:33.731Z INFO Agent handling completed for message 3A2A3C2949F98C777067 in 60658ms.
+2026-02-21T13:26:33.732Z INFO Reply routing inId=3A2A3C2949F98C777067 strategy=dual_fallback reason=lid_primary_phone_fallback primary=99905888624837@lid fallbacks=[639497868448@s.whatsapp.net].
+2026-02-21T13:26:33.742Z INFO Reply send attempt success inId=3A2A3C2949F98C777067 outId=3EB09B026A1313B1FB8D86 target=99905888624837@lid.
+2026-02-21T13:26:34.595Z INFO messages.upsert received: type=append count=1
+2026-02-21T13:26:34.595Z INFO Observed outbound echo immediately from upsert. outId=3EB09B026A1313B1FB8D86 chat=99905888624837@lid.
+2026-02-21T13:26:34.613Z INFO Reply verify inId=3A2A3C2949F98C777067 outId=3EB09B026A1313B1FB8D86 target=99905888624837@lid verified=true.
+2026-02-21T13:26:34.613Z INFO Reply sent for message 3A2A3C2949F98C777067. outId=3EB09B026A1313B1FB8D86 target=99905888624837@lid usedFallback=false verified=true.

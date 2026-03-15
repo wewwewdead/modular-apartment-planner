@@ -1,0 +1,162 @@
+# Refactor Sketch Studio: Canvas & 3D Preview to Match Floor Planner
+
+## Context
+
+The Sketch Studio (`/sketch`) has a simpler canvas and minimal 3D preview compared to the Floor Planner (`/floorplan`). The user wants both brought into visual and functional parity with the floor planner. This means: side-by-side canvas+preview layout, overlay controls, compass, navigation mode toggle (inspect/walk), object picking, inspect card, maximize/restore, and richer status information.
+
+---
+
+## Step 1: Add `maximizedPanel` state to SketchEditorProvider
+
+**File:** `src/modules/sketch/app/SketchEditorProvider.jsx`
+
+- Add `maximizedPanel: null` to `createInitialSketchEditorState()` (line 106)
+- Add `TOGGLE_MAXIMIZE_PANEL` case to reducer (after `DISMISS_EMPTY_STATE` at line 87):
+  ```js
+  case 'TOGGLE_MAXIMIZE_PANEL':
+    return { ...state, maximizedPanel: state.maximizedPanel === action.panel ? null : action.panel };
+  ```
+
+---
+
+## Step 2: Restructure layout — move 3D preview side-by-side with canvas
+
+**File:** `src/modules/sketch/SketchWorkspace.jsx`
+
+- Import `lazy`, `Suspense` from React; import `useSketchEditor`
+- Wrap `SketchCanvas` + `SketchPreviewPanel` in a `modelWorkspace` div inside the canvas grid area (same pattern as `FloorplanWorkspace.jsx` lines 89-107)
+- Remove `SketchPreviewPanel` from `rightPanel` — rightPanel only has `SketchPropertiesPanel`
+- Conditionally hide canvas/preview based on `maximizedPanel`
+- Pass `isMaximized` and `onToggleMaximize` props to `SketchPreviewPanel`
+
+**File:** `src/modules/sketch/SketchWorkspace.module.css`
+
+- Add `.modelWorkspace` (grid: `minmax(0, 1fr) minmax(300px, 28vw)`)
+- Add `.primaryCanvas`, `.preview`, `.previewFallback`, `.workspaceMaximized` (from `App.module.css`)
+- Add responsive `@media (max-width: 1200px)` to stack vertically
+
+---
+
+## Step 3: Enhance SketchCanvas with overlay controls, compass, double-click
+
+**File:** `src/modules/sketch/renderers/SketchCanvas.jsx`
+
+- Import `CompassOverlay` from `@/ui/CompassOverlay`
+- Import `{ CenterViewIcon, ExpandIcon, CollapseIcon }` from `@/ui/ToolbarIcons`
+- Read `maximizedPanel` from editor context
+- Add `handleResetCenterPoint` callback (same logic as `SvgCanvas.jsx` lines 229-241)
+- Add `handleDoubleClick` callback with optional chaining on `tool.onDoubleClick?.()`
+- Add `<CompassOverlay>` as first child in container div
+- Add overlay controls div after `</svg>`: center view button + maximize/collapse button
+- Add `onDoubleClick={handleDoubleClick}` to SVG element
+- Add toast slide-up animation to CSS
+
+**File:** `src/modules/sketch/renderers/SketchCanvas.module.css`
+
+- Add `.compassDock`, `.overlayControls`, `.overlayBtn` (+ hover/active) classes from `SvgCanvas.module.css`
+- Add `animation: toastSlideUp` to `.toast` and `@keyframes toastSlideUp`
+
+---
+
+## Step 4: Add `previewTarget` userData to sketch 3D meshes
+
+**File:** `src/modules/sketch/renderers/buildSketchPreview.js`
+
+- Change `mesh.userData.partId = part.id` (line 122) to:
+  ```js
+  mesh.userData.previewTarget = { sourceId: part.id, kind: 'part' };
+  ```
+  This matches the shape expected by `createPreviewViewport`'s pick resolver.
+
+---
+
+## Step 5: Create sketch inspection helper
+
+**New file:** `src/modules/sketch/renderers/sketchPreviewInspection.js`
+
+- Export `getSketchPartInspection(project, selectedId)` returning `{ id, title, subtitle, rows }` or `null`
+- Find part by ID, skip dimensions/cutouts/holes
+- Title: part name or `"Part (type)"`
+- Subtitle: assembly name or `"Unassigned"`
+- Rows: dimension properties based on part type (width, depth, thickness for panels; width, depth, height for legs; etc.)
+
+---
+
+## Step 6: Rewrite SketchPreviewPanel to match floor planner
+
+**File:** `src/modules/sketch/renderers/SketchPreviewPanel.jsx`
+
+Accept props: `{ isMaximized, onToggleMaximize, className }`
+
+Add features matching `ThreePreviewPanel.jsx`:
+- **Header**: eyebrow "3D Preview", subtitle with part count, actions row
+- **Navigation mode toggle**: Inspect / Walk buttons
+- **Assembly selector**: `<select>` dropdown with "All Parts" + each assembly
+- **Reset view button** and **maximize/restore button**
+- **Compass overlay** with heading handler
+- **Walk mode overlay** with instructions
+- **Inspect card** showing selected part details (via `getSketchPartInspection`)
+- **Empty state** message when no visible parts
+- **Object picking** via `setPickHandler` → dispatches `SELECT_OBJECT`
+- **Navigation mode switching** via `setNavigationMode`
+- **Walk context** via `setActiveFloorContext` with computed spawn from part bounds
+- **Rich footer** with mode-specific instructions
+
+**File:** `src/modules/sketch/renderers/SketchPreviewPanel.module.css`
+
+Rewrite to match `ThreePreviewPanel.module.css` structure:
+- `.panel` → grid layout `auto 1fr auto`
+- `.header`, `.titleGroup`, `.eyebrow`, `.title`, `.actions`
+- `.modeToggle`, `.modeButton`, `.modeButtonActive` (use sketch amber accent)
+- `.assemblySelect` (same as `.floorSelect`)
+- `.button`, `.iconButton`
+- `.viewportWrap`, `.viewport`, `.compassDock`
+- `.walkOverlay`, `.walkOverlayTitle`, `.walkOverlayBody`
+- `.inspectCard`, `.inspectEyebrow`, `.inspectTitle`, `.inspectMeta`, `.inspectGrid`, `.inspectRow`, `.inspectLabel`, `.inspectValue`
+- `.emptyState`, `.emptyTitle`, `.emptyBody`
+- `.footer`
+- Responsive media queries
+
+---
+
+## Files Modified
+
+| File | Change |
+|------|--------|
+| `src/modules/sketch/app/SketchEditorProvider.jsx` | Add `maximizedPanel` state + reducer action |
+| `src/modules/sketch/SketchWorkspace.jsx` | Restructure layout, side-by-side canvas+preview |
+| `src/modules/sketch/SketchWorkspace.module.css` | Add modelWorkspace, preview, maximize classes |
+| `src/modules/sketch/renderers/SketchCanvas.jsx` | Overlay controls, compass, double-click |
+| `src/modules/sketch/renderers/SketchCanvas.module.css` | Compass, overlay, toast animation styles |
+| `src/modules/sketch/renderers/SketchPreviewPanel.jsx` | Full rewrite with all floor planner features |
+| `src/modules/sketch/renderers/SketchPreviewPanel.module.css` | Full rewrite matching floor planner |
+| `src/modules/sketch/renderers/buildSketchPreview.js` | Add previewTarget userData for picking |
+
+## New Files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/renderers/sketchPreviewInspection.js` | Part inspection data for inspect card |
+
+## Reused Components (no changes needed)
+
+- `@/ui/CompassOverlay` — compass overlay widget
+- `@/ui/ToolbarIcons` — CenterViewIcon, ExpandIcon, CollapseIcon
+- `@/three/viewer/createPreviewViewport` — already used by sketch
+- `@/three/viewer/disposeScene` — already used by sketch
+
+---
+
+## Verification
+
+1. Navigate to `/sketch` and confirm the 3D preview is now side-by-side with the canvas (not stacked in right panel)
+2. Canvas: compass visible top-left, center view + maximize buttons visible bottom-right
+3. Canvas: double-click doesn't throw errors
+4. Canvas: maximize button toggles between full canvas and split view
+5. 3D Preview: header shows part count, has Inspect/Walk toggle, assembly selector, reset + maximize buttons
+6. 3D Preview: clicking a part in 3D selects it in the editor (inspect card appears)
+7. 3D Preview: Walk mode captures mouse and allows W/A/S/D flight
+8. 3D Preview: compass shows camera heading
+9. 3D Preview: empty state message when no parts exist
+10. 3D Preview: maximize button expands preview to full width
+11. Responsive: at <1200px the canvas and preview stack vertically

@@ -1,0 +1,44 @@
+# Add Back Button to StoryDetail + Preserve Filter State
+
+## Context
+When you click a story card in StoryBrowser, you land on StoryDetail with no way to go back. The user wants a back button in the StoryDetail header that returns them to the exact filter tab (All, Ongoing, Completed, Hiatus) they came from.
+
+Currently:
+- StoryBrowser stores the filter in local `useState` — it resets on re-mount
+- Story card click does `navigate(/home/stories/${story.id})` with no state passed
+- StoryDetail has no back button at all
+
+## Approach
+
+### 1. StoryBrowser — persist filter in URL search params
+**File:** `client/src/components/Stories/StoryBrowser/StoryBrowser.jsx`
+
+- Import `useSearchParams` from react-router-dom
+- Replace `useState(null)` for `statusFilter` with `searchParams.get('status')`
+- When a filter tab is clicked, update the search param (`?status=ongoing`) instead of local state
+- This means when the browser navigates back, the URL still has `?status=ongoing` and the correct tab is restored
+
+### 2. StoryDetail — add back button to header
+**File:** `client/src/components/Stories/StoryDetail/StoryDetail.jsx`
+
+- Add a back button above the hero section, following the same pattern as ChapterReader's `.chapter-reader-back` button
+- Use `navigate(-1)` (browser back) — this naturally returns to `/home/stories?status=ongoing` preserving the filter
+- Add a header row with the back arrow + "Stories" label (like ChapterReader has chapter label + title)
+
+### 3. StoryDetail CSS — style the back button
+**File:** `client/src/components/Stories/StoryDetail/StoryDetail.css`
+
+- Add `.story-detail-header` (flex row with gap, border-bottom, same as `.chapter-reader-header`)
+- Add `.story-detail-back` button (36x36, `var(--bg-secondary)`, rounded 8px — identical to `.chapter-reader-back`)
+- Add `.story-detail-header-label` for the "Stories" text
+
+## Files to Modify
+1. `client/src/components/Stories/StoryBrowser/StoryBrowser.jsx` — switch filter from useState to useSearchParams
+2. `client/src/components/Stories/StoryDetail/StoryDetail.jsx` — add back button header
+3. `client/src/components/Stories/StoryDetail/StoryDetail.css` — style the back button
+
+## Verification
+1. Go to `/home/stories` → click "Ongoing" tab → click a story → see back button at top
+2. Click back button → returns to `/home/stories?status=ongoing` with Ongoing tab active
+3. Repeat for Completed, Hiatus, All tabs — each preserves correctly
+4. Back button style matches ChapterReader's back button exactly

@@ -1,0 +1,52 @@
+# Fix: Repost embedded click missing interaction data
+
+## Context
+When a user views a repost and clicks the embedded original post, they navigate to the original post's `ContentView`. However, likes count, bookmark count, comments count, and the user's own like/bookmark state all show as 0/false. This is because `viewContent` is called with hardcoded `false, 0, false, 0, 0` for the interaction fields, and the `repostSource` object from the backend doesn't include this data. Since `postType` IS passed in state, `shouldFetchPost` evaluates to `false`, so the component never fetches the real data from the API.
+
+## Fix
+**File:** `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+
+**Change:** In the `cv-repost-embedded` onClick handler (lines 409-430), instead of calling `viewContent` with incomplete data, navigate directly using just the `journalId` so that `ContentView` fetches the full enriched post data from `getJournalById`.
+
+Replace the current onClick with a simple navigation to the post route **without passing state** (or with minimal state that omits `postType`), which makes `shouldFetchPost = true` on the destination page:
+
+```jsx
+onClick={(e) => {
+    e.stopPropagation();
+    const src = postData.repostSource;
+    navigate(`/home/post/${encodeURIComponent(src.id)}/${slugifyTitle(src.title)}`);
+}}
+```
+
+This requires importing `slugifyTitle` from the same place `handleClicks.js` uses it, or simply using the navigate helper with just the journalId (letting ContentView fetch everything).
+
+Alternatively, the minimal change: just pass state **without** `postType` so `shouldFetchPost` triggers:
+```jsx
+onClick={(e) => {
+    e.stopPropagation();
+    const src = postData.repostSource;
+    viewContent(
+        e,
+        src.content,
+        srcParsed?.wholeText || '',
+        src.title,
+        src.users?.id,
+        src.users?.name,
+        src.users?.image_url,
+        src.created_at,
+        src.id,
+        false, 0, false, 0, 0,
+        src.users?.badge
+        // omit postType and canvasDoc → postType defaults to null → shouldFetchPost = true
+    );
+}}
+```
+
+By omitting `postType` (letting it default to `null`), the condition `!statePostData?.postType` becomes true, and `ContentView` will fetch the journal via API with all real interaction data.
+
+## Verification
+1. Start the dev server
+2. Navigate to a repost in the feed
+3. Click on the embedded original post
+4. Confirm that the original post shows correct likes count, bookmark count, comments count, and the logged-in user's like/bookmark state
+5. Confirm canvas reposts still render correctly when navigated to

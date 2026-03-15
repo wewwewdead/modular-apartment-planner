@@ -1,0 +1,80 @@
+# "Save Draft?" Confirmation Dialog on Editor Close
+
+## Context
+
+The drafts system is implemented, but when a user closes the editor (X button), there's no prompt asking if they want to save their work as a draft first. The editor just closes — deleting images if no draft exists, or silently keeping the draft at its last-saved state. Users with unsaved changes lose work without warning.
+
+**Two scenarios need handling:**
+1. **New writing (no draft saved yet)** — user has typed content but never saved → ask "Save as draft?"
+2. **Editing a draft (unsaved changes)** — user resumed a draft and made changes since last save → ask "Save changes?"
+
+If the editor has no content or no unsaved changes, close immediately (no prompt).
+
+---
+
+## Approach
+
+Add a styled confirmation dialog inline in `Editor.jsx` that appears when the user clicks X and has unsaved work. The dialog follows the existing app pattern: `AnimatePresence` + `motion.div` overlay with Framer Motion spring animations, using the project's CSS variables.
+
+No new reusable component needed — the dialog is small enough to live inside `Editor.jsx` as a conditional render (same pattern as how the editor itself is an inline overlay). The codebase currently uses `window.confirm()` in Stories — this is a better UX.
+
+---
+
+## Changes
+
+### `Editor.jsx` — Add confirmation dialog state and render
+
+**State:**
+- `showCloseConfirm` (boolean) — controls dialog visibility
+
+**Logic change to close button:**
+- On X click → check if there's unsaved work (`hasChangesRef.current && hasContentRef.current`)
+- If unsaved work exists → `setShowCloseConfirm(true)` instead of closing
+- If no unsaved work → close immediately (existing behavior)
+
+**Need refs from EditorInner:** `hasChanges` and `hasContent` need to be accessible in Editor.jsx. Add a `editorStateRef` (ref object) passed from Editor to EditorInner. EditorInner writes `{ hasChanges, hasContent, editorState }` to this ref on every change. Editor reads it on close.
+
+**Dialog actions:**
+- **"Save Draft"** — call `saveDraft()` API with current content from the ref, then close
+- **"Discard"** — close without saving (existing close behavior: delete images if no draft, clear editor)
+
+**Dialog render:** Inline `{showCloseConfirm && (...)}` inside the `editor-container` div, positioned as an overlay on top of the editor content.
+
+### `RichTextEditor.jsx` — Expose state via ref
+
+- Accept new prop: `editorStateRef` (a ref object from parent)
+- On every `onchange` and `handleSaveDraft`, write current state to `editorStateRef.current = { hasChanges, hasContent, editorState, title }`
+- This lets Editor.jsx read the latest state without prop drilling callbacks
+
+### `editor.css` — Add dialog styles
+
+Small overlay + card inside the editor container:
+- Semi-transparent backdrop over editor content
+- Centered card with message + two buttons
+- "Save Draft" button: `var(--accent-purple)` (matches Publish button style)
+- "Discard" button: transparent with border (matches Save Draft button style)
+- Responsive for mobile
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `client/src/components/HomePage/Editor/Editor.jsx` | Add `showCloseConfirm` state, modify close handler, add `editorStateRef`, render confirmation dialog, add "Save Draft" + "Discard" handlers |
+| `client/src/components/HomePage/Editor/RichTextEditor.jsx` | Accept `editorStateRef` prop, write `{ hasChanges, hasContent, editorState }` to it on change |
+| `client/src/components/HomePage/Editor/editor.css` | Add `.editor-close-confirm-*` styles for the dialog overlay and card |
+
+No new files needed.
+
+---
+
+## Verification
+
+1. **New content, click X** → dialog appears with "Save as draft before closing?"
+2. **Click "Save Draft"** → draft saved, editor closes, draft appears in `/home/drafts`
+3. **Click "Discard"** → editor closes, no draft created, images cleaned up
+4. **Existing draft with changes, click X** → dialog appears with "Save changes before closing?"
+5. **Click "Save Draft"** → changes saved to existing draft, editor closes
+6. **No content or no changes, click X** → editor closes immediately (no dialog)
+7. **After publish, click X** → editor already closed by publish flow (no dialog)

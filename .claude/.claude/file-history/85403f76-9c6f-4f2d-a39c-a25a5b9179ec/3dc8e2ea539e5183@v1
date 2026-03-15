@@ -1,0 +1,29 @@
+# Fix: Analytics summary tiles not responding to date range
+
+## Bug
+The 4 summary stat tiles (posts, views, reactions, comments) show the same numbers regardless of which time range is selected (7d / 30d / 90d / all). Charts and other sections change correctly.
+
+## Root Cause
+In `server/sql/analytics.sql` lines 23-42, the `v_summary` query filters only by `user_id` and `privacy = 'public'` — it **never applies** `p_range_start` / `p_range_end`. This makes it always return all-time totals.
+
+## Fix
+**File: `server/sql/analytics.sql`** — Add date range filter to the summary WHERE clause (lines 40-42):
+
+```sql
+-- Current (broken):
+WHERE j.user_id = p_user_id
+  AND j.privacy = 'public';
+
+-- Fixed:
+WHERE j.user_id = p_user_id
+  AND j.privacy = 'public'
+  AND j.created_at >= p_range_start
+  AND j.created_at < p_range_end;
+```
+
+That's it — one file, two added lines. The RPC already receives the correct date params, it just wasn't using them for the summary section.
+
+## Verification
+1. Re-run the updated `analytics.sql` in Supabase SQL editor
+2. Navigate to `/home/analytics`, switch between 7d → 30d → 90d → All time
+3. Confirm the 4 summary tiles now show different numbers per range

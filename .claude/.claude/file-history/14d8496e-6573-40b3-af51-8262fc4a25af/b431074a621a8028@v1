@@ -1,0 +1,60 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+import { useTimeOfDayGreeting } from '../../../hooks/useTimeOfDayGreeting';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+
+interface HomeHeaderProps {
+  userName: string;
+  activeCarts: number;
+  itemCount: number;
+}
+
+export function HomeHeader({ userName, activeCarts, itemCount }: HomeHeaderProps) {
+  const greeting = useTimeOfDayGreeting();
+
+  const summaryLine = activeCarts > 0
+    ? `${activeCarts} active cart${activeCarts === 1 ? '' : 's'}, ${itemCount} items in vault`
+    : `${itemCount} items in your vault`;
+
+  return (
+    <Animated.View entering={FadeInDown.duration(400)} style={styles.container}>
+      <Text style={styles.eyebrow}>Grock</Text>
+      <Text
+        style={styles.greeting}
+        accessibilityRole="header"
+      >
+        {greeting}, {userName || 'there'}
+      </Text>
+      <Text
+        style={styles.summary}
+        accessibilityLiveRegion="polite"
+      >
+        {summaryLine}
+      </Text>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    gap: 6,
+  },
+  eyebrow: {
+    color: colors.brandDeep,
+    fontWeight: '800',
+    fontSize: 14,
+    textTransform: 'uppercase',
+  },
+  greeting: {
+    ...typography.headline,
+    color: colors.ink,
+  },
+  summary: {
+    ...typography.body,
+    color: colors.mutedInk,
+    fontSize: 15,
+  },
+});

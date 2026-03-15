@@ -1,0 +1,106 @@
+import React from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts} from '../../theme/typography';
+import {spacing} from '../../theme/spacing';
+import {HeartIcon, CommentIcon, BookmarkIcon, RepostIcon} from '../icons';
+
+interface ActionBarProps {
+  likeCount: number;
+  commentCount: number;
+  bookmarkCount?: number;
+  isLiked?: boolean;
+  isBookmarked?: boolean;
+  onLike?: () => void;
+  onComment?: () => void;
+  onBookmark?: () => void;
+  onRepost?: () => void;
+}
+
+export function ActionBar({
+  likeCount,
+  commentCount,
+  bookmarkCount,
+  isLiked,
+  isBookmarked,
+  onLike,
+  onComment,
+  onBookmark,
+  onRepost,
+}: ActionBarProps) {
+  const {colors} = useTheme();
+
+  return (
+    <View style={[styles.bar, {borderTopColor: colors.borderCard}]}>
+      <Pressable
+        style={styles.action}
+        onPress={onLike}
+        hitSlop={8}>
+        <HeartIcon
+          size={18}
+          color={isLiked ? colors.danger : colors.iconDefault}
+          filled={isLiked}
+        />
+        {likeCount > 0 && (
+          <Text
+            style={[
+              styles.count,
+              {color: isLiked ? colors.danger : colors.textMuted},
+            ]}>
+            {likeCount}
+          </Text>
+        )}
+      </Pressable>
+
+      <Pressable style={styles.action} onPress={onComment} hitSlop={8}>
+        <CommentIcon size={18} color={colors.iconDefault} />
+        {commentCount > 0 && (
+          <Text style={[styles.count, {color: colors.textMuted}]}>
+            {commentCount}
+          </Text>
+        )}
+      </Pressable>
+
+      <Pressable style={styles.action} onPress={onBookmark} hitSlop={8}>
+        <BookmarkIcon
+          size={18}
+          color={isBookmarked ? colors.accentAmber : colors.iconDefault}
+          filled={isBookmarked}
+        />
+        {(bookmarkCount ?? 0) > 0 && (
+          <Text
+            style={[
+              styles.count,
+              {color: isBookmarked ? colors.accentAmber : colors.textMuted},
+            ]}>
+            {bookmarkCount}
+          </Text>
+        )}
+      </Pressable>
+
+      <Pressable style={styles.action} onPress={onRepost} hitSlop={8}>
+        <RepostIcon size={18} color={colors.iconDefault} />
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xl,
+  },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  count: {
+    fontSize: 13,
+    fontFamily: fonts.ui.medium,
+  },
+});

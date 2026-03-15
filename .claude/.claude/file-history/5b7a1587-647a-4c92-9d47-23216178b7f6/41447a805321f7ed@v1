@@ -1,0 +1,70 @@
+# Fix: Link Button Not Working
+
+## Context
+
+The link toolbar button (and floating toolbar link button) silently fail. Root cause: when creating a new link, the Toolbar dispatches `TOGGLE_LINK_COMMAND` with payload `'https://'`. The `LinkPlugin` handler calls `validateUrl('https://')`, which runs `new URL('https://')` — this **throws** because `https://` alone is not a valid URL (no hostname). So `validateUrl` returns `false`, the handler returns `false`, and the link is never created.
+
+Same issue exists in `FloatingSelectionToolbar.jsx` which also dispatches `TOGGLE_LINK_COMMAND` with `'https://'`.
+
+## Root Cause
+
+**File:** `Toolbar.jsx:379` and `FloatingSelectionToolbar.jsx:103`
+```js
+editor.dispatchCommand(TOGGLE_LINK_COMMAND, 'https://');
+// ↑ LinkPlugin calls validateUrl('https://') → new URL('https://') → THROWS → returns false
+```
+
+**File:** `RichTextEditor.jsx:290`, `ChapterEditor.jsx:204`, `editJournal.jsx`
+```jsx
+<LinkPlugin validateUrl={(url) => {
+    try { return Boolean(new URL(url)); } catch { return false; }
+}} />
+// ↑ 'https://' has no hostname, so new URL() throws, returns false
+```
+
+## Fix
+
+Two-part fix — both are needed:
+
+### 1. Toolbar.jsx (line ~379) — Use `$toggleLink` directly instead of dispatching command with placeholder URL
+
+Replace the `toggleLink` function to call `$toggleLink` inside `editor.update()` which bypasses the `validateUrl` check for the initial creation. The FloatingLinkEditor will handle actual URL editing.
+
+```js
+const toggleLink = () => {
+    editor.update(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return;
+        if (activeStates.isLink) {
+            $toggleLink(null);          // remove link
+        } else {
+            $toggleLink('https://');    // create link with placeholder
+        }
+    });
+};
+```
+
+Requires adding import: `$toggleLink` from `@lexical/link`
+
+### 2. FloatingSelectionToolbar.jsx (line ~103) — Same fix
+
+Replace:
+```js
+editor.dispatchCommand(TOGGLE_LINK_COMMAND, 'https://');
+```
+With direct `editor.update()` + `$toggleLink('https://')` call.
+
+Requires adding import: `$toggleLink` from `@lexical/link`
+
+### Files to modify
+| File | Change |
+|---|---|
+| `client/src/components/HomePage/Editor/Toolbar.jsx` | Import `$toggleLink`, rewrite `toggleLink()` to use `editor.update()` |
+| `client/src/components/HomePage/Editor/plugins/FloatingSelectionToolbar.jsx` | Import `$toggleLink`, rewrite `toggleLink()` to use `editor.update()` |
+
+## Verification
+1. Open editor, select text, click link button → link should be created with `https://` placeholder
+2. FloatingLinkEditor should appear showing the URL for editing
+3. Click link button again on linked text → link should be removed
+4. Select text in floating selection toolbar, click link → same behavior
+5. Verify auto-link still works (type a full URL like `https://google.com` → auto-linked)

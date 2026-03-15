@@ -1,0 +1,37 @@
+# Add view tracking to repost embedded click in ContentView
+
+## Context
+When clicking the embedded original post inside a repost in `ContentView.jsx`, views are not being tracked. The same interaction in `PostCards.jsx` already tracks views via `useAddViewsMutation`. This change makes the behavior consistent.
+
+## Changes
+
+### `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+
+1. **Add `useAddViewsMutation` to existing import** (line 14):
+   ```js
+   import { useBookMarkMutation, useFollowMutation, useLikeMutation, useAddViewsMutation } from "../../../utils/useMutation";
+   ```
+
+2. **Create mutateViews instance** (after line 183, near the other mutation hooks):
+   ```js
+   const mutateViews = useAddViewsMutation(session);
+   ```
+
+3. **Add view tracking to the `cv-repost-embedded` onClick** (line 411-428): Add the view mutation call before `viewContent`:
+   ```js
+   onClick={(e) => {
+       e.stopPropagation();
+       if(session){
+           const formadata = new FormData();
+           formadata.append('journalId', postData.repostSource.id);
+           mutateViews.mutate(formadata);
+       }
+       const src = postData.repostSource;
+       // ...rest unchanged
+   }}
+   ```
+
+## Verification
+- Click an embedded original post inside a repost on the ContentView page
+- Confirm a view is recorded (check network tab for the addViews API call)
+- Confirm navigation to the original post still works correctly

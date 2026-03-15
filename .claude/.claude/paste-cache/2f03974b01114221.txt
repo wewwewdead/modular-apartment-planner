@@ -1,0 +1,50 @@
+2026-02-18T10:49:09.945692511Z 
+2026-02-18T10:49:09.945702442Z 41 packages are looking for funding
+2026-02-18T10:49:09.945706951Z   run `npm fund` for details
+2026-02-18T10:49:09.951304436Z 
+2026-02-18T10:49:09.951324617Z 5 moderate severity vulnerabilities
+2026-02-18T10:49:09.951328767Z 
+2026-02-18T10:49:09.951333117Z Some issues need review, and may require choosing
+2026-02-18T10:49:09.951337267Z a different dependency.
+2026-02-18T10:49:09.951340957Z 
+2026-02-18T10:49:09.951344917Z Run `npm audit` for details.
+2026-02-18T10:49:10.034276302Z ==> Running build command 'npm install; npm run build'...
+2026-02-18T10:49:10.728935131Z 
+2026-02-18T10:49:10.728961622Z up to date, audited 230 packages in 608ms
+2026-02-18T10:49:10.728969852Z 
+2026-02-18T10:49:10.728997762Z 41 packages are looking for funding
+2026-02-18T10:49:10.729036873Z   run `npm fund` for details
+2026-02-18T10:49:10.736410941Z 
+2026-02-18T10:49:10.736426682Z 5 moderate severity vulnerabilities
+2026-02-18T10:49:10.736430032Z 
+2026-02-18T10:49:10.736433772Z Some issues need review, and may require choosing
+2026-02-18T10:49:10.736437612Z a different dependency.
+2026-02-18T10:49:10.736440442Z 
+2026-02-18T10:49:10.736454142Z Run `npm audit` for details.
+2026-02-18T10:49:10.877033357Z 
+2026-02-18T10:49:10.877050167Z > iskrib_v3@0.0.0 prebuild
+2026-02-18T10:49:10.877055037Z > npm run seo:sitemap
+2026-02-18T10:49:10.877058527Z 
+2026-02-18T10:49:10.986515369Z 
+2026-02-18T10:49:10.986534049Z > iskrib_v3@0.0.0 seo:sitemap
+2026-02-18T10:49:10.986538999Z > node ./scripts/generate-sitemap.mjs
+2026-02-18T10:49:10.98657026Z 
+2026-02-18T10:49:11.018310595Z Generated sitemap: /opt/render/project/src/public/sitemap.xml
+2026-02-18T10:49:11.029428123Z 
+2026-02-18T10:49:11.029452514Z > iskrib_v3@0.0.0 build
+2026-02-18T10:49:11.029456364Z > vite build && npm run seo:prerender
+2026-02-18T10:49:11.029458804Z 
+2026-02-18T10:49:11.229790549Z vite v7.3.1 building client environment for production...
+2026-02-18T10:49:11.29014208Z transforming...
+2026-02-18T10:49:11.70954829Z ✓ 84 modules transformed.
+2026-02-18T10:49:11.71168513Z ✗ Build failed in 457ms
+2026-02-18T10:49:11.711748462Z error during build:
+2026-02-18T10:49:11.711752602Z Could not resolve "./components/HomePage/home.jsx" from "src/App.jsx"
+2026-02-18T10:49:11.711755782Z file: /opt/render/project/src/src/App.jsx
+2026-02-18T10:49:11.711758082Z     at getRollupError (file:///opt/render/project/src/node_modules/vite/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+2026-02-18T10:49:11.711759792Z     at error (file:///opt/render/project/src/node_modules/vite/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+2026-02-18T10:49:11.711762072Z     at ModuleLoader.handleInvalidResolvedId (file:///opt/render/project/src/node_modules/vite/node_modules/rollup/dist/es/shared/node-entry.js:21590:24)
+2026-02-18T10:49:11.711763722Z     at ModuleLoader.resolveDynamicImport (file:///opt/render/project/src/node_modules/vite/node_modules/rollup/dist/es/shared/node-entry.js:21650:58)
+2026-02-18T10:49:11.711765442Z     at async file:///opt/render/project/src/node_modules/vite/node_modules/rollup/dist/es/shared/node-entry.js:21534:32
+2026-02-18T10:49:11.787917289Z ==> Build failed 😞
+2026-02-18T10:49:11.787935019Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys

@@ -1,0 +1,172 @@
+# Sketch Generators V1 — Full Audit + Cabinet Fix
+
+## Context
+
+The user requested parametric object generators for Sketch Studio. The full infrastructure already exists: template system, generator pipeline, UI (dialog, sidebar tree, properties panel with parameter editing), 3D preview, orthographic views, sheet generation, and persistence. This plan covers a full audit of all 4 generators against the user's spec, fixes for the cabinet template, and end-to-end verification.
+
+---
+
+## Audit: Table Generator
+
+**Spec:** width, depth, height, tabletop thickness, leg thickness, leg inset → tabletop part, four leg parts, assembly tree, top/front/side views, 3D preview, part list
+
+**Current** (`src/modules/sketch/domain/templates/tableTemplate.js`):
+| Parameter | Status | Notes |
+|-----------|--------|-------|
+| width (1200) | ✅ | |
+| depth (600) | ✅ | |
+| height (750) | ✅ | |
+| topThickness (18) | ✅ | Maps to "tabletop thickness" |
+| legWidth (40) + legDepth (40) | ✅ | More flexible than single "leg thickness" |
+| legInset (30) | ✅ | |
+
+**Outputs:**
+| Output | Status |
+|--------|--------|
+| Tabletop panel | ✅ |
+| 4 leg parts | ✅ (front_left, front_right, rear_left, rear_right) |
+| Assembly tree (Top + Legs) | ✅ |
+| Top/front/side views | ✅ (via `viewProjection.js`) |
+| 3D preview | ✅ (via `buildSketchPreview.js`) |
+| Part list | ✅ (via `sketchSheetTemplates.js`) |
+
+**Verdict: No changes needed.** All spec requirements met.
+
+---
+
+## Audit: Cabinet Generator
+
+**Spec:** width, height, depth, panel thickness, shelf count, door count, toe kick, back panel thickness → side panels, top/bottom, shelves, doors, assembly tree, views, 3D, part list
+
+**Current** (`src/modules/sketch/domain/templates/cabinetTemplate.js`):
+| Parameter | Status | Notes |
+|-----------|--------|-------|
+| width (600) | ✅ | |
+| height (800) | ✅ | |
+| depth (400) | ✅ | |
+| panelThickness (18) | ✅ | |
+| shelfCount (2) | ✅ | |
+| hasDoors (false) | ⚠️ | Boolean — spec wants `doorCount` integer |
+| hasBack (true) | ✅ | Toggle for back panel |
+| toeKick | ❌ | Missing |
+| backPanelThickness | ❌ | Missing — currently reuses panelThickness |
+
+**Outputs:** All outputs work (panels, shelves, doors, tree, views, 3D, part list). Geometry needs updating for toe kick and door count.
+
+**Verdict: 3 parameter changes needed** (see Implementation below).
+
+---
+
+## Audit: Desk Generator
+
+**Spec:** "create architecture so shelf and desk generators can be added next using the same pattern"
+
+**Current** (`src/modules/sketch/domain/templates/deskTemplate.js`):
+- Already fully functional with 6 params: width, depth, height, topThickness, sideThickness, hasBackPanel
+- Follows exact same `buildDefinition` → `materializeTemplateDefinition` pattern
+- Generates desktop panel, two side supports, optional back panel
+- Registered in `templateRegistry.js`, accessible from TemplateDialog
+
+**Verdict: No changes needed.** Already scaffolded and working.
+
+---
+
+## Audit: Shelf Generator
+
+**Spec:** "create architecture so shelf and desk generators can be added next using the same pattern"
+
+**Current** (`src/modules/sketch/domain/templates/shelfTemplate.js`):
+- Already fully functional with 7 params: width, depth, height, sideThickness, shelfThickness, shelfCount, hasBack
+- Same pattern as all other templates
+- Generates side panels, evenly spaced shelves (+ top/bottom), optional back panel
+- Registered in `templateRegistry.js`, accessible from TemplateDialog
+
+**Verdict: No changes needed.** Already scaffolded and working.
+
+---
+
+## Audit: UI & Pipeline
+
+| Component | File | Status |
+|-----------|------|--------|
+| "New Object" flow | `SketchToolbar.jsx` (button), `SketchSidebar.jsx` (button), `SketchEmptyState.jsx` | ✅ |
+| Template picker | `TemplateDialog.jsx` | ✅ (renders cards from templateList) |
+| Parameter form | `TemplateParamsForm.jsx` | ✅ (auto-renders number/integer/boolean) |
+| Object generation | `objectGenerator.js` → `SketchProvider.jsx` TEMPLATE_GENERATE | ✅ |
+| Assembly tree in sidebar | `SketchSidebar.jsx` (object→assembly→part tree) | ✅ |
+| Parameter editing after creation | `SketchPropertiesPanel.jsx` ObjectProperties + Apply | ✅ |
+| Regeneration | `SketchProvider.jsx` TEMPLATE_REGENERATE → `rebuildManagedObject` | ✅ |
+| 3D preview | `SketchPreviewPanel.jsx` + `buildSketchPreview.js` | ✅ |
+| Orthographic views | `viewProjection.js` (top/front/side) | ✅ |
+| Sheet generation | `sketchSheetTemplates.js` (object/assembly sheets) | ✅ |
+| Detach to manual | `SketchProvider.jsx` OBJECT_DETACH | ✅ |
+
+**Verdict: No pipeline changes needed.** All generic components handle any template automatically.
+
+---
+
+## Implementation: Cabinet Template Enhancement
+
+**File to modify:** `src/modules/sketch/domain/templates/cabinetTemplate.js`
+
+### Parameter Changes
+
+1. **Replace** `hasDoors` (boolean) **with** `doorCount` (integer)
+   - `{ key: 'doorCount', label: 'Door Count', type: 'integer', default: 2, min: 0, max: 4, step: 1, suffix: '' }`
+
+2. **Add** `toeKick`
+   - `{ key: 'toeKick', label: 'Toe Kick', type: 'number', default: 75, min: 0, max: 200, step: 5, suffix: 'mm' }`
+
+3. **Add** `backPanelThickness`
+   - `{ key: 'backPanelThickness', label: 'Back Thickness', type: 'number', default: 6, min: 3, max: 25, step: 1, suffix: 'mm' }`
+
+### Geometry Changes in `buildDefinition`
+
+**Destructure new params:**
+```js
+const { width, depth, height, panelThickness, shelfCount, doorCount, toeKick, hasBack, backPanelThickness } = params;
+```
+
+**Toe kick logic:**
+- Side panels: full height (`height`), position `z: 0` (sides go floor to top)
+- Bottom panel: position `z: toeKick` (raised above floor)
+- `innerHeight = height - 2 * panelThickness` (unchanged — toe kick is below bottom panel)
+- Actually, more accurate: `innerHeight` stays the same, bottom panel at `z: toeKick`, top panel at `z: height - panelThickness`
+- Side panels span full height. The toe kick creates a recessed gap at the bottom front.
+
+**Door count logic:**
+- If `doorCount > 0`: generate `doorCount` evenly-spaced door panels
+- Each door width = `innerWidth / doorCount`
+- Position each door at `x: panelThickness + i * doorWidth`
+
+**Back panel thickness:**
+- Back panel `depth` dimension uses `backPanelThickness` instead of `panelThickness`
+- Back panel position: `y: depth - backPanelThickness`
+
+### No Other Files Need Changes
+
+The template system is fully generic — TemplateDialog, TemplateParamsForm, ObjectProperties, objectGenerator, buildSketchPreview, viewProjection, and sketchSheetTemplates all operate on the template definition data without any template-specific code.
+
+---
+
+## Verification
+
+1. `npm run dev` → navigate to `/sketch`
+2. **Table**: New Object → Table → verify 7 params, tabletop + 4 legs, 3D preview, front/side views, generate sheet
+3. **Cabinet**: New Object → Cabinet → verify:
+   - Door count 0: no doors in front assembly
+   - Door count 1: single full-width door
+   - Door count 2: two half-width doors
+   - Door count 3: three third-width doors
+   - Toe kick 75mm: bottom panel raised, gap visible in front view and 3D
+   - Toe kick 0: no gap (flush to floor)
+   - Back thickness 6mm: thin back panel in side view
+   - Apply Parameters: change values → regeneration works
+   - Generate Object Sheet: correct viewports
+4. **Desk**: New Object → Desk → verify 6 params, desktop + sides + optional back, 3D, views, sheet
+5. **Shelf**: New Object → Shelf → verify 7 params, sides + shelves + optional back, 3D, views, sheet
+6. **Cross-cutting**: For each generator, verify:
+   - Assembly tree in sidebar (expandable, shows assemblies + parts)
+   - 3D preview updates live
+   - Parameter editing in properties panel works
+   - Detach to custom assemblies unlocks parts

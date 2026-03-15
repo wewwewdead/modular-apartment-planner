@@ -1,0 +1,101 @@
+import { useRef, useCallback } from 'react';
+import styles from '../Universe.module.css';
+
+const RADIUS = 50; // half of 100px ring
+const KNOB_SIZE = 44;
+const DEADZONE = 0.12;
+
+const VirtualJoystick = ({ analogRef, inputFrozenRef }) => {
+    const ringRef = useRef(null);
+    const touchIdRef = useRef(null);
+    const knobRef = useRef(null);
+
+    const updateAnalog = useCallback((clientX, clientY) => {
+        if (inputFrozenRef.current) return;
+        const ring = ringRef.current;
+        if (!ring) return;
+
+        const rect = ring.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        let dx = (clientX - centerX) / RADIUS;
+        let dy = (clientY - centerY) / RADIUS;
+
+        // Clamp to unit circle
+        const mag = Math.sqrt(dx * dx + dy * dy);
+        if (mag > 1) { dx /= mag; dy /= mag; }
+
+        // Apply deadzone
+        const deadMag = Math.max(0, mag - DEADZONE) / (1 - DEADZONE);
+        if (deadMag < 0.001) {
+            analogRef.current.yaw = 0;
+            analogRef.current.pitch = 0;
+        } else {
+            const scale = mag > 0 ? deadMag / mag : 0;
+            analogRef.current.yaw = dx * scale;
+            analogRef.current.pitch = -dy * scale; // invert Y: drag up = pitch up
+        }
+
+        // Move knob visually
+        if (knobRef.current) {
+            const clampedDx = mag > 1 ? dx : (clientX - centerX) / RADIUS;
+            const clampedDy = mag > 1 ? dy : (clientY - centerY) / RADIUS;
+            const px = (mag > 1 ? dx : clampedDx) * RADIUS;
+            const py = (mag > 1 ? dy : clampedDy) * RADIUS;
+            knobRef.current.style.transition = 'none';
+            knobRef.current.style.transform = `translate(${px}px, ${py}px)`;
+        }
+    }, [analogRef, inputFrozenRef]);
+
+    const resetKnob = useCallback(() => {
+        analogRef.current.yaw = 0;
+        analogRef.current.pitch = 0;
+        touchIdRef.current = null;
+        if (knobRef.current) {
+            knobRef.current.style.transition = 'transform 60ms ease-out';
+            knobRef.current.style.transform = 'translate(0px, 0px)';
+        }
+    }, [analogRef]);
+
+    const onTouchStart = useCallback((e) => {
+        if (touchIdRef.current !== null) return; // already tracking a finger
+        const touch = e.changedTouches[0];
+        touchIdRef.current = touch.identifier;
+        updateAnalog(touch.clientX, touch.clientY);
+    }, [updateAnalog]);
+
+    const onTouchMove = useCallback((e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchIdRef.current) {
+                e.preventDefault();
+                updateAnalog(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                return;
+            }
+        }
+    }, [updateAnalog]);
+
+    const onTouchEnd = useCallback((e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchIdRef.current) {
+                resetKnob();
+                return;
+            }
+        }
+    }, [resetKnob]);
+
+    return (
+        <div
+            ref={ringRef}
+            className={styles.joystickRing}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onTouchCancel={onTouchEnd}
+        >
+            <div ref={knobRef} className={styles.joystickKnob} />
+        </div>
+    );
+};
+
+export default VirtualJoystick;

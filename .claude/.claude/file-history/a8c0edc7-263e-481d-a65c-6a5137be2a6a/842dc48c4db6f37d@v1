@@ -1,0 +1,8 @@
+CREATE TABLE hottest_tracker (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    month_key TEXT NOT NULL UNIQUE,
+    journal_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    hot_score INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -1,0 +1,74 @@
+2026-02-21T12:43:28.224Z INFO GradeBot starting. Data directory: C:\Users\johnm\teacher-gradebot\data | Model: qwen3-vl:8b
+2026-02-21T12:43:28.225Z INFO Single-number mode=true | loopGuard ttl=600000ms idTtl=300000ms textTtl=120000ms
+2026-02-21T12:43:28.226Z INFO Reply routing strategy=dual_fallback fallback=true verifyTimeout=1500ms
+GradeBot is booting. Scan QR code in terminal once WhatsApp starts.
+2026-02-21T12:43:30.030Z INFO WhatsApp connected. meId=639497868448:3@s.whatsapp.net meLid=99905888624837:3@lid
+Closing session: SessionEntry {
+  _chains: {
+    'BTPpYR6K4LK0AFes6apZ+c5mOFgsNAWQI7+1nFkxt2NJ': { chainKey: [Object], chainType: 1, messageKeys: {} }
+  },
+  registrationId: 879554420,
+  currentRatchet: {
+    ephemeralKeyPair: {
+      pubKey: <Buffer 05 33 e9 61 1e 8a e0 b2 b4 00 57 ac e9 aa 59 f9 ce 66 38 58 2c 34 05 90 23 bf b5 9c 59 31 b7 63 49>,
+      privKey: <Buffer e0 64 9a 54 67 69 2e 8b 6a d5 eb f7 c4 cc fc cb e4 8c 2b be c2 97 2e 7f 9e 8e 43 ea 50 ba 63 7a>
+    },
+    lastRemoteEphemeralKey: <Buffer 05 c3 35 a2 ca 2a 97 b5 bf 95 42 d1 eb 82 53 d3 6d 31 71 f0 79 e3 ff 44 3d f1 d8 b4 2e c8 b9 aa 5f>,
+    previousCounter: 0,
+    rootKey: <Buffer d6 05 62 5a 86 98 c6 dc 98 de 1e 43 db c5 d4 c8 8e 35 b8 93 f3 96 56 fd 93 61 90 ad 01 d8 3f 69>
+  },
+  indexInfo: {
+    baseKey: <Buffer 05 fa 51 97 f2 df a0 26 ab fd bd d5 54 19 49 76 d0 d4 1b 02 b2 df 1c 1c 29 11 ed 7f e5 f7 2e 6e 41>,
+    baseKeyType: 1,
+    closed: -1,
+    used: 1771677211474,
+    created: 1771677211474,
+    remoteIdentityKey: <Buffer 05 52 a7 f9 04 a2 82 d3 d5 02 e9 48 e3 27 be e8 98 9c b8 cf 7a 95 da e5 c7 b1 5d 11 d8 c5 81 a7 3d>
+  },
+  pendingPreKey: {
+    signedKeyId: 6915594,
+    baseKey: <Buffer 05 fa 51 97 f2 df a0 26 ab fd bd d5 54 19 49 76 d0 d4 1b 02 b2 df 1c 1c 29 11 ed 7f e5 f7 2e 6e 41>,
+    preKeyId: 764
+  }
+}
+Decrypted message with closed session.
+2026-02-21T12:43:33.492Z INFO messages.upsert received: type=notify count=1
+2026-02-21T12:43:33.493Z INFO Accepted fromMe operator message 3A08F92DFDF0DC6F665F in 99905888624837@lid (single-number mode).
+2026-02-21T12:43:33.493Z INFO Inbound message accepted from 99905888624837@lid (fromMe=true textPreview="hello" attachments=0).
+2026-02-21T12:43:33.493Z INFO Agent handling started for message 3A08F92DFDF0DC6F665F in 99905888624837@lid.
+2026-02-21T12:43:33.496Z INFO Agent handling completed for message 3A08F92DFDF0DC6F665F in 3ms.
+2026-02-21T12:43:33.496Z INFO Reply routing inId=3A08F92DFDF0DC6F665F strategy=dual_fallback reason=lid_rewritten_to_phone primary=639497868448@s.whatsapp.net fallbacks=[99905888624837@lid].
+2026-02-21T12:43:34.084Z INFO Reply send attempt success inId=3A08F92DFDF0DC6F665F outId=3EB02B72D360F1FFB2E630 target=639497868448@s.whatsapp.net.
+Closing session: SessionEntry {
+  _chains: {
+    BRHln2orJBGudkH3giKCAgEOGNEtcNg35fcuxAn3Apts: { chainKey: [Object], chainType: 2, messageKeys: [Object] },
+    'BdTUkGXq1ul/YpAKjWp5OaRbeop2TewvvvhXdzlQbjsV': { chainKey: [Object], chainType: 1, messageKeys: {} }
+  },
+  registrationId: 879554420,
+  currentRatchet: {
+    ephemeralKeyPair: {
+      pubKey: <Buffer 05 d4 d4 90 65 ea d6 e9 7f 62 90 0a 8d 6a 79 39 a4 5b 7a 8a 76 4d ec 2f be f8 57 77 39 50 6e 3b 15>,
+      privKey: <Buffer 90 a3 8d 71 11 e6 9f f8 e2 39 fb 4b ba d8 02 69 13 2b 3a df 79 27 b4 95 9f 30 c0 ae bd 76 d7 6a>
+    },
+    lastRemoteEphemeralKey: <Buffer 05 11 e5 9f 6a 2b 24 11 ae 76 41 f7 82 22 82 02 01 0e 18 d1 2d 70 d8 37 e5 f7 2e c4 09 f7 02 9b 6c>,
+    previousCounter: -1,
+    rootKey: <Buffer b5 4d 5b 35 f1 3f 7a 56 96 24 66 71 12 9d 96 f6 ba 84 e7 47 9e 40 6c be a9 8b 43 58 51 c6 d4 0d>
+  },
+  indexInfo: {
+    baseKey: <Buffer 05 cd 8a 8e 01 05 c3 12 39 a5 58 c3 e2 21 23 0f 12 7f 23 4a 5b 1b 8e dd 54 c1 58 0b a9 15 14 26 55>,
+    baseKeyType: 1,
+    closed: -1,
+    used: 1771677811247,
+    created: 1771677811247,
+    remoteIdentityKey: <Buffer 05 52 a7 f9 04 a2 82 d3 d5 02 e9 48 e3 27 be e8 98 9c b8 cf 7a 95 da e5 c7 b1 5d 11 d8 c5 81 a7 3d>
+  },
+  pendingPreKey: {
+    signedKeyId: 6915594,
+    baseKey: <Buffer 05 cd 8a 8e 01 05 c3 12 39 a5 58 c3 e2 21 23 0f 12 7f 23 4a 5b 1b 8e dd 54 c1 58 0b a9 15 14 26 55>,
+    preKeyId: 24
+  }
+}
+2026-02-21T12:43:35.454Z INFO messages.upsert received: type=append count=1
+2026-02-21T12:43:35.454Z INFO Observed outbound echo immediately from upsert. outId=3EB02B72D360F1FFB2E630 chat=639497868448@s.whatsapp.net.
+2026-02-21T12:43:35.483Z INFO Reply verify inId=3A08F92DFDF0DC6F665F outId=3EB02B72D360F1FFB2E630 target=639497868448@s.whatsapp.net verified=true.
+2026-02-21T12:43:35.484Z INFO Reply sent for message 3A08F92DFDF0DC6F665F. outId=3EB02B72D360F1FFB2E630 target=639497868448@s.whatsapp.net usedFallback=false verified=true.

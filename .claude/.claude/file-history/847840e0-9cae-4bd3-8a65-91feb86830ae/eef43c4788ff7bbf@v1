@@ -1,0 +1,146 @@
+# Enhanced Social Reactions — Implementation Plan
+
+## Context
+
+iskrib_v3 has strong content creation and discovery features but the social interaction layer is thin — reactions are silent, reply threading lacks visual polish, and there's no @mention autocomplete in comments/opinions. These three enhancements make every interaction feel more alive, deepen comment conversations, and lower the friction of mentioning other users — all driving repeat engagement.
+
+---
+
+## Feature 1: Reaction Animations
+
+**Goal:** When a user reacts to a post, show a burst of floating emoji particles that drift upward and fade out from the reaction button.
+
+### Files to modify
+- `client/src/components/Reactions/ReactionButton.jsx` — add `burstState`, capture button rect on react, render burst
+
+### Files to create
+- `client/src/components/Reactions/ReactionBurst.jsx` — self-contained portal component
+
+### Design
+- 6 emoji particles spawn from `containerRef.getBoundingClientRect()`
+- Each particle: randomized x drift (-40 to +40px), y travel (-80 to -140px), rotation, scale
+- Duration: ~850ms with 60ms stagger per particle
+- Rendered via `createPortal(document.body)` to escape card overflow
+- Framer Motion `motion.span` for each particle with spring easing
+- Auto-cleanup via `setTimeout` → `onComplete` callback → `setBurstState(null)`
+- Guard: skip burst on un-react (removing a reaction)
+- Guard: `if (burstState) return` to prevent double-burst on rapid clicks
+- No CSS file needed — fully inline-styled since it portals out
+
+### Changes to `ReactionButton.jsx`
+1. Add `const [burstState, setBurstState] = useState(null)`
+2. In `handleQuickClick` (adding reaction path only): capture rect, set burst state
+3. In `handlePickerSelect`: capture rect, set burst state
+4. Render `{burstState && <ReactionBurst emoji={burstState.emoji} originRect={burstState.rect} onComplete={() => setBurstState(null)} />}`
+5. Import `ReactionBurst` and `getReactionEmoji` from `reactionConfig.js` (already imported)
+
+---
+
+## Feature 2: Threaded Reply Improvements
+
+**Goal:** Polish the reply UX with a "Replying to @Name" context chip, animated collapse/expand toggle with count badge, and CSS-class-based indentation.
+
+### Files to modify
+- `client/src/components/comments/commentsCards.jsx` — add context chip, enhance toggle button, use CSS class for indent
+- `client/src/components/comments/comments.css` — add new styles
+
+### Files to create
+- `client/src/components/comments/ReplyContextChip.jsx` — small animated chip component
+
+### Changes to `commentsCards.jsx`
+1. Import `ReplyContextChip`
+2. Inside the `showReplyInput` AnimatePresence block (line 211-242), add `<ReplyContextChip name={comments?.users?.name} onDismiss={(e) => handleClickReplyButton(e)} />` above the textarea
+3. Replace the toggle replies button (lines 194-201) with an enhanced version:
+   - Animated chevron SVG (`motion.svg` with `rotate: showReplies ? 180 : 0`)
+   - Count badge span with `.cm-replies-count-badge` class
+   - Text: `{showReplies ? 'Hide replies' : 'View replies'}`
+4. Replace `style={{marginLeft: comments?.parent_id ? 20 : 0}}` on line 161 with `className={...cm-card ${comments?.parent_id ? 'cm-card--reply' : ''}}`
+
+### CSS additions to `comments.css`
+- `.cm-reply-context-chip` — inline-flex pill with glass morphism, amber `@Name`
+- `.cm-reply-context-dismiss` — small X button
+- `.cm-replies-count-badge` — amber pill with white count number
+- `.cm-card--reply` — `margin-left: 20px`
+
+### Backend: @mention notifications in comments
+**File:** `server/services/interactService.js` — `addCommentService`
+
+After successful comment insert, add non-fatal try/catch block:
+- Regex `/@([\w-]+)/g` to extract usernames from comment text
+- Look up users by username (max 10)
+- Filter out `userId` (self) and `receiverId` (post owner, already notified)
+- Insert `type: 'mention'` notifications for remaining matched users
+
+---
+
+## Feature 3: @mention Autocomplete
+
+**Goal:** Type `@` in comment/opinion textareas to get a floating user suggestion dropdown with avatar, name, username. Arrow keys + Enter/Tab to select. Inserts `@username ` into the text.
+
+### Files to create
+- `client/src/components/mentions/useMentionAutocomplete.js` — core hook: detects `@query` from text+cursor, debounced search via `searchUsers` API (300ms), manages results/selectedIndex state
+- `client/src/components/mentions/useTextareaMention.js` — textarea glue: onChange/onKeyDown/onKeyUp handlers, dropdown positioning, `handleSelect` (text insertion at cursor), keyboard nav (ArrowUp/Down, Enter, Tab, Escape)
+- `client/src/components/mentions/MentionDropdown.jsx` — portaled dropdown with `AnimatePresence`, avatar+name+username rows, mouse hover to highlight
+- `client/src/components/mentions/mentionDropdown.css` — glass morphism dropdown matching existing design system
+
+### Files to modify
+- `client/src/components/comments/comments.jsx` — wire `useTextareaMention` into main comment textarea, add `MentionDropdown`
+- `client/src/components/comments/commentsCards.jsx` — wire into reply textarea, add `MentionDropdown`
+- `client/src/components/SidebarOpinions/OpinionsEditor.jsx` — wire into opinion textarea, add `MentionDropdown`
+
+### Reused utilities
+- `searchUsers()` from `client/API/Api.js` (line 81) — public search, ilike on name+username
+- `handleImageFallback` from `client/src/utils/handleImageFallback.js` — avatar fallback
+- Existing `MENTION_TRIGGER_REGEX` pattern from Lexical `MentionPlugin.jsx` as reference
+
+### Integration pattern (same for all 3 textareas)
+```jsx
+const textareaRef = useRef(null);
+const { textareaProps, dropdownProps } = useTextareaMention(value, setValue, textareaRef);
+
+<textarea
+  ref={textareaRef}
+  value={value}
+  onChange={(e) => { setValue(e.target.value); textareaProps.onChange(e); }}
+  onKeyDown={textareaProps.onKeyDown}
+  onKeyUp={textareaProps.onKeyUp}
+/>
+<MentionDropdown {...dropdownProps} />
+```
+
+### Edge cases handled
+- `maxLength` guard: skip insertion if `newValue.length > maxLength`
+- Empty `@` (no query): don't fetch, keep dropdown closed
+- CJK composition: skip when `e.isComposing === true`
+- Outside click: close dropdown
+- Multiple mentions in same text: regex anchored to `$` (end of text-up-to-cursor)
+
+---
+
+## Build Sequence
+
+1. **Reaction Animations** (isolated, zero dependencies)
+   - Create `ReactionBurst.jsx`
+   - Modify `ReactionButton.jsx`
+
+2. **Reply Threading Polish** (isolated from #1)
+   - Create `ReplyContextChip.jsx`
+   - Modify `commentsCards.jsx`
+   - Add CSS to `comments.css`
+
+3. **Backend mention notifications** (independent)
+   - Add @username regex + notification insert to `interactService.js`
+
+4. **@mention Autocomplete** (depends on nothing, but benefits from #3)
+   - Create `useMentionAutocomplete.js`, `useTextareaMention.js`, `MentionDropdown.jsx`, `mentionDropdown.css`
+   - Wire into `comments.jsx`, `commentsCards.jsx`, `OpinionsEditor.jsx`
+
+---
+
+## Verification
+
+1. **Reactions:** Open feed, react to a post → emoji particles float up from button. Try all 6 reaction types. Un-react (no burst). Long-press on mobile → picker → select → burst. Rapid double-click → only one burst.
+
+2. **Reply threading:** Open comments, click Reply → "Replying to @Name" chip appears above textarea with dismiss X. Click the toggle replies button → animated chevron rotates, count badge visible. Replies indent properly via CSS class.
+
+3. **@mention autocomplete:** Type `@jo` in comment textarea → dropdown appears with matching users. Arrow down/up to navigate, Enter to select → `@johndoe ` inserted. Escape to dismiss. Test in reply textarea and opinion editor. Verify backend: submit comment with `@validusername` → notification created for that user.

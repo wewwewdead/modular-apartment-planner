@@ -1,0 +1,213 @@
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-17-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-18-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-19-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx:20:const UniverseMinimap = React.memo(({ galaxies, camera, zoom, stageSize, onNavigate, constellations, computedStarPositions }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-21-    const canvasRef = useRef(null);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-22-    const pointerStateRef = useRef({
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-23-        active: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-59-        ctx.globalAlpha = 1;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-60-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-61-        // Constellation lines
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx:62:        if (Array.isArray(constellations) && constellations.length > 0 && computedStarPositions) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-63-            ctx.strokeStyle = 'rgba(95, 146, 255, 0.4)';
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-64-            ctx.lineWidth = 0.5;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-65-            ctx.globalAlpha = 0.6;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-66-            for (const link of constellations) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx:67:                const posA = computedStarPositions.get(link.star_id_a);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx:68:                const posB = computedStarPositions.get(link.star_id_b);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-69-                if (!posA || !posB) continue;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-70-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-71-                const ax = worldToMinimap(posA.x);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-102-        ctx.lineWidth = 1;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-103-        ctx.strokeRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-104-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx:105:    }, [galaxies, camera, zoom, stageSize, constellations, computedStarPositions]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-106-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-107-    const navigateFromClientPoint = useCallback((clientX, clientY, mode = 'fly') => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\components\UniverseMinimap.jsx-108-        const canvas = canvasRef.current;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-515-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-516-export const computeSemanticBridges = (
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-517-    posts,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js:518:    computedStarPositions,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-519-    threshold = 0.9,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-520-    maxPairs = 120
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-521-) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-522-    if (!Array.isArray(posts) || posts.length < 2) return [];
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js:523:    if (!(computedStarPositions instanceof Map)) return [];
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-524-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-525-    const minSimilarity = Number.isFinite(Number(threshold)) ? Number(threshold) : 0.9;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-526-    const limit = normalizeMaxEdges(maxPairs, 120);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-528-    const enriched = [];
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-529-    for (const post of posts) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-530-        const postId = post?.id;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js:531:        if (!postId || !computedStarPositions.has(postId)) continue;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-532-        const embedding = normalizeEmbedding(post?.embeddings);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-533-        if (!embedding) continue;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\utils\cosmicPhysics.js-534-        enriched.push({ postId, embedding });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-208-        };
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-209-    }, [galaxyPositions, starPullOffsets]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-210-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:211:    // ── Hoisted computedStarPositions for sharing across layers ──────
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:212:    const computedStarPositions = useMemo(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-213-        const map = new Map();
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-214-        for (const post of postArray) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-215-            const uid = post.users?.id ?? post.user_id;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-238-    );
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-239-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-240-    const constellationPullOffsets = useMemo(
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:241:        () => computeConstellationPullOffsets(acceptedConstellations, computedStarPositions),
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:242:        [acceptedConstellations, computedStarPositions]
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-243-    );
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-244-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-245-    // ── Final star positions with constellation pull applied ───────
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:246:    const finalStarPositions = useMemo(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:247:        if (constellationPullOffsets.size === 0) return computedStarPositions;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-248-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:249:        const map = new Map(computedStarPositions);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-250-        for (const [postId, offset] of constellationPullOffsets) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-251-            const pos = map.get(postId);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-252-            if (pos) {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-257-            }
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-258-        }
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-259-        return map;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:260:    }, [computedStarPositions, constellationPullOffsets]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-261-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-262-    // ── Constellation chain colors ────────────────────────────────
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-263-    const chainColors = useMemo(() => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-518-        if (!target) return;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-519-        if (isInitialLoading) return;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-520-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:521:        const posA = finalStarPositions.get(target.starIdA);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:522:        const posB = finalStarPositions.get(target.starIdB);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-523-        if (!posA || !posB) return;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-524-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-525-        constellationFlyToRef.current = null;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-531-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-532-        // Clear navigation state so refreshing doesn't re-trigger
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-533-        navigate(location.pathname, { replace: true, state: {} });
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:534:    }, [isInitialLoading, finalStarPositions, flyTo, navigate, location.pathname]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-535-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-536-    const settledPayload = useMemo(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-537-        if (!isSettled || activePosts.length === 0) return [];
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-679-                    <ConstellationLayer
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-680-                        layerProps={getLayerProps(1.0)}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-681-                        constellations={constellations}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:682:                        computedStarPositions={finalStarPositions}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-683-                        zoom={zoom}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-684-                        chainColors={chainColors}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-685-                        userId={userId}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-702-                    useEmbeddingBridges={hasEmbeddingGravity}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-703-                    camera={camera}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-704-                    stageSize={stageSize}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:705:                    computedStarPositions={finalStarPositions}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-706-                />
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-707-            </Stage>
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-708-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-715-                stageSize={stageSize}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-716-                onNavigate={handleMinimapNavigate}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-717-                constellations={acceptedConstellations}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx:718:                computedStarPositions={finalStarPositions}
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-719-            />
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-720-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\Universe.jsx-721-            {selectedGalaxy && galaxyProfile && (
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-8-    b: parseInt(hex.slice(5, 7), 16),
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-9-});
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-10-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx:11:const ConstellationLayer = React.memo(({ layerProps, constellations, computedStarPositions, zoom, chainColors, userId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-12-    const lineRefsMap = useRef(new Map());
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-13-    const rafRef = useRef(null);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-14-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-58-    return (
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-59-        <Layer {...layerProps} listening={false}>
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-60-            {linkData.map((link) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx:61:                const posA = computedStarPositions.get(link.star_id_a);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx:62:                const posB = computedStarPositions.get(link.star_id_b);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-63-                if (!posA || !posB) return null;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-64-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\ConstellationLayer.jsx-65-                const ax = posA.x, ay = posA.y;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-45-    galaxyPositions, starPullOffsets, similarPairs, galaxyEdges,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-46-    activePostIds, useEmbeddingBridges,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-47-    camera, stageSize,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:48:    computedStarPositions: computedStarPositionsProp,
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-49-}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-50-    // Build userId→index map for edge lookups in drawGalaxyVisuals
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-51-    const galaxyUserIdMap = useMemo(() => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-66-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-67-    // ── Compute every star's render position ─────────────────────────
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-68-    // Use prop if provided (hoisted from Universe.jsx), otherwise compute locally.
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:69:    const computedStarPositionsLocal = useMemo(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:70:        if (computedStarPositionsProp) return computedStarPositionsProp;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-71-        const map = new Map();
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-72-        for (const post of posts) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-73-            const uid = post.users?.id ?? post.user_id;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-88-            });
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-89-        }
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-90-        return map;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:91:    }, [computedStarPositionsProp, posts, galaxyPositions, starPullOffsets]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:92:    const computedStarPositions = computedStarPositionsLocal;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-93-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-94-    // ── Viewport culling: only render stars within visible bounds + buffer ──
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-95-    const visibleBounds = useMemo(() => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-108-    const visiblePosts = useMemo(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-109-        if (!visibleBounds) return posts; // fallback: render all
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-110-        return posts.filter(post => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:111:            const pos = computedStarPositions.get(post.id);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-112-            if (!pos) return true; // keep if no position computed yet
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-113-            return pos.x >= visibleBounds.minX && pos.x <= visibleBounds.maxX
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-114-                && pos.y >= visibleBounds.minY && pos.y <= visibleBounds.maxY;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-115-        });
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:116:    }, [posts, computedStarPositions, visibleBounds]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-117-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-118-    const bridgePairs = useMemo(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-119-        const maxPairs = 120;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-122-            const bridgePosts = (activePostIds instanceof Set && activePostIds.size > 0)
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-123-                ? posts.filter((post) => activePostIds.has(post?.id))
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-124-                : posts;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:125:            return computeSemanticBridges(bridgePosts, computedStarPositions, 0.9, maxPairs);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-126-        }
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-127-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-128-        if (!Array.isArray(similarPairs) || similarPairs.length === 0) return [];
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-134-                return activePostIds.has(pair?.post_a) && activePostIds.has(pair?.post_b);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-135-            })
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-136-            .slice(0, maxPairs);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:137:    }, [useEmbeddingBridges, activePostIds, posts, computedStarPositions, similarPairs]);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-138-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-139-    return (
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-140-        <Layer {...layerProps}>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-143-                <Shape
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-144-                    sceneFunc={(ctx) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-145-                        for (const pair of bridgePairs) {
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:146:                            const posA = computedStarPositions.get(pair.post_a);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:147:                            const posB = computedStarPositions.get(pair.post_b);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-148-                            if (!posA || !posB) continue;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-149-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-150-                            const dx = posB.x - posA.x;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-197-                    : (Array.isArray(post.likes) && post.likes[0]?.count != null ? post.likes[0].count : 0);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-198-                const radius = getStarRadius(likeCount);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-199-
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx:200:                const pos = computedStarPositions.get(post.id);
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-201-                const x = pos?.x ?? post.universe_x ?? post.display_x;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-202-                const y = pos?.y ?? post.universe_y ?? post.display_y;
+C:\Users\johnm\iskrib_v3\client\src\components\Universe\layers\InteractiveLayer.jsx-203-

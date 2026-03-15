@@ -1,0 +1,37 @@
+# 3D Preview: Don't Reset Camera on Plan Edits
+
+## Context
+When the user edits the plan canvas (adding walls, doors, etc.), the 3D preview camera resets to the default position. This is disruptive — the user wants to keep their camera orbit/zoom while editing.
+
+## Root Cause
+In `src/three/viewer/createPreviewViewport.js` line 133, `setWorld()` unconditionally calls `fitCameraToBox()` every time it's invoked. The call chain:
+1. User edits plan → `project` object changes in ProjectProvider
+2. `ThreePreviewPanel.jsx` line 11: `sceneDescriptor` useMemo recalculates
+3. `ThreePreviewPanel.jsx` line 44: useEffect fires, calls `viewport.setWorld()`
+4. `createPreviewViewport.js` line 133: `setWorld()` calls `fitCameraToBox()` → camera resets
+
+The "Reset View" button already exists (line 65) calling `viewport.resetView()`, so users can manually reset when they want to.
+
+## Fix — 1 file, 1 line change
+
+### `src/three/viewer/createPreviewViewport.js`
+In `setWorld()` (line 116), only call `fitCameraToBox()` on the **first** call (when there was no previous `worldRoot`). On subsequent updates, just rebuild the scene objects without touching the camera.
+
+Change line 133 from:
+```js
+fitCameraToBox(camera, controls, currentBounds, currentPreset);
+```
+to:
+```js
+if (!hadWorld) fitCameraToBox(camera, controls, currentBounds, currentPreset);
+```
+
+With a `const hadWorld = !!worldRoot;` captured at the top of `setWorld()` before the old root is removed.
+
+## Verification
+1. Run `npm run dev`
+2. Open plan workspace with walls, orbit/zoom the 3D preview to a custom angle
+3. Add a new wall or door on the plan canvas
+4. Confirm the 3D preview updates with the new geometry but camera stays in place
+5. Click "Reset View" button — confirm camera resets to default
+6. Switch floors — confirm camera resets (new `activeFloorId` triggers full remount via the `[]` useEffect)

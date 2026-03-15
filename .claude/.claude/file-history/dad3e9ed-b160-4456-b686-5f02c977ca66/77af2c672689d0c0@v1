@@ -1,0 +1,74 @@
+import { useEditor } from '@/app/EditorProvider';
+import { useProject } from '@/app/ProjectProvider';
+import { TOOLS } from '@/editor/tools';
+import styles from './Toolbar.module.css';
+
+export default function Toolbar({ onNew, onSave, onLoad }) {
+  const { activeTool, showGrid, snapEnabled, dispatch: editorDispatch } = useEditor();
+  const { isDirty } = useProject();
+
+  const setTool = (tool) => editorDispatch({ type: 'SET_TOOL', tool });
+
+  return (
+    <div className={styles.toolbar}>
+      <div className={styles.group}>
+        <button className={styles.btn} onClick={onNew}>New</button>
+        <button className={styles.btn} onClick={onSave}>
+          {isDirty && <span className={styles.dirtyIndicator} />}
+          Save
+        </button>
+        <button className={styles.btn} onClick={onLoad}>Load</button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.SELECT ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.SELECT)}
+          title="Select (V)"
+        >
+          Select
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.WALL ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.WALL)}
+          title="Draw Wall (W)"
+        >
+          Wall
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.DOOR ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.DOOR)}
+          title="Place Door (D)"
+        >
+          Door
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.WINDOW ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.WINDOW)}
+          title="Place Window (N)"
+        >
+          Window
+        </button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
+          onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
+          title="Toggle Grid"
+        >
+          Grid
+        </button>
+        <button
+          className={`${styles.toggleBtn} ${snapEnabled ? styles.toggleActive : ''}`}
+          onClick={() => editorDispatch({ type: 'TOGGLE_SNAP' })}
+          title="Toggle Snap"
+        >
+          Snap
+        </button>
+      </div>
+
+      <div className={styles.spacer} />
+    </div>
+  );
+}

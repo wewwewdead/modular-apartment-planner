@@ -1,0 +1,72 @@
+# Galaxy Profile Preview Panel
+
+## Context
+Galaxy labels (user names) are rendered on the Universe canvas but aren't clickable. The user wants clicking a galaxy name to show a profile preview panel — displaying the user's profile picture, background, bio, and a "This is [name]'s galaxy" heading — matching the glass-morphism style of the existing post preview panel.
+
+---
+
+## Data Flow
+
+- Galaxy labels already exist in `InteractiveLayer.jsx` as `GalaxyLabel` components with `listening={false}`
+- Posts API (`/universe/posts`) only returns `users(id, name, image_url, badge)` — no bio or background
+- Full profile data available via `getUserData(userId)` in `client/API/Api.js` → returns `{ userData: [...], followerCount, followingCount }`
+- `userData.background` is a CSS style object applied directly (e.g. `{ backgroundImage: 'url(...)' }`)
+- `userData.bio` is a plain string
+
+**Approach:** Fetch full user profile on-demand when galaxy label is clicked (avoids bloating every universe fetch).
+
+---
+
+## Changes
+
+### 1. `InteractiveLayer.jsx` — Make galaxy labels clickable
+
+- Remove `listening={false}` from the GalaxyLabel `<Group>` wrapper
+- Add `cursor: pointer` style and `onClick`/`onTap` handler on the `<Text>` element
+- Pass `onGalaxyClick(galaxy)` callback from Universe.jsx
+
+### 2. `Universe.module.css` — Add galaxy preview panel styles
+
+New CSS classes (reusing existing glass-morphism pattern from `.previewPanel`):
+
+- `.galaxyPreviewPanel` — same position/blur as `.previewPanel` but slightly taller max-height
+- `.galaxyPreviewBg` — background image/gradient header area (120px tall, rounded top, covers the top of the panel)
+- `.galaxyPreviewContent` — padding below the background image
+- `.galaxyPreviewAvatar` — 56px circular avatar, centered, overlapping the background edge
+- `.galaxyPreviewHeading` — "This is [name]'s galaxy" text, centered
+- `.galaxyPreviewBio` — bio text, subdued color, 3-line clamp
+- `.galaxyPreviewVisitBtn` — "Visit Profile" button (same style as `.previewReadBtn`)
+
+### 3. `Universe.jsx` — Galaxy click state + data fetching
+
+- Add state: `selectedGalaxy` (null or `{ userId, name, ... }`) and `galaxyProfile` (null or fetched user data)
+- `handleGalaxyClick(galaxy)` → sets `selectedGalaxy`, clears `selectedPost`, calls `getUserData(galaxy.userId)` → sets `galaxyProfile`
+- When `selectedPost` is set, clear `selectedGalaxy` (they're mutually exclusive)
+- Render galaxy preview panel when `selectedGalaxy && galaxyProfile` is truthy
+- Panel contents:
+  - Background div with `style={galaxyProfile.background}`
+  - Avatar image from `galaxyProfile.image_url`
+  - Heading: `"This is {galaxyProfile.name}'s galaxy"`
+  - Bio from `galaxyProfile.bio`
+  - "Visit Profile" button → `navigate(`/visit/${selectedGalaxy.userId}`)`
+- Pass `onGalaxyClick` down to `InteractiveLayer`
+
+---
+
+## Files Modified
+
+| File | Change |
+|------|--------|
+| `client/src/components/Universe/layers/InteractiveLayer.jsx` | Make GalaxyLabel clickable, accept + pass `onGalaxyClick` |
+| `client/src/components/Universe/Universe.module.css` | Add galaxy preview panel styles |
+| `client/src/components/Universe/Universe.jsx` | Add galaxy click state, fetch profile, render galaxy preview panel |
+
+---
+
+## Verification
+
+1. Click a galaxy name label → galaxy preview panel appears with background, avatar, name heading, bio
+2. Click a star → galaxy preview dismisses, post preview appears (mutually exclusive)
+3. Click "Visit Profile" → navigates to `/visit/{userId}`
+4. Galaxy labels show pointer cursor on hover
+5. Panel loads smoothly (profile data fetched on-demand)

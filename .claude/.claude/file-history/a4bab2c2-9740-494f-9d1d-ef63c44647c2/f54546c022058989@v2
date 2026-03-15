@@ -1,0 +1,90 @@
+import {apiRequest} from './apiClient';
+
+export type OpinionItem = {
+  id: string;
+  opinion?: string;
+  user_id?: string;
+  created_at?: string;
+  reply_count?: number;
+  users?: {
+    id?: string;
+    name?: string;
+    username?: string;
+    image_url?: string;
+    badge?: string;
+  };
+};
+
+export type OpinionReply = OpinionItem;
+
+const authHeaders = (token?: string): Record<string, string> => {
+  if (!token) return {};
+  return {Authorization: `Bearer ${token}`};
+};
+
+export const opinionsApi = {
+  async addOpinion(token: string, opinion: string): Promise<{message?: string}> {
+    const formData = new FormData();
+    formData.append('opinion', opinion);
+    return apiRequest<{message?: string}>('/addOpinion', {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: formData,
+      retries: 0,
+    });
+  },
+
+  async getOpinions(cursor: string | null, limit = 20): Promise<{data: OpinionItem[]; nextCursor?: string}> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) params.set('before', cursor);
+    return apiRequest('/getOpinions?' + params.toString(), {method: 'GET'});
+  },
+
+  async getMyOpinions(token: string, cursor: string | null, limit = 20): Promise<{data: OpinionItem[]; nextCursor?: string}> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) params.set('before', cursor);
+    return apiRequest('/getMyOpinions?' + params.toString(), {
+      method: 'GET',
+      headers: authHeaders(token),
+    });
+  },
+
+  async getUserOpinions(userId: string, cursor: string | null, limit = 20): Promise<{data: OpinionItem[]; nextCursor?: string}> {
+    const params = new URLSearchParams();
+    params.set('userId', userId);
+    params.set('limit', String(limit));
+    if (cursor) params.set('before', cursor);
+    return apiRequest('/getUserOpinions?' + params.toString(), {method: 'GET'});
+  },
+
+  async addOpinionReply(
+    token: string,
+    parentId: string,
+    userId: string,
+    receiverId: string,
+    opinion: string,
+  ): Promise<{message?: string}> {
+    const formData = new FormData();
+    formData.append('opinion', opinion);
+    return apiRequest<{message?: string}>(
+      `/addOpinionReply/${encodeURIComponent(parentId)}/${encodeURIComponent(userId)}/${encodeURIComponent(receiverId)}`,
+      {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: formData,
+        retries: 0,
+      },
+    );
+  },
+
+  async getOpinionReplies(parentId: string, cursor: string | null, limit = 20): Promise<{data: OpinionReply[]; nextCursor?: string}> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) params.set('cursor', cursor);
+    return apiRequest(`/getOpinionReply/${encodeURIComponent(parentId)}?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+};

@@ -1,0 +1,44 @@
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+
+import { colors } from '../../../theme/colors';
+import { QuickActionButton } from './QuickActionButton';
+
+interface QuickActionsProps {
+  onBrowseVault: () => void;
+  onHistory: () => void;
+  onPaywall: () => void;
+}
+
+export function QuickActions({ onBrowseVault, onHistory, onPaywall }: QuickActionsProps) {
+  return (
+    <View style={styles.grid}>
+      <QuickActionButton
+        icon="archive-outline"
+        label="Browse Vault"
+        tint={colors.brandLight}
+        onPress={onBrowseVault}
+      />
+      <QuickActionButton
+        icon="history"
+        label="History"
+        tint={colors.surfaceAlt}
+        onPress={onHistory}
+      />
+      <QuickActionButton
+        icon="crown-outline"
+        label="Pro"
+        tint="#e8d5f5"
+        onPress={onPaywall}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+});

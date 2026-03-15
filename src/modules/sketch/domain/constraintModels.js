@@ -1,0 +1,60 @@
+import { generateId } from '@/domain/ids';
+
+export const CONSTRAINT_TYPES = [
+  { value: 'attach_face', label: 'Attach to Face' },
+  { value: 'align_edge', label: 'Align Edge' },
+  { value: 'center_axis', label: 'Center Axis' },
+  { value: 'inset_edge', label: 'Inset / Fixed Offset' },
+  { value: 'flush_surface', label: 'Flush Surface' },
+  { value: 'equal_spacing', label: 'Equal Spacing' },
+];
+
+export const ANCHOR_OPTIONS = [
+  { value: 'top', label: 'Top' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'front', label: 'Front' },
+  { value: 'back', label: 'Back' },
+  { value: 'center', label: 'Center' },
+];
+
+export const CENTER_AXIS_OPTIONS = [
+  { value: 'both', label: 'Both' },
+  { value: 'x', label: 'Horizontal (X)' },
+  { value: 'y', label: 'Vertical (Y)' },
+  { value: 'z', label: 'Height (Z)' },
+];
+
+export const SPACING_AXIS_OPTIONS = [
+  { value: 'x', label: 'X' },
+  { value: 'y', label: 'Y' },
+  { value: 'z', label: 'Z' },
+];
+
+export function createConstraint(overrides = {}) {
+  return {
+    id: generateId('cstr'),
+    type: overrides.type || 'attach_face',
+    sourcePartId: overrides.sourcePartId || null,
+    targetPartId: overrides.targetPartId || null,
+    sourceAnchor: overrides.sourceAnchor || 'bottom',
+    targetAnchor: overrides.targetAnchor || 'top',
+    offset: overrides.offset ?? 0,
+    axis: overrides.axis || 'both',
+    ...overrides,
+  };
+}
+
+export function createEqualSpacingConstraint(overrides = {}) {
+  return {
+    id: generateId('cstr'),
+    type: 'equal_spacing',
+    partIds: overrides.partIds || [],
+    axis: overrides.axis || 'z',
+    referencePartId: overrides.referencePartId || null,
+    startAnchor: overrides.startAnchor || 'bottom',
+    endAnchor: overrides.endAnchor || 'top',
+    ...overrides,
+  };
+}

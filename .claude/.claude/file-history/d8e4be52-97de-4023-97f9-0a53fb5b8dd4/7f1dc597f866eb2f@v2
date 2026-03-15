@@ -1,0 +1,82 @@
+import { isLidUser, jidDecode, jidEncode, jidNormalizedUser } from "@whiskeysockets/baileys";
+
+function unique(items) {
+  const output = [];
+  const seen = new Set();
+  for (const item of items) {
+    const value = String(item || "").trim();
+    if (!value) continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    output.push(value);
+  }
+  return output;
+}
+
+export function normalizePhoneJid(meId) {
+  const normalized = jidNormalizedUser(meId || "");
+  const decoded = jidDecode(normalized);
+  if (!decoded?.user) return "";
+  return jidEncode(decoded.user, "s.whatsapp.net");
+}
+
+export function resolveReplyTargets({
+  incomingJid,
+  fromMe,
+  meId,
+  meLid,
+  singleNumberMode,
+  enableFallback,
+  strategy = "dual_fallback",
+}) {
+  const primary = String(incomingJid || "").trim();
+  if (!primary) {
+    return { primary: "", fallbacks: [], strategy, reason: "missing_incoming" };
+  }
+
+  if (!singleNumberMode || !fromMe) {
+    return { primary, fallbacks: [], strategy, reason: "standard_mode" };
+  }
+
+  if (!enableFallback || strategy !== "dual_fallback") {
+    return { primary, fallbacks: [], strategy, reason: "fallback_disabled" };
+  }
+
+  const incomingIsLid = Boolean(isLidUser(primary));
+  const mePhoneJid = normalizePhoneJid(meId);
+  const meLidJid = jidNormalizedUser(meLid || "");
+
+  if (incomingIsLid && mePhoneJid) {
+    return {
+      primary: mePhoneJid,
+      fallbacks: unique([primary, meLidJid].filter((j) => j && j !== mePhoneJid)),
+      strategy,
+      reason: "lid_rewritten_to_phone",
+    };
+  }
+
+  const fallbackCandidates = [];
+  if (meLidJid && meLidJid !== primary) {
+    fallbackCandidates.push(meLidJid);
+  }
+
+  return {
+    primary,
+    fallbacks: unique(fallbackCandidates),
+    strategy,
+    reason: "single_number_non_lid",
+  };
+}
+
+export function makeInboundReplyKey(chatJid, inboundMessageId) {
+  return `${String(chatJid || "unknown")}::${String(inboundMessageId || "unknown")}`;
+}
+
+export function makeReplyContentKey(inboundKey, targetJid, textHash) {
+  return `${inboundKey}::${String(targetJid || "unknown")}::${String(textHash || "none")}`;
+}
+
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+

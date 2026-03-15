@@ -1,0 +1,108 @@
+/* ─── Reaction Picker ─── */
+.reaction-picker {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px;
+    background: var(--card-bg, rgba(30, 30, 30, 0.95));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 24px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    z-index: 200;
+    white-space: nowrap;
+}
+
+.reaction-picker::after {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 0;
+    right: 0;
+    height: 12px;
+}
+
+.reaction-picker-item {
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+    line-height: 1;
+}
+
+.reaction-picker-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.reaction-picker-item.is-active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* ─── Reaction Button ─── */
+.reaction-button-container {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reaction-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.reaction-button:active {
+    transform: scale(0.9);
+}
+
+.reaction-button-emoji {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.reaction-count {
+    font-size: 0.78rem;
+    padding: 0;
+    margin: 0;
+    color: var(--text-secondary, #a1a1aa);
+}
+
+/* ─── Reaction Summary (ContentView) ─── */
+.reaction-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0;
+}
+
+.reaction-summary-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    background: var(--card-bg, rgba(255, 255, 255, 0.05));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    font-size: 13px;
+}
+
+.reaction-summary-emoji {
+    font-size: 15px;
+    line-height: 1;
+}
+
+.reaction-summary-count {
+    color: var(--text-secondary, #a1a1aa);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+

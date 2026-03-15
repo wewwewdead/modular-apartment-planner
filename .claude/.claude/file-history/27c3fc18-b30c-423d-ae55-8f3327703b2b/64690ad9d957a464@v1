@@ -1,0 +1,151 @@
+# Plan: Add Profile Background & Font Color to Mobile Profile Screen
+
+## Context
+The mobile Profile screen is missing two user customization features that the web app supports:
+1. **Profile background** (`users.background`) — gradient or uploaded image shown as a hero header + full-screen blurred backdrop
+2. **Profile font color** (`users.profile_font_color`) — custom text color applied to the profile section
+
+The server's `/getUserData` endpoint already returns ALL user columns (uses `select('*')`), including `background`, `profile_font_color`, `dominant_colors`, and `secondary_colors`. The mobile app simply ignores these fields — they're missing from the `UserDataResponse` type and the profile UI.
+
+## How the web app works (reference)
+
+**Background field** (`users.background`) stores a CSS style object:
+- **Gradient:** `{ background: "#2A7B9B", backgroundImage: "linear-gradient(90deg, rgba(42,123,155,1) 0%, rgba(87,199,133,1) 50%, rgba(237,221,83,1) 100%)" }`
+- **Image:** `{ backgroundImage: "url(https://...)", backgroundSize: "cover", backgroundPosition: "center" }`
+- **None:** `{}` or `null`
+
+**Font color** (`users.profile_font_color`): hex string like `"#ff0000"`, applied via inline `color` style on the profile container.
+
+**Blurred backdrop** (web):
+- Gradient bg → full-page gradient layer, `blur(100px)`, `opacity: 0.1`
+- Image bg → full-page image layer, `blur(40px)`, plus outer container shows a gradient from `dominant_colors` → `secondary_colors`
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `apps/mobile/src/lib/api/mobileApi.ts` | Add `background`, `profile_font_color`, `dominant_colors`, `secondary_colors` to `UserDataResponse` |
+| `apps/mobile/src/lib/utils/profileBackground.ts` | **NEW** — utility to parse CSS background objects into RN-compatible props |
+| `apps/mobile/src/screens/Profile/ProfileScreen.tsx` | Add blurred backdrop layer behind profile content |
+| `apps/mobile/src/screens/Profile/ProfileHeroSection.tsx` | Render gradient/image in hero header; apply font color to text |
+
+## Implementation
+
+### 1. `mobileApi.ts` — Add missing type fields
+
+Add to `UserDataResponse.userData[]`:
+```ts
+background?: Record<string, string> | null;
+profile_font_color?: string | null;
+dominant_colors?: string | null;
+secondary_colors?: string | null;
+```
+
+### 2. `profileBackground.ts` — NEW utility (parse CSS → RN props)
+
+Create `apps/mobile/src/lib/utils/profileBackground.ts` with:
+
+**`parseProfileBackground(bg)`** — Takes the `background` DB field, returns a typed result:
+```ts
+type ProfileBgGradient = {
+  type: 'gradient';
+  colors: string[];        // e.g. ['rgba(42,123,155,1)', 'rgba(87,199,133,1)', ...]
+  locations: number[];     // e.g. [0, 0.5, 1.0]
+  angle: number;           // degrees, e.g. 90
+  fallbackColor: string;   // the `background` field, e.g. "#2A7B9B"
+};
+
+type ProfileBgImage = {
+  type: 'image';
+  uri: string;             // extracted from url(...)
+};
+
+type ProfileBgNone = { type: 'none' };
+
+type ParsedProfileBg = ProfileBgGradient | ProfileBgImage | ProfileBgNone;
+```
+
+**`cssAngleToGradientPoints(angleDeg)`** — Converts CSS angle to LinearGradient `start`/`end` props:
+- 0° → bottom-to-top
+- 90° → left-to-right
+- 135° → top-left to bottom-right
+
+**`parseCssLinearGradient(str)`** — Regex-parses a CSS `linear-gradient(...)` string:
+- Extract angle (e.g. `90deg`)
+- Extract color stops: `rgba(R,G,B,A) N%` → colors array + locations array
+
+**`extractImageUrl(str)`** — Extracts URL from `"url(https://...)"`.
+
+### 3. `ProfileScreen.tsx` — Add blurred backdrop
+
+Wrap the `SafeAreaView` content with a backdrop layer:
+
+```
+<SafeAreaView>
+  {/* Blurred backdrop — absolutely positioned, full screen */}
+  <ProfileBackdrop background={profile?.background} dominantColors={...} secondaryColors={...} />
+
+  {/* Existing content on top */}
+  {activeTab === 'writings' ? <ProfileWritingsTab ... /> : <ProfileStoriesTab ... />}
+</SafeAreaView>
+```
+
+**`ProfileBackdrop`** (inline or small component in ProfileScreen):
+- If gradient bg: render a full-screen `LinearGradient` with `opacity: 0.15`, `transform: [{scale: 1.4}]`
+- If image bg: render a full-screen `Image` with `blurRadius={40}`, `opacity: 0.3`, `transform: [{scale: 1.4}]`; if `dominant_colors`/`secondary_colors` exist, also render a `LinearGradient` underneath
+- If no bg: render nothing (keep current `bgPrimary` background)
+
+The backdrop is absolutely positioned with `StyleSheet.absoluteFill` so content scrolls on top of it.
+
+### 4. `ProfileHeroSection.tsx` — Hero background + font color
+
+**Props changes:**
+```ts
+interface ProfileHeroProps {
+  profile: {
+    // existing fields...
+    background?: Record<string, string> | null;
+    profile_font_color?: string | null;
+    dominant_colors?: string | null;
+    secondary_colors?: string | null;
+  } | null;
+  // ...existing props
+}
+```
+
+**Hero header background (replacing solid color):**
+- Parse `profile.background` using `parseProfileBackground()`
+- If gradient: replace the `<View style={[styles.headerBg, {backgroundColor: bgColor}]}>` with a `<LinearGradient>` using the parsed colors/angle
+- If image: replace with `<ImageBackground source={{uri}} style={styles.headerBg} imageStyle={{borderBottomLeftRadius, borderBottomRightRadius}}>`
+- If none: keep current fallback (`profile_layout?.backgroundColor ?? colors.accentAmber`)
+
+**Font color:**
+- Extract `fontColor = profile?.profile_font_color`
+- When `fontColor` is set, apply it as the `color` override on:
+  - Name text (line 108)
+  - Username text (line 112)
+  - Bio text (line 159)
+  - Stat numbers (lines 80, 88, 96)
+  - Stat labels (lines 83, 91, 99)
+  - Settings icon, share icon colors
+- When not set: keep current theme colors (no change)
+
+**Pattern:**
+```ts
+const nameColor = fontColor || colors.textHeading;
+const mutedColor = fontColor ? `${fontColor}99` : colors.textMuted;  // slightly transparent for secondary text
+const secondaryColor = fontColor ? `${fontColor}CC` : colors.textSecondary;
+```
+
+## Key Decisions
+- **No new npm dependencies** — use `react-native-linear-gradient` (already installed) and RN `Image` `blurRadius`
+- **Gradient parsing is limited** to the known patterns (90deg/135deg with rgba color stops) — matches the 4 predefined web gradients
+- **Font color opacity** — muted/secondary text gets reduced opacity variants of the custom font color (matching web where CSS `color` cascades with opacity)
+
+## Verification
+1. **User with gradient background**: Profile header shows gradient; blurred gradient visible behind content
+2. **User with image background**: Profile header shows image; blurred image visible behind content
+3. **User with font color set**: Name, username, bio, stats all use custom color
+4. **User with no customization**: Profile looks exactly as before (amber fallback header, theme colors)
+5. **Scroll test**: Content scrolls smoothly over the blurred backdrop
+6. **Other screens unaffected**: Home feed, post detail, etc. unchanged

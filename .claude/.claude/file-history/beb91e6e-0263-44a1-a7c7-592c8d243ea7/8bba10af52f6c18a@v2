@@ -1,0 +1,196 @@
+.repost-overlay{
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.repost-modal{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 90%;
+    max-width: 440px;
+    padding: 1.25rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+.repost-modal-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.repost-modal-title{
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-heading);
+}
+
+.repost-modal-close{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-faint);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 50%;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.repost-modal-close:hover{
+    background: var(--bg-hover);
+    color: var(--text-heading);
+}
+
+.repost-original-preview{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-card);
+    border-radius: 10px;
+}
+
+.repost-original-author{
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.repost-original-avatar{
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.repost-original-name{
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.repost-original-title{
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--text-heading);
+    line-height: 1.4;
+}
+
+.repost-caption-container{
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.repost-caption-input{
+    width: 100%;
+    min-height: 70px;
+    padding: 0.65rem 0.75rem;
+    padding-bottom: 1.6rem;
+    font-family: var(--font-ui);
+    font-size: 0.84rem;
+    color: var(--text-heading);
+    background: var(--bg-secondary);
+    border: 1.5px solid var(--border-card);
+    border-radius: 10px;
+    outline: none;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+.repost-caption-input::placeholder{
+    color: var(--text-faint);
+}
+.repost-caption-input:focus{
+    border-color: var(--accent-sage);
+}
+
+.repost-char-count{
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.75rem;
+    font-family: var(--font-ui);
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: var(--text-faint);
+}
+.repost-char-count.at-limit{
+    color: rgb(235, 87, 87);
+}
+
+.repost-error{
+    margin: 0;
+    font-family: var(--font-ui);
+    font-size: 0.76rem;
+    font-weight: 500;
+    color: rgb(235, 87, 87);
+}
+
+.repost-modal-actions{
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.repost-cancel-btn{
+    padding: 0.45rem 0.9rem;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.repost-cancel-btn:hover{
+    background: var(--bg-hover);
+}
+
+.repost-submit-btn{
+    padding: 0.45rem 1rem;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #fff;
+    background: var(--accent-sage);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.repost-submit-btn:hover{
+    opacity: 0.9;
+}
+.repost-submit-btn:active{
+    transform: scale(0.97);
+}
+.repost-submit-btn:disabled{
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+@media (max-width: 480px){
+    .repost-modal{
+        width: 94%;
+        padding: 1rem;
+    }
+}

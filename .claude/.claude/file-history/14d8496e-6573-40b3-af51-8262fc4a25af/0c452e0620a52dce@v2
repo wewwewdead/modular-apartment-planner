@@ -1,0 +1,158 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { Item } from '../../../domain/models';
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { motion } from '../../../theme/motion';
+import { typography } from '../../../theme/typography';
+import { SelectionBadge } from './SelectionBadge';
+
+interface VaultItemCardProps {
+  item: Item;
+  quantity: number;
+  onToggle: () => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+  onDelete: () => void;
+}
+
+const SWIPE_THRESHOLD = 120;
+
+export const VaultItemCard = React.memo(function VaultItemCard({
+  item,
+  quantity,
+  onToggle,
+  onIncrement,
+  onDecrement,
+  onDelete,
+}: VaultItemCardProps) {
+  const translateX = useSharedValue(0);
+  const bestOption = item.priceOptions[0];
+  const priceLabel = bestOption
+    ? `${bestOption.store} - ${formatCurrency(bestOption.pricePerUnit.priceValue)}/${bestOption.pricePerUnit.unit}`
+    : 'No price set';
+
+  const panGesture = Gesture.Pan()
+    .onUpdate(e => {
+      translateX.value = Math.min(0, e.translationX);
+    })
+    .onEnd(e => {
+      if (e.translationX < -SWIPE_THRESHOLD) {
+        translateX.value = withSpring(0, motion.snappy);
+        runOnJS(onDelete)();
+      } else {
+        translateX.value = withSpring(0, motion.snappy);
+      }
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const revealStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value < -20 ? 1 : 0,
+  }));
+
+  return (
+    <View
+      style={styles.container}
+      accessibilityLabel={`${item.name}, ${priceLabel}`}
+    >
+      <Animated.View style={[styles.revealBg, revealStyle]}>
+        <MaterialCommunityIcons name="trash-can-outline" size={28} color={colors.canvas} />
+      </Animated.View>
+
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[styles.row, rowStyle]}
+          accessible
+          accessibilityActions={[{ name: 'delete', label: 'Delete item' }]}
+          onAccessibilityAction={event => {
+            if (event.nativeEvent.actionName === 'delete') {
+              onDelete();
+            }
+          }}
+        >
+          <View style={styles.info} onStartShouldSetResponder={() => false}>
+            <Text style={styles.name}>{item.name}</Text>
+            {item.notes ? <Text style={styles.description} numberOfLines={2}>{item.notes}</Text> : null}
+            <Text style={styles.price}>{priceLabel}</Text>
+          </View>
+          <AnimatedPressable
+            onPress={onDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${item.name}`}
+            hitSlop={8}
+          >
+            <View style={styles.deleteButton}>
+              <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.danger} />
+            </View>
+          </AnimatedPressable>
+          <SelectionBadge
+            selected={quantity > 0}
+            quantity={quantity}
+            onToggle={onToggle}
+            onIncrement={onIncrement}
+            onDecrement={onDecrement}
+          />
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    overflow: 'hidden',
+  },
+  revealBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.danger,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 24,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    backgroundColor: colors.surface,
+    gap: 12,
+  },
+  info: {
+    flex: 1,
+    gap: 4,
+  },
+  name: {
+    fontFamily: 'SourceSans3-SemiBold',
+    color: colors.ink,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  description: {
+    ...typography.caption,
+    color: colors.mutedInk,
+    fontSize: 13,
+  },
+  price: {
+    ...typography.caption,
+    color: colors.subtleInk,
+  },
+  deleteButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: colors.canvas,
+  },
+});

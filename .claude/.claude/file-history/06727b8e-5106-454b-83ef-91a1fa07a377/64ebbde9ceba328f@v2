@@ -1,0 +1,100 @@
+.auth-modal-overlay{
+    position: fixed;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(2px);
+    z-index: 200;
+    top: 0;
+    left: 0;
+}
+
+.auth-modal-container{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 360px;
+    padding: 2rem;
+    background-color: var(--bg-card);
+    box-shadow: var(--shadow-modal);
+    border-radius: 12px;
+    gap: 1rem;
+    position: relative;
+}
+
+.auth-modal-close{
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.auth-modal-close:hover{
+    opacity: 0.7;
+}
+
+.auth-modal-logo{
+    font-size: 1.6rem;
+    font-weight: 780;
+}
+
+.auth-modal-message{
+    text-align: center;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.auth-modal-buttons{
+    display: flex;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.auth-modal-login-bttn{
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border: 2px solid var(--text-heading);
+    background-color: var(--text-heading);
+    color: var(--bg-primary);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.auth-modal-login-bttn:hover{
+    opacity: 0.85;
+}
+
+.auth-modal-signup-bttn{
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border: 2px solid var(--text-heading);
+    background-color: var(--bg-card);
+    color: var(--text-heading);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+.auth-modal-signup-bttn:hover{
+    background-color: var(--bg-hover);
+}
+
+@media(max-width: 480px){
+    .auth-modal-container{
+        width: 85%;
+        padding: 1.5rem;
+    }
+}

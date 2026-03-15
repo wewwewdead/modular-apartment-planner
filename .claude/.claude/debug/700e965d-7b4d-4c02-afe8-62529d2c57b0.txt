@@ -1,0 +1,1386 @@
+2026-03-05T12:27:22.472Z [DEBUG] Aborting: tool=ExitPlanMode isAbort=undefined hasFeedback=false isSubagent=false
+2026-03-05T12:27:22.472Z [DEBUG] ExitPlanMode tool permission denied
+2026-03-05T12:27:22.474Z [DEBUG] [useDeferredValue] Messages deferred by 2 (119→121)
+2026-03-05T12:27:22.495Z [DEBUG] High write ratio: blit=8760, write=12022 (57.8% writes), screen=284x120
+2026-03-05T12:27:22.495Z [DEBUG] Full reset (scrollback changes): scrollbackRows=263, firstChangeY=237
+  prev: "                                                                                                                        "
+  next: "  ⎿  User rejected Claude's plan:                                                                                       "
+2026-03-05T12:27:22.499Z [DEBUG] [useDeferredValue] Messages deferred by 2 (119→121)
+2026-03-05T12:27:22.500Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.502Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-03-05T12:27:22.502Z [DEBUG] Getting matching hook commands for SessionEnd with query: clear
+2026-03-05T12:27:22.502Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:27:22.502Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-03-05T12:27:22.502Z [DEBUG] Cleared all session hooks for session 6fa923ba-1eef-4c2d-ba6d-c70ac090b552
+2026-03-05T12:27:22.503Z [DEBUG] Getting matching hook commands for SessionStart with query: clear
+2026-03-05T12:27:22.503Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:27:22.503Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-03-05T12:27:22.504Z [DEBUG] Applying permission update: Setting mode to 'acceptEdits'
+2026-03-05T12:27:22.504Z [DEBUG] FileHistory: Added snapshot for 4a816861-0912-4f17-b636-bb62a7249e4f, tracking 0 files
+2026-03-05T12:27:22.583Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.600Z [DEBUG] High write ratio: blit=0, write=12462 (100.0% writes), screen=244x120
+2026-03-05T12:27:22.600Z [DEBUG] Full reset (scrollback changes): scrollbackRows=255, firstChangeY=128
+  prev: "● Searched for 2 patterns, read 1 file (ctrl+o to expand)                                                               "
+  next: "● Searched for 1 pattern, read 1 file (ctrl+o to expand)                                                                "
+2026-03-05T12:27:22.609Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.618Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-03-05T12:27:22.618Z [DEBUG] Loading skills from: managed=C:\ProgramData\ClaudeCode\.claude\skills, user=C:\Users\johnm\.claude\skills, project=[]
+2026-03-05T12:27:22.619Z [DEBUG] getPluginSkills: Processing 3 enabled plugins
+2026-03-05T12:27:22.619Z [DEBUG] Checking plugin example-skills: skillsPath=exists, skillsPaths=12 paths
+2026-03-05T12:27:22.619Z [DEBUG] Attempting to load skills from plugin example-skills default skillsPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills
+2026-03-05T12:27:22.619Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.1b2; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:27:22.619Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.619Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:27:22.619Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:27:22.619Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.619Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:27:22.621Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.623Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-03-05T12:27:22.624Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-03-05T12:27:22.624Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-03-05T12:27:22.624Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-03-05T12:27:22.625Z [DEBUG] Loaded 1 commands from plugin feature-dev default directory
+2026-03-05T12:27:22.625Z [DEBUG] Total plugin commands loaded: 1
+2026-03-05T12:27:22.627Z [DEBUG] Loaded 16 skills from plugin example-skills default directory
+2026-03-05T12:27:22.627Z [DEBUG] Attempting to load skills from plugin example-skills skillsPaths: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-03-05T12:27:22.627Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art for plugin example-skills
+2026-03-05T12:27:22.632Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.636Z [DEBUG] High write ratio: blit=0, write=2238 (100.0% writes), screen=55x120
+2026-03-05T12:27:22.636Z [DEBUG] Full reset (scrollback changes): scrollbackRows=215, firstChangeY=8
+  prev: "│ Mobile Toolbar: Horizontal Scroll                                                                                    │"
+  next: "│ Fix: Toolbar buttons clipped at ≤480px                                                                               │"
+2026-03-05T12:27:22.638Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art
+2026-03-05T12:27:22.638Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines for plugin example-skills
+2026-03-05T12:27:22.639Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines
+2026-03-05T12:27:22.639Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design for plugin example-skills
+2026-03-05T12:27:22.640Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design
+2026-03-05T12:27:22.640Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring for plugin example-skills
+2026-03-05T12:27:22.640Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring
+2026-03-05T12:27:22.640Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design for plugin example-skills
+2026-03-05T12:27:22.640Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design
+2026-03-05T12:27:22.640Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms for plugin example-skills
+2026-03-05T12:27:22.640Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms
+2026-03-05T12:27:22.640Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder for plugin example-skills
+2026-03-05T12:27:22.641Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder
+2026-03-05T12:27:22.641Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator for plugin example-skills
+2026-03-05T12:27:22.641Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator
+2026-03-05T12:27:22.641Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator for plugin example-skills
+2026-03-05T12:27:22.641Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator
+2026-03-05T12:27:22.641Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory for plugin example-skills
+2026-03-05T12:27:22.642Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory
+2026-03-05T12:27:22.642Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder for plugin example-skills
+2026-03-05T12:27:22.642Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder
+2026-03-05T12:27:22.642Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing for plugin example-skills
+2026-03-05T12:27:22.642Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-03-05T12:27:22.642Z [DEBUG] Checking plugin feature-dev: skillsPath=none, skillsPaths=0 paths
+2026-03-05T12:27:22.642Z [DEBUG] Checking plugin frontend-design: skillsPath=exists, skillsPaths=0 paths
+2026-03-05T12:27:22.642Z [DEBUG] Attempting to load skills from plugin frontend-design default skillsPath: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\205b6e0b3036\skills
+2026-03-05T12:27:22.643Z [DEBUG] Loaded 1 skills from plugin frontend-design default directory
+2026-03-05T12:27:22.643Z [DEBUG] Total plugin skills loaded: 17
+2026-03-05T12:27:22.643Z [DEBUG] getSkills returning: 0 skill dir commands, 17 plugin skills, 5 bundled skills
+2026-03-05T12:27:22.644Z [DEBUG] autocompact: tokens=477 threshold=167000 effectiveWindow=180000
+2026-03-05T12:27:22.644Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:27:22.646Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:27:22.646Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.647Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:27:22.647Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:27:22.647Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.647Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:27:22.647Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.650Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.955Z [DEBUG] Checking for native installer update to version 2.1.69
+2026-03-05T12:27:22.957Z [DEBUG] Version 2.1.69 already installed, updating symlink
+2026-03-05T12:27:22.957Z [DEBUG] Successfully updated to version 2.1.69
+2026-03-05T12:27:22.958Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.980Z [DEBUG] [claudeai-mcp] Fetched 2 servers
+2026-03-05T12:27:22.983Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:22.986Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:23.412Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:27:23.430Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:23.587Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:24.560Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:25.515Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:26.497Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:27.467Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:27.835Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:27:27.837Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.288Z [DEBUG] [useDeferredValue] Messages deferred by 1 (1→2)
+2026-03-05T12:27:28.290Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.294Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.426Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.738Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.740Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.742Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.745Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.938Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.941Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.945Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.948Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:27:28.948Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:27:28.948Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:27:28.948Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:27:28.951Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-03-05T12:27:28.953Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.957Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.959Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.962Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.965Z [DEBUG] High write ratio: blit=0, write=2374 (100.0% writes), screen=60x120
+2026-03-05T12:27:28.968Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:27:28.969Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:27:28.969Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:27:28.969Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:27:28.969Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:27:28.969Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:27:28.969Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:27:28.971Z [DEBUG] Sending 21 skills via attachment (initial, 21 total sent)
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:brand-guidelines" (userFacingName="brand-guidelines")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:canvas-design" (userFacingName="canvas-design")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:internal-comms" (userFacingName="internal-comms")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:algorithmic-art" (userFacingName="algorithmic-art")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:frontend-design" (userFacingName="frontend-design")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:doc-coauthoring" (userFacingName="doc-coauthoring")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:docx" (userFacingName="docx")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:pdf" (userFacingName="pdf")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:theme-factory" (userFacingName="theme-factory")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:mcp-builder" (userFacingName="mcp-builder")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:webapp-testing" (userFacingName="webapp-testing")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:pptx" (userFacingName="pptx")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:slack-gif-creator" (userFacingName="slack-gif-creator")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:web-artifacts-builder" (userFacingName="web-artifacts-builder")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:xlsx" (userFacingName="xlsx")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "example-skills:skill-creator" (userFacingName="skill-creator")
+2026-03-05T12:27:28.971Z [DEBUG] Skill prompt: showing "frontend-design:frontend-design" (userFacingName="frontend-design")
+2026-03-05T12:27:28.972Z [DEBUG] autocompact: tokens=26358 threshold=167000 effectiveWindow=180000
+2026-03-05T12:27:28.972Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:27:28.974Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:27:28.975Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.975Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:27:28.975Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:27:28.975Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.975Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:27:28.975Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.977Z [DEBUG] [useDeferredValue] Messages deferred by 4 (3→7)
+2026-03-05T12:27:28.979Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:28.984Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:29.401Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:30.372Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:31.327Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:31.358Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:27:31.361Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.302Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.601Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.603Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.605Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.608Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.610Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.612Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.614Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.617Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.618Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:32.621Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.276Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.572Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.573Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.575Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.580Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.919Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.926Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.928Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.935Z [DEBUG] [useDeferredValue] Messages deferred by 1 (7→8)
+2026-03-05T12:27:33.937Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.940Z [DEBUG] High write ratio: blit=0, write=2374 (100.0% writes), screen=60x120
+2026-03-05T12:27:33.941Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-03-05T12:27:33.941Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-03-05T12:27:33.941Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:27:33.941Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-03-05T12:27:33.943Z [DEBUG] [useDeferredValue] Messages deferred by 1 (7→8)
+2026-03-05T12:27:33.944Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.948Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.953Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.959Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css
+2026-03-05T12:27:33.960Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css.tmp.28288.1772713653960
+2026-03-05T12:27:33.960Z [DEBUG] Preserving file permissions: 100666
+2026-03-05T12:27:33.962Z [DEBUG] Temp file written successfully, size: 28568 bytes
+2026-03-05T12:27:33.962Z [DEBUG] Applied original permissions to temp file
+2026-03-05T12:27:33.962Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css.tmp.28288.1772713653960 to C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css
+2026-03-05T12:27:33.963Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css written atomically
+2026-03-05T12:27:33.967Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-03-05T12:27:33.967Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:27:33.967Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-03-05T12:27:33.969Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:27:33.969Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:27:33.969Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:27:33.969Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:27:33.970Z [DEBUG] autocompact: tokens=26534 threshold=167000 effectiveWindow=180000
+2026-03-05T12:27:33.970Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:27:33.972Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:27:33.973Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.973Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:27:33.973Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:27:33.973Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.973Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:27:33.973Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:33.975Z [DEBUG] [useDeferredValue] Messages deferred by 3 (8→11)
+2026-03-05T12:27:33.978Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:34.026Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:34.245Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:35.212Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:36.179Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:36.405Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:27:36.406Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:37.155Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:37.432Z [DEBUG] [useDeferredValue] Messages deferred by 1 (11→12)
+2026-03-05T12:27:37.433Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:37.438Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:37.454Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-03-05T12:27:37.454Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:27:37.454Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-03-05T12:27:37.458Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:27:48.884Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:00.759Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:02.093Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:40.291Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:41.093Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:41.973Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:41.976Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.145Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.245Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.349Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.469Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.637Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.805Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:42.997Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:43.362Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:43.573Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:43.613Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:43.757Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:43.860Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:43.949Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.144Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.309Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.389Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.557Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.645Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.772Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:44.980Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:45.053Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:45.221Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:45.285Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:45.789Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:45.884Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.068Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.241Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.420Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.525Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.693Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.821Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:46.909Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:47.013Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:47.640Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:47.812Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:47.916Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.061Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.157Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.312Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.429Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.517Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.572Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.780Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:48.860Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:49.216Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:49.380Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:49.477Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:49.748Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:49.901Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.036Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.188Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.264Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.388Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.492Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.597Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.686Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:50.820Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:51.456Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:51.621Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:51.845Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.327Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.517Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.612Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.724Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.820Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.909Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:52.996Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.092Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.204Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.336Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.484Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.660Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.732Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:53.845Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:54.862Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:55.335Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:55.436Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:55.500Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:55.700Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:55.748Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:55.852Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:56.028Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:56.480Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:56.863Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.28288.1772713796863
+2026-03-05T12:29:56.863Z [DEBUG] Preserving file permissions: 100666
+2026-03-05T12:29:56.865Z [DEBUG] Temp file written successfully, size: 14870 bytes
+2026-03-05T12:29:56.865Z [DEBUG] Applied original permissions to temp file
+2026-03-05T12:29:56.865Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.28288.1772713796863 to C:\Users\johnm\.claude.json
+2026-03-05T12:29:56.865Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-03-05T12:29:56.880Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.157Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:29:57.158Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:29:57.158Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:29:57.158Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:29:57.160Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-03-05T12:29:57.160Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:29:57.160Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-03-05T12:29:57.160Z [DEBUG] FileHistory: Making snapshot for message 629225d6-6e32-42bc-85e4-fb5d7be5cb32
+2026-03-05T12:29:57.171Z [DEBUG] FileHistory: Added snapshot for 629225d6-6e32-42bc-85e4-fb5d7be5cb32, tracking 1 files
+2026-03-05T12:29:57.173Z [DEBUG] [useDeferredValue] Messages deferred by 3 (12→15)
+2026-03-05T12:29:57.176Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.176Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.182Z [DEBUG] autocompact: tokens=28239 threshold=167000 effectiveWindow=180000
+2026-03-05T12:29:57.183Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:29:57.187Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:29:57.187Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.187Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:29:57.187Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:29:57.187Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.187Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:29:57.187Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.191Z [DEBUG] [useDeferredValue] Messages deferred by 3 (12→15)
+2026-03-05T12:29:57.192Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:57.197Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:58.144Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:59.110Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:59.513Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:29:59.514Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:29:59.654Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:00.886Z [DEBUG] [useDeferredValue] Messages deferred by 1 (15→16)
+2026-03-05T12:30:00.887Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:00.893Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.347Z [DEBUG] [useDeferredValue] Messages deferred by 1 (16→17)
+2026-03-05T12:30:01.348Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.356Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.361Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.793Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.796Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.799Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:01.802Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:02.761Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:02.764Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:02.768Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.100Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.105Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.109Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.114Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.117Z [DEBUG] [useDeferredValue] Messages deferred by 1 (17→18)
+2026-03-05T12:30:03.120Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.128Z [DEBUG] High write ratio: blit=0, write=3081 (100.0% writes), screen=76x120
+2026-03-05T12:30:03.129Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:30:03.130Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:30:03.130Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:30:03.130Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:30:03.144Z [DEBUG] [useDeferredValue] Messages deferred by 1 (17→18)
+2026-03-05T12:30:03.148Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.160Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.660Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:30:03.660Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:30:03.660Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:30:03.663Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:30:03.663Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:30:03.663Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:30:03.663Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:30:03.664Z [DEBUG] autocompact: tokens=28307 threshold=167000 effectiveWindow=180000
+2026-03-05T12:30:03.665Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:30:03.668Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:30:03.669Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.669Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:30:03.669Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:30:03.669Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.669Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:30:03.669Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.673Z [DEBUG] [useDeferredValue] Messages deferred by 3 (18→21)
+2026-03-05T12:30:03.678Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:03.689Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.736Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:30:06.741Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.757Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.974Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.979Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.985Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.987Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:06.990Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.323Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.334Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.342Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.358Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.372Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.377Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.402Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.406Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.415Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.420Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.426Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.430Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.435Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.445Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.453Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.457Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.462Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.465Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.472Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.475Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.479Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.483Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.485Z [DEBUG] [useDeferredValue] Messages deferred by 1 (21→22)
+2026-03-05T12:30:07.488Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.489Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:30:07.490Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:30:07.490Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:30:07.490Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:30:07.499Z [DEBUG] [useDeferredValue] Messages deferred by 1 (21→22)
+2026-03-05T12:30:07.500Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.510Z [DEBUG] [useDeferredValue] Messages deferred by 1 (21→22)
+2026-03-05T12:30:07.514Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.523Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.969Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:30:07.969Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:30:07.969Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:30:07.971Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:30:07.971Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:30:07.971Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:30:07.971Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:30:07.972Z [DEBUG] autocompact: tokens=28764 threshold=167000 effectiveWindow=180000
+2026-03-05T12:30:07.972Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:30:07.975Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:30:07.975Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.976Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:30:07.976Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:30:07.976Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.976Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:30:07.976Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.980Z [DEBUG] [useDeferredValue] Messages deferred by 3 (22→25)
+2026-03-05T12:30:07.984Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:07.994Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:10.554Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:30:10.559Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:10.978Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.471Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.474Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.477Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.486Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.493Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.522Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.540Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.545Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.551Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.560Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.569Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.585Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.592Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.601Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.630Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.637Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.890Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.909Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.929Z [DEBUG] [useDeferredValue] Messages deferred by 1 (25→26)
+2026-03-05T12:30:11.932Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.937Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:30:11.938Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:30:11.938Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:30:11.938Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:30:11.948Z [DEBUG] [useDeferredValue] Messages deferred by 1 (25→26)
+2026-03-05T12:30:11.949Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:11.957Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.066Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.082Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.107Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.351Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:30:12.351Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:30:12.351Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:30:12.352Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:30:12.352Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:30:12.352Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:30:12.352Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:30:12.353Z [DEBUG] autocompact: tokens=29019 threshold=167000 effectiveWindow=180000
+2026-03-05T12:30:12.354Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:30:12.355Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:30:12.356Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.356Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:30:12.356Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:30:12.356Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.356Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:30:12.356Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.359Z [DEBUG] [useDeferredValue] Messages deferred by 3 (26→29)
+2026-03-05T12:30:12.363Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:12.372Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:15.369Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:30:15.372Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:19.509Z [DEBUG] [useDeferredValue] Messages deferred by 1 (29→30)
+2026-03-05T12:30:19.510Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:19.528Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:19.538Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-03-05T12:30:19.538Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:30:19.538Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-03-05T12:30:19.543Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:30.897Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:38.575Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:30:47.629Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:02.117Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:02.652Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:02.753Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:02.755Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:02.963Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:03.404Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:03.484Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:03.595Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:04.620Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:05.119Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:05.731Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:05.939Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.054Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.195Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.331Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.435Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.627Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.715Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.875Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:06.991Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:07.139Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:07.323Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:07.531Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:07.659Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:07.835Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:08.070Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:08.187Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:08.299Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:08.691Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:08.883Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.014Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.091Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.179Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.291Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.563Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.683Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.859Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:09.971Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:10.118Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:10.267Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:10.395Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:10.499Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:10.611Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:10.707Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:11.095Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:11.473Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:12.114Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:12.611Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:16.821Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:17.271Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:17.382Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:17.383Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:18.126Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:18.635Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:19.278Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:19.435Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:20.442Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:20.957Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:20.987Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:21.122Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:21.246Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:21.459Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:21.587Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:21.794Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:21.987Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:22.075Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:22.358Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:22.603Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:22.699Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:22.875Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:23.027Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:23.158Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:23.299Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:23.434Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:23.971Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:24.445Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:24.958Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:25.428Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:25.900Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.28288.1772713885900
+2026-03-05T12:31:25.900Z [DEBUG] Preserving file permissions: 100666
+2026-03-05T12:31:25.905Z [DEBUG] Temp file written successfully, size: 14870 bytes
+2026-03-05T12:31:25.905Z [DEBUG] Applied original permissions to temp file
+2026-03-05T12:31:25.905Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.28288.1772713885900 to C:\Users\johnm\.claude.json
+2026-03-05T12:31:25.905Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-03-05T12:31:25.917Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.256Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:26.256Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:26.256Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:26.256Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:26.258Z [DEBUG] Getting matching hook commands for UserPromptSubmit with query: undefined
+2026-03-05T12:31:26.258Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:26.258Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-03-05T12:31:26.259Z [DEBUG] FileHistory: Making snapshot for message 964d7633-7650-44f3-a45b-e40a49a5e4cc
+2026-03-05T12:31:26.259Z [DEBUG] FileHistory: Added snapshot for 964d7633-7650-44f3-a45b-e40a49a5e4cc, tracking 1 files
+2026-03-05T12:31:26.260Z [DEBUG] [useDeferredValue] Messages deferred by 3 (30→33)
+2026-03-05T12:31:26.263Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.263Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.271Z [DEBUG] autocompact: tokens=29571 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:26.272Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:26.275Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:26.275Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.275Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:26.275Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:26.276Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.276Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:26.276Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.279Z [DEBUG] [useDeferredValue] Messages deferred by 3 (30→33)
+2026-03-05T12:31:26.280Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:26.285Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:27.251Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:28.210Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:28.275Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:28.276Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:28.876Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:29.605Z [DEBUG] [useDeferredValue] Messages deferred by 1 (33→34)
+2026-03-05T12:31:29.606Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:29.612Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.074Z [DEBUG] [useDeferredValue] Messages deferred by 1 (34→35)
+2026-03-05T12:31:30.078Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.089Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.548Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.551Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.554Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.556Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.559Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:30.563Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.044Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:31:31.045Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:31:31.045Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:31.045Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:31:31.061Z [DEBUG] [useDeferredValue] Messages deferred by 1 (35→36)
+2026-03-05T12:31:31.066Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.076Z [DEBUG] High write ratio: blit=0, write=3957 (100.0% writes), screen=94x120
+2026-03-05T12:31:31.085Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.094Z [DEBUG] High write ratio: blit=0, write=3991 (100.0% writes), screen=95x120
+2026-03-05T12:31:31.492Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.497Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.500Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.504Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.607Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:31:31.607Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:31.607Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:31:31.610Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.832Z [DEBUG] [useDeferredValue] Messages deferred by 3 (36→39)
+2026-03-05T12:31:31.837Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.843Z [DEBUG] [useDeferredValue] Messages deferred by 3 (36→39)
+2026-03-05T12:31:31.844Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.849Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:31.974Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:31:31.975Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:31:31.975Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:31.975Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:31:31.988Z [DEBUG] [useDeferredValue] Messages deferred by 1 (39→40)
+2026-03-05T12:31:31.993Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:32.006Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:32.561Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:31:32.561Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:32.561Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:31:32.564Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:32.564Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:32.565Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:32.565Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:32.566Z [DEBUG] autocompact: tokens=30059 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:32.568Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:32.571Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:32.571Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:32.571Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:32.571Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:32.571Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:32.572Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:32.572Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:32.575Z [DEBUG] [useDeferredValue] Messages deferred by 4 (40→44)
+2026-03-05T12:31:32.580Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:32.593Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.059Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:36.066Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.075Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.443Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.447Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.449Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.453Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.457Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.460Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.464Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.900Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.907Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.914Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:31:36.916Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:31:36.916Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:36.916Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:31:36.935Z [DEBUG] [useDeferredValue] Messages deferred by 1 (44→45)
+2026-03-05T12:31:36.941Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:36.958Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.376Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.380Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.383Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.498Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:31:37.498Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:37.498Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:31:37.501Z [DEBUG] [useDeferredValue] Messages deferred by 3 (45→48)
+2026-03-05T12:31:37.506Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.515Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:31:37.516Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:31:37.516Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:37.516Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:31:37.521Z [DEBUG] [useDeferredValue] Messages deferred by 4 (45→49)
+2026-03-05T12:31:37.525Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.536Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.539Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:31:37.539Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:37.539Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:31:37.541Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.547Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:37.547Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:37.547Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:37.547Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:37.551Z [DEBUG] autocompact: tokens=30717 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:37.551Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:37.554Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:37.555Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.555Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:37.555Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:37.555Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.555Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:37.555Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.558Z [DEBUG] [useDeferredValue] Messages deferred by 4 (49→53)
+2026-03-05T12:31:37.563Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:37.575Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:40.751Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:40.755Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:40.761Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.193Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:31:41.194Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:31:41.194Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:41.194Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:31:41.198Z [DEBUG] [useDeferredValue] Messages deferred by 1 (53→54)
+2026-03-05T12:31:41.202Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.212Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.217Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:31:41.217Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:41.217Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:31:41.219Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.638Z [DEBUG] [useDeferredValue] Messages deferred by 3 (54→57)
+2026-03-05T12:31:41.641Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.646Z [DEBUG] [useDeferredValue] Messages deferred by 3 (54→57)
+2026-03-05T12:31:41.647Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.653Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.797Z [DEBUG] [useDeferredValue] Messages deferred by 1 (57→58)
+2026-03-05T12:31:41.801Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.807Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:31:41.808Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:31:41.808Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:41.808Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:31:41.818Z [DEBUG] [useDeferredValue] Messages deferred by 1 (57→58)
+2026-03-05T12:31:41.822Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:41.834Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:42.253Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:31:42.253Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:42.253Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:31:42.254Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:42.254Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:42.254Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:42.254Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:42.258Z [DEBUG] autocompact: tokens=31469 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:42.259Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:42.261Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:42.262Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:42.262Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:42.262Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:42.262Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:42.262Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:42.262Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:42.266Z [DEBUG] [useDeferredValue] Messages deferred by 3 (58→61)
+2026-03-05T12:31:42.269Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:42.282Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:45.271Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:45.275Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:46.191Z [DEBUG] [useDeferredValue] Messages deferred by 1 (61→62)
+2026-03-05T12:31:46.197Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:46.212Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:46.645Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:46.649Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.087Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:31:47.088Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:31:47.088Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:47.088Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:31:47.093Z [DEBUG] [useDeferredValue] Messages deferred by 1 (62→63)
+2026-03-05T12:31:47.098Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.105Z [DEBUG] High write ratio: blit=0, write=4113 (100.0% writes), screen=98x120
+2026-03-05T12:31:47.112Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.117Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:31:47.117Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:47.117Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:31:47.119Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.125Z [DEBUG] High write ratio: blit=0, write=4182 (100.0% writes), screen=99x120
+2026-03-05T12:31:47.533Z [DEBUG] [useDeferredValue] Messages deferred by 3 (63→66)
+2026-03-05T12:31:47.537Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.547Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.982Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:47.988Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.170Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.174Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.177Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.180Z [DEBUG] [useDeferredValue] Messages deferred by 1 (66→67)
+2026-03-05T12:31:48.184Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.187Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:31:48.188Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:31:48.188Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:48.188Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:31:48.204Z [DEBUG] [useDeferredValue] Messages deferred by 1 (66→67)
+2026-03-05T12:31:48.209Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.222Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.670Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:31:48.670Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:48.670Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:31:48.672Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:48.672Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:48.672Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:48.672Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:48.675Z [DEBUG] autocompact: tokens=32347 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:48.676Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:48.681Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:48.682Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.682Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:48.682Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:48.682Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.682Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:48.683Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.686Z [DEBUG] [useDeferredValue] Messages deferred by 4 (67→71)
+2026-03-05T12:31:48.691Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:48.704Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:50.681Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:50.688Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:50.692Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.192Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.202Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.207Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.214Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.221Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.225Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.229Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.233Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.239Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.327Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.335Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:31:51.335Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:31:51.335Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:51.335Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:31:51.340Z [DEBUG] [useDeferredValue] Messages deferred by 1 (71→72)
+2026-03-05T12:31:51.347Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.359Z [DEBUG] [useDeferredValue] Messages deferred by 1 (71→72)
+2026-03-05T12:31:51.364Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.378Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.383Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:31:51.383Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:51.383Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:31:51.384Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:51.384Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:51.384Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:51.384Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:51.388Z [DEBUG] autocompact: tokens=32847 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:51.389Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:51.393Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:51.393Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.394Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:51.394Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:51.394Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.394Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:51.394Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.397Z [DEBUG] [useDeferredValue] Messages deferred by 3 (72→75)
+2026-03-05T12:31:51.401Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:51.416Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:53.721Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:53.723Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:54.228Z [DEBUG] [useDeferredValue] Messages deferred by 1 (75→76)
+2026-03-05T12:31:54.232Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:54.237Z [DEBUG] [useDeferredValue] Messages deferred by 1 (75→76)
+2026-03-05T12:31:54.238Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:54.244Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:54.641Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:54.645Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.083Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.086Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.087Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.092Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.437Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.443Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.446Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.450Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.452Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.458Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.460Z [DEBUG] [useDeferredValue] Messages deferred by 1 (76→77)
+2026-03-05T12:31:55.465Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.467Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:31:55.468Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:31:55.468Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:55.468Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:31:55.482Z [DEBUG] [useDeferredValue] Messages deferred by 1 (76→77)
+2026-03-05T12:31:55.483Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.493Z [DEBUG] High write ratio: blit=0, write=4210 (100.0% writes), screen=100x120
+2026-03-05T12:31:55.511Z [DEBUG] [useDeferredValue] Messages deferred by 1 (76→77)
+2026-03-05T12:31:55.519Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:55.539Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:56.030Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:31:56.030Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:56.030Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:31:56.032Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:56.032Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:56.032Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:56.032Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:56.033Z [DEBUG] autocompact: tokens=33513 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:56.034Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:56.038Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:56.038Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:56.038Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:56.038Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:56.038Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:56.038Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:56.038Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:56.043Z [DEBUG] [useDeferredValue] Messages deferred by 4 (77→81)
+2026-03-05T12:31:56.049Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:56.062Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.056Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:31:58.061Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.070Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.823Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.827Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.829Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.835Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.839Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.842Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.845Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.848Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.853Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.862Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.865Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.869Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.875Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.884Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.886Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:31:58.887Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:31:58.887Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:31:58.887Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:31:58.891Z [DEBUG] [useDeferredValue] Messages deferred by 1 (81→82)
+2026-03-05T12:31:58.897Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.913Z [DEBUG] [useDeferredValue] Messages deferred by 1 (81→82)
+2026-03-05T12:31:58.917Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.927Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.931Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:31:58.931Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:31:58.931Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:31:58.932Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:31:58.932Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:31:58.932Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:31:58.932Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:31:58.935Z [DEBUG] autocompact: tokens=33939 threshold=167000 effectiveWindow=180000
+2026-03-05T12:31:58.936Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:31:58.939Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:31:58.939Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.939Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:31:58.939Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:31:58.939Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.939Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:31:58.939Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.942Z [DEBUG] [useDeferredValue] Messages deferred by 3 (82→85)
+2026-03-05T12:31:58.947Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:58.960Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:31:59.619Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:01.077Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:32:01.079Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:02.411Z [DEBUG] [useDeferredValue] Messages deferred by 1 (85→86)
+2026-03-05T12:32:02.417Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:02.429Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:02.945Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:02.948Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.364Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.367Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.373Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.673Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.678Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.685Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.690Z [DEBUG] [useDeferredValue] Messages deferred by 1 (86→87)
+2026-03-05T12:32:03.697Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.709Z [DEBUG] High write ratio: blit=0, write=4395 (100.0% writes), screen=104x120
+2026-03-05T12:32:03.711Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:32:03.712Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:32:03.712Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:32:03.712Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:32:03.730Z [DEBUG] [useDeferredValue] Messages deferred by 1 (86→87)
+2026-03-05T12:32:03.734Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:03.748Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:04.169Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:32:04.169Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:32:04.170Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:32:04.170Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:32:04.170Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:32:04.170Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:32:04.170Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:32:04.172Z [DEBUG] autocompact: tokens=35186 threshold=167000 effectiveWindow=180000
+2026-03-05T12:32:04.172Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:32:04.176Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:32:04.176Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:04.176Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:32:04.176Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:32:04.176Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:04.176Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:32:04.176Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:04.179Z [DEBUG] [useDeferredValue] Messages deferred by 4 (87→91)
+2026-03-05T12:32:04.183Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:04.197Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:06.352Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:32:06.354Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:07.301Z [DEBUG] [useDeferredValue] Messages deferred by 1 (91→92)
+2026-03-05T12:32:07.302Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:07.305Z [DEBUG] [useDeferredValue] Messages deferred by 1 (91→92)
+2026-03-05T12:32:07.310Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:07.318Z [DEBUG] [useDeferredValue] Messages deferred by 1 (91→92)
+2026-03-05T12:32:07.318Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:07.324Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:08.168Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:08.172Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:08.617Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:08.759Z [DEBUG] [useDeferredValue] Messages deferred by 1 (92→93)
+2026-03-05T12:32:08.764Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:08.779Z [DEBUG] High write ratio: blit=0, write=4486 (100.0% writes), screen=108x120
+2026-03-05T12:32:08.780Z [DEBUG] executePreToolHooks called for tool: Grep
+2026-03-05T12:32:08.781Z [DEBUG] Getting matching hook commands for PreToolUse with query: Grep
+2026-03-05T12:32:08.781Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:32:08.781Z [DEBUG] Matched 0 unique hooks for query "Grep" (0 before deduplication)
+2026-03-05T12:32:08.793Z [DEBUG] [useDeferredValue] Messages deferred by 1 (92→93)
+2026-03-05T12:32:08.799Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:08.813Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:09.225Z [DEBUG] Getting matching hook commands for PostToolUse with query: Grep
+2026-03-05T12:32:09.225Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:32:09.225Z [DEBUG] Matched 1 unique hooks for query "Grep" (1 before deduplication)
+2026-03-05T12:32:09.226Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:32:09.226Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:32:09.226Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:32:09.226Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:32:09.226Z [DEBUG] autocompact: tokens=35489 threshold=167000 effectiveWindow=180000
+2026-03-05T12:32:09.226Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:32:09.229Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:32:09.230Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:09.230Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:32:09.230Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:32:09.230Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:09.230Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:32:09.230Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:09.234Z [DEBUG] [useDeferredValue] Messages deferred by 3 (93→96)
+2026-03-05T12:32:09.239Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:09.252Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:12.155Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:32:12.156Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:13.975Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:14.940Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:15.908Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.220Z [DEBUG] [useDeferredValue] Messages deferred by 1 (96→97)
+2026-03-05T12:32:16.221Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.224Z [DEBUG] [useDeferredValue] Messages deferred by 1 (96→97)
+2026-03-05T12:32:16.227Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.235Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.675Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.698Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.700Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:32:16.701Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:32:16.701Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:32:16.701Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:32:16.703Z [DEBUG] [useDeferredValue] Messages deferred by 1 (97→98)
+2026-03-05T12:32:16.707Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.714Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.720Z [DEBUG] High write ratio: blit=0, write=5241 (100.0% writes), screen=124x120
+2026-03-05T12:32:16.728Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.732Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:32:16.732Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:32:16.732Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:32:16.733Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:32:16.733Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:32:16.733Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:32:16.733Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:32:16.735Z [DEBUG] autocompact: tokens=36062 threshold=167000 effectiveWindow=180000
+2026-03-05T12:32:16.736Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:32:16.738Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:32:16.738Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.738Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:32:16.738Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:32:16.738Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.738Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:32:16.738Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.740Z [DEBUG] [useDeferredValue] Messages deferred by 3 (98→101)
+2026-03-05T12:32:16.744Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.756Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:16.884Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:17.849Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:18.812Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:19.791Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:19.980Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:32:19.981Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:20.756Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:20.782Z [DEBUG] [useDeferredValue] Messages deferred by 1 (101→102)
+2026-03-05T12:32:20.787Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:20.799Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:21.727Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:22.700Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.340Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.343Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.347Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.356Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.364Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.366Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.370Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.372Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.376Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.378Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.385Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.388Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.391Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.395Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.400Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.405Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.408Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.412Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.416Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.419Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.423Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.426Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.429Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.434Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.437Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.441Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.446Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.448Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.452Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.459Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.460Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.466Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.471Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.477Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.481Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.488Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.490Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.495Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.500Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.509Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.514Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.516Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.524Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.527Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.529Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:32:23.531Z [DEBUG] executePreToolHooks called for tool: AskUserQuestion
+2026-03-05T12:32:23.531Z [DEBUG] Getting matching hook commands for PreToolUse with query: AskUserQuestion
+2026-03-05T12:32:23.531Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:32:23.531Z [DEBUG] Matched 0 unique hooks for query "AskUserQuestion" (0 before deduplication)
+2026-03-05T12:32:23.532Z [DEBUG] executePermissionRequestHooks called for tool: AskUserQuestion
+2026-03-05T12:32:23.532Z [DEBUG] Getting matching hook commands for PermissionRequest with query: AskUserQuestion
+2026-03-05T12:32:23.532Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:32:23.532Z [DEBUG] Matched 0 unique hooks for query "AskUserQuestion" (0 before deduplication)
+2026-03-05T12:32:23.533Z [DEBUG] [useDeferredValue] Messages deferred by 1 (102→103)
+2026-03-05T12:32:23.548Z [DEBUG] High write ratio: blit=0, write=5758 (100.0% writes), screen=136x120
+2026-03-05T12:32:23.551Z [DEBUG] [useDeferredValue] Messages deferred by 1 (102→103)
+2026-03-05T12:32:23.557Z [DEBUG] [useDeferredValue] Messages deferred by 1 (102→103)
+2026-03-05T12:32:29.566Z [DEBUG] Getting matching hook commands for Notification with query: permission_prompt
+2026-03-05T12:32:29.566Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:32:29.566Z [DEBUG] Matched 0 unique hooks for query "permission_prompt" (0 before deduplication)
+2026-03-05T12:34:08.270Z [DEBUG] Getting matching hook commands for PostToolUse with query: AskUserQuestion
+2026-03-05T12:34:08.270Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:34:08.270Z [DEBUG] Matched 0 unique hooks for query "AskUserQuestion" (0 before deduplication)
+2026-03-05T12:34:08.271Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:34:08.271Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:34:08.272Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:34:08.272Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:34:08.273Z [DEBUG] autocompact: tokens=37763 threshold=167000 effectiveWindow=180000
+2026-03-05T12:34:08.274Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:34:08.278Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:34:08.278Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.278Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:34:08.278Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:34:08.278Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.279Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:34:08.279Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.283Z [DEBUG] [useDeferredValue] Messages deferred by 2 (103→105)
+2026-03-05T12:34:08.300Z [DEBUG] [useDeferredValue] Messages deferred by 2 (103→105)
+2026-03-05T12:34:08.301Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.302Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-03-05T12:34:08.302Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.304Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.313Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:08.928Z [DEBUG] Checking for native installer update to version 2.1.69
+2026-03-05T12:34:08.930Z [DEBUG] Version 2.1.69 already installed, updating symlink
+2026-03-05T12:34:08.930Z [DEBUG] Successfully updated to version 2.1.69
+2026-03-05T12:34:08.933Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:09.275Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:10.143Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:34:10.145Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:10.237Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:11.200Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:12.173Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:13.141Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:14.120Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:15.082Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:16.048Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:17.024Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:17.333Z [DEBUG] [useDeferredValue] Messages deferred by 1 (105→106)
+2026-03-05T12:34:17.337Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:17.350Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:17.988Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.227Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.229Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.236Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.288Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.291Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:34:18.291Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:34:18.291Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:34:18.291Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:34:18.295Z [DEBUG] [useDeferredValue] Messages deferred by 1 (106→107)
+2026-03-05T12:34:18.299Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.306Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.312Z [DEBUG] High write ratio: blit=0, write=6325 (100.0% writes), screen=145x120
+2026-03-05T12:34:18.320Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.324Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:34:18.324Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:34:18.324Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:34:18.325Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:34:18.325Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:34:18.325Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:34:18.325Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:34:18.327Z [DEBUG] autocompact: tokens=39570 threshold=167000 effectiveWindow=180000
+2026-03-05T12:34:18.327Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:34:18.330Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:34:18.330Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.331Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:34:18.331Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:34:18.331Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.331Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:34:18.331Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.334Z [DEBUG] [useDeferredValue] Messages deferred by 4 (107→111)
+2026-03-05T12:34:18.337Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.350Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:18.963Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:19.929Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:20.297Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:34:20.298Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:20.899Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:21.858Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:22.827Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:23.805Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:24.764Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:25.734Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:26.701Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:26.988Z [DEBUG] [useDeferredValue] Messages deferred by 1 (111→112)
+2026-03-05T12:34:26.993Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.013Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.058Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.714Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.719Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.723Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.727Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.728Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-05T12:34:27.729Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-05T12:34:27.729Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:34:27.729Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-05T12:34:27.732Z [DEBUG] [useDeferredValue] Messages deferred by 1 (112→113)
+2026-03-05T12:34:27.739Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.755Z [DEBUG] High write ratio: blit=0, write=6996 (100.0% writes), screen=155x120
+2026-03-05T12:34:27.759Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-05T12:34:27.759Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:34:27.759Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-05T12:34:27.761Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:34:27.761Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:34:27.761Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:34:27.761Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:34:27.763Z [DEBUG] autocompact: tokens=40216 threshold=167000 effectiveWindow=180000
+2026-03-05T12:34:27.763Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:34:27.766Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:34:27.767Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.767Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:34:27.767Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:34:27.767Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.767Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:34:27.767Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.771Z [DEBUG] [useDeferredValue] Messages deferred by 4 (112→116)
+2026-03-05T12:34:27.778Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:27.797Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:30.604Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:34:30.612Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:30.624Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:39.611Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:40.576Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:40.809Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.910Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.917Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.921Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.924Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.927Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.943Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.957Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.962Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.973Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:41.988Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.044Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.114Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.126Z [DEBUG] executePreToolHooks called for tool: Write
+2026-03-05T12:34:42.127Z [DEBUG] Getting matching hook commands for PreToolUse with query: Write
+2026-03-05T12:34:42.127Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:34:42.127Z [DEBUG] Matched 0 unique hooks for query "Write" (0 before deduplication)
+2026-03-05T12:34:42.133Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\.claude\plans\splendid-churning-candle.md
+2026-03-05T12:34:42.134Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude\plans\splendid-churning-candle.md.tmp.28288.1772714082134
+2026-03-05T12:34:42.134Z [DEBUG] Preserving file permissions: 100666
+2026-03-05T12:34:42.136Z [DEBUG] Temp file written successfully, size: 2104 bytes
+2026-03-05T12:34:42.136Z [DEBUG] Applied original permissions to temp file
+2026-03-05T12:34:42.136Z [DEBUG] Renaming C:\Users\johnm\.claude\plans\splendid-churning-candle.md.tmp.28288.1772714082134 to C:\Users\johnm\.claude\plans\splendid-churning-candle.md
+2026-03-05T12:34:42.137Z [DEBUG] File C:\Users\johnm\.claude\plans\splendid-churning-candle.md written atomically
+2026-03-05T12:34:42.146Z [DEBUG] Getting matching hook commands for PostToolUse with query: Write
+2026-03-05T12:34:42.146Z [DEBUG] Found 5 hook matchers in settings
+2026-03-05T12:34:42.146Z [DEBUG] Matched 1 unique hooks for query "Write" (1 before deduplication)
+2026-03-05T12:34:42.148Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-05T12:34:42.148Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-05T12:34:42.148Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-05T12:34:42.148Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-05T12:34:42.150Z [DEBUG] autocompact: tokens=41127 threshold=167000 effectiveWindow=180000
+2026-03-05T12:34:42.151Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-05T12:34:42.156Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.68.898; cc_entrypoint=cli; cch=00000;
+2026-03-05T12:34:42.156Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.157Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-05T12:34:42.157Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-05T12:34:42.157Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.157Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-05T12:34:42.157Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.161Z [DEBUG] [useDeferredValue] Messages deferred by 5 (116→121)
+2026-03-05T12:34:42.167Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:42.179Z [DEBUG] High write ratio: blit=0, write=7079 (100.0% writes), screen=158x120
+2026-03-05T12:34:42.197Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:44.534Z [DEBUG] Stream started - received first chunk
+2026-03-05T12:34:44.540Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-05T12:34:44.634Z [DEBUG] executePreToolHooks called for tool: ExitPlanMode
+2026-03-05T12:34:44.634Z [DEBUG] Getting matching hook commands for PreToolUse with query: ExitPlanMode
+2026-03-05T12:34:44.634Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:34:44.634Z [DEBUG] Matched 0 unique hooks for query "ExitPlanMode" (0 before deduplication)
+2026-03-05T12:34:44.635Z [DEBUG] executePermissionRequestHooks called for tool: ExitPlanMode
+2026-03-05T12:34:44.636Z [DEBUG] Getting matching hook commands for PermissionRequest with query: ExitPlanMode
+2026-03-05T12:34:44.636Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:34:44.636Z [DEBUG] Matched 0 unique hooks for query "ExitPlanMode" (0 before deduplication)
+2026-03-05T12:34:44.636Z [DEBUG] [useDeferredValue] Messages deferred by 1 (121→122)
+2026-03-05T12:34:44.669Z [DEBUG] High write ratio: blit=0, write=9389 (100.0% writes), screen=218x120
+2026-03-05T12:34:44.673Z [DEBUG] [useDeferredValue] Messages deferred by 1 (121→122)
+2026-03-05T12:34:44.676Z [DEBUG] [useDeferredValue] Messages deferred by 1 (121→122)
+2026-03-05T12:34:44.699Z [DEBUG] High write ratio: blit=6000, write=7415 (55.3% writes), screen=218x120
+2026-03-05T12:34:44.712Z [DEBUG] High write ratio: blit=6000, write=7415 (55.3% writes), screen=218x120
+2026-03-05T12:34:50.679Z [DEBUG] Getting matching hook commands for Notification with query: permission_prompt
+2026-03-05T12:34:50.679Z [DEBUG] Found 0 hook matchers in settings
+2026-03-05T12:34:50.679Z [DEBUG] Matched 0 unique hooks for query "permission_prompt" (0 before deduplication)
+2026-03-05T12:35:29.660Z [DEBUG] High write ratio: blit=6000, write=7415 (55.3% writes), screen=218x120

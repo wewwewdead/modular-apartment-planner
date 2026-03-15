@@ -1,0 +1,61 @@
+# Plan: Add Forgot Password to Login Page
+
+## Context
+Users who forget their password currently have no way to recover their account. The login page (`client/src/components/LoginPage/login.jsx`) needs a "Forgot password?" link that triggers Supabase's password reset email flow. After clicking the email link, the user should land on the Settings page where they can set a new password without needing their old one.
+
+**Supabase flow:** `supabase.auth.resetPasswordForEmail(email, { redirectTo })` sends a reset link. Clicking it creates a recovery session and redirects to the app. With that session, `supabase.auth.updateUser({ password })` works without the old password.
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `client/src/components/LoginPage/login.jsx` | Add forgot password toggle + reset form |
+| `client/src/components/LoginPage/login.css` | Add `.forgot-password-row` style |
+| `client/src/components/SettingsPage/SettingsPage.jsx` | Handle `?recovery=true` query param (skip current password) |
+
+---
+
+## Implementation
+
+### 1. Modify `login.jsx` — Add forgot password flow
+
+Add a `forgotMode` boolean state. When toggled:
+
+**Normal login view (forgotMode = false):**
+- Existing form stays exactly as-is
+- Add a "Forgot password?" `link-button` right-aligned below the password field's label row (between label and input, or as a row with the label)
+
+**Forgot password view (forgotMode = true):**
+- Header changes to "Reset your password" / "Enter your email and we'll send a reset link."
+- Show only the email field + "Send Reset Link" primary button
+- "Back to login" link-button below
+- On submit: call `supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + '/home/settings?recovery=true' })`
+- Show success message: "Check your email for a password reset link."
+
+### 2. Modify `login.css` — Minimal styling addition
+
+Add a `.forgot-password-row` class:
+- Flexbox row with `justify-content: flex-end`
+- Positions the "Forgot password?" link right-aligned above the password input
+- Reuses existing `.link-button` styling (already defined in login.css)
+
+### 3. Modify `SettingsPage.jsx` — Handle recovery landing
+
+- Read `recovery` query param via `useSearchParams()` or `URLSearchParams(window.location.search)`
+- When `recovery=true`:
+  - Hide the "Current Password" field
+  - Change button text to "Set New Password"
+  - On submit: call `supabase.auth.updateUser({ password: newPassword })` directly (skip `signInWithPassword` verification)
+  - On success: clear the `?recovery=true` param from URL
+
+---
+
+## Verification
+1. Go to `/login` — "Forgot password?" link visible below password label
+2. Click it — form toggles to email-only reset view
+3. Enter email, submit — success message "Check your email..."
+4. Click "Back to login" — returns to normal login form
+5. After clicking email link — user lands on `/home/settings?recovery=true` with a simplified password form (no "current password" field)
+6. Enter new password + confirm — password updated, `?recovery=true` cleared from URL

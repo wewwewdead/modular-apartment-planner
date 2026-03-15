@@ -1,0 +1,61 @@
+# Sheet Viewport Mouse Rotation Handle
+
+## Context
+Sheet viewports have a `rotation` property, but it can only be set by typing a number in the Properties Panel. The user wants to rotate viewports interactively with the mouse — a standard drag-to-rotate handle like in Figma/PowerPoint.
+
+## Approach
+Add a circular rotation handle above the top-center of a selected sheet viewport, connected by a thin stem line. Dragging it rotates the viewport around its center. Shift-drag snaps to 15° increments.
+
+## Files to Modify (3 files)
+
+### 1. `src/sheets/hitTest.js` — rotation handle geometry + hit test
+- Add `getViewportRotationHandle(viewport, handleSize)` → returns `{ cx, cy, radius, stemX, stemY1, stemY2 }`
+  - Position: centered above top edge, stem length = `handleSize * 2.5`, radius = `handleSize / 2`
+- Add `hitTestViewportRotationHandle(point, viewport, handleSize)` → boolean distance check against circle
+
+### 2. `src/renderers/SheetRenderer.jsx` — render the handle
+- Import `getViewportRotationHandle`
+- Inside the `isSelected` block (after resize handles, line ~145), render:
+  - `<line>` stem from viewport top-center to circle bottom
+  - `<circle>` with `fill="#fff" stroke="#0f8f74"` and `cursor: 'grab'`
+- Already inside the rotated `<g>`, so handle visually follows the viewport rotation
+
+### 3. `src/renderers/SheetCanvas.jsx` — mouse interaction
+- Import `hitTestViewportRotationHandle`
+- **`handleMouseDown`**: Before resize hit test (line ~59), check rotation handle hit on selected viewport. If hit, set:
+  ```js
+  dragState.current = {
+    mode: 'rotate',
+    viewportId: selectedId,
+    center: { x: cx, y: cy },
+    initialRotation: vp.rotation || 0,
+    startAngle: Math.atan2(point.y - cy, point.x - cx) * (180 / Math.PI),
+  }
+  ```
+- **`handleMouseMove`**: Add `mode === 'rotate'` branch before move/resize logic:
+  - Compute current angle from center to mouse via `Math.atan2`
+  - `newRotation = initialRotation + (currentAngle - startAngle)`
+  - If `event.shiftKey`: snap to nearest 15°
+  - Normalize to 0–360, call `updateViewport(viewportId, { rotation: newRotation })`
+- **`handleMouseUp`**: No changes needed — existing `dragState.current = null` handles it
+
+## No Changes Needed
+- `sheetModels.js` — `rotation` property already exists
+- `ProjectProvider.jsx` — `SHEET_VIEWPORT_UPDATE` already merges any viewport prop
+- `PropertiesPanel.jsx` — rotation input already reads/writes the same property (stays in sync)
+- `layout.js` — `fitViewportToSheet` passes rotation through unchanged
+
+## Notes
+- Hit testing is in unrotated sheet space (consistent with existing resize handles)
+- Export SVG renders with `selectedId={null}`, so rotation handle won't appear in exports
+- Undo/redo works automatically via existing history in `SHEET_VIEWPORT_UPDATE`
+
+## Verification
+1. Run the app with `npm run dev`
+2. Switch to sheet workspace, select a viewport
+3. Verify rotation handle (circle + stem) appears above the selected viewport
+4. Drag the handle — viewport should rotate smoothly following the mouse
+5. Hold Shift while dragging — should snap to 15° increments
+6. Confirm the Properties Panel rotation number updates in sync
+7. Confirm move/resize still work correctly on a rotated viewport
+8. Confirm undo (Ctrl+Z) reverts rotation

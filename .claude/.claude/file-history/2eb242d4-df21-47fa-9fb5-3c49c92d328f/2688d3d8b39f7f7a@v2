@@ -1,0 +1,215 @@
+import React, {useState} from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {Avatar} from './Avatar';
+import {XIcon} from './icons';
+import {PrimaryButton} from './PrimaryButton';
+import {useAuth} from '../features/auth/AuthProvider';
+import {useTheme} from '../theme/ThemeProvider';
+import {socialApi} from '../lib/api/socialApi';
+import {queryClient} from '../lib/queryClient';
+import {fonts, typeScale} from '../theme/typography';
+import {spacing, radii} from '../theme/spacing';
+
+const CAPTION_MAX = 280;
+
+type RepostModalProps = {
+  visible: boolean;
+  sourceJournalId: string;
+  title?: string;
+  authorName?: string;
+  authorAvatar?: string;
+  onClose: () => void;
+};
+
+export function RepostModal({
+  visible,
+  sourceJournalId,
+  title,
+  authorName,
+  authorAvatar,
+  onClose,
+}: RepostModalProps) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const [caption, setCaption] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleRepost = async () => {
+    if (!token) {
+      Alert.alert('Error', 'Please log in to repost.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await socialApi.createRepost(token, {
+        sourceJournalId,
+        caption: caption.trim() || undefined,
+      });
+      queryClient.invalidateQueries({queryKey: ['feed']});
+      queryClient.invalidateQueries({queryKey: ['profileWritings']});
+      setCaption('');
+      onClose();
+      Alert.alert('Reposted', 'Post was reposted to your feed.');
+    } catch (e) {
+      Alert.alert('Repost failed', e instanceof Error ? e.message : 'Could not repost. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const displayTitle = title
+    ? title.length > 80 ? title.slice(0, 80) + '...' : title
+    : 'Untitled Post';
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}>
+      <SafeAreaView style={[styles.container, {backgroundColor: colors.bgPrimary}]}>
+        {/* Header */}
+        <View style={[styles.header, {borderBottomColor: colors.borderCard}]}>
+          <Text style={[styles.headerTitle, {color: colors.textHeading}]}>
+            Repost
+          </Text>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <XIcon size={22} color={colors.textMuted} />
+          </Pressable>
+        </View>
+
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.body}>
+            {/* Original post preview */}
+            <View style={[styles.preview, {backgroundColor: colors.bgSecondary, borderColor: colors.borderCard}]}>
+              <View style={styles.previewRow}>
+                <Avatar uri={authorAvatar} name={authorName} size={28} />
+                <Text style={[styles.previewAuthor, {color: colors.textPrimary}]} numberOfLines={1}>
+                  {authorName || 'Unknown author'}
+                </Text>
+              </View>
+              <Text style={[styles.previewTitle, {color: colors.textSecondary}]} numberOfLines={2}>
+                {displayTitle}
+              </Text>
+            </View>
+
+            {/* Caption input */}
+            <Text style={[styles.label, {color: colors.textMuted}]}>
+              Add your thoughts (optional)
+            </Text>
+            <TextInput
+              value={caption}
+              onChangeText={text => text.length <= CAPTION_MAX && setCaption(text)}
+              placeholder="Write a caption..."
+              placeholderTextColor={colors.textFaint}
+              style={[
+                styles.captionInput,
+                {
+                  backgroundColor: colors.bgSecondary,
+                  borderColor: colors.borderCard,
+                  color: colors.textPrimary,
+                },
+              ]}
+              maxLength={CAPTION_MAX}
+              multiline
+            />
+            <Text
+              style={[
+                styles.charCount,
+                {color: caption.length >= CAPTION_MAX ? colors.danger : colors.textFaint},
+              ]}>
+              {caption.length}/{CAPTION_MAX}
+            </Text>
+
+            {/* Repost button */}
+            <PrimaryButton
+              label={submitting ? 'Reposting...' : 'Repost to feed'}
+              onPress={handleRepost}
+              disabled={submitting}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerTitle: {
+    ...typeScale.h3,
+  },
+  body: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    gap: spacing.md,
+  },
+  preview: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  previewAuthor: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 14,
+    flex: 1,
+  },
+  previewTitle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  label: {
+    fontFamily: fonts.ui.medium,
+    fontSize: 13,
+    marginTop: spacing.sm,
+  },
+  captionInput: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    textAlignVertical: 'top',
+    minHeight: 80,
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  charCount: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+});

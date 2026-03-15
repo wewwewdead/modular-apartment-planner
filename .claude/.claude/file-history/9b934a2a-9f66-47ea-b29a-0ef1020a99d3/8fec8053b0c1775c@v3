@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: iskrib-v3-client-side
+    runtime: static
+    rootDir: .
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    pullRequestPreviewsEnabled: true
+    routes:
+      - type: redirect
+        source: /api/sitemap-index.xml
+        destination: https://iskrib-v3-server-production.up.railway.app/api/sitemap-index.xml
+      - type: redirect
+        source: /api/sitemap-posts.xml
+        destination: https://iskrib-v3-server-production.up.railway.app/api/sitemap-posts.xml
+      - type: redirect
+        source: /api/sitemap-profiles.xml
+        destination: https://iskrib-v3-server-production.up.railway.app/api/sitemap-profiles.xml
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: geolocation=(), camera=(), microphone=()
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: VITE_BACKEND_URL
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_API_KEY
+        sync: false
+      - key: VITE_SITE_KEY
+        sync: false
+      - key: VITE_FB_APP_ID
+        sync: false

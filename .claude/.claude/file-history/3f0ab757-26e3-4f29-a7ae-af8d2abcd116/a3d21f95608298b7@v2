@@ -1,0 +1,27 @@
+import { useEffect } from 'react';
+import {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+} from 'react-native-reanimated';
+
+import { motion } from '../theme/motion';
+
+export function useAnimatedEntrance(index: number, delayMs = 60) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(12);
+
+  useEffect(() => {
+    const delay = index * delayMs;
+    opacity.value = withDelay(delay, withSpring(1, motion.gentle));
+    translateY.value = withDelay(delay, withSpring(0, motion.gentle));
+  }, [index, delayMs, opacity, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return animatedStyle;
+}

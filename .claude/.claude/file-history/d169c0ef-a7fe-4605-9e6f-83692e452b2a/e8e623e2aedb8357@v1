@@ -1,0 +1,32 @@
+# Fix Badge Not Showing — Wrong API Field Name
+
+## Context
+
+The previous fix used `badge_type` as the field name, but the API actually returns `badge` on the user object (i.e. `users.badge`, not `users.badge_type`). This means `undefined` is being passed as the badge value everywhere, so badge rings never render.
+
+Additionally, PostDetailScreen's author Avatar still doesn't pass a `badge` prop at all.
+
+---
+
+## Changes
+
+### 1. Rename field in `UserPreview` type: `badge_type` → `badge`
+**File:** `apps/mobile/src/lib/api/mobileApi.ts` (line 8)
+- Change `badge_type?: string | null;` → `badge?: string | null;`
+
+### 2. Fix HomeFeedScreen to use `badge` instead of `badge_type`
+**File:** `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` (line 252)
+- Change `authorBadge={item.users?.badge_type as 'legend' | 'og' | undefined}`
+- To: `authorBadge={item.users?.badge as 'legend' | 'og' | undefined}`
+
+### 3. Add badge prop to PostDetailScreen author Avatar
+**File:** `apps/mobile/src/screens/Home/PostDetailScreen.tsx` (line 221-225)
+- Add `badge={journal?.users?.badge as 'legend' | 'og' | undefined}` to the `<Avatar>` component
+
+---
+
+## Verification
+
+- Run the app and check Home feed — badge rings (gold for legend, purple for OG) should appear on avatars of badged users
+- Check PostDetail screen — author avatar should also show badge ring
+- Confirm avatar images still render correctly (no regression from previous fix)

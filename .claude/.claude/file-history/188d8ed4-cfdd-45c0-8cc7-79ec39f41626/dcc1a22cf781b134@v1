@@ -1,0 +1,50 @@
+# Show WhatsApp "typing..." indicator while Ollama processes
+
+## Context
+After sending "hello" (instant rule-based reply), any follow-up that doesn't match a rule pattern goes to Ollama which takes 60-110 seconds (qwen3-vl:8b reasoning model). The user sees no activity and thinks the bot is dead. Showing a "typing..." indicator in WhatsApp while the bot waits for Ollama tells the user the bot is working.
+
+## Changes
+
+### File: `C:\Users\johnm\teacher-gradebot\src\whatsapp\handler.js`
+
+**In `handleIncomingMessage()`**, wrap the agent call + reply send with a composing presence indicator. Because WhatsApp auto-clears the typing indicator after ~15-25 seconds, use a repeating interval to keep it alive during long Ollama calls.
+
+Before the `withTimeout(this.agent.handleIncoming(...))` call (around line 553), start the typing indicator. Clear it in a `finally` block after the reply is sent or on error.
+
+```js
+// --- inside handleIncomingMessage, after extractAttachments ---
+
+// Show "typing..." while processing
+const typingJid = chatJid;
+let typingInterval = null;
+const startTyping = () => {
+  this.socket.sendPresenceUpdate("composing", typingJid).catch(() => {});
+  typingInterval = setInterval(() => {
+    this.socket.sendPresenceUpdate("composing", typingJid).catch(() => {});
+  }, 10_000);
+};
+const stopTyping = () => {
+  if (typingInterval) clearInterval(typingInterval);
+  typingInterval = null;
+  this.socket.sendPresenceUpdate("paused", typingJid).catch(() => {});
+};
+
+try {
+  startTyping();
+  // ... existing agent handling + reply sending ...
+} finally {
+  stopTyping();
+}
+```
+
+The existing try/catch in `handleIncomingMessage` already handles errors, so the typing indicator fits cleanly around it. Key points:
+- `startTyping()` fires immediately + every 10s to keep the indicator alive
+- `stopTyping()` in `finally` ensures cleanup even on errors
+- `.catch(() => {})` silences presence errors (non-critical)
+- Uses the incoming `chatJid` (the LID JID the user sees)
+
+## Verification
+1. Start bot, send "hello" → instant reply, brief typing flash
+2. Send a non-rule message (e.g. "can i ask a question?") → WhatsApp shows "typing..." for the entire Ollama processing duration
+3. Reply eventually arrives, typing indicator stops
+4. Send another message → typing indicator shows again

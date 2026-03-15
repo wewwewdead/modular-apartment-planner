@@ -1,0 +1,55 @@
+import { useMemo } from 'react';
+import FloorplanWorkspace from '@floorplan';
+import { createWall, createDoor, createWindow, createFloor } from '@/domain/models';
+import { generateId } from '@/domain/ids';
+import { CURRENT_PROJECT_VERSION } from '@/domain/projectVersion';
+
+function buildDemoProject() {
+  const projectId = generateId('proj');
+  const floorId = generateId('floor');
+
+  // Create 4 walls forming a 6000x4000mm rectangle
+  const wall1 = createWall({ x: 0, y: 0 }, { x: 6000, y: 0 });       // top
+  const wall2 = createWall({ x: 6000, y: 0 }, { x: 6000, y: 4000 }); // right
+  const wall3 = createWall({ x: 6000, y: 4000 }, { x: 0, y: 4000 }); // bottom
+  const wall4 = createWall({ x: 0, y: 4000 }, { x: 0, y: 0 });       // left
+
+  // Place a door on wall 3 (bottom) at offset ~2000
+  const door = createDoor(wall3.id, 2000);
+
+  // Place a window on wall 2 (right) at offset ~1500
+  const win = createWindow(wall2.id, 1500);
+
+  // Build a floor manually based on the createFloor structure
+  const floor = createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: 3000 });
+  floor.id = floorId;
+  floor.walls = [wall1, wall2, wall3, wall4];
+  floor.doors = [door];
+  floor.windows = [win];
+
+  return {
+    id: projectId,
+    name: 'Playground Demo',
+    address: '',
+    documentDefaults: {
+      drawnBy: '',
+      checkedBy: '',
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    floors: [floor],
+    roofSystem: null,
+    trussSystems: [],
+    sheets: [],
+    phases: [],
+    version: CURRENT_PROJECT_VERSION,
+  };
+}
+
+export default function PlaygroundPage() {
+  const demoProject = useMemo(() => buildDemoProject(), []);
+
+  return (
+    <FloorplanWorkspace initialProject={demoProject} isPlayground={true} />
+  );
+}

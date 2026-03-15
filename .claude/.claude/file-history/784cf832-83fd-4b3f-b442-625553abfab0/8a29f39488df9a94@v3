@@ -1,0 +1,87 @@
+import 'prismjs';
+import { HeadingNode, QuoteNode } from '@lexical/rich-text';
+import { ListNode, ListItemNode } from '@lexical/list';
+import { LinkNode, AutoLinkNode } from '@lexical/link';
+import { CodeNode, CodeHighlightNode } from '@lexical/code';
+import { HorizontalRuleNode } from '@lexical/react/LexicalHorizontalRuleNode';
+import ImageNode from './nodes/ImageNode';
+import MentionNode from './nodes/MentionNode';
+
+export const EDITOR_THEME = {
+    paragraph: 'editor-paragraph',
+    heading: {
+        h1: 'editor-heading-h1',
+        h2: 'editor-heading-h2',
+        h3: 'editor-heading-h3',
+    },
+    quote: 'editor-quote',
+    text: {
+        bold: 'editor-text-bold',
+        italic: 'editor-text-italic',
+        underline: 'editor-text-underline',
+        strikethrough: 'editor-text-strikethrough',
+        code: 'editor-text-code',
+    },
+    list: {
+        ul: 'editor-list-ul',
+        ol: 'editor-list-ol',
+        listitem: 'editor-listitem',
+        listitemChecked: 'editor-listitem-checked',
+        listitemUnchecked: 'editor-listitem-unchecked',
+        nested: {
+            listitem: 'editor-nested-listitem',
+        },
+    },
+    link: 'editor-link',
+    code: 'editor-code',
+    codeHighlight: {
+        atrule: 'editor-tokenize-atrule',
+        attr: 'editor-tokenize-attr',
+        boolean: 'editor-tokenize-boolean',
+        builtin: 'editor-tokenize-builtin',
+        cdata: 'editor-tokenize-cdata',
+        char: 'editor-tokenize-char',
+        class: 'editor-tokenize-class',
+        'class-name': 'editor-tokenize-class-name',
+        comment: 'editor-tokenize-comment',
+        constant: 'editor-tokenize-constant',
+        deleted: 'editor-tokenize-deleted',
+        doctype: 'editor-tokenize-doctype',
+        entity: 'editor-tokenize-entity',
+        function: 'editor-tokenize-function',
+        important: 'editor-tokenize-important',
+        inserted: 'editor-tokenize-inserted',
+        keyword: 'editor-tokenize-keyword',
+        namespace: 'editor-tokenize-namespace',
+        number: 'editor-tokenize-number',
+        operator: 'editor-tokenize-operator',
+        prolog: 'editor-tokenize-prolog',
+        property: 'editor-tokenize-property',
+        punctuation: 'editor-tokenize-punctuation',
+        regex: 'editor-tokenize-regex',
+        selector: 'editor-tokenize-selector',
+        string: 'editor-tokenize-string',
+        symbol: 'editor-tokenize-symbol',
+        tag: 'editor-tokenize-tag',
+        url: 'editor-tokenize-url',
+        variable: 'editor-tokenize-variable',
+    },
+    horizontalRule: 'editor-hr',
+};
+
+export const EDITOR_NODES = [
+    ImageNode,
+    MentionNode,
+    HeadingNode,
+    QuoteNode,
+    ListNode,
+    ListItemNode,
+    LinkNode,
+    AutoLinkNode,
+    HorizontalRuleNode,
+    CodeNode,
+    CodeHighlightNode,
+];
+
+// Read-only composers need the same nodes to deserialize content
+export const VIEWER_NODES = EDITOR_NODES;

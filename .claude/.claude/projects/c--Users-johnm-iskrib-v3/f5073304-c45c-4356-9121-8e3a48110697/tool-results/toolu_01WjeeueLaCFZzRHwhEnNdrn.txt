@@ -1,0 +1,610 @@
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-1-import { useEffect, useState } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-2-import { getBookmarks } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-3-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-4-import './bookmarks.css';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:5:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-6-import CalculateText from '../HomePage/postCards/calculateReadingTime';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-7-import { MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-8-import { motion, AnimatePresence } from 'framer-motion';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-9-import { handleCLickContent, handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-10-import { useNavigate } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-11-import { useInView } from 'react-intersection-observer';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-12-import { useRef } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-13-import VerifiedBadge from '../Badge/VerifiedBadge';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-39-    const handleBackLocation = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-40-        e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-41-        window.history.back();
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-42-    }
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-43-
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-44-    const handleClick = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-45-
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-46-    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:47:    const {data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-48-        queryKey: ['getBookmarks', userId],
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-49-        queryFn: ({queryKey, pageParam = null}) => getBookmarks(pageParam, 5, queryKey[1], session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-50-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-51-            if(lastPage?.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-52-                const lastBookmark = lastPage.bookmarks[lastPage?.bookmarks?.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-53-                return new Date(lastBookmark.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-54-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-55-                return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-1-import { useEffect, useRef, useState } from "react"
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-2-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-3-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-4-import { addReply, getPostReplies } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:5:import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-6-import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-7-import { useNavigate } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-8-import { motion, AnimatePresence } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-9-import VerifiedBadge from "../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-10-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-11-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-12-const incrementReplyCount = (old, parentId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-13-    if (!old || !Array.isArray(old.pages)) return old;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-41-    const [reply, setReply] = useState('')
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-42-    const [replyLoaderId, setReplyLoaderId] = useState('');
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-43-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-44-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-45-    const replyInputRef = useRef(null);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-46-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-47-    const clickProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-48-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:49:    const {data, isLoading, fetchNextPage, hasNextPage, isFetchinNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-50-        queryKey: ['getPostReplies', comments.id],
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-51-        queryFn: ({pageParam = null, queryKey}) => getPostReplies(queryKey[1], 5, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-52-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-53-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-54-                const lastReply = lastPage?.data[lastPage?.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-55-                return lastReply.id;
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-56-            } else{
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-57-                return undefined
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-1-import { useEffect, useRef, useState } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-2-import './comments.css'
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-3-import { motion } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-4-import { addComment } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-5-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-6-import { getComments } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:7:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-8-import { BarLoader, MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-9-import CommentsCards from './commentsCards';
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-10-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-11-const incrementJournalCommentCount = (old, postId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-12-    if (!old || !Array.isArray(old.pages)) return old;
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-13-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-14-    return {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-15-        ...old,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-35-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-36-    const {session, user} = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-37-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-38-    const textAreaFocusRef = useRef();
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-39-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-40-    const [comments, setComments] = useState('');
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-41-    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-42-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:43:    const {data, fetchNextPage, hasNextPage, isLoading, isFetchingNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-44-        queryKey: ['postComments', postId],
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-45-        queryFn: ({queryKey, pageParam = null}) => getComments(pageParam, 10, queryKey[1]),
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-46-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-47-            if(lastPage?.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-48-                const lastComment = lastPage.comments[lastPage?.comments?.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-49-                return new Date(lastComment.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-50-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-51-                return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-1-import { motion, AnimatePresence } from 'framer-motion';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-2-import { useNavigate } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:3:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-4-import { getPromptResponses } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-5-import { MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-6-import VerifiedBadge from '../Badge/VerifiedBadge';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-7-
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-8-function timeAgo(dateStr) {
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-9-    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-10-    if (seconds < 60) return 'just now';
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-11-    const minutes = Math.floor(seconds / 60);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-20-const PromptResponsesModal = ({ promptId, count, promptText, onClose }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-21-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-22-
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-23-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-24-        data,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-25-        hasNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-26-        fetchNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-27-        isFetchingNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:28:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-29-        queryKey: ['promptResponsesModal', promptId],
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-30-        queryFn: ({ pageParam = null }) => getPromptResponses(promptId, pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-31-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-32-            if (lastPage?.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-33-                const last = lastPage.responses[lastPage.responses.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-34-                return new Date(last.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-35-            }
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-36-            return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-2-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-3-import { getUnreadNotification } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-4-import { useEffect, useRef, useState } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-5-import FormatNotificationType from "../../../helpers/formatNoficationType";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-6-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-7-import { useReadNotificationMutation, useUserDeleteNotificationMutation } from "../../utils/useMutation";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-8-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-9-import { handleCLickContent, handleClickOpinion } from "../../../helpers/handleClicks";
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-99-            type: 'mention',
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-100-            icon:
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-101-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="30px" height="30px" fill="var(--accent-purple)">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-102-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57V12c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57V12c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"/>
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-103-                </svg>,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-104-        }
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-105-    ]
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-106-
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:107:    const {data, isLoading, isFetchinNextPage, hasNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-108-        queryKey: ['unreadNotification', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-109-        queryFn: ({pageParam = null}) => getUnreadNotification(session?.access_token, pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-110-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-111-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-112-                const lastJournal = lastPage?.data[lastPage?.data?.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-113-                return new Date(lastJournal.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-114-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-115-                return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:1:import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-2-import '../ProfilePage/myprofile.css';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-3-import './visitProfile.css';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-4-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-5-import { getFollowsData, getUserData, getUserJournals, getUserByUsername } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-6-import { Fragment, useEffect, useRef } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-7-import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-8-import Sidebar from '../SideBar/Sidebar';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-9-import { MoonLoader } from 'react-spinners';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-2-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-3-import { useInView } from "react-intersection-observer";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-4-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-5-import { getNotifications } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-6-import { useEffect, useRef, useState } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-7-import FormatNotificationType from "../../../helpers/formatNoficationType";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-8-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-9-import { handleCLickContent, handleClickOpinion } from "../../../helpers/handleClicks";
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-140-                notification?.hasBookMarked,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-141-                0,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-142-                0,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-143-                notification?.journals?.users?.badge,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-144-            )
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-145-        }
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-146-    }
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-147-
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:148:    const {data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-149-        queryKey: ['getNotifications', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-150-        queryFn: ({pageParam = null}) => getNotifications(session?.access_token, pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-151-        getNextPageParam: (lastpage) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-152-            if(lastpage?.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-153-                const lastNotification = lastpage?.data[lastpage?.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-154-                return new Date(lastNotification.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-155-
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-156-            }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-1-import React, { useEffect, useState, useRef } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-2-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-3-import { motion, AnimatePresence,} from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:4:import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-5-import './postcards.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-6-import '../explore/userSearch.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-7-import { getJournals, getFollowingFeed, getForYouFeed, searchJournals, searchUsers } from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-8-import { useInView } from 'react-intersection-observer';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-9-import CalculateText from "./calculateReadingTime";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-10-import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-11-import VerifiedBadge from "../../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-12-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-165-    }, [searchInput]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-166-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-167-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-168-        data,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-169-        fetchNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-170-        hasNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-171-        isFetchingNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-172-        isLoading: isFeedLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:173:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-174-        queryKey: ['journals', userId],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-175-        queryFn: ({pageParam = null}) => getJournals(pageParam, 5, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-176-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-177-            if(lastPage?.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-178-                const lastJournal = lastPage?.data[lastPage?.data?.length - 1]; //get the last array of object using index
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-179-                return new Date(lastJournal.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-180-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-181-            return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-185-    })
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-186-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-187-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-188-        data: followingData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-189-        fetchNextPage: fetchNextFollowingPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-190-        hasNextPage: hasNextFollowingPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-191-        isFetchingNextPage: isFetchingNextFollowingPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-192-        isLoading: isFollowingLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:193:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-194-        queryKey: ['journals-following', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-195-        queryFn: ({ pageParam = null }) => getFollowingFeed(session?.access_token, pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-196-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-197-            if (lastPage?.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-198-                const lastJournal = lastPage?.data[lastPage?.data?.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-199-                return new Date(lastJournal.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-200-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-201-            return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-206-    })
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-207-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-208-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-209-        data: forYouData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-210-        fetchNextPage: fetchNextForYouPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-211-        hasNextPage: hasNextForYouPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-212-        isFetchingNextPage: isFetchingNextForYouPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-213-        isLoading: isForYouLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:214:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-215-        queryKey: ['journals-for-you', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-216-        queryFn: ({ pageParam = 0 }) => getForYouFeed(session?.access_token, pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-217-        getNextPageParam: (lastPage, allPages) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-218-            if (lastPage?.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-219-                const totalLoaded = allPages.reduce((sum, page) => sum + (page?.data?.length || 0), 0);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-220-                return totalLoaded;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-221-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-222-            return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx:1:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-2-import './notification.css';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-3-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-4-import { MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-5-import { useEffect, useRef, useState } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-6-import NotificationCards from './notificationsCards';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-7-import { AnimatePresence, motion } from 'framer-motion';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-8-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx-9-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:1:import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-2-import { getMyStories, getMyLibrary, getStoryById, getChapter, getChapterComments, getChapterCommentCounts, getUserStories } from '../../../../API/StoryApi';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-3-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-4-export const useMyStories = (token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:5:    return useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-6-        queryKey: ['myStories'],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-7-        queryFn: ({ pageParam }) => getMyStories(token, 5, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-8-        initialPageParam: undefined,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-9-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-10-            if (lastPage.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-11-                const lastStory = lastPage.data[lastPage.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-12-                return new Date(lastStory.updated_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-13-            }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-15-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-16-        enabled: !!token,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-17-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-18-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-19-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-20-};
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-21-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-22-export const useMyLibrary = (token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:23:    return useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-24-        queryKey: ['myLibrary'],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-25-        queryFn: ({ pageParam }) => getMyLibrary(token, 5, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-26-        initialPageParam: undefined,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-27-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-28-            if (lastPage.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-29-                const lastStory = lastPage.data[lastPage.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-30-                return new Date(lastStory.added_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-31-            }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-63-        queryFn: () => getChapterCommentCounts(chapterId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-64-        enabled: !!chapterId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-65-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-66-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-67-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-68-};
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-69-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-70-export const useUserStories = (userId, token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:71:    return useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-72-        queryKey: ['userStories', userId],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-73-        queryFn: ({ pageParam }) => getUserStories(userId, token, 5, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-74-        initialPageParam: undefined,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-75-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-76-            if (lastPage.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-77-                const lastStory = lastPage.data[lastPage.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-78-                return new Date(lastStory.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-79-            }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-1-import './profilepostcards.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-2-import '../../../RepostModal/repostmodal.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-3-import { createPortal } from 'react-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-4-import { useAuth } from '../../../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:5:import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-6-import { deleteJournal, deleteJournalImage, getJournalContent, getUserJournals, updateRepostCaption } from '../../../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-7-import { useEffect, useCallback } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-8-import { FadeLoader, MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-9-import { useInView } from 'react-intersection-observer';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-10-import { useState } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-11-import { AnimatePresence, motion } from 'framer-motion';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-12-import { handleCLickContent } from '../../../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-13-import { useNavigate } from 'react-router-dom';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-85-    const [isSavingCaption, setIsSavingCaption] = useState(false);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-86-    
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-87-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-88-        data,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-89-        fetchNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-90-        hasNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-91-        isFetchingNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-92-        isLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:93:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-94-        queryKey: ['userJournals', user?.userData?.[0].id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-95-        queryFn: ({queryKey, pageParam}) => getUserJournals(pageParam, 5, queryKey[1], session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-96-        getNextPageParam: (lastPage) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-97-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-98-                const lastJournal = lastPage?.data[lastPage?.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-99-                return new Date(lastJournal.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-100-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-101-                return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-1-import {useLocation, useNavigate } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-2-import './profilepostcards.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:3:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-4-import { useEffect, useState, useCallback } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-5-import { MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-6-import { motion } from 'framer-motion';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-7-import { useInView } from 'react-intersection-observer';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-8-import { handleCLickContent } from '../../../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-9-import { useAuth } from '../../../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-10-import { getVisitedUserJournals } from '../../../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-11-import { useAddViewsMutation } from '../../../../utils/useMutation';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-18-    const {user, session} = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-19-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-20-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-21-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-22-    const {ref, inView} = useInView({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-23-        threshold: 0.2
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-24-    })
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-25-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:26:    const {data: journalData, isLoading: isLoadingJournals, isFetchingNextPage, fetchNextPage, hasNextPage,} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-27-        queryKey: ['visitedProfileJournals', userId, user?.userData?.[0]?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-28-        queryFn: ({pageParam = null, queryKey}) => getVisitedUserJournals(pageParam, 5, queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-29-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-30-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-31-                const lastJournal = lastPage?.data[lastPage?.data.length - 1]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-32-                return new Date(lastJournal.created_at).toISOString();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-33-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-34-                return undefined
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-1-import React, { useEffect, useState } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-2-import { createPortal } from "react-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:3:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-4-import { useInView } from "react-intersection-observer";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-5-import { useLocation } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-6-import { useAuth } from "../../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-7-import { getVisitedProfileMedia } from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-8-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-9-const PROFILE_MEDIA_PAGE_SIZE = 5;
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-10-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-11-const VisitedProfileMediaSection = () => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-13-    const stateData = location.state;
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-14-    const queryUserId = new URLSearchParams(location.search).get("userId");
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-15-    const visitedUserId = stateData?.userId || queryUserId;
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-16-    const { session } = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-17-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-18-    const [selectedMedia, setSelectedMedia] = useState(null);
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-19-    const { ref: inViewRef, inView } = useInView({ threshold: 0.1 });
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-20-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:21:    const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-22-        queryKey: ["visitedProfileMedia", visitedUserId],
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-23-        queryFn: ({ pageParam }) =>
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-24-            getVisitedProfileMedia(session?.access_token, visitedUserId, pageParam, PROFILE_MEDIA_PAGE_SIZE),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-25-        initialPageParam: null,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-26-        getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextCursor : undefined),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-27-        enabled: Boolean(visitedUserId && session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-28-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-29-        staleTime: 1000 * 60 * 10,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-2-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-3-import { getMyOpinions } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-4-import { useEffect } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-5-import { useNavigate } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-6-import { AnimatePresence, motion } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-7-import { useInView } from "react-intersection-observer";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-8-import VerifiedBadge from "../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-9-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-10-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-11-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-12-const MyOpinions = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-13-    const {session, user, openAuthModal} = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-14-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-15-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-16-    const {ref, inView} = useInView({threshold: 0, rootMargin: '200px'})
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-17-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:18:    const {data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-19-        queryKey: ['getMyOpinions', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-20-        queryFn: ({pageParam = null}) => getMyOpinions(pageParam, 5, session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-21-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-22-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-23-                const lastOpinion = lastPage?.data[lastPage.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-24-                return lastOpinion.id
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-25-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-26-                return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:1:import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-2-import { addReplyOpinion, getOpinionReply } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-3-import { useState, useRef } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-4-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-5-import { motion, AnimatePresence } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-6-import formatPostDate from "../../../helpers/formatDateString";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-7-import VerifiedBadge from "../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-8-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-9-const MAX_VISUAL_DEPTH = 4;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-14-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-15-    const [showReply, setShowReply] = useState(false);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-16-    const [replyOpinion, setReplyOpinion] = useState('');
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-17-    const [isTypingId, setIsTypingId] = useState('');
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-18-    const [showReplyButtonId, setShowReplyButtonId] = useState('');
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-19-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-20-    const textAreaRef = useRef(null);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-21-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:22:    const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-23-        queryKey: ['getReplyOpinion', opinionId],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-24-        queryFn: ({ queryKey, pageParam = null }) => getOpinionReply(queryKey[1], 10, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-25-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-26-            if (lastPage?.hasMore) {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-27-                const lastReply = lastPage?.data[lastPage?.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-28-                return lastReply.id;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-29-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-30-            return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:1:import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-2-import { AnimatePresence, motion } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-3-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-4-import { useLocation, useNavigate } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-5-import { getOpinions } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-6-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-7-import { useInView } from "react-intersection-observer";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-8-import { useMediaQuery } from "react-responsive";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-9-import { handleClickProfile } from "../../../helpers/handleClicks";
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-20-    const isMobile = useMediaQuery({query: '(max-width: 480px'});
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-21-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-22-    const timeoutRef = useRef();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-23-    const {user, session, openAuthModal} = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-24-    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-25-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-26-    const [openOpinionEditor, setOpenOpinionEditor] = useState(false);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-27-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:28:    const {isLoading, data, fetchNextPage, isFetchingNextPage, hasNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-29-        queryKey: ['getOpinions'],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-30-        queryFn:({pageParam = null}) => getOpinions(pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-31-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-32-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-33-                const lastOpinion = lastPage?.data[lastPage?.data.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-34-                return lastOpinion.id;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-35-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-36-                return undefined;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-1-import React from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-2-import { useNavigate, useSearchParams } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-3-import { useAuth } from '../../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:4:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-5-import { getStories } from '../../../../API/StoryApi';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-6-import { motion } from 'framer-motion';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-7-import { BeatLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-8-import './StoryBrowser.css';
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-9-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-10-const STATUS_LABELS = { ongoing: 'Ongoing', completed: 'Completed', hiatus: 'Hiatus' };
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-11-const STATUS_FILTERS = [
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-12-    { value: null, label: 'All' },
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-72-    const statusFilter = searchParams.get('status') || null;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-73-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-74-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-75-        data,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-76-        isLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-77-        hasNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-78-        fetchNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-79-        isFetchingNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:80:    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-81-        queryKey: ['storiesBrowse', statusFilter],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-82-        queryFn: ({ pageParam = null }) => getStories(12, pageParam, statusFilter, null, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-83-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-84-            if (!lastPage?.hasMore || !lastPage.data?.length) return undefined;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-85-            return lastPage.data[lastPage.data.length - 1].created_at;
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-86-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-87-        initialPageParam: null,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-88-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:1:import { useInfiniteQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-2-import './sidebarOpinions.css'
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-3-import { getOpinions } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-4-import { useNavigate } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-5-import { handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-6-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-7-import { BarLoader, MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-8-import VerifiedBadge from '../Badge/VerifiedBadge';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-9-import { useEffect } from 'react';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-21-    const handleClickOpionionsProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-22-        if(!session){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-23-            e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-24-            return openAuthModal();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-25-        }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-26-        handleClickOpionionsProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-27-    };
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-28-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:29:    const {data, isLoading, fetchNextPage, isFetchingNextPage, hasNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-30-        queryKey: ['getOpinions'],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-31-        queryFn: ({pageParam = null}) => getOpinions(pageParam, 5),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-32-        getNextPageParam: (lastPage) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-33-            if(lastPage?.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-34-                const lastOpinion = lastPage?.data[lastPage?.data?.length - 1];
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-35-                return lastOpinion.id;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-36-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-37-                return undefined
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-1-import React, { useEffect, useState } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-2-import { createPortal } from "react-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:3:import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-4-import { useInView } from "react-intersection-observer";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-5-import { useAuth } from "../../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-6-import { deleteProfileMediaImage, getProfileMedia } from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-7-
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-8-const PROFILE_MEDIA_PAGE_SIZE = 5;
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-9-
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-10-const ProfileMediaSection = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-11-    const { user, session } = useAuth();
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-12-    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-13-    const userId = user?.userData?.[0]?.id;
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-14-    const [selectedMedia, setSelectedMedia] = useState(null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-15-    const [activeMenuId, setActiveMenuId] = useState(null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-16-    const [deleteCandidate, setDeleteCandidate] = useState(null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-17-    const { ref: inViewRef, inView } = useInView({ threshold: 0.1 });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-18-
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:19:    const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-20-        queryKey: ["profileMedia", userId],
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-21-        queryFn: ({ pageParam }) => getProfileMedia(session?.access_token, pageParam, PROFILE_MEDIA_PAGE_SIZE),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-22-        initialPageParam: null,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-23-        getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextCursor : undefined),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-24-        enabled: Boolean(userId && session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-25-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-26-        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-27-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:1:import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-2-import { useEffect } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-3-import { useLocation, useNavigate } from "react-router-dom";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-4-import { getUserOpinions } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-5-import { AnimatePresence, motion } from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-6-import { useInView } from "react-intersection-observer";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-7-import VerifiedBadge from "../Badge/VerifiedBadge";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-8-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-9-import { handleClickProfile } from "../../../helpers/handleClicks";
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-14-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-15-const VisitedProfileOpinions = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-16-    const {ref, inView} = useInView({threshold: 0, rootMargin: '200px'})
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-17-    const location = useLocation();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-18-    const navigate = useNavigate();
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-19-    const userId = location.state?.userId || new URLSearchParams(location.search).get('userId');
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-20-   const {openAuthModal, session, user} = useAuth();;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-21-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:22:    const {data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage} = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-23-        queryKey: ['getUserOpinions', userId],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-24-        queryFn: ({pageParam = null, queryKey}) => getUserOpinions(pageParam, 5, queryKey[1]),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-25-        getNextPageParam: (lastPage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-26-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-27-                const lastOpinion = lastPage?.data[lastPage?.data.length - 1]
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-28-                return lastOpinion.id;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-29-            } else {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-30-                return undefined

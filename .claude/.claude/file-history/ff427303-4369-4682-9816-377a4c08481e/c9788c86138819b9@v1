@@ -1,0 +1,52 @@
+# Add Embeddings to Stories
+
+## Context
+When users create/update a story, we want to generate a 384-dim vector embedding from the story's title + description, stored alongside the story row. This mirrors the existing journal embedding pattern in `uploadService.js` (lines 323-332) and will enable similarity-based story recommendations later.
+
+## Changes
+
+### 1. SQL Migration — `server/sql/stories_embeddings.sql` (new file)
+Run in Supabase SQL Editor:
+- Add `embedding vector(384)` column to `stories` table
+- Create IVFFlat index (cosine distance) filtered to `privacy='public' AND embedding IS NOT NULL`
+- Create `match_public_stories` RPC function (mirrors `match_public_journals` from `semantic_search.sql`) for future similarity search
+
+### 2. Service Changes — `server/services/storyService.js`
+
+**Import** `GenerateEmbeddings` from `../utils/GenerateEmbeddings.js`
+
+**`createStoryService` (line 26):**
+- After validation and before the insert (line 61), generate embedding:
+  ```js
+  const embedding = await GenerateEmbeddings(title.trim(), (description || '').trim());
+  if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+      throw { status: 400, error: 'failed to generate story embedding' };
+  }
+  ```
+- Add `embedding` to the insert payload (line 63-71)
+
+**`updateStoryService` (line 215):**
+- After building `updateData` and before the update query (line 270), if `title` or `description` changed, regenerate embedding:
+  - Fetch the full current story (title + description) to merge with partial updates
+  - Generate new embedding from the resolved title + description
+  - Add `embedding` to `updateData`
+- If neither title nor description changed, skip embedding regeneration
+
+### 3. Exclude Embedding from Responses
+Replace `.select('*')` with explicit column lists in read queries (`getStoriesService`, `getStoryByIdService`, `getMyStoriesService`, `getUserStoriesService`) to avoid sending the 384-float array to the client. Alternatively, strip `embedding` from responses in the service before returning.
+
+### 4. Backfill Script — `server/scripts/backfillStoryEmbeddings.js` (new file)
+One-time script to generate embeddings for existing stories that have `embedding IS NULL`. Follows the pattern of `server/scripts/backfillUsernames.js`.
+
+## Critical Files
+- `server/services/storyService.js` — main changes (import + create/update logic)
+- `server/utils/GenerateEmbeddings.js` — reuse as-is, no changes
+- `server/sql/stories.sql` — reference for existing schema
+- `server/services/uploadService.js:323-332` — reference pattern for embedding in insert
+
+## Verification
+1. Run the SQL migration in Supabase
+2. Create a new story via the UI → check DB row has a non-null `embedding` array of length 384
+3. Update a story's title or description → verify `embedding` is regenerated
+4. Update only status/privacy/tags → verify `embedding` is NOT regenerated
+5. Confirm story API responses do not include the `embedding` field

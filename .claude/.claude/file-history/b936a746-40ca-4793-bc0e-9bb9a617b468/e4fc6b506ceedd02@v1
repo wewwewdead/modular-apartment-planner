@@ -1,0 +1,72 @@
+:root {
+  /* Blueprint colors (canvas stays light) */
+  --color-background: #FAFAF8;
+  --color-wall-fill: #2D3748;
+  --color-wall-stroke: #1A202C;
+  --color-grid-minor: #E4E7EC;
+  --color-grid-major: #CDD5DF;
+  --color-selection: #10B981;
+  --color-selection-fill: rgba(16, 185, 129, 0.08);
+
+  /* UI colors — light chrome panels */
+  --color-text-primary: #1A1D23;
+  --color-text-secondary: #5F6470;
+  --color-text-tertiary: #9CA3AF;
+  --color-panel-bg: #F3F3F0;
+  --color-panel-bg-alt: #EAEAE7;
+  --color-surface-elevated: #FFFFFF;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-subtle: rgba(0, 0, 0, 0.05);
+  --color-accent: #0D7C66;
+  --color-accent-hover: #0A6B58;
+  --color-accent-subtle: rgba(13, 124, 102, 0.08);
+  --color-danger: #DC2626;
+  --color-danger-hover: #B91C1C;
+  --color-danger-subtle: rgba(220, 38, 38, 0.06);
+  --color-card-bg: #FFFFFF;
+  --color-card-bg-hover: #F7F7F5;
+  --color-segment-bg: rgba(0, 0, 0, 0.04);
+  --color-segment-active-bg: #FFFFFF;
+  --color-segment-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  --color-danger-ghost-border: rgba(220, 38, 38, 0.25);
+  --color-danger-ghost-bg-hover: rgba(220, 38, 38, 0.06);
+  --color-divider: rgba(0, 0, 0, 0.06);
+  --color-sticky-bg: rgba(243, 243, 240, 0.92);
+
+  /* Layout */
+  --toolbar-height: 56px;
+  --sidebar-width: 260px;
+  --properties-width: 280px;
+
+  /* Typography */
+  --font-ui: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-blueprint: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* Spacing */
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+
+  /* Borders */
+  --radius-xs: 4px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-overlay: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 0.1s;
+  --duration-normal: 0.2s;
+  --duration-smooth: 0.3s;
+}

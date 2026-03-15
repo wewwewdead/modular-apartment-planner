@@ -1,0 +1,103 @@
+import { useEffect, useMemo, useRef } from 'react';
+import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
+import { buildPreviewObjectRoot } from './buildPreviewObjects';
+import { createPreviewViewport } from './createPreviewViewport';
+import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
+import styles from './ThreePreviewPanel.module.css';
+
+export default function ThreePreviewPanel({ project, activeFloorId, isMaximized = false, onToggleMaximize, className = '' }) {
+  const viewportRef = useRef(null);
+  const containerRef = useRef(null);
+  const resizeObserverRef = useRef(null);
+  const sceneDescriptor = useMemo(() => buildPreviewScene(project, {
+    activeFloorId,
+  }), [project, activeFloorId]);
+
+  const activeFloor = (project?.floors || []).find((floor) => floor.id === activeFloorId) || null;
+  const visibleCount = sceneDescriptor.floors
+    .filter((floor) => floor.visible)
+    .reduce((count, floor) => count + floor.objects.length, 0);
+  const visibleFloorCount = sceneDescriptor.floors.filter((floor) => floor.visible).length;
+
+  useEffect(() => {
+    if (!containerRef.current) return undefined;
+
+    const viewport = createPreviewViewport(containerRef.current);
+    viewportRef.current = viewport;
+
+    if ('ResizeObserver' in window) {
+      const observer = new ResizeObserver(() => {
+        viewport.resize();
+      });
+      observer.observe(containerRef.current);
+      resizeObserverRef.current = observer;
+    }
+
+    viewport.resize();
+
+    return () => {
+      resizeObserverRef.current?.disconnect?.();
+      resizeObserverRef.current = null;
+      viewport.dispose();
+      viewportRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const root = buildPreviewObjectRoot(sceneDescriptor, viewport.materialPalette);
+    viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel);
+  }, [sceneDescriptor]);
+
+  return (
+    <section className={`${styles.panel} ${className}`}>
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <span className={styles.eyebrow}>3D Preview</span>
+          <span className={styles.title}>
+            {activeFloor ? `${activeFloor.name} selected · ${visibleFloorCount} floors · ${visibleCount} objects` : 'No active floor'}
+          </span>
+        </div>
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={() => viewportRef.current?.resetView()}
+          >
+            Reset View
+          </button>
+          {onToggleMaximize && (
+            <button
+              type="button"
+              className={styles.button}
+              onClick={onToggleMaximize}
+              title={isMaximized ? 'Restore split view' : 'Maximize preview'}
+              aria-label={isMaximized ? 'Restore split view' : 'Maximize preview'}
+            >
+              {isMaximized ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.viewportWrap}>
+        <div ref={containerRef} className={styles.viewport} />
+        {!sceneDescriptor.hasVisibleObjects && (
+          <div className={styles.emptyState}>
+            <span className={styles.emptyTitle}>Scene Empty</span>
+            <span className={styles.emptyBody}>
+              Add walls, slab, columns, beams, stairs, doors, or windows to populate the read-only preview.
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className={styles.footer}>
+        <span>Orbit: drag · Pan: right drag · Zoom: wheel</span>
+        <span>Perspective preview, future-ready for presets and floor visibility.</span>
+      </div>
+    </section>
+  );
+}

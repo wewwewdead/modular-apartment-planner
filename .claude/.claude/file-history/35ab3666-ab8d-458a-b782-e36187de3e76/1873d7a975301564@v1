@@ -1,0 +1,137 @@
+# Replace Fixture Boxes with Composed 3D Shapes
+
+## Context
+Fixtures currently render as plain colored boxes in the 3D preview (see screenshot). The goal is to replace each box with a recognizable multi-mesh composition — a sofa should look like a sofa, a table like a table, etc. We follow the exact same pattern used by `createWindowObject` and `createStairObject` which already compose THREE.Groups from multiple sub-meshes.
+
+---
+
+## Files to Modify (3 files)
+
+### 1. `src/three/scene/objectBuilders.js`
+**Two small changes** to the existing `buildFixtureObjects` function:
+
+- Change TV height: `FIXTURE_3D_HEIGHTS.tv` from `50` to `750` (total envelope height for panel + stand)
+- After calling `createBoxDescriptor`, set `descriptor.geometry = 'fixture'` and `descriptor.fixtureType = fixture.fixtureType` — same pattern used for windows at line ~280 where `desc.geometry = 'window'` is set post-creation
+
+### 2. `src/three/viewer/materials.js`
+**Add 5 accent materials** to `createMaterialPalette()` for fixture sub-parts:
+
+| Key | Color | Roughness | Metalness | Purpose |
+|-----|-------|-----------|-----------|---------|
+| `fixtureAccentMetal` | `0x888888` | 0.3 | 0.4 | Sink, burners, TV stand |
+| `fixtureAccentDark` | `0x2A2A2A` | 0.4 | 0.1 | Stovetop surface, TV bezel |
+| `fixtureAccentCeramic` | `0xE8EEF2` | 0.7 | 0.02 | Toilet bowl interior, lavatory basin |
+| `fixtureAccentFabric` | `0xB0A090` | 0.95 | 0.01 | Sofa seat cushions |
+| `fixtureAccentWood` | `0xA08060` | 0.85 | 0.02 | Table legs and apron |
+
+All `DoubleSide`. The 6 per-type base materials already exist from prior work.
+
+### 3. `src/three/viewer/buildPreviewObjects.js`
+**Main work** — add fixture geometry dispatcher and 6 per-type builder functions.
+
+#### Dispatcher
+Add in `createObjectForDescriptor` (before the `return createBoxObject` fallback):
+```js
+if (descriptor.geometry === 'fixture') {
+  return createFixtureObject(descriptor, materialPalette, isSelected);
+}
+```
+
+`createFixtureObject` dispatches by `descriptor.fixtureType` to per-type functions, falling back to `createBoxObject` for unknown types.
+
+#### Helpers (reduce boilerplate)
+```js
+function addBox(group, material, sx, sy, sz, px, py, pz, palette, selected) { ... }
+function addCylinder(group, material, rTop, rBot, h, segs, px, py, pz, palette, selected) { ... }
+```
+Each creates geometry, sets position, enables shadows, adds outline, adds to group.
+
+#### Coordinate System
+Group origin at fixture center at floor level. Children build upward: y=0 is ground, y=H is top. x spans -W/2 to W/2, z spans -D/2 to D/2. W = `descriptor.size.x`, H = `descriptor.size.y`, D = `descriptor.size.z`.
+
+Group positioning (same as stairs/windows):
+```js
+group.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation));
+group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+```
+
+---
+
+## Per-Type Composed Shapes
+
+### kitchenTop (W=2400, D=600, H=900) — 8 sub-meshes
+| Part | Geometry | Material | Size/Params | Position |
+|------|----------|----------|-------------|----------|
+| Cabinet body | Box | fixture_kitchenTop | W, H×0.88, D | 0, H×0.44, 0 |
+| Countertop slab | Box | fixture_kitchenTop | W+20, H×0.04, D+18 | 0, H×0.90, 0 |
+| Stovetop area | Box | fixtureAccentDark | W×0.48, 5, D×0.7 | -W×0.18, H×0.921, 0 |
+| 4 burner rings | Cylinder(r=D×0.13/0.10, h=8, 16seg) | fixtureAccentMetal | — | 2×2 grid on left half |
+| Sink basin | Box | fixtureAccentCeramic | W×0.22, H×0.06, D×0.5 | W×0.22, H×0.88, 0 |
+
+### toilet (W=700, D=400, H=400) — 5 sub-meshes
+| Part | Geometry | Material | Size/Params | Position |
+|------|----------|----------|-------------|----------|
+| Cistern box | Box | fixture_toilet | W×0.75, H×0.75, D×0.30 | 0, H×0.375, -D×0.35 |
+| Cistern cap | Box | fixture_toilet | W×0.70, H×0.04, D×0.26 | 0, H×0.77, -D×0.35 |
+| Bowl outer | Cylinder(rTop=W×0.38, rBot=W×0.30, h=H×0.65, 20seg) | fixture_toilet | scale.z=0.75 | 0, H×0.325, D×0.12 |
+| Bowl inner | Cylinder(rTop=W×0.30, rBot=W×0.24, h=H×0.15, 20seg) | fixtureAccentCeramic | scale.z=0.75 | 0, H×0.58, D×0.12 |
+| Seat rim | Cylinder(rTop=W×0.37, h=H×0.05, 20seg) | fixture_toilet | scale.z=0.75 | 0, H×0.66, D×0.12 |
+
+### lavatory (W=500, D=400, H=850) — 7 sub-meshes
+| Part | Geometry | Material | Size/Params | Position |
+|------|----------|----------|-------------|----------|
+| Pedestal column | Box | fixture_lavatory | W×0.25, H×0.75, D×0.25 | 0, H×0.375, 0 |
+| Pedestal base | Box | fixture_lavatory | W×0.35, H×0.03, D×0.35 | 0, H×0.015, 0 |
+| Basin outer | Cylinder(rTop=W×0.46, rBot=W×0.38, h=H×0.15, 20seg) | fixture_lavatory | scale.z=D/W | 0, H×0.825, 0 |
+| Basin inner | Cylinder(rTop=W×0.38, rBot=W×0.30, h=H×0.10, 20seg) | fixtureAccentCeramic | scale.z=D/W | 0, H×0.86, 0 |
+| Basin rim | Cylinder(rTop=W×0.47, h=H×0.02, 20seg) | fixture_lavatory | scale.z=D/W | 0, H×0.90, 0 |
+| Faucet stem | Box | fixtureAccentMetal | W×0.04, H×0.08, D×0.04 | 0, H×0.94, -D×0.30 |
+| Faucet spout | Box | fixtureAccentMetal | W×0.04, H×0.02, D×0.12 | 0, H×0.96, -D×0.18 |
+
+### table (W=1200, D=800, H=750) — 9 sub-meshes
+| Part | Geometry | Material | Size/Params | Position |
+|------|----------|----------|-------------|----------|
+| Tabletop | Box | fixture_table | W, H×0.05, D | 0, H×0.975, 0 |
+| Front apron | Box | fixture_table | W×0.90, H×0.06, D×0.03 | 0, H×0.92, D×0.44 |
+| Back apron | Box | fixture_table | W×0.90, H×0.06, D×0.03 | 0, H×0.92, -D×0.44 |
+| Left/Right apron | Box | fixtureAccentWood | W×0.03, H×0.06, D×0.80 | ±W×0.44, H×0.92, 0 |
+| 4 legs | Cylinder(r=W×0.02, h=H×0.88, 8seg) | fixtureAccentWood | — | ±W×0.43, H×0.44, ±D×0.40 |
+
+### tv (W=1200, D=100, H=750) — 5 sub-meshes
+| Part | Geometry | Material | Size/Params | Position |
+|------|----------|----------|-------------|----------|
+| Screen panel | Box | fixture_tv | W, H×0.56, D×0.3 | 0, H×0.72, 0 |
+| Bezel top | Box | fixtureAccentDark | W×1.01, H×0.012, D×0.35 | 0, H×1.00, 0 |
+| Bezel bottom | Box | fixtureAccentDark | W×1.01, H×0.025, D×0.35 | 0, H×0.435, 0 |
+| Stand neck | Box | fixtureAccentMetal | W×0.04, H×0.15, D×0.5 | 0, H×0.365, 0 |
+| Stand base | Box | fixtureAccentMetal | W×0.30, H×0.02, D×1.8 | 0, H×0.01, 0 |
+
+### sofa (W=2000, D=900, H=800) — 7 sub-meshes
+| Part | Geometry | Material | Size/Params | Position |
+|------|----------|----------|-------------|----------|
+| Base frame | Box | fixture_sofa | W, H×0.15, D | 0, H×0.075, 0 |
+| Backrest | Box | fixture_sofa | W×0.92, H×0.52, D×0.20 | 0, H×0.50, -D×0.40 |
+| Left armrest | Box | fixture_sofa | W×0.06, H×0.38, D×0.85 | -W×0.47, H×0.34, D×0.05 |
+| Right armrest | Box | fixture_sofa | W×0.06, H×0.38, D×0.85 | W×0.47, H×0.34, D×0.05 |
+| 3 seat cushions | Box | fixtureAccentFabric | W×0.28, H×0.14, D×0.58 | {-W×0.28, 0, W×0.28}, H×0.22, D×0.10 |
+
+---
+
+## What We Reuse
+- `createBoxDescriptor()` — still used for bounds calculation, then geometry overridden
+- `addOutline()` — applied to each sub-mesh individually (same as stairs/windows)
+- `createMeshMaterial()` — clones + applies selection tint per sub-mesh
+- `assignPreviewMetadata()` / `matchesSelection()` — selection/picking unchanged
+- `planPointToWorld()` / `planAngleToWorldRotation()` — group positioning
+
+No changes needed to `previewInspection.js`, `createPreviewViewport.js`, or `ThreePreviewPanel.jsx`.
+
+---
+
+## Verification
+1. `npm run dev` — confirm no build errors
+2. Place each of the 6 fixture types on the 2D canvas
+3. Switch to 3D preview — confirm each fixture has its recognizable composed shape (not a box)
+4. Click a fixture in 3D — confirm selection highlighting covers all sub-meshes
+5. Rotate fixtures in 2D — confirm 3D rotation matches
+6. Walk mode — verify fixtures look good from eye level

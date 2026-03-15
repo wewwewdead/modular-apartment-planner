@@ -1,0 +1,34 @@
+import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const ACCOUNTS_PATH = join(__dirname, '..', 'accounts.json')
+
+const PLATFORMS = {
+  // Add platforms here later
+}
+
+export function getPlatforms() {
+  return PLATFORMS
+}
+
+export function loadAccounts() {
+  if (!existsSync(ACCOUNTS_PATH)) return {}
+  try {
+    return JSON.parse(readFileSync(ACCOUNTS_PATH, 'utf-8'))
+  } catch {
+    return {}
+  }
+}
+
+export function saveAccount(platform, credentials) {
+  const accounts = loadAccounts()
+  accounts[platform] = credentials
+  writeFileSync(ACCOUNTS_PATH, JSON.stringify(accounts, null, 2), 'utf-8')
+}
+
+export function getAccount(platform) {
+  const accounts = loadAccounts()
+  return accounts[platform] || null
+}

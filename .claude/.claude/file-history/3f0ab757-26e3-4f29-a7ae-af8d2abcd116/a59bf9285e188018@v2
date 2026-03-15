@@ -1,0 +1,123 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { colors } from '../../../theme/colors';
+import { motion } from '../../../theme/motion';
+
+interface SelectionBadgeProps {
+  selected: boolean;
+  quantity: number;
+  onToggle: () => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}
+
+export function SelectionBadge({
+  selected,
+  quantity,
+  onToggle,
+  onIncrement,
+  onDecrement,
+}: SelectionBadgeProps) {
+  const checkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(selected ? 1 : 0, motion.bouncy) }],
+  }));
+
+  return (
+    <View style={styles.container}>
+      <AnimatedPressable
+        onPress={onToggle}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: selected }}
+        accessibilityLabel={selected ? 'Deselect item' : 'Select item'}
+      >
+        <View style={[styles.checkCircle, selected && styles.checkCircleActive]}>
+          <Animated.View style={checkStyle}>
+            <MaterialCommunityIcons name="check" size={16} color={colors.surface} />
+          </Animated.View>
+        </View>
+      </AnimatedPressable>
+
+      {selected && (
+        <View
+          style={styles.stepper}
+          accessibilityRole="adjustable"
+          accessibilityValue={{ min: 1, max: 99, now: quantity }}
+          accessibilityLabel={`Quantity: ${quantity}`}
+        >
+          <AnimatedPressable
+            onPress={onDecrement}
+            accessibilityLabel="Decrease quantity"
+            accessibilityRole="button"
+          >
+            <View style={styles.stepperButton}>
+              <Text style={styles.stepperButtonText}>-</Text>
+            </View>
+          </AnimatedPressable>
+          <Text style={styles.quantityText}>{quantity}</Text>
+          <AnimatedPressable
+            onPress={onIncrement}
+            accessibilityLabel="Increase quantity"
+            accessibilityRole="button"
+          >
+            <View style={styles.stepperButton}>
+              <Text style={styles.stepperButtonText}>+</Text>
+            </View>
+          </AnimatedPressable>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  checkCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkCircleActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepperButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonText: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  quantityText: {
+    minWidth: 20,
+    textAlign: 'center',
+    color: colors.ink,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+});

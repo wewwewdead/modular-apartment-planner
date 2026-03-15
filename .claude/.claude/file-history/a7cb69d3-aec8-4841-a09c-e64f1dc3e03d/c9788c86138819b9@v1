@@ -1,0 +1,43 @@
+# Fix Mobile Paragraph Comments in ChapterReader
+
+## Context
+On mobile (<=768px), tapping a story paragraph does not highlight it or show the comment icon. Two root causes:
+
+1. **CSS explicitly disables the highlight on mobile** — `ChapterReader.css:274-277` sets `:hover` background to `transparent` at `max-width: 768px`, so there's zero visual feedback on tap.
+
+2. **No active/selected state for paragraphs** — The component relies entirely on `:hover` for highlighting. On touch devices `:hover` is unreliable. The `click` handler does set `hoveredIndex`, which should make the badge visible, but the `mouseleave` event can fire immediately after a touch tap and schedule a 450ms auto-hide via `scheduleLeave`, causing the badge to flash and disappear.
+
+## Changes
+
+### 1. Add an active-paragraph CSS class for tap highlighting
+**File:** `client/src/components/Stories/ChapterReader/ChapterReader.css`
+
+- In the mobile media query (line 268), **remove** the rule that forces `:hover` to `transparent`
+- Add a new class `.editor-paragraph.pcl-active` with `background-color: var(--bg-selection)` — this will be toggled via JS on both desktop and mobile, giving reliable highlight regardless of hover support
+
+### 2. Apply/remove `.pcl-active` class based on `hoveredIndex`
+**File:** `client/src/components/Stories/ChapterReader/ParagraphCommentLayer.jsx`
+
+- In `scanParagraphs`, after setting up listeners, also track the active element
+- Add a `useEffect` that watches `hoveredIndex`: when it changes, add `.pcl-active` to the matching `[data-paragraph-index="N"]` element and remove it from any previous one
+- In the `click` handler, also call `e.stopPropagation()` (via a wrapper) to prevent the tap from bubbling and potentially dismissing the state
+- No need to add `touchstart`/`touchend` — the existing `click` listener fires correctly on mobile taps. The real fix is preventing `mouseleave` from canceling it.
+
+### 3. Prevent `mouseleave` from canceling a click-activated state on mobile
+**File:** `client/src/components/Stories/ChapterReader/ParagraphCommentLayer.jsx`
+
+- Add a `clickedRef` boolean ref. Set it to `true` in the `click` handler.
+- In the `leave` handler, if `clickedRef.current` is `true`, skip calling `scheduleLeave` (the user explicitly tapped, so we don't auto-hide).
+- Reset `clickedRef` to `false` when `hoveredIndex` is cleared (e.g., when the user taps another paragraph or taps outside).
+
+## Files to Modify
+1. `client/src/components/Stories/ChapterReader/ChapterReader.css` (~lines 268-278)
+2. `client/src/components/Stories/ChapterReader/ParagraphCommentLayer.jsx`
+
+## Verification
+1. Mobile: tap a paragraph -> it highlights + comment icon appears and stays visible
+2. Mobile: tap a different paragraph -> previous un-highlights, new one highlights
+3. Mobile: tap the comment icon -> comment panel opens
+4. Desktop: hover still works as before (highlight on hover, badge appears, badge disappears after leaving)
+5. Desktop: click a paragraph -> same behavior as mobile (stays highlighted until clicking elsewhere)
+6. Paragraphs with existing comments still show their badge permanently

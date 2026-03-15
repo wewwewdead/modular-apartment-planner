@@ -1,0 +1,29 @@
+import { TextStyle } from 'react-native';
+
+export const typography = {
+  headline: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '800',
+  } as TextStyle,
+  title: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '700',
+  } as TextStyle,
+  body: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
+  } as TextStyle,
+  caption: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400',
+  } as TextStyle,
+  label: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  } as TextStyle,
+} as const;

@@ -1,0 +1,424 @@
+C:\Users\johnm\iskrib_v3\client\src\utils\getCroppedImage.js:19:    const canvas = document.createElement('canvas');
+C:\Users\johnm\iskrib_v3\client\src\utils\getCroppedImage.js:20:    const ctx = canvas.getContext('2d');
+C:\Users\johnm\iskrib_v3\client\src\utils\getCroppedImage.js:25:    canvas.width = crop.width;
+C:\Users\johnm\iskrib_v3\client\src\utils\getCroppedImage.js:26:    canvas.height = crop.height;
+C:\Users\johnm\iskrib_v3\client\src\utils\getCroppedImage.js:42:    canvas.toBlob(async(blob) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\getCroppedImage.js:44:            console.error("Canvas toBlob failed");
+C:\Users\johnm\iskrib_v3\client\src\utils\extractDominantColors.js:2:    const canvas = document.createElement('canvas');
+C:\Users\johnm\iskrib_v3\client\src\utils\extractDominantColors.js:3:    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+C:\Users\johnm\iskrib_v3\client\src\utils\extractDominantColors.js:6:    canvas.width = size;
+C:\Users\johnm\iskrib_v3\client\src\utils\extractDominantColors.js:7:    canvas.height = size;
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:1:const DEFAULT_CANVAS_DOC = {
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:96:export const parseCanvasDoc = (rawCanvasDoc) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:97:    if(!rawCanvasDoc){
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:98:        return {...DEFAULT_CANVAS_DOC};
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:102:        const parsed = typeof rawCanvasDoc === 'string' ? JSON.parse(rawCanvasDoc) : rawCanvasDoc;
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:104:            return {...DEFAULT_CANVAS_DOC};
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:135:        console.error('Error parsing canvas doc:', error);
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:136:        return {...DEFAULT_CANVAS_DOC};
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:140:export const getCanvasWholeText = (rawCanvasDoc) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:141:    const canvasDoc = parseCanvasDoc(rawCanvasDoc);
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:142:    return canvasDoc.snippets
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:148:export const getCanvasPreview = (rawCanvasDoc, maxLength = 215) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\canvasDoc.js:149:    const wholeText = getCanvasWholeText(rawCanvasDoc);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:15:import { getCanvasPreview } from '../../../../utils/canvasDoc';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:16:import CanvasPreview from '../CanvasPreview/CanvasPreview';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:47:    const viewContent = (e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType = null, canvasDoc = null, userReaction = null, reactionCount = 0) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:52:        clickContent(e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType, canvasDoc, userReaction, reactionCount);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:118:                        const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:120:                        const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:121:                        const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:122:                        const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:123:                        const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:127:                                className={`postcards-grid-item${isCanvasPost ? ' is-canvas-card' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:131:                                onClick={(e) => viewContent(e, journal?.content, wholeText, journal?.title, userId, journal?.users?.name, journal?.users?.image_url, journal?.created_at, journal?.id, journal?.has_liked, journal?.comment_count?.[0].count, journal?.has_bookmarked, journal?.like_count?.[0].count, journal?.bookmark_count?.[0].count, journal?.users?.badge, journal?.post_type, journal?.canvas_doc, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:133:                                {isCanvasPost ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:135:                                        <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:155:                const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:157:                const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:158:                const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:159:                const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:160:                const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:166:                        className={`profile-postcards${isCanvasPost ? ' is-canvas-card' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:171:                        {isCanvasPost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:172:                            <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:182:                                onClick={(e) => viewContent(e, journal?.content, wholeText, journal?.title, userId, journal?.users?.name, journal?.users?.image_url, journal?.created_at, journal?.id, journal?.has_liked, journal?.comment_count?.[0].count, journal?.has_bookmarked, journal?.like_count?.[0].count, journal?.bookmark_count?.[0].count, journal?.users?.badge, journal?.post_type, journal?.canvas_doc, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:187:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:19:import CanvasViewer from "../Canvas/CanvasViewer";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:26:import { getCanvasWholeText, parseCanvasDoc } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:117:            const canvasDoc = postType === 'canvas' ? parseCanvasDoc(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:118:            const wholeText = postType === 'canvas'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:119:                ? getCanvasWholeText(canvasDoc)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:125:                canvasDoc: canvasDoc,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:151:        const inferredPostType = statePostData?.postType || (statePostData?.canvasDoc ? 'canvas' : 'text');
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:153:        const canvasDoc = inferredPostType === 'canvas' ? parseCanvasDoc(statePostData?.canvasDoc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:158:            canvasDoc: canvasDoc,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:159:            wholeText: inferredPostType === 'canvas'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:160:                ? (statePostData?.wholeText || getCanvasWholeText(canvasDoc))
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:295:    const handleRemixCanvas = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:304:            : `Remix: ${sourceTitle || 'Canvas'}`;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:309:                editorMode: 'canvas',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:311:                initialCanvasDoc: postData?.canvasDoc || null,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:468:                                        {postData.repostSource.post_type === 'canvas' ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:469:                                            <CanvasViewer canvasDoc={parseCanvasDoc(postData.repostSource.canvas_doc)} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:646:                            {postData?.postType === 'canvas' && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:647:                                <div className="cv-canvas-actions">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:651:                                        onClick={handleRemixCanvas}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:653:                                        title={session ? "Remix this canvas" : "Sign in to remix"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:655:                                        Remix this Canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:661:                                {postData?.postType === 'canvas' ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:662:                                    <CanvasViewer canvasDoc={postData?.canvasDoc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\contentviewer.css:277:.cv-canvas-actions{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\contentviewer.css:509:    .cv-canvas-actions{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:19:import { getCanvasPreview } from '../../../../utils/canvasDoc';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:20:import CanvasPreview from '../CanvasPreview/CanvasPreview';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:115:    const viewContent = (e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType = null, canvasDoc = null, userReaction = null, reactionCount = 0) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:120:        clickContent(e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType, canvasDoc, userReaction, reactionCount)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:336:                        const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:338:                        const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:339:                        const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:340:                        const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:341:                        const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:345:                                className={`postcards-grid-item${isCanvasPost ? ' is-canvas-card' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:349:                                onClick={(e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0].count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:391:                                {isCanvasPost ? (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:393:                                        <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:438:                                                    {setting.actionEdit && journal?.post_type !== 'canvas' && !journal?.is_repost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:474:                const isCanvasPost = journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:476:                const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:477:                const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:478:                const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:479:                const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:489:                        <div className={`profile-postcards${isCanvasPost ? ' is-canvas-card' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:491:                            {isCanvasPost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:492:                                <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:544:                                    onClick={(e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0].count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:566:                                    journal?.canvas_doc,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:632:                                                {setting.actionEdit && journal?.post_type !== 'canvas' && !journal?.is_repost &&(
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.module.css:51:.canvasColumn {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.module.css:354:/* ── Kept for canvas viewer toolbar ── */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:1:.canvas-editor-root,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:2:.canvas-viewer-root {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:11:.canvas-editor-controls,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:12:.canvas-editor-selection-bar,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:13:.canvas-stamp-toolbar {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:20:.canvas-snippet-input {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:30:.canvas-snippet-input:focus {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:35:.canvas-snippet-popover {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:46:.canvas-snippet-actions {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:52:.canvas-control-btn,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:53:.canvas-brush-btn,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:54:.canvas-select,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:55:.canvas-stamp-btn {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:66:.canvas-control-btn:hover,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:67:.canvas-brush-btn:hover,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:68:.canvas-stamp-btn:hover {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:72:.canvas-select {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:76:.canvas-control-btn.is-active,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:77:.canvas-brush-btn.is-active,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:78:.canvas-stamp-btn.is-active {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:83:.canvas-stage-shell {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:99:.canvas-stage-shell.is-dark {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:103:.canvas-stage-shell.is-drop-active {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:108:.canvas-stage-shell.is-doodle-active {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:114:.canvas-stamp-label {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:120:.canvas-tool-btn {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:131:.canvas-tool-btn.is-active {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:136:.canvas-tool-controls {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:144:.canvas-color-swatches {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:151:.canvas-color-swatch {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:160:.canvas-color-swatch.is-active {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:165:.canvas-color-input {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:175:.canvas-size-range {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:179:.canvas-sticky-input {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:189:.canvas-tool-hint {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:194:.canvas-remix-banner {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:207:    .canvas-stage-shell {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:212:    .canvas-stamp-toolbar {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:216:    .canvas-stamp-label {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:221:    .canvas-tool-controls {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:226:    .canvas-size-range {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\canvas.css:230:    .canvas-color-swatch {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:30:const ToolBar = ({addUploadedImagePath, onSwitchToCanvas}) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:327:                {typeof onSwitchToCanvas === 'function' && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:328:                    <div onMouseDown={(e) => e.preventDefault()} onClick={onSwitchToCanvas} className="toolbar-bttns" title="Switch to Canvas">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:40:const EditorInner = ({title, onclose, onCloseOnSave, addUploadImagesPath, setWordCount, wordCount, onSwitchToCanvas, promptId = null}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:109:            <ToolBar addUploadedImagePath={addUploadImagesPath} onSwitchToCanvas={onSwitchToCanvas}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:2:import { parseCanvasDoc } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:3:import CanvasSurface, { buildSortedCanvasObjects, getCanvasStageHeight } from "./CanvasSurface";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:4:import styles from "./CanvasEditor.module.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:5:import "./canvas.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:7:const CANVAS_MAX_WIDTH = 560;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:11:const CanvasViewer = ({canvasDoc}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:15:    const [shellWidth, setShellWidth] = useState(CANVAS_MAX_WIDTH);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:17:    const parsedCanvasDoc = useMemo(() => parseCanvasDoc(canvasDoc), [canvasDoc]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:19:        () => buildSortedCanvasObjects(parsedCanvasDoc?.snippets || [], parsedCanvasDoc?.images || []),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:20:        [parsedCanvasDoc?.images, parsedCanvasDoc?.snippets]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:27:                return CANVAS_MAX_WIDTH;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:56:    const stageWidth = useMemo(() => Math.max(240, Math.min(CANVAS_MAX_WIDTH, shellWidth)), [shellWidth]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:57:    const stageHeight = getCanvasStageHeight(stageWidth, parsedCanvasDoc?.meta?.aspectRatio);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:58:    const doodleStrokeScale = useMemo(() => clamp(stageWidth / CANVAS_MAX_WIDTH, 0.45, 1), [stageWidth]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:64:                className={`${styles.stageShell} ${parsedCanvasDoc?.meta?.theme === "dark" ? styles.isDark : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:67:                    <CanvasSurface
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:73:                        gridEnabled={parsedCanvasDoc?.meta?.gridEnabled}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:74:                        theme={parsedCanvasDoc?.meta?.theme}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:75:                        doodles={parsedCanvasDoc?.doodles || []}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasViewer.jsx:87:export default CanvasViewer;
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:60:      "Browse visual canvas posts in Iskryb Gallery with community doodles, stamps, and remixes.",
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:7:import { parseCanvasDoc } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:8:import CanvasSurface, { buildSortedCanvasObjects } from "./CanvasSurface";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:10:import styles from "./CanvasEditor.module.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:11:import "./canvas.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:29:const CANVAS_MAX_WIDTH = 560;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:142:const CanvasMinimap = ({viewport, stageWidth, stageHeight, viewportWidth, viewportHeight, fitScale, isDark, updateViewport}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:234:const CanvasEditor = ({title, onCloseOnSave, addUploadedImagePath, initialCanvasDoc = null, remixSource = null}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:246:    const [shellWidth, setShellWidth] = useState(CANVAS_MAX_WIDTH);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:259:    const [canvasMeta, setCanvasMeta] = useState({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:299:        if(hasHydratedInitialDocRef.current || !initialCanvasDoc){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:303:        const parsedDoc = parseCanvasDoc(initialCanvasDoc);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:304:        setCanvasMeta((prev) => ({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:327:    }, [initialCanvasDoc]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:333:                return CANVAS_MAX_WIDTH;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:401:    const viewportWidth = useMemo(() => Math.max(280, Math.min(CANVAS_MAX_WIDTH, shellWidth)), [shellWidth]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:402:    const viewportHeight = getStageHeight(viewportWidth, canvasMeta.aspectRatio);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:403:    const stageWidth = CANVAS_MAX_WIDTH;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:404:    const stageHeight = getStageHeight(stageWidth, canvasMeta.aspectRatio);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:436:            const canvas = layer?.getCanvas?.();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:437:            if(canvas?.setPixelRatio){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:438:                canvas.setPixelRatio(safePixelRatio);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:455:    const sortedObjects = useMemo(() => buildSortedCanvasObjects(snippets, images), [snippets, images]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:463:    const hasCanvasContent = snippets.length > 0 || images.length > 0 || doodles.length > 0;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:553:                console.error("Canvas image upload failed:", error);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:725:    const getPointerInCanvasSpace = (stage) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:741:        const worldPointer = getPointerInCanvasSpace(stage);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:850:    const handleCanvasPointerDown = (event) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:908:    const handleCanvasPointerMove = (event) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:946:    const handleCanvasPointerUp = (event) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1026:        if(canvasMeta.snapEnabled){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1049:        if(canvasMeta.snapEnabled){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1105:    const saveCanvas = async() => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1106:        if(!title || !hasCanvasContent){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1110:        const canvasDoc = {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1113:                aspectRatio: canvasMeta.aspectRatio,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1114:                gridEnabled: canvasMeta.gridEnabled,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1115:                theme: canvasMeta.theme
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1151:            formdata.append("post_type", "canvas");
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1152:            formdata.append("canvas_doc", JSON.stringify(canvasDoc));
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1161:            queryClient.invalidateQueries({queryKey: ["canvasGallery"]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1165:            console.error("Error saving canvas journal:", error);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1216:                            placeholder="Type text to place on canvas..."
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1344:                    Remixing {remixSource?.authorName ? `${remixSource.authorName}'s` : "a"} canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1389:                        className={`${styles.sideToolButton} ${canvasMeta.aspectRatio === "4:5" ? styles.toolButtonActive : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1390:                        onClick={() => setCanvasMeta((prev) => ({...prev, aspectRatio: prev.aspectRatio === "1:1" ? "4:5" : "1:1"}))}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1391:                        title={`Aspect: ${canvasMeta.aspectRatio}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1393:                        {canvasMeta.aspectRatio === "1:1" ? "⬜" : "▯"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1397:                        className={`${styles.sideToolButton} ${canvasMeta.gridEnabled ? styles.toolButtonActive : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1398:                        onClick={() => setCanvasMeta((prev) => ({...prev, gridEnabled: !prev.gridEnabled}))}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1405:                        className={`${styles.sideToolButton} ${canvasMeta.snapEnabled ? styles.toolButtonActive : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1406:                        onClick={() => setCanvasMeta((prev) => ({...prev, snapEnabled: !prev.snapEnabled}))}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1413:                        className={`${styles.sideToolButton} ${canvasMeta.theme === "dark" ? styles.toolButtonActive : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1414:                        onClick={() => setCanvasMeta((prev) => ({...prev, theme: prev.theme === "dark" ? "light" : "dark"}))}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1415:                        title={canvasMeta.theme === "dark" ? "Dark theme" : "Light theme"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1433:                {/* ── Canvas column (stage + loader + footer) ── */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1434:                <div className={styles.canvasColumn}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1437:                        className={`${styles.stageShell} ${canvasMeta.theme === "dark" ? styles.isDark : ""} ${activeTool === "doodle" ? styles.isDoodleActive : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1453:                            <CanvasSurface
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1463:                                gridEnabled={canvasMeta.gridEnabled}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1464:                                theme={canvasMeta.theme}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1478:                                onPointerDown={handleCanvasPointerDown}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1479:                                onPointerMove={handleCanvasPointerMove}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1480:                                onPointerUp={handleCanvasPointerUp}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1500:                            isDark={canvasMeta.theme === "dark"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1510:                            <CanvasMinimap
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1517:                                isDark={canvasMeta.theme === "dark"}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1533:                            disabled={!title || !hasCanvasContent || isSending}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1534:                            onClick={saveCanvas}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1535:                            className={`${styles.shareButton} ${(!title || !hasCanvasContent || isSending) ? styles.shareButtonDisabled : ""}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1553:export default CanvasEditor;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:62:const CanvasImageNode = ({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:63:    canvasImage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:75:    const loadedImage = useLoadedImage(canvasImage?.src);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:76:    const objectWidth = clamp((canvasImage?.width || 0.3) * stageWidth, 56, stageWidth * 0.95);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:77:    const objectHeight = clamp((canvasImage?.height || 0.3) * stageHeight, 56, stageHeight * 0.95);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:78:    const x = clamp((canvasImage?.x || 0) * stageWidth, 0, Math.max(0, stageWidth - objectWidth));
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:79:    const y = clamp((canvasImage?.y || 0) * stageHeight, 0, Math.max(0, stageHeight - objectHeight));
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:81:    const baseScaleX = canvasImage?.scaleX === -1 ? -1 : 1;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:86:                name={canvasImage?.id}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:93:                rotation={canvasImage?.rotation || 0}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:114:                    rotation={canvasImage?.rotation || 0}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:122:export const getCanvasStageHeight = (width, aspectRatio) => (aspectRatio === "4:5" ? Math.round(width * 1.25) : width);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:124:export const buildSortedCanvasObjects = (snippets = [], images = []) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:130:const CanvasSurface = ({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:313:                        <CanvasImageNode
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:315:                            canvasImage={image}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasSurface.jsx:340:export default CanvasSurface;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:22:import { getCanvasPreview } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:23:import CanvasPreview from "./CanvasPreview/CanvasPreview";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:70:    const viewContent = (e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType = null, canvasDoc = null, userReaction = null, reactionCount = 0) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:77:        clickContent(e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType, canvasDoc, userReaction, reactionCount)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:89:    const handleExpandCanvas = (e, journal) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:94:            getCanvasPreview(journal?.canvas_doc)?.wholeText || '',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:108:            journal?.canvas_doc,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:114:    const handleRemixCanvas = (e, journal) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:124:            : `Remix: ${sourceTitle || 'Canvas'}`;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:129:                editorMode: 'canvas',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:131:                initialCanvasDoc: journal?.canvas_doc || null,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:171:            commentAction: (e, jsonbContent, wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likeCount, bookmarkCount, badge, postType, canvasDoc, userReaction, reactionCount) => viewContent(e, jsonbContent, wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likeCount, bookmarkCount, badge, postType, canvasDoc, userReaction, reactionCount),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:716:                const isCanvasPost = !isRepost && journal?.post_type === 'canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:718:                const canvasPreview = isCanvasPost ? getCanvasPreview(journal?.canvas_doc) : null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:719:                const wholeText = isRepost ? '' : isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:720:                const previewText = isRepost ? '' : isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:721:                const thumbnail = isRepost ? null : isCanvasPost ? null : parsedContent?.firstImage?.src;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:732:                        className={`cards${isCanvasPost ? ' is-canvas-card' : ''}${isRepost ? ' is-repost-card' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:734:                        onClick={isCanvasPost ? (e) => handleExpandCanvas(e, journal) : undefined}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:735:                        role={isCanvasPost ? 'button' : undefined}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:736:                        tabIndex={isCanvasPost ? 0 : undefined}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:737:                        onKeyDown={isCanvasPost ? (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:740:                                handleExpandCanvas(e, journal);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:812:                                {isCanvasPost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:813:                                    <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:823:                                        onClick={(e) => viewContent(e, journal.content, wholeText, journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.canvas_doc, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:828:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:831:                                                {isCanvasPost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:832:                                                    <span className="canvas-type-badge">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:840:                                                        Canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:849:                                    {isCanvasPost && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:850:                                        <div className="canvas-card-actions">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:853:                                                className="canvas-card-action-btn is-remix"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:854:                                                onClick={(e) => handleRemixCanvas(e, journal)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:856:                                                Remix this Canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:892:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:28:    initialCanvasDoc: null,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:321:            initialMode: launchState?.editorMode === 'canvas' ? 'canvas' : 'text',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:323:            initialCanvasDoc: launchState?.initialCanvasDoc || null,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:386:                initialCanvasDoc={editorLaunchConfig.initialCanvasDoc}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:6:import CanvasEditor from '../Canvas/CanvasEditor.jsx';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:24:const Editor=({onClose, initialMode = 'text', initialTitle = '', initialCanvasDoc = null, remixSource = null, promptId = null, promptText = null}) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:27:    const [editorMode, setEditorMode] = useState(initialMode === 'canvas' ? 'canvas' : 'text');
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:40:        setEditorMode(initialMode === 'canvas' ? 'canvas' : 'text');
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:82:            className={`editor-container ${editorMode === 'canvas' ? 'is-canvas-mode' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:97:                <div className='canvas-editor-controls' style={{marginBottom: "0.55rem"}}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:101:                        className={`canvas-control-btn ${editorMode === 'text' ? 'is-active' : ''} composer-mode-btn`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:108:                        onClick={() => setEditorMode('canvas')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:109:                        className={`canvas-control-btn ${editorMode === 'canvas' ? 'is-active' : ''} composer-mode-btn`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:112:                        Switch to Canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:116:                <div className={`editor-mode-shell ${editorMode === 'canvas' ? 'is-canvas-mode' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:126:                                onSwitchToCanvas={() => setEditorMode('canvas')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:130:                            <CanvasEditor
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:134:                                initialCanvasDoc={initialCanvasDoc}
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\recapCopy.js:14:    return 'First strokes on the canvas';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:50:.editor-container.is-canvas-mode{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:68:.editor-mode-shell.is-canvas-mode {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:189:.search-empty-state.is-canvas-only{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:564:.cards.is-canvas-card .feed-title-content{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:590:.canvas-card-actions{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:598:.canvas-card-action-btn{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:610:.canvas-card-action-btn:hover{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:615:.canvas-card-action-btn.is-remix{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:1020:    .canvas-card-actions{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:1023:    .canvas-card-action-btn{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:2:import CanvasSurface, { buildSortedCanvasObjects, getCanvasStageHeight } from '../../Canvas/CanvasSurface';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:3:import { parseCanvasDoc } from '../../../../utils/canvasDoc';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:4:import './canvaspreview.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:6:const CANVAS_BASE_WIDTH = 560;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:12:const CanvasPreview = ({ canvasDoc }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:19:    const parsed = useMemo(() => parseCanvasDoc(canvasDoc), [canvasDoc]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:86:    const sortedObjects = useMemo(() => buildSortedCanvasObjects(snippets, images), [snippets, images]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:88:    const fallbackHeight = getCanvasStageHeight(viewportWidth, meta.aspectRatio);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:90:    const stageWidth = CANVAS_BASE_WIDTH;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:91:    const stageHeight = getCanvasStageHeight(stageWidth, meta.aspectRatio);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:99:            className={`canvas-preview ${isDark ? 'is-dark' : 'is-light'} ${aspectClass}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:102:            <div className="canvas-preview-dots" />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:105:                <span className="canvas-preview-empty">Canvas</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:107:                <CanvasSurface
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:120:                    className="canvas-preview-stage"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:123:                <span className="canvas-preview-loading">Loading canvas...</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\CanvasPreview.jsx:129:export default CanvasPreview;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:6:import { getCanvasGallery } from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:11:import { getCanvasPreview } from "../../../utils/canvasDoc";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:12:import CanvasPreview from "../postCards/CanvasPreview/CanvasPreview";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:16:const CANVAS_GALLERY_PAGE_SIZE = 5;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:34:        queryKey: ['canvasGallery', userId, sortMode],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:35:        queryFn: ({pageParam = null}) => getCanvasGallery(userId, CANVAS_GALLERY_PAGE_SIZE, sortMode, pageParam),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:51:            .filter((journal) => journal?.post_type === "canvas")
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:54:    const handleOpenCanvas = (journalId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:71:    const handleRemixCanvas = (event, journal) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:81:            : `Remix: ${sourceTitle || 'Canvas'}`;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:86:                editorMode: 'canvas',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:88:                initialCanvasDoc: journal?.canvas_doc || null,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:110:                    <p className="gallery-subtitle">Canvas posts arranged as visual pieces</p>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:136:                <div className="gallery-empty-state">No public canvases yet.</div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:141:                            const canvasPreview = getCanvasPreview(journal?.canvas_doc);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:142:                            const previewText = canvasPreview?.slicedText || 'No text added to this canvas yet.';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:143:                            const wholeText = canvasPreview?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:148:                                className="gallery-canvas-card"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:149:                                onClick={() => handleOpenCanvas(journal.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:155:                                        handleOpenCanvas(journal.id);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:159:                                <CanvasPreview canvasDoc={journal?.canvas_doc} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:160:                                <div className="gallery-canvas-content">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:164:                                                <span className="gallery-canvas-type-badge">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:172:                                                    Canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:175:                                                    {journal?.title?.length > 55 ? `${journal.title.substring(0, 55)}...` : (journal?.title || 'Untitled Canvas')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:184:                                    <div className="gallery-canvas-actions">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:187:                                            className="gallery-canvas-action-btn is-remix"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:188:                                            onClick={(event) => handleRemixCanvas(event, journal)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:190:                                            Remix this Canvas
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:98:.gallery-canvas-card{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:114:[data-theme="dark"] .gallery-canvas-card{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:118:.gallery-canvas-card::before{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:132:.gallery-canvas-card:hover{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:137:.gallery-canvas-card:hover::before{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:141:.gallery-canvas-content{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:177:.gallery-canvas-type-badge{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:195:.gallery-canvas-type-badge svg{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:200:.gallery-canvas-card:hover .gallery-canvas-type-badge{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:227:.gallery-canvas-actions{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:235:.gallery-canvas-action-btn{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:247:.gallery-canvas-action-btn:hover{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:252:.gallery-canvas-action-btn.is-remix{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:454:    .gallery-canvas-card{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:458:    .gallery-canvas-content{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:472:    .gallery-canvas-type-badge{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:477:    .gallery-canvas-type-badge svg{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:482:    .gallery-canvas-actions{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\gallery.css:486:    .gallery-canvas-action-btn{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:1:/* ── Canvas Preview Thumbnail ── */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:2:.canvas-preview {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:13:.canvas-preview.is-1-1 {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:17:.canvas-preview.is-4-5 {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:21:.canvas-preview.is-light {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:25:.canvas-preview.is-dark {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:30:.canvas-preview-dots {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:39:.canvas-preview.is-light .canvas-preview-dots {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:43:.canvas-preview.is-dark .canvas-preview-dots {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:47:.canvas-preview-stage {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:52:.canvas-preview-loading {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:65:.canvas-preview.is-light .canvas-preview-loading {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:69:.canvas-preview.is-dark .canvas-preview-loading {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:74:.canvas-preview-empty {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:85:.canvas-preview.is-light .canvas-preview-empty {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:89:.canvas-preview.is-dark .canvas-preview-empty {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:93:/* ── Canvas Card Accent ── */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:94:.cards.is-canvas-card {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:99:[data-theme="dark"] .cards.is-canvas-card {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:104:.cards.is-canvas-card::before {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:118:.cards.is-canvas-card:hover::before {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:122:/* Canvas type badge */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:123:.canvas-type-badge {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:141:.canvas-type-badge svg {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:146:.cards.is-canvas-card:hover .canvas-type-badge {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:151:/* Grid view canvas accent */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:152:.postcards-grid-item.is-canvas-card {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:156:.postcards-grid-item.is-canvas-card:hover {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:160:/* Grid view: canvas preview inside grid img wrap */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:161:.postcards-grid-img-wrap .canvas-preview {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:167:/* Profile list view canvas accent */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:168:.profile-postcards.is-canvas-card {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:172:.profile-postcards.is-canvas-card:hover {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:178:    .canvas-preview {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:183:    .canvas-type-badge {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\CanvasPreview\canvaspreview.css:188:    .canvas-type-badge svg {
+C:\Users\johnm\iskrib_v3\client\src\components\WelcomeMessage\WelcomeMessage.jsx:3:import confetti from "canvas-confetti";
+C:\Users\johnm\iskrib_v3\client\src\components\WelcomeMessage\WelcomeMessage.jsx:9:        const canvas = document.getElementById('my-confetti');
+C:\Users\johnm\iskrib_v3\client\src\components\WelcomeMessage\WelcomeMessage.jsx:10:        const myConfetti = confetti.create(canvas, {resize: true})
+C:\Users\johnm\iskrib_v3\client\src\components\WelcomeMessage\WelcomeMessage.jsx:32:        <canvas id='my-confetti' className='confetti-layer'></canvas>

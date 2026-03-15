@@ -1,0 +1,114 @@
+import React, { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedStyle,
+  withSpring,
+  useSharedValue,
+} from 'react-native-reanimated';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { colors } from '../../../theme/colors';
+import { elevation } from '../../../theme/elevation';
+import { motion } from '../../../theme/motion';
+
+interface VaultFABProps {
+  onAddItem: () => void;
+  onAddCategory: () => void;
+}
+
+export function VaultFAB({ onAddItem, onAddCategory }: VaultFABProps) {
+  const [expanded, setExpanded] = useState(false);
+  const rotation = useSharedValue(0);
+
+  const toggleExpand = () => {
+    setExpanded(prev => !prev);
+    rotation.value = withSpring(expanded ? 0 : 45, motion.snappy);
+  };
+
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  return (
+    <View style={styles.container}>
+      {expanded && (
+        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={styles.menu}>
+          <AnimatedPressable
+            onPress={() => { onAddItem(); setExpanded(false); }}
+            accessibilityRole="button"
+            accessibilityLabel="Add item"
+          >
+            <View style={styles.menuItem}>
+              <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.ink} />
+              <Text style={styles.menuText}>Add Item</Text>
+            </View>
+          </AnimatedPressable>
+          <AnimatedPressable
+            onPress={() => { onAddCategory(); setExpanded(false); }}
+            accessibilityRole="button"
+            accessibilityLabel="Add category"
+          >
+            <View style={styles.menuItem}>
+              <MaterialCommunityIcons name="folder-plus-outline" size={20} color={colors.ink} />
+              <Text style={styles.menuText}>Add Category</Text>
+            </View>
+          </AnimatedPressable>
+        </Animated.View>
+      )}
+
+      <AnimatedPressable
+        onPress={toggleExpand}
+        accessibilityRole="button"
+        accessibilityLabel={expanded ? 'Close menu' : 'Open add menu'}
+      >
+        <Animated.View style={[styles.fab, iconStyle]}>
+          <MaterialCommunityIcons name="plus" size={28} color={colors.surface} />
+        </Animated.View>
+      </AnimatedPressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...elevation.level3,
+  },
+  menu: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 8,
+    gap: 4,
+    ...elevation.level2,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  menuText: {
+    color: colors.ink,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+});

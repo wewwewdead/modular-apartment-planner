@@ -1,0 +1,106 @@
+import React, { useRef, useEffect, useCallback } from 'react';
+import { getStarColor } from '../utils/starUtils';
+import styles from '../Universe.module.css';
+
+const MINIMAP_SIZE = 160;
+const WORLD_MIN = -25000;
+const WORLD_MAX = 25000;
+const WORLD_RANGE = WORLD_MAX - WORLD_MIN;
+
+/** Convert world coordinate to minimap pixel */
+const worldToMinimap = (val) =>
+    ((val - WORLD_MIN) / WORLD_RANGE) * MINIMAP_SIZE;
+
+/** Convert minimap pixel to world coordinate */
+const minimapToWorld = (px) =>
+    (px / MINIMAP_SIZE) * WORLD_RANGE + WORLD_MIN;
+
+const UniverseMinimap = React.memo(({ galaxies, camera, zoom, stageSize, onNavigate }) => {
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+
+        canvas.width = MINIMAP_SIZE * dpr;
+        canvas.height = MINIMAP_SIZE * dpr;
+        ctx.scale(dpr, dpr);
+
+        // Background
+        ctx.fillStyle = 'rgba(10, 14, 26, 0.85)';
+        ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+
+        // Galaxy dots
+        if (galaxies) {
+            for (const g of galaxies) {
+                const mx = worldToMinimap(g.x);
+                const my = worldToMinimap(g.y);
+
+                ctx.fillStyle = getStarColor(g.userId);
+                ctx.globalAlpha = 0.7;
+                ctx.beginPath();
+                ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        ctx.globalAlpha = 1;
+
+        // Viewport rectangle
+        if (camera && stageSize) {
+            // Camera is the world-space center, zoom determines how much world is visible
+            const viewWidth = stageSize.width / zoom;
+            const viewHeight = stageSize.height / zoom;
+
+            const vpLeft = worldToMinimap(camera.x - viewWidth / 2);
+            const vpTop = worldToMinimap(camera.y - viewHeight / 2);
+            const vpW = (viewWidth / WORLD_RANGE) * MINIMAP_SIZE;
+            const vpH = (viewHeight / WORLD_RANGE) * MINIMAP_SIZE;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(vpLeft, vpTop, vpW, vpH);
+        }
+
+        // Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+
+    }, [galaxies, camera, zoom, stageSize]);
+
+    const handleClick = useCallback((e) => {
+        const canvas = canvasRef.current;
+        if (!canvas || !onNavigate) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = MINIMAP_SIZE / rect.width;
+        const scaleY = MINIMAP_SIZE / rect.height;
+
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
+
+        const worldX = minimapToWorld(px);
+        const worldY = minimapToWorld(py);
+
+        onNavigate(worldX, worldY);
+    }, [onNavigate]);
+
+    return (
+        <canvas
+            ref={canvasRef}
+            className={styles.minimap}
+            width={MINIMAP_SIZE}
+            height={MINIMAP_SIZE}
+            onClick={handleClick}
+            title="Click to navigate"
+        />
+    );
+});
+
+UniverseMinimap.displayName = 'UniverseMinimap';
+
+export default UniverseMinimap;

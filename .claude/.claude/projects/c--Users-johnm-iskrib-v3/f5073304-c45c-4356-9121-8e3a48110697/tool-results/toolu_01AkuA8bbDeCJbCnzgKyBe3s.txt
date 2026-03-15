@@ -1,0 +1,584 @@
+C:\Users\johnm\iskrib_v3\server\server.js-1087-    console.log(`server is running at port${PORT}${workerInfo}`)
+C:\Users\johnm\iskrib_v3\server\server.js-1088-
+C:\Users\johnm\iskrib_v3\server\server.js:1089:    // Bootstrap topic embeddings (non-blocking, only on first worker or non-clustered)
+C:\Users\johnm\iskrib_v3\server\server.js-1090-    if (!CLUSTER_ENABLED || cluster.worker?.id === 1) {
+C:\Users\johnm\iskrib_v3\server\server.js-1091-        bootstrapTopicEmbeddings()
+C:\Users\johnm\iskrib_v3\server\server.js:1092:            .catch(err => console.error('topic embeddings bootstrap error:', err?.message || err));
+C:\Users\johnm\iskrib_v3\server\server.js-1093-    }
+C:\Users\johnm\iskrib_v3\server\server.js-1094-})
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-1-/**
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:2: * One-time script to generate embeddings for existing stories.
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-3- * Run: node --env-file=.env server/scripts/backfillStoryEmbeddings.js
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-4- */
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-20-        .from('stories')
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-21-        .select('id, title, description')
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:22:        .is('embedding', null);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-23-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-24-    if (error) {
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-28-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-29-    if (!stories || stories.length === 0) {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:30:        console.log('No stories need embedding backfill.');
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-31-        return;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-32-    }
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-33-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:34:    console.log(`Found ${stories.length} stories without embeddings.`);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-35-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-36-    let updated = 0;
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-38-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-39-    for (const story of stories) {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:40:        const embedding = await GenerateEmbeddings(
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-41-            (story.title || '').trim(),
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-42-            (story.description || '').trim()
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-43-        );
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-44-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:45:        if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:46:            console.error(`  Failed to generate embedding for story ${story.id} ("${story.title}")`);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-47-            failed++;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-48-            continue;
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-51-        const { error: updateError } = await supabase
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-52-            .from('stories')
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:53:            .update({ embedding })
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-54-            .eq('id', story.id);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-55-
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-59-        } else {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-60-            updated++;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js:61:            console.log(`  ${story.title} -> embedding (${embedding.length} dims)`);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-62-        }
+C:\Users\johnm\iskrib_v3\server\scripts\backfillStoryEmbeddings.js-63-    }
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-1-/**
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:2: * One-time script to generate interests embeddings for existing users.
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-3- * Run: node --env-file=.env server/scripts/backfillInterestEmbeddings.js
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-4- */
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-17-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-18-const run = async () => {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:19:    // Fetch users who have writing_interests but no interests_embedding
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-20-    const { data: users, error } = await supabase
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-21-        .from('users')
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-22-        .select('id, writing_interests')
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-23-        .not('writing_interests', 'is', null)
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:24:        .is('interests_embedding', null);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-25-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-26-    if (error) {
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-35-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-36-    if (eligible.length === 0) {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:37:        console.log('No users need interest embedding backfill.');
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-38-        return;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-39-    }
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-40-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:41:    console.log(`Found ${eligible.length} users with interests but no embedding.`);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-42-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-43-    let updated = 0;
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-55-        }
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-56-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:57:        const embedding = await GenerateEmbeddings(joined, '');
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-58-
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:59:        if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:60:            console.error(`  Failed to generate embedding for user ${user.id}`);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-61-            failed++;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-62-            continue;
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-65-        const { error: updateError } = await supabase
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-66-            .from('users')
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:67:            .update({ interests_embedding: embedding })
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-68-            .eq('id', user.id);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-69-
+--
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-73-        } else {
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-74-            updated++;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js:75:            console.log(`  User ${user.id} -> embedding (${embedding.length} dims) [${user.writing_interests.join(', ')}]`);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-76-        }
+C:\Users\johnm\iskrib_v3\server\scripts\backfillInterestEmbeddings.js-77-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1438-        if(Array.isArray(queryEmbedding) && queryEmbedding.length > 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1439-            const {data: matches, error: matchError} = await supabase.rpc('match_public_journals', {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1440:                query_embedding: queryEmbedding,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1441-                match_count: fetchLimit,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1442-                similarity_threshold: 0.35
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1482-        }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1483-    } catch (error) {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1484:        console.error('semantic embedding/search fallback error:', error?.message || error);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1485-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1486-
+--
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:1:-- Stories embedding support (384-dim vectors via Supabase/gte-small)
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-2--- Run in Supabase SQL Editor after stories.sql
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-3-
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:4:-- 1. Add embedding column
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-5-ALTER TABLE public.stories
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:6:ADD COLUMN IF NOT EXISTS embedding vector(384);
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-7-
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-8--- 2. IVFFlat index for cosine similarity on public stories
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:9:CREATE INDEX IF NOT EXISTS stories_embedding_ivfflat_idx
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-10-ON public.stories
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:11:USING ivfflat (embedding vector_cosine_ops)
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-12-WITH (lists = 100)
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:13:WHERE privacy = 'public' AND embedding IS NOT NULL;
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-14-
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-15--- 3. RPC function for similarity search (mirrors match_public_journals)
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-16-CREATE OR REPLACE FUNCTION public.match_public_stories(
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:17:    query_embedding vector(384),
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-18-    match_count int DEFAULT 20,
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-19-    similarity_threshold float DEFAULT 0.35
+--
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-28-    SELECT
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-29-        s.id,
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:30:        1 - (s.embedding <=> query_embedding) AS similarity
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-31-    FROM public.stories s
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-32-    WHERE s.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:33:      AND s.embedding IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:34:      AND 1 - (s.embedding <=> query_embedding) >= similarity_threshold
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql:35:    ORDER BY s.embedding <=> query_embedding
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-36-    LIMIT greatest(match_count, 1);
+C:\Users\johnm\iskrib_v3\server\sql\stories_embeddings.sql-37-$$;
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-113-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-114-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:115:    // Fire-and-forget: generate interests embedding for personalized feed
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-116-    if(Array.isArray(writingInterests) && writingInterests.length > 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-117-        updateUserInterestsEmbedding(userId, writingInterests)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:118:            .catch(err => console.error('non-blocking interests embedding error:', err?.message || err));
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-119-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-120-
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-259-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-260-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:261:    const embeddingBody = parseData.wholeText || '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-262-    const preview_text = parseData.slicedText || '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-263-    const thumbnail_url = parseData.firstImage?.src || null;
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-271-    };
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-272-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:273:    const embeddingResult = await GenerateEmbeddings(trimmedTitle, embeddingBody);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-274-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:275:    if(!embeddingResult || !Array.isArray(embeddingResult) || embeddingResult.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:276:        console.error('error while generating embeddings on a post!');
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:277:        throw {status: 400, error: 'error while generating embeddings on a post!'};
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-278-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-279-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-280-    const insertPayload = {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-281-        ...payload,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:282:        embeddings: embeddingResult
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-283-    };
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-284-
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-309-            const fallbackPayload = {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-310-                ...payload,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:311:                embeddings: embeddingResult
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-312-            };
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-313-
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-420-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-421-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:422:    const embeddingBody = parseData.wholeText || '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-423-    const preview_text = parseData.slicedText || '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-424-    const thumbnail_url = parseData.firstImage?.src || null;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:425:    const embeddings = await GenerateEmbeddings(resolvedTitle, embeddingBody);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-426-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:427:    if(!embeddings || !Array.isArray(embeddings) || embeddings.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:428:        console.error('failed to generate embeddings')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:429:        throw {status: 400, error: 'failed to generate embeddings'};
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-430-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-431-
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-434-        title: resolvedTitle,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-435-        post_type: POST_TYPE_TEXT,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:436:        embeddings: embeddings,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-437-        preview_text,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-438-        thumbnail_url,
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-563-    }
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-564-
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:565:    // Await embedding so it's in the DB before response (feed refetch needs it)
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-566-    if(Array.isArray(writingInterests) && writingInterests.length > 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-567-        await updateUserInterestsEmbedding(userId, writingInterests);
+--
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-1-import { pipeline } from "@xenova/transformers";
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-2-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:3:let embeddingPipelinePromise;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-4-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-5-const EMBEDDING_MODEL = 'Supabase/gte-small';
+--
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-7-const CACHE_MAX_ENTRIES = 250;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-8-const CACHE_TTL_MS = 10 * 60 * 1000;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:9:const embeddingCache = new Map();
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-10-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-11-const getEmbeddingPipeline = () => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:12:    if(!embeddingPipelinePromise){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:13:        embeddingPipelinePromise = pipeline('feature-extraction', EMBEDDING_MODEL);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-14-    }
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:15:    return embeddingPipelinePromise;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-16-}
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-17-
+--
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-33-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-34-const getCachedEmbedding = (text) => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:35:    const cached = embeddingCache.get(text);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-36-    if(!cached){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-37-        return null;
+--
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-39-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-40-    if(Date.now() > cached.expiresAt){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:41:        embeddingCache.delete(text);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-42-        return null;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-43-    }
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-44-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:45:    return [...cached.embedding];
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-46-}
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-47-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:48:const setCachedEmbedding = (text, embedding) => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:49:    if(embeddingCache.size >= CACHE_MAX_ENTRIES){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:50:        const firstKey = embeddingCache.keys().next().value;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-51-        if(firstKey){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:52:            embeddingCache.delete(firstKey);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-53-        }
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-54-    }
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-55-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:56:    embeddingCache.set(text, {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:57:        embedding: [...embedding],
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-58-        expiresAt: Date.now() + CACHE_TTL_MS
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-59-    });
+--
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-77-    })
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-78-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:79:    const embedding = Array.from(output.data);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:80:    setCachedEmbedding(normalizedText, embedding);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-81-
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:82:    return embedding;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-83-}
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js-84-
+--
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-8-/**
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-9- * Get interest-based explore sections for a user.
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:10: * Fetches the user's writing_interests, looks up cached topic embeddings,
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-11- * and calls get_interest_posts RPC in parallel for each interest.
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-12- */
+--
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-36-    const capped = interests.slice(0, MAX_INTEREST_SECTIONS);
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-37-
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:38:    // Build queries in parallel — skip interests without a cached embedding
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-39-    const sectionPromises = capped.map(async (interest) => {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:40:        const embedding = getTopicEmbedding(interest);
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:41:        if (!embedding) {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-42-            return null;
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-43-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-45-        try {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-46-            const { data: posts, error: rpcError } = await supabase.rpc('get_interest_posts', {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:47:                p_topic_embedding: embedding,
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-48-                p_limit: 8,
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-49-                p_recency_days: 30
+--
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-34-AS $$
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-35-DECLARE
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:36:    source_embedding vector(384);
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-37-    source_user_id UUID;
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-38-    max_hot BIGINT;
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-39-BEGIN
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:40:    -- Get the source post's embedding and author
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:41:    SELECT j.embeddings, j.user_id
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:42:    INTO source_embedding, source_user_id
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-43-    FROM public.journals j
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-44-    WHERE j.id = source_post_id;
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-45-
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:46:    -- If no embedding, return empty
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:47:    IF source_embedding IS NULL THEN
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-48-        RETURN;
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-49-    END IF;
+--
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-59-    FROM public.journals j2
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-60-    WHERE j2.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:61:      AND j2.embeddings IS NOT NULL;
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-62-
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-63-    RETURN QUERY
+--
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-75-            u.badge AS user_badge,
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-76-            u.username::TEXT,
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:77:            (1 - (j.embeddings <=> source_embedding))::FLOAT AS sem_sim,
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-78-            (
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-79-                COALESCE(j.views, 0) * 6
+--
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-85-        LEFT JOIN public.users u ON u.id = j.user_id
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-86-        WHERE j.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:87:          AND j.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-88-          AND j.id != source_post_id
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-89-          AND COALESCE(j.is_repost, false) = false
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:90:          AND (1 - (j.embeddings <=> source_embedding)) >= similarity_floor
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql:91:        ORDER BY j.embeddings <=> source_embedding
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-92-        LIMIT match_count * 4
+C:\Users\johnm\iskrib_v3\server\sql\discovery.sql-93-    )
+--
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-19-        .select('id', { count: 'exact', head: true })
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-20-        .eq('privacy', 'public')
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js:21:        .not('embeddings', 'is', null);
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-22-
+C:\Users\johnm\iskrib_v3\server\services\discoveryService.js-23-    if (error) {
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-4-import { createMediaResponsePayload } from "../utils/mediaVariants.js";
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-5-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:6:/** Strip the embedding vector from a story object before sending to client. */
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-7-const stripEmbedding = (story) => {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-8-    if (!story) return story;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:9:    const { embedding, ...rest } = story;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-10-    return rest;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-11-};
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-109-    }
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-110-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:111:    const embedding = await GenerateEmbeddings(title.trim(), (description || '').trim());
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:112:    if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:113:        throw { status: 400, error: 'failed to generate story embedding' };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-114-    }
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-115-
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-124-            privacy: storyPrivacy,
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-125-            tags: parsedTags,
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:126:            embedding,
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-127-        })
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-128-        .select(STORY_SELECT_COLUMNS)
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-274-    }
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-275-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:276:    // Verify ownership (also grab title + description for embedding check)
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-277-    const { data: existing, error: fetchError } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-278-        .from('stories')
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-324-    }
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-325-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:326:    // Regenerate embedding if title or description changed
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-327-    if (updateData.title !== undefined || updateData.description !== undefined) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-328-        const resolvedTitle = updateData.title ?? existing.title;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-329-        const resolvedDesc = updateData.description ?? (existing.description || '');
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:330:        const embedding = await GenerateEmbeddings(resolvedTitle, resolvedDesc);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:331:        if (embedding && Array.isArray(embedding) && embedding.length > 0) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:332:            updateData.embedding = embedding;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-333-        }
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-334-    }
+--
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-4-create extension if not exists vector;
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-5-
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:6:create index if not exists journals_embeddings_ivfflat_idx
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-7-on public.journals
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:8:using ivfflat (embeddings vector_cosine_ops)
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-9-with (lists = 100)
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:10:where privacy = 'public' and embeddings is not null;
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-11-
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-12-create or replace function public.match_public_journals(
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:13:    query_embedding vector(384),
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-14-    match_count int default 20,
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-15-    similarity_threshold float default 0.35
+--
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-24-    select
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-25-        j.id,
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:26:        1 - (j.embeddings <=> query_embedding) as similarity
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-27-    from public.journals j
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-28-    where j.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:29:      and j.embeddings is not null
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:30:      and 1 - (j.embeddings <=> query_embedding) >= similarity_threshold
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:31:    order by j.embeddings <=> query_embedding
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-32-    limit greatest(match_count, 1);
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql-33-$$;
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-3--- Safe to re-run (uses CREATE OR REPLACE / IF NOT EXISTS)
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-4-
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:5:-- 1. Add interests_embedding column to users
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-6-ALTER TABLE public.users
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:7:ADD COLUMN IF NOT EXISTS interests_embedding vector(384);
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-8-
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:9:-- 2. Create topic_embeddings lookup table (canonical topics from onboarding)
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:10:CREATE TABLE IF NOT EXISTS public.topic_embeddings (
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-11-    topic TEXT PRIMARY KEY,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:12:    embedding vector(384) NOT NULL,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-13-    created_at TIMESTAMPTZ DEFAULT now()
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-14-);
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-15-
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:16:-- 3. IVFFlat index on users.interests_embedding for fast cosine similarity
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-17--- (lists=10 is fine for < 50k users; bump to sqrt(n) when user base grows)
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:18:CREATE INDEX IF NOT EXISTS idx_users_interests_embedding
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-19-ON public.users
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:20:USING ivfflat (interests_embedding vector_cosine_ops)
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-21-WITH (lists = 10);
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-22-
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-23--- 4. RPC: get_for_you_feed
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:24:-- Cosine similarity between user's interests_embedding and journal embeddings
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-25--- Composite score: 80% semantic + 10% engagement + 10% recency (90-day window)
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-26--- Excludes own posts & reposts, minimum 0.30 similarity floor, cursor pagination
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-69-AS $$
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-70-DECLARE
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:71:    user_embedding vector(384);
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-72-    max_hot INT;
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-73-BEGIN
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:74:    -- Get user's interests embedding
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:75:    SELECT u.interests_embedding
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:76:    INTO user_embedding
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-77-    FROM public.users u
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-78-    WHERE u.id = p_user_id;
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-79-
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:80:    -- If no embedding, return empty
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:81:    IF user_embedding IS NULL THEN
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-82-        RETURN;
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-83-    END IF;
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-93-    FROM public.journals j2
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-94-    WHERE j2.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:95:      AND j2.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-96-      AND j2.created_at >= now() - interval '90 days';
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-97-
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-119-        j.cached_comment_count::bigint AS comment_count,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-120-        j.cached_bookmark_count::bigint AS bookmark_count,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:121:        (1 - (j.embeddings <=> user_embedding))::FLOAT AS semantic_similarity,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-122-        (
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:123:            0.80 * (1 - (j.embeddings <=> user_embedding))::FLOAT
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-124-            + 0.10 * ((COALESCE(j.views, 0) * 6 + j.cached_reaction_count * 3 + j.cached_comment_count * 2 + j.cached_bookmark_count * 2)::FLOAT / GREATEST(max_hot, 1))
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-125-            + 0.10 * GREATEST(0, 1.0 - EXTRACT(EPOCH FROM (now() - j.created_at)) / (90 * 86400.0))
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-128-    LEFT JOIN public.users u ON u.id = j.user_id
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-129-    WHERE j.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:130:      AND j.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-131-      AND j.user_id != p_user_id
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-132-      AND COALESCE(j.is_repost, false) = false
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:133:      AND (1 - (j.embeddings <=> user_embedding)) >= 0.30
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-134-      AND j.created_at >= now() - interval '90 days'
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-135-    ORDER BY (
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:136:        0.80 * (1 - (j.embeddings <=> user_embedding))::FLOAT
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-137-        + 0.10 * ((COALESCE(j.views, 0) * 6 + j.cached_reaction_count * 3 + j.cached_comment_count * 2 + j.cached_bookmark_count * 2)::FLOAT / GREATEST(max_hot, 1))
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-138-        + 0.10 * GREATEST(0, 1.0 - EXTRACT(EPOCH FROM (now() - j.created_at)) / (90 * 86400.0))
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-144-
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-145--- 5. RPC: get_interest_posts
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:146:-- Finds posts matching a single topic embedding
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-147--- Composite score: 50% semantic + 35% engagement + 15% recency, 30-day default window
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-148-DO $$ BEGIN
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-151-END $$;
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-152-CREATE OR REPLACE FUNCTION public.get_interest_posts(
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:153:    p_topic_embedding vector(384),
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-154-    p_limit INT DEFAULT 8,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-155-    p_recency_days INT DEFAULT 30
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-192-    FROM public.journals j2
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-193-    WHERE j2.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:194:      AND j2.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-195-      AND j2.created_at >= now() - (p_recency_days || ' days')::interval;
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-196-
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-213-            j.cached_comment_count::bigint AS comment_count,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-214-            j.cached_bookmark_count::bigint AS bookmark_count,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:215:            (1 - (j.embeddings <=> p_topic_embedding))::FLOAT AS sem_sim,
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-216-            (
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-217-                COALESCE(j.views, 0) * 6
+--
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-223-        LEFT JOIN public.users u ON u.id = j.user_id
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-224-        WHERE j.privacy = 'public'
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:225:          AND j.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-226-          AND COALESCE(j.is_repost, false) = false
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:227:          AND (1 - (j.embeddings <=> p_topic_embedding)) >= 0.30
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-228-          AND j.created_at >= now() - (p_recency_days || ' days')::interval
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql:229:        ORDER BY j.embeddings <=> p_topic_embedding
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-230-        LIMIT p_limit * 3
+C:\Users\johnm\iskrib_v3\server\sql\personalized_feed.sql-231-    )
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-187-    const storyMap = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-188-    stories.forEach(s => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:189:        const { embedding, ...rest } = s;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-190-        storyMap[s.id] = { ...rest, users: authorMap[s.author_id] || null, in_library: true, added_at: addedAtMap[s.id] };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-191-    });
+--
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-10-];
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-11-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:12:// In-memory cache: topic string → embedding array
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-13-const topicEmbeddingCache = new Map();
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-14-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-15-/**
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:16: * Generate a single embedding from an array of interest strings.
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:17: * Joins them into a comma-separated string and runs through the embedding pipeline.
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-18- */
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-19-export const generateInterestsEmbedding = async (interests) => {
+--
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-32-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-33-/**
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:34: * Generate an interests embedding for a user and store it on the users table.
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-35- */
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-36-export const updateUserInterestsEmbedding = async (userId, interests) => {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:37:    const embedding = await generateInterestsEmbedding(interests);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:38:    if (!embedding) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:39:        throw new Error('failed to generate interests embedding');
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-40-    }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-41-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-42-    const { error } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-43-        .from('users')
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:44:        .update({ interests_embedding: embedding })
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-45-        .eq('id', userId);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-46-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-47-    if (error) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:48:        throw new Error(`failed to update interests_embedding: ${error.message}`);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-49-    }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-50-};
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-51-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-52-/**
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:53: * Bootstrap topic_embeddings table at server start.
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:54: * Generates embeddings for any missing topics and loads all into the in-memory cache.
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-55- */
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-56-export const bootstrapTopicEmbeddings = async () => {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:57:    // Fetch existing topic embeddings
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-58-    const { data: existing, error: fetchError } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:59:        .from('topic_embeddings')
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:60:        .select('topic, embedding');
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-61-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-62-    if (fetchError) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:63:        console.error('Failed to fetch topic_embeddings:', fetchError.message);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-64-        return;
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-65-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-69-    // Load existing into cache
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-70-    for (const row of (existing || [])) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:71:        topicEmbeddingCache.set(row.topic, row.embedding);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-72-    }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-73-
+--
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-76-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-77-    if (missing.length > 0) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:78:        console.log(`topic_embeddings: generating ${missing.length} missing embeddings...`);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-79-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-80-        for (const topic of missing) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-81-            try {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:82:                const embedding = await GenerateEmbeddings(topic, '');
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:83:                if (!embedding) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:84:                    console.error(`  Failed to generate embedding for topic "${topic}"`);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-85-                    continue;
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-86-                }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-87-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-88-                const { error: insertError } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:89:                    .from('topic_embeddings')
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:90:                    .upsert({ topic, embedding }, { onConflict: 'topic' });
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-91-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-92-                if (insertError) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-93-                    console.error(`  Failed to insert topic "${topic}":`, insertError.message);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-94-                } else {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:95:                    topicEmbeddingCache.set(topic, embedding);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-96-                }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-97-            } catch (err) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:98:                console.error(`  Error generating embedding for topic "${topic}":`, err.message);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-99-            }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-100-        }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-101-    }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-102-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:103:    console.log(`topic_embeddings: all topics present (${topicEmbeddingCache.size} cached)`);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-104-};
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-105-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-106-/**
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:107: * Get the cached embedding for a topic.
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-108- * Returns null if not cached (topic was never bootstrapped or failed).
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-109- */

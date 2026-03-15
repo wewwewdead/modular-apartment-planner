@@ -1,0 +1,33 @@
+Task: Implement Scalable Embedding-Based Galaxy Gravity
+
+Goal: Use embeddings (vectors) to position stars and galaxies. Implement a "Centroid" strategy to ensure performance at scale.
+
+1. The "Galaxy Centroid" Logic:
+
+For each Galaxy (User), calculate a Mean Embedding (the average of all their posts).
+
+Gravity Step A (Galaxy-to-Galaxy): Use Cosine Similarity between Galaxy Mean Embeddings to position the "Galaxy Suns" on the map. If two users write about similar topics, their entire galaxies should be pulled closer together.
+
+Gravity Step B (Star-to-Galaxy): Individual stars within a galaxy should be pulled toward the Centroids of other galaxies they are similar to, causing the galaxy shape to "stretch" semantically.
+
+2. Scaling Strategy (Spatial Partitioning):
+
+Sectoring: Divide the infinite map into "Sectors" (e.g., 2000px blocks).
+
+Pruning: Only calculate gravity for stars within the user's current Sector and the 8 surrounding Sectors.
+
+Worker-Ready: Write the similarity math as a pure function so it can easily be moved to a Web Worker later if the UI thread lags.
+
+3. Technical Implementation:
+
+Cosine Similarity: Provide a robust JS function to calculate similarity between two float arrays.
+
+Force-Directed Settle: Use a "Cooling" effect. When the universe loads, stars move quickly toward their semantic targets, then slow down and "lock" into place to save CPU.
+
+Supabase Integration: Assume the embeddings are already fetched. Provide a placeholder to save the "Settled" x, y coordinates back to Supabase using a debounced RPC call.
+
+4. Visuals:
+
+Maintain the Andromeda/Milky Way glow.
+
+Add "Semantic Bridges": Draw a very faint, glowing line (opacity 0.1) between stars that have a similarity score > 0.9.

@@ -1,0 +1,69 @@
+import React from 'react';
+import { StyleSheet, Text } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+
+import { colors } from '../theme/colors';
+import { motion } from '../theme/motion';
+import { AnimatedPressable } from './AnimatedPressable';
+
+interface ChipProps {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+  accessibilityLabel?: string;
+}
+
+export const Chip = React.memo(function Chip({
+  label,
+  selected,
+  onPress,
+  accessibilityLabel,
+}: ChipProps) {
+  const progress = useSharedValue(selected ? 1 : 0);
+  progress.value = withSpring(selected ? 1 : 0, motion.snappy);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [colors.surfaceAlt, colors.brandLight]
+    ),
+    borderColor: interpolateColor(
+      progress.value,
+      [0, 1],
+      [colors.line, colors.brand]
+    ),
+    transform: [{ scale: withSpring(selected ? 1.02 : 1, motion.bouncy) }],
+  }));
+
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      <Animated.View style={[styles.chip, animatedStyle]}>
+        <Text style={styles.chipText}>{label}</Text>
+      </Animated.View>
+    </AnimatedPressable>
+  );
+});
+
+const styles = StyleSheet.create({
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  chipText: {
+    color: colors.ink,
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+});

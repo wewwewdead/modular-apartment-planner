@@ -1,0 +1,114 @@
+import { wallOutline } from '@/geometry/wallGeometry';
+
+const HANDLE_SIZE = 8; // px, will use vectorEffect
+
+function WallSelection({ wall, zoom }) {
+  const outline = wallOutline(wall);
+  const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+  const handleR = HANDLE_SIZE / zoom;
+
+  return (
+    <g>
+      <polygon
+        points={points}
+        fill="var(--color-selection-fill)"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Endpoint handles */}
+      <rect
+        data-handle="start"
+        x={wall.start.x - handleR / 2}
+        y={wall.start.y - handleR / 2}
+        width={handleR}
+        height={handleR}
+        fill="white"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+        style={{ cursor: 'move' }}
+      />
+      <rect
+        data-handle="end"
+        x={wall.end.x - handleR / 2}
+        y={wall.end.y - handleR / 2}
+        width={handleR}
+        height={handleR}
+        fill="white"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        vectorEffect="non-scaling-stroke"
+        style={{ cursor: 'move' }}
+      />
+    </g>
+  );
+}
+
+export default function SelectionOverlay({ selectedId, selectedType, floor, zoom }) {
+  if (!selectedId || !floor) return null;
+
+  if (selectedType === 'wall') {
+    const wall = floor.walls.find(w => w.id === selectedId);
+    if (!wall) return null;
+    return <WallSelection wall={wall} zoom={zoom} />;
+  }
+
+  if (selectedType === 'door') {
+    const door = floor.doors.find(d => d.id === selectedId);
+    if (!door) return null;
+    const wall = floor.walls.find(w => w.id === door.wallId);
+    if (!wall) return null;
+    // Highlight parent wall subtly
+    const outline = wallOutline(wall);
+    const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+    return (
+      <polygon
+        points={points}
+        fill="none"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+
+  if (selectedType === 'window') {
+    const win = floor.windows.find(w => w.id === selectedId);
+    if (!win) return null;
+    const wall = floor.walls.find(w => w.id === win.wallId);
+    if (!wall) return null;
+    const outline = wallOutline(wall);
+    const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+    return (
+      <polygon
+        points={points}
+        fill="none"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+
+  if (selectedType === 'room') {
+    const room = floor.rooms.find(r => r.id === selectedId);
+    if (!room?.points?.length) return null;
+    const points = room.points.map(p => `${p.x},${p.y}`).join(' ');
+    return (
+      <polygon
+        points={points}
+        fill="none"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+
+  return null;
+}

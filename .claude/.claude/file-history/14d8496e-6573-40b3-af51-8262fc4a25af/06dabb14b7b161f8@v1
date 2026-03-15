@@ -1,0 +1,245 @@
+import React, { useMemo, useState } from 'react';
+import {
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import Animated, { FadeInUp } from 'react-native-reanimated';
+
+import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { Card } from '../../components/Card';
+import { EmptyState } from '../../components/EmptyState';
+import { Cart, computeCartTotal } from '../../domain/models';
+import { formatCurrency } from '../../lib/format';
+import { MainTabScreenProps } from '../../navigation/types';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+import { ProgressBar } from '../../components/ProgressBar';
+
+type Props = MainTabScreenProps<'Cart'>;
+
+const CartCard = React.memo(function CartCard({
+  cart,
+  total,
+  onPress,
+}: {
+  cart: Cart;
+  total: number;
+  onPress: () => void;
+}) {
+  const fulfilledCount = cart.cartItems.filter(i => i.isFulfilled).length;
+  const progress = cart.cartItems.length > 0 ? fulfilledCount / cart.cartItems.length : 0;
+
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      accessibilityLabel={`${cart.name}, ${cart.cartItems.length} items, ${formatCurrency(total)}`}
+      accessibilityRole="button"
+    >
+      <Animated.View entering={FadeInUp.duration(300)} style={styles.cartCard}>
+        <View style={styles.cartCardHeader}>
+          <Text style={styles.cartName}>{cart.name}</Text>
+          <View style={[styles.statusBadge, cart.status === 'shopping' && styles.statusShopping]}>
+            <Text style={styles.statusText}>{cart.status}</Text>
+          </View>
+        </View>
+        <ProgressBar
+          progress={progress}
+          color={colors.success}
+          accessibilityLabel={`${fulfilledCount} of ${cart.cartItems.length} items done`}
+        />
+        <View style={styles.cartCardFooter}>
+          <Text style={styles.cartMeta}>
+            {cart.cartItems.length} item{cart.cartItems.length === 1 ? '' : 's'}
+          </Text>
+          <Text style={styles.cartTotal}>{formatCurrency(total)}</Text>
+        </View>
+      </Animated.View>
+    </AnimatedPressable>
+  );
+});
+
+export function CartListScreen({ navigation }: Props) {
+  const appState = useAppStore(state => state.appState);
+  const draftSelections = useAppStore(state => state.draftSelections);
+  const createCart = useAppStore(state => state.createCart);
+  const [cartName, setCartName] = useState('');
+  const [budget, setBudget] = useState('120');
+
+  const activeCarts = useMemo(
+    () => appState?.vault.carts.filter(c => !c.isDeleted && c.status !== 'completed') ?? [],
+    [appState]
+  );
+
+  if (!appState) return null;
+
+  const selectedItems = Object.entries(draftSelections).map(([itemId, quantity]) => ({
+    itemId,
+    quantity,
+  }));
+
+  const handleCreateCart = async () => {
+    if (!selectedItems.length) return;
+    const parsedBudget = Number(budget);
+    if (!cartName.trim() || !Number.isFinite(parsedBudget)) return;
+    await createCart({ name: cartName, budget: parsedBudget, selectedItems });
+    setCartName('');
+  };
+
+  const renderItem = ({ item }: { item: Cart }) => (
+    <CartCard
+      cart={item}
+      total={computeCartTotal(appState.vault, item)}
+      onPress={() => navigation.navigate('CartDetail', { cartId: item.id })}
+    />
+  );
+
+  return (
+    <FlatList
+      data={activeCarts}
+      keyExtractor={item => item.id}
+      renderItem={renderItem}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      ListHeaderComponent={
+        <Card style={styles.createCard}>
+          <Text style={styles.createTitle}>Quick create</Text>
+          <Text style={styles.createHint}>
+            Select items in Vault tab, then create a cart here.
+          </Text>
+          <TextInput
+            style={styles.input}
+            value={cartName}
+            onChangeText={setCartName}
+            placeholder="Cart name"
+            placeholderTextColor={colors.mutedInk}
+            accessibilityLabel="Cart name"
+          />
+          <TextInput
+            style={styles.input}
+            value={budget}
+            onChangeText={setBudget}
+            placeholder="Budget"
+            placeholderTextColor={colors.mutedInk}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Budget amount"
+          />
+          <AnimatedPressable
+            style={[styles.createButton, !selectedItems.length && styles.buttonDisabled]}
+            onPress={() => { handleCreateCart().catch(() => undefined); }}
+            disabled={!selectedItems.length}
+            accessibilityRole="button"
+            accessibilityLabel={`Create cart from ${selectedItems.length} selected items`}
+            accessibilityState={{ disabled: !selectedItems.length }}
+          >
+            <Text style={styles.createButtonText}>
+              Create from {selectedItems.length} item{selectedItems.length === 1 ? '' : 's'}
+            </Text>
+          </AnimatedPressable>
+        </Card>
+      }
+      ListEmptyComponent={
+        <EmptyState
+          title="No active carts"
+          message="Select items in Vault, then create your first planning cart above."
+        />
+      }
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  createCard: {
+    gap: 10,
+    marginBottom: spacing.sm,
+  },
+  createTitle: {
+    ...typography.title,
+    color: colors.ink,
+  },
+  createHint: {
+    ...typography.body,
+    color: colors.mutedInk,
+    fontSize: 14,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+  },
+  createButton: {
+    borderRadius: 18,
+    backgroundColor: colors.brand,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  createButtonText: {
+    color: colors.surface,
+    fontWeight: '800',
+  },
+  cartCard: {
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 10,
+  },
+  cartCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cartName: {
+    ...typography.label,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  statusBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: colors.surfaceAlt,
+  },
+  statusShopping: {
+    backgroundColor: colors.brandLight,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.mutedInk,
+    textTransform: 'capitalize',
+  },
+  cartCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cartMeta: {
+    ...typography.caption,
+    color: colors.mutedInk,
+  },
+  cartTotal: {
+    ...typography.label,
+    color: colors.brandDeep,
+  },
+});

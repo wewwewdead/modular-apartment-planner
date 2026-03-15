@@ -1,0 +1,90 @@
+.canvasContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: var(--color-background);
+}
+
+.svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+.statusBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: var(--color-panel-bg);
+  border-top: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xl);
+  padding: 0 var(--space-lg);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  font-family: var(--font-blueprint);
+  user-select: none;
+}
+
+.statusCoords {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-blueprint);
+}
+
+.statusTool {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-workspace-sketch, #B8860B);
+  background: rgba(184, 134, 11, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.statusContext {
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  color: var(--color-text-secondary);
+}
+
+.toast {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(30, 36, 51, 0.92);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.toastProgress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--color-workspace-sketch, #B8860B);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  animation: toastCountdown 2.5s linear forwards;
+}
+
+@keyframes toastCountdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}

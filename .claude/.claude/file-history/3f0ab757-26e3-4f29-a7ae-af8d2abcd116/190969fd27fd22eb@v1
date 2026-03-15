@@ -1,0 +1,233 @@
+# Grock Mobile - Material You UI/UX Redesign Plan
+
+## Context
+
+Grock is a React Native (0.84.1) Android-only grocery planning app with a warm, card-based UI but **no animations** (despite Reanimated 4.2.2 + Lottie being installed), **no accessibility** (zero a11y props anywhere), **no list virtualization** (all ScrollView + .map()), and **no bottom tab navigation** (stack-only). The app has solid architecture (Zustand, SQLite, clean domain models) but the UI needs a Material You upgrade with performance, accessibility, and micro-interactions.
+
+**Screen mapping:** SearchScreen = **VaultScreen**, ComparisonScreen = **CartDetailScreen**, CartScreen = **HomeScreen** + new Cart tab.
+
+## User Decisions
+- **List rendering:** FlatList + React.memo (no FlashList dependency)
+- **Icons:** `react-native-vector-icons` (MaterialCommunityIcons) for tab bar + throughout app
+- **First screen after nav:** HomeScreen (Dashboard)
+- **Implementation order:** Foundation -> Navigation -> HomeScreen -> VaultScreen -> CartDetailScreen
+
+---
+
+## Phase 1: Foundation - Theme Tokens & Shared Components
+
+### 1A. New theme files
+
+| File | Purpose |
+|------|---------|
+| `src/theme/spacing.ts` | Scale: xs=4, sm=8, md=12, lg=16, xl=20, xxl=24, xxxl=32 |
+| `src/theme/typography.ts` | headline/title/body/caption/label with fontSize, lineHeight, fontWeight |
+| `src/theme/elevation.ts` | level0-3 mapping to Android elevation + shadow values |
+| `src/theme/motion.ts` | Reanimated spring presets: snappy, gentle, bouncy, quick + ReduceMotion.System |
+
+### 1B. Shared components (new `src/components/`)
+
+| Component | Key Behavior |
+|-----------|-------------|
+| `AnimatedPressable.tsx` | Base pressable with Reanimated scale (0.97) + opacity (0.85) spring on press. All interactive elements use this. Full a11y props pass-through. |
+| `Card.tsx` | Material You surface: borderRadius 24, elevation prop (0-3), entrance FadeInDown animation |
+| `Chip.tsx` | Animated selection chip: interpolateColor on bg/border, scale bounce on select |
+| `SearchBar.tsx` | Animated focus: border color transition, icon scale, clear button fade-in. `accessibilityRole="search"` |
+| `ProgressBar.tsx` | Animated width via withSpring, color prop, `accessibilityRole="progressbar"` with value |
+| `EmptyState.tsx` | Optional Lottie + fade-in text |
+| `FloatingActionBar.tsx` | Absolute bottom, blur bg via @react-native-community/blur, slide-up entrance |
+| `SectionHeader.tsx` | Sticky header with emoji + title + count |
+
+### 1C. Shared hooks (new `src/hooks/`)
+
+| Hook | Purpose |
+|------|---------|
+| `useAnimatedEntrance.ts` | Returns animated style for staggered list item fade-in |
+| `useTimeOfDayGreeting.ts` | Returns "Good morning/afternoon/evening" |
+
+---
+
+## Phase 2: Navigation & Tab Bar Redesign
+
+### New dependencies
+- `@react-navigation/bottom-tabs` (v7, matches existing @react-navigation/native v7.1.33)
+- `react-native-vector-icons` (MaterialCommunityIcons for tab bar icons + app-wide use)
+  - Android setup: add `apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")` to `android/app/build.gradle`
+
+### New navigation architecture
+```
+RootNavigator (conditional guards unchanged)
+  |-- [bootstrapping/error] --> LoadingScreen
+  |-- [!onboarded] --> OnboardingFlow
+  |-- NavigationContainer
+       RootStack (native-stack)
+         |-- "MainTabs" (headerShown: false)
+         |     BottomTabNavigator (custom tabBar)
+         |       |-- Home --> HomeScreen
+         |       |-- Vault --> VaultScreen
+         |       |-- Cart --> CartListScreen (NEW)
+         |       |-- Menu --> MenuScreen
+         |-- "CartDetail" { cartId } (presentation: 'card')
+         |-- "Paywall" (presentation: 'modal')
+         |-- "History" (presentation: 'card')
+```
+
+### Files to modify
+- **`src/navigation/types.ts`** - Add `MainTabParamList`, update `RootStackParamList` with `MainTabs: NavigatorScreenParams<MainTabParamList>`, add composite nav types, add global `ReactNavigation` declaration
+- **`src/navigation/RootNavigator.tsx`** - Nest `MainTabNavigator` as "MainTabs" screen, keep CartDetail/Paywall/History as overlay stack screens
+
+### Files to create
+- **`src/navigation/MainTabNavigator.tsx`** - `createBottomTabNavigator<MainTabParamList>()` with custom `tabBar={GrockTabBar}`
+- **`src/components/navigation/GrockTabBar.tsx`** - Custom tab bar (height 80, `colors.surface` bg, elevation 3)
+- **`src/components/navigation/TabBarIcon.tsx`** - Per-tab MaterialCommunityIcons icon with Reanimated scale (1.0->1.15) + color (mutedInk->brand) animation. Uses outline variant when inactive, filled when active (e.g. "home-outline" / "home").
+- **`src/components/navigation/TabBarIndicatorPill.tsx`** - Material You pill (64x32, brandLight, borderRadius 16) with spring translateX
+- **`src/components/navigation/TabBarBadge.tsx`** - Cart item count badge (brand bg, white text, scale entrance animation)
+- **`src/components/navigation/tabBarIcons.ts`** - Icon name mapping for MaterialCommunityIcons: Home="home"/"home-outline", Vault="archive"/"archive-outline", Cart="cart"/"cart-outline", Menu="menu"/"menu"
+- **`src/screens/cart/CartListScreen.tsx`** - New Cart tab landing: active carts list + quick create
+
+### Tab bar animation specs
+- **Pill slide:** `withSpring(newIndex, { damping: 20, stiffness: 200, mass: 0.8 })`
+- **Icon scale/color:** `interpolate(progress, [0,1], [1.0, 1.15])` + `interpolateColor(progress, [0,1], [mutedInk, brand])`
+- **Badge entrance:** `withSpring(count > 0 ? 1 : 0, { damping: 12, stiffness: 180 })`
+- **All springs:** `reduceMotion: ReduceMotion.System`
+
+### Tab bar accessibility
+- Container: `accessibilityRole="tablist"`
+- Each tab: `accessibilityRole="tab"`, `accessibilityState={{ selected }}`, `accessibilityLabel` includes badge count for Cart
+- Min touch target: 48x48dp
+- Badge: `importantForAccessibility="no"` (count read via tab label)
+
+---
+
+## Phase 3: HomeScreen Redesign (Dashboard + Cart Management)
+
+**Why:** The home screen is the app's front door. Shoppers need to instantly see: active trips, budget status, and next action.
+
+### Component breakdown
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| HomeHeader | `src/screens/home/components/HomeHeader.tsx` | Time-of-day greeting + 1-line summary |
+| QuickActions | `src/screens/home/components/QuickActions.tsx` | 2-col icon grid: Browse Vault, New Cart, History, Pro |
+| QuickActionButton | `src/screens/home/components/QuickActionButton.tsx` | Icon + label rounded-square with tint bg |
+| ActiveCartCard | `src/screens/home/components/ActiveCartCard.tsx` | Cart preview: name, progress bar, budget dot, item count |
+| CartMiniProgress | `src/screens/home/components/CartMiniProgress.tsx` | Thin animated progress bar for cart fulfillment |
+| CreateCartCTA | `src/screens/home/components/CreateCartCTA.tsx` | Prominent create button with draft selection badge |
+| HomeTabBar | `src/screens/home/components/HomeTabBar.tsx` | Active/Completed/Insights pill tabs with animated indicator |
+| CompletedCartCard | `src/screens/home/components/CompletedCartCard.tsx` | Completed trip: date, total, budget comparison |
+| InsightsPanel | `src/screens/home/components/InsightsPanel.tsx` | Spend trends with SVG mini charts |
+| StatCard | `src/screens/home/components/StatCard.tsx` | Animated count-up number stat |
+| HomeEmptyState | `src/screens/home/components/HomeEmptyState.tsx` | Lottie + guidance text |
+
+### Key changes to `src/screens/home/HomeScreen.tsx`
+- Replace ScrollView with **FlatList** (ListHeaderComponent for static top, dynamic data for tab content)
+- Remove Vault/Menu action buttons (now tabs)
+- Keep History/Paywall navigation buttons
+- Use composite navigation type for parent stack access
+- Add all accessibility props + live regions for dynamic values
+- Animated stat counters (withTiming count-up on mount)
+- Staggered card entrance: `FadeInUp.delay(index * 60)`
+
+---
+
+## Phase 4: VaultScreen Redesign (Search + Browse)
+
+**Why:** Primary item discovery screen. Grocery shoppers scan by department, then individual products. Search and selection must be fast and satisfying.
+
+### Component breakdown
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| VaultSearchBar | `src/screens/vault/components/VaultSearchBar.tsx` | Animated focus border/icon, clear button |
+| CategoryChipRow | `src/screens/vault/components/CategoryChipRow.tsx` | Horizontal FlatList of filter chips |
+| VaultItemCard | `src/screens/vault/components/VaultItemCard.tsx` | Item card: name, best price, store, selection toggle |
+| VaultSectionHeader | `src/screens/vault/components/VaultSectionHeader.tsx` | Sticky category header with emoji + count |
+| SelectionBadge | `src/screens/vault/components/SelectionBadge.tsx` | Animated check circle + quantity stepper |
+| VaultFAB | `src/screens/vault/components/VaultFAB.tsx` | Floating action button with expand menu (Add Item / Add Category) |
+| AddItemSheet | `src/screens/vault/components/AddItemSheet.tsx` | Bottom sheet form for new items |
+| AddCategorySheet | `src/screens/vault/components/AddCategorySheet.tsx` | Bottom sheet form for new categories |
+| VaultEmptyState | `src/screens/vault/components/VaultEmptyState.tsx` | Per-category empty state |
+
+### Key changes to `src/screens/vault/VaultScreen.tsx`
+- Replace ScrollView + .map() with **SectionList** (sections = categories, items = category.items)
+- Move add forms from inline to FAB-triggered bottom sheets
+- `React.memo` on VaultItemCard with shallow comparator
+- `getItemLayout` for fixed-height rows
+- SectionList config: `initialNumToRender: 10`, `maxToRenderPerBatch: 5`, `windowSize: 5`
+- Category chips: `accessibilityRole="tab"`, `accessibilityState={{ selected }}`
+- Item cards: `accessibilityLabel` includes best price + store
+- Quantity stepper: `accessibilityRole="adjustable"` with value
+
+---
+
+## Phase 5: CartDetailScreen Redesign (Shopping + Comparison)
+
+**Why:** The active shopping screen. Must be usable one-handed in a store. Existing `fulfillmentAnimationState` (0-5), `shouldShowCheckmark`, and `shouldStrikethrough` fields on CartItem are finally activated.
+
+### Component breakdown
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| CartHero | `src/screens/cart/components/CartHero.tsx` | Name + status badge + progress ring |
+| CartProgressRing | `src/screens/cart/components/CartProgressRing.tsx` | SVG circle: animated strokeDashoffset driven by fulfillmentStatus |
+| BudgetBar | `src/screens/cart/components/BudgetBar.tsx` | Spend vs budget bar with color transitions (success->warning->danger) |
+| CartStatusButton | `src/screens/cart/components/CartStatusButton.tsx` | "Start Shopping" / "Finish Trip" CTA with state-aware color |
+| CartItemRow | `src/screens/cart/components/CartItemRow.tsx` | Swipeable row (Gesture.Pan), green reveal on right-swipe, threshold at 120px |
+| FulfillmentCheckmark | `src/screens/cart/components/FulfillmentCheckmark.tsx` | 5-stage SVG animation: circle draw -> fill -> checkmark draw -> bounce -> settle |
+| StoreGroupToggle | `src/screens/cart/components/StoreGroupToggle.tsx` | Toggle to group items by store for efficient shopping |
+| CartSummaryBar | `src/screens/cart/components/CartSummaryBar.tsx` | Floating bottom bar: "X/Y done" + running total, blur bg |
+| PlannedVsActualPill | `src/screens/cart/components/PlannedVsActualPill.tsx` | Per-item planned vs actual price comparison badge |
+
+### Key changes to `src/screens/cart/CartDetailScreen.tsx`
+- Replace ScrollView with **FlatList** (ListHeaderComponent for hero/budget/status, items as data)
+- Add swipe-to-fulfill via `react-native-gesture-handler` Gesture.Pan()
+- `accessibilityRole="checkbox"` on items with `onAccessibilityAction` fallback for TalkBack (can't swipe)
+- Progress ring: `accessibilityRole="progressbar"` with min/max/now values
+- Budget bar: color interpolation across 4 thresholds (0-0.7 success, 0.7-0.9 warning, 0.9-1.0 brand, 1.0+ danger)
+- Status-aware UI: Planning=edit-friendly, Shopping=swipe+fulfill, Completed=read-only receipt
+- `React.memo` on CartItemRow
+- `useMemo` for store-grouped data transformation
+- `contentContainerStyle={{ paddingBottom: 100 }}` for floating summary bar clearance
+
+---
+
+## Implementation Order
+
+1. **Phase 1** (Foundation) - Theme tokens + shared components + install `react-native-vector-icons`
+2. **Phase 2** (Navigation) - Tab bar with MaterialCommunityIcons + CartListScreen
+3. **Phase 3** (HomeScreen) - Dashboard redesign *(user's chosen first screen)*
+4. **Phase 4** (VaultScreen) - Search/browse redesign
+5. **Phase 5** (CartDetailScreen) - Shopping experience redesign
+
+Each phase is self-contained and testable. We start with Phases 1+2 together (foundation + navigation), then proceed to HomeScreen. After each screen, we iterate.
+
+---
+
+## Verification
+
+After each phase:
+1. `npx react-native run-android` - app builds and boots
+2. Navigate all routes - no crashes, correct screen transitions
+3. Enable TalkBack - all interactive elements announced correctly, no unlabeled buttons
+4. Check animation smoothness - Reanimated performance monitor shows 60fps
+5. Run existing tests: `npx jest` - domain tests still pass
+6. For Phase 2: verify tab switching, badge updates, indicator pill animation
+7. For Phases 3-5: verify FlatList virtualization (large dataset), gesture handling, layout animations
+
+---
+
+## Key Files Reference
+
+| File | Role |
+|------|------|
+| `src/navigation/RootNavigator.tsx` | Navigation restructuring target |
+| `src/navigation/types.ts` | Type definitions update |
+| `src/theme/colors.ts` | Existing color tokens (no changes needed) |
+| `src/domain/models.ts` | CartItem.fulfillmentAnimationState (0-5), shouldShowCheckmark, shouldStrikethrough - unused fields to activate |
+| `src/state/useAppStore.ts` | Zustand store - tighten selectors, optional UI prefs |
+| `src/screens/home/HomeScreen.tsx` | Dashboard rewrite |
+| `src/screens/vault/VaultScreen.tsx` | Search/browse rewrite |
+| `src/screens/cart/CartDetailScreen.tsx` | Shopping experience rewrite |
+| `src/lib/format.ts` | Reuse: formatCurrency(), formatDate(), capitalize() |
+| `src/domain/models.ts:computeDashboardSummary` | Reuse for HomeScreen stats |
+| `src/domain/models.ts:computeCartTotal` | Reuse for budget bar + summary |

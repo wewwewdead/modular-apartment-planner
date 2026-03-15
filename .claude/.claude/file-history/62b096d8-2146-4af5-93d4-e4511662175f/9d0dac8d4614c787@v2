@@ -1,0 +1,38 @@
+import { rotate, midpoint } from './point';
+
+export function columnOutline(column) {
+  const hw = column.width / 2, hd = column.depth / 2;
+  const { x: cx, y: cy } = column;
+  const corners = [
+    { x: cx - hw, y: cy - hd }, { x: cx + hw, y: cy - hd },
+    { x: cx + hw, y: cy + hd }, { x: cx - hw, y: cy + hd },
+  ];
+  if (!column.rotation) return corners;
+  return corners.map(p => rotate(p, { x: cx, y: cy }, column.rotation));
+}
+
+export function columnEdgeMidpoints(column) {
+  const corners = columnOutline(column);
+  return [
+    midpoint(corners[0], corners[1]),
+    midpoint(corners[1], corners[2]),
+    midpoint(corners[2], corners[3]),
+    midpoint(corners[3], corners[0]),
+  ];
+}
+
+export function columnEdges(column) {
+  const corners = columnOutline(column);
+  return corners.map((c, i) => ({
+    start: c,
+    end: corners[(i + 1) % corners.length],
+  }));
+}
+
+export function columnSnapPoints(column) {
+  return [
+    { x: column.x, y: column.y },
+    ...columnOutline(column),
+    ...columnEdgeMidpoints(column),
+  ];
+}

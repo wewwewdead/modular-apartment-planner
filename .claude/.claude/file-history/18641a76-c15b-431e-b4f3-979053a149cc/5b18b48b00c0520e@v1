@@ -1,0 +1,81 @@
+# Plan: Surveyor Bearing + Length Input for Wall Drawing
+
+## Context
+
+The user needs to trace a lot plan (LOT 812-I-1, 120 sq.m.) with surveyor bearings like "N 50°56'W, 21.80m" as walls in the planner. Currently the wall tool only supports mouse-click placement. There is no way to type exact lengths or angles, making it impossible to replicate precise lot boundaries.
+
+## Approach
+
+Add a **"Drawing Wall"** section to the PropertiesPanel that appears when the wall tool is active and a start point has been set. It provides structured inputs for surveyor bearing (N/S + degrees + minutes + E/W) and length, with Enter-to-confirm creating each wall segment and chaining to the next.
+
+## Files to Change
+
+| File | Action |
+|------|--------|
+| `src/geometry/bearing.js` | **NEW** — bearing-to-angle conversion utilities |
+| `src/ui/PropertiesPanel.jsx` | Add `WallDrawingInput` component + wire into render |
+| `src/ui/PropertiesPanel.module.css` | Add bearing input row styles |
+
+**No changes** to `wallDrawHandler.js`, `EditorProvider.jsx`, or any other file.
+
+## Step 1: Create `src/geometry/bearing.js`
+
+Two exported functions:
+
+- `surveyorBearingToSvgAngle(ns, degrees, minutes, ew)` — converts bearing to radians for the SVG Y-down coordinate system:
+  - N X° E → −π/2 + X_rad
+  - N X° W → −π/2 − X_rad
+  - S X° E → π/2 − X_rad
+  - S X° W → π/2 + X_rad
+- `endpointFromBearing(start, lengthMm, angleRad)` — computes {x, y} endpoint
+
+## Step 2: Add CSS to `PropertiesPanel.module.css`
+
+New classes: `.bearingRow` (flex row for N/S + deg + min + E/W), `.bearingSelect`, `.bearingInput`, `.bearingSymbol`, `.confirmBtn`
+
+## Step 3: Add `WallDrawingInput` component in `PropertiesPanel.jsx`
+
+- Uses `useState` for: `lengthVal`, `degrees`, `minutes`, `nsDir` ('N'/'S'), `ewDir` ('E'/'W')
+- Uses `useRef` for length input to re-focus after wall creation
+- Shows: Start X/Y (read-only), Bearing row (N/S dropdown + deg + min + E/W dropdown), Length input, "Create Wall" button
+- On Enter or button click:
+  1. Parse inputs, validate (length ≥ MIN_WALL_LENGTH, degrees 0-90, minutes 0-59)
+  2. Compute angle via `surveyorBearingToSvgAngle`, endpoint via `endpointFromBearing`
+  3. `dispatch({ type: 'WALL_ADD' })` with `createWall(start, endPt)`
+  4. `editorDispatch({ type: 'UPDATE_TOOL_STATE' })` to chain (end → new start)
+  5. Clear length/deg/min inputs, re-focus length input
+
+## Step 4: Wire into PropertiesPanel render
+
+1. Add `activeTool, toolState` to the `useEditor()` destructuring
+2. Add imports: `TOOLS` (from `@/editor/tools`), `createWall` (from `@/domain/models`), bearing utilities
+3. In the return JSX, render `<WallDrawingInput>` above `{content}` when `activeTool === TOOLS.WALL && toolState.start && workspaceMode === 'model'`
+
+## Key Reuse
+
+- `createWall(start, end, thickness, options)` from `src/domain/models.js`
+- `MIN_WALL_LENGTH` (100mm) already imported in PropertiesPanel
+- `WALL_ADD` dispatch pattern from `wallDrawHandler.js`
+- `UPDATE_TOOL_STATE` chaining pattern from `wallDrawHandler.js`
+- `isTypingTarget()` in `src/utils/keyboard.js` already suppresses tool shortcuts for INPUT/SELECT elements
+
+## Data Flow
+
+1. User clicks canvas → `wallDrawHandler` sets `toolState.start`
+2. PropertiesPanel sees `activeTool === WALL && toolState.start`, renders `WallDrawingInput`
+3. User types bearing + length, presses Enter
+4. Wall created via `WALL_ADD`, start chained via `UPDATE_TOOL_STATE`
+5. Inputs clear, focus returns to length field for next segment
+6. Mouse-based drawing continues to work in parallel (same `toolState.start`)
+
+## Verification
+
+1. `npx vite build` — no build errors
+2. Run the app, select wall tool, click canvas to set start point
+3. Confirm "Drawing Wall" section appears in Properties Panel
+4. Type bearing "N 50 56 W" and length "21800" (mm) or "21.8" (m), press Enter
+5. Verify wall appears at correct angle and length on canvas
+6. Verify inputs clear and start point chains to the wall's endpoint
+7. Verify mouse-click wall drawing still works alongside typed input
+8. Verify Escape on canvas clears the drawing state and the panel section disappears
+9. Test unit toggle (mm/m) works correctly for the length input

@@ -1,0 +1,276 @@
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys'
+import P from 'pino'
+import qrcode from 'qrcode-terminal'
+import { Ollama } from 'ollama'
+import { config, SYSTEM_PROMPT, CLASSIFIER_PROMPT } from './config.js'
+import { parseDocument } from './services/fileProcessor.js'
+import { runGrading, summarizeTwitter } from './services/automationEngine.js'
+import { answerAssignment } from './services/academicService.js'
+import { getPlatforms, saveAccount, getAccount } from './services/accounts.js'
+
+const ollama = new Ollama({ host: config.ollama.host })
+
+const VALID_INTENTS = ['ENCODE_DATA', 'SUMMARIZE_TWITTER', 'ANSWER_ASSIGNMENT', 'CHAT']
+
+// Per-chat conversation history
+const chatHistories = new Map()
+
+// Per-chat onboarding state: { step, platform, data }
+const onboardingSessions = new Map()
+
+async function classifyIntent(text, hasDocument) {
+  try {
+    let message = text
+    if (hasDocument) message += ' [FILE ATTACHED]'
+
+    const prompt = CLASSIFIER_PROMPT.replace('{MESSAGE}', message)
+
+    const response = await ollama.chat({
+      model: config.ollama.model,
+      messages: [{ role: 'user', content: prompt }],
+    })
+
+    const intent = response.message.content.trim().toUpperCase()
+
+    if (VALID_INTENTS.includes(intent)) return intent
+    return 'CHAT'
+  } catch {
+    return 'CHAT'
+  }
+}
+
+async function chatWithOllama(remoteJid, userMessage) {
+  if (!chatHistories.has(remoteJid)) {
+    chatHistories.set(remoteJid, [])
+  }
+  const history = chatHistories.get(remoteJid)
+
+  history.push({ role: 'user', content: userMessage })
+
+  const response = await ollama.chat({
+    model: config.ollama.model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history,
+    ],
+  })
+
+  const reply = response.message.content
+
+  history.push({ role: 'assistant', content: reply })
+
+  // Keep history from growing too large (last 50 messages)
+  if (history.length > 50) {
+    chatHistories.set(remoteJid, history.slice(-50))
+  }
+
+  return reply
+}
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: P({ level: 'silent' }),
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) qrcode.generate(qr, { small: true })
+    if (connection === 'open') console.log('Gilas connected to WhatsApp!')
+    if (connection === 'close') {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      if (shouldReconnect) startBot()
+      else console.log('Logged out. Delete auth_info folder and restart to re-link.')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      // Text from regular or extended messages
+      const text = msg.message?.conversation
+        || msg.message?.extendedTextMessage?.text
+        || ''
+
+      // Document detection
+      const docMsg = msg.message?.documentMessage
+        || msg.message?.documentWithCaptionMessage?.message?.documentMessage
+      const docCaption = docMsg?.caption || ''
+      const hasDocument = !!docMsg
+      const userText = text || docCaption
+
+      // Skip if no text and no document
+      if (!userText && !hasDocument) continue
+
+      const jid = msg.key.remoteJid
+
+      // /help command — show available intents
+      if (userText.toLowerCase().startsWith('/help')) {
+        await sock.sendMessage(jid, {
+          text: `Here's what I can do:\n\n`
+            + `1. ENCODE DATA — Send me a CSV or Excel file and I'll parse and extract the data for you.\n\n`
+            + `2. SUMMARIZE TWITTER — Ask me what's trending or for a Twitter summary and I'll fetch the latest posts.\n\n`
+            + `3. ANSWER ASSIGNMENT — Ask any academic or educational question and I'll give you a clear explanation.\n\n`
+            + `4. CHAT — Just talk to me normally for general conversation.\n\n`
+            + `/onboard — Set up platform accounts (Twitter, etc.)\n`
+            + `/clear — Reset our conversation history.`,
+        })
+        console.log(`[${jid}] /help`)
+        continue
+      }
+
+      // /clear command — reset conversation history
+      if (userText.toLowerCase().startsWith('/clear')) {
+        chatHistories.delete(jid)
+        onboardingSessions.delete(jid)
+        await sock.sendMessage(jid, { text: 'Conversation cleared.' })
+        console.log(`[${jid}] Conversation history cleared`)
+        continue
+      }
+
+      // /onboard command — start account setup
+      if (userText.toLowerCase().startsWith('/onboard')) {
+        const platforms = getPlatforms()
+        const keys = Object.keys(platforms)
+        let list = 'Add accounts:\n\n'
+        keys.forEach((key, i) => {
+          const existing = getAccount(key)
+          const status = existing ? ' (configured)' : ''
+          list += `${i + 1}. ${platforms[key].label}${status}\n`
+        })
+        list += '\n(More platforms coming soon)\n\nReply with the platform name or number to set it up. Send /cancel to exit.'
+
+        onboardingSessions.set(jid, { step: 'choose_platform' })
+        await sock.sendMessage(jid, { text: list })
+        console.log(`[${jid}] /onboard`)
+        continue
+      }
+
+      // /cancel command — exit onboarding
+      if (userText.toLowerCase().startsWith('/cancel') && onboardingSessions.has(jid)) {
+        onboardingSessions.delete(jid)
+        await sock.sendMessage(jid, { text: 'Onboarding cancelled.' })
+        continue
+      }
+
+      // Handle active onboarding session
+      if (onboardingSessions.has(jid)) {
+        const session = onboardingSessions.get(jid)
+        const platforms = getPlatforms()
+        const keys = Object.keys(platforms)
+
+        if (session.step === 'choose_platform') {
+          const input = userText.trim().toLowerCase()
+          let chosenKey = null
+
+          // Match by number or name
+          const num = parseInt(input)
+          if (num >= 1 && num <= keys.length) {
+            chosenKey = keys[num - 1]
+          } else if (keys.includes(input)) {
+            chosenKey = input
+          }
+
+          if (!chosenKey) {
+            await sock.sendMessage(jid, { text: `I didn't recognize that platform. Reply with a number (1-${keys.length}) or platform name. Send /cancel to exit.` })
+            continue
+          }
+
+          const platform = platforms[chosenKey]
+          session.platform = chosenKey
+          session.data = {}
+          session.fields = [...platform.fields]
+          session.currentField = 0
+          session.step = 'collect_field'
+
+          await sock.sendMessage(jid, { text: `Setting up ${platform.label}.\n\nEnter your ${platform.fields[0]}:` })
+          continue
+        }
+
+        if (session.step === 'collect_field') {
+          const fieldName = session.fields[session.currentField]
+          session.data[fieldName] = userText.trim()
+          session.currentField++
+
+          if (session.currentField < session.fields.length) {
+            const nextField = session.fields[session.currentField]
+            await sock.sendMessage(jid, { text: `Enter your ${nextField}:` })
+            continue
+          }
+
+          // All fields collected — save
+          saveAccount(session.platform, session.data)
+          const label = platforms[session.platform].label
+          onboardingSessions.delete(jid)
+          await sock.sendMessage(jid, { text: `${label} account saved successfully.` })
+          console.log(`[${jid}] onboard: ${label} configured`)
+          continue
+        }
+
+        // Unknown state — reset
+        onboardingSessions.delete(jid)
+      }
+
+      console.log(`[${jid}] > ${userText || '[document]'}`)
+
+      // Show typing indicator
+      await sock.sendPresenceUpdate('composing', jid)
+
+      try {
+        const intent = await classifyIntent(userText, hasDocument)
+        console.log(`[${jid}] intent: ${intent}`)
+
+        let reply
+
+        switch (intent) {
+          case 'ENCODE_DATA': {
+            if (!hasDocument) {
+              reply = 'It looks like you want to process a file, but no document was attached. Please send a CSV or Excel file.'
+              break
+            }
+            const buffer = await downloadMediaMessage(msg, 'buffer', {})
+            const result = parseDocument(buffer, docMsg.mimetype, docMsg.fileName)
+            if (result.success) {
+              const preview = JSON.stringify(result.data.slice(0, 3), null, 2)
+              reply = `File parsed successfully.\n\nSheet: ${result.sheetName}\nRows: ${result.rowCount}\n\nFirst rows (preview):\n${preview}`
+            } else {
+              reply = result.message
+            }
+            break
+          }
+
+          case 'SUMMARIZE_TWITTER': {
+            reply = await summarizeTwitter()
+            break
+          }
+
+          case 'ANSWER_ASSIGNMENT': {
+            reply = await answerAssignment(ollama, config.ollama.model, userText)
+            break
+          }
+
+          case 'CHAT':
+          default: {
+            reply = await chatWithOllama(jid, userText)
+            break
+          }
+        }
+
+        console.log(`[${jid}] < ${reply}`)
+        await sock.sendPresenceUpdate('paused', jid)
+        await sock.sendMessage(jid, { text: reply })
+      } catch (err) {
+        console.error(`[${jid}] Error:`, err.message)
+        await sock.sendPresenceUpdate('paused', jid)
+        await sock.sendMessage(jid, {
+          text: 'I apologize for the inconvenience. An error occurred while processing your request. Please try again shortly.',
+        })
+      }
+    }
+  })
+}
+
+startBot()

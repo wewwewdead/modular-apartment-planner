@@ -1,0 +1,84 @@
+import React, {useMemo} from 'react';
+import {FlatList, StyleSheet, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PostCard} from '../../components/PostCard/PostCard';
+import {EmptyState} from '../../components/EmptyState';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {extractPlainText, extractBannerImage, resolveCount} from '../../lib/utils/journalHelpers';
+import {spacing} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'PromptResponses'>;
+
+export function PromptResponsesScreen({route, navigation}: Props) {
+  const {promptId} = route.params;
+  const {user} = useAuth();
+  const {colors} = useTheme();
+
+  const query = useInfiniteQuery({
+    queryKey: ['prompt-responses', promptId],
+    queryFn: ({pageParam}) => mobileApi.getPromptResponses(promptId, pageParam ?? null),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => lastPage.before ?? undefined,
+  });
+
+  const responses = useMemo(
+    () => query.data?.pages.flatMap(p => p.responses ?? []) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <FlatList
+        data={responses}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.list}
+        onEndReachedThreshold={0.3}
+        onEndReached={() => {
+          if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+        }}
+        ListEmptyComponent={
+          query.isLoading ? null : <EmptyState title="No responses yet" />
+        }
+        renderItem={({item}) => {
+          const preview = extractPlainText(item.content).slice(0, 180);
+          const bannerImage = extractBannerImage(item.content, (item as any).images);
+          return (
+            <PostCard
+              title={item.title || 'Untitled'}
+              bodyPreview={preview}
+              authorName={item.users?.name || 'Unknown'}
+              authorAvatar={item.users?.image_url}
+              likeCount={resolveCount(item.like_count, item.likes_count)}
+              commentCount={resolveCount(item.comment_count, item.comments_count)}
+              bookmarkCount={resolveCount(item.bookmark_count)}
+              bannerImage={bannerImage}
+              onPress={() => navigation.navigate('PostDetail', {journalId: item.id})}
+              onAuthorPress={() => {
+                const authorId = item.users?.id ?? item.user_id;
+                if (authorId && authorId !== user?.id) {
+                  navigation.navigate('VisitProfile', {userId: authorId});
+                }
+              }}
+              onReact={() => {}}
+              onComment={() => {}}
+              onBookmark={() => {}}
+              onRepost={() => {}}
+            />
+          );
+        }}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {flex: 1},
+  list: {paddingHorizontal: spacing.lg, paddingBottom: 100},
+  separator: {height: spacing.md},
+});

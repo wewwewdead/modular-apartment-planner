@@ -1,0 +1,193 @@
+# Assembly-Driven Object Generator for Sketch Studio
+
+## Context
+
+Sketch Studio currently has a 2D-drawing-first workflow: users click-drag rectangles on a canvas to create individual parts (panels, legs, frames), then optionally group them into assemblies and add constraints. This is fine for individual part layout but is awkward for designing complete furniture objects (tables, cabinets, desks, shelves) where the user already knows the overall dimensions and structure.
+
+**Goal:** Make the primary workflow template-driven and parameter-driven — users pick an object type, specify dimensions, and the system generates a structured assembly. The existing 2D part tools remain for manual/advanced editing, but templates become the primary creation path.
+
+**Key architectural insight:** The existing `buildDemoTable()` in `demoObject.js` already demonstrates the exact pattern — it creates parts via `createPanel()`/`createLeg()` with computed positions and returns `{ assembly, parts }`. Templates generalize this into a reusable, parameterized system.
+
+---
+
+## Design Decisions
+
+1. **Templates as pure generator functions** — each template defines parameter specs (for auto-generating forms) and a `generate(params)` function that returns `{ parts, name }` using the existing `createPanel`/`createLeg`/`createFrame` factories. Parts have computed absolute positions (no constraints needed).
+
+2. **Assembly model extension** — `createAssembly` already accepts `...overrides`, so we store `templateType` and `templateParams` on the assembly object without changing the factory function. Add a `createTemplateAssembly()` convenience helper.
+
+3. **Delete-and-recreate regeneration** — when parameters change, remove all assembly parts and regenerate from scratch. Simple, always correct, single undo step. Manual edits to template parts are lost (the UI communicates this).
+
+4. **Assembly selection for properties** — `SELECT_OBJECT` already supports any `objectType` string. Add `'assembly'` handling in the properties panel to show template parameters.
+
+5. **Reusable parameter form** — `TemplateParamsForm` component renders form fields from parameter definitions, reused in both the creation dialog and properties panel.
+
+---
+
+## Implementation Steps
+
+### Step 1: Template infrastructure (`domain/templates/`)
+
+**New files:**
+
+`src/modules/sketch/domain/templates/templateRegistry.js`
+- Template definition shape:
+  ```
+  { type, label, description, parameters: [{ key, label, type, default, min, max, step, suffix }], generate(params) → { parts, name } }
+  ```
+- Exports: `getTemplate(type)`, `getDefaultParams(type)`, `templateList` (ordered array for UI)
+- Imports and registers all four templates
+
+`src/modules/sketch/domain/templates/tableTemplate.js`
+- Params: `width` (1200), `depth` (600), `height` (750), `topThickness` (18), `legWidth` (40), `legDepth` (40), `legInset` (30)
+- Generates: 1 tabletop panel at z=height-topThickness + 4 legs at corners inset from edges
+- Pattern: mirrors existing `buildDemoTable()` in `demoObject.js` but parameterized
+
+`src/modules/sketch/domain/templates/cabinetTemplate.js`
+- Params: `width` (600), `depth` (400), `height` (800), `panelThickness` (18), `shelfCount` (2), `hasDoors` (false), `hasBack` (true)
+- Generates: 2 side panels (vertical — width=thickness, depth=depth, thickness=innerHeight), top + bottom panels, N evenly-spaced shelves, optional back panel, optional 1-2 door panels at front face
+- Side panel mapping: part.width=panelThickness, part.depth=depth, part.thickness=innerHeight (so `getPartExtents` returns correct height)
+
+`src/modules/sketch/domain/templates/deskTemplate.js`
+- Params: `width` (1400), `depth` (600), `height` (750), `topThickness` (25), `sideThickness` (18), `hasBackPanel` (false)
+- Generates: 1 desktop panel + 2 side panels (pedestals) + optional back modesty panel
+
+`src/modules/sketch/domain/templates/shelfTemplate.js`
+- Params: `width` (800), `depth` (300), `height` (1800), `sideThickness` (18), `shelfThickness` (18), `shelfCount` (4), `hasBack` (true)
+- Generates: 2 side panels + N shelves evenly spaced + optional back panel
+
+### Step 2: Assembly model helper
+
+**Modified file:** `src/modules/sketch/domain/assemblyModels.js`
+- Add `createTemplateAssembly(templateType, params, name)` — calls `createAssembly(name, { category: templateType, templateType, templateParams: { ...params } })`
+
+### Step 3: Reducer actions
+
+**Modified file:** `src/modules/sketch/app/SketchProvider.jsx`
+
+Add three new cases:
+
+`TEMPLATE_GENERATE` — create new template assembly
+- action: `{ templateType, params }`
+- Lookup template, call `generate(params)`, create assembly via `createTemplateAssembly`, set `assemblyId` on all parts, set `assembly.partIds`, add to project
+
+`TEMPLATE_REGENERATE` — update existing template assembly with new params
+- action: `{ assemblyId, params }`
+- Find assembly, verify `templateType` exists
+- Collect old partIds, remove from `project.parts`
+- Remove constraints referencing old parts (same logic as `PART_DELETE`)
+- Unbind dimensions bound to old parts (`boundPartId` → null)
+- Call `template.generate(params)`, set `assemblyId` on new parts
+- Update assembly: new `partIds`, new `templateParams`, keep user-edited `name`
+- Single history entry via `applyUpdate`
+
+`TEMPLATE_DETACH` — remove template metadata, convert to manual assembly
+- action: `{ assemblyId }`
+- Set `templateType: null, templateParams: null` on assembly
+- Parts remain as-is
+
+### Step 4: Template parameter form component
+
+**New file:** `src/modules/sketch/ui/TemplateParamsForm.jsx`
+- Props: `parameters` (array of param definitions), `values` (object), `onChange(key, value)`
+- Renders form fields based on parameter type:
+  - `'number'` → existing `NumberInput` pattern (with min/max/step/suffix)
+  - `'integer'` → `NumberInput` with step=1
+  - `'boolean'` → styled checkbox
+- Reuses the same styling patterns as `SketchPropertiesPanel` (`styles.field`, `styles.fieldLabel`, etc.)
+
+### Step 5: Template creation dialog
+
+**New file:** `src/modules/sketch/ui/TemplateDialog.jsx`
+- Two-phase UI inside a `Modal` (reuses `@/ui/Modal`):
+  1. **Template selection**: grid of template cards (label + description + icon) — clicking one populates phase 2
+  2. **Parameter form**: renders `TemplateParamsForm` with defaults, plus "Create" and "Back" buttons
+- On "Create": dispatches `TEMPLATE_GENERATE`, sets `activeAssemblyId`, selects the new assembly, closes dialog
+
+**New file:** `src/modules/sketch/ui/TemplateDialog.module.css`
+- Card grid layout, parameter form styling
+
+### Step 6: Wire up dialog to workspace
+
+**Modified file:** `src/modules/sketch/SketchWorkspace.jsx`
+- Add `showTemplateDialog` state + `setShowTemplateDialog` to `SketchProjectContext`
+- Render `<TemplateDialog>` when `showTemplateDialog` is true
+
+### Step 7: Sidebar — "Create from Template" button + assembly selection
+
+**Modified file:** `src/modules/sketch/ui/SketchSidebar.jsx`
+- Add "Create from Template" button next to existing "+" in Assemblies section header
+- On assembly name click: dispatch `SELECT_OBJECT` with `objectType: 'assembly'` (in addition to existing `SET_ACTIVE_ASSEMBLY` toggle)
+- Show template badge on template-based assemblies (small icon or label like `[TABLE]`)
+
+### Step 8: Properties panel — assembly-level parameter editing
+
+**Modified file:** `src/modules/sketch/ui/SketchPropertiesPanel.jsx`
+- In model mode, when `selectedType === 'assembly'`:
+  - Find assembly by `selectedId` in `project.assemblies`
+  - If `assembly.templateType`:
+    - Show assembly name (editable via `ASSEMBLY_UPDATE`)
+    - Show template type badge (read-only)
+    - Show `TemplateParamsForm` with current `templateParams` values
+    - "Apply Changes" button → dispatch `TEMPLATE_REGENERATE` with updated params
+    - "Detach Template" button → dispatch `TEMPLATE_DETACH`
+    - Part count summary
+  - If no `templateType`:
+    - Show assembly name (editable)
+    - Show category, description
+
+### Step 9: Empty state — add template option
+
+**Modified file:** `src/modules/sketch/ui/SketchEmptyState.jsx`
+- Add "Create from Template" button between "Start Drawing" and "Try Demo Object"
+- Opens the template dialog via `useSketchProject().setShowTemplateDialog(true)`
+
+---
+
+## Files Summary
+
+### New files (7)
+| File | Purpose |
+|---|---|
+| `src/modules/sketch/domain/templates/templateRegistry.js` | Registry: lookup, defaults, ordered list |
+| `src/modules/sketch/domain/templates/tableTemplate.js` | Table generator (tabletop + 4 legs) |
+| `src/modules/sketch/domain/templates/cabinetTemplate.js` | Cabinet generator (sides + top/bottom + shelves + doors + back) |
+| `src/modules/sketch/domain/templates/deskTemplate.js` | Desk generator (desktop + 2 sides + back) |
+| `src/modules/sketch/domain/templates/shelfTemplate.js` | Shelf generator (sides + N shelves + back) |
+| `src/modules/sketch/ui/TemplateDialog.jsx` | Modal: template selection → parameter form → create |
+| `src/modules/sketch/ui/TemplateParamsForm.jsx` | Reusable parameter form driven by template definitions |
+
+### Modified files (5)
+| File | Change |
+|---|---|
+| `src/modules/sketch/domain/assemblyModels.js` | Add `createTemplateAssembly()` helper |
+| `src/modules/sketch/app/SketchProvider.jsx` | Add `TEMPLATE_GENERATE`, `TEMPLATE_REGENERATE`, `TEMPLATE_DETACH` reducer cases |
+| `src/modules/sketch/ui/SketchSidebar.jsx` | Add "Create from Template" button, assembly selection with `objectType: 'assembly'`, template badge |
+| `src/modules/sketch/ui/SketchPropertiesPanel.jsx` | Add assembly properties view with template parameter editing + regenerate/detach |
+| `src/modules/sketch/ui/SketchEmptyState.jsx` | Add "Create from Template" button |
+| `src/modules/sketch/SketchWorkspace.jsx` | Add `showTemplateDialog` state to context, render `TemplateDialog` |
+
+### Unchanged (reused as-is)
+- All part factories (`partModels.js`) — templates call `createPanel`/`createLeg`/`createFrame` directly
+- All renderers (`PartRenderer`, `buildSketchPreview`, `SketchCanvas`) — generated parts are standard part types
+- View projection (`viewProjection.js`) — orthographic views work unchanged
+- Dimension binding — works on template-generated parts
+- Persistence — `templateType`/`templateParams` are plain JSON, serialize/deserialize unchanged
+- `@/ui/Modal.jsx` — reused for template dialog
+- `SketchEditorProvider` — `SELECT_OBJECT` already supports any `objectType`
+
+---
+
+## Verification
+
+1. Open `/sketch` → empty state shows "Start Drawing", "Create from Template", "Try Demo Object"
+2. Click "Create from Template" → dialog opens with 4 template cards (Table, Cabinet, Desk, Shelf)
+3. Click "Table" → parameter form appears with defaults (1200×600×750, etc.)
+4. Adjust width to 1500, click "Create" → assembly appears in sidebar with 5 parts, renders in all 3 views and 3D preview
+5. Click assembly name in sidebar → properties panel shows template parameters
+6. Change height to 800, click "Apply Changes" → parts regenerate with new dimensions, views update
+7. Click "Detach Template" → template badge disappears, parameters section replaced with plain assembly properties, parts remain
+8. Create a Cabinet template with 3 shelves → sidebar shows assembly with 7+ parts, 3D preview renders box structure
+9. Undo after regenerate → restores previous dimensions
+10. Clone a template assembly → cloned assembly retains templateType and can be independently regenerated
+11. Build passes, no console errors

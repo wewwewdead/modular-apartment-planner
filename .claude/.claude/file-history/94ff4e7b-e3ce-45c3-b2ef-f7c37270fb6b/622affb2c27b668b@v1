@@ -1,0 +1,70 @@
+# Fix Avatar Strip: X/Twitter-style Side-by-Side Layout
+
+## Context
+The user wants the prompt response avatars in `.dashboard-prompt-responses` to display side-by-side in a row like X/Twitter notification avatars (no overlap, small gap between each). The current CSS has two problems preventing this:
+
+1. **Missing `flex-shrink: 0`** on `.dashboard-prompt-avatar` — flex images collapse to 0px width when the parent footer (`justify-content: space-between`) constrains space
+2. **Parent card has `overflow: hidden`** (line 11) — any overflow is invisible
+
+The JS slice is already updated to 10 (done earlier).
+
+## File to Change
+
+### `client/src/components/DashboardBriefing/DashboardBriefing.css`
+
+**1. `.dashboard-prompt-avatars` (line 359)** — add `flex-shrink: 0` so the avatar strip doesn't get crushed by the footer's space-between layout:
+```css
+.dashboard-prompt-avatars {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+```
+
+**2. `.dashboard-prompt-avatar` (line 365)** — add `flex-shrink: 0` so individual avatar images don't collapse:
+```css
+.dashboard-prompt-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+```
+
+**3. `.dashboard-prompt-footer` (line 309)** — change from `space-between` to `flex-end` with `flex-wrap: wrap` so the button and avatar strip can flow naturally without squishing:
+```css
+.dashboard-prompt-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 2px;
+    flex-wrap: wrap;
+}
+```
+
+**4. `.dashboard-prompt-responses` (line 344)** — allow it to shrink with `min-width: 0` and let avatars overflow scroll if needed:
+```css
+.dashboard-prompt-responses {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 8px;
+    transition: background 0.15s ease;
+    min-width: 0;
+}
+```
+
+### No JSX changes needed
+- `PromptSection.jsx` already slices to 10 and renders avatars correctly
+
+## Verification
+1. Dashboard avatar strip shows up to 10 profile pictures side by side (not overlapping)
+2. Each avatar is visible as a distinct circle with a small gap
+3. With fewer respondents, all avatars display correctly
+4. Footer layout doesn't break on narrow screens (wraps if needed)

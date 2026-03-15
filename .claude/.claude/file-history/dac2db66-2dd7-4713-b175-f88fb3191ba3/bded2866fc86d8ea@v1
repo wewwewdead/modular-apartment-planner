@@ -1,0 +1,65 @@
+# Remove FreedomWall Feature
+
+## Context
+The FreedomWall feature (a collaborative canvas with doodles, stickers, stamps, and notes on a weekly rotation) is being removed to simplify the early version of iskrib.
+
+## Files to DELETE (7 files)
+
+| File | Description |
+|------|-------------|
+| `client/src/components/HomePage/freedomWall/FreedomWallPage.jsx` | Main component (~2,874 lines) |
+| `client/src/components/HomePage/freedomWall/freedomWall.css` | Component styles (~1,309 lines) |
+| `server/services/freedomWallService.js` | Backend service |
+| `server/controller/freedomWallController.js` | Backend controller |
+| `server/sql/freedom_wall.sql` | DB schema |
+| `server/sql/freedom_wall_cron.sql` | Weekly rotation cron |
+| `server/sql/freedom_wall_constraints_patch.sql` | Schema patch |
+
+## Files to EDIT (5 files)
+
+### 1. `server/routes/routes.js`
+- **Line 15:** Remove the `freedomWallController` import
+- **Lines 293-301:** Remove all 9 `/freedom-wall/*` route definitions
+
+### 2. `client/API/Api.js`
+- **Lines 1115-1321:** Remove all 9 FreedomWall API functions (`getCurrentFreedomWallWeek` through `clearMyFreedomWallDoodles`)
+
+### 3. `client/src/App.jsx`
+- **Line 37:** Remove `FreedomWallPage` lazy import
+- **Line 127:** Remove `<Route path='freedom-wall' .../>`
+
+### 4. `client/src/components/HomePage/postCards/PostCards.jsx`
+- **Lines 414-416:** Remove `handleVisitFreedomWall` function
+- **Lines 623-631:** Remove the Freedom Wall nav button
+
+### 5. `client/src/components/HomePage/postCards/postcards.css`
+- **Lines 120-128:** Remove `.search-nav-fw` and `.search-nav-fw:hover` styles
+
+## NOT changed
+- `server/sql/hottest_tracker.sql` — only has a comment referencing the pattern; harmless, leave as-is
+
+## Supabase SQL Cleanup (run in SQL Editor)
+
+Run this in the Supabase SQL Editor to fully remove all FreedomWall database objects:
+
+```sql
+-- 1. Unschedule the cron job
+SELECT cron.unschedule('freedom-wall-weekly-reset');
+
+-- 2. Drop tables (items first due to FK references)
+DROP TABLE IF EXISTS public.freedom_wall_items CASCADE;
+DROP TABLE IF EXISTS public.freedom_wall_stickers CASCADE;
+DROP TABLE IF EXISTS public.freedom_wall_weeks CASCADE;
+
+-- 3. Drop functions
+DROP FUNCTION IF EXISTS public.set_updated_at_freedom_wall_items() CASCADE;
+DROP FUNCTION IF EXISTS public.rotate_freedom_wall_week() CASCADE;
+```
+
+All indexes, triggers, and constraints are dropped automatically with their parent tables via `CASCADE`.
+
+## Verification
+1. Start the dev server — confirm no import errors
+2. Navigate to `/home` — confirm the Freedom Wall button is gone from the nav row
+3. Visit `/home/freedom-wall` directly — should show a 404 or redirect
+4. Check the server starts without errors (no missing controller imports)

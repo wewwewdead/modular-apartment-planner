@@ -1,0 +1,79 @@
+# Redesign: Writer Stats Dashboard (RecapSection)
+
+## Context
+The current `RecapSection` shows weekly stats as a flat text line ("3 posts · 1.2K words · 5 reactions · 42 views") with community highlights hidden behind an expand click. This lacks visual weight and psychological engagement. The redesign turns stats into visual tiles with animated counters, contextual micro-copy, an achievement-style best-post card, and always-visible community highlights — all designed to make writers feel invested.
+
+## Files to Create
+
+### 1. `client/src/components/DashboardBriefing/useAnimatedCounter.js`
+Custom hook — animates from 0 to target value using `requestAnimationFrame` with easeOutExpo curve. No new dependencies. ~25 lines.
+
+### 2. `client/src/components/DashboardBriefing/recapCopy.js`
+Pure utility — returns contextual encouragement strings based on stat thresholds. Exports: `getPostsCopy`, `getWordsCopy`, `getReactionsCopy`, `getViewsCopy`, `getOverallEncouragement(personal, streakCount)`.
+
+Psychological levers:
+- **Loss aversion**: "Don't break the streak" when streak >= 7
+- **Identity reinforcement**: "Your most prolific week!" not just numbers
+- **Zero-state invitation**: "The blank page is waiting" instead of showing bare 0s
+- **Variable rewards**: Different messages at different thresholds prevent habituation
+
+### 3. `client/src/components/DashboardBriefing/StatTile.jsx`
+Individual stat card with icon, animated counter (via `useAnimatedCounter`), label, and italic micro-copy. Accepts `{ icon, value, label, microCopy, index }`. Uses `motion.div` with staggered delay (`0.1 + index * 0.08s`).
+
+### 4. `client/src/components/DashboardBriefing/BestPostCard.jsx`
+Achievement-style card for the user's best post. Star badge + "Best Post This Week" label, post title, reaction/view counts. Amber gradient background. Clickable — navigates to the post via `useNavigate`. Animated entrance at 0.45s delay.
+
+### 5. `client/src/components/DashboardBriefing/CommunityHighlights.jsx`
+Always-visible section showing most active writer (avatar + name + post count) and most reacted post (avatar + title + reaction count). "This week on iskrib" label. Social proof — no longer hidden behind expand.
+
+## Files to Modify
+
+### 6. `client/src/components/DashboardBriefing/RecapSection.jsx` — Full Rewrite
+Composes: encouragement line → 4 StatTiles in a grid → BestPostCard → CommunityHighlights. Inline SVG icons (pen, type, heart, eye). Accepts new `streakCount` prop. Removes old expand/collapse pattern entirely.
+
+### 7. `client/src/components/DashboardBriefing/DashboardBriefing.jsx` — One-line Change
+Pass `streakCount={streakCount}` to `<RecapSection>` (variable already exists at line 84).
+
+### 8. `client/src/components/DashboardBriefing/DashboardBriefing.css` — CSS Updates
+**Remove** old classes: `.dashboard-stat-row`, `.dashboard-stat-line`, `.dashboard-recap-expand`, `.dashboard-recap-details`, `.dashboard-recap-detail-*`
+
+**Add** new classes:
+- `.dashboard-recap-v2` — flex column, 12px gap
+- `.recap-encouragement` — Lora italic, 13.5px, `--text-secondary`
+- `.recap-tiles-grid` — `grid-template-columns: repeat(4, 1fr)`, 8px gap; 2x2 on mobile
+- `.recap-tile` — flex column, centered, `--bg-secondary` bg, 10px border-radius, hover state
+- `.recap-tile-value` — Playfair Display 22px bold (18px mobile)
+- `.recap-tile-label` — Outfit 11px lowercase
+- `.recap-tile-micro` — Lora 10px italic, `--accent-amber`
+- `.recap-tile-icon` — `--accent-amber`, 0.8 opacity
+- `.recap-best-post` — amber gradient bg, clickable, hover lift
+- `.recap-best-post-badge` — Outfit 10px uppercase with star icon
+- `.recap-best-post-title` — Lora 14px, 2-line clamp
+- `.recap-community` — flex column
+- `.recap-community-item` — avatar + text row
+- Dark mode overrides for `.recap-tile` and `.recap-best-post` backgrounds
+
+CSS variables used (all verified to exist in both light/dark): `--bg-secondary`, `--bg-hover`, `--bg-card`, `--border-card`, `--text-primary`, `--text-secondary`, `--text-muted`, `--accent-amber`
+
+## Animation Timeline
+| Element | Type | Delay |
+|---------|------|-------|
+| Encouragement text | Fade in | 0.05s |
+| Stat tile 1–4 | Fade + slide up | 0.10–0.34s (staggered) |
+| Counter numbers | Count 0→value (easeOutExpo) | 800–1100ms |
+| Best post card | Fade + slide up | 0.45s |
+| Community section | Fade in | 0.55s |
+
+## Responsive
+- Desktop: 4 tiles in a row
+- Mobile (<=480px): 2x2 grid, smaller font sizes
+
+## Verification
+1. Run dev server, log in as a user with posts
+2. Homepage feed should show the redesigned dashboard at top
+3. Verify: 4 stat tiles with animated counters, micro-copy, staggered entrance
+4. Verify: best post card visible (if user has posts), clickable
+5. Verify: community highlights visible without expand
+6. Verify: dark mode toggle — tiles and best-post card backgrounds adapt
+7. Verify: mobile viewport — tiles reflow to 2x2 grid
+8. Verify: zero-state — user with no posts sees invitational micro-copy

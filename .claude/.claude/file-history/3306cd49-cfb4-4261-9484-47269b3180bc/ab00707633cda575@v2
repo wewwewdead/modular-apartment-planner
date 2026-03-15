@@ -1,0 +1,268 @@
+import { projectPartToView, getPartExtents } from '../domain/viewProjection';
+import { createDimensionFigure } from '@/annotations/dimensions';
+
+const PART_PADDING = 500;
+const VIEW_GAP = 300;
+
+function projectDimensionPoint(point, view) {
+  switch (view) {
+    case 'top':
+      return { x: point.x, y: point.y };
+    case 'front':
+      return { x: point.x, y: -(point.z || 0) };
+    case 'side':
+      return { x: point.y, y: -(point.z || 0) };
+    default:
+      return { x: point.x, y: point.y };
+  }
+}
+
+function getPartsBounds(parts, view, dimensions = []) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+  for (const part of parts) {
+    if (part.type === 'dimension') continue;
+    const { svgX, svgY, svgWidth, svgHeight } = projectPartToView(part, view);
+    minX = Math.min(minX, svgX);
+    minY = Math.min(minY, svgY);
+    maxX = Math.max(maxX, svgX + svgWidth);
+    maxY = Math.max(maxY, svgY + svgHeight);
+  }
+
+  for (const dim of dimensions) {
+    const start2D = projectDimensionPoint(dim.startPoint, view);
+    const end2D = projectDimensionPoint(dim.endPoint, view);
+    const figure = createDimensionFigure({
+      id: dim.id,
+      startPoint: start2D,
+      endPoint: end2D,
+      mode: 'aligned',
+      offset: dim.offset || 200,
+      label: dim.textOverride || undefined,
+      source: 'manual',
+    });
+    if (!figure) continue;
+    const points = [
+      figure.lineStart, figure.lineEnd,
+      ...figure.extensionLines.flatMap((l) => [l.start, l.end]),
+    ];
+    for (const p of points) {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+  }
+
+  if (minX === Infinity) return { minX: 0, maxX: 1000, minY: 0, maxY: 1000 };
+  return {
+    minX: minX - PART_PADDING,
+    maxX: maxX + PART_PADDING,
+    minY: minY - PART_PADDING,
+    maxY: maxY + PART_PADDING,
+  };
+}
+
+function gatherAssemblyParts(project, assemblyId) {
+  if (assemblyId) {
+    return project.parts.filter((p) => p.assemblyId === assemblyId && p.type !== 'dimension');
+  }
+  return project.parts.filter((p) => p.type !== 'dimension');
+}
+
+function gatherAssemblyDimensions(project, assemblyId) {
+  if (assemblyId) {
+    const partIds = new Set(project.parts.filter((p) => p.assemblyId === assemblyId).map((p) => p.id));
+    return project.parts.filter((p) => p.type === 'dimension' && p.boundPartId && partIds.has(p.boundPartId));
+  }
+  return project.parts.filter((p) => p.type === 'dimension');
+}
+
+function resolveAssemblyName(project, assemblyId) {
+  if (!assemblyId) return project.name || 'All Parts';
+  const asm = (project.assemblies || []).find((a) => a.id === assemblyId);
+  return asm?.name || 'Assembly';
+}
+
+function extractView(sourceView) {
+  if (sourceView === 'sketch_assembly_top') return 'top';
+  if (sourceView === 'sketch_assembly_front') return 'front';
+  if (sourceView === 'sketch_assembly_side') return 'side';
+  return 'top';
+}
+
+function buildSketchAssemblySource(project, assemblyId, view) {
+  const parts = gatherAssemblyParts(project, assemblyId);
+  const dimensions = gatherAssemblyDimensions(project, assemblyId);
+
+  if (parts.length === 0) {
+    return {
+      kind: 'empty',
+      title: `${resolveAssemblyName(project, assemblyId)} — ${view}`,
+      message: 'No parts in this assembly.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+    };
+  }
+
+  const bounds = getPartsBounds(parts, view, dimensions);
+
+  return {
+    kind: 'sketch_assembly',
+    title: `${resolveAssemblyName(project, assemblyId)} — ${view}`,
+    view,
+    parts,
+    dimensions,
+    assembly: assemblyId ? (project.assemblies || []).find((a) => a.id === assemblyId) : null,
+    bounds,
+  };
+}
+
+function buildSketchPartDetailSource(project, partId) {
+  const part = project.parts.find((p) => p.id === partId);
+  if (!part || part.type === 'dimension') {
+    return {
+      kind: 'empty',
+      title: 'Part Detail',
+      message: 'Part not found.',
+      bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+    };
+  }
+
+  const ext = getPartExtents(part);
+  const views = ['top', 'front', 'side'];
+  const viewLayouts = [];
+
+  // Compute auto-dimension descriptors for each view
+  let totalWidth = 0;
+  const viewBounds = views.map((view) => {
+    const { svgX, svgY, svgWidth, svgHeight } = projectPartToView(part, view);
+    return { view, svgX, svgY, svgWidth, svgHeight };
+  });
+
+  // Layout: top | front | side arranged horizontally with gaps
+  let offsetX = 0;
+  for (const vb of viewBounds) {
+    viewLayouts.push({
+      view: vb.view,
+      offsetX,
+      offsetY: 0,
+      width: vb.svgWidth,
+      height: vb.svgHeight,
+      svgX: vb.svgX,
+      svgY: vb.svgY,
+    });
+    offsetX += vb.svgWidth + VIEW_GAP;
+  }
+  totalWidth = offsetX - VIEW_GAP;
+
+  const maxHeight = Math.max(...viewBounds.map((vb) => vb.svgHeight));
+  const padding = PART_PADDING;
+
+  return {
+    kind: 'sketch_part_detail',
+    title: part.name || 'Part Detail',
+    part,
+    extents: ext,
+    viewLayouts,
+    bounds: {
+      minX: -padding,
+      maxX: totalWidth + padding,
+      minY: -padding,
+      maxY: maxHeight + padding,
+    },
+  };
+}
+
+function buildSketchPartListSource(project, assemblyId) {
+  const parts = gatherAssemblyParts(project, assemblyId);
+
+  // Build BOM rows — group identical parts by name+type+material+dimensions
+  const groupMap = new Map();
+  for (const part of parts) {
+    const ext = getPartExtents(part);
+    const key = `${part.type}|${part.material || ''}|${ext.width}|${ext.depth}|${ext.height}`;
+    if (groupMap.has(key)) {
+      groupMap.get(key).qty += 1;
+    } else {
+      groupMap.set(key, {
+        name: part.name,
+        type: part.type,
+        material: part.material || '-',
+        width: ext.width,
+        depth: ext.depth,
+        height: ext.height,
+        qty: 1,
+      });
+    }
+  }
+
+  const rows = [];
+  let item = 1;
+  for (const group of groupMap.values()) {
+    rows.push({
+      item: item++,
+      name: group.name,
+      type: group.type,
+      material: group.material,
+      qty: group.qty,
+      dims: `${Math.round(group.width)} x ${Math.round(group.depth)} x ${Math.round(group.height)}`,
+    });
+  }
+
+  const columnWidths = [30, 120, 60, 80, 30, 120];
+  const tableWidth = columnWidths.reduce((sum, w) => sum + w, 0);
+  const rowHeight = 20;
+  const headerHeight = 24;
+  const tableHeight = headerHeight + rows.length * rowHeight;
+
+  return {
+    kind: 'sketch_part_list',
+    title: `${resolveAssemblyName(project, assemblyId)} Parts List`,
+    rows,
+    columnWidths,
+    headers: ['Item', 'Name', 'Type', 'Material', 'Qty', 'Dimensions'],
+    rowHeight,
+    headerHeight,
+    bounds: {
+      minX: 0,
+      maxX: tableWidth,
+      minY: 0,
+      maxY: tableHeight,
+    },
+  };
+}
+
+export function resolveSketchViewportSource(sketchProject, viewport) {
+  const { sourceView, sourceRefId } = viewport;
+
+  if (sourceView === 'sketch_assembly_top' || sourceView === 'sketch_assembly_front' || sourceView === 'sketch_assembly_side') {
+    const view = extractView(sourceView);
+    return buildSketchAssemblySource(sketchProject, sourceRefId, view);
+  }
+
+  if (sourceView === 'sketch_part_detail') {
+    return buildSketchPartDetailSource(sketchProject, sourceRefId);
+  }
+
+  if (sourceView === 'sketch_part_list') {
+    return buildSketchPartListSource(sketchProject, sourceRefId);
+  }
+
+  return {
+    kind: 'empty',
+    title: 'Unknown Source',
+    message: `Unknown source view: ${sourceView}`,
+    bounds: { minX: 0, maxX: 2000, minY: 0, maxY: 1500 },
+  };
+}
+
+export function getSketchViewportSourceLabel(sourceView) {
+  switch (sourceView) {
+    case 'sketch_assembly_top': return 'Assembly Top';
+    case 'sketch_assembly_front': return 'Assembly Front';
+    case 'sketch_assembly_side': return 'Assembly Side';
+    case 'sketch_part_detail': return 'Part Detail';
+    case 'sketch_part_list': return 'Parts List';
+    default: return 'Unknown';
+  }
+}

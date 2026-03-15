@@ -1,0 +1,290 @@
+import React, { useMemo, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+
+import { defaultCategorySeeds } from '../../domain/defaultCategories';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+
+const steps = ['Welcome', 'Store', 'First item'] as const;
+
+export function OnboardingFlow() {
+  const completeOnboarding = useAppStore(state => state.completeOnboarding);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [userName, setUserName] = useState('');
+  const [storeName, setStoreName] = useState('');
+  const [itemName, setItemName] = useState('');
+  const [itemPrice, setItemPrice] = useState('4.99');
+  const [itemUnit, setItemUnit] = useState('each');
+  const [categoryId, setCategoryId] = useState(defaultCategorySeeds[0].slug);
+
+  const selectedCategory = useMemo(
+    () => defaultCategorySeeds.find(category => category.slug === categoryId) ?? defaultCategorySeeds[0],
+    [categoryId]
+  );
+
+  const next = async () => {
+    if (stepIndex === 0) {
+      if (!userName.trim()) {
+        Alert.alert('Name required', 'Enter the name Grock should use on your home screen.');
+        return;
+      }
+
+      setStepIndex(1);
+      return;
+    }
+
+    if (stepIndex === 1) {
+      if (!storeName.trim()) {
+        Alert.alert('Store required', 'Add the store you use most often.');
+        return;
+      }
+
+      setStepIndex(2);
+      return;
+    }
+
+    if (!itemName.trim() || !itemUnit.trim()) {
+      Alert.alert('First item required', 'Add one item so the vault starts populated.');
+      return;
+    }
+
+    const parsedPrice = Number(itemPrice);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      Alert.alert('Invalid price', 'Enter a valid price for the first item.');
+      return;
+    }
+
+    await completeOnboarding({
+      userName,
+      primaryStore: storeName,
+      firstItemName: itemName,
+      firstItemPrice: parsedPrice,
+      firstItemUnit: itemUnit,
+      firstCategoryId: categoryId,
+    });
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.brand}>Grock</Text>
+      <Text style={styles.title}>Plan, shop, and track every grocery run.</Text>
+      <Text style={styles.subtitle}>
+        This React Native migration keeps the same core flow as the SwiftUI app:
+        welcome, primary store, and your first saved item.
+      </Text>
+
+      <View style={styles.stepRow}>
+        {steps.map((label, index) => (
+          <View key={label} style={[styles.stepPill, index === stepIndex && styles.stepPillActive]}>
+            <Text style={[styles.stepText, index === stepIndex && styles.stepTextActive]}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {stepIndex === 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Who is this vault for?</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Your name"
+            placeholderTextColor={colors.mutedInk}
+            value={userName}
+            onChangeText={setUserName}
+          />
+        </View>
+      ) : null}
+
+      {stepIndex === 1 ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>What store should Grock use first?</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g. Costco"
+            placeholderTextColor={colors.mutedInk}
+            value={storeName}
+            onChangeText={setStoreName}
+          />
+        </View>
+      ) : null}
+
+      {stepIndex === 2 ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Seed the vault with one item.</Text>
+          <TextInput
+            style={styles.input}
+            placeholder={selectedCategory.placeholder}
+            placeholderTextColor={colors.mutedInk}
+            value={itemName}
+            onChangeText={setItemName}
+          />
+          <View style={styles.row}>
+            <TextInput
+              style={[styles.input, styles.rowInput]}
+              placeholder="Price"
+              placeholderTextColor={colors.mutedInk}
+              value={itemPrice}
+              onChangeText={setItemPrice}
+              keyboardType="decimal-pad"
+            />
+            <TextInput
+              style={[styles.input, styles.rowInput]}
+              placeholder="Unit"
+              placeholderTextColor={colors.mutedInk}
+              value={itemUnit}
+              onChangeText={setItemUnit}
+            />
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+            {defaultCategorySeeds.map(category => (
+              <Pressable
+                key={category.slug}
+                style={[styles.categoryChip, category.slug === categoryId && styles.categoryChipActive]}
+                onPress={() => setCategoryId(category.slug)}
+              >
+                <Text style={styles.categoryEmoji}>{category.emoji}</Text>
+                <Text style={styles.categoryLabel}>{category.title}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      <Pressable
+        style={styles.button}
+        onPress={() => {
+          next().catch(() => undefined);
+        }}
+      >
+        <Text style={styles.buttonText}>{stepIndex === steps.length - 1 ? 'Finish onboarding' : 'Continue'}</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 20,
+    paddingTop: 32,
+    paddingBottom: 40,
+    gap: 18,
+  },
+  brand: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.brandDeep,
+  },
+  title: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  subtitle: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: colors.mutedInk,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  stepPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: colors.surface,
+  },
+  stepPillActive: {
+    backgroundColor: colors.brand,
+    borderColor: colors.brand,
+  },
+  stepText: {
+    color: colors.mutedInk,
+    fontWeight: '600',
+  },
+  stepTextActive: {
+    color: colors.surface,
+  },
+  card: {
+    borderRadius: 24,
+    padding: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 12,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.ink,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rowInput: {
+    flex: 1,
+  },
+  categoryRow: {
+    gap: 10,
+    paddingVertical: 4,
+  },
+  categoryChip: {
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    minWidth: 118,
+    gap: 4,
+  },
+  categoryChipActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandLight,
+  },
+  categoryEmoji: {
+    fontSize: 18,
+  },
+  categoryLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+    color: colors.ink,
+    fontWeight: '600',
+  },
+  button: {
+    borderRadius: 18,
+    backgroundColor: colors.brand,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: colors.surface,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+});

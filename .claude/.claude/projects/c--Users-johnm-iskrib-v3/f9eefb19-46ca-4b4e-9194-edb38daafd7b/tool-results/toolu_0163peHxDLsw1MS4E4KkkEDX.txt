@@ -1,0 +1,764 @@
+C:\Users\johnm\iskrib_v3\client\src\Context\ThemeContext.jsx:21:        const handleChange = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\Context\ThemeContext.jsx:28:        mediaQuery.addEventListener('change', handleChange);
+C:\Users\johnm\iskrib_v3\client\src\Context\ThemeContext.jsx:29:        return () => mediaQuery.removeEventListener('change', handleChange);
+C:\Users\johnm\iskrib_v3\client\src\components\LoginPage\login.jsx:18:    const handleShowPass = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\LoginPage\login.jsx:23:    const handleNavigate = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\LoginPage\login.jsx:28:    const handleLogin = async (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\LoginPage\login.jsx:76:                    <form className='auth-form' onSubmit={handleLogin} aria-busy={isLoading ? 'true' : 'false'}>
+C:\Users\johnm\iskrib_v3\client\src\components\LoginPage\login.jsx:107:                                    onClick={handleShowPass}
+C:\Users\johnm\iskrib_v3\client\src\components\LoginPage\login.jsx:132:                        <button className='link-button' type='button' onClick={handleNavigate}>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:513:.profile-layout-drag-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:750:.profile-vertical-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:783:.profile-side-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:792:.profile-side-resize-handle.left{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:795:.profile-side-resize-handle.right{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:864:.profile-widget-view-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:874:.profile-widget-view-handle:active{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:877:.profile-widget-card:hover .profile-widget-view-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:878:.profile-widget-card.is-widget-active .profile-widget-view-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:879:.profile-layout-editable-card:hover > .profile-widget-view-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1105:.profile-widget-block-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1115:.profile-widget-block:hover .profile-widget-block-resize-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1116:.profile-widget-block.is-resizing .profile-widget-block-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1119:.profile-widget-card:hover > .profile-widget-card-resize-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1120:.profile-widget-card.is-widget-active > .profile-widget-card-resize-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1121:.profile-widget-card.is-editing > .profile-widget-card-resize-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1122:.profile-widget-card.is-resizing > .profile-widget-card-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1125:.profile-widget-block-resize-handle.side-right{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1133:.profile-widget-block-resize-handle.side-left{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1141:.profile-widget-block-resize-handle.side-top{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1149:.profile-widget-block-resize-handle.side-bottom{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1157:.profile-widget-block-resize-handle.side-right-corners{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1165:.profile-widget-block-resize-handle.corner-br{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1278:/* Corner handles */
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1279:.profile-widget-image-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1292:.profile-widget-image-wrapper:hover .profile-widget-image-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1293:.profile-widget-image-wrapper.is-resizing .profile-widget-image-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1296:.profile-widget-block-image-wrapper:hover .profile-widget-image-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1297:.profile-widget-block-image-wrapper.is-active .profile-widget-image-handle,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1298:.profile-widget-block-image-wrapper.is-resizing .profile-widget-image-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1301:.profile-widget-image-handle.corner-tl{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1306:.profile-widget-block-image-wrapper .profile-widget-image-handle.corner-tl{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1310:.profile-widget-image-handle.corner-tr{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1315:.profile-widget-block-image-wrapper .profile-widget-image-handle.corner-tr{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1319:.profile-widget-image-handle.corner-bl{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1324:.profile-widget-block-image-wrapper .profile-widget-image-handle.corner-bl{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1328:.profile-widget-image-handle.corner-br{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1333:.profile-widget-block-image-wrapper .profile-widget-image-handle.corner-br{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1337:/* Side handles */
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1338:.profile-widget-image-handle.side-right{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1347:.profile-widget-block-image-wrapper .profile-widget-image-handle.side-right{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1350:.profile-widget-image-handle.side-bottom{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1359:.profile-widget-block-image-wrapper .profile-widget-image-handle.side-bottom{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1443:/* Legacy bottom-only handle (kept for pinned widget views) */
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1444:.profile-widget-image-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\myprofile.css:1458:.profile-widget-image-wrapper:hover .profile-widget-image-resize-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:199:    const handleClickOpenSidebar = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:204:    const handleCloseSidebar = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:207:    const handleCloseLayoutBuilder = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:212:    const handleStartSectionMove = (e, sectionId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:226:    const handleStartSectionContainerMove = (e, sectionId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:231:            e.target.closest('button, input, textarea, select, a, .profile-widget-card, .profile-side-resize-handle, .profile-vertical-resize-handle, .profile-widget-block, .profile-widget-block-editor, .profile-widget-image-wrapper, .profile-widget-block-image-wrapper')
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:236:            handleStartSectionMove(e, sectionId);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:239:    const handleStartSectionResize = (e, sectionId, side) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:257:    const handleStartSectionHeightResize = (e, sectionId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:275:    const handleAddWidget = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:281:    const handleRemoveWidget = (widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:289:    const handleWidgetFieldChange = (widgetId, field, value) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:299:    const handleToggleWidgetEdit = (e, widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:311:    const handleConfirmWidgetEdit = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:317:    const handleCancelWidgetEdit = (e, widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:329:    const handleStartWidgetImageResize = (e, widgetId, mode = 'bottom') => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:347:    const handleStartBlockImageResize = (e, widgetId, blockId, mode = 'bottom') => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:371:    const handleDeleteWidgetImage = async (widgetId, imageUrl) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:372:        handleWidgetFieldChange(widgetId, 'image_url', '');
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:373:        handleWidgetFieldChange(widgetId, 'image_height', null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:374:        handleWidgetFieldChange(widgetId, 'image_width', null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:384:    // --- Block handlers ---
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:385:    const handleAddBlock = (widgetId, blockType = 'text') => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:414:    const handleRemoveBlock = (widgetId, blockId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:425:    const handleBlockFieldChange = (widgetId, blockId, field, value) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:439:    const handleStartBlockDrag = (e, widgetId, blockId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:454:    const handleStartBlockResize = (e, widgetId, blockId, mode = 'corner-br') => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:472:    const handleOpenBlockColorPicker = (blockId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:476:    const handleBlockColorChange = (widgetId, blockId, color) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:477:        handleBlockFieldChange(widgetId, blockId, 'bg_color', color || null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:480:    const handleOpenWidgetColorPicker = (widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:484:    const handleWidgetColorChange = (widgetId, color) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:493:    const handleOpenBlockImagePicker = (blockId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:497:    const handleBlockImageUpload = async(widgetId, blockId, file) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:505:                handleBlockFieldChange(widgetId, blockId, 'image_url', data.img_url);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:513:    const handleDeleteBlockImage = async(widgetId, blockId, imageUrl) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:514:        handleBlockFieldChange(widgetId, blockId, 'image_url', '');
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:515:        handleBlockFieldChange(widgetId, blockId, 'image_width', null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:516:        handleBlockFieldChange(widgetId, blockId, 'image_height', null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:526:    const handleResetBlockImageSize = (widgetId, blockId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:550:    const handleConvertToBlocks = (widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:573:    const handleWidgetDragStart = (e, widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:581:    const handleOpenWidgetImagePicker = (widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:588:    const handleWidgetImageUpload = async(widgetId, file) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:603:                handleWidgetFieldChange(widgetId, 'image_url', data.img_url);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:614:    const handleStartWidgetMove = (e, widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:628:    const handleStartWidgetResize = (e, widgetId, side) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:644:    const handleStartWidgetHeightResize = (e, widgetId, mode = 'bottom') => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:659:    const handleStartWidgetCornerResize = (e, widgetId, mode = 'side-right-corners') => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:687:    const handleStartWidgetContainerResize = (e, widgetId, options = {}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:724:    const handleStartWidgetContainerInteraction = (e, widgetId, options = {}) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:746:            handleStartWidgetContainerResize(e, widgetId, {requireActive: false});
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:750:        handleStartWidgetMove(e, widgetId);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:752:    const handleDropWidgetToSection = (e, sectionId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:770:    const handleUndockWidget = (widgetId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:780:    const handleSaveProfileLayout = async() =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:845:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:870:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:881:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:882:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:885:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:886:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:896:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:927:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:938:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:939:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:942:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:943:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:953:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:976:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:987:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:988:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:991:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:992:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1002:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1034:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1045:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1046:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1049:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1050:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1060:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1104:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1113:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1114:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1117:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1118:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1128:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1190:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1199:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1200:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1203:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1204:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1214:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1270:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1279:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1280:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1283:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1284:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1292:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1320:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1329:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1330:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1332:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1333:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1343:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1388:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1405:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1406:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1409:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1410:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1419:        const handleMouseMove = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1445:        const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1453:        window.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1454:        window.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1457:            window.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1458:            window.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1464:    const handleClickEdit = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1476:        handleHideGradientPicker(e)
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1483:    const handleCloseRichTextEditor = useCallback(() =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1487:    const handleImageOnChange = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1510:    const handleShowGradientPicker = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1515:    const handleHideGradientPicker = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1522:    const handleSaveProfileEdit = async() =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1558:    const handleSaveProfileConfig = async() =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1584:    const handleRemoveBgPreview = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1588:    const handleSelectGradient = useCallback((gradient) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1594:    const handleInsertBgImage = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1602:    const handleBgOnchange = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1628:    const handleClickFontColorSelector = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1633:    const handleClickInputColor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1639:    const handleClickSaveFontColor = async() => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1688:            handleClickInputColor={handleClickInputColor}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1690:            handleClickSaveFontColor={handleClickSaveFontColor}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1695:            handleBgOnchange={handleBgOnchange}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1698:            handleSelectGradient={handleSelectGradient}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1699:            handleInsertBgImage={handleInsertBgImage}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1706:            handleRemoveBgPreview={handleRemoveBgPreview}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1707:            handleHideGradientPicker={handleHideGradientPicker}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1708:            handleSaveProfileConfig={handleSaveProfileConfig}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1718:                handleImageOnChange={handleImageOnChange}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1722:                handleShowGradientPicker={handleShowGradientPicker}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1727:                handleSaveProfileEdit={handleSaveProfileEdit}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1732:                <Editor key={'main-editor'} onClose={handleCloseRichTextEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1766:                        handleClickEdit={handleClickEdit}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1767:                        handleAddWidget={handleAddWidget}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1770:                        handleClickFontColorSelector={handleClickFontColorSelector}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1811:                        handleDropWidgetToSection={handleDropWidgetToSection}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1812:                        handleStartSectionContainerMove={handleStartSectionContainerMove}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1813:                        handleStartSectionResize={handleStartSectionResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1814:                        handleStartSectionHeightResize={handleStartSectionHeightResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1815:                        handleWidgetDragStart={handleWidgetDragStart}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1816:                        handleStartWidgetContainerInteraction={handleStartWidgetContainerInteraction}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1817:                        handleUndockWidget={handleUndockWidget}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1818:                        handleRemoveWidget={handleRemoveWidget}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1819:                        handleStartWidgetHeightResize={handleStartWidgetHeightResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1820:                        handleStartWidgetResize={handleStartWidgetResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1821:                        handleStartWidgetCornerResize={handleStartWidgetCornerResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1822:                        handleDeleteWidgetImage={handleDeleteWidgetImage}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1823:                        handleStartWidgetImageResize={handleStartWidgetImageResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1824:                        handleAddBlock={handleAddBlock}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1825:                        handleConvertToBlocks={handleConvertToBlocks}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1826:                        handleWidgetFieldChange={handleWidgetFieldChange}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1827:                        handleOpenWidgetImagePicker={handleOpenWidgetImagePicker}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1828:                        handleWidgetImageUpload={handleWidgetImageUpload}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1829:                        handleRemoveBlock={handleRemoveBlock}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1830:                        handleBlockFieldChange={handleBlockFieldChange}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1831:                        handleOpenBlockColorPicker={handleOpenBlockColorPicker}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1832:                        handleBlockColorChange={handleBlockColorChange}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1833:                        handleOpenBlockImagePicker={handleOpenBlockImagePicker}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1834:                        handleDeleteBlockImage={handleDeleteBlockImage}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1835:                        handleBlockImageUpload={handleBlockImageUpload}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1836:                        handleOpenWidgetColorPicker={handleOpenWidgetColorPicker}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1837:                        handleWidgetColorChange={handleWidgetColorChange}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1838:                        handleToggleWidgetEdit={handleToggleWidgetEdit}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1839:                        handleConfirmWidgetEdit={handleConfirmWidgetEdit}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1840:                        handleCancelWidgetEdit={handleCancelWidgetEdit}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1841:                        handleStartBlockDrag={handleStartBlockDrag}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1842:                        handleStartBlockResize={handleStartBlockResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1843:                        handleResetBlockImageSize={handleResetBlockImageSize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1844:                        handleStartBlockImageResize={handleStartBlockImageResize}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1849:                            <div onClick={(e) => handleCloseLayoutBuilder(e)} className="cancel-button">Cancel</div>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1850:                            <div onClick={() => handleSaveProfileLayout()} className="save-button">Save</div>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1868:                    <MobileSidebarLink onclose={handleCloseSidebar}/>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:1871:                <MobileNavlink clickOpenSidebar={handleClickOpenSidebar}/>
+C:\Users\johnm\iskrib_v3\client\src\components\MobileSidebarLink\MobileSidebarLink.jsx:18:    const handleClose =(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\MobileSidebarLink\MobileSidebarLink.jsx:30:        <div onClick={(e) => handleClose(e)} className="mobile-sidebar-bg">
+C:\Users\johnm\iskrib_v3\client\src\components\AuthModal\AuthModal.jsx:8:    const handleLogin = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\AuthModal\AuthModal.jsx:13:    const handleSignUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\AuthModal\AuthModal.jsx:41:                    <button onClick={handleLogin} className='auth-modal-login-bttn'>Log in</button>
+C:\Users\johnm\iskrib_v3\client\src\components\AuthModal\AuthModal.jsx:42:                    <button onClick={handleSignUp} className='auth-modal-signup-bttn'>Sign up</button>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\ViewUserCollections.jsx:8:import { handleCLickContent } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\ViewUserCollections.jsx:32:    const handleClickBack = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\ViewUserCollections.jsx:37:    const handleClickCard = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\ViewUserCollections.jsx:50:            <div onClick={(e) => handleClickBack(e)} className="back-button" role="button" tabIndex={0} aria-label="Go back" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickBack(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\ViewUserCollections.jsx:71:                        <div onClick={(e) => handleClickCard(e, journal.journals.content, parseContent?.wholeText, journal.journals.title, journal.journals.users.id, journal.journals.users.name, journal.journals.users.image_url, journal.journals.created_at, journal.journals.id, journal.hasLiked, journal.journals.comments[0].count, journal.hasBookMarked, journal.journals.likes[0].count, journal.journals.bookmarks[0].count)} className="user-collections" key={journal.id}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:88:    const handleClickCards = (e, collectionId, collectionName, collectionDescription) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:124:    const handleClickSettings = (e, collectionId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:129:    const handleDeleteCollection = async(e, collectionId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:163:        const handleClickOutside = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:169:        document.addEventListener('click', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:172:            document.removeEventListener('click', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:225:                                    <button className='btn-collection btn-collection--danger' onClick={(e) => handleDeleteCollection(e, collection.id)}>Delete</button>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:231:                        <div className='setting-bttn' aria-label="Collection settings" role="button" tabIndex={0} onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickSettings(e, collection?.id) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:261:                            <svg onClick={(e) => handleClickSettings(e, collection?.id)} xmlns="http://www.w3.org/2000/svg" xmlnsXlink="http://www.w3.org/1999/xlink" width="20px" height="20px" viewBox="0 0 24 24" version="1.1" aria-label="Settings">
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:277:                        <div onClick={(e) => handleClickCards(e, collection?.id, collection?.name, collection?.description)} className='collection-gradient-header' data-accent={accentIndex}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionCards.jsx:280:                        <div onClick={(e) => handleClickCards(e, collection?.id, collection?.name, collection?.description)} className='collection-name-container text-truncate'>
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:10:import { handleCLickContent, handleClickOpinion } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:26:    const handleClickSettings = (e, notifId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:32:    const handleClickDeleteNotification = (e, notifId, source) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:107:    const handleClickNotif = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:108:    const handleClickOpinionNotif = handleClickOpinion(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:111:    const handleReadNotif = async(e, notification) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:116:            handleClickOpinionNotif(e, notification?.opinions?.id, notification?.opinions?.user_id)
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:119:            handleClickNotif(
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:145:        const handleClickOutside = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:150:        document.addEventListener('mousedown', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:153:            document.removeEventListener('mousedown', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:222:                                                <div onClick={(e) => handleClickDeleteNotification(e, unreadNotification?.id, unreadNotification?.source)} className="delete-notification">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:236:                                        <svg onClick={(e) => handleClickSettings(e, unreadNotification?.id)} xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:250:                                    onClick={(e) => handleReadNotif(e, unreadNotification)}
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:40:    const handleClickBack = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:45:    const handleClickSaveCollection = async(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:76:    const handleClickShowCollectionEditor = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:81:    const handleClickShowOlderPost = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:85:    const handleCloseShowOlderPost = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:89:    const handleClickSaveSelectedContent = (data) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:96:        const handleClickOutside = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:105:        document.addEventListener('click', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:108:            document.removeEventListener('click', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:118:            <div onClick={(e) => handleClickBack(e)} className='back-button' role="button" tabIndex={0} aria-label="Go back" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickBack(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:145:            <div onClick={(e) =>{handleClickShowCollectionEditor(e)}} className='btn-collection btn-collection--secondary' role="button" tabIndex={0} aria-label="Create a collection" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickShowCollectionEditor(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:163:            <OlderPost onClose={handleCloseShowOlderPost} onSave={handleClickSaveSelectedContent}/>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:200:                        <div onClick={(e) => handleClickShowOlderPost(e)} className='btn-collection btn-collection--primary' role="button" tabIndex={0} aria-label="Select journals" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickShowOlderPost(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\Collection.jsx:225:                <button disabled={isDisabled} onClick={(e) => handleClickSaveCollection(e, journalIds)} className='btn-collection btn-collection--primary' style={{margin: '1rem 0 1rem 1rem'}}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\NotCollectedJournals.jsx:34:    const handleClick = (e, collected, journal) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\NotCollectedJournals.jsx:59:    const handleClickSave = async(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\NotCollectedJournals.jsx:154:                        <div onClick={(e) => {handleClick(e, journal.hasCollected, journal)}} className={isSelected(journal.id) ? "collected-cards" : "not-collected-cards"} key={journal.id} role="button" tabIndex={0} onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClick(e, journal.hasCollected, journal) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\NotCollectedJournals.jsx:180:                <button onClick={(e) => handleClickSave(e)} className="btn-collection btn-collection--primary">
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:15:    const handleNavigatePath = (path) => {
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:38:            action: (path) => handleNavigatePath(path),
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:53:                handleNavigatePath(path);
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:71:                handleNavigatePath(path);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:10:import { handleCLickContent, handleClickOpinion } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:69:    const handleClickNotif = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:70:    const handleClickOpinionNotif = handleClickOpinion(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:73:    const handleReadNotif = async(e, notification) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:79:            handleClickOpinionNotif(e, notification?.opinions?.id, notification?.opinions?.user_id)
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:82:            handleClickNotif(
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:133:        const handleClickOutside = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:140:        document.addEventListener('click', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:142:            document.removeEventListener('click', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:150:    const handleClickSettings = (e, notifId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:158:    const handleClickDeleteNotification = async(e, notifId, source) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:241:                                            <div onClick={(e) => handleClickDeleteNotification(e, notification?.id, notification?.source)} className="delete-notification">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:256:                                    <svg onClick={(e) => handleClickSettings(e, notification?.id)} xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:271:                            onClick={(e) => handleReadNotif(e, notification)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:43:        handleDropWidgetToSection,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:44:        handleStartSectionContainerMove,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:45:        handleStartSectionResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:46:        handleStartSectionHeightResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:47:        handleWidgetDragStart,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:48:        handleStartWidgetContainerInteraction,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:49:        handleUndockWidget,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:50:        handleRemoveWidget,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:51:        handleStartWidgetHeightResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:52:        handleStartWidgetResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:53:        handleStartWidgetCornerResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:54:        handleDeleteWidgetImage,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:55:        handleStartWidgetImageResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:56:        handleAddBlock,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:57:        handleConvertToBlocks,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:58:        handleWidgetFieldChange,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:59:        handleOpenWidgetImagePicker,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:60:        handleWidgetImageUpload,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:61:        handleRemoveBlock,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:62:        handleBlockFieldChange,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:63:        handleOpenBlockColorPicker,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:64:        handleBlockColorChange,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:65:        handleOpenBlockImagePicker,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:66:        handleDeleteBlockImage,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:67:        handleBlockImageUpload,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:68:        handleOpenWidgetColorPicker,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:69:        handleWidgetColorChange,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:70:        handleToggleWidgetEdit,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:71:        handleConfirmWidgetEdit,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:72:        handleCancelWidgetEdit,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:73:        handleStartBlockDrag,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:74:        handleStartBlockResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:75:        handleResetBlockImageSize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:76:        handleStartBlockImageResize,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:97:                onClick={() => handleDeleteWidgetImage(widget.id, widget.image_url)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:107:            <button type="button" className="profile-widget-image-handle corner-tl" onMouseDown={(e) => handleStartWidgetImageResize(e, widget.id, 'corner-tl')} aria-label="Resize from top-left" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:108:            <button type="button" className="profile-widget-image-handle corner-tr" onMouseDown={(e) => handleStartWidgetImageResize(e, widget.id, 'corner-tr')} aria-label="Resize from top-right" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:109:            <button type="button" className="profile-widget-image-handle corner-bl" onMouseDown={(e) => handleStartWidgetImageResize(e, widget.id, 'corner-bl')} aria-label="Resize from bottom-left" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:110:            <button type="button" className="profile-widget-image-handle corner-br" onMouseDown={(e) => handleStartWidgetImageResize(e, widget.id, 'corner-br')} aria-label="Resize from bottom-right" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:111:            <button type="button" className="profile-widget-image-handle side-right" onMouseDown={(e) => handleStartWidgetImageResize(e, widget.id, 'right')} aria-label="Resize width" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:112:            <button type="button" className="profile-widget-image-handle side-bottom" onMouseDown={(e) => handleStartWidgetImageResize(e, widget.id, 'bottom')} aria-label="Resize height" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:162:                            handleResetBlockImageSize(widgetId, block.id);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:168:                <button type="button" className="profile-widget-image-handle corner-tl" onMouseDown={(e) => handleStartBlockImageResize(e, widgetId, block.id, 'corner-tl')} aria-label="Resize block image from top-left" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:169:                <button type="button" className="profile-widget-image-handle corner-tr" onMouseDown={(e) => handleStartBlockImageResize(e, widgetId, block.id, 'corner-tr')} aria-label="Resize block image from top-right" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:170:                <button type="button" className="profile-widget-image-handle corner-bl" onMouseDown={(e) => handleStartBlockImageResize(e, widgetId, block.id, 'corner-bl')} aria-label="Resize block image from bottom-left" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:171:                <button type="button" className="profile-widget-image-handle corner-br" onMouseDown={(e) => handleStartBlockImageResize(e, widgetId, block.id, 'corner-br')} aria-label="Resize block image from bottom-right" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:172:                <button type="button" className="profile-widget-image-handle side-right" onMouseDown={(e) => handleStartBlockImageResize(e, widgetId, block.id, 'right')} aria-label="Resize block image width" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:173:                <button type="button" className="profile-widget-image-handle side-bottom" onMouseDown={(e) => handleStartBlockImageResize(e, widgetId, block.id, 'bottom')} aria-label="Resize block image height" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:177:    const renderBlockResizeHandles = (widgetId, block) => (
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:181:                className="profile-widget-block-resize-handle side-right"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:182:                onMouseDown={(e) => handleStartBlockResize(e, widgetId, block.id, 'right')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:187:                className="profile-widget-block-resize-handle side-bottom"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:188:                onMouseDown={(e) => handleStartBlockResize(e, widgetId, block.id, 'bottom')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:193:                className="profile-widget-block-resize-handle corner-br"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:194:                onMouseDown={(e) => handleStartBlockResize(e, widgetId, block.id, 'corner-br')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:199:    const renderWidgetCardResizeHandles = (widget, isVisible = false) => {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:207:                    className="profile-widget-block-resize-handle side-left profile-widget-card-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:208:                    onMouseDown={(e) => handleStartWidgetResize(e, widget.id, 'left')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:213:                    className="profile-widget-block-resize-handle side-right profile-widget-card-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:214:                    onMouseDown={(e) => handleStartWidgetResize(e, widget.id, 'right')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:219:                    className="profile-widget-block-resize-handle side-top profile-widget-card-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:220:                    onMouseDown={(e) => handleStartWidgetHeightResize(e, widget.id, 'top')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:225:                    className="profile-widget-block-resize-handle side-bottom profile-widget-card-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:226:                    onMouseDown={(e) => handleStartWidgetHeightResize(e, widget.id, 'bottom')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:231:                    className="profile-widget-block-resize-handle side-right-corners profile-widget-card-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:232:                    onMouseDown={(e) => handleStartWidgetCornerResize(e, widget.id, 'side-right-corners')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:320:                                        onDrop={(e) => handleDropWidgetToSection(e, section.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:321:                                        onMouseDown={(e) => handleStartSectionContainerMove(e, section.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:332:                                                    className="profile-side-resize-handle left"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:333:                                                    onMouseDown={(e) => handleStartSectionResize(e, section.id, 'left')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:341:                                                    className="profile-side-resize-handle right"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:342:                                                    onMouseDown={(e) => handleStartSectionResize(e, section.id, 'right')}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:356:                                                        onDragStart={(e) => handleWidgetDragStart(e, widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:363:                                                        onMouseDown={(e) => handleStartWidgetContainerInteraction(e, widget.id, {requireActive: false})}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:367:                                                                <button type="button" onClick={() => handleUndockWidget(widget.id)} className="profile-widget-upload-button">Undock</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:368:                                                                <button type="button" onClick={() => handleRemoveWidget(widget.id)} className="profile-widget-remove-button">Remove</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:402:                                                                        {renderBlockResizeHandles(widget.id, block)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:410:                                                                className="profile-vertical-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:411:                                                                onMouseDown={(e) => handleStartWidgetHeightResize(e, widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:415:                                                        {renderWidgetCardResizeHandles(widget, showLayoutBuilder || activeWidgetId === widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:426:                                                className="profile-vertical-resize-handle"
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:427:                                                onMouseDown={(e) => handleStartSectionHeightResize(e, section.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:439:                                    onDragStart={(e) => handleWidgetDragStart(e, widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:449:                                    onMouseDown={(e) => handleStartWidgetContainerInteraction(e, widget.id, {requireActive: false})}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:452:                                        <button type="button" onClick={() => handleRemoveWidget(widget.id)} className="profile-widget-remove-button">Remove</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:456:                                        <div className="profile-widget-block-color-swatch" style={{backgroundColor: widget.bg_color || 'transparent'}} onClick={() => handleOpenWidgetColorPicker(widget.id)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:458:                                            <button type="button" className="profile-widget-clear-image-button" onClick={() => handleWidgetColorChange(widget.id, null)}>Clear</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:460:                                        <input ref={(node) => { if(node) widgetColorInputRefs.current[widget.id] = node; else delete widgetColorInputRefs.current[widget.id]; }} type="color" value={widget.bg_color || '#ffffff'} style={{display: 'none'}} onChange={(e) => handleWidgetColorChange(widget.id, e.target.value)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:464:                                        <button type="button" className="profile-widget-block-add-btn" onClick={() => handleAddBlock(widget.id, 'text')}>+ Text</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:465:                                        <button type="button" className="profile-widget-block-add-btn" onClick={() => handleAddBlock(widget.id, 'image')}>+ Image</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:467:                                            <button type="button" className="profile-widget-block-add-btn" onClick={() => handleConvertToBlocks(widget.id)}>Convert to blocks</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:474:                                                <select value={widget.type} onChange={(e) => handleWidgetFieldChange(widget.id, 'type', e.target.value)}>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:485:                                                    onChange={(e) => handleWidgetFieldChange(widget.id, 'title', e.target.value)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:495:                                                            onClick={() => handleOpenWidgetImagePicker(widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:504:                                                                onClick={() => handleDeleteWidgetImage(widget.id, widget.image_url)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:520:                                                            onChange={(e) => handleWidgetImageUpload(widget.id, e.target.files?.[0])}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:530:                                                    onChange={(e) => handleWidgetFieldChange(widget.id, 'note', e.target.value)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:543:                                                        <button type="button" className="profile-widget-block-remove-btn" onClick={(e) => { e.stopPropagation(); handleRemoveBlock(widget.id, block.id); }}>x</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:547:                                                            <textarea value={block.content} onChange={(e) => handleBlockFieldChange(widget.id, block.id, 'content', e.target.value)} maxLength={300} rows={2} placeholder="Text content" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:550:                                                                <div className="profile-widget-block-color-swatch" style={{backgroundColor: block.bg_color || 'transparent'}} onClick={() => handleOpenBlockColorPicker(block.id)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:552:                                                                    <button type="button" className="profile-widget-clear-image-button" onClick={() => handleBlockColorChange(widget.id, block.id, null)}>Clear</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:554:                                                                <input ref={(node) => { if(node) blockColorInputRefs.current[block.id] = node; else delete blockColorInputRefs.current[block.id]; }} type="color" value={block.bg_color || '#ffffff'} style={{display: 'none'}} onChange={(e) => handleBlockColorChange(widget.id, block.id, e.target.value)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:560:                                                            <input type="text" value={block.title || ''} placeholder="Title" onChange={(e) => handleBlockFieldChange(widget.id, block.id, 'title', e.target.value)} maxLength={40} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:562:                                                                <button type="button" onClick={() => handleOpenBlockImagePicker(block.id)} className="profile-widget-upload-button">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:566:                                                                    <button type="button" className="profile-widget-clear-image-button" onClick={() => handleDeleteBlockImage(widget.id, block.id, block.image_url)}>Remove</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:568:                                                                <input ref={(node) => { if(node) blockImageInputRefs.current[block.id] = node; else delete blockImageInputRefs.current[block.id]; }} type="file" accept="image/*" style={{display: 'none'}} onChange={(e) => { handleBlockImageUpload(widget.id, block.id, e.target.files?.[0]); }} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:571:                                                            <textarea value={block.note || ''} placeholder="Note" onChange={(e) => handleBlockFieldChange(widget.id, block.id, 'note', e.target.value)} maxLength={200} rows={2} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:574:                                                                <div className="profile-widget-block-color-swatch" style={{backgroundColor: block.bg_color || 'transparent'}} onClick={() => handleOpenBlockColorPicker(block.id)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:576:                                                                    <button type="button" className="profile-widget-clear-image-button" onClick={() => handleBlockColorChange(widget.id, block.id, null)}>Clear</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:578:                                                                <input ref={(node) => { if(node) blockColorInputRefs.current[block.id] = node; else delete blockColorInputRefs.current[block.id]; }} type="color" value={block.bg_color || '#ffffff'} style={{display: 'none'}} onChange={(e) => handleBlockColorChange(widget.id, block.id, e.target.value)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:586:                                    {renderWidgetCardResizeHandles(widget, true)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:606:                                    onMouseDown={(e) => handleStartWidgetContainerInteraction(e, widget.id, {requireActive: true})}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:608:                                    <div className="profile-widget-top-actions profile-widget-view-handle">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:613:                                                    onClick={(e) => handleConfirmWidgetEdit(e, widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:620:                                                    onClick={(e) => handleCancelWidgetEdit(e, widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:629:                                                onClick={(e) => handleToggleWidgetEdit(e, widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:639:                                                <button type="button" className="profile-widget-block-add-btn" onClick={() => handleAddBlock(widget.id, 'text')}>+ Text</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:640:                                                <button type="button" className="profile-widget-block-add-btn" onClick={() => handleAddBlock(widget.id, 'image')}>+ Image</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:642:                                                    <button type="button" className="profile-widget-block-add-btn" onClick={() => handleConvertToBlocks(widget.id)}>Convert to blocks</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:649:                                                        <select value={widget.type} onChange={(e) => { handleWidgetFieldChange(widget.id, 'type', e.target.value); triggerAutoSave(); }}>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:657:                                                        <input type="text" value={widget.title} onChange={(e) => handleWidgetFieldChange(widget.id, 'title', e.target.value)} onBlur={() => triggerAutoSave()} maxLength={40} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:663:                                                                <button type="button" onClick={() => handleOpenWidgetImagePicker(widget.id)} className="profile-widget-upload-button">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:667:                                                                    <button type="button" className="profile-widget-clear-image-button" onClick={() => handleDeleteWidgetImage(widget.id, widget.image_url)}>Remove</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:669:                                                                <input ref={(node) => { if(node) widgetImageInputRefs.current[widget.id] = node; else delete widgetImageInputRefs.current[widget.id]; }} type="file" accept="image/*" style={{display: 'none'}} onChange={(e) => { handleWidgetImageUpload(widget.id, e.target.files?.[0]).then(() => triggerAutoSave()); }} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:676:                                                        <textarea value={widget.note} onChange={(e) => handleWidgetFieldChange(widget.id, 'note', e.target.value)} onBlur={() => triggerAutoSave()} maxLength={220} rows={3} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:686:                                                                <button type="button" className="profile-widget-block-remove-btn" onClick={(e) => { e.stopPropagation(); handleRemoveBlock(widget.id, block.id); }}>x</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:690:                                                                    <textarea value={block.content} onChange={(e) => handleBlockFieldChange(widget.id, block.id, 'content', e.target.value)} onBlur={() => triggerAutoSave()} maxLength={300} rows={2} placeholder="Text content" />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:693:                                                                        <div className="profile-widget-block-color-swatch" style={{backgroundColor: block.bg_color || 'transparent'}} onClick={() => handleOpenBlockColorPicker(block.id)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:695:                                                                            <button type="button" className="profile-widget-clear-image-button" onClick={() => handleBlockColorChange(widget.id, block.id, null)}>Clear</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:697:                                                                        <input ref={(node) => { if(node) blockColorInputRefs.current[block.id] = node; else delete blockColorInputRefs.current[block.id]; }} type="color" value={block.bg_color || '#ffffff'} style={{display: 'none'}} onChange={(e) => handleBlockColorChange(widget.id, block.id, e.target.value)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:703:                                                                    <input type="text" value={block.title || ''} placeholder="Title" onChange={(e) => handleBlockFieldChange(widget.id, block.id, 'title', e.target.value)} onBlur={() => triggerAutoSave()} maxLength={40} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:705:                                                                        <button type="button" onClick={() => handleOpenBlockImagePicker(block.id)} className="profile-widget-upload-button">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:709:                                                                            <button type="button" className="profile-widget-clear-image-button" onClick={() => handleDeleteBlockImage(widget.id, block.id, block.image_url)}>Remove</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:711:                                                                        <input ref={(node) => { if(node) blockImageInputRefs.current[block.id] = node; else delete blockImageInputRefs.current[block.id]; }} type="file" accept="image/*" style={{display: 'none'}} onChange={(e) => { handleBlockImageUpload(widget.id, block.id, e.target.files?.[0]).then(() => triggerAutoSave()); }} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:714:                                                                    <textarea value={block.note || ''} placeholder="Note" onChange={(e) => handleBlockFieldChange(widget.id, block.id, 'note', e.target.value)} onBlur={() => triggerAutoSave()} maxLength={200} rows={2} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:717:                                                                        <div className="profile-widget-block-color-swatch" style={{backgroundColor: block.bg_color || 'transparent'}} onClick={() => handleOpenBlockColorPicker(block.id)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:719:                                                                            <button type="button" className="profile-widget-clear-image-button" onClick={() => handleBlockColorChange(widget.id, block.id, null)}>Clear</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:721:                                                                        <input ref={(node) => { if(node) blockColorInputRefs.current[block.id] = node; else delete blockColorInputRefs.current[block.id]; }} type="color" value={block.bg_color || '#ffffff'} style={{display: 'none'}} onChange={(e) => handleBlockColorChange(widget.id, block.id, e.target.value)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:731:                                                <div className="profile-widget-block-color-swatch" style={{backgroundColor: widget.bg_color || 'transparent'}} onClick={() => handleOpenWidgetColorPicker(widget.id)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:733:                                                    <button type="button" className="profile-widget-clear-image-button" onClick={() => handleWidgetColorChange(widget.id, null)}>Clear</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:735:                                                <input ref={(node) => { if(node) widgetColorInputRefs.current[widget.id] = node; else delete widgetColorInputRefs.current[widget.id]; }} type="color" value={widget.bg_color || '#ffffff'} style={{display: 'none'}} onChange={(e) => handleWidgetColorChange(widget.id, e.target.value)} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:737:                                            <button type="button" onClick={() => { handleRemoveWidget(widget.id); setEditingWidgetId(null); triggerAutoSave(); }} className="profile-widget-remove-button">Remove widget</button>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:766:                                                            onMouseDown={(e) => handleStartBlockDrag(e, widget.id, block.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:778:                                                            {renderBlockResizeHandles(widget.id, block)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileLayoutCanvas.jsx:785:                                    {renderWidgetCardResizeHandles(widget, activeWidgetId === widget.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\SignUpPage\signup.jsx:23:    const handleShowPass = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SignUpPage\signup.jsx:28:    const handleSignUp = async(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SignUpPage\signup.jsx:78:    const handleNavigate = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SignUpPage\signup.jsx:111:                    <form className='auth-form' onSubmit={handleSignUp} aria-busy={isLoadingSignUp ? 'true' : 'false'}>
+C:\Users\johnm\iskrib_v3\client\src\components\SignUpPage\signup.jsx:150:                                <button className='show-toggle' type='button' onClick={handleShowPass}>
+C:\Users\johnm\iskrib_v3\client\src\components\SignUpPage\signup.jsx:183:                        <button className='link-button' type='button' onClick={handleNavigate}>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileEditModal.jsx:11:    handleImageOnChange,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileEditModal.jsx:15:    handleShowGradientPicker,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileEditModal.jsx:20:    handleSaveProfileEdit,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileEditModal.jsx:64:                                    onChange={(e) => handleImageOnChange(e)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileEditModal.jsx:81:                        <div onClick={(e) => handleShowGradientPicker(e)} className="add-profile-background">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileEditModal.jsx:150:                <div onClick={() => handleSaveProfileEdit()} className="profile-edit-save-bttn">
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:14:    const handleClickContent = (e, journal) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:29:    const handleSave = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:34:    const handleClose = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:88:                        <div onClick={(e) => handleClickContent(e, journal)} key={journal.id} className={isSelected(journal.id) ? "old-post-cards-selected" : "old-post-cards"} role="button" tabIndex={0} onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickContent(e, journal) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:110:                    <button onClick={(e) => handleSave(e)} className="btn-collection btn-collection--primary">
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:118:                <button onClick={(e) => handleClose(e)} className="btn-collection btn-collection--secondary">
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionViewer.jsx:34:    const handleClickCards = (e, collectionId, collectionName, collectionDescription, isPublic) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionViewer.jsx:96:                <div onClick={(e) => handleClickCards(e, collection.id, collection.name, collection.description, collection.is_public)} key={collection.id} className="collection-cards-profile">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:8:    handleBgOnchange,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:11:    handleSelectGradient,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:12:    handleInsertBgImage,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:19:    handleRemoveBgPreview,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:20:    handleHideGradientPicker,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:21:    handleSaveProfileConfig,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:40:                    onChange={(e) => handleBgOnchange(e)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:50:                            onClick={() => handleSelectGradient(gradient.style)}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:59:                    <div onClick={(e) => handleInsertBgImage(e)} className="add-bgImage-bttn">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:91:                            <div onClick={() => handleRemoveBgPreview()} className="remove-bg-preview">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:107:                    <div onClick={(e) => handleHideGradientPicker(e)} className="cancel-button">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileBackgroundPicker.jsx:110:                    <div onClick={() => handleSaveProfileConfig()} className="save-button">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx:33:    const handleClickBack = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\Notifications.jsx:73:                    <div onClick={(e) => handleClickBack(e)} className='back-button'>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileHeroSection.jsx:9:    handleClickEdit,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileHeroSection.jsx:10:    handleAddWidget,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileHeroSection.jsx:13:    handleClickFontColorSelector,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileHeroSection.jsx:64:                <div onClick={(e) => handleClickEdit(e)} className="edit-profile-bttn">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileHeroSection.jsx:79:                        handleAddWidget();
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileHeroSection.jsx:88:                <div onClick={(e) => handleClickFontColorSelector(e)} className="font-picker-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:121:            label: 'Write', action: () => handleOpenTextEditor(),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:161:    const handleClickUploadPhoto = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:167:    const handleImageChange = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:179:    const handleOpenTextEditor = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:183:    const handleCloseEditor = useCallback(() => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:187:    const handleSubmit = async(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:220:    const handleClickMobileProfileLink = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:224:    const handleClickCloseSidebar = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:229:    const handleCloseWelcomeMessage = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:233:    const handleOpenOpinionTextEditor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:236:    const handleCloseOpiniionTextEditor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:240:    //handle show links header when stop scrolling and hides header when scrolling
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:242:    //     const handleScroll = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:251:    //     document.addEventListener('scroll', handleScroll, true);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:254:    //         document.removeEventListener('scroll', handleScroll, true);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:291:            <WelcomeMessage onClose={handleCloseWelcomeMessage}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:296:            <Editor key={'main-editor'} onClose={handleCloseEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:300:            <OpinionEditor onClose={handleCloseOpiniionTextEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:333:                    <button disabled={!bio || !name} onClick={(e) => handleSubmit(e)} className={!bio || !name ? "save-bttn-disabled" : 'save-bttn'}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:340:                        <div onClick={(e) => handleClickUploadPhoto(e)} className="camera-icon-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:343:                        <input onChange={(e) => handleImageChange(e)} ref={imgRef} type="file" accept="image/*" style={{display: "none"}} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:413:                    <SidebarOpinions openEditor={handleOpenOpinionTextEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:419:                <WriteJournalButton onOpen={handleOpenTextEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:422:            <MobileNavlink clickOpenSidebar={handleClickMobileProfileLink}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\home.jsx:426:            <MobileSidebarLink onclose={handleClickCloseSidebar}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:9:import { handleCLickContent } from '../../../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:41:    const clickContent = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:8:import { handleCLickContent } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:48:    const handleClickBack = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:53:    const handleClickCollection = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:62:        handleClickCollection(e, content, wholeText, title, userId, name, image_url, created_at, journalId, hasLiked, commentsCount, hasBookMarked, likesCount, bookmarkCount);
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:83:                <div onClick={(e) => handleClickBack(e)} className='back-button' role="button" tabIndex={0} aria-label="Go back" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickBack(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:109:                <div onClick={(e) => handleClickBack(e)} className='back-button' role="button" tabIndex={0} aria-label="Go back" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickBack(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\collections\CollectionJournalCards.jsx:180:            <div onClick={(e) => handleClickBack(e)} className='back-button' role="button" tabIndex={0} aria-label="Go back" onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') handleClickBack(e) }}>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileFontColorSelector.jsx:10:    handleClickInputColor,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileFontColorSelector.jsx:12:    handleClickSaveFontColor,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileFontColorSelector.jsx:29:                    onClick={() => handleClickInputColor()}
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileFontColorSelector.jsx:44:                    <div className="save-button" onClick={() => handleClickSaveFontColor()}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:9:import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:38:    const handleClickOpionionsProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:39:    const handleClickOpionionsProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:44:        handleClickOpionionsProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:47:    const handleClickContent = (e, opinionId, userId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:105:                                        <img onClick={(e) => handleClickOpionionsProfile(e, user?.userData[0].id, userId)} className="so-avatar" src={opinion.users.image_url || "../../assets/profile.jpg"} alt="" />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:112:                                        <span className="so-handle">{formatPostDate(opinion.created_at)}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:118:                                onClick={(e) => handleClickContent(e, opinion.id, opinion.users.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:45:    const handlClickCloseEditor = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:49:    const handleCloseNotes = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:113:                        <div onClick={(e) => handleCloseNotes(e)} className='notes-close-button'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:132:                     <div onClick={(e) => handlClickCloseEditor(e)} className='edit-journal-close-bttn'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:416:/* ── Resize handles ── */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:417:.southeast-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:429:.southwest-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:441:.northeast-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:453:.northwest-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:465:.east-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:478:.south-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\editor.css:491:.north-side-handle {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:9:import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:45:    const getUserHandle = (opinionUser) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:47:        const handle = opinionUser.user_email.split('@')[0];
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:48:        return handle ? `@${handle}` : null;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:58:    const handleClickLinks = (path) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:62:    const handleClickWriteOpinion = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:72:    const handleClickOpinionProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:73:    const handleClickOpinionProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:78:        handleClickOpinionProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:81:    const handleClickContent = (e, opinionId, userId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:143:                            <div onClick={() => handleClickLinks(link.path)} key={index} className='header-link'>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:157:                            onClick={(e) => handleClickWriteOpinion(e)}
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:202:                    <div onClick={() => handleClickLinks(link.path)} key={index} className='header-link'>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:216:                    onClick={(e) => handleClickWriteOpinion(e)}
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:234:                const handle = getUserHandle(opinion?.users);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:242:                                            <img onClick={(e) => handleClickOpinionProfile(e, user?.userData[0].id, opinion.user_id)} className="so-avatar" src={opinion.users.image_url || "../../assets/profile.jpg"} alt="" />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:246:                                                <span onClick={(e) => handleClickOpinionProfile(e, user?.userData[0].id, opinion.user_id)} className="so-username">{opinion.users.name}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:249:                                            {handle && (
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:250:                                                <span className="so-handle">{handle}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:259:                                <div className="so-body" onClick={(e) => handleClickContent(e, opinion.id, opinion.user_id)}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:730:.so-card--profile .so-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:774:.so-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:797:    font-family: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:1239:    .so-handle{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:5:import { handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:14:    const handleOpenEditor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:20:    const handleClickOpionionsProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:21:    const handleClickOpionionsProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:26:        handleClickOpionionsProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:43:    const handleClickSeeMore = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:50:    const handleClickContent = (e, opinionId, userId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:65:    const getUserHandle = (opinionUser) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:67:        const handle = opinionUser.user_email.split('@')[0];
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:68:        return handle ? `@${handle}` : null;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:78:                    <button onClick={() => handleOpenEditor()} className='write-opinions-bttn'>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:107:                <button onClick={() => handleOpenEditor()} className='write-opinions-bttn'>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:118:                        const handle = getUserHandle(opinionsData?.users);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:126:                                                    <img onClick={(e) => handleClickOpionionsProfile(e, user?.userData[0].id, opinionsData.user_id)} className="so-avatar" src={opinionsData.users.image_url || "../../assets/profile.jpg"} alt="" />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:130:                                                        <span onClick={(e) => handleClickOpionionsProfile(e, user?.userData[0].id, opinionsData.user_id)} className="so-username">{opinionsData.users.name}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:133:                                                    {handle && (
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:134:                                                        <span className="so-handle">{handle}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:139:                                        <div className="so-body" onClick={(e) => handleClickContent(e, opinionsData.id, opinionsData.user_id)}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:156:                        <div onClick={() => handleClickSeeMore()} className='see-fullpage-bttn'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:18:import { handleClickProfile } from "../../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:67:    const handleclickUserProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:70:    const handleClickLike = async (e, journalId, receiverId, senderImageUrl, sendername, senderEmail) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:76:    const debounceClickLike = debounce(handleClickLike, 200);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:79:    const handleClickBookmark = async (e, journalId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:99:    const debounceClickBookmark = debounce(handleClickBookmark, 100);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:102:    const handleClickFollow = async (e, followingId, followerId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:106:    const debounceClickFollow = debounce(handleClickFollow, 100);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:108:    const handleBackLocation = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:118:    const handleCLoseComments = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:166:                    <CommentSection onclose={handleCLoseComments} postId={postData?.journalId} receiverId={postData?.userId} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:180:                            <button onClick={handleBackLocation} className="cv-back-btn">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:197:                            onClick={(e) => handleclickUserProfile(e, user?.userData[0].id, postData?.userId)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:205:                                    onClick={(e) => handleclickUserProfile(e, user?.userData[0].id, postData?.userId)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:17:import { handleClickProfile, handleCLickContent } from "../../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:39:    const handleClickUserProfileOriginal = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:40:    const clickContent = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:44:    const handleClickUserProfile = (e, loggedInUserId, clickedUserId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:49:        handleClickUserProfileOriginal(e, loggedInUserId, clickedUserId);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:70:    const handleClickHeaderLinks = (path) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:149:    const handleClickSettings = (e, postId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:156:    const handleClickLike = async(e, journalId, receiverId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:162:    const debounceClickLike = debounce(handleClickLike, 200);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:167:    const handleClickBookmark = async(e, journalId,) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:195:    const debounceClickBookmark = debounce(handleClickBookmark, 100);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:207:       const handleClickOutside = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:212:       window.addEventListener('click', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:215:        window.removeEventListener('click', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:280:                            <div onClick={() => handleClickHeaderLinks(header_link.path) } className='header-link'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:326:                                <div onClick={(e) => handleClickUserProfile(e, user?.userData?.[0].id, journal.users.id)} className={`user-avatar-container ${journal.users.badge === 'legend' ? 'avatar-ring-legend' : journal.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:329:                                <div onClick={(e) => handleClickUserProfile(e, user?.userData?.[0].id, journal.users.id)} className="user-name-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:380:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:10:import { handleCLickContent, handleClickProfile } from '../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:32:    const handleclickUserProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:34:    const handleClickBookmarkSettings = (e, journalId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:39:    const handleBackLocation = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:44:    const handleClick = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:94:        const handleClickOutside = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:99:        window.addEventListener('click', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:101:            window.removeEventListener('click', handleClickOutside)
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:141:                <div onClick={(e) => handleBackLocation(e)} className='back-button'>
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:165:                                onClick={(e) => handleClick(
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:186:                            <div onClick={(e) => handleClick(
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:216:                                <div onClick={(e) => handleclickUserProfile(e, user?.userData?.[0].id, journal.journals.user_id)} className={`user-avatar-container ${journal?.journals?.users?.badge === 'legend' ? 'avatar-ring-legend' : journal?.journals?.users?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:219:                                <div onClick={(e) => handleclickUserProfile(e, user?.userData?.[0].id, journal.journals.user_id)} className="user-name-container">
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:233:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:11:import { handleCLickContent } from '../../../../../helpers/handleClicks';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:32:            actionDelete: (e, journalId) => handleClickDeleteJournal(e, journalId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:45:            actionEdit: (e, journalContent, journalId, journalTitle) => handleClickEdit(e, journalContent, journalId, journalTitle), // still in progress
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:55:            actionOnlyMe: (e, privacy, journalId) => {handleEditJournalPrivacy(e, privacy, journalId)},
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:68:            actionPublic: (e, privacy, journalId) => {handleEditJournalPrivacy(e, privacy, journalId)},
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:102:    const clickContent = handleCLickContent(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:113:    const handleEditJournalPrivacy = (e, privacy, journalId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:123:    const handleClickSettings = (e, journalId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:128:    const handleClickDeleteJournal = (e, journalId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:134:    const handleConfirmDeleteJournal = async(e, journalId, token, image_url) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:172:    const handleClickEdit = (e, journalContent, journalId, journalTitle) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:184:    const handleClickCloseEditor = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:193:        const handleClickOutsideSettings = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:200:        document.addEventListener('click', handleClickOutsideSettings);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:203:            document.removeEventListener('click', handleClickOutsideSettings)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:249:                                <EditJournal key={index} journalData={journalData ? journalData : {}} onClose={handleClickCloseEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:285:                                                <div onClick={(e) => handleConfirmDeleteJournal(e, journal.id, session?.access_token, parsedContent?.firstImage?.src)} className="confirm-buttons-yes">Yes</div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:361:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:15:    const handleCloseEditor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:19:    const handleClickSave = async(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:59:            onClick={handleCloseEditor}
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:70:                    <button className="oe-close-btn" onClick={handleCloseEditor} aria-label="Close editor">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:93:                        onClick={(e) => handleClickSave(e)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ImageComponent.jsx:5:  const handleDelete = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ImageComponent.jsx:23:      <div className="image-delete" onClick={handleDelete}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:36:    const handleSubmitReplyOpinion = async (reply, receiver_id, sender_id, parent_id) => {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:100:                                        <span className="so-handle">{formatPostDate(opinion.created_at)}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:159:                                                    onClick={() => handleSubmitReplyOpinion(replyOpinion, opinion.users.id, user?.userData[0].id, opinion.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:37:    const handleCloseEditor = useCallback(async() => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:55:    const handleCloseEditorOnSave = useCallback(async() => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:79:                        onClick={() => handleCloseEditor()}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Editor.jsx:91:                    <EditorInner addUploadImagesPath={addUploadedImagePath} onclose={handleCloseEditor} onCloseOnSave={handleCloseEditorOnSave} title={title} setWordCount={setWordCount} wordCount={wordCount}/>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:90:                                        <span className="so-handle">{formatPostDate(opinion.created_at)}</span>
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:35:    const handleSeeMoreComments = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:58:    const handeCloseCommentsSection = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:63:    const handaleSubmitComment = async(e, postId, receiverId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:101:                <div className="cm-close-btn" onClick={(e) => handeCloseCommentsSection(e)}>
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:120:                    <button onClick={(e) => handleSeeMoreComments(e)} className="cm-load-more">
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:140:                        onClick={(e) => handaleSubmitComment(e, postId, receiverId)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:22:  //handle delete image from the editor
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:33:  const handleDelete = async(e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:55:  const handleRotate = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:72:  // handle mouse down on resize handle
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:73:  const handleMouseDown = (e, corner) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:89:    const handleMouseMove = (moveEvent) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:142:    const handleMouseUp = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:153:            if (node && typeof node.setWidthAndHeight === 'function') {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:154:                node.setWidthAndHeight(finalWidth, finalHeight);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:167:        document.removeEventListener('touchmove', handleMouseMove)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:168:        document.removeEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:169:        document.removeEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:170:        document.removeEventListener('touchend', handleMouseUp)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:174:    document.addEventListener('touchmove', handleMouseMove, {passive: false})
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:175:    document.addEventListener('mousemove', handleMouseMove);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:176:    document.addEventListener('mouseup', handleMouseUp);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:177:    document.addEventListener('touchend', handleMouseUp)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:181:  // handle image click for selection
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:182:  const handleImageClick = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:186:  //handle image  click for view
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:187:  const handleViewImage = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:199:    const handleClickOutside = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:205:    document.addEventListener('mousedown', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:206:    return () => document.removeEventListener('mousedown', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:230:      onClick={isEditable ? handleImageClick : handleViewImage}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:257:        onClick={() => handleViewImage()}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:270:        <div onClick={(e) => handleRotate(e)} className='image-action-btn' title='Rotate image'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:273:        <div onClick={(e) => handleDelete(e)} className='image-action-btn' title='Delete image'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:281:          {/* southeast corner handle - proportional resize */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:283:            onMouseDown={(e) => handleMouseDown(e, 'se')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:284:            onTouchStart={(e) => handleMouseDown(e, 'se')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:285:            className='southeast-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:288:          {/* southwest corner handle - proportional resize */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:290:            onMouseDown={(e) => handleMouseDown(e, 'sw')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:291:            onTouchStart={(e) => handleMouseDown(e, 'sw')} 
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:292:            className='southwest-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:295:          {/* northeast corner handle - proportional resize */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:297:            onMouseDown={(e) => handleMouseDown(e, 'ne')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:298:            onTouchStart={(e) => handleMouseDown(e, 'ne')} 
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:299:            className='northeast-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:302:          {/* northwest corner handle - proportional resize */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:304:            onMouseDown={(e) => handleMouseDown(e, 'nw')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:305:            onTouchStart={(e) => handleMouseDown(e, 'nw')} 
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:306:            className='northwest-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:309:          {/* east side handle - width only */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:311:            onMouseDown={(e) => handleMouseDown(e, 'e')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:312:            onTouchStart={(e) => handleMouseDown(e, 'e')} 
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:313:            className='east-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:316:          {/* south side handle - height only */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:318:            onMouseDown={(e) => handleMouseDown(e, 's')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:319:            onTouchStart={(e) => handleMouseDown(e, 's')} 
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:320:            className='south-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:323:           {/* north side handle - height only */}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:325:            onMouseDown={(e) => handleMouseDown(e, 'n')}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:326:            onTouchStart={(e) => handleMouseDown(e, 'n')} 
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\ResizableImageComponent.jsx:327:            className='north-side-handle'
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:6:import { handleClickProfile } from "../../../helpers/handleClicks";
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:27:    const clickProfile = handleClickProfile(navigate);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:44:    const handleClickReplyButton = (e) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:49:    const handleShowMoreReplies = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:120:                    <button onClick={(e) => handleClickReplyButton(e)} className="cm-reply-btn">
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:192:                                <button onClick={handleShowMoreReplies} className="cm-show-more-replies">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:50:    const handleClickSave = async(e, title) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:138:            <button disabled={!title || !hasContent} onClick={(e) =>handleClickSave(e, title)} className={title && hasContent ? 'editor-save-bttn' : 'editor-save-bttn-disabled'}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:125:        const handleClickOutside = (event) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:132:        document.addEventListener('mousedown', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:133:        return () => document.removeEventListener('mousedown', handleClickOutside);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:225:        const handleOnChange = async(e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\Toolbar.jsx:273:        input.onchange = (e) => {handleOnChange(e)}
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:33:    const handleClickContent = (e, opinionId, userId) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:86:                        onClick={(e) => handleClickContent(e, opinion.id, user?.userData[0].id)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\nodes\ImageNode.jsx:60:  setWidthAndHeight(width, height) {
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:144:    const handleMouseMove = (isFollowing) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:155:    const handleClickRichtextEditor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:159:    const handleCloseRichtextEditor = () =>{
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:173:    const handleMouseLeave = (isFollowing) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:390:        const handleEsc = (e) => {
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:401:        window.addEventListener('keydown', handleEsc);
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:402:        return () => window.removeEventListener('keydown', handleEsc);
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:413:            <Editor onClose={handleCloseRichtextEditor}/>
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:501:                            <div onMouseMove={() => handleMouseMove(followsData?.isFollowing)} onMouseLeave={() => handleMouseLeave(followsData?.isFollowing)} className='visited-profile-follow-button-container'>
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\VisitProfile.jsx:597:            <WriteJournalButton onOpen={handleClickRichtextEditor}/>

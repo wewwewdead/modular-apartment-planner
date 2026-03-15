@@ -1,0 +1,144 @@
+import { useState, useEffect, useCallback } from 'react';
+import { ProjectProvider, useProject } from './ProjectProvider';
+import { EditorProvider } from './EditorProvider';
+import SvgCanvas from '@/renderers/SvgCanvas';
+import Toolbar from '@/ui/Toolbar';
+import Sidebar from '@/ui/Sidebar';
+import PropertiesPanel from '@/ui/PropertiesPanel';
+import Modal from '@/ui/Modal';
+import { createProject } from '@/domain/models';
+import { saveProject, loadProject, listProjects } from '@/persistence/storage';
+import styles from './App.module.css';
+
+function AppInner() {
+  const { project, isDirty, dispatch } = useProject();
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [savedProjects, setSavedProjects] = useState([]);
+
+  // beforeunload warning
+  useEffect(() => {
+    const handler = (e) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  const handleNew = useCallback(() => {
+    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
+    dispatch({ type: 'PROJECT_NEW', project: createProject() });
+  }, [isDirty, dispatch]);
+
+  const handleSave = useCallback(() => {
+    saveProject(project);
+    dispatch({ type: 'MARK_SAVED' });
+  }, [project, dispatch]);
+
+  // Ctrl+S save
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleSave]);
+
+  const handleLoadClick = useCallback(() => {
+    setSavedProjects(listProjects());
+    setShowLoadModal(true);
+  }, []);
+
+  const handleLoad = useCallback((id) => {
+    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
+    try {
+      const { project: loaded, savedAt } = loadProject(id);
+      dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
+      setShowLoadModal(false);
+    } catch (err) {
+      alert('Failed to load project: ' + err.message);
+    }
+  }, [isDirty, dispatch]);
+
+  const activeFloorId = project.floors[0]?.id;
+
+  return (
+    <EditorProvider activeFloorId={activeFloorId}>
+      <div className={styles.layout}>
+        <div className={styles.toolbar}>
+          <Toolbar onNew={handleNew} onSave={handleSave} onLoad={handleLoadClick} />
+        </div>
+        <div className={styles.sidebar}>
+          <Sidebar />
+        </div>
+        <div className={styles.canvas}>
+          <SvgCanvas />
+        </div>
+        <div className={styles.properties}>
+          <PropertiesPanel />
+        </div>
+      </div>
+
+      {showLoadModal && (
+        <Modal title="Load Project" onClose={() => setShowLoadModal(false)}>
+          {savedProjects.length === 0 ? (
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '13px' }}>
+              No saved projects found.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {savedProjects.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => handleLoad(p.id)}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '10px 12px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    background: 'white',
+                    fontSize: '13px',
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>{p.name}</span>
+                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
+                    {new Date(p.savedAt).toLocaleDateString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={() => setShowLoadModal(false)}
+            style={{
+              marginTop: '16px',
+              padding: '8px 16px',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              fontSize: '13px',
+              background: 'white',
+            }}
+          >
+            Cancel
+          </button>
+        </Modal>
+      )}
+    </EditorProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ProjectProvider>
+      <AppInner />
+    </ProjectProvider>
+  );
+}

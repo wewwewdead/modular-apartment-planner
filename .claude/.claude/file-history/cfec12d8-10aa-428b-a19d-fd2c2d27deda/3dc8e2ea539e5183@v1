@@ -1,0 +1,17 @@
+# Fix: Analytics reaction breakdown shows raw type strings instead of emojis
+
+## Context
+In the analytics reaction breakdown section (`.analytics-breakdown-emoji`), each row displays the raw `item.type` string (e.g. "fire", "mind_blown") instead of the corresponding emoji icon. The project already has `reactionConfig.js` with a `getReactionEmoji()` helper that maps type strings to emojis.
+
+## Fix
+**File: `client/src/components/Analytics/ReactionBreakdown.jsx`**
+
+1. Import `getReactionEmoji` from `reactionConfig.js`
+2. Replace `{item.type}` with `{getReactionEmoji(item.type)}` on line 21
+
+**Reusing:** `getReactionEmoji` from `client/src/utils/reactionConfig.js` (already exists, maps type → emoji)
+
+## Verification
+1. Navigate to `/home/analytics`
+2. Scroll to "Reaction breakdown" section
+3. Confirm each row shows an emoji (🔥 ❤️ 🤯 👏 😂 😢) instead of text strings

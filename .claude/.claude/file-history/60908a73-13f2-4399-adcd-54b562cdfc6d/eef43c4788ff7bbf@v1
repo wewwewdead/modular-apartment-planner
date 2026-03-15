@@ -1,0 +1,33 @@
+# Hide Self from @Mention Autocomplete
+
+## Context
+
+Users can currently see themselves in the @mention autocomplete dropdown when typing `@` in comments, replies, and opinions. Since mentioning yourself serves no purpose (backend already filters self-mentions from generating notifications), the current user should be excluded from the suggestion list entirely.
+
+## Files to modify
+
+1. **`client/src/components/mentions/useMentionAutocomplete.js`** — accept optional `excludeUserId` param, filter results
+2. **`client/src/components/mentions/useTextareaMention.js`** — pass `excludeUserId` through to `useMentionAutocomplete`
+3. **`client/src/components/comments/comments.jsx`** — pass `user?.id` as `excludeUserId`
+4. **`client/src/components/comments/commentsCards.jsx`** — pass `user?.id` as `excludeUserId`
+5. **`client/src/components/SidebarOpinions/OpinionsEditor.jsx`** — pass `user?.id` as `excludeUserId`
+
+## Changes
+
+### 1. `useMentionAutocomplete.js`
+- Add `excludeUserId` as 3rd parameter
+- After fetching results, filter: `res.data.filter(u => u.id !== excludeUserId)`
+
+### 2. `useTextareaMention.js`
+- Add `excludeUserId` as 5th parameter
+- Pass it through: `useMentionAutocomplete(value, cursorPos, excludeUserId)`
+
+### 3–5. All three consumers
+- Each already has `const { user } = useAuth()` or equivalent
+- Pass `user?.id` as the new last argument to `useTextareaMention()`
+
+## Verification
+
+1. Log in and type `@` followed by your own username in a comment/reply
+2. Confirm you do NOT appear in the dropdown
+3. Confirm other matching users still appear normally

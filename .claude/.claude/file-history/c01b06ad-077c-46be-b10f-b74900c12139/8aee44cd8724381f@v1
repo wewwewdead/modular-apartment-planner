@@ -1,0 +1,190 @@
+# Harden Project Persistence System
+
+## Context
+
+The apartment planner's persistence layer currently works but has several architectural weaknesses: a monolithic 393-line deserializer that mixes version detection, migration, and validation into one function; no formal schema versioning (just a `version` counter); no validation of loaded data; and no clear migration pipeline for future schema changes. This plan refactors persistence into a modular, layered system that supports schema evolution, validates data integrity, and is ready for future backends (IndexedDB, Node.js, Supabase).
+
+## Current State
+
+**Files (all in `src/persistence/`):**
+- `serialize.js` (9 lines) — wraps project as `{ version: 14, data, savedAt }`
+- `deserialize.js` (393 lines) — monolithic: validates envelope, then 350 lines of field backfilling
+- `storage.js` (30 lines) — backend-agnostic `save/load/list/delete`, uses `localStorageBackend`
+- `localStorageBackend.js` (50 lines) — localStorage impl with index
+- `fileTransfer.js` (122 lines) — File Picker API import/export
+- `useAutosave.js` (22 lines) — 5-second debounced autosave to localStorage
+
+**Version constants in `src/domain/projectVersion.js`:**
+- `CURRENT_PROJECT_FILE_VERSION = 14` (wrapper envelope)
+- `CURRENT_PROJECT_VERSION = 14` (project data, used by `syncProjectRoofSystem`)
+
+## Plan
+
+### New Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/persistence/errors.js` | Custom error classes: `PersistenceError`, `ProjectValidationError`, `UnsupportedVersionError`, `CorruptedDataError` |
+| `src/persistence/validate.js` | Post-migration validation: structural checks (required fields/types), referential integrity (cross-ID references), auto-repair of broken references |
+| `src/persistence/migrations/index.js` | Migration registry and sequential pipeline runner |
+| `src/persistence/migrations/migration_14_to_15.js` | Extracts ALL backfill logic from current `deserialize.js` lines 39-389 verbatim, plus adds missing `railings` backfill |
+| `src/persistence/backendInterface.js` | Documents backend contract (`save/load/list/delete`) and exports a `validateBackend()` helper |
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/domain/projectVersion.js` | Add `CURRENT_SCHEMA_VERSION = 15`, `isSupportedSchemaVersion()`, keep old exports as aliases |
+| `src/persistence/serialize.js` | Add `schemaVersion: CURRENT_SCHEMA_VERSION` to output (keep `version` for backward compat) |
+| `src/persistence/deserialize.js` | Replace monolithic body with: detect schema version → run migration pipeline → validate → return `{ project, savedAt }` |
+| `src/persistence/storage.js` | Add `validateBackend()` call in `setBackend()` |
+
+### Files NOT Modified (stable interfaces preserved)
+
+- `localStorageBackend.js` — already conforms to backend contract
+- `fileTransfer.js` — delegates to serialize/deserialize, no changes needed
+- `useAutosave.js` — delegates to `storage.saveProject`, no changes needed
+- `App.jsx` — consumes stable `{ project, savedAt }` return shape
+- `ProjectProvider.jsx` — consumes `PROJECT_LOAD` dispatch, shape unchanged
+- `models.js` — factory functions remain source of truth
+- `roofModels.js`, `trussModels.js` — sync pipelines untouched
+
+---
+
+### Step 1: `src/persistence/errors.js`
+
+Custom error classes with error codes for consumers to distinguish error types:
+
+```js
+export class PersistenceError extends Error { constructor(message, code) }
+export class ProjectValidationError extends PersistenceError {
+  // code: 'VALIDATION_FAILED', errors: Array<{ path, message }>
+}
+export class UnsupportedVersionError extends PersistenceError {
+  // code: 'UNSUPPORTED_VERSION', version: number
+}
+export class CorruptedDataError extends PersistenceError {
+  // code: 'CORRUPTED_DATA'
+}
+```
+
+### Step 2: `src/domain/projectVersion.js`
+
+```js
+export const CURRENT_SCHEMA_VERSION = 15;
+export const CURRENT_PROJECT_VERSION = 14;          // unchanged — data revision counter
+export const CURRENT_PROJECT_FILE_VERSION = 14;     // kept as alias
+
+const SUPPORTED_SCHEMA_VERSIONS = new Set([1,2,...,14,15]);
+export function isSupportedSchemaVersion(v) { return SUPPORTED_SCHEMA_VERSIONS.has(Number(v)); }
+export const isSupportedProjectFileVersion = isSupportedSchemaVersion; // backward compat
+```
+
+### Step 3: `src/persistence/backendInterface.js`
+
+Documents the contract any backend must implement and exports `validateBackend(backend)` which checks the four required methods exist (`save`, `load`, `list`, `delete`). Throws on violation.
+
+### Step 4: `src/persistence/migrations/index.js`
+
+Migration registry pattern:
+- `registerMigration(fromVersion, toVersion, migrateFn)` — registers a migration step
+- `runMigrations(project, fromSchemaVersion, targetSchemaVersion)` — runs applicable migrations sequentially, returns migrated project
+- Migrations are pure functions: `(project) => project`
+
+### Step 5: `src/persistence/migrations/migration_14_to_15.js`
+
+**This is the largest file.** It contains ALL backfill logic currently in `deserialize.js` lines 39-389, extracted verbatim. This is a mechanical move — the logic is copied as-is with the same imports (`defaults`, `models`, `phaseModels`, `roofModels`, `trussModels`, `floorModels`, `sheetModels`, `systemTransform`, `phaseAssignments`).
+
+Additionally adds the missing `railings` backfill:
+```js
+if (!floor.railings) floor.railings = [];
+```
+
+Self-registers via `registerMigration(14, 15, migrateV14toV15)` on import.
+
+### Step 6: `src/persistence/validate.js`
+
+Three validation levels, run after migration:
+
+**Structural validation** (`validateProjectStructure`):
+- Project must have `id` (string), `name` (string), `floors` (non-empty array)
+- Each floor must have `id`, `walls` (array)
+- Each door/window must have `wallId`, `id`
+- Returns array of `{ path, message }` errors — fatal if non-empty
+
+**Referential integrity** (`validateProjectReferences`):
+- Doors/windows reference existing walls
+- Beam `startRef`/`endRef` column IDs reference existing columns
+- Stair `floorRelation` IDs reference existing floors
+- Stair landing attachment IDs reference existing landings
+- Slab `floorId` references existing floor
+- All `phaseId` values reference existing phases
+- Returns array of warnings — logged, not fatal
+
+**Auto-repair** (`repairBrokenReferences`):
+- Removes doors/windows pointing to non-existent walls
+- Nullifies invalid `phaseId` references (subsumes current `sanitizeProjectPhaseReferences`)
+- Nullifies invalid stair landing attachments
+- Returns repaired project
+
+### Step 7: Refactor `src/persistence/deserialize.js`
+
+Replace the 393-line body with ~40 lines of orchestration:
+
+```
+1. Detect schema version (prefer json.schemaVersion, fall back to json.version)
+2. Validate envelope (must be object with data)
+3. Basic pre-migration check (project needs id, name, floors)
+4. Run migration pipeline if version < CURRENT_SCHEMA_VERSION
+5. Run structural validation — throw ProjectValidationError on failure
+6. Run referential integrity check — auto-repair and log warnings
+7. Return { project, savedAt }
+```
+
+Import all migration modules (side-effect registration). The return shape `{ project, savedAt }` is identical to current code — no consumer changes.
+
+### Step 8: Update `src/persistence/serialize.js`
+
+Add `schemaVersion` field:
+```js
+return {
+  schemaVersion: CURRENT_SCHEMA_VERSION,
+  version: CURRENT_PROJECT_FILE_VERSION,  // backward compat, drop after one release
+  data: project,
+  savedAt: new Date().toISOString(),
+};
+```
+
+### Step 9: Update `src/persistence/storage.js`
+
+Add backend validation in `setBackend()`:
+```js
+import { validateBackend } from './backendInterface';
+export function setBackend(b) { backend = validateBackend(b); }
+```
+
+---
+
+## Key Design Decisions
+
+1. **Schema version starts at 15** — versions 1-14 are legacy. Files without `schemaVersion` are detected by the `version` field and treated as legacy.
+
+2. **`project.version` is NOT renamed** — it's used by `syncProjectRoofSystem` (roofModels.js line ~720) as a data revision counter. Different semantic from file format version.
+
+3. **`version` kept in serialized envelope** — for one release cycle, so files saved by new code can be opened by old code. Can be dropped later.
+
+4. **Migration is a mechanical extract** — the backfill logic in `migration_14_to_15.js` is copied as-is from `deserialize.js`, not rewritten, to minimize risk of behavioral differences.
+
+5. **Validation is post-migration, pre-load** — catches both migration bugs and hand-edited files before data enters the app.
+
+6. **Backend contract is documented, not enforced at type level** — `validateBackend()` does runtime method checking. Future backends (IndexedDB, Supabase) just need to implement the 4 methods.
+
+## Verification
+
+1. **Save/load round-trip**: Create a project with walls, doors, windows, rooms, columns, beams, stairs, landings, fixtures, slabs, roof, trusses, sheets, and phases. Save to file. Close and reopen. Verify all data is intact.
+2. **Legacy file import**: Take an existing `.json` file (no `schemaVersion` field). Import it. Verify it loads correctly with all backfills applied.
+3. **Malformed file**: Hand-edit a JSON file to remove `floors` array. Import it. Verify a `CorruptedDataError` is thrown with a clear message.
+4. **Broken references**: Hand-edit a JSON file to set a door's `wallId` to a non-existent ID. Import it. Verify the door is removed and a console warning is logged.
+5. **Autosave**: Make changes, wait 5+ seconds, refresh the page. Load from browser drafts. Verify the autosaved project loads correctly with the new `schemaVersion` field.
+6. **3D preview**: Load a project with roof and truss systems. Open the 3D preview. Verify it renders correctly.
+7. **Sheet export**: Load a project with sheets. Export a sheet as PDF/PNG. Verify it works.

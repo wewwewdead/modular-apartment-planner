@@ -1,0 +1,224 @@
+import React, { useMemo } from 'react';
+import { Layer, Group, Text, Shape } from 'react-konva';
+import StarGroup from '../components/StarGroup';
+import { getStarColor, getStarRadius, userHomeCoords } from '../utils/starUtils';
+import { generateGalaxyData, drawGalaxyVisuals } from '../utils/galaxyVisuals';
+import { computeSemanticBridges } from '../utils/cosmicPhysics';
+
+const GalaxyLabel = React.memo(({ x, y, name, zoom, onClick }) => {
+    const invZoom = 1 / zoom;
+    return (
+        <Group x={x} y={y} scaleX={invZoom} scaleY={invZoom}>
+            <Text
+                text={name}
+                fontSize={14}
+                fill="rgba(255,255,255,0.45)"
+                fontStyle="600"
+                fontFamily="inherit"
+                align="center"
+                width={200}
+                offsetX={100}
+                y={-24}
+                perfectDrawEnabled={false}
+                onMouseEnter={(e) => {
+                    e.target.fill('rgba(255,255,255,0.75)');
+                    const container = e.target.getStage().container();
+                    container.style.cursor = 'pointer';
+                }}
+                onMouseLeave={(e) => {
+                    e.target.fill('rgba(255,255,255,0.45)');
+                    const container = e.target.getStage().container();
+                    container.style.cursor = 'grab';
+                }}
+                onClick={onClick}
+                onTap={onClick}
+            />
+        </Group>
+    );
+});
+
+GalaxyLabel.displayName = 'GalaxyLabel';
+
+const InteractiveLayer = React.memo(({
+    layerProps, posts, galaxies, zoom, showTitles, pulsingId,
+    onStarClick, onGalaxyClick,
+    galaxyPositions, starPullOffsets, similarPairs, galaxyEdges,
+    activePostIds, useEmbeddingBridges,
+    camera, stageSize,
+    computedStarPositions: computedStarPositionsProp,
+}) => {
+    // Build userId→index map for edge lookups in drawGalaxyVisuals
+    const galaxyUserIdMap = useMemo(() => {
+        const map = new Map();
+        galaxies?.forEach((g, i) => map.set(g.userId, i));
+        return map;
+    }, [galaxies]);
+
+    // Galaxy spiral visuals — positioned at animated galaxy coords
+    const galaxyVisuals = useMemo(() =>
+        galaxies?.map(g => ({
+            x: g.x,
+            y: g.y,
+            ...generateGalaxyData(g.userId),
+            color: getStarColor(g.userId),
+        })) || []
+    , [galaxies]);
+
+    // ── Compute every star's render position ─────────────────────────
+    // Use prop if provided (hoisted from Universe.jsx), otherwise compute locally.
+    const computedStarPositionsLocal = useMemo(() => {
+        if (computedStarPositionsProp) return computedStarPositionsProp;
+        const map = new Map();
+        for (const post of posts) {
+            const uid = post.users?.id ?? post.user_id;
+
+            const hashGal = userHomeCoords(uid);
+            const animGal = galaxyPositions?.get(uid);
+            const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+            const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+
+            const pull = starPullOffsets?.get(post.id);
+
+            const baseX = post.universe_x ?? post.display_x;
+            const baseY = post.universe_y ?? post.display_y;
+
+            map.set(post.id, {
+                x: baseX + galDx + (pull?.dx ?? 0),
+                y: baseY + galDy + (pull?.dy ?? 0),
+            });
+        }
+        return map;
+    }, [computedStarPositionsProp, posts, galaxyPositions, starPullOffsets]);
+    const computedStarPositions = computedStarPositionsLocal;
+
+    // ── Viewport culling: only render stars within visible bounds + buffer ──
+    const visibleBounds = useMemo(() => {
+        if (!camera || !stageSize || !zoom) return null;
+        const halfW = (stageSize.width / 2) / zoom;
+        const halfH = (stageSize.height / 2) / zoom;
+        const bufferWorld = 500 / zoom;
+        return {
+            minX: camera.x - halfW - bufferWorld,
+            maxX: camera.x + halfW + bufferWorld,
+            minY: camera.y - halfH - bufferWorld,
+            maxY: camera.y + halfH + bufferWorld,
+        };
+    }, [camera, stageSize, zoom]);
+
+    const visiblePosts = useMemo(() => {
+        if (!visibleBounds) return posts; // fallback: render all
+        return posts.filter(post => {
+            const pos = computedStarPositions.get(post.id);
+            if (!pos) return true; // keep if no position computed yet
+            return pos.x >= visibleBounds.minX && pos.x <= visibleBounds.maxX
+                && pos.y >= visibleBounds.minY && pos.y <= visibleBounds.maxY;
+        });
+    }, [posts, computedStarPositions, visibleBounds]);
+
+    const bridgePairs = useMemo(() => {
+        const maxPairs = 120;
+
+        if (useEmbeddingBridges) {
+            const bridgePosts = (activePostIds instanceof Set && activePostIds.size > 0)
+                ? posts.filter((post) => activePostIds.has(post?.id))
+                : posts;
+            return computeSemanticBridges(bridgePosts, computedStarPositions, 0.9, maxPairs);
+        }
+
+        if (!Array.isArray(similarPairs) || similarPairs.length === 0) return [];
+
+        return similarPairs
+            .filter((pair) => Number(pair?.similarity) > 0.9)
+            .filter((pair) => {
+                if (!(activePostIds instanceof Set) || activePostIds.size === 0) return true;
+                return activePostIds.has(pair?.post_a) && activePostIds.has(pair?.post_b);
+            })
+            .slice(0, maxPairs);
+    }, [useEmbeddingBridges, activePostIds, posts, computedStarPositions, similarPairs]);
+
+    return (
+        <Layer {...layerProps}>
+            {/* Semantic bridges between similar posts */}
+            {bridgePairs.length > 0 && (
+                <Shape
+                    sceneFunc={(ctx) => {
+                        for (const pair of bridgePairs) {
+                            const posA = computedStarPositions.get(pair.post_a);
+                            const posB = computedStarPositions.get(pair.post_b);
+                            if (!posA || !posB) continue;
+
+                            const dx = posB.x - posA.x;
+                            const dy = posB.y - posA.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                            const mx = (posA.x + posB.x) / 2;
+                            const my = (posA.y + posB.y) / 2;
+                            const perpX = (-dy / dist) * dist * 0.06;
+                            const perpY = (dx / dist) * dist * 0.06;
+
+                            ctx.strokeStyle = 'rgba(150,200,255,0.1)';
+                            ctx.lineWidth = 0.8;
+                            ctx.shadowColor = 'rgba(150,200,255,0.3)';
+                            ctx.shadowBlur = 4;
+                            ctx.beginPath();
+                            ctx.moveTo(posA.x, posA.y);
+                            ctx.quadraticCurveTo(mx + perpX, my + perpY, posB.x, posB.y);
+                            ctx.stroke();
+                        }
+                        ctx.shadowBlur = 0;
+                    }}
+                    perfectDrawEnabled={false}
+                    listening={false}
+                />
+            )}
+            {/* Spiral galaxy visuals + connection lines */}
+            <Shape
+                sceneFunc={(ctx) => { drawGalaxyVisuals(ctx, galaxyVisuals, galaxyEdges, galaxyUserIdMap); }}
+                perfectDrawEnabled={false}
+                listening={false}
+            />
+            {/* Galaxy name labels */}
+            {galaxies?.map((g) => (
+                <GalaxyLabel
+                    key={g.userId}
+                    x={g.x}
+                    y={g.y}
+                    name={g.name}
+                    zoom={zoom}
+                    onClick={() => onGalaxyClick(g)}
+                />
+            ))}
+            {/* Stars (viewport-culled) */}
+            {visiblePosts.map((post) => {
+                const postUserId = post.users?.id ?? post.user_id;
+                const color = getStarColor(postUserId);
+                const likeCount = post.like_count != null
+                    ? post.like_count
+                    : (Array.isArray(post.likes) && post.likes[0]?.count != null ? post.likes[0].count : 0);
+                const radius = getStarRadius(likeCount);
+
+                const pos = computedStarPositions.get(post.id);
+                const x = pos?.x ?? post.universe_x ?? post.display_x;
+                const y = pos?.y ?? post.universe_y ?? post.display_y;
+
+                return (
+                    <StarGroup
+                        key={post.id}
+                        x={x}
+                        y={y}
+                        radius={radius}
+                        color={color}
+                        title={post.title}
+                        showTitle={showTitles}
+                        isPulsing={pulsingId === post.id}
+                        onClick={() => onStarClick(post)}
+                    />
+                );
+            })}
+        </Layer>
+    );
+});
+
+InteractiveLayer.displayName = 'InteractiveLayer';
+
+export default InteractiveLayer;

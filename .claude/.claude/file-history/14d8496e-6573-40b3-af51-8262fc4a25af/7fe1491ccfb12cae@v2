@@ -1,0 +1,128 @@
+import React, { useState } from 'react';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { colors } from '../../../theme/colors';
+import { elevation } from '../../../theme/elevation';
+import { spacing } from '../../../theme/spacing';
+import { typography } from '../../../theme/typography';
+
+interface AddCategorySheetProps {
+  onSubmit: (name: string, emoji: string) => void;
+  onClose: () => void;
+}
+
+export function AddCategorySheet({ onSubmit, onClose }: AddCategorySheetProps) {
+  const [name, setName] = useState('');
+  const [emoji, setEmoji] = useState('');
+
+  const handleSubmit = () => {
+    if (!name.trim()) return;
+    onSubmit(name, emoji || '');
+    setName('');
+    setEmoji('');
+  };
+
+  return (
+    <Animated.View
+      entering={FadeInDown.springify().damping(20)}
+      exiting={FadeOutDown.duration(200)}
+      style={styles.sheet}
+    >
+      <View style={styles.header}>
+        <Text style={styles.title}>Add category</Text>
+        <AnimatedPressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+          <Text style={styles.closeText}>Cancel</Text>
+        </AnimatedPressable>
+      </View>
+
+      <View style={styles.row}>
+        <TextInput
+          style={[styles.input, styles.emojiInput]}
+          value={emoji}
+          onChangeText={setEmoji}
+          placeholder="Emoji"
+          placeholderTextColor={colors.mutedInk}
+          textAlign="center"
+          accessibilityLabel="Category emoji"
+        />
+        <TextInput
+          style={[styles.input, styles.flex]}
+          value={name}
+          onChangeText={setName}
+          placeholder="Category name"
+          placeholderTextColor={colors.mutedInk}
+          accessibilityLabel="Category name"
+        />
+      </View>
+
+      <AnimatedPressable
+        style={styles.submitButton}
+        onPress={handleSubmit}
+        accessibilityRole="button"
+        accessibilityLabel="Create category"
+      >
+        <Text style={styles.submitText}>Create category</Text>
+      </AnimatedPressable>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surfaceElevated,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: spacing.xl,
+    gap: spacing.md,
+    ...elevation.level4,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    ...typography.title,
+    color: colors.ink,
+  },
+  closeText: {
+    color: colors.brand,
+    fontFamily: 'SourceSans3-Bold',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+    fontFamily: 'SourceSans3-Regular',
+  },
+  emojiInput: {
+    width: 64,
+  },
+  flex: {
+    flex: 1,
+  },
+  submitButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.brand,
+    paddingVertical: 14,
+  },
+  submitText: {
+    ...typography.button,
+    color: colors.surface,
+  },
+});

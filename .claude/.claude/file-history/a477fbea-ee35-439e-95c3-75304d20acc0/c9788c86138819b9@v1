@@ -1,0 +1,66 @@
+# Add Stories Tab to Profile Pages
+
+## Context
+Users can write and browse stories, but their stories don't appear on their profile pages. We need a "Stories" tab on both MyProfile and VisitProfile so visitors can see a user's published stories directly from their profile.
+
+## Approach
+
+### 1. Add `useUserStories` hook
+
+**File: `client/src/components/Stories/hooks/useStoryData.js`**
+- Import `getUserStories` from StoryApi (already exists at line 104 of StoryApi.js)
+- Add `useUserStories(userId, token)` hook — queryKey `['userStories', userId]`, enabled when `!!userId`
+
+### 2. Create ProfileStoriesSection component (own profile)
+
+**File (new): `client/src/components/ProfilePage/components/ProfileStoriesSection.jsx`**
+- Gets `user` and `session` from `useAuth()`
+- Calls `useUserStories(userData.id, token)`
+- Displays story cards in a grid layout (reuse StoryBrowser's card pattern: cover, title, status badge, vote/read stats)
+- Card click navigates to `/home/stories/${story.id}`
+- Empty state: "No stories yet."
+- No CSS file needed — reuse `.story-browser-grid`, `.story-card`, etc. from StoryBrowser.css (already globally available via lazy import)
+
+### 3. Create VisitedProfileStoriesSection component
+
+**File (new): `client/src/components/VisitProfile/components/VisitedProfileStoriesSection.jsx`**
+- Gets `userId` from `location.state?.userId` or query param (same pattern as `VisitedProfilePostCards`)
+- Calls `useUserStories(userId, token)`
+- Same card layout as ProfileStoriesSection
+- Empty state: "No stories yet."
+
+### 4. Add "Stories" tab to MyProfile tabs
+
+**File: `client/src/components/ProfilePage/constants/profileTabs.js`**
+- Add `{ label: "Stories", path: "/profile/stories" }` to the array
+
+### 5. Add "Stories" tab to VisitProfile tabs
+
+**File: `client/src/components/VisitProfile/VisitProfile.jsx`**
+- Add Stories entry to both `useNewUrls` and legacy `tablists` arrays:
+  - New: `{label: 'Stories', path: '/u/${profileUsername}/stories', action: () => navigate(...)}`
+  - Legacy: `{label: 'Stories', path: '/visitProfile/stories', action: () => navigate(...)}`
+
+### 6. Register routes + lazy imports in App.jsx
+
+**File: `client/src/App.jsx`**
+- Add lazy imports for both new components
+- Add nested routes:
+  - Under `/profile`: `<Route path='stories' element={<ProfileStoriesSection/>}/>`
+  - Under `/visitProfile`: `<Route path='stories' element={<VisitedProfileStoriesSection/>}/>`
+  - Under `/u/:username`: `<Route path='stories' element={<VisitedProfileStoriesSection/>}/>`
+
+## Files to Modify
+1. `client/src/components/Stories/hooks/useStoryData.js` — add `useUserStories` hook
+2. `client/src/components/ProfilePage/components/ProfileStoriesSection.jsx` — **new**
+3. `client/src/components/VisitProfile/components/VisitedProfileStoriesSection.jsx` — **new**
+4. `client/src/components/ProfilePage/constants/profileTabs.js` — add Stories tab
+5. `client/src/components/VisitProfile/VisitProfile.jsx` — add Stories tab entries
+6. `client/src/App.jsx` — lazy imports + 3 route entries
+
+## Verification
+1. Go to own profile → "Stories" tab appears → click it → shows your published stories
+2. Visit another user's profile → "Stories" tab shows their stories
+3. Click a story card → navigates to story detail page
+4. Empty state shows when user has no stories
+5. Works on both `/u/:username/stories` and legacy `/visitProfile/stories` routes

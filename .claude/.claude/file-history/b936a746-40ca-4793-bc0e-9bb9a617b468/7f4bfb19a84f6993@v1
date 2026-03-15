@@ -1,0 +1,182 @@
+# UI/UX Redesign: "Precision Atelier"
+
+## Context
+The current UI is functional but visually generic — flat buttons that all look the same, no micro-interactions, native browser tooltips, and a cold teal/gray palette. The goal is to make the interface feel like a **professional architect's studio**: warm, precise, and psychologically productive. Users should feel capable and focused when they open the app, not overwhelmed by a wall of identical gray icons.
+
+**Design direction**: Warm neutrals, amber/gold active states (precision & craft), tactile button physics, distinctive typography, and purposeful micro-interactions. Not cold/clinical, not playful/toy-like — professional warmth.
+
+---
+
+## Phase 1: Foundation — Design Tokens & Typography (highest impact, pure CSS)
+
+### `index.html`
+- Replace font import: swap `Outfit` for `DM Sans` (400,500,600,700) + `Plus Jakarta Sans` (600,700). Keep `JetBrains Mono`.
+
+### `src/styles/variables.css`
+Typography:
+- `--font-ui`: `'DM Sans'` (geometric, excellent readability, not AI-slop)
+- Add `--font-heading`: `'Plus Jakarta Sans'` (distinctive for section headers)
+
+Colors — warm neutral shift:
+- `--color-text-primary`: `#1E2433` (deep navy-charcoal, warmer)
+- `--color-text-secondary`: `#5B6275` (warmer gray)
+- `--color-text-tertiary`: `#94989F` (warm mid-gray)
+- `--color-panel-bg`: `#F4F3F0` (warm parchment)
+- `--color-wall-fill`: `#2D3444` / `--color-wall-stroke`: `#1E2433` (warmer)
+- `--color-accent`: `#1A7A68` (warmer teal) / `--color-accent-hover`: `#156B5A`
+- `--color-accent-subtle`: `rgba(26,122,104,0.08)`
+- `--color-grid-minor`: `#E6E4DE` / `--color-grid-major`: `#D0CDC5` (warm)
+
+New variables for active/selection states (amber-gold):
+- `--color-active-glow`: `#D4A94C`
+- `--color-active-glow-subtle`: `rgba(212,169,76,0.12)`
+- `--color-active-glow-border`: `rgba(212,169,76,0.30)`
+
+New variables for micro-interactions:
+- `--shadow-hover`: `0 2px 8px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04)`
+- `--shadow-pressed`: `inset 0 1px 3px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)`
+- `--shadow-active-glow`: `0 0 0 2px rgba(212,169,76,0.20), 0 0 8px rgba(212,169,76,0.10)`
+- `--duration-micro`: `0.08s`
+- `--ease-tactile`: `cubic-bezier(0.25,0.46,0.45,0.94)`
+
+---
+
+## Phase 2: Button Micro-interactions & Active Tool States (CSS-only)
+
+### `src/ui/Toolbar.module.css`
+
+**`.btn`** — add tactile feel:
+- Add `box-shadow: inset 0 -1px 0 rgba(0,0,0,0.04)` (subtle bottom edge)
+- Hover: `translateY(-1px)` + `var(--shadow-hover)` (lift)
+- Active: `scale(0.97)` + `var(--shadow-pressed)` (press-in)
+- Expand transition to include `transform` and `box-shadow`
+
+**`.toolPaletteBtn`** — same lift/press treatment:
+- Hover: `translateY(-1px)` + `var(--shadow-sm)`
+- Active press: `scale(0.96)` + `var(--shadow-pressed)`
+
+**`.toolPaletteBtnActive`** — warm gold glow (the "I'm using this tool" state):
+- `background: var(--color-active-glow-subtle)`
+- `color: var(--color-active-glow)`
+- `border-color: var(--color-active-glow-border)`
+- `box-shadow: var(--shadow-active-glow)`
+- Hover: `rgba(212,169,76,0.18)` background
+
+**`.toggleBtn.toggleActive`** — same warm gold treatment
+
+**`.saveBtn[data-dirty="true"]::after`** — warm gold pulse instead of teal
+
+**`.groupLabel`** — use `--font-heading`, bump to `10px`, warmer color
+
+### `src/styles/global.css`
+
+- Update `::selection` color to new accent
+- Update input focus ring to new accent
+- Add `@keyframes warmPulse` (gold glow ring animation)
+- Add `@keyframes toastSlideUp` and `@keyframes toastCountdown`
+
+---
+
+## Phase 3: Sidebar Polish (CSS-only)
+
+### `src/ui/Sidebar.module.css`
+
+- Section headers: `--font-heading`, warm accent `border-bottom`
+- Section titles: bump to `12px`, stronger color
+- Count badges: warm gold tint background
+- Context headers: warm gold color + accent border
+- Selected items: warm gold highlights (`color`, `border-left`, `background`)
+- Floor/phase cards: warm gold active borders
+- Add hover lift on cards: `translateY(-1px)` + shadow
+- Add button presses: `scale(0.92)` on `:active`
+
+---
+
+## Phase 4: Properties Panel & Inputs (CSS-only)
+
+### `src/ui/PropertiesPanel.module.css`
+- Titles/subtitles: `--font-heading`
+- Confirm button: subtle gradient for depth + glassy inner shadow
+- Action buttons: warm gold border/color
+- Schedule metric cards: hover lift
+
+### `src/ui/InputField.module.css`
+- Labels: `--font-heading`, `font-weight: 500`
+- Inputs: inset shadow for depth, warm gold focus ring
+- Readonly: flat (no shadow)
+
+---
+
+## Phase 5: Toast Notifications (CSS + ~3 lines JSX)
+
+### `src/renderers/SvgCanvas.module.css`
+- Add `.toast` class: floating dark card, positioned above status bar, `toastSlideUp` animation
+- Add `.toastProgress` class: gold countdown bar at bottom
+- Polish `.overlayBtn`: add hover `scale(1.05)`, active `scale(0.95)` + pressed shadow
+
+### `src/renderers/SvgCanvas.jsx` (~3 line change)
+- Move `statusMessage` from inline `<span>` in status bar to a floating `<div className={styles.toast}>` with `<div className={styles.toastProgress} />` child
+
+---
+
+## Phase 6: Custom Tooltips (new component + Toolbar JSX)
+
+### New: `src/ui/Tooltip.jsx` (~30 lines)
+- Lightweight wrapper: shows styled tooltip on hover with 400ms delay
+- Props: `label` (string), `shortcut` (string, optional)
+- Pure CSS positioning (`:hover` toggled visibility), no libraries
+
+### New: `src/ui/Tooltip.module.css` (~40 lines)
+- Dark background, 11px text, `--font-ui`
+- Keyboard shortcut shown in subtle `<kbd>`-style badge
+- Slide-in transition from `scale(0.95)` + `opacity: 0`
+
+### `src/ui/Toolbar.jsx`
+- Import Tooltip component
+- Wrap each button in `<Tooltip label="..." shortcut="...">`, remove `title` attributes
+- Apply systematically through `toolItems` and `fixtureItems` arrays (~30 buttons)
+
+---
+
+## Phase 7: Modal Polish (CSS-only)
+
+### `src/ui/Modal.module.css`
+- Header title: `--font-heading`, slightly larger
+- Buttons: tactile hover lift + press-in effects
+- Close button: `:active` scale
+
+---
+
+## Files Changed Summary
+
+| File | Change Type | Phase |
+|---|---|---|
+| `index.html` | Edit font import | 1 |
+| `src/styles/variables.css` | Edit ~20 vars, add ~8 new | 1 |
+| `src/styles/global.css` | Edit colors, add keyframes | 2 |
+| `src/ui/Toolbar.module.css` | Edit button states | 2 |
+| `src/ui/Sidebar.module.css` | Edit headers/items/cards | 3 |
+| `src/ui/PropertiesPanel.module.css` | Edit titles/buttons | 4 |
+| `src/ui/InputField.module.css` | Edit focus states | 4 |
+| `src/renderers/SvgCanvas.module.css` | Add toast, edit overlay btns | 5 |
+| `src/renderers/SvgCanvas.jsx` | Move status msg to toast (~3 lines) | 5 |
+| `src/ui/Tooltip.jsx` | **New** (~30 lines) | 6 |
+| `src/ui/Tooltip.module.css` | **New** (~40 lines) | 6 |
+| `src/ui/Toolbar.jsx` | Wrap buttons in Tooltip | 6 |
+| `src/ui/Modal.module.css` | Edit heading/button styles | 7 |
+
+**CSS-only**: 9 files | **JSX**: 2 existing + 1 new | **HTML**: 1
+
+---
+
+## Verification
+
+1. **Phase 1**: Load app — all colors/fonts update globally. Check blueprint dimensions still use JetBrains Mono.
+2. **Phase 2**: Hover/click every toolbar button — verify lift, press, warm gold active glow. Save dot pulses gold.
+3. **Phase 3**: Click sidebar items — verify warm gold selected states, section headers have accent lines.
+4. **Phase 4**: Focus property inputs — verify warm gold focus rings, confirm button has depth.
+5. **Phase 5**: Trigger a status message (undo, detect rooms) — verify floating toast with countdown bar.
+6. **Phase 6**: Hover toolbar buttons — verify styled tooltips with keyboard shortcut badges appear after delay.
+7. **Phase 7**: Open modals — verify heading fonts and button press effects.
+
+Run `npm run dev` (or `npx vite`) and visually test each phase in browser.

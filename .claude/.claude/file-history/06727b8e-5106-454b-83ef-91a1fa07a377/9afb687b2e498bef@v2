@@ -1,0 +1,603 @@
+/* ── Glow tokens (light) — warm sun glow ── */
+.explore-page-container{
+    --hero-glow-border: rgba(255, 170, 40, 0.35);
+    --hero-glow-core: rgba(255, 180, 50, 0.25);
+    --hero-glow-tight: rgba(255, 165, 30, 0.2);
+    --hero-glow-mid: rgba(255, 145, 20, 0.12);
+    --hero-glow-wide: rgba(255, 120, 10, 0.06);
+    --hero-glow-ambient: rgba(255, 100, 0, 0.03);
+}
+
+/* ── Glow tokens (dark) — luminous sun/star corona ── */
+[data-theme="dark"] .explore-page-container{
+    --hero-glow-border: rgba(255, 180, 50, 0.4);
+    --hero-glow-core: rgba(255, 190, 60, 0.3);
+    --hero-glow-tight: rgba(255, 170, 40, 0.28);
+    --hero-glow-mid: rgba(255, 150, 25, 0.16);
+    --hero-glow-wide: rgba(255, 130, 15, 0.08);
+    --hero-glow-ambient: rgba(255, 110, 5, 0.04);
+}
+
+.explore-page-container{
+    width: 100%;
+    min-height: 100vh;
+    padding-bottom: 4.5rem;
+}
+
+.explore-page-container .search-shell{
+    top: 0;
+}
+
+/* ── Section title ── */
+.explore-section-title{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 0.85rem 0.5rem 0.85rem;
+    box-sizing: border-box;
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08rem;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+.explore-section-title::after{
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-card);
+}
+.explore-section-title--runners{
+    padding-top: 0.25rem;
+}
+
+
+/* ══════════════════════════════════════════
+   HERO CARD — #1 Hottest
+   ══════════════════════════════════════════ */
+
+.explore-hero-section{
+    padding: 0 8px;
+    margin-bottom: 0.25rem;
+}
+
+/* Wrapper: positions the glow behind the card */
+.explore-hero-wrap{
+    position: relative;
+    width: 100%;
+}
+
+.explore-hero-card{
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--bg-card);
+    border: 1.5px solid var(--hero-glow-border);
+    box-shadow:
+        0 0 8px 2px var(--hero-glow-tight),
+        0 0 24px 6px var(--hero-glow-mid),
+        0 0 56px 14px var(--hero-glow-wide),
+        0 0 100px 28px var(--hero-glow-ambient);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    z-index: 1;
+}
+.explore-hero-card:hover{
+    transform: translateY(-3px);
+    box-shadow:
+        0 0 12px 4px var(--hero-glow-tight),
+        0 0 32px 10px var(--hero-glow-mid),
+        0 0 70px 20px var(--hero-glow-wide),
+        0 0 120px 36px var(--hero-glow-ambient);
+}
+
+/* Diffused solar corona glow behind card */
+.explore-hero-glow{
+    position: absolute;
+    inset: -28px;
+    border-radius: 42px;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(
+            ellipse 90% 70% at 50% 50%,
+            var(--hero-glow-core) 0%,
+            var(--hero-glow-mid) 30%,
+            var(--hero-glow-wide) 55%,
+            var(--hero-glow-ambient) 75%,
+            transparent 90%
+        );
+    filter: blur(20px);
+}
+
+/* Hero image */
+.explore-hero-image-wrap{
+    position: relative;
+    width: 100%;
+    max-height: 260px;
+    overflow: hidden;
+    z-index: 1;
+}
+.explore-hero-image{
+    width: 100%;
+    height: 100%;
+    max-height: 260px;
+    object-fit: cover;
+    display: block;
+}
+.explore-hero-image-overlay{
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        transparent 40%,
+        var(--bg-card) 100%
+    );
+    pointer-events: none;
+}
+
+/* Hero body */
+.explore-hero-body{
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 1.1rem 1.25rem 1rem 1.25rem;
+}
+.explore-hero-body--has-image{
+    margin-top: -2.5rem;
+}
+
+/* Badge pill */
+.explore-hero-badge{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    width: fit-content;
+    padding: 0.25rem 0.65rem 0.25rem 0.4rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(212, 168, 83, 0.15), rgba(245, 158, 11, 0.1));
+    border: 1px solid rgba(212, 168, 83, 0.25);
+}
+.explore-hero-flame{
+    width: 16px;
+    height: 16px;
+    color: var(--accent-amber);
+    animation: flamePulse 2s ease-in-out infinite;
+}
+@keyframes flamePulse{
+    0%, 100%{ transform: scale(1); opacity: 1; }
+    50%{ transform: scale(1.15); opacity: 0.85; }
+}
+.explore-hero-badge-text{
+    font-family: var(--font-ui);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04rem;
+    text-transform: uppercase;
+    color: var(--accent-amber);
+}
+
+/* Hero title */
+.explore-hero-title{
+    margin: 0;
+    padding: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.3;
+    letter-spacing: -0.03rem;
+    color: var(--text-heading);
+}
+
+/* Hero excerpt */
+.explore-hero-excerpt{
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-serif);
+    font-size: 0.88rem;
+    font-weight: 400;
+    line-height: 1.65;
+    color: var(--text-body);
+    letter-spacing: 0.005rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Hero footer */
+.explore-hero-footer{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--border-card);
+}
+.explore-hero-author{
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.explore-hero-stats{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.explore-hero-score-pill{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(212, 168, 83, 0.08));
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    font-family: var(--font-ui);
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--accent-amber);
+    letter-spacing: 0.02rem;
+}
+.explore-hero-score-flame{
+    width: 12px;
+    height: 12px;
+    color: var(--accent-amber);
+}
+
+
+/* ══════════════════════════════════════════
+   RUNNER CARDS — #2-#5
+   ══════════════════════════════════════════ */
+
+.explore-runners-section{
+    padding: 0;
+}
+.explore-runners-section--search{
+    padding: 0;
+}
+.explore-runners-list{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 8px;
+    padding-bottom: 2rem;
+}
+
+.explore-runner-card{
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    min-height: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+.explore-runner-card:hover{
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+    border-color: rgba(212, 168, 83, 0.2);
+}
+
+/* Rank column */
+.explore-runner-rank-col{
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 38px;
+    padding-top: 1rem;
+}
+.explore-runner-rank{
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--border-card);
+    user-select: none;
+}
+.explore-runner-rank--top{
+    color: var(--accent-amber);
+}
+
+/* Runner body */
+.explore-runner-body{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.85rem 0.5rem 0.75rem 0;
+}
+.explore-runner-title{
+    margin: 0;
+    padding: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: -0.02rem;
+    color: var(--text-heading);
+}
+.explore-runner-excerpt{
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-serif);
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-body);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.explore-runner-meta{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding-top: 0.35rem;
+}
+.explore-runner-author{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.explore-runner-stats{
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.explore-runner-flame-icon{
+    width: 10px;
+    height: 10px;
+    color: var(--accent-amber);
+    margin-right: 0.15rem;
+}
+
+/* Runner thumbnail */
+.explore-runner-thumb-wrap{
+    flex-shrink: 0;
+    width: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.explore-runner-thumb{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+.explore-runner-card:hover .explore-runner-thumb{
+    transform: scale(1.04);
+}
+
+
+/* ── Score pill (shared) ── */
+.explore-score-pill{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.18rem 0.48rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-card);
+    background-color: var(--bg-pill);
+    color: var(--text-faint);
+    font-family: var(--font-ui);
+    font-size: 0.58rem;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: 0.02rem;
+    white-space: nowrap;
+}
+
+/* ── Meta right (search mode) ── */
+.explore-meta-right{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+}
+
+/* ── Explore rank (search mode) ── */
+.explore-rank{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.15rem 1.15rem 0;
+    box-sizing: border-box;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--border-card);
+    user-select: none;
+}
+.explore-page-container .cards:nth-child(-n+3) .explore-rank{
+    color: var(--accent-amber);
+}
+
+/* ── Fix border stacking in search mode ── */
+.explore-page-container .card-image-banner{
+    border-bottom: none;
+}
+.explore-page-container .card-icons-container{
+    border-top: none;
+}
+
+/* ── Explore cards container (search mode fallback) ── */
+.explore-postcards-parent-container{
+    top: 0;
+}
+
+
+/* ══════════════════════════════════════════
+   MOBILE
+   ══════════════════════════════════════════ */
+@media (max-width: 480px){
+    .explore-page-container{
+        padding-bottom: 5.5rem;
+    }
+
+    .explore-page-container .search-shell{
+        top: 0;
+    }
+
+    .explore-section-title{
+        font-size: 0.62rem;
+        padding: 0.6rem 0.6rem 0.4rem 0.6rem;
+        letter-spacing: 0.06rem;
+    }
+
+    /* ── Hero mobile ── */
+    .explore-hero-section{
+        padding: 0 6px;
+    }
+    .explore-hero-card{
+        border-radius: 10px;
+    }
+    .explore-hero-glow{
+        inset: -14px;
+        border-radius: 24px;
+        filter: blur(14px);
+    }
+    .explore-hero-image-wrap{
+        max-height: 180px;
+    }
+    .explore-hero-image{
+        max-height: 180px;
+    }
+    .explore-hero-body{
+        padding: 0.85rem 0.85rem 0.8rem 0.85rem;
+        gap: 0.5rem;
+    }
+    .explore-hero-body--has-image{
+        margin-top: -2rem;
+    }
+    .explore-hero-badge{
+        padding: 0.2rem 0.55rem 0.2rem 0.3rem;
+    }
+    .explore-hero-flame{
+        width: 14px;
+        height: 14px;
+    }
+    .explore-hero-badge-text{
+        font-size: 0.58rem;
+    }
+    .explore-hero-title{
+        font-size: 1.1rem;
+        line-height: 1.25;
+    }
+    .explore-hero-excerpt{
+        font-size: 0.8rem;
+        line-height: 1.5;
+        -webkit-line-clamp: 2;
+    }
+    .explore-hero-footer{
+        gap: 0.4rem;
+        padding-top: 0.45rem;
+    }
+    .explore-hero-author .user-info-avatar{
+        width: 20px;
+        height: 20px;
+    }
+    .explore-hero-author .user-newsfeed-name{
+        font-size: 0.72rem;
+        max-width: 110px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .explore-hero-author .user-post-date{
+        font-size: 0.6rem;
+    }
+    .explore-hero-score-pill{
+        font-size: 0.56rem;
+        padding: 0.18rem 0.4rem;
+    }
+    .explore-hero-score-flame{
+        width: 10px;
+        height: 10px;
+    }
+
+    /* ── Runner cards mobile ── */
+    .explore-runners-list{
+        gap: 2px;
+        padding: 0 6px;
+        padding-bottom: 6rem;    
+    }
+    .explore-runner-card{
+        border-radius: 10px;
+    }
+    .explore-runner-rank-col{
+        width: 30px;
+        padding-top: 0.8rem;
+    }
+    .explore-runner-rank{
+        font-size: 0.95rem;
+    }
+    .explore-runner-body{
+        padding: 0.7rem 0.4rem 0.6rem 0;
+        gap: 0.2rem;
+    }
+    .explore-runner-title{
+        font-size: 0.84rem;
+        line-height: 1.25;
+    }
+    .explore-runner-excerpt{
+        font-size: 0.74rem;
+        -webkit-line-clamp: 1;
+    }
+    .explore-runner-meta{
+        gap: 0.3rem;
+        padding-top: 0.25rem;
+    }
+    .explore-runner-author .user-info-avatar{
+        width: 18px;
+        height: 18px;
+    }
+    .explore-runner-author .user-newsfeed-name{
+        font-size: 0.68rem;
+        max-width: 90px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .explore-runner-author .user-post-date{
+        font-size: 0.58rem;
+    }
+    .explore-runner-thumb-wrap{
+        width: 70px;
+    }
+
+    /* ── Search mode cards mobile ── */
+    .explore-postcards-parent-container{
+        top: 0;
+    }
+    .explore-rank{
+        font-size: 1rem;
+        padding: 0.1rem 0.75rem 0;
+    }
+    .explore-meta-right{
+        gap: 0.25rem;
+    }
+    .explore-score-pill{
+        font-size: 0.54rem;
+        padding: 0.15rem 0.38rem;
+    }
+}

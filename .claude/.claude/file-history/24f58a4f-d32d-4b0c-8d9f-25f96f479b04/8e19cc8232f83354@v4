@@ -1,0 +1,409 @@
+.freedom-wall-page{
+    width: 100%;
+    padding: 0.8rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.freedom-wall-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-title-shell{
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+}
+
+.freedom-wall-title{
+    margin: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1.3rem;
+    color: var(--text-heading);
+}
+
+.freedom-wall-subtitle{
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+}
+
+.freedom-wall-week-pill{
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.01rem;
+}
+
+.freedom-wall-toolbar{
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border: 1px solid var(--border-card);
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 0.7rem;
+}
+
+.freedom-wall-tool-group{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fw-tool-btn{
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 10px;
+    padding: 0.4rem 0.72rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.fw-tool-btn.is-active{
+    border-color: var(--accent-sage);
+    color: var(--accent-sage);
+    background: color-mix(in srgb, var(--bg-secondary) 70%, var(--accent-sage) 8%);
+}
+
+.freedom-wall-tool-controls{
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-tool-controls input[type="text"],
+.freedom-wall-tool-controls select{
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0.34rem 0.45rem;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    min-width: 150px;
+}
+
+.fw-label{
+    color: var(--text-faint);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04rem;
+    font-weight: 700;
+}
+
+.fw-stamp-grid{
+    display: flex;
+    gap: 0.4rem;
+}
+
+.fw-stamp-btn{
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    cursor: pointer;
+}
+
+.fw-sticker-grid{
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.fw-sticker-btn{
+    width: 36px;
+    height: 36px;
+    font-size: 1.15rem;
+}
+
+.fw-stamp-btn.is-active{
+    border-color: var(--accent-sage);
+    background: color-mix(in srgb, var(--bg-secondary) 72%, var(--accent-sage) 8%);
+}
+
+.fw-readonly-pill{
+    width: fit-content;
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.68rem;
+    color: var(--text-faint);
+    font-weight: 600;
+}
+
+.freedom-wall-note-editor{
+    border: 1px solid var(--border-card);
+    background: var(--bg-card);
+    border-radius: 12px;
+    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.freedom-wall-note-editor h4{
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.freedom-wall-note-editor textarea{
+    min-height: 78px;
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    padding: 0.4rem;
+    resize: vertical;
+}
+
+.fw-note-controls{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fw-note-controls label{
+    font-size: 0.68rem;
+    color: var(--text-faint);
+    font-weight: 700;
+}
+
+.fw-note-controls select{
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 0.32rem 0.4rem;
+    font-size: 0.72rem;
+}
+
+.fw-note-actions,
+.freedom-wall-selected-actions{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fw-apply-btn,
+.fw-delete-btn{
+    border-radius: 8px;
+    padding: 0.38rem 0.68rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: 1px solid var(--border-card);
+    cursor: pointer;
+}
+
+.fw-apply-btn{
+    background: color-mix(in srgb, var(--bg-secondary) 72%, var(--accent-sage) 12%);
+    color: var(--accent-sage);
+    border-color: color-mix(in srgb, var(--border-card) 70%, var(--accent-sage) 30%);
+}
+
+.fw-delete-btn{
+    background: color-mix(in srgb, var(--bg-secondary) 72%, #ff4d6d 12%);
+    color: #ff4d6d;
+    border-color: color-mix(in srgb, var(--border-card) 70%, #ff4d6d 30%);
+}
+
+.freedom-wall-canvas-shell{
+    width: 100%;
+    border: 1px solid var(--border-card);
+    background: var(--bg-card);
+    border-radius: 14px;
+    padding: 6px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.freedom-wall-loading,
+.freedom-wall-error{
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-faint);
+}
+
+.fw-note-modal-overlay{
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.fw-note-modal{
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 16px;
+    padding: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.fw-note-modal h4{
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-heading);
+    font-family: "Lexend Deca", sans-serif;
+}
+
+.fw-note-modal-preview{
+    position: relative;
+    min-height: 70px;
+    max-height: 130px;
+    overflow: hidden;
+    border-radius: 2px;
+    padding: 1.4rem 0.75rem 0.6rem;
+    word-break: break-word;
+    line-height: 1.3;
+    border: none;
+    box-shadow: 2px 3px 10px rgba(0, 0, 0, 0.14);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+}
+
+.fw-note-modal-preview::before,
+.fw-note-modal-preview::after{
+    content: "";
+    position: absolute;
+    top: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e63946;
+    box-shadow: inset -1px -1px 2px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.fw-note-modal-preview::before{
+    left: 18%;
+}
+
+.fw-note-modal-preview::after{
+    right: 18%;
+}
+
+.fw-note-modal-textarea{
+    width: 100%;
+    min-height: 70px;
+    border: 1px solid var(--border-card);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.fw-note-modal-controls{
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.fw-note-modal-row{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.fw-note-modal-row label{
+    min-width: 72px;
+    font-size: 0.7rem;
+    color: var(--text-faint);
+    font-weight: 700;
+}
+
+.fw-note-modal-row select,
+.fw-note-modal-row input[type="range"]{
+    flex: 1;
+}
+
+.fw-note-modal-row select{
+    border: 1px solid var(--border-card);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.72rem;
+}
+
+.fw-note-modal-row input[type="color"]{
+    width: 32px;
+    height: 28px;
+    border: 1px solid var(--border-card);
+    border-radius: 6px;
+    padding: 0;
+    cursor: pointer;
+}
+
+.fw-note-modal-actions{
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    padding-top: 0.2rem;
+}
+
+.freedom-wall-error-toast{
+    padding: 0.45rem 0.75rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-card) 85%, #ff4d6d 15%);
+    border: 1px solid color-mix(in srgb, var(--border-card) 60%, #ff4d6d 40%);
+    color: #ff4d6d;
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.freedom-wall-footer{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--text-faint);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+@media (max-width: 480px){
+    .freedom-wall-page{
+        padding: 0.5rem;
+        padding-bottom: 5rem;
+    }
+
+    .freedom-wall-week-pill{
+        width: 100%;
+        border-radius: 10px;
+    }
+
+    .freedom-wall-tool-controls{
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .freedom-wall-tool-controls input[type="text"],
+    .freedom-wall-tool-controls select{
+        width: 100%;
+    }
+}

@@ -1,0 +1,213 @@
+# UI Enhancement Plan: Typography, Visual Hierarchy & Delight
+
+## Context
+
+The Grock mobile app (React Native, Android-only) has a solid warm color palette and animation system, but the UI feels flat and generic due to: system-only fonts with no typographic character, every card looking identical (same radius/border/padding/bg), and screens like Menu/History using raw inline styles without the theme system. This plan enhances typography with custom fonts, creates visual depth through card differentiation, and polishes details across all screens.
+
+---
+
+## 1. Custom Fonts: Nunito + Source Sans 3
+
+**Why these fonts:** Nunito's rounded terminals match the warm, friendly grocery-app character and harmonize with the rounded UI (20px border-radius). Source Sans 3 provides clean contrast for body text — humanist and legible at small sizes.
+
+### 1a. Download & install fonts
+
+Create `android/app/src/main/assets/fonts/` with 6 TTF files:
+- `Nunito-SemiBold.ttf` (600), `Nunito-Bold.ttf` (700), `Nunito-ExtraBold.ttf` (800)
+- `SourceSans3-Regular.ttf` (400), `SourceSans3-SemiBold.ttf` (600), `SourceSans3-Bold.ttf` (700)
+
+Use a download script (`scripts/download-fonts.sh`) that fetches from Google Fonts API.
+
+### 1b. Create `react-native.config.js` (project root)
+
+```js
+module.exports = {
+  project: { android: {} },
+  assets: ['./android/app/src/main/assets/fonts/'],
+};
+```
+
+> On RN 0.84 with New Architecture, TTFs in `assets/fonts/` are auto-bundled. No linking step needed.
+
+---
+
+## 2. Theme Token Updates
+
+### `src/theme/typography.ts` — Full rewrite
+
+Replace `fontWeight` with `fontFamily` (Android resolves weight from filename, not fontWeight prop with custom fonts).
+
+| Token | Font | Size | Letter Spacing | Purpose |
+|---|---|---|---|---|
+| `headline` | Nunito-ExtraBold | 32 | -0.5 | Hero text, greetings |
+| `title` | Nunito-Bold | 22 | -0.3 | Card/section titles |
+| **`subtitle`** (new) | Nunito-SemiBold | 18 | -0.2 | Secondary headings |
+| `body` | SourceSans3-Regular | 16 | — | Descriptions |
+| `caption` | SourceSans3-Regular | 13 | — | Metadata, dates |
+| `label` | SourceSans3-SemiBold | 14 | — | Chip labels, prices |
+| **`eyebrow`** (new) | SourceSans3-Bold | 12 | 1.2 | Uppercase overlines |
+| **`numericDisplay`** (new) | Nunito-Bold | 24 | -0.5 | Stat values, totals |
+| **`button`** (new) | SourceSans3-Bold | 15 | 0.3 | Button text |
+
+### `src/theme/colors.ts` — Add 4 new tokens (no existing changes)
+
+- `surfaceElevated: '#fffcf7'` — warm-tinted white for prominent cards
+- `subtleInk: '#a39a8e'` — tertiary text (dates, struck items)
+- `divider: '#f2e8d8'` — softer than `line` for item separators
+- `brandWash: '#fff5ed'` — faint brand tint for hero backgrounds
+
+### `src/theme/spacing.ts` — Add 2 tokens
+
+- `section: 40` — generous section spacing
+- `page: 20` — screen edge padding
+
+### `src/theme/elevation.ts` — Bump values, add `level4`
+
+Increase existing levels slightly (e.g., level1 elevation 1->2, level3 elevation 6->8). Add `level4` (elevation 12) for tab bar and bottom sheets.
+
+### `src/theme/motion.ts` — Add entrance preset + stagger helper
+
+- `entrance` spring: damping 18, stiffness 160, mass 0.9
+- `stagger(index, baseDelay=50)` helper capped at 300ms
+
+---
+
+## 3. Shared Component Changes
+
+### `src/components/Card.tsx`
+Add `variant` prop: `'default' | 'outlined' | 'filled' | 'elevated'`
+- **default**: surface bg + line border (current behavior)
+- **outlined**: transparent bg + 1.5px line border
+- **filled**: surfaceAlt bg + no border (for inset data)
+- **elevated**: surfaceElevated bg + no border (for hero cards)
+- Reduce borderRadius 24 -> 20
+
+### `src/components/SectionHeader.tsx`
+- Use `typography.subtitle` for title (was label+16px)
+- Branded badge: `brandLight` bg, `brandDeep` text (was surfaceAlt/mutedInk)
+- Add 3px left `brand` accent stripe
+
+### `src/components/Chip.tsx`
+- Apply `fontFamily: 'SourceSans3-SemiBold'` (replace fontWeight)
+
+### `src/components/SearchBar.tsx`
+- Apply `fontFamily: 'SourceSans3-Regular'` to input
+
+### `src/components/EmptyState.tsx`
+- Increase padding 32->48, add maxWidth 260 on message
+
+### `src/components/FloatingActionBar.tsx`
+- Use `surfaceElevated` bg, remove border, use `elevation.level4`
+
+### `src/components/AnimatedPressable.tsx`
+- Deepen press: scale 0.97->0.965, opacity 0.85->0.8
+
+### `src/components/navigation/GrockTabBar.tsx`
+- Height 80->72, remove top border, use `surfaceElevated` bg + `level4` elevation
+- Font: `SourceSans3-SemiBold` inactive / `SourceSans3-Bold` active, 11px
+
+### `src/components/navigation/TabBarIndicatorPill.tsx`
+- Refine: width 64->56, height 32->28, borderRadius 16->14
+
+---
+
+## 4. Screen-Level Changes
+
+### Home Screen
+| File | Key Changes |
+|---|---|
+| `HomeHeader.tsx` | Use `typography.eyebrow` for "GROCK", `typography.headline` for greeting (now Nunito-ExtraBold) |
+| `StatCard.tsx` | Remove border, use `typography.eyebrow` for label + `typography.numericDisplay` at 20px for value. Switch entrance from `withTiming` to `withSpring(motion.entrance)` |
+| `ActiveCartCard.tsx` | Use `surfaceElevated` bg, remove border, add `elevation.level2`. Name uses `typography.subtitle` |
+| `CompletedCartCard.tsx` | Keep surface bg, use softer `divider` border. Dates use `subtleInk` |
+| `QuickActionButton.tsx` | Remove border, add `elevation.level1`. Label uses `typography.label` |
+| `InsightsPanel.tsx` | Stat values use `typography.numericDisplay` at 16px |
+| `HomeScreen.tsx` | Add staggered `FadeInUp` entrance on stat cards using `stagger()`. Increase header gap 18->22 |
+
+### Cart Screens
+| File | Key Changes |
+|---|---|
+| `CartHero.tsx` | Name uses `typography.headline` at 28px. Badge uses `typography.eyebrow` |
+| `BudgetBar.tsx` | Wrap in surfaceAlt container with 16px borderRadius. Spent uses `numericDisplay` at 20px. Track height 8->10 |
+| `CartItemRow.tsx` | Item name uses `SourceSans3-SemiBold`. Struck items use `subtleInk`. Mark button gets faint success wash bg |
+| `CartSummaryBar.tsx` | Total uses `numericDisplay` at 20px |
+| `CartStatusButton.tsx` | Text uses `typography.button`. Add `elevation.level1` |
+| `CartListScreen.tsx` | CartCard: `surfaceElevated` bg, no border, `elevation.level2`. Name uses `subtitle`. Status badge uses `eyebrow`. Quick create inputs get `SourceSans3-Regular` font, button uses `typography.button` |
+
+### Vault Screen
+| File | Key Changes |
+|---|---|
+| `VaultItemCard.tsx` | Name uses `SourceSans3-SemiBold`. Price uses `subtleInk` |
+| `AddItemSheet.tsx` | `surfaceElevated` bg, no border, `elevation.level4`, borderRadius 24->28. Inputs get `SourceSans3-Regular`. Button uses `typography.button` |
+| `AddCategorySheet.tsx` | Same treatment as AddItemSheet |
+
+### Menu & History Screens
+| File | Key Changes |
+|---|---|
+| `MenuScreen.tsx` | Title uses `typography.headline`. Card titles use `typography.subtitle`. Body uses `typography.body`. Buttons: swap `Pressable` -> `AnimatedPressable` for spring press feedback. Button text uses `typography.button`. Inputs get font family. Use `divider` border color |
+| `HistoryScreen.tsx` | Same typography migration. Totals use `numericDisplay` at 20px. Add staggered `FadeInUp` entrance on cards via `stagger()`. Use `subtleInk` for dates |
+
+### Separator refinement (VaultScreen + CartDetailScreen)
+- Height: 1px -> `StyleSheet.hairlineWidth`
+- Color: `line` -> `divider`
+- Margin: 18 -> 20
+
+---
+
+## 5. Implementation Order
+
+**Batch 1 — Foundation (no visual changes until batch 2):**
+1. Download fonts + create `android/app/src/main/assets/fonts/`
+2. Create `react-native.config.js`
+3. Update `typography.ts`, `colors.ts`, `spacing.ts`, `elevation.ts`, `motion.ts`
+
+**Batch 2 — Shared components (high leverage):**
+4. `Card.tsx` (variant system)
+5. `SectionHeader.tsx`, `Chip.tsx`, `SearchBar.tsx`, `EmptyState.tsx`
+6. `FloatingActionBar.tsx`, `AnimatedPressable.tsx`
+7. Tab bar: `GrockTabBar.tsx`, `TabBarIndicatorPill.tsx`
+
+**Batch 3 — Home screen:**
+8. `HomeHeader.tsx`, `StatCard.tsx`, `ActiveCartCard.tsx`, `CompletedCartCard.tsx`
+9. `QuickActionButton.tsx`, `InsightsPanel.tsx`, `HomeScreen.tsx`
+
+**Batch 4 — Cart screens:**
+10. `CartHero.tsx`, `BudgetBar.tsx`, `CartItemRow.tsx`
+11. `CartSummaryBar.tsx`, `CartStatusButton.tsx`, `CartListScreen.tsx`, `CartDetailScreen.tsx`
+
+**Batch 5 — Vault + remaining:**
+12. `VaultItemCard.tsx`, `AddItemSheet.tsx`, `AddCategorySheet.tsx`, `VaultScreen.tsx`
+13. `MenuScreen.tsx`, `HistoryScreen.tsx`
+
+---
+
+## 6. Verification
+
+1. **Font rendering:** After batch 1, add a temporary `<Text style={{fontFamily: 'Nunito-ExtraBold', fontSize: 32}}>Test</Text>` in App.tsx to confirm fonts load
+2. **Clean Android build:** `cd android && ./gradlew clean && cd .. && npx react-native run-android`
+3. **Visual check per screen:** Navigate through Home -> Vault -> Cart -> Menu -> History after each batch
+4. **Card variants:** Confirm elevated cards have visible shadow lift vs filled/outlined
+5. **Animations:** Verify staggered entrances on Home stat cards and History cards
+6. **Tab bar:** Confirm reduced height, removed border, pill indicator alignment
+7. **Typography hierarchy:** Headlines (Nunito-ExtraBold) should feel distinctly different from body (SourceSans3-Regular)
+
+---
+
+## Files Modified (37 total)
+
+**New files (3):**
+- `android/app/src/main/assets/fonts/` (6 TTF files)
+- `react-native.config.js`
+- `scripts/download-fonts.sh`
+
+**Theme (5):** `typography.ts`, `colors.ts`, `spacing.ts`, `elevation.ts`, `motion.ts`
+
+**Shared components (8):** `Card.tsx`, `SectionHeader.tsx`, `Chip.tsx`, `SearchBar.tsx`, `EmptyState.tsx`, `FloatingActionBar.tsx`, `AnimatedPressable.tsx`, `GrockTabBar.tsx`, `TabBarIndicatorPill.tsx`
+
+**Home (7):** `HomeHeader.tsx`, `StatCard.tsx`, `ActiveCartCard.tsx`, `CompletedCartCard.tsx`, `QuickActionButton.tsx`, `InsightsPanel.tsx`, `HomeScreen.tsx`
+
+**Cart (7):** `CartHero.tsx`, `BudgetBar.tsx`, `CartItemRow.tsx`, `CartSummaryBar.tsx`, `CartStatusButton.tsx`, `CartListScreen.tsx`, `CartDetailScreen.tsx`
+
+**Vault (4):** `VaultItemCard.tsx`, `AddItemSheet.tsx`, `AddCategorySheet.tsx`, `VaultScreen.tsx`
+
+**Other (2):** `MenuScreen.tsx`, `HistoryScreen.tsx`

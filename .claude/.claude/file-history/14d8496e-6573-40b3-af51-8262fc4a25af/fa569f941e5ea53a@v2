@@ -1,0 +1,64 @@
+import React from 'react';
+import { StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+import { colors } from '../theme/colors';
+import { elevation as elevationTokens } from '../theme/elevation';
+
+type ElevationLevel = 0 | 1 | 2 | 3 | 4;
+type CardVariant = 'default' | 'outlined' | 'filled' | 'elevated';
+
+interface CardProps {
+  children: React.ReactNode;
+  elevation?: ElevationLevel;
+  variant?: CardVariant;
+  style?: StyleProp<ViewStyle>;
+  entering?: typeof FadeInDown;
+}
+
+const elevationMap = {
+  0: elevationTokens.level0,
+  1: elevationTokens.level1,
+  2: elevationTokens.level2,
+  3: elevationTokens.level3,
+  4: elevationTokens.level4,
+};
+
+const variantStyles: Record<CardVariant, ViewStyle> = {
+  default: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  outlined: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.line,
+  },
+  filled: {
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 0,
+  },
+  elevated: {
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 0,
+  },
+};
+
+export function Card({ children, elevation = 1, variant = 'default', style, entering }: CardProps) {
+  return (
+    <Animated.View
+      entering={entering ?? FadeInDown.duration(300)}
+      style={[styles.card, variantStyles[variant], elevationMap[elevation], style]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 20,
+    padding: 18,
+  },
+});

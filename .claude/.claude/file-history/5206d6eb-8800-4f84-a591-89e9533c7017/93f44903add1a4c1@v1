@@ -1,0 +1,33 @@
+import { TOOLS, FIXTURE_DEFAULTS, FIXTURE_TYPES } from '@/editor/tools';
+import { fixtureOutline } from '@/geometry/fixtureGeometry';
+
+export default function FixturePreview({ toolState, activeTool }) {
+  if (activeTool !== TOOLS.FIXTURE) return null;
+  if (toolState.previewX == null || toolState.previewY == null) return null;
+
+  const fixtureType = toolState.fixtureType || FIXTURE_TYPES.KITCHEN_TOP;
+  const defaults = FIXTURE_DEFAULTS[fixtureType] || { width: 600, depth: 400 };
+
+  const preview = {
+    x: toolState.previewX,
+    y: toolState.previewY,
+    width: defaults.width,
+    depth: defaults.depth,
+    rotation: toolState.previewRotation || 0,
+  };
+
+  const outline = fixtureOutline(preview);
+  const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+
+  return (
+    <polygon
+      points={points}
+      fill="rgba(200, 180, 160, 0.3)"
+      stroke="var(--color-selection)"
+      strokeWidth={2}
+      strokeDasharray="4 2"
+      vectorEffect="non-scaling-stroke"
+      style={{ pointerEvents: 'none' }}
+    />
+  );
+}

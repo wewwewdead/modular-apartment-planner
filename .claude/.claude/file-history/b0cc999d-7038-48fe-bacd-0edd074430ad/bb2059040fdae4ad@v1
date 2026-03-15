@@ -1,0 +1,99 @@
+# Plan: Add Change Email & Change Password
+
+## Context
+Users currently have no way to change their email or password after signup. The app uses Supabase Auth with a client-side supabase instance (`client/src/utils/supabaseClient.js`). The `supabase.auth.updateUser()` method can be called directly from the client — **no new server endpoints needed** for the auth changes themselves.
+
+**Feasibility: YES** — straightforward to implement.
+
+---
+
+## How Supabase handles these
+
+**Change Password:**
+1. Re-authenticate with `supabase.auth.signInWithPassword({ email, password: currentPassword })` to verify
+2. Call `supabase.auth.updateUser({ password: newPassword })` — takes effect immediately
+
+**Change Email:**
+1. Call `supabase.auth.updateUser({ email: newEmail })`
+2. Supabase sends a confirmation link to the **new** email
+3. Email only changes after user clicks the link
+4. Requires "Confirm email change" enabled in Supabase Dashboard > Auth > Email settings
+
+**Caveat:** The `users` table has a `user_email` column used in many queries. A Supabase DB trigger will auto-sync it when `auth.users.email` changes (user's chosen approach).
+
+---
+
+## Implementation Steps
+
+### 1. Create Settings Page component
+**New:** `client/src/components/SettingsPage/SettingsPage.jsx`
+- Two sections: "Change Password" and "Change Email"
+- Styled with existing CSS variable patterns and glass morphism
+- Uses `supabase` client directly (imported from `supabaseClient.js`)
+- Gets current user email from `useAuth()` context (`session.user.email`)
+
+**Change Password form:**
+- Fields: Current Password, New Password, Confirm New Password
+- Validation: min 6 chars, passwords must match
+- Show/hide password toggle (same pattern as `login.jsx`)
+- On submit: verify current → update new → show success toast
+
+**Change Email form:**
+- Field: New Email
+- On submit: call `updateUser({ email })` → show "Confirmation email sent" message
+
+### 2. Create Settings Page styles
+**New:** `client/src/components/SettingsPage/SettingsPage.css`
+- Follow existing patterns from `ProfileEditModal` / login page styling
+
+### 3. Add route in App.jsx
+**Modify:** `client/src/App.jsx`
+- Add lazy import: `const SettingsPage = lazy(() => import('./components/SettingsPage/SettingsPage.jsx'))`
+- Add route nested under `/home`: `<Route path='settings' element={<SettingsPage/>}/>`
+
+### 4. Add Settings link to sidebar
+**Modify:** `client/src/components/HomePage/Home.jsx`
+- Add a `settingsLink` object (same pattern as `homeLink`, `exploreLink`, etc.) with gear icon
+- Insert into `authLinks` array before the "Write" button
+
+### 5. Create Supabase DB trigger for email sync
+**SQL migration** (run in Supabase SQL Editor):
+```sql
+CREATE OR REPLACE FUNCTION sync_user_email()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE public.users
+  SET user_email = NEW.email
+  WHERE id = NEW.id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_email_change
+  AFTER UPDATE OF email ON auth.users
+  FOR EACH ROW
+  WHEN (OLD.email IS DISTINCT FROM NEW.email)
+  EXECUTE FUNCTION sync_user_email();
+```
+
+---
+
+## Files Summary
+
+| Action | File |
+|--------|------|
+| Create | `client/src/components/SettingsPage/SettingsPage.jsx` |
+| Create | `client/src/components/SettingsPage/SettingsPage.css` |
+| Modify | `client/src/App.jsx` (add lazy import + route) |
+| Modify | `client/src/components/HomePage/Home.jsx` (add sidebar link) |
+| Run SQL | Supabase Dashboard — DB trigger for email sync |
+
+---
+
+## Verification
+1. Navigate to `/home/settings` — page renders with both forms
+2. **Password change:** Enter current password + new password → success → logout → login with new password works
+3. **Password validation:** Wrong current password shows error, mismatched passwords blocked
+4. **Email change:** Enter new email → "Confirmation sent" message displayed
+5. Check Supabase Dashboard > Auth > Email settings has "Confirm email change" enabled
+6. After confirming email change, verify `users.user_email` updated via DB trigger

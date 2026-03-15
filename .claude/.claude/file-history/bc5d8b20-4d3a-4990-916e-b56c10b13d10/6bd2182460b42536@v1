@@ -1,0 +1,157 @@
+# Door & Window Variants
+
+## Context
+
+Doors and windows are fully implemented with a single type each: swing doors and standard (three-line) windows. This plan adds variant types — double and sliding doors, casement and fixed windows — so the user can place a default type and then change it via the properties panel.
+
+## Design Decisions
+
+- **Type selection happens after placement** — the user places a door/window with defaults, then changes type in the properties panel. No new toolbar buttons or placement handlers needed.
+- **One new field per model**: `door.type` (`'swing'`|`'double'`|`'sliding'`) and `win.type` (`'standard'`|`'casement'`|`'fixed'`). Windows also gain `openDirection` (for casement).
+- **Rendering branches inside existing renderers** — extract variant-specific SVG into helper components, keep the wall-masking polygon shared.
+- **No new constants or geometry helpers** — all variants reuse the same `doorOutlineOnWall`/`windowOutlineOnWall` positioning.
+
+## Files to Change
+
+| File | Action | What |
+|------|--------|------|
+| `src/domain/models.js` | MODIFY | Add `type` to `createDoor`, add `type` + `openDirection` to `createWindow` |
+| `src/persistence/deserialize.js` | MODIFY | Backfill `door.type`, `win.type`, `win.openDirection` for old saves |
+| `src/renderers/DoorRenderer.jsx` | MODIFY | Add double/sliding rendering branches |
+| `src/renderers/WindowRenderer.jsx` | MODIFY | Add casement/fixed rendering branches |
+| `src/ui/PropertiesPanel.jsx` | MODIFY | Add type `<select>` dropdowns, conditional direction toggle |
+
+No changes needed to: placement handlers, ProjectProvider (spread-update handles new fields), selectHandler, Toolbar, SvgCanvas, SelectionOverlay, wallGeometry, serialize, defaults.
+
+---
+
+## Change 1: Update `createDoor` and `createWindow` in `models.js`
+
+```js
+export function createDoor(wallId, offset, width = DOOR_WIDTH, openDirection = 'left', type = 'swing') {
+  return { id: generateId('door'), wallId, offset, width, openDirection, type };
+}
+
+export function createWindow(wallId, offset, width = WINDOW_WIDTH, type = 'standard', openDirection = 'left') {
+  return { id: generateId('win'), wallId, offset, width, type, openDirection };
+}
+```
+
+---
+
+## Change 2: Backfill in `deserialize.js`
+
+Add after the existing room backfill block:
+
+```js
+for (const floor of project.floors) {
+  if (!floor.doors) floor.doors = [];
+  for (const door of floor.doors) {
+    if (!door.type) door.type = 'swing';
+  }
+  if (!floor.windows) floor.windows = [];
+  for (const win of floor.windows) {
+    if (!win.type) win.type = 'standard';
+    if (!win.openDirection) win.openDirection = 'left';
+  }
+}
+```
+
+---
+
+## Change 3: Door variant rendering in `DoorRenderer.jsx`
+
+Refactor to extract variant sub-components. The masking polygon + outer `<g>` stay the same. The inner `<g transform="translate/rotate">` content branches on `door.type`:
+
+**`swing` (default, current code unchanged):**
+- Transform origin: `info.start`
+- Leaf line: `(0,0)` → `(0, flipSign * -door.width)`
+- Arc: `M ${door.width} 0 A ... 0 ${flipSign * -door.width}`
+
+**`double` (new):**
+- Transform origin: `info.center` (not `info.start`)
+- Two leaves from center, each `width/2` long, opening in opposite perpendicular directions
+- Left leaf: `(0,0)` → `(0, -halfWidth)`, arc sweeping from `(halfWidth, 0)` to `(0, -halfWidth)`
+- Right leaf: `(0,0)` → `(0, halfWidth)`, arc sweeping from `(halfWidth, 0)` to `(0, halfWidth)`
+- `halfWidth = door.width / 2`
+
+**`sliding` (new):**
+- Transform origin: `info.start`
+- Thick panel line: `(0,0)` → `(door.width, 0)`, strokeWidth 4
+- Direction arrow: thin line at `y = flipSign * -12` from `0.2*width` → `0.8*width`, with a small V-shaped arrowhead at the trailing end
+
+---
+
+## Change 4: Window variant rendering in `WindowRenderer.jsx`
+
+Refactor similarly. Masking polygon stays the same.
+
+**`standard` (default, current code unchanged):**
+- Three parallel lines at perpendicular offsets -0.3, 0, +0.3
+
+**`casement` (new):**
+- Uses a `<g transform="translate/rotate">` like doors (at `info.start`, rotated by angle)
+- Glass pane line: `(0,0)` → `(win.width, 0)`, strokeWidth 2
+- Hinge leaf: short line from `(0,0)` → `(0, flipSign * -win.width * 0.3)`
+- Small dashed arc: radius `win.width * 0.3`, quarter-circle from pane to leaf end
+- `flipSign` from `win.openDirection`
+
+**`fixed` (new):**
+- Center line from `info.start` → `info.end`, strokeWidth 2
+- Two diagonal lines forming an X: `info.p1→info.p3` and `info.p2→info.p4`, strokeWidth 1
+
+---
+
+## Change 5: Properties panel type selectors in `PropertiesPanel.jsx`
+
+**DoorProperties** — add a type `<select>` above the Width field:
+```jsx
+<div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+  <select value={door.type || 'swing'} onChange={(e) => updateDoor({ type: e.target.value })}
+    style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+             borderRadius: 'var(--radius-sm)', fontSize: '12px' }}>
+    <option value="swing">Swing</option>
+    <option value="double">Double</option>
+    <option value="sliding">Sliding</option>
+  </select>
+</div>
+```
+- Hide the "Toggle Swing Direction" button and openDirection field when `type === 'double'` (symmetric, no direction)
+- For `sliding`, keep the toggle but label it "Toggle Slide Direction"
+
+**WindowProperties** — add a type `<select>` above the Width field:
+```jsx
+<select value={win.type || 'standard'} onChange={(e) => updateWindow({ type: e.target.value })} ...>
+  <option value="standard">Standard</option>
+  <option value="casement">Casement</option>
+  <option value="fixed">Fixed</option>
+</select>
+```
+- Show "Toggle Open Side" button only when `type === 'casement'`
+
+Style the `<select>` inline to match `InputField` dimensions (height 28px, fontSize 12px, same border).
+
+---
+
+## Implementation Order
+
+1. `models.js` — add `type` fields (defines data shape)
+2. `deserialize.js` — backfill (so test loads work immediately)
+3. `DoorRenderer.jsx` — variant rendering (can test by changing default type)
+4. `WindowRenderer.jsx` — variant rendering
+5. `PropertiesPanel.jsx` — UI controls (enables runtime switching)
+
+---
+
+## Verification
+
+1. `npx vite build` — no errors
+2. Place a door → properties panel shows Type dropdown defaulting to "Swing" → renders swing arc as before
+3. Change door type to "Double" → two symmetric arcs render from center; direction toggle hidden
+4. Change door type to "Sliding" → thick panel line + arrow renders; toggle shows "Slide Direction"
+5. Place a window → Type defaults to "Standard" → three-line rendering as before
+6. Change to "Casement" → glass line + small arc renders; "Toggle Open Side" button appears
+7. Change to "Fixed" → X pattern renders; no direction controls
+8. Save project, reload → types persist, render correctly
+9. Load old save (no type fields) → doors render as swing, windows as standard

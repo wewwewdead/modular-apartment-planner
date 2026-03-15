@@ -1,0 +1,287 @@
+# Add Assembly Sheets and Part Detail Sheets to Sketch Studio
+
+## Context
+
+The Sketch Studio (`/sketch`) can model furniture parts (panels, legs, frames) with assemblies and orthographic views, but has no formal drawing sheet system. The floor planner has a full sheet pipeline (layout, viewports, title block, export). The goal is to bring professional assembly drawings, part detail drawings, dimensioned views, and part lists to the sketch module — reusing the existing sheet infrastructure while keeping sketch-specific rendering within the `src/modules/sketch/` boundary.
+
+---
+
+## Architecture: Sketch-Specific Pipeline on Shared Infrastructure
+
+- **Reuse as-is**: `createSheet()`, `createSheetViewport()` (`src/domain/sheetModels.js`), paper presets (`src/sheets/paper.js`), layout tokens/colors (`src/sheets/standards.js`), title block (`src/renderers/sheet/SheetTitleBlock.jsx`), hit testing (`src/sheets/hitTest.js`), PDF/PNG export (`src/export/sheetExport.js`)
+- **Extend minimally**: `buildSheetScene()` (`src/sheets/layout.js`) — add pluggable source resolver parameter; `standards.js` — add sketch reference notes
+- **Create in sketch module**: source resolver, viewport content renderer, sheet renderer, sheet canvas, sheet templates, UI integration
+
+### Source View Types
+
+| sourceView | kind | Content |
+|------------|------|---------|
+| `sketch_assembly_top` | `sketch_assembly` | Assembly parts projected to top view |
+| `sketch_assembly_front` | `sketch_assembly` | Assembly parts projected to front view |
+| `sketch_assembly_side` | `sketch_assembly` | Assembly parts projected to side view |
+| `sketch_part_detail` | `sketch_part_detail` | Single part — 3-view arrangement with auto-dimensions |
+| `sketch_part_list` | `sketch_part_list` | BOM table (item, name, type, material, qty, dims) |
+
+---
+
+## Step 1: Extend shared layout engine (backward-compatible)
+
+**File:** `src/sheets/layout.js`
+
+- Change `buildSheetScene(project, sheet)` to `buildSheetScene(project, sheet, options = {})`.
+- At the source resolution call (line ~353), use `(options.resolveSource || resolveSheetViewportSource)` instead of the hard-coded import.
+- Add `sketch_part_list` to `sourceFitsFrame()` (line 18) so BOM tables scale-to-fit like roof schedules.
+
+**File:** `src/sheets/standards.js`
+
+- In `resolveViewportScaleLabel()` (line 122): add `if (source?.kind === 'sketch_part_list') return 'NTS';`
+- In `resolveViewportReferenceNote()` (line 128): add cases for `sketch_assembly` → `'ASSEMBLY VIEW'`, `sketch_part_detail` → `'PART DETAIL'`, `sketch_part_list` → `'PARTS LIST'`
+
+---
+
+## Step 2: Add sheet CRUD actions to SketchProvider
+
+**File:** `src/modules/sketch/app/SketchProvider.jsx`
+
+Add 6 reducer actions (same pattern as `ProjectProvider.jsx` lines 547-606):
+- `SKETCH_SHEET_ADD` — push sheet to `state.project.sheets`
+- `SKETCH_SHEET_UPDATE` — merge updates for matching sheet id
+- `SKETCH_SHEET_DELETE` — filter out by id
+- `SKETCH_SHEET_VIEWPORT_ADD` — find sheet, append viewport to its `viewports[]`
+- `SKETCH_SHEET_VIEWPORT_UPDATE` — find sheet, update matching viewport
+- `SKETCH_SHEET_VIEWPORT_DELETE` — find sheet, filter out viewport
+
+All wrapped with `applyUpdate(state, ...)` for undo/redo history.
+
+---
+
+## Step 3: Add workspace mode to SketchEditorProvider
+
+**File:** `src/modules/sketch/app/SketchEditorProvider.jsx`
+
+Add to `createInitialSketchEditorState()`:
+```js
+workspaceMode: 'model',    // 'model' | 'sheet'
+activeSheetId: null,
+sheetViewport: { panX: 400, panY: 300, zoom: 2.0 },
+```
+
+Rename current `viewport` to `modelViewport` in initial state (keep backward-compat in the return by mapping `viewport` from the active workspace's viewport).
+
+Add reducer actions:
+- `SET_WORKSPACE_MODE` — swap between model/sheet, swap viewport, clear selection (pattern from `EditorProvider.jsx` lines 61-70)
+- `SET_ACTIVE_SHEET` — set `activeSheetId`, clear selection
+
+Modify `PAN`, `ZOOM`, `SET_VIEWPORT` to write to `modelViewport` or `sheetViewport` based on `workspaceMode`.
+
+Ensure `useSketchEditor()` returns `viewport` as the active workspace's viewport (no change to consumers).
+
+---
+
+## Step 4: Create sketch source resolver
+
+**New file:** `src/modules/sketch/sheets/sketchSources.js`
+
+Exports:
+- `resolveSketchViewportSource(sketchProject, viewport)` — switch on `viewport.sourceView`:
+  - `sketch_assembly_top/front/side` → `buildSketchAssemblySource(project, viewport.sourceRefId, view)` — gather parts for assembly (or all if null), compute bounds via `projectPartToView` + `getPartsBounds` pattern from `sketchSheetExport.js`, return `{ kind: 'sketch_assembly', view, parts, dimensions, assembly, bounds }`
+  - `sketch_part_detail` → `buildSketchPartDetailSource(project, viewport.sourceRefId)` — find part, compute 3-view L-layout bounds (top+front+side arranged with gaps), auto-generate dimension descriptors for width/depth/height, return `{ kind: 'sketch_part_detail', part, viewLayouts, bounds }`
+  - `sketch_part_list` → `buildSketchPartListSource(project, viewport.sourceRefId)` — build BOM rows from parts, compute table bounds, return `{ kind: 'sketch_part_list', rows, columnWidths, bounds }`
+  - default → `{ kind: 'empty', ... }`
+
+- `getSketchViewportSourceLabel(sourceView)` — returns display labels
+
+Reuses: `projectPartToView`, `getPartExtents` from `../domain/viewProjection.js`; `createDimensionFigure` from `@/annotations/dimensions` for dimension geometry.
+
+---
+
+## Step 5: Create sketch sheet layout wrapper
+
+**New file:** `src/modules/sketch/sheets/sketchSheetLayout.js`
+
+```js
+import { buildSheetScene } from '@/sheets/layout';
+import { resolveSketchViewportSource } from './sketchSources';
+
+export function buildSketchSheetScene(sketchProject, sheet) {
+  return buildSheetScene(sketchProject, sheet, {
+    resolveSource: (project, viewport) => resolveSketchViewportSource(project, viewport),
+  });
+}
+```
+
+---
+
+## Step 6: Create sketch sheet viewport content renderer
+
+**New file:** `src/modules/sketch/renderers/SketchSheetViewportContent.jsx`
+
+Handles three source kinds:
+
+- **`sketch_assembly`** — renders parts via `PartRenderer` and dimensions via `DimensionRenderer` (both from sketch module) in the given orthographic view. Uses `view={source.view}`, `isSelected={false}`, `zoom={1}`.
+
+- **`sketch_part_detail`** — renders three sub-groups positioned per `source.viewLayouts` (top, front, side). Each group: part rect + auto-dimension lines (extension lines, arrowheads, text via `createDimensionFigure`). View labels rendered as `<text>`.
+
+- **`sketch_part_list`** — SVG table: header row + data rows. Columns: Item, Name, Type, Material, Qty, Dimensions. Pattern follows `RoofScheduleRenderer`. Uses `SHEET_COLORS` for consistent styling.
+
+Returns `null` for `kind === 'empty'`.
+
+---
+
+## Step 7: Create sketch sheet renderer
+
+**New file:** `src/modules/sketch/renderers/SketchSheetRenderer.jsx`
+
+Same structure as `src/renderers/SheetRenderer.jsx` (paper background, border, live area, title block, viewports with captions and handles) but:
+- Calls `buildSketchSheetScene(sketchProject, sheet)` instead of `buildSheetScene(project, sheet)`
+- Renders `SketchSheetViewportContent` instead of `SheetViewportContent`
+- Imports `SheetTitleBlock` from `@/renderers/sheet/SheetTitleBlock` (reuse directly)
+- Imports `getViewportHandleRects`, `getViewportRotationHandle` from `@/sheets/hitTest` (reuse directly)
+
+---
+
+## Step 8: Create sketch sheet canvas
+
+**New file:** `src/modules/sketch/renderers/SketchSheetCanvas.jsx`
+
+Same interaction model as `src/renderers/SheetCanvas.jsx` (pan, zoom, viewport drag/resize/rotate, grid snap, pointer capture) but:
+- Uses `useSketch()` + `useSketchEditor()` instead of `useProject()` + `useEditor()`
+- Dispatches `SKETCH_SHEET_VIEWPORT_UPDATE` instead of `SHEET_VIEWPORT_UPDATE`
+- Renders `SketchSheetRenderer` instead of `SheetRenderer`
+- Includes hidden `data-sheet-export-root` SVG for export compatibility (pattern from `SheetCanvas.jsx` lines 303-326)
+- Uses `fitViewportToSheet` from `@/sheets/layout` (reuse directly)
+
+---
+
+## Step 9: Create sheet template generators
+
+**New file:** `src/modules/sketch/sheets/sketchSheetTemplates.js`
+
+- `generateAssemblySheet(project, assemblyId)` — creates a sheet with 3 assembly view viewports (top/front/side) + a part list viewport. Sets `sourceRefId: assemblyId`, title from assembly name, scale computed from assembly bounds (target ~1:5 for furniture).
+
+- `generatePartDetailSheet(project, partId)` — creates a sheet with 1 part detail viewport. Sets `sourceRefId: partId`, title from part name, scale computed from part extents.
+
+Both use `createSheet()` and `createSheetViewport()` from `@/domain/sheetModels`.
+
+---
+
+## Step 10: Integrate workspace mode switching
+
+**File:** `src/modules/sketch/SketchWorkspace.jsx`
+
+- Lazy-import `SketchSheetCanvas`.
+- Read `workspaceMode` and `activeSheetId` from `useSketchEditor()`.
+- Add sheet validity check (if active sheet deleted, revert to model mode).
+- When `workspaceMode === 'sheet'`, render `SketchSheetCanvas` instead of the model workspace (`SketchCanvas` + `SketchPreviewPanel`).
+
+---
+
+## Step 11: Add Sheets section to sidebar
+
+**File:** `src/modules/sketch/ui/SketchSidebar.jsx`
+
+Add a "Sheets" section below "Unassigned Parts":
+- "+" button → `dispatch({ type: 'SKETCH_SHEET_ADD', sheet: createSheet('Sheet N+1', { number: 'S0N', drawingName: '...' }) })` → `editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId })` → `editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' })`
+- Sheet list items, click to activate.
+- "Generate Assembly Sheet" button per assembly (in assembly row actions or as a separate action).
+- Active sheet highlighted when in sheet mode.
+- Clicking an assembly/part while in sheet mode switches back to model mode.
+
+---
+
+## Step 12: Sheet-mode toolbar and properties
+
+**File:** `src/modules/sketch/ui/SketchToolbar.jsx`
+
+When `workspaceMode === 'sheet'`:
+- Hide tool palette and view switcher.
+- Show: "Add Viewport" dropdown (Assembly Top/Front/Side, Part Detail, Part List), "Back to Model" button, Export PDF/PNG buttons.
+- "Add Viewport" dispatches `SKETCH_SHEET_VIEWPORT_ADD` with `createSheetViewport(sourceView, null, opts)`.
+- Export PDF/PNG calls `exportActiveSheetAsPdf`/`exportActiveSheetAsPng` from `@/export/sheetExport`.
+
+**File:** `src/modules/sketch/ui/SketchPropertiesPanel.jsx`
+
+When `workspaceMode === 'sheet'`:
+- If `selectedType === 'sheet'`: show paper size, title, number, scale, title block fields.
+- If `selectedType === 'sheetViewport'`: show source view dropdown, assembly/part selector, scale, title, caption position.
+- "Generate Assembly Sheet" and "Generate Part Detail Sheet" action buttons.
+- Export buttons.
+
+When `workspaceMode === 'model'`: no changes (existing behavior).
+
+---
+
+## Files Summary
+
+### New files (7)
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/sheets/sketchSources.js` | Source resolution for sketch viewport types |
+| `src/modules/sketch/sheets/sketchSheetLayout.js` | Wraps shared layout with sketch source resolver |
+| `src/modules/sketch/sheets/sketchSheetTemplates.js` | Assembly/part detail sheet generators |
+| `src/modules/sketch/renderers/SketchSheetViewportContent.jsx` | Renders sketch content in sheet viewports |
+| `src/modules/sketch/renderers/SketchSheetRenderer.jsx` | Full sheet renderer for sketch |
+| `src/modules/sketch/renderers/SketchSheetCanvas.jsx` | Interactive sheet editing canvas |
+| `src/modules/sketch/renderers/SketchSheetCanvas.module.css` | Sheet canvas styling |
+
+### Modified files (8)
+| File | Change |
+|------|--------|
+| `src/sheets/layout.js` | Accept pluggable source resolver in `buildSheetScene`, add `sketch_part_list` to `sourceFitsFrame` |
+| `src/sheets/standards.js` | Add sketch reference notes and scale labels |
+| `src/modules/sketch/app/SketchProvider.jsx` | Add 6 sheet CRUD actions |
+| `src/modules/sketch/app/SketchEditorProvider.jsx` | Add `workspaceMode`, `activeSheetId`, dual viewport |
+| `src/modules/sketch/SketchWorkspace.jsx` | Conditional model/sheet rendering |
+| `src/modules/sketch/ui/SketchSidebar.jsx` | Add Sheets section with create/select |
+| `src/modules/sketch/ui/SketchToolbar.jsx` | Sheet-mode toolbar (add viewport, export) |
+| `src/modules/sketch/ui/SketchPropertiesPanel.jsx` | Sheet/viewport property editing |
+
+### Reused without changes
+- `src/domain/sheetModels.js` — `createSheet`, `createSheetViewport`
+- `src/sheets/paper.js` — paper presets
+- `src/sheets/hitTest.js` — viewport handles
+- `src/renderers/sheet/SheetTitleBlock.jsx` — title block
+- `src/export/sheetExport.js` — PDF/PNG export (works on `[data-sheet-export-root]` SVG)
+- `src/annotations/dimensions.js` — `createDimensionFigure` for auto-dimensions
+- `src/modules/sketch/domain/viewProjection.js` — `projectPartToView`, `getPartExtents`
+- `src/modules/sketch/renderers/PartRenderer.jsx`, `DimensionRenderer.jsx` — sketch part rendering
+- `src/modules/sketch/persistence/sketchSerialize.js` — already handles `sheets: []`
+
+---
+
+## Implementation Order
+
+1. `layout.js` + `standards.js` (shared extensions, backward-compatible)
+2. `SketchProvider.jsx` (sheet CRUD actions)
+3. `SketchEditorProvider.jsx` (workspace mode + dual viewport)
+4. `sketchSources.js` (source resolver)
+5. `sketchSheetLayout.js` (layout wrapper)
+6. `SketchSheetViewportContent.jsx` (viewport content)
+7. `SketchSheetRenderer.jsx` (sheet renderer)
+8. `SketchSheetCanvas.jsx` + CSS (interactive canvas)
+9. `sketchSheetTemplates.js` (sheet generators)
+10. `SketchWorkspace.jsx` (workspace switching)
+11. `SketchSidebar.jsx` (sheets section)
+12. `SketchToolbar.jsx` + `SketchPropertiesPanel.jsx` (toolbar/properties)
+
+---
+
+## Verification
+
+1. Navigate to `/sketch`, create parts and an assembly
+2. Sidebar: "Sheets" section visible with "+" button
+3. Click "+" → new sheet created, workspace switches to sheet view
+4. Sheet canvas shows empty sheet with title block
+5. Toolbar: "Add Viewport" dropdown appears in sheet mode
+6. Add Assembly Top viewport → parts render in top orthographic projection
+7. Add Assembly Front/Side viewports → correct projections
+8. Add Part Detail viewport → 3-view layout with auto-dimensions
+9. Add Part List viewport → BOM table with part data
+10. Drag/resize/rotate viewports on sheet
+11. Click assembly in sidebar → switches back to model mode
+12. Export PDF → file downloads with correct sheet content
+13. Export PNG → file downloads with correct sheet content
+14. Generate Assembly Sheet button → creates pre-configured sheet
+15. Generate Part Detail Sheet button → creates part detail sheet
+16. Undo/redo preserves sheet operations
+17. Sheets persist across save/load

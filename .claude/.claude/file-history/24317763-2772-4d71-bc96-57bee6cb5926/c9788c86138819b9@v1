@@ -1,0 +1,57 @@
+# Move Freedom Wall & Stories links from Sidebar to Home Feed
+
+## Context
+The sidebar has too many links (Home, Explore, Gallery, Freedom Wall, Universe, Stories, Profile, Notifications, Bookmarks, Collections, Settings, Write). The user wants to move **Freedom Wall** and **Stories** out of the sidebar and place them **side-by-side below the search bar** on the main home feed (`PostCards.jsx`).
+
+There's already a "Visit Freedom Wall" button inside the search bar area — we'll replace it with a row of two equal-width pill buttons below the search shell.
+
+## Changes
+
+### 1. `client/src/components/HomePage/postCards/PostCards.jsx`
+
+**Replace** the single `search-freedom-wall-btn` button (line 496-498) and the `mobile-fw-banner` div (lines 579-582) with a new **nav row** placed right after the `</div>` that closes the `search-shell` (after line 577):
+
+```jsx
+<div className="search-nav-row">
+    <button type="button" className="search-nav-btn search-nav-fw" onClick={handleVisitFreedomWall}>
+        <svg ...golden wall icon... />
+        Freedom Wall
+    </button>
+    <button type="button" className="search-nav-btn search-nav-stories" onClick={() => navigate('/home/stories')}>
+        <svg ...book icon... />
+        Stories
+    </button>
+</div>
+```
+
+- Remove the existing `search-freedom-wall-btn` from inside the search-top-bar
+- Remove the `mobile-fw-banner` div (it gets replaced by the new row which works on all sizes)
+- Reuse the same SVG icons already used in the sidebar (`Home.jsx` lines 97-102 for Freedom Wall, lines 129-131 for Stories)
+
+### 2. `client/src/components/HomePage/postCards/postcards.css`
+
+- **Remove** `.search-freedom-wall-btn` styles and `.mobile-fw-banner` styles
+- **Add** new `.search-nav-row` styles:
+  - `display: flex; gap: 6px; padding: 0.4rem 0.75rem;` — two equal buttons side by side
+  - Each `.search-nav-btn` gets the same pill styling (border-radius, font, size) matching the existing amber Freedom Wall aesthetic
+  - `.search-nav-fw` keeps the golden `#e6a817` accent
+  - `.search-nav-stories` uses the blue `#5f92ff` accent (matching the existing Stories sidebar icon active color)
+  - Mobile responsive: buttons stay side-by-side but shrink slightly at 480px
+
+### 3. `client/src/components/HomePage/Home.jsx`
+
+- **Remove** `freedomWallLink` (lines 91-103) and `storiesLink` (lines 124-132) from the sidebar links arrays
+- **Remove** them from both `links` arrays (line 220-221): change from `[homeLink, exploreLink, galleryLink, freedomWallLink, universeLink, storiesLink, ...]` to `[homeLink, exploreLink, galleryLink, universeLink, ...]`
+
+## Files to Modify
+- `client/src/components/HomePage/postCards/PostCards.jsx` — replace FW button + mobile banner with nav row
+- `client/src/components/HomePage/postCards/postcards.css` — swap old styles for new nav row styles
+- `client/src/components/HomePage/Home.jsx` — remove FW + Stories from sidebar links
+
+## Verification
+1. Sidebar should no longer show Freedom Wall or Stories links
+2. Home feed should show two side-by-side buttons below the search bar
+3. Clicking "Freedom Wall" navigates to `/home/freedom-wall`
+4. Clicking "Stories" navigates to `/home/stories`
+5. Buttons look correct on both desktop and mobile (480px)
+6. Explore page search bar is unaffected

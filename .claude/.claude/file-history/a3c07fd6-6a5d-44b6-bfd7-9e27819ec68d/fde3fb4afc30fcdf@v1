@@ -1,0 +1,41 @@
+import { useMemo, useRef } from 'react';
+import { TOOLS } from './tools';
+import { createWallDrawHandler } from './handlers/wallDrawHandler';
+import { createSelectHandler } from './handlers/selectHandler';
+import { createDoorPlaceHandler } from './handlers/doorPlaceHandler';
+import { createWindowPlaceHandler } from './handlers/windowPlaceHandler';
+
+export function useEditorTool({ activeTool, dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState }) {
+  const getFloorRef = useRef(getFloor);
+  getFloorRef.current = getFloor;
+
+  const handler = useMemo(() => {
+    const ctx = {
+      dispatch, editorDispatch,
+      getFloor: (...args) => getFloorRef.current(...args),
+      activeFloorId, viewport, snapEnabled,
+    };
+
+    switch (activeTool) {
+      case TOOLS.WALL:
+        return createWallDrawHandler(ctx);
+      case TOOLS.SELECT:
+        return createSelectHandler(ctx);
+      case TOOLS.DOOR:
+        return createDoorPlaceHandler(ctx);
+      case TOOLS.WINDOW:
+        return createWindowPlaceHandler(ctx);
+      default:
+        return null;
+    }
+  }, [activeTool, activeFloorId, viewport.zoom, snapEnabled]);
+
+  return {
+    onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),
+    onMouseMove: (modelPos, e) => handler?.onMouseMove?.(modelPos, e, toolState, selectedId, selectedType),
+    onMouseUp: (modelPos, e) => handler?.onMouseUp?.(modelPos, e, toolState),
+    onDoubleClick: (modelPos, e) => handler?.onDoubleClick?.(modelPos, e, toolState),
+    onKeyDown: (e) => handler?.onKeyDown?.(e, toolState, selectedId, selectedType),
+    getCursor: () => handler?.getCursor?.(toolState) || 'default',
+  };
+}

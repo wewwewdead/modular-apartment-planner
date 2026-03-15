@@ -1,0 +1,18 @@
+import React from 'react';
+
+import { SearchBar } from '../../../components/SearchBar';
+
+interface VaultSearchBarProps {
+  value: string;
+  onChangeText: (text: string) => void;
+}
+
+export function VaultSearchBar({ value, onChangeText }: VaultSearchBarProps) {
+  return (
+    <SearchBar
+      value={value}
+      onChangeText={onChangeText}
+      placeholder="Search categories or items"
+    />
+  );
+}

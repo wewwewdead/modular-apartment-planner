@@ -1,0 +1,47 @@
+import {apiRequest} from './apiClient';
+
+export type AnalyticsData = {
+  views?: number;
+  likes?: number;
+  comments?: number;
+  bookmarks?: number;
+  publishes?: number;
+  topPosts?: Array<{
+    id: string;
+    title?: string;
+    views?: number;
+    likes?: number;
+  }>;
+};
+
+export type WeeklyRecapData = {
+  postsWritten?: number;
+  totalViews?: number;
+  newFollowers?: number;
+  topPost?: {
+    id: string;
+    title?: string;
+    views?: number;
+  };
+  available?: boolean;
+};
+
+const authHeaders = (token: string) => ({Authorization: `Bearer ${token}`});
+
+export const analyticsApi = {
+  async getWriterAnalytics(token: string, range = '30d'): Promise<{analytics: AnalyticsData}> {
+    const params = new URLSearchParams();
+    params.set('range', range);
+    return apiRequest('/analytics?' + params.toString(), {
+      method: 'GET',
+      headers: authHeaders(token),
+    });
+  },
+
+  async getWeeklyRecap(token: string): Promise<{recap: WeeklyRecapData}> {
+    return apiRequest('/recap/weekly', {
+      method: 'GET',
+      headers: authHeaders(token),
+    });
+  },
+};

@@ -1,0 +1,112 @@
+# Improve ExploreScreen to match webapp
+
+## Context
+The mobile ExploreScreen is currently a bare search-only page — it shows nothing until the user types 2+ characters, then displays simple text rows for results. The webapp's Explore page is much richer: it displays a **#1 Hottest post hero card**, **runners-up (#2–#5)**, and the same search functionality. This plan brings the mobile Explore page in line with the webapp.
+
+## What changes
+
+### Default view (before searching)
+Instead of an empty state, show **monthly hottest posts**:
+1. **Hero card** — The #1 hottest post as a full-width `PostCard` with a "#1 Hottest" badge (FireIcon + text overlay on top-left)
+2. **Runners-up list** — Posts #2–#5 as compact ranked rows (rank number, title, author avatar+name, hot score pill)
+
+### Search mode (when user types 2+ chars)
+Keep the existing search behavior (users + posts tabs) but upgrade post results to use `PostCard` instead of plain text rows.
+
+### New API method
+Add `getHottestMonthly()` to `mobileApi.ts` — calls the existing server endpoint `GET /journals/hottest-monthly`.
+
+### New utility
+Add `calculateReadingTime()` to `journalHelpers.ts` — matches the webapp logic (150 wpm, returns "X min read").
+
+## Files to edit
+
+### 1. `apps/mobile/src/lib/api/mobileApi.ts`
+- Add method:
+  ```ts
+  async getHottestMonthly(limit = 5, userId?: string): Promise<CursorPage<JournalItem>>
+  ```
+  Calls `GET /journals/hottest-monthly?limit={limit}&userId={userId}`
+
+### 2. `apps/mobile/src/lib/utils/journalHelpers.ts`
+- Add function:
+  ```ts
+  export const calculateReadingTime = (text: string): string => { ... }
+  ```
+  Logic: word count / 150 wpm, ceil, return `"X min read"` / `"X mins read"`
+
+### 3. `apps/mobile/src/screens/Home/ExploreScreen.tsx` — full rewrite
+**Imports to add:** `useAuth`, `PostCard`, `PostCardSkeleton`, `FireIcon`, `BadgeCheckIcon`, `mobileApi` methods, `extractPlainText`, `extractBannerImage`, `resolveCount`, `calculateReadingTime`, `useBookmarkMutation`, `useMutation`, `socialApi`, `queryClient`, `Image`
+
+**New data fetching:**
+- `hottestQuery` — `useQuery` calling `mobileApi.getHottestMonthly(5, user?.id)`, staleTime 5 min
+- Keep existing `usersQuery` and `journalsQuery` for search
+
+**New state:**
+- Existing: `query`, `activeTab`
+- Derive: `isSearching = normalizedQuery.length >= 2`
+
+**Layout — two modes:**
+
+**A) Default mode (`!isSearching`)**
+```
+SafeAreaView
+  Header ("Explore" + SearchInput)
+  ScrollView
+    Hero section
+      PostCard for #1 post with "#1 Hottest" badge overlay (FireIcon + label)
+    Runners section
+      SectionTitle "Top This Month"
+      RunnerRow × 4 (#2–#5): rank | thumbnail | title + author | hot score pill
+    Loading: 3x PostCardSkeleton
+    Empty: EmptyState "No hot posts yet this month"
+```
+
+**B) Search mode (`isSearching`)**
+```
+SafeAreaView
+  Header ("Explore" + SearchInput)
+  Tab chips (All / Users / Posts)
+  FlatList
+    Users section (same as current, with Avatar rows)
+    Posts section — upgrade from text rows to PostCard components
+    Empty state
+```
+
+**Runner row component** (inline, not a separate file):
+- `View` row: rank number (styled in amber for #2–3), post thumbnail (60×60 rounded), title (2 lines), author name, hot score pill with FireIcon
+- Pressable → navigates to PostDetail
+
+**Hero badge overlay:**
+- Absolute-positioned View on top-left of PostCard
+- FireIcon + "#1 Hottest" text
+- Semi-transparent dark background with amber border, rounded
+
+**Interaction handlers:**
+- Reactions, bookmarks, comments, reposts — same pattern as HomeFeedScreen
+- Author press → VisitProfile or Profile tab
+
+## Reusable pieces (no new files needed)
+- `PostCard` — already supports `bannerImage`, `readingTime`, `postType`, `bannerContent`
+- `PostCardSkeleton` — loading state
+- `FireIcon` — already exported from icons
+- `Avatar`, `Chip`, `SearchInput`, `EmptyState` — already imported
+- `extractPlainText`, `extractBannerImage`, `resolveCount` — from journalHelpers
+- `useBookmarkMutation` — from hooks
+- Server endpoint `GET /journals/hottest-monthly` — already exists
+
+## Files NOT changed
+- No new component files — everything is inline in ExploreScreen or uses existing components
+- No navigation changes — ExploreScreen route already exists
+- No server changes — endpoint already exists
+
+## Verification
+- ExploreScreen shows hottest posts on load (hero + runners)
+- Tapping a hottest post navigates to PostDetail
+- Typing 2+ chars switches to search mode with tab filters
+- Search results show PostCard for posts, Avatar rows for users
+- Clearing search returns to hottest view
+- Loading skeletons display while hottest data loads
+- Empty state shows when no hottest posts exist
+- Reactions/bookmarks work on explore PostCards
+- No new TypeScript errors

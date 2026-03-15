@@ -1,0 +1,564 @@
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-58-            }
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-59-        },
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:60:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-61-        enabled: showReplies,
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:62:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-63-    })
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-64-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-128-                // console.log(message);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-129-            }
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:130:            queryClient.invalidateQueries({ queryKey: ['getPostReplies', parent_id] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx:131:            queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-132-            setReply('')
+C:\Users\johnm\iskrib_v3\client\src\components\comments\commentsCards.jsx-133-            setShowReplies(true)
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-52-            }
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-53-        },
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:54:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:55:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-56-    })
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-57-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-147-                // console.log(message)
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-148-            }
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:149:            queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:150:            queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:151:            queryClient.invalidateQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:152:            queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-153-        } catch (error) {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-154-            queryClient.setQueryData(['postComments', postId], previousComments);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-117-        queryFn: () => getRelatedPosts(journalId),
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-118-        enabled: !!journalId,
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx:119:        staleTime: 10 * 60 * 1000,
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-120-        retry: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-121-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-37-        },
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-38-        enabled: !!promptId,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:39:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx:40:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-41-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\PromptResponsesModal.jsx-42-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-8-        queryKey: ['todaysPrompt'],
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-9-        queryFn: getTodaysPrompt,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:10:        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:11:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-12-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-13-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-16-        queryFn: () => getPromptResponses(prompt.id),
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-17-        enabled: !!prompt?.id,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:18:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:19:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-20-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-21-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-41-        queryFn: () => getWeeklyRecap(session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-42-        enabled: !!session?.access_token,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:43:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:44:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-45-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-46-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-48-        queryKey: ['todaysPrompt'],
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-49-        queryFn: getTodaysPrompt,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:50:        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:51:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-52-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-53-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-56-        queryFn: () => getPromptResponses(prompt.id),
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-57-        enabled: !!prompt?.id,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:58:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:59:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-60-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-61-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-58-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-59-        enabled: !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:60:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:61:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-62-    })
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-63-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-37-        },
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-38-        enabled: !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:39:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:40:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-41-    })
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-42-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-65-            if(saveData){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-66-                // console.log(saveData)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:67:                queryClient.invalidateQueries({queryKey: ['journals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:68:                queryClient.invalidateQueries({queryKey: ['userJournals', user?.userData?.[0].id]})
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:69:                queryClient.invalidateQueries({queryKey: ['streak', user?.userData?.[0]?.id]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-70-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-71-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-104-        },
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-105-        enabled: !!user?.userData?.[0].id,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:106:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:107:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-108-    })
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-109-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-188-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-189-            setJournalIsDeleted(true)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:190:            queryClient.invalidateQueries({ queryKey: queryKey });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:191:            queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:192:            queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-193-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-194-            setTimeout(() =>{
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-239-                caption: captionText
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-240-            });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:241:            queryClient.invalidateQueries({queryKey: ['userJournals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:242:            queryClient.invalidateQueries({queryKey: ['journals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:243:            queryClient.invalidateQueries({queryKey: ['visitedProfileJournals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-244-            setShowCaptionEditor(null);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-245-            setCaptionData(null);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-34-        queryFn: () => getWeeklyRecap(session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-35-        enabled: !!session?.access_token && !dismissed,
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:36:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:37:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-38-    });
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-39-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-182-            return undefined;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-183-        } ,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:184:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:185:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-186-    })
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-187-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-202-            return undefined;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-203-        },
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:204:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:205:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-206-        enabled: isFollowingFeed && !!session?.access_token,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-207-    })
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-223-            return undefined;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-224-        },
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:225:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:226:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-227-        enabled: isForYouFeed && !!session?.access_token,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-228-    })
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-237-        queryFn: () => searchJournals(committedSearchQuery, 10, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-238-        enabled: isPostSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:239:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:240:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-241-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-242-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-248-        queryFn: () => searchJournals(debouncedSearchInput, 6, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-249-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === 'posts',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:250:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:251:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-252-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-253-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-261-        queryFn: () => searchUsers(committedSearchQuery, 10),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-262-        enabled: isPeopleSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:263:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:264:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-265-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-266-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-272-        queryFn: () => searchUsers(debouncedSearchInput, 6),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-273-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === 'people',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:274:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:275:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-276-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-277-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-69-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-70-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:71:            queryClient.invalidateQueries(['userJournals', user?.userData?.[0].id])
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-72-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-73-            setIsUpdatingJournal(false)
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx-88-            });
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx-89-            setInterestsSuccess('Writing preferences updated.');
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx:90:            queryClient.invalidateQueries({ queryKey: ['userData', session?.user?.id] });
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx-91-            queryClient.removeQueries({ queryKey: ['journals-for-you'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SettingsPage\SettingsPage.jsx-92-        } catch (err) {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-118-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-119-        enabled: !!session,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:120:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:121:        staleTime: 1000 * 60 * 2
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-122-    })
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-123-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-10-        queryFn: () => getPostReactions(journalId),
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-11-        enabled: !!journalId,
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:12:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:13:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-14-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-15-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-160-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-161-        enabled: !!session?.access_token,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:162:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:163:        staleTime: 1000 * 60 * 2
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-164-    })
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-165-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-104-        queryFn: ({ queryKey }) => getJournalById(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-105-        enabled: shouldFetchPost,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:106:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:107:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-108-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-109-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-175-        queryKey: ['followsData', user?.userData?.[0]?.id, postData?.userId],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-176-        queryFn: ({ queryKey }) => getFollowsData(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:177:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-178-        cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-179-        enabled: !!user?.userData?.[0]?.id && !!postData?.userId,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-102-            }
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-103-            await submitProfileData(formdata, session?.access_token);
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx:104:            queryClient.invalidateQueries({ queryKey: ['userData', session?.user?.id] });
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-105-            return true;
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-106-        } catch (error) {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-121-            console.error('non-fatal: failed to save onboarding preferences:', err);
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-122-        }
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx:123:        queryClient.invalidateQueries({ queryKey: ['userData', session?.user?.id] });
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-124-        onComplete(action);
+C:\Users\johnm\iskrib_v3\client\src\components\Onboarding\OnboardingWizard.jsx-125-    }, [session, writingInterests, writingGoal, queryClient, onComplete]);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-186-            await updateProfileData(formdata, session?.access_token);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-187-            setProfileEditAvatar(null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:188:            queryClient.invalidateQueries({ queryKey: ["userData"] });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-189-            setShowProfileEditor(false);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-190-        } catch {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-215-            setImageSrc(null);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-216-            setShowBgPicker(false);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:217:            queryClient.invalidateQueries({ queryKey: ["userData"] });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-218-        } catch {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-219-            showError("Failed to update background. Please try again.");
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-284-        try {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-285-            await updateFontColor(session?.access_token, formdata);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx:286:            queryClient.invalidateQueries({ queryKey: ["userData"] });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-287-            setShowFontColorSelector(false);
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\MyProfile.jsx-288-        } catch {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-171-    const handleOnboardingComplete = useCallback((action) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-172-        setShowOnboarding(false);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:173:        queryClient.invalidateQueries({ queryKey: ['userData', session?.user?.id] });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-174-        if (action === 'write') {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-175-            handleOpenTextEditor();
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-7-        queryFn: () => getStreak(userId),
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-8-        enabled: !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:9:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:10:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-11-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-12-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-29-        queryFn: () => searchUsers(searchQuery, 10),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-30-        enabled: searchQuery.length >= 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:31:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:32:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-33-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-34-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-31-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-32-        },
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:33:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-34-        enabled: !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:35:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-36-    })
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-37-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-37-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-38-        },
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:39:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:40:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-41-    })
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-42-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-27-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-28-        },
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:29:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-30-        enabled: !!session,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:31:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-32-    })
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-33-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-23-        getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextCursor : undefined),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-24-        enabled: Boolean(userId && session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:25:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:26:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-27-    });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-28-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-61-            });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-62-
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:63:            queryClient.invalidateQueries({ queryKey: ["profileMedia", userId] });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-64-
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-65-            if (response?.clearedAvatar || response?.clearedBackground) {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx:66:                queryClient.invalidateQueries({ queryKey: ["userData"] });
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-67-            }
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\components\ProfileMediaSection.jsx-68-        },
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-214-        queryKey: ["explore-hottest-monthly-feed", userId, currentUtcMonthKey],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-215-        queryFn: () => getMonthlyHottestJournals(userId, 10),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:216:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:217:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-218-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-219-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-221-        queryKey: ["explore-interest-sections", session?.access_token],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-222-        queryFn: () => getInterestSections(session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:223:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:224:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-225-        enabled: !!session?.access_token && !isSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-226-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-235-        queryFn: () => searchJournals(committedSearchQuery, 10, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-236-        enabled: isSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:237:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:238:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-239-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-240-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-246-        queryFn: () => searchJournals(debouncedSearchInput, 6, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-247-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === "posts",
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:248:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:249:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-250-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-251-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-257-        queryFn: () => searchUsers(debouncedSearchInput, 6),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-258-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === "people",
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:259:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:260:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-261-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-262-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx-33-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx-34-            setIsSaving(false)
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:35:            queryClient.invalidateQueries({ queryKey: ['getOpinions'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx:36:            queryClient.invalidateQueries({ queryKey: ['getMyOpinions'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx-37-        } catch (error) {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsEditor.jsx-38-            setIsSaving(false)
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-31-        },
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-32-        enabled: !!opinionId,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:33:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:34:        staleTime: 1000 * 60 * 5
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-35-    });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-36-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-40-            formadata.append('opinion', reply);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-41-            await addReplyOpinion(formadata, receiver_id, sender_id, parent_id, session?.access_token);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:42:            queryClient.invalidateQueries({ queryKey: ['getReplyOpinion', opinionId] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:43:            queryClient.invalidateQueries({ queryKey: ['getOpinions'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:44:            queryClient.invalidateQueries({ queryKey: ['getViewOpinion'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-45-            setReplyOpinion('');
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-46-            if (textAreaRef.current) {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-53-                textAreaRef.current.innerText = '';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-54-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:55:            queryClient.invalidateQueries({ queryKey: ['getReplyOpinion', opinionId] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:56:            queryClient.invalidateQueries({ queryKey: ['getOpinions'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:57:            queryClient.invalidateQueries({ queryKey: ['getViewOpinion'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-58-        }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-59-    };
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-38-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-39-        },
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:40:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:41:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-42-    });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-43-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-37-        queryFn: () => getUserByUsername(urlUsername),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-38-        enabled: isUsernameRoute,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:39:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:40:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-41-    });
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-42-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-142-        queryFn:({queryKey}) => getUserData(queryKey[1]),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-143-        enabled: !!visitedUserId && !isUsernameRoute,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:144:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:145:        staleTime: 1000 * 60 * 10
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-146-    })
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-147-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-157-        queryKey: ['followsData', user?.userData?.[0].id, visitedUserId],
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-158-        queryFn: ({queryKey}) => getFollowsData(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:159:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-160-        cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-161-        enabled: !!user?.userData?.[0].id && !!visitedUserId,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:162:        refetchOnWindowFocus: false
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-163-    })
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-164-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-22-        queryKey: ['getViewOpinion', opinionId, userId],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-23-        queryFn: ({ queryKey }) => getViewOpinion(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:24:        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-25-        cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-26-        enabled: !!opinionId && !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:27:        refetchOnWindowFocus: false
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-28-    });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-29-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-47-                textAreaRef.current.innerText = '';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-48-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:49:            queryClient.invalidateQueries({ queryKey: ['getViewOpinion', opinionId, userId] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:50:            queryClient.invalidateQueries({ queryKey: ['getReplyOpinion', opinionId] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:51:            queryClient.invalidateQueries({ queryKey: ['getOpinions'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-52-        } catch (error) {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-53-            console.error(error);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-56-                textAreaRef.current.innerText = '';
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-57-            }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:58:            queryClient.invalidateQueries({ queryKey: ['getViewOpinion', opinionId, userId] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:59:            queryClient.invalidateQueries({ queryKey: ['getReplyOpinion', opinionId] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:60:            queryClient.invalidateQueries({ queryKey: ['getOpinions'] });
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-61-        }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-62-    };
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-86-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-87-        initialPageParam: null,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:88:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx:89:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-90-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\StoryBrowser\StoryBrowser.jsx-91-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-15-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-16-        enabled: !!token,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:17:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:18:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-19-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-20-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-33-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-34-        enabled: !!token,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:35:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:36:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-37-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-38-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-43-        queryFn: () => getStoryById(storyId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-44-        enabled: !!storyId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:45:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:46:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-47-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-48-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-53-        queryFn: () => getChapter(storyId, chapterId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-54-        enabled: !!storyId && !!chapterId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:55:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:56:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-57-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-58-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-63-        queryFn: () => getChapterCommentCounts(chapterId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-64-        enabled: !!chapterId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:65:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:66:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-67-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-68-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-81-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-82-        enabled: !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:83:        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:84:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-85-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-86-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-91-        queryFn: () => getChapterComments(chapterId, paragraphIndex, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-92-        enabled: !!chapterId && paragraphIndex !== null && paragraphIndex !== undefined,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:93:        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:94:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-95-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-96-};
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-18-        mutationFn: (formData) => createStory(token, formData),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-19-        onSuccess: () => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:20:            queryClient.invalidateQueries({ queryKey: ['myStories'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-21-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-22-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-28-        mutationFn: ({ storyId, formData }) => updateStory(token, storyId, formData),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-29-        onSuccess: (_data, { storyId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:30:            queryClient.invalidateQueries({ queryKey: ['myStories'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:31:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-32-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-33-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-39-        mutationFn: (storyId) => deleteStory(token, storyId),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-40-        onSuccess: () => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:41:            queryClient.invalidateQueries({ queryKey: ['myStories'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-42-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-43-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-49-        mutationFn: ({ storyId, title }) => createChapter(token, storyId, title),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-50-        onSuccess: (_data, { storyId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:51:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:52:            queryClient.invalidateQueries({ queryKey: ['myStories'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-53-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-54-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-60-        mutationFn: ({ storyId, chapterId, data }) => updateChapter(token, storyId, chapterId, data),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-61-        onSuccess: (_data, { storyId, chapterId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:62:            queryClient.invalidateQueries({ queryKey: ['chapter', storyId, chapterId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:63:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:64:            queryClient.invalidateQueries({ queryKey: ['myStories'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-65-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-66-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-72-        mutationFn: ({ storyId, chapterId }) => deleteChapter(token, storyId, chapterId),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-73-        onSuccess: (_data, { storyId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:74:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:75:            queryClient.invalidateQueries({ queryKey: ['myStories'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-76-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-77-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-83-        mutationFn: ({ storyId, chapterOrder }) => reorderChapters(token, storyId, chapterOrder),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-84-        onSuccess: (_data, { storyId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:85:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-86-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-87-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-110-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-111-        onSettled: (_data, _err, storyId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:112:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-113-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-114-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-120-        mutationFn: ({ chapterId, data }) => addChapterComment(token, chapterId, data),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-121-        onSuccess: (_data, { chapterId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:122:            queryClient.invalidateQueries({ queryKey: ['chapterComments', chapterId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:123:            queryClient.invalidateQueries({ queryKey: ['chapterCommentCounts', chapterId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-124-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-125-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-147-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-148-        onSettled: (_data, _err, storyId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:149:            queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js:150:            queryClient.invalidateQueries({ queryKey: ['myLibrary'] });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-151-        },
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryMutations.js-152-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-26-        getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextCursor : undefined),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-27-        enabled: Boolean(visitedUserId && session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:28:        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx:29:        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-30-    });
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\components\VisitedProfileMediaSection.jsx-31-

@@ -1,0 +1,71 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { Card } from '../../../components/Card';
+import { DashboardSummary } from '../../../domain/models';
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+
+interface InsightsPanelProps {
+  summary: DashboardSummary;
+}
+
+export function InsightsPanel({ summary }: InsightsPanelProps) {
+  const avgSpend = summary.completedCarts.length
+    ? summary.totalSpent / summary.completedCarts.length
+    : 0;
+
+  return (
+    <Card style={styles.card}>
+      <Text style={styles.title}>Trip insights</Text>
+      <View style={styles.row}>
+        <View style={styles.stat}>
+          <Text style={styles.statValue}>{summary.overBudgetCount}</Text>
+          <Text style={styles.statLabel}>Over budget</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statValue}>{formatCurrency(avgSpend)}</Text>
+          <Text style={styles.statLabel}>Avg per trip</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statValue}>{formatCurrency(summary.totalSpent)}</Text>
+          <Text style={styles.statLabel}>Total spent</Text>
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    gap: 14,
+  },
+  title: {
+    ...typography.title,
+    color: colors.ink,
+    fontSize: 18,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceAlt,
+  },
+  statValue: {
+    ...typography.label,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  statLabel: {
+    ...typography.caption,
+    color: colors.mutedInk,
+    textAlign: 'center',
+  },
+});

@@ -1,0 +1,50 @@
+import { useCallback } from 'react';
+
+export default function InputField({ label, value, onChange, type = 'text', suffix, readOnly, step }) {
+  const handleChange = useCallback((e) => {
+    const val = type === 'number' ? parseFloat(e.target.value) : e.target.value;
+    if (type === 'number' && isNaN(val)) return;
+    onChange(val);
+  }, [onChange, type]);
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '8px',
+    }}>
+      <label style={{
+        flex: '0 0 80px',
+        fontSize: '12px',
+        color: 'var(--color-text-secondary)',
+      }}>
+        {label}
+      </label>
+      <div style={{ display: 'flex', alignItems: 'center', flex: 1, gap: '4px' }}>
+        <input
+          type={type}
+          value={value}
+          onChange={handleChange}
+          readOnly={readOnly}
+          step={step}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 8px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+            background: readOnly ? 'var(--color-panel-bg)' : 'white',
+            color: readOnly ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
+          }}
+        />
+        {suffix && (
+          <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+            {suffix}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}

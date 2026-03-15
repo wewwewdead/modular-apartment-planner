@@ -1,0 +1,8 @@
+export function sketchSerialize(project) {
+  return {
+    schemaType: 'sketch',
+    schemaVersion: 1,
+    data: project,
+    savedAt: new Date().toISOString(),
+  };
+}

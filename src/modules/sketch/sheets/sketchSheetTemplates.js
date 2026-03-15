@@ -1,0 +1,104 @@
+import { createSheet, createSheetViewport } from '@/domain/sheetModels';
+
+export function generateObjectSheet(project, objectId) {
+  const object = objectId
+    ? (project.objects || []).find((entry) => entry.id === objectId)
+    : null;
+  const name = object?.name || project.name || 'Object';
+
+  return createSheet(`${name} Object`, {
+    number: `S${String((project.sheets || []).length + 1).padStart(2, '0')}`,
+    drawingName: `${name} Object`,
+    scaleMode: 'as_noted',
+    viewports: [
+      createSheetViewport('sketch_object_top', null, {
+        sourceRefId: objectId,
+        title: `${name} — Top`,
+        role: 'primary',
+        scale: 5,
+      }),
+      createSheetViewport('sketch_object_front', null, {
+        sourceRefId: objectId,
+        title: `${name} — Front`,
+        role: 'secondary',
+        scale: 5,
+      }),
+      createSheetViewport('sketch_object_side', null, {
+        sourceRefId: objectId,
+        title: `${name} — Side`,
+        role: 'secondary',
+        scale: 5,
+      }),
+      createSheetViewport('sketch_part_list', null, {
+        sourceRefId: objectId,
+        sourceObjectId: objectId,
+        title: `${name} — Parts List`,
+        role: 'supplemental',
+        scale: 1,
+      }),
+    ],
+  });
+}
+
+export function generateAssemblySheet(project, assemblyId) {
+  const assembly = assemblyId
+    ? (project.assemblies || []).find((a) => a.id === assemblyId)
+    : null;
+  const name = assembly?.name || project.name || 'Assembly';
+
+  const sheet = createSheet(`${name} Assembly`, {
+    number: `S${String((project.sheets || []).length + 1).padStart(2, '0')}`,
+    drawingName: `${name} Assembly`,
+    scaleMode: 'as_noted',
+    viewports: [
+      createSheetViewport('sketch_assembly_top', null, {
+        sourceRefId: assemblyId,
+        title: `${name} — Top`,
+        role: 'primary',
+        scale: 5,
+      }),
+      createSheetViewport('sketch_assembly_front', null, {
+        sourceRefId: assemblyId,
+        title: `${name} — Front`,
+        role: 'secondary',
+        scale: 5,
+      }),
+      createSheetViewport('sketch_assembly_side', null, {
+        sourceRefId: assemblyId,
+        title: `${name} — Side`,
+        role: 'secondary',
+        scale: 5,
+      }),
+      createSheetViewport('sketch_part_list', null, {
+        sourceRefId: assemblyId,
+        title: `${name} — Parts List`,
+        role: 'supplemental',
+        scale: 1,
+      }),
+    ],
+  });
+
+  return sheet;
+}
+
+export function generatePartDetailSheet(project, partId) {
+  const part = project.parts.find((p) => p.id === partId);
+  const name = part?.name || 'Part';
+
+  const sheet = createSheet(`${name} Detail`, {
+    number: `S${String((project.sheets || []).length + 1).padStart(2, '0')}`,
+    drawingName: `${name} Detail`,
+    scaleMode: 'custom',
+    scaleLabel: '1:5',
+    viewports: [
+      createSheetViewport('sketch_part_detail', null, {
+        sourceRefId: partId,
+        title: `${name} — Detail`,
+        role: 'primary',
+        scale: 5,
+      }),
+    ],
+  });
+
+  return sheet;
+}

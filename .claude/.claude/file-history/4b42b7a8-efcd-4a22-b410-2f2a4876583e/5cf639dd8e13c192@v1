@@ -1,0 +1,112 @@
+# Redesign Dashboard Briefing — Editorial Morning Digest
+
+## Context
+The current `.dashboard-briefing` is functional but visually busy — boxy stat tiles, left amber border, thick cards, motivational micro-copy on every tile, heavy community section. The user wants it **simpler, more aesthetic, and dramatically better**. No JSX structure changes to data flow — purely visual/CSS redesign with minor JSX cleanup.
+
+## Design Direction: "Morning Digest"
+A clean, typographic-first editorial layout inspired by literary magazines. Let the numbers and words breathe. Remove chrome, reduce visual noise, let hierarchy come from typography and whitespace instead of borders and backgrounds.
+
+**Key Aesthetic Moves:**
+- Drop the left amber border and card background — open, borderless feel
+- Stats become a horizontal inline row with large serif numbers + tiny labels, separated by subtle vertical hairlines (not boxed tiles)
+- Remove per-tile motivational micro-copy (visual noise) — keep only the single encouragement line
+- Best post becomes a minimal inline callout, not a gradient card
+- Community highlights condensed into one subtle line
+- Prompt section becomes the visual hero — large serif text, generous whitespace
+- CTA button becomes understated: outlined or text-link style instead of bright amber pill
+- Subtle top-border accent (thin amber line) instead of thick left border
+- Softer entrance animations — fade only, no Y-translate jitter
+
+## Files to Modify
+
+### 1. `client/src/components/DashboardBriefing/DashboardBriefing.css` — Full restyle
+Complete CSS rewrite for `.dashboard-briefing` and all child classes. Key changes:
+
+**Container (`.dashboard-briefing`):**
+- Remove `border-left: 3px solid amber`, `border-radius: 14px`, `box-shadow`
+- Add `border-top: 2px solid var(--accent-amber)` — thin top accent
+- Background: transparent or very subtle `var(--bg-card)` with no shadow
+- Generous padding: `24px 24px 20px`
+
+**Header (`.dashboard-briefing-header`):**
+- Date formatted larger in Playfair Display (16px), the "Today" label smaller/muted above it
+- Or: merge into a single elegant line "Tuesday, March 4"
+
+**Stats Row (`.recap-tiles-grid`):**
+- Switch from `grid 4-col` to `display: flex; justify-content: space-around`
+- Remove tile backgrounds, borders, hover effects
+- Numbers: Playfair Display 28px, labels: Outfit 10px uppercase tracking
+- Vertical hairline dividers between tiles via `border-right: 1px solid var(--border-card)` on all but last
+- No per-tile micro-copy — cleaner
+
+**Best Post (`.recap-best-post`):**
+- Remove gradient background, border, shadow
+- Simple: star icon + title as a subtle text link, single line
+- Hover: just color change, no transform
+
+**Community (`.recap-community`):**
+- More compact — avatars slightly larger (26px), text tighter
+- Remove uppercase label, integrate more naturally
+
+**Prompt (`.dashboard-prompt`):**
+- Remove left amber border on prompt text
+- Larger font: Lora 20px → feels like a pull-quote
+- More generous vertical spacing
+- Category badge more refined (smaller, ghost style)
+
+**CTA Button (`.dashboard-prompt-write-btn`):**
+- Ghost/outline style: `border: 1.5px solid var(--accent-amber)`, `background: transparent`, `color: var(--accent-amber)`
+- Hover: fill with amber, text goes white
+- Remove heavy box-shadow
+
+**Response Avatars:**
+- Tighter overlap stack (negative margin) for a more polished look
+- Keep badge glow animations (they're nice)
+
+**Dark Mode:**
+- Update dark overrides to match new minimal approach
+- Container gets very subtle `rgba(255,255,255,0.02)` bg in dark mode
+
+**Mobile (`@media max-width: 480px`):**
+- Stats: 2x2 grid fallback (already exists, keep)
+- Tighter padding but maintain breathing room
+- Prompt text: 17px
+
+### 2. `client/src/components/DashboardBriefing/StatTile.jsx` — Remove micro-copy
+- Remove the `{microCopy && ...}` line (line 24)
+- Simplify motion: just `opacity` fade, remove `y: 14` translate
+- Keep animated counter
+
+### 3. `client/src/components/DashboardBriefing/RecapSection.jsx` — Minor cleanup
+- Remove microCopy from tiles array (lines 49-53): drop `microCopy: getXCopy(x)` props
+- Remove imports for `getPostsCopy`, `getWordsCopy`, `getReactionsCopy`, `getViewsCopy` (keep `getOverallEncouragement`)
+- Keep BestPostCard and CommunityHighlights as-is (styling handles the simplification)
+
+### 4. `client/src/components/DashboardBriefing/BestPostCard.jsx` — Lighter animation
+- Change motion: `y: 14` → remove, just opacity fade
+- Keep click behavior
+
+### 5. `client/src/components/DashboardBriefing/DashboardBriefing.jsx` — Lighter entrance
+- Soften entrance animation: remove `y: -10` translate, just opacity fade
+- Keep all data flow, collapse logic, prompt logic unchanged
+
+### 6. `client/src/components/DashboardBriefing/PromptSection.jsx` — No changes needed
+All prompt simplification handled via CSS.
+
+## What Stays the Same
+- All data fetching, queries, API calls
+- Collapse/expand logic with localStorage
+- PromptResponsesModal (modal styles are fine)
+- Badge glow animations (legend/og rings)
+- Animated counter hook
+- All navigation handlers
+
+## Verification
+1. Open the home feed — dashboard briefing should appear clean and editorial
+2. Stats should display as an elegant horizontal row with large serif numbers
+3. Prompt text should feel like a magazine pull-quote
+4. Write button should be outlined/ghost style, fill on hover
+5. Collapse/expand should still animate smoothly
+6. Test dark mode — minimal container should look clean
+7. Test mobile (480px) — stats should fall to 2-col grid, prompt text slightly smaller
+8. Hover states should feel polished (no jarring transforms)

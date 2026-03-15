@@ -1,0 +1,234 @@
+import React, {useCallback, useRef} from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {CommentThread} from './CommentThread';
+import {XIcon} from '../icons';
+import {PrimaryButton} from '../PrimaryButton';
+import {useComments} from '../../hooks/useComments';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+
+type CommentModalProps = {
+  visible: boolean;
+  postId: string;
+  receiverId?: string;
+  commentCount?: number;
+  onClose: () => void;
+};
+
+export function CommentModal({
+  visible,
+  postId,
+  receiverId,
+  commentCount,
+  onClose,
+}: CommentModalProps) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  const onReplyActivated = useCallback(() => {
+    setTimeout(() => {
+      inputRef.current?.focus();
+      scrollViewRef.current?.scrollToEnd({animated: true});
+    }, 100);
+  }, []);
+
+  const {
+    comments,
+    isLoading,
+    commentInput,
+    setCommentInput,
+    replyingTo,
+    setReplyingTo,
+    expandedReplies,
+    fetchedReplies,
+    loadingReplies,
+    handleReply,
+    handleToggleReplies,
+    submitComment,
+    isSubmitting,
+  } = useComments(postId, receiverId, token, onReplyActivated);
+
+  const topLevelComments = comments.filter(c => !c.parent_id);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}>
+      <SafeAreaView style={[styles.container, {backgroundColor: colors.bgPrimary}]}>
+        {/* Header */}
+        <View style={[styles.header, {borderBottomColor: colors.borderCard}]}>
+          <Text style={[styles.headerTitle, {color: colors.textHeading}]}>
+            Comments{commentCount != null ? ` (${commentCount})` : ''}
+          </Text>
+          <Pressable onPress={onClose} hitSlop={12}>
+            <XIcon size={22} color={colors.textMuted} />
+          </Pressable>
+        </View>
+
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}>
+          {/* Comments list */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.flex}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled">
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color={colors.loaderColor} />
+              </View>
+            ) : topLevelComments.length === 0 ? (
+              <Text style={[styles.emptyText, {color: colors.textMuted}]}>
+                No comments yet. Be the first!
+              </Text>
+            ) : (
+              topLevelComments.map(comment => (
+                <CommentThread
+                  key={comment.id}
+                  comment={comment}
+                  postId={postId}
+                  allComments={comments}
+                  fetchedReplies={fetchedReplies}
+                  loadingReplies={loadingReplies}
+                  isLoggedIn={!!token}
+                  onReply={handleReply}
+                  onToggleReplies={handleToggleReplies}
+                  expandedReplies={expandedReplies}
+                  colors={colors}
+                  depth={0}
+                />
+              ))
+            )}
+          </ScrollView>
+
+          {/* Input area */}
+          {token ? (
+            <View style={[styles.inputArea, {borderTopColor: colors.borderCard, backgroundColor: colors.bgPrimary}]}>
+              {replyingTo && (
+                <View style={[styles.replyBanner, {backgroundColor: colors.bgSecondary}]}>
+                  <Text style={[styles.replyBannerText, {color: colors.textPrimary}]}>
+                    Replying to {replyingTo.userName}
+                  </Text>
+                  <Pressable onPress={() => setReplyingTo(null)} hitSlop={8}>
+                    <XIcon size={16} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+              )}
+              <View style={styles.inputRow}>
+                <TextInput
+                  ref={inputRef}
+                  value={commentInput}
+                  onChangeText={setCommentInput}
+                  placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : 'Write a comment...'}
+                  placeholderTextColor={colors.textFaint}
+                  style={[
+                    styles.textInput,
+                    {
+                      backgroundColor: colors.bgSecondary,
+                      borderColor: colors.borderCard,
+                      color: colors.textPrimary,
+                    },
+                  ]}
+                  maxLength={200}
+                  multiline
+                />
+                <PrimaryButton
+                  label={isSubmitting ? 'Posting...' : 'Post'}
+                  onPress={submitComment}
+                  disabled={commentInput.trim().length === 0 || isSubmitting}
+                />
+              </View>
+            </View>
+          ) : null}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerTitle: {
+    ...typeScale.h3,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  loadingContainer: {
+    paddingVertical: spacing.xxxl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: spacing.xxxl,
+  },
+  inputArea: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+  },
+  replyBannerText: {
+    fontFamily: fonts.ui.medium,
+    fontSize: 13,
+  },
+  inputRow: {
+    gap: spacing.md,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    textAlignVertical: 'top',
+    minHeight: 60,
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+});

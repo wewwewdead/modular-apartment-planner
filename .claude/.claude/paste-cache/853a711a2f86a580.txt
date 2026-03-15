@@ -1,0 +1,60 @@
+sources.js:19  Uncaught TypeError: Cannot read properties of undefined (reading 'x')
+    at sources.js:19:51
+    at Array.map (<anonymous>)
+    at boundsFromPoints (sources.js:19:30)
+    at buildPlanSource (sources.js:93:39)
+    at resolveSheetViewportSource (sources.js:180:14)
+    at layout.js:83:34
+    at Array.map (<anonymous>)
+    at buildSheetScene (layout.js:82:45)
+    at SheetCanvas.jsx:33:31
+    at updateMemo (react-dom-client.development.js:8795:19)
+(anonymous) @ sources.js:19
+boundsFromPoints @ sources.js:19
+buildPlanSource @ sources.js:93
+resolveSheetViewportSource @ sources.js:180
+(anonymous) @ layout.js:83
+buildSheetScene @ layout.js:82
+(anonymous) @ SheetCanvas.jsx:33
+updateMemo @ react-dom-client.development.js:8795
+useMemo @ react-dom-client.development.js:26484
+exports.useMemo @ react.development.js:1251
+SheetCanvas @ SheetCanvas.jsx:33
+react_stack_bottom_frame @ react-dom-client.development.js:25904
+renderWithHooks @ react-dom-client.development.js:7662
+updateFunctionComponent @ react-dom-client.development.js:10166
+beginWork @ react-dom-client.development.js:11778
+runWithFiberInDEV @ react-dom-client.development.js:871
+performUnitOfWork @ react-dom-client.development.js:17641
+workLoopSync @ react-dom-client.development.js:17469
+renderRootSync @ react-dom-client.development.js:17450
+performWorkOnRoot @ react-dom-client.development.js:16583
+performSyncWorkOnRoot @ react-dom-client.development.js:18972
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:18814
+processRootScheduleInMicrotask @ react-dom-client.development.js:18853
+(anonymous) @ react-dom-client.development.js:18991
+react-dom-client.development.js:9362  An error occurred in the <SheetCanvas> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+defaultOnUncaughtError @ react-dom-client.development.js:9362
+logUncaughtError @ react-dom-client.development.js:9431
+runWithFiberInDEV @ react-dom-client.development.js:871
+lane.callback @ react-dom-client.development.js:9461
+callCallback @ react-dom-client.development.js:7423
+commitCallbacks @ react-dom-client.development.js:7443
+runWithFiberInDEV @ react-dom-client.development.js:874
+commitLayoutEffectOnFiber @ react-dom-client.development.js:14047
+flushLayoutEffects @ react-dom-client.development.js:18138
+commitRoot @ react-dom-client.development.js:17954
+commitRootWhenReady @ react-dom-client.development.js:16824
+performWorkOnRoot @ react-dom-client.development.js:16722
+performSyncWorkOnRoot @ react-dom-client.development.js:18972
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:18814
+processRootScheduleInMicrotask @ react-dom-client.development.js:18853
+(anonymous) @ react-dom-client.development.js:18991
+[NEW] Explain Console errors by using Copilot in Edge: click
+         
+         to explain an error. 
+        Learn more

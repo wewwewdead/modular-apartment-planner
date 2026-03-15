@@ -1,0 +1,40 @@
+.streak-milestone-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--card-bg, rgba(30, 30, 30, 0.95));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 14px;
+    padding: 14px 20px;
+    cursor: pointer;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+
+.streak-milestone-flame {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.streak-milestone-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.streak-milestone-count {
+    font-weight: 700;
+    font-size: 15px;
+    color: #eab308;
+}
+
+.streak-milestone-msg {
+    font-size: 13px;
+    color: var(--text-secondary, #a1a1aa);
+}

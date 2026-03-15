@@ -1,0 +1,187 @@
+import { buildSheetScene } from '@/sheets/layout';
+import { SHEET_COLORS } from '@/sheets/standards';
+import { getViewportHandleRects, getViewportRotationHandle } from '@/sheets/hitTest';
+import SheetViewportContent from './SheetViewportContent';
+import SheetTitleBlock from './sheet/SheetTitleBlock';
+
+const HANDLE_SIZE = 4;
+
+function EmptyViewportMessage({ viewport, message }) {
+  return (
+    <text
+      x={viewport.x + viewport.width / 2}
+      y={viewport.y + viewport.height / 2}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fill={SHEET_COLORS.textFaint}
+      fontSize={4}
+      pointerEvents="none"
+    >
+      {message}
+    </text>
+  );
+}
+
+function ViewportCaption({ viewport }) {
+  const isAbove = viewport.caption.position === 'above';
+  const ruleY = isAbove ? viewport.y - 2.2 : viewport.y + viewport.height + 1.2;
+  const secondaryY = isAbove ? viewport.y - 2.8 : viewport.caption.y;
+  const primaryY = secondaryY - 3.1;
+
+  return (
+    <g className="sheet-viewport-caption" pointerEvents="none">
+      <line
+        x1={viewport.x}
+        y1={ruleY}
+        x2={viewport.x + viewport.width}
+        y2={ruleY}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <text
+        x={viewport.x}
+        y={primaryY}
+        fontSize={3}
+        fill={SHEET_COLORS.text}
+        fontWeight={600}
+        letterSpacing={0.12}
+      >
+        {viewport.caption.primaryText}
+      </text>
+      <text
+        x={viewport.x}
+        y={secondaryY}
+        fontSize={1.9}
+        fill={SHEET_COLORS.textMuted}
+        letterSpacing={0.12}
+      >
+        {viewport.caption.secondaryText}
+      </text>
+    </g>
+  );
+}
+
+export default function SheetRenderer({ project, sheet, selectedId, selectedType }) {
+  const scene = buildSheetScene(project, sheet);
+  if (!scene) return null;
+
+  return (
+    <g className="sheet">
+      <rect
+        x={0}
+        y={0}
+        width={scene.paper.width}
+        height={scene.paper.height}
+        fill={SHEET_COLORS.sheetBackdrop}
+        stroke="none"
+      />
+      <rect
+        x={scene.border.x}
+        y={scene.border.y}
+        width={scene.border.width}
+        height={scene.border.height}
+        fill={SHEET_COLORS.paper}
+        stroke={selectedType === 'sheet' && selectedId === sheet.id ? '#0f8f74' : SHEET_COLORS.border}
+        strokeWidth={selectedType === 'sheet' && selectedId === sheet.id ? 1 : 0.6}
+      />
+      <rect
+        x={scene.liveArea.x}
+        y={scene.liveArea.y}
+        width={scene.liveArea.width}
+        height={scene.liveArea.height}
+        fill="none"
+        stroke={SHEET_COLORS.divider}
+        strokeWidth={0.2}
+      />
+      <SheetTitleBlock titleBlock={scene.titleBlock} />
+
+      {scene.viewports.map((viewport) => {
+        const isSelected = selectedType === 'sheetViewport' && selectedId === viewport.id;
+        return (
+          <g
+            key={viewport.id}
+            className="sheet-viewport"
+            transform={viewport.rotation ? `rotate(${viewport.rotation}, ${viewport.x + viewport.width / 2}, ${viewport.y + viewport.height / 2})` : undefined}
+          >
+            <ViewportCaption viewport={viewport} />
+            <rect
+              x={viewport.x}
+              y={viewport.y}
+              width={viewport.width}
+              height={viewport.height}
+              fill={viewport.source.kind === '3d_preview' ? '#f8fafc' : SHEET_COLORS.paper}
+              stroke={isSelected ? '#0f8f74' : SHEET_COLORS.border}
+              strokeWidth={isSelected ? 0.8 : 0.45}
+            />
+            <rect
+              x={viewport.contentRect.x}
+              y={viewport.contentRect.y}
+              width={viewport.contentRect.width}
+              height={viewport.contentRect.height}
+              fill="none"
+              stroke={SHEET_COLORS.divider}
+              strokeWidth={0.18}
+              pointerEvents="none"
+            />
+            {viewport.source.kind === 'empty' ? (
+              <EmptyViewportMessage viewport={viewport} message={viewport.source.message} />
+            ) : (
+              <svg
+                x={viewport.clipRect.x}
+                y={viewport.clipRect.y}
+                width={viewport.clipRect.width}
+                height={viewport.clipRect.height}
+                viewBox={`0 0 ${viewport.clipRect.width} ${viewport.clipRect.height}`}
+                overflow="hidden"
+                pointerEvents="none"
+              >
+                <g
+                  transform={`translate(${viewport.contentTransform.translateX}, ${viewport.contentTransform.translateY}) scale(${viewport.contentTransform.scale})`}
+                  pointerEvents="none"
+                >
+                  <SheetViewportContent source={viewport.source} />
+                </g>
+              </svg>
+            )}
+            {isSelected && Object.values(getViewportHandleRects(viewport, HANDLE_SIZE)).map((handleRect) => (
+              <rect
+                key={`${viewport.id}-${handleRect.x}-${handleRect.y}`}
+                x={handleRect.x}
+                y={handleRect.y}
+                width={handleRect.width}
+                height={handleRect.height}
+                fill="#ffffff"
+                stroke="#0f8f74"
+                strokeWidth={0.5}
+              />
+            ))}
+            {isSelected && (() => {
+              const rh = getViewportRotationHandle(viewport, HANDLE_SIZE);
+              return (
+                <>
+                  <line
+                    x1={rh.stemX}
+                    y1={rh.stemY1}
+                    x2={rh.stemX}
+                    y2={rh.stemY2}
+                    stroke="#0f8f74"
+                    strokeWidth={0.4}
+                  />
+                  <circle
+                    cx={rh.cx}
+                    cy={rh.cy}
+                    r={rh.radius}
+                    fill="#ffffff"
+                    stroke="#0f8f74"
+                    strokeWidth={0.5}
+                    style={{ cursor: 'grab' }}
+                  />
+                </>
+              );
+            })()}
+          </g>
+        );
+      })}
+    </g>
+  );
+}

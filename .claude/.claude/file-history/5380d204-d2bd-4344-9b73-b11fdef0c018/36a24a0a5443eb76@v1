@@ -1,0 +1,413 @@
+import { createId } from '../lib/id';
+import { defaultCategorySeeds } from './defaultCategories';
+
+export type CartStatus = 'planning' | 'shopping' | 'completed';
+
+export type FulfillmentAnimationState = 0 | 1 | 2 | 3 | 4 | 5;
+
+export interface PricePerUnit {
+  priceValue: number;
+  unit: string;
+}
+
+export interface PriceOption {
+  id: string;
+  store: string;
+  pricePerUnit: PricePerUnit;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Item {
+  id: string;
+  name: string;
+  categoryId: string;
+  priceOptions: PriceOption[];
+  createdAt: string;
+  isTemporaryShoppingItem: boolean;
+  shoppingPrice: number | null;
+  shoppingUnit: string | null;
+  isOnSale: boolean;
+  notes: string | null;
+  saleType: string | null;
+  discountValue: number | null;
+  regularPrice: number | null;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  deletedFromCategoryName: string | null;
+  isPlanSuppressed: boolean;
+  planSuppressedAt: string | null;
+  planSuppressedReason: string | null;
+}
+
+export interface Category {
+  uid: string;
+  name: string;
+  emoji: string | null;
+  sortOrder: number;
+  colorHex: string | null;
+  isPlanSuppressed: boolean;
+  planSuppressedAt: string | null;
+  planSuppressedReason: string | null;
+  items: Item[];
+}
+
+export interface DeletedCartItemSnapshot {
+  id: string;
+  cartId: string;
+  quantity: number;
+  plannedStore: string;
+  plannedPrice: number | null;
+  plannedUnit: string | null;
+  actualStore: string | null;
+  actualPrice: number | null;
+  actualQuantity: number | null;
+  actualUnit: string | null;
+  wasEditedDuringShopping: boolean;
+  wasFulfilled: boolean;
+  itemId: string | null;
+}
+
+export interface CartItem {
+  id: string;
+  addedAt: string | null;
+  itemId: string;
+  quantity: number;
+  isFulfilled: boolean;
+  isSkippedDuringShopping: boolean;
+  plannedStore: string;
+  plannedPrice: number | null;
+  plannedUnit: string | null;
+  actualStore: string | null;
+  actualPrice: number | null;
+  actualQuantity: number | null;
+  actualUnit: string | null;
+  wasEditedDuringShopping: boolean;
+  isShoppingOnlyItem: boolean;
+  shoppingOnlyName: string | null;
+  shoppingOnlyStore: string | null;
+  shoppingOnlyPrice: number | null;
+  shoppingOnlyUnit: string | null;
+  shoppingOnlyCategory: string | null;
+  vaultItemNameSnapshot: string | null;
+  vaultItemCategorySnapshot: string | null;
+  originalPlanningQuantity: number | null;
+  addedDuringShopping: boolean;
+  fulfillmentAnimationState: FulfillmentAnimationState;
+  fulfillmentStartTime: string | null;
+  shouldShowCheckmark: boolean;
+  shouldStrikethrough: boolean;
+  isOnSale: boolean;
+  notes: string | null;
+  saleType: string | null;
+  discountValue: number | null;
+  regularPrice: number | null;
+}
+
+export interface Cart {
+  id: string;
+  name: string;
+  budget: number;
+  fulfillmentStatus: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  status: CartStatus;
+  isDeleted: boolean;
+  deletedAt: string | null;
+  cartItems: CartItem[];
+}
+
+export interface Vault {
+  uid: string;
+  categories: Category[];
+  carts: Cart[];
+  stores: Store[];
+  deletedItems: Item[];
+  deletedCarts: Cart[];
+  deletedCartItemSnapshots: DeletedCartItemSnapshot[];
+}
+
+export interface User {
+  id: string;
+  name: string;
+}
+
+export interface PreferencesState {
+  hasCompletedOnboarding: boolean;
+  userName: string;
+  hasPromptedForNameAfterOnboarding: boolean;
+  hasPromptedForNameAfterVaultCelebration: boolean;
+  hasShownAddItemGuideAfterName: boolean;
+  isPro: boolean;
+  freeEditableStoreKeys: string[];
+  freePrimaryEditableCartId: string | null;
+}
+
+export interface VaultAppState {
+  schemaVersion: number;
+  user: User;
+  vault: Vault;
+  preferences: PreferencesState;
+}
+
+export interface CompleteOnboardingInput {
+  userName: string;
+  primaryStore: string;
+  firstItemName: string;
+  firstItemPrice: number;
+  firstItemUnit: string;
+  firstCategoryId: string;
+}
+
+export interface AddItemInput {
+  categoryId: string;
+  name: string;
+  store: string;
+  price: number;
+  unit: string;
+}
+
+export interface CreateCartInput {
+  name: string;
+  budget: number;
+  selectedItems: Array<{
+    itemId: string;
+    quantity: number;
+    selectedStore?: string | null;
+  }>;
+}
+
+export interface DashboardSummary {
+  activeCarts: Cart[];
+  completedCarts: Cart[];
+  totalSpent: number;
+  overBudgetCount: number;
+  itemCount: number;
+}
+
+export function createInitialAppState(): VaultAppState {
+  const categories: Category[] = defaultCategorySeeds.map((seed, index) => ({
+    uid: seed.slug,
+    name: seed.title,
+    emoji: seed.emoji,
+    sortOrder: index,
+    colorHex: seed.pastelHex,
+    isPlanSuppressed: false,
+    planSuppressedAt: null,
+    planSuppressedReason: null,
+    items: [],
+  }));
+
+  return {
+    schemaVersion: 1,
+    user: {
+      id: createId('user'),
+      name: 'Default User',
+    },
+    vault: {
+      uid: createId('vault'),
+      categories,
+      carts: [],
+      stores: [],
+      deletedItems: [],
+      deletedCarts: [],
+      deletedCartItemSnapshots: [],
+    },
+    preferences: {
+      hasCompletedOnboarding: false,
+      userName: '',
+      hasPromptedForNameAfterOnboarding: false,
+      hasPromptedForNameAfterVaultCelebration: false,
+      hasShownAddItemGuideAfterName: false,
+      isPro: false,
+      freeEditableStoreKeys: [],
+      freePrimaryEditableCartId: null,
+    },
+  };
+}
+
+export function cloneState<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export function getCategoryById(vault: Vault, categoryId: string): Category | undefined {
+  return vault.categories.find(category => category.uid === categoryId);
+}
+
+export function getItemById(vault: Vault, itemId: string): Item | undefined {
+  for (const category of vault.categories) {
+    const match = category.items.find(item => item.id === itemId);
+    if (match) {
+      return match;
+    }
+  }
+
+  return vault.deletedItems.find(item => item.id === itemId);
+}
+
+export function getCurrentPrice(item: Item, store: string): number | null {
+  return item.priceOptions.find(option => option.store === store)?.pricePerUnit.priceValue ?? null;
+}
+
+export function getCurrentUnit(item: Item, store: string): string | null {
+  return item.priceOptions.find(option => option.store === store)?.pricePerUnit.unit ?? null;
+}
+
+export function createCartItemFromVaultItem(
+  vault: Vault,
+  itemId: string,
+  quantity: number,
+  selectedStore?: string | null
+): CartItem {
+  const item = getItemById(vault, itemId);
+  if (!item) {
+    throw new Error(`Item ${itemId} not found`);
+  }
+
+  const plannedStore = selectedStore ?? item.priceOptions[0]?.store ?? vault.stores[0]?.name ?? 'Unknown Store';
+
+  return {
+    id: createId('cartItem'),
+    addedAt: new Date().toISOString(),
+    itemId,
+    quantity,
+    isFulfilled: false,
+    isSkippedDuringShopping: false,
+    plannedStore,
+    plannedPrice: getCurrentPrice(item, plannedStore),
+    plannedUnit: getCurrentUnit(item, plannedStore),
+    actualStore: null,
+    actualPrice: null,
+    actualQuantity: null,
+    actualUnit: null,
+    wasEditedDuringShopping: false,
+    isShoppingOnlyItem: false,
+    shoppingOnlyName: null,
+    shoppingOnlyStore: null,
+    shoppingOnlyPrice: null,
+    shoppingOnlyUnit: null,
+    shoppingOnlyCategory: null,
+    vaultItemNameSnapshot: item.name,
+    vaultItemCategorySnapshot: getCategoryById(vault, item.categoryId)?.name ?? null,
+    originalPlanningQuantity: null,
+    addedDuringShopping: false,
+    fulfillmentAnimationState: 0,
+    fulfillmentStartTime: null,
+    shouldShowCheckmark: false,
+    shouldStrikethrough: false,
+    isOnSale: false,
+    notes: null,
+    saleType: null,
+    discountValue: null,
+    regularPrice: null,
+  };
+}
+
+export function computeCartTotal(vault: Vault, cart: Cart): number {
+  return cart.cartItems.reduce((total, cartItem) => {
+    if (cart.status !== 'planning' && cartItem.isSkippedDuringShopping) {
+      return total;
+    }
+
+    const item = getItemById(vault, cartItem.itemId);
+    const fallbackPrice = item ? getCurrentPrice(item, cartItem.plannedStore) ?? 0 : 0;
+    const price =
+      cart.status === 'completed'
+        ? cartItem.actualPrice ?? cartItem.plannedPrice ?? fallbackPrice
+        : cart.status === 'shopping'
+          ? cartItem.actualPrice ?? cartItem.plannedPrice ?? fallbackPrice
+          : cartItem.plannedPrice ?? fallbackPrice;
+
+    const quantity = cart.status === 'planning'
+      ? cartItem.quantity
+      : cartItem.actualQuantity ?? cartItem.quantity;
+
+    return total + price * quantity;
+  }, 0);
+}
+
+export function computeDashboardSummary(state: VaultAppState): DashboardSummary {
+  const activeCarts = state.vault.carts.filter(cart => !cart.isDeleted && cart.status !== 'completed');
+  const completedCarts = state.vault.carts.filter(cart => !cart.isDeleted && cart.status === 'completed');
+  const totalSpent = completedCarts.reduce((sum, cart) => sum + computeCartTotal(state.vault, cart), 0);
+  const overBudgetCount = completedCarts.filter(cart => computeCartTotal(state.vault, cart) > cart.budget).length;
+  const itemCount = state.vault.categories.reduce((sum, category) => sum + category.items.length, 0);
+
+  return {
+    activeCarts,
+    completedCarts,
+    totalSpent,
+    overBudgetCount,
+    itemCount,
+  };
+}
+
+export function completeOnboardingState(
+  baseState: VaultAppState,
+  input: CompleteOnboardingInput
+): VaultAppState {
+  const state = cloneState(baseState);
+  const normalizedName = input.userName.trim();
+  const normalizedStore = input.primaryStore.trim();
+  const normalizedItemName = input.firstItemName.trim();
+  const normalizedUnit = input.firstItemUnit.trim();
+  const category = getCategoryById(state.vault, input.firstCategoryId);
+
+  if (!category) {
+    throw new Error('Selected category was not found.');
+  }
+
+  state.user.name = normalizedName;
+  state.preferences.userName = normalizedName;
+  state.preferences.hasCompletedOnboarding = true;
+
+  const existingStore = state.vault.stores.find(store => store.name.toLowerCase() === normalizedStore.toLowerCase());
+  const store = existingStore ?? {
+    id: createId('store'),
+    name: normalizedStore,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!existingStore) {
+    state.vault.stores.push(store);
+  }
+
+  category.items.unshift({
+    id: createId('item'),
+    name: normalizedItemName,
+    categoryId: category.uid,
+    priceOptions: [
+      {
+        id: createId('priceOption'),
+        store: store.name,
+        pricePerUnit: {
+          priceValue: input.firstItemPrice,
+          unit: normalizedUnit,
+        },
+      },
+    ],
+    createdAt: new Date().toISOString(),
+    isTemporaryShoppingItem: false,
+    shoppingPrice: null,
+    shoppingUnit: null,
+    isOnSale: false,
+    notes: null,
+    saleType: null,
+    discountValue: null,
+    regularPrice: null,
+    isDeleted: false,
+    deletedAt: null,
+    deletedFromCategoryName: null,
+    isPlanSuppressed: false,
+    planSuppressedAt: null,
+    planSuppressedReason: null,
+  });
+
+  return state;
+}

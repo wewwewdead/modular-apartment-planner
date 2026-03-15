@@ -1,0 +1,98 @@
+# Fix Mobile Reading Time & Settings Visibility
+
+## Context
+On mobile (`<480px`), the `.reading-time-container` and `.user-post-settings` elements are pushed to the very bottom of the card footer because `.user-info-child-container` uses `flex: 0 0 100%`, forcing everything after it to subsequent rows. The user expects these to be visible and prominent, not buried at the bottom.
+
+### Current DOM structure (`PostCards.jsx:881-968`)
+```
+.card-icons-container (flex-wrap)
+  ├── .user-info-child-container (flex: 0 0 100% on mobile)
+  │     ├── avatar, name, separator, date
+  │     └── icon-containers (like, comment, bookmark, repost, views)
+  ├── .reading-time-container   ← pushed below, own row
+  └── .user-post-settings       ← pushed below, own row
+```
+
+### Current mobile render
+```
+[avatar] [name] [•] [date] [♥5][💬3][🔖][↺][👁]  (100% width block)
+─── border ───
+[2 min read ──────────────────────→]  ← barely visible
+[⋯]                                   ← barely visible
+```
+
+## Solution — CSS-only (no JSX changes)
+
+Absolutely position `.reading-time-container` and `.user-post-settings` in the top-right of the card footer (inline with the author info row). Add `flex-wrap: wrap` to `.user-info-child-container` so action icons properly wrap to a second line. Add `padding-right` to prevent content overlap.
+
+### Target mobile render
+```
+[avatar] [name] [•] [date]       [2 min read] [⋯]
+[♥5] [💬3] [🔖] [↺] [👁12]
+```
+
+## File to edit
+
+**`client/src/components/HomePage/postCards/postcards.css`** — mobile `@media (max-width: 480px)` section only
+
+### Changes
+
+#### 1. `.card-icons-container` (~line 1038) — add `position: relative`
+```css
+.card-icons-container {
+    position: relative;          /* NEW — anchor for absolute children */
+    /* ...existing styles unchanged... */
+}
+```
+
+#### 2. `.card-icons-container .user-info-child-container` (~line 1054) — add wrap + right padding
+```css
+.card-icons-container .user-info-child-container {
+    display: flex;
+    align-items: center;
+    flex: 0 0 100%;
+    flex-wrap: wrap;             /* NEW — let icons wrap to row 2 */
+    gap: 0.3rem;
+    row-gap: 0.4rem;             /* NEW — space between author & icons rows */
+    padding-bottom: 0.25rem;
+    padding-right: 7rem;         /* NEW — clear space for abs-positioned elements */
+    box-sizing: border-box;      /* NEW — padding included in 100% width */
+    border-bottom: 0.5px solid var(--border-card);
+    margin-bottom: 0.1rem;
+}
+```
+
+#### 3. `.reading-time-container` (~line 1141) — absolute position top-right
+```css
+.reading-time-container {
+    position: absolute;          /* CHANGED from flex item to absolute */
+    top: 0.55rem;                /* NEW — align with author row */
+    right: 2.5rem;               /* NEW — left of settings icon */
+    display: flex !important;
+    visibility: visible;
+    margin-left: 0;              /* CHANGED from auto — no longer needed */
+    padding: 0.2rem 0.6rem;
+    flex-shrink: 0;
+    min-width: fit-content;
+}
+```
+
+#### 4. `.user-post-settings` (~line 1154) — absolute position far right
+```css
+.user-post-settings {
+    position: absolute;          /* NEW */
+    top: 0.5rem;                 /* NEW — align with author row */
+    right: 0.75rem;              /* NEW — flush with container padding */
+    flex-shrink: 0;
+    color: var(--text-heading);
+}
+```
+
+## Verification
+1. Resize browser to `<480px` or use mobile DevTools
+2. Reading time pill and settings dots appear on the **author info row**, right-aligned
+3. Action icons wrap to a **second row** below author info
+4. No content overlap between author info text and reading-time/settings
+5. Settings three-dot menu still opens correctly when tapped
+6. Desktop layout (`>480px`) remains completely unchanged
+7. Test on narrow screens (320px) — author name truncates with ellipsis, no overflow

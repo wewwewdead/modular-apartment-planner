@@ -1,0 +1,32 @@
+import { generateId } from '@/domain/ids';
+
+export const CONSTRAINT_TYPES = [
+  { value: 'attach_face', label: 'Attach Face' },
+  { value: 'align_edge', label: 'Align Edge' },
+  { value: 'center_axis', label: 'Center Axis' },
+  { value: 'inset_edge', label: 'Inset Edge' },
+  { value: 'flush_surface', label: 'Flush Surface' },
+];
+
+export const ANCHOR_OPTIONS = [
+  { value: 'top', label: 'Top' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'front', label: 'Front' },
+  { value: 'back', label: 'Back' },
+  { value: 'center', label: 'Center' },
+];
+
+export function createConstraint(overrides = {}) {
+  return {
+    id: generateId('cstr'),
+    type: overrides.type || 'attach_face',
+    sourcePartId: overrides.sourcePartId || null,
+    targetPartId: overrides.targetPartId || null,
+    sourceAnchor: overrides.sourceAnchor || 'bottom',
+    targetAnchor: overrides.targetAnchor || 'top',
+    offset: overrides.offset ?? 0,
+    ...overrides,
+  };
+}

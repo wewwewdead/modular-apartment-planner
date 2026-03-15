@@ -1,0 +1,232 @@
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-32-const VisitedProfileOpinions = lazy(() => import('./components/SidebarOpinions/visitedProfileOpinions.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-33-const MyOpinions = lazy(() => import('./components/SidebarOpinions/MyOpinions.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-34-const OpinionViewer = lazy(() => import('./components/SidebarOpinions/opinionViewer.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx:35:const ExplorePage = lazy(() => import('./components/HomePage/explore/ExplorePage.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-36-const GalleryPage = lazy(() => import('./components/HomePage/gallery/GalleryPage.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx:37:const FreedomWallPage = lazy(() => import('./components/HomePage/freedomWall/FreedomWallPage.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-38-const Universe = lazy(() => import('./components/Universe/Universe.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-39-const SettingsPage = lazy(() => import('./components/SettingsPage/SettingsPage.jsx'));
+C:\Users\johnm\iskrib_v3\client\src\App.jsx-40-const StoryDashboard = lazy(() => import('./components/Stories/StoryDashboard/StoryDashboard.jsx'));
+--
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-44-    sitemap: { changefreq: "daily", priority: "0.8" },
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-45-  },
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-46-  {
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:47:    path: "/home/explore",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-48-    title: `${SITE_NAME} Explore`,
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-49-    description:
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-50-      "Discover the hottest posts and search across community journals on Iskryb.",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:51:    canonicalPath: "/home/explore",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-52-    robots: "index,follow",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-53-    prerender: true,
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-54-    sitemap: { changefreq: "daily", priority: "0.8" },
+--
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-64-    sitemap: { changefreq: "daily", priority: "0.8" },
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-65-  },
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-66-  {
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:67:    path: "/home/freedom-wall",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:68:    title: `${SITE_NAME} Freedom Wall`,
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-69-    description:
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:70:      "Join the live weekly Freedom Wall to doodle, drop stickers and stamps, and leave colorful notes with the community.",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js:71:    canonicalPath: "/home/freedom-wall",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-72-    robots: "index,follow",
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-73-    prerender: true,
+C:\Users\johnm\iskrib_v3\client\src\seo\seoConfig.js-74-    sitemap: { changefreq: "daily", priority: "0.8" },
+--
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-39-        {
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-40-            type: 'icon',
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-41-            label: 'Explore',
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:42:            path: '/home/explore',
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-43-            action: (path) => handleNavigatePath(path),
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-44-            icon: (isActive) => (
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-45-                <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24" fill={isActive ? activeColor : inactiveColor}>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-63-        },
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-64-        {
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-65-            type: 'icon',
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:66:            label: 'Freedom Wall',
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx:67:            path: '/home/freedom-wall',
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-68-            action: (path) => handleNavigatePath(path),
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-69-            icon: (isActive) => (
+C:\Users\johnm\iskrib_v3\client\src\components\mobileNavLink\MobileNavLink.jsx-70-                <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24" fill="none">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css-153-.write-journal-bttn:hover{
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css-154-    background-color: var(--accent-dark-hover);
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css-155-}
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css:156:/* ── Freedom Wall CTA ── */
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css-157-.sidebar-freedom-wall-cta{
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css-158-    display: flex;
+C:\Users\johnm\iskrib_v3\client\src\components\SideBar\sidebar.css-159-    justify-content: flex-start;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-16-} from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-17-import { useAuth } from "../../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-18-import supabase from "../../../utils/supabaseClient";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:19:import "./freedomWall.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-20-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-21-const STAMP_ICONS = {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-22-    heart: "❤️",
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-764-        isLoading: isWeekLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-765-        error: weekError
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-766-    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:767:        queryKey: ["freedomWallCurrentWeek"],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-768-        queryFn: () => getCurrentFreedomWallWeek(authToken),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-769-        refetchOnWindowFocus: true,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-770-        staleTime: 30 * 1000
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-777-        data: weeksData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-778-        isLoading: isWeeksLoading
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-779-    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:780:        queryKey: ["freedomWallWeeks"],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-781-        queryFn: () => getFreedomWallWeeks({limit: 8}, authToken),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-782-        refetchOnWindowFocus: true,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-783-        staleTime: 60 * 1000
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-803-    const weekId = effectiveWeekId;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-804-    const countdownText = useMemo(() => formatResetCountdown(activeWeek?.week_end, nowMs), [activeWeek?.week_end, nowMs]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-805-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:806:    const itemsQueryKey = useMemo(() => ["freedomWallItems", weekId], [weekId]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-807-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-808-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-809-        data: itemsData,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-1046-            });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-1047-        },
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-1048-        onError: (error, variables, context) => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:1049:            console.error("Freedom Wall create error:", error, "variables:", variables);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-1050-            if(context?.optimisticId){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-1051-                setItemsCache((items) => removeById(items, context.optimisticId));
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-1052-            }
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2208-            <div className="freedom-wall-page">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2209-                <div className="fw-error-state">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2210-                    <span className="fw-error-icon">&#x26A0;</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:2211:                    <span>Failed to load Freedom Wall.</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2212-                    <span className="fw-error-hint">Please refresh the page to try again.</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2213-                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2214-            </div>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2219-        <div className={`freedom-wall-page ${isFocusMode ? "fw-focus-mode" : ""}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2220-            {!isFocusMode && <div className="freedom-wall-header">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2221-                <div className="freedom-wall-title-shell">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx:2222:                    <h2 className="freedom-wall-title"><span className="fw-title-chalk">Freedom Wall</span></h2>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2223-                    <p className="freedom-wall-subtitle">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2224-                        Public collaborative canvas. Resets weekly.
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\freedomWall\FreedomWallPage.jsx-2225-                    </p>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css-928-        flex-shrink: 0;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css-929-    }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css-930-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css:931:    /* ── Freedom Wall banner pill ── */
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css-932-    .mobile-fw-banner{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css-933-        display: flex;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\postcards.css-934-        align-items: center;
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-14-import { useAddViewsMutation } from "../../../utils/useMutation";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-15-import UserSearchResults from "./UserSearchResults";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-16-import "../postCards/postcards.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:17:import "./explore.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-18-import "./userSearch.css";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-19-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-20-const getHotScore = (journal) => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-69-    };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-70-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-71-    const exploreLink = {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:72:        path: '/home/explore',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-73-        label: 'Explore',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:74:        action: () => navigatePath('/home/explore'),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-75-        icon:
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-76-        <svg xmlns="http://www.w3.org/2000/svg" width="28px" height="28px" viewBox="0 0 24 24" fill="#000000">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:77:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-78-        </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-79-    };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-80-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-88-        </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-89-    };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-90-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:91:    const freedomWallLink = {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:92:        path: '/home/freedom-wall',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:93:        label: 'Freedom Wall',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:94:        action: () => navigatePath('/home/freedom-wall'),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:95:        className: location.pathname === '/home/freedom-wall' ? 'sidebar-freedom-wall-cta-active' : 'sidebar-freedom-wall-cta',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-96-        icon:
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-97-        <svg xmlns="http://www.w3.org/2000/svg" width="28px" height="28px" viewBox="0 0 24 24" fill="none">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:98:            <path d="M4 7.2A3.2 3.2 0 0 1 7.2 4h9.6A3.2 3.2 0 0 1 20 7.2v9.6a3.2 3.2 0 0 1-3.2 3.2H7.2A3.2 3.2 0 0 1 4 16.8V7.2Z" stroke={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} strokeWidth="1.6"/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:99:            <path d="M8 15.5c1.7-3 2.4-3 4 0 1.5-2.2 2.1-2.2 3.9 0" stroke={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} strokeWidth="1.6" strokeLinecap="round"/>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:100:            <circle cx="9" cy="9.2" r="1.1" fill={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:101:            <circle cx="14.2" cy="8.6" r="0.9" fill={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-102-        </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-103-    };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-104-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-217-    ];
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-218-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-219-    const links = isGuest
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:220:        ? [homeLink, exploreLink, galleryLink, freedomWallLink, universeLink, storiesLink, ...guestLinks]
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx:221:        : [homeLink, exploreLink, galleryLink, freedomWallLink, universeLink, storiesLink, ...authLinks];
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-222-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-223-    const imgRef = useRef(null)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Home.jsx-224-    const [showProfileEditor, setShowProfileEditor] = useState(false);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-3-import { motion, AnimatePresence,} from "framer-motion";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-4-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-5-import './postcards.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:6:import '../explore/userSearch.css';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-7-import { getJournals, searchJournals, searchUsers } from "../../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-8-import ParseContent from "./parseData";
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-9-import { useInView } from 'react-intersection-observer';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-378-    };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-379-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-380-    const handleVisitFreedomWall = () => {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:381:        navigate('/home/freedom-wall');
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-382-    };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-383-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-384-    useEffect(() => {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-494-                </button>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-495-            ) : null}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-496-            <button type="button" className="search-freedom-wall-btn" onClick={handleVisitFreedomWall}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:497:                Visit Freedom Wall
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-498-            </button>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-499-            {handleOpenTextEditor && (
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-500-                <button type="button" className="mobile-write-btn" onClick={() => handleOpenTextEditor()}>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-577-        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-578-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-579-        <div className="mobile-fw-banner" onClick={handleVisitFreedomWall}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:580:            <span>Freedom Wall</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-581-            <span className="mobile-fw-banner-sub">Speak freely</span>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-582-        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-583-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-15-            </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-16-        },
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-17-        {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:18:            path: '/home/explore',
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-19-            label: 'Explore',
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:20:            action: () => navigatePath('/home/explore'),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-21-            icon:
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-22-            <svg xmlns="http://www.w3.org/2000/svg" width="28px" height="28px" viewBox="0 0 24 24" fill="#000000">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:23:[Omitted long matching line]
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-24-            </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-25-        },
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-26-        {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-33-            </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-34-        },
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-35-        {
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:36:            path: '/home/freedom-wall',
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:37:            label: 'Freedom Wall',
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:38:            action: () => navigatePath('/home/freedom-wall'),
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:39:            className: location.pathname === '/home/freedom-wall' ? 'sidebar-freedom-wall-cta-active' : 'sidebar-freedom-wall-cta',
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-40-            icon:
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-41-            <svg xmlns="http://www.w3.org/2000/svg" width="28px" height="28px" viewBox="0 0 24 24" fill="none">
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:42:                <path d="M4 7.2A3.2 3.2 0 0 1 7.2 4h9.6A3.2 3.2 0 0 1 20 7.2v9.6a3.2 3.2 0 0 1-3.2 3.2H7.2A3.2 3.2 0 0 1 4 16.8V7.2Z" stroke={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} strokeWidth="1.6"/>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:43:                <path d="M8 15.5c1.7-3 2.4-3 4 0 1.5-2.2 2.1-2.2 3.9 0" stroke={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} strokeWidth="1.6" strokeLinecap="round"/>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:44:                <circle cx="9" cy="9.2" r="1.1" fill={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx:45:                <circle cx="14.2" cy="8.6" r="0.9" fill={location.pathname === '/home/freedom-wall' ? "#ffffff" : "#e6a817"} />
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-46-            </svg>
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-47-        },
+C:\Users\johnm\iskrib_v3\client\src\components\ProfilePage\constants\profileSidebarLinks.jsx-48-        {

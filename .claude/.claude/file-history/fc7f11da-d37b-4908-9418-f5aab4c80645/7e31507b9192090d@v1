@@ -1,0 +1,335 @@
+import { apiRequest } from './apiClient';
+
+export type UserPreview = {
+  id: string;
+  name: string | null;
+  username?: string | null;
+  image_url?: string | null;
+  badge?: string | null;
+};
+
+export type JournalItem = {
+  id: string;
+  title: string | null;
+  content: string | null;
+  post_type?: string | null;
+  user_id?: string | null;
+  privacy?: string | null;
+  created_at?: string;
+  likes_count?: number;
+  comments_count?: number;
+  has_liked?: boolean;
+  has_bookmarked?: boolean;
+  like_count?: Array<{count?: number}>;
+  comment_count?: Array<{count?: number}>;
+  bookmark_count?: Array<{count?: number}>;
+  is_repost?: boolean;
+  repost_caption?: string | null;
+  repost_source?: JournalItem | null;
+  users?: UserPreview | null;
+};
+
+export type CursorPage<T> = {
+  data: T[];
+  nextCursor?: string | null;
+  hasMore?: boolean;
+};
+
+export type NotificationItem = {
+  id: string;
+  sender_id?: string;
+  receiver_id?: string;
+  journal_id?: string;
+  repost_journal_id?: string | null;
+  opinion_id?: string | null;
+  type?: string;
+  source?: 'journal' | 'opinion' | string;
+  users?: UserPreview | null;
+  journals?: JournalItem | null;
+  opinions?: {
+    id?: string;
+    opinion?: string;
+    user_id?: string;
+    created_at?: string;
+  } | null;
+  message?: string;
+  created_at?: string;
+  read?: boolean;
+};
+
+type FreedomWeek = {
+  id: string;
+  label?: string;
+  week_start?: string;
+  week_end?: string;
+};
+
+type FreedomItem = {
+  id: string;
+  type?: string;
+  text?: string;
+  created_at?: string;
+};
+
+type UniversePost = {
+  id: string;
+  title?: string | null;
+  x?: number;
+  y?: number;
+};
+
+type UserDataResponse = {
+  userData?: Array<{
+    id: string;
+    name?: string;
+    username?: string;
+    bio?: string;
+    image_url?: string;
+    badge_type?: string;
+    profile_layout?: any;
+    followers_count?: number;
+    following_count?: number;
+    posts_count?: number;
+  }>;
+};
+
+const authHeaders = (token?: string): Record<string, string> => {
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+export const mobileApi = {
+  async getJournals(cursor: string | null, limit = 10, userId?: string): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) {
+      params.set('before', cursor);
+    }
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    return apiRequest<CursorPage<JournalItem>>(`/journals?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getJournalById(journalId: string, userId?: string): Promise<{ journal: JournalItem }> {
+    const params = new URLSearchParams();
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest<{ journal: JournalItem }>(`/journal/${encodeURIComponent(journalId)}${suffix}`, {
+      method: 'GET',
+    });
+  },
+
+  async searchUsers(query: string, limit = 20): Promise<{ data: UserPreview[]; hasMore: boolean }> {
+    const params = new URLSearchParams();
+    params.set('query', query.trim());
+    params.set('limit', String(limit));
+
+    return apiRequest<{ data: UserPreview[]; hasMore: boolean }>(`/users/search?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async searchJournals(query: string, limit = 20, userId?: string): Promise<{ data: JournalItem[]; hasMore: boolean }> {
+    const params = new URLSearchParams();
+    params.set('query', query.trim());
+    params.set('limit', String(limit));
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    return apiRequest<{ data: JournalItem[]; hasMore: boolean }>(`/journals/search?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getNotifications(token: string, cursor: string | null, limit = 20): Promise<CursorPage<NotificationItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) {
+      params.set('before', cursor);
+    }
+
+    return apiRequest<CursorPage<NotificationItem>>(`/getNotifications?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        ...authHeaders(token),
+      },
+    });
+  },
+
+  async getUserData(userId: string): Promise<UserDataResponse> {
+    const params = new URLSearchParams();
+    params.set('userId', userId);
+
+    return apiRequest<UserDataResponse>(`/getUserData?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getCanvasGallery(
+    userId?: string,
+    limit = 36,
+    sort: 'hottest' | 'newest' = 'hottest',
+    cursor?: string | null,
+  ): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('sort', sort);
+    if (userId) {
+      params.set('userId', userId);
+    }
+    if (cursor) {
+      params.set('cursor', cursor);
+    }
+
+    return apiRequest<CursorPage<JournalItem>>(`/journals/canvas/gallery?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getFreedomWallWeeks(limit = 8, token?: string): Promise<{ data?: FreedomWeek[] }> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+
+    return apiRequest<{ data?: FreedomWeek[] }>(`/freedom-wall/weeks?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        ...authHeaders(token),
+      },
+    });
+  },
+
+  async getCurrentFreedomWallWeek(token?: string): Promise<{ data?: FreedomWeek }> {
+    return apiRequest<{ data?: FreedomWeek }>('/freedom-wall/current', {
+      method: 'GET',
+      headers: {
+        ...authHeaders(token),
+      },
+    });
+  },
+
+  async getFreedomWallItems(
+    weekId: string,
+    options: { limit?: number; cursor?: string; types?: string[] | string } = {},
+    token?: string,
+  ): Promise<CursorPage<FreedomItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(options.limit ?? 200));
+    if (options.cursor) {
+      params.set('cursor', options.cursor);
+    }
+    if (Array.isArray(options.types) && options.types.length > 0) {
+      params.set('types', options.types.join(','));
+    } else if (typeof options.types === 'string' && options.types.trim().length > 0) {
+      params.set('types', options.types.trim());
+    }
+
+    return apiRequest<CursorPage<FreedomItem>>(
+      `/freedom-wall/${encodeURIComponent(weekId)}/items?${params.toString()}`,
+      {
+        method: 'GET',
+        headers: {
+          ...authHeaders(token),
+        },
+      },
+    );
+  },
+
+  async getUniversePosts(
+    viewport: { minX: number; maxX: number; minY: number; maxY: number },
+    limit = 200,
+  ): Promise<{ data?: UniversePost[] }> {
+    const params = new URLSearchParams();
+    params.set('minX', String(viewport.minX));
+    params.set('maxX', String(viewport.maxX));
+    params.set('minY', String(viewport.minY));
+    params.set('maxY', String(viewport.maxY));
+    params.set('limit', String(limit));
+
+    return apiRequest<{ data?: UniversePost[] }>(`/universe/posts?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getUserByUsername(username: string): Promise<UserDataResponse> {
+    return apiRequest<UserDataResponse>(
+      `/user/${encodeURIComponent(username)}`,
+      {method: 'GET'},
+    );
+  },
+
+  async getRelatedPosts(journalId: string): Promise<{data: JournalItem[]}> {
+    return apiRequest<{data: JournalItem[]}>(
+      `/journal/${encodeURIComponent(journalId)}/related`,
+      {method: 'GET'},
+    );
+  },
+
+  async getUserJournals(userId: string, cursor: string | null, limit = 10): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('authorId', userId);
+    if (cursor) params.set('before', cursor);
+    return apiRequest<CursorPage<JournalItem>>(`/journals?${params.toString()}`, {method: 'GET'});
+  },
+
+  async saveJournal(token: string, payload: { title: string; plainText: string; html?: string }): Promise<{ message?: string }> {
+    const formData = new FormData();
+
+    const lexicalPayload = {
+      root: {
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'text',
+                text: payload.plainText,
+                detail: 0,
+                format: 0,
+                mode: 'normal',
+                style: '',
+                version: 1,
+              },
+            ],
+            direction: null,
+            format: '',
+            indent: 0,
+            version: 1,
+          },
+        ],
+        direction: null,
+        format: '',
+        indent: 0,
+        type: 'root',
+        version: 1,
+      },
+    };
+
+    formData.append('title', payload.title);
+    formData.append('content', JSON.stringify(lexicalPayload));
+    formData.append('post_type', 'text');
+
+    return apiRequest<{ message?: string }>('/save-journal', {
+      method: 'POST',
+      headers: {
+        ...authHeaders(token),
+      },
+      body: formData,
+      timeoutMs: 30000,
+      retries: 0,
+    });
+  },
+};

@@ -1,0 +1,163 @@
+import React, { useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import Share from 'react-native-share';
+
+import { AnimatedPressable } from '../../components/AnimatedPressable';
+import { computeCartTotal } from '../../domain/models';
+import { formatCurrency } from '../../lib/format';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { typography } from '../../theme/typography';
+
+export function MenuScreen() {
+  const appState = useAppStore(state => state.appState);
+  const updateUserName = useAppStore(state => state.updateUserName);
+  const resetApp = useAppStore(state => state.resetApp);
+  const [userName, setUserName] = useState(appState?.user.name ?? '');
+
+  if (!appState) {
+    return null;
+  }
+
+  const completedSpend = appState.vault.carts
+    .filter(cart => cart.status === 'completed')
+    .reduce((sum, cart) => sum + computeCartTotal(appState.vault, cart), 0);
+
+  const shareSnapshot = async () => {
+    await Share.open({
+      title: 'Grock summary',
+      message: `Grock vault: ${appState.vault.categories.length} categories, ${appState.vault.carts.length} carts, completed spend ${formatCurrency(completedSpend)}.`,
+    });
+  };
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Menu</Text>
+      <Text style={styles.subtitle}>Account, reset, and support surfaces for the RN migration.</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Your name</Text>
+        <TextInput
+          style={styles.input}
+          value={userName}
+          onChangeText={setUserName}
+          placeholder="Your name"
+          placeholderTextColor={colors.mutedInk}
+        />
+        <AnimatedPressable
+          style={styles.primaryButton}
+          onPress={() => {
+            updateUserName(userName).catch(() => undefined);
+          }}
+          accessibilityRole="button"
+        >
+          <Text style={styles.primaryButtonText}>Save name</Text>
+        </AnimatedPressable>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Subscription state</Text>
+        <Text style={styles.cardCopy}>Pro active: {appState.preferences.isPro ? 'Yes' : 'No'}</Text>
+        <Text style={styles.cardCopy}>
+          Free editable stores: {appState.preferences.freeEditableStoreKeys.length}
+        </Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Share summary</Text>
+        <Text style={styles.cardCopy}>Open the native share sheet with the current vault snapshot.</Text>
+        <AnimatedPressable
+          style={styles.primaryButton}
+          onPress={() => {
+            shareSnapshot().catch(() => undefined);
+          }}
+          accessibilityRole="button"
+        >
+          <Text style={styles.primaryButtonText}>Share</Text>
+        </AnimatedPressable>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Danger zone</Text>
+        <Text style={styles.cardCopy}>Reset the RN app state back to an empty first-launch vault.</Text>
+        <AnimatedPressable
+          style={[styles.primaryButton, styles.dangerButton]}
+          onPress={() =>
+            Alert.alert('Reset Grock RN state', 'This clears the new SQLite/MMKV app state.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Reset',
+                style: 'destructive',
+                onPress: () => {
+                  resetApp().catch(() => undefined);
+                },
+              },
+            ])
+          }
+          accessibilityRole="button"
+        >
+          <Text style={styles.primaryButtonText}>Reset local state</Text>
+        </AnimatedPressable>
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: spacing.page,
+    gap: 14,
+  },
+  title: {
+    ...typography.headline,
+    color: colors.ink,
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.mutedInk,
+  },
+  card: {
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    padding: 16,
+    gap: 10,
+  },
+  cardTitle: {
+    ...typography.subtitle,
+    color: colors.ink,
+  },
+  cardCopy: {
+    ...typography.body,
+    color: colors.mutedInk,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+    fontFamily: 'SourceSans3-Regular',
+  },
+  primaryButton: {
+    alignItems: 'center',
+    borderRadius: 16,
+    backgroundColor: colors.brand,
+    paddingVertical: 14,
+  },
+  primaryButtonText: {
+    ...typography.button,
+    color: colors.surface,
+  },
+  dangerButton: {
+    backgroundColor: colors.danger,
+  },
+});

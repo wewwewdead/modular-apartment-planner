@@ -1,0 +1,71 @@
+import { createPanel } from '../partModels';
+
+const deskTemplate = {
+  type: 'desk',
+  label: 'Desk',
+  description: 'Desktop with two side panels and optional back',
+  parameters: [
+    { key: 'width', label: 'Width', type: 'number', default: 1400, min: 400, max: 5000, step: 10, suffix: 'mm' },
+    { key: 'depth', label: 'Depth', type: 'number', default: 600, min: 300, max: 2000, step: 10, suffix: 'mm' },
+    { key: 'height', label: 'Height', type: 'number', default: 750, min: 400, max: 1200, step: 10, suffix: 'mm' },
+    { key: 'topThickness', label: 'Top Thickness', type: 'number', default: 25, min: 10, max: 80, step: 1, suffix: 'mm' },
+    { key: 'sideThickness', label: 'Side Thickness', type: 'number', default: 18, min: 6, max: 50, step: 1, suffix: 'mm' },
+    { key: 'hasBackPanel', label: 'Back Panel', type: 'boolean', default: false },
+  ],
+  generate(params) {
+    const { width, depth, height, topThickness, sideThickness, hasBackPanel } = params;
+    const sideHeight = height - topThickness;
+    const parts = [];
+
+    // Desktop
+    parts.push(createPanel({
+      name: 'Desktop',
+      width,
+      depth,
+      thickness: topThickness,
+      material: 'plywood',
+      position: { x: 0, y: 0, z: sideHeight },
+    }));
+
+    // Left side panel
+    parts.push(createPanel({
+      name: 'Left Side',
+      width: sideThickness,
+      depth,
+      thickness: sideHeight,
+      material: 'plywood',
+      position: { x: 0, y: 0, z: 0 },
+    }));
+
+    // Right side panel
+    parts.push(createPanel({
+      name: 'Right Side',
+      width: sideThickness,
+      depth,
+      thickness: sideHeight,
+      material: 'plywood',
+      position: { x: width - sideThickness, y: 0, z: 0 },
+    }));
+
+    // Optional back panel (modesty panel)
+    if (hasBackPanel) {
+      const backHeight = sideHeight * 0.6;
+      parts.push(createPanel({
+        name: 'Back Panel',
+        width: width - 2 * sideThickness,
+        depth: sideThickness,
+        thickness: backHeight,
+        material: 'plywood',
+        position: { x: sideThickness, y: depth - sideThickness, z: 0 },
+        fill: 'rgba(120, 120, 120, 0.06)',
+      }));
+    }
+
+    return {
+      parts,
+      name: `Desk ${width}×${depth}`,
+    };
+  },
+};
+
+export default deskTemplate;

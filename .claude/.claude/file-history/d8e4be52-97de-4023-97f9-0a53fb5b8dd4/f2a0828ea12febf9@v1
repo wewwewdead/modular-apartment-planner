@@ -1,0 +1,103 @@
+import fs from "fs/promises";
+import pRetry from "p-retry";
+import { validateScore } from "./common.js";
+import { postOllamaChat } from "./ollama-http.js";
+
+function parseModelJson(rawContent) {
+  const text = String(rawContent || "").trim();
+  if (!text) {
+    throw new Error("Vision model returned empty output.");
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error("Failed to parse JSON from vision output.");
+  }
+}
+
+export function createVisionTool({ config, logger }) {
+  async function extractScoresFromImage({ imagePath, suggestedClassFile }) {
+    const imageBuffer = await fs.readFile(imagePath);
+    const base64Image = imageBuffer.toString("base64");
+
+    const prompt = [
+      "Extract a score sheet from this image.",
+      "Return strict JSON with this structure:",
+      '{ "classFile": "optional_filename.xlsx", "rows": [{"student":"Name","score":95}], "warnings": ["..."] }',
+      "Rules:",
+      "- student must be non-empty string",
+      "- score must be numeric",
+      "- do not invent missing scores",
+      "- if uncertain, add warning",
+      `- preferred class file if known: ${suggestedClassFile || "class1.xlsx"}`,
+    ].join("\n");
+
+    const doRequest = async () => {
+      const response = await postOllamaChat({
+        baseUrl: config.ollama.baseUrl,
+        model: config.ollama.model,
+        timeoutMs: config.ollama.requestTimeoutMs,
+        logger,
+        stream: false,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+            images: [base64Image],
+          },
+        ],
+      });
+      const content = response?.data?.message?.content;
+      if (!content) {
+        throw new Error("Ollama vision response is missing content.");
+      }
+      return parseModelJson(content);
+    };
+
+    const parsed = await pRetry(doRequest, {
+      retries: Math.max(0, (config.ollama.retries || 1) - 1),
+      factor: 2,
+      minTimeout: 800,
+      maxTimeout: 5000,
+      onFailedAttempt: (error) => {
+        logger.warn(
+          `Vision retry ${error.attemptNumber} failed: ${error.message}`,
+        );
+      },
+    });
+
+    const rawRows = Array.isArray(parsed.rows) ? parsed.rows : [];
+    const rows = [];
+    const warnings = Array.isArray(parsed.warnings) ? [...parsed.warnings] : [];
+
+    for (const row of rawRows) {
+      const student = String(row?.student || "").trim();
+      const score = Number(row?.score);
+      if (!student) {
+        warnings.push("A row was skipped because student name was missing.");
+        continue;
+      }
+      if (!validateScore(score, config.limits.minScore, config.limits.maxScore)) {
+        warnings.push(
+          `A row for "${student}" was skipped because score ${row?.score} is outside 0-100.`,
+        );
+        continue;
+      }
+      rows.push({ student, score });
+    }
+
+    return {
+      classFile: parsed.classFile || suggestedClassFile || "class1.xlsx",
+      rows,
+      warnings,
+      raw: parsed,
+    };
+  }
+
+  return { extractScoresFromImage };
+}

@@ -1,0 +1,50 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+
+interface PlannedVsActualPillProps {
+  planned: number;
+  actual: number;
+}
+
+export function PlannedVsActualPill({ planned, actual }: PlannedVsActualPillProps) {
+  const diff = actual - planned;
+  if (diff === 0) return null;
+
+  const isMore = diff > 0;
+
+  return (
+    <View style={[styles.pill, isMore ? styles.pillOver : styles.pillUnder]}>
+      <Text style={[styles.text, isMore ? styles.textOver : styles.textUnder]}>
+        {isMore ? '+' : ''}{formatCurrency(diff)} vs plan
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  pill: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  pillOver: {
+    backgroundColor: '#fde8e5',
+  },
+  pillUnder: {
+    backgroundColor: '#e5f5e8',
+  },
+  text: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  textOver: {
+    color: colors.danger,
+  },
+  textUnder: {
+    color: colors.success,
+  },
+});

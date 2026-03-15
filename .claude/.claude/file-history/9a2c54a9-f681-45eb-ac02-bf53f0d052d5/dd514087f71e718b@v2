@@ -1,0 +1,165 @@
+.chapter-reader {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 0 16px 40px;
+}
+
+.chapter-reader-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+
+.chapter-reader-error {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 0;
+}
+
+/* Progress bar */
+.chapter-progress-track {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--border-light);
+    z-index: 100;
+}
+
+.chapter-progress-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent-purple);
+    transition: width 0.1s linear;
+}
+
+/* Header */
+.chapter-reader-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 20px 0 16px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 24px;
+}
+
+.chapter-reader-back {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.chapter-reader-back:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-reader-header-info {
+    min-width: 0;
+}
+
+.chapter-reader-chapter-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.chapter-reader-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 4px 0 0 0;
+    line-height: 1.25;
+}
+
+/* Content */
+.chapter-reader-body {
+    min-height: 300px;
+}
+
+.chapter-reader-content {
+    font-size: 1.05rem;
+    line-height: 1.85;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.chapter-reader-content .editor-paragraph {
+    margin-bottom: 1em;
+}
+
+/* Navigation */
+.chapter-reader-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 12px;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-light);
+}
+
+.chapter-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    max-width: 48%;
+}
+
+.chapter-nav-btn:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-nav-btn span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapter-nav-prev {
+    text-align: left;
+}
+
+.chapter-nav-next {
+    text-align: right;
+    margin-left: auto;
+}
+
+@media (max-width: 480px) {
+    .chapter-reader {
+        padding: 0 12px 32px;
+    }
+
+    .chapter-reader-title {
+        font-size: 1.1rem;
+    }
+
+    .chapter-reader-content {
+        font-size: 0.98rem;
+        line-height: 1.75;
+    }
+
+    .chapter-nav-btn {
+        padding: 10px 12px;
+        font-size: 0.78rem;
+    }
+}

@@ -1,0 +1,90 @@
+import React from 'react';
+import {ActivityIndicator, Alert, StyleSheet, Text, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {Screen} from '../../components/Screen';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {colors} from '../../theme/colors';
+import type {MainTabParamList} from '../../navigation/types';
+
+type Props = BottomTabScreenProps<MainTabParamList, 'Profile'>;
+
+export function ProfileScreen(_: Props) {
+  const {user, signOut} = useAuth();
+
+  const userDataQuery = useQuery({
+    queryKey: ['profile', user?.id],
+    enabled: Boolean(user?.id),
+    queryFn: () => mobileApi.getUserData(user?.id ?? ''),
+  });
+
+  const onSignOut = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      Alert.alert(
+        'Sign out failed',
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+    }
+  };
+
+  return (
+    <Screen>
+      <Text style={styles.title}>Profile</Text>
+
+      {userDataQuery.isLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.meta}>Loading profile...</Text>
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.name}>
+            {userDataQuery.data?.userData?.[0]?.name || user?.email || 'User'}
+          </Text>
+          <Text style={styles.meta}>
+            {userDataQuery.data?.userData?.[0]?.username ||
+              user?.id ||
+              'No username yet'}
+          </Text>
+          <Text style={styles.meta}>{user?.email || 'No email on session'}</Text>
+        </View>
+      )}
+
+      <PrimaryButton label="Sign Out" onPress={onSignOut} kind="danger" />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
+  },
+  name: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  meta: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+});

@@ -1,0 +1,747 @@
+import { useState } from 'react';
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { MATERIAL_OPTIONS, LEG_PROFILE_OPTIONS, FRAME_AXIS_OPTIONS } from '../domain/partDefaults';
+import { clampDimension } from '../domain/validation';
+import { createConstraint, CONSTRAINT_TYPES, ANCHOR_OPTIONS } from '../domain/constraintModels';
+import { applyDimensionValueToPart, bindDimensionToPart } from '../domain/dimensionBinding';
+import { generateAssemblySheet, generatePartDetailSheet } from '../sheets/sketchSheetTemplates';
+import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
+import { getTemplate } from '../domain/templates/templateRegistry';
+import TemplateParamsForm from './TemplateParamsForm';
+import styles from './SketchPropertiesPanel.module.css';
+
+function NumberInput({ label, value, onChange, suffix = 'mm', step = 1, readOnly = false }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <div className={styles.fieldInput}>
+        <input
+          type="number"
+          value={Math.round(value)}
+          step={step}
+          readOnly={readOnly}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) onChange(v);
+          }}
+          onBlur={(e) => {
+            if (readOnly) return;
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) {
+              const clamped = clampDimension(v);
+              if (clamped !== v) onChange(clamped);
+            }
+          }}
+          className={styles.numberInput}
+        />
+        {suffix && <span className={styles.suffix}>{suffix}</span>}
+      </div>
+    </label>
+  );
+}
+
+function SelectInput({ label, value, options, onChange }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={styles.selectInput}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextInput({ label, value, onChange }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={styles.textInput}
+      />
+    </label>
+  );
+}
+
+function PositionSection({ position, onUpdate }) {
+  return (
+    <div className={styles.fieldGroup}>
+      <span className={styles.groupTitle}>Position</span>
+      <div className={styles.fieldRow}>
+        <NumberInput label="X" value={position.x} onChange={(v) => onUpdate({ x: v })} />
+        <NumberInput label="Y" value={position.y} onChange={(v) => onUpdate({ y: v })} />
+        <NumberInput label="Z" value={position.z} onChange={(v) => onUpdate({ z: v })} />
+      </div>
+    </div>
+  );
+}
+
+function PanelFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+      <NumberInput label="Thickness" value={part.thickness} onChange={(v) => onUpdate({ thickness: v })} />
+      <SelectInput label="Material" value={part.material} options={MATERIAL_OPTIONS} onChange={(v) => onUpdate({ material: v })} />
+    </>
+  );
+}
+
+function LegFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+      <NumberInput label="Height" value={part.height} onChange={(v) => onUpdate({ height: v })} />
+      <SelectInput label="Profile" value={part.profile} options={LEG_PROFILE_OPTIONS} onChange={(v) => onUpdate({ profile: v })} />
+    </>
+  );
+}
+
+function FrameFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Height" value={part.height} onChange={(v) => onUpdate({ height: v })} />
+      <NumberInput label="Length" value={part.length} onChange={(v) => onUpdate({ length: v })} />
+      <SelectInput label="Axis" value={part.axis} options={FRAME_AXIS_OPTIONS} onChange={(v) => onUpdate({ axis: v })} />
+    </>
+  );
+}
+
+function CutoutFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Height" value={part.height} onChange={(v) => onUpdate({ height: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+    </>
+  );
+}
+
+function HoleFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Diameter" value={part.diameter} onChange={(v) => onUpdate({ diameter: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+    </>
+  );
+}
+
+function DimensionFields({ part, onUpdate, dispatch, project }) {
+  const measurement = Math.round(
+    Math.sqrt(
+      Math.pow((part.endPoint?.x || 0) - (part.startPoint?.x || 0), 2) +
+      Math.pow((part.endPoint?.y || 0) - (part.startPoint?.y || 0), 2) +
+      Math.pow((part.endPoint?.z || 0) - (part.startPoint?.z || 0), 2)
+    )
+  );
+
+  const handleBoundValueChange = (newVal) => {
+    if (!part.boundPartId || !part.boundProperty) return;
+    const boundPart = project.parts.find((p) => p.id === part.boundPartId);
+    if (!boundPart) return;
+    const result = applyDimensionValueToPart(part, newVal, boundPart);
+    if (result) {
+      dispatch({ type: 'PART_UPDATE', part: { id: result.partId, ...result.changes } });
+    }
+  };
+
+  const bindableParts = project.parts.filter((p) => p.type !== 'dimension');
+
+  const BINDABLE_PROPS = {
+    panel: ['width', 'depth', 'thickness'],
+    leg: ['width', 'depth', 'height'],
+    frame: ['width', 'height', 'length'],
+    cutout: ['width', 'height', 'depth'],
+    hole: ['diameter', 'depth'],
+  };
+
+  const handleBind = (partId, property) => {
+    const target = project.parts.find((p) => p.id === partId);
+    if (!target) return;
+    const updated = bindDimensionToPart(part, target, property);
+    dispatch({ type: 'PART_UPDATE', part: { id: part.id, ...updated } });
+  };
+
+  return (
+    <>
+      {part.boundPartId ? (
+        <NumberInput
+          label="Value"
+          value={measurement}
+          suffix="mm"
+          onChange={handleBoundValueChange}
+        />
+      ) : (
+        <NumberInput label="Measured" value={measurement} readOnly suffix="mm" onChange={() => {}} />
+      )}
+      <NumberInput label="Offset" value={part.offset || 200} onChange={(v) => onUpdate({ offset: v })} />
+      <TextInput label="Text Override" value={part.textOverride || ''} onChange={(v) => onUpdate({ textOverride: v || null })} />
+      {part.boundPartId && (
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Bound to</span>
+          <span className={styles.typeBadge}>{part.boundProperty || 'part'}</span>
+        </div>
+      )}
+      {!part.boundPartId && bindableParts.length > 0 && (
+        <BindDimensionUI parts={bindableParts} bindableProps={BINDABLE_PROPS} onBind={handleBind} />
+      )}
+    </>
+  );
+}
+
+function BindDimensionUI({ parts, bindableProps, onBind }) {
+  const [selectedPartId, setSelectedPartId] = useState('');
+  const [selectedProp, setSelectedProp] = useState('');
+
+  const selectedPart = parts.find((p) => p.id === selectedPartId);
+  const props = selectedPart ? (bindableProps[selectedPart.type] || []) : [];
+
+  return (
+    <div className={styles.fieldGroup}>
+      <span className={styles.groupTitle}>Bind to Part</span>
+      <select
+        className={styles.selectInput}
+        value={selectedPartId}
+        onChange={(e) => { setSelectedPartId(e.target.value); setSelectedProp(''); }}
+      >
+        <option value="">Select part...</option>
+        {parts.map((p) => (
+          <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+        ))}
+      </select>
+      {props.length > 0 && (
+        <select
+          className={styles.selectInput}
+          value={selectedProp}
+          onChange={(e) => setSelectedProp(e.target.value)}
+        >
+          <option value="">Select property...</option>
+          {props.map((pr) => (
+            <option key={pr} value={pr}>{pr}</option>
+          ))}
+        </select>
+      )}
+      {selectedPartId && selectedProp && (
+        <button
+          className={styles.duplicateBtn}
+          onClick={() => onBind(selectedPartId, selectedProp)}
+        >
+          Bind
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ConstraintsSection({ part, project, dispatch }) {
+  const [showForm, setShowForm] = useState(false);
+  const [cType, setCType] = useState('attach_face');
+  const [targetId, setTargetId] = useState('');
+  const [srcAnchor, setSrcAnchor] = useState('bottom');
+  const [tgtAnchor, setTgtAnchor] = useState('top');
+  const [offset, setOffset] = useState(0);
+
+  const constraints = (project.constraints || []).filter(
+    (c) => c.sourcePartId === part.id || c.targetPartId === part.id
+  );
+
+  const otherParts = project.parts.filter((p) => p.id !== part.id && p.type !== 'dimension');
+
+  const handleAddConstraint = () => {
+    if (!targetId) return;
+    const constraint = createConstraint({
+      type: cType,
+      sourcePartId: part.id,
+      targetPartId: targetId,
+      sourceAnchor: srcAnchor,
+      targetAnchor: tgtAnchor,
+      offset: parseFloat(offset) || 0,
+    });
+    dispatch({ type: 'CONSTRAINT_ADD', constraint });
+    setShowForm(false);
+    setTargetId('');
+  };
+
+  return (
+    <div className={styles.fieldGroup}>
+      <span className={styles.groupTitle}>Constraints</span>
+      <div className={styles.constraintSection}>
+        {constraints.map((c) => {
+          const targetPart = project.parts.find((p) => p.id === (c.sourcePartId === part.id ? c.targetPartId : c.sourcePartId));
+          return (
+            <div key={c.id} className={styles.constraintItem}>
+              <span>{c.type}: {c.sourceAnchor} → {c.targetAnchor} ({targetPart?.name || '?'})</span>
+              <button
+                className={styles.constraintDelete}
+                onClick={() => dispatch({ type: 'CONSTRAINT_DELETE', constraintId: c.id })}
+                title="Remove constraint"
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {!showForm ? (
+        <button className={styles.duplicateBtn} onClick={() => setShowForm(true)}>
+          Add Constraint
+        </button>
+      ) : (
+        <div className={styles.constraintSection}>
+          <SelectInput label="Type" value={cType} options={CONSTRAINT_TYPES} onChange={setCType} />
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Target</span>
+            <select className={styles.selectInput} value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+              <option value="">Select...</option>
+              {otherParts.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+              ))}
+            </select>
+          </label>
+          <SelectInput label="Source Anchor" value={srcAnchor} options={ANCHOR_OPTIONS} onChange={setSrcAnchor} />
+          <SelectInput label="Target Anchor" value={tgtAnchor} options={ANCHOR_OPTIONS} onChange={setTgtAnchor} />
+          <NumberInput label="Offset" value={offset} suffix="mm" onChange={setOffset} />
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button className={styles.duplicateBtn} onClick={handleAddConstraint}>Create</button>
+            <button className={styles.duplicateBtn} onClick={() => setShowForm(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const partFieldComponents = {
+  panel: PanelFields,
+  leg: LegFields,
+  frame: FrameFields,
+  cutout: CutoutFields,
+  hole: HoleFields,
+};
+
+const PAPER_SIZE_OPTIONS = [
+  { value: 'A4_LANDSCAPE', label: 'A4 Landscape' },
+  { value: 'A4_PORTRAIT', label: 'A4 Portrait' },
+  { value: 'A3_LANDSCAPE', label: 'A3 Landscape' },
+  { value: 'A3_PORTRAIT', label: 'A3 Portrait' },
+  { value: 'A2_LANDSCAPE', label: 'A2 Landscape' },
+  { value: 'A2_PORTRAIT', label: 'A2 Portrait' },
+  { value: 'A1_LANDSCAPE', label: 'A1 Landscape' },
+  { value: 'LETTER_LANDSCAPE', label: 'Letter Landscape' },
+  { value: 'TABLOID_LANDSCAPE', label: 'Tabloid Landscape' },
+];
+
+const VIEWPORT_SOURCE_OPTIONS = [
+  { value: 'sketch_assembly_top', label: 'Assembly Top' },
+  { value: 'sketch_assembly_front', label: 'Assembly Front' },
+  { value: 'sketch_assembly_side', label: 'Assembly Side' },
+  { value: 'sketch_part_detail', label: 'Part Detail' },
+  { value: 'sketch_part_list', label: 'Parts List' },
+];
+
+function SheetProperties({ sheet, project, dispatch }) {
+  const handleUpdate = (changes) => {
+    dispatch({ type: 'SKETCH_SHEET_UPDATE', sheet: { id: sheet.id, ...changes } });
+  };
+
+  return (
+    <>
+      <TextInput label="Title" value={sheet.title || ''} onChange={(v) => handleUpdate({ title: v })} />
+      <TextInput label="Number" value={sheet.number || ''} onChange={(v) => handleUpdate({ number: v })} />
+      <TextInput label="Drawing Name" value={sheet.drawingName || ''} onChange={(v) => handleUpdate({ drawingName: v })} />
+      <SelectInput
+        label="Paper Size"
+        value={sheet.paperSize || 'A3_LANDSCAPE'}
+        options={PAPER_SIZE_OPTIONS}
+        onChange={(v) => handleUpdate({ paperSize: v })}
+      />
+      <TextInput label="Scale Label" value={sheet.scaleLabel || ''} onChange={(v) => handleUpdate({ scaleLabel: v })} />
+    </>
+  );
+}
+
+function SheetViewportProperties({ viewport, sheet, project, dispatch }) {
+  const assemblies = project.assemblies || [];
+  const selectableParts = project.parts.filter((p) => p.type !== 'dimension');
+
+  const handleUpdate = (changes) => {
+    dispatch({
+      type: 'SKETCH_SHEET_VIEWPORT_UPDATE',
+      sheetId: sheet.id,
+      viewport: { id: viewport.id, ...changes },
+    });
+  };
+
+  const handleDelete = () => {
+    dispatch({ type: 'SKETCH_SHEET_VIEWPORT_DELETE', sheetId: sheet.id, viewportId: viewport.id });
+  };
+
+  return (
+    <>
+      <TextInput label="Title" value={viewport.title || ''} onChange={(v) => handleUpdate({ title: v })} />
+      <SelectInput
+        label="Source View"
+        value={viewport.sourceView || 'sketch_assembly_top'}
+        options={VIEWPORT_SOURCE_OPTIONS}
+        onChange={(v) => handleUpdate({ sourceView: v })}
+      />
+      {viewport.sourceView?.startsWith('sketch_assembly') && (
+        <SelectInput
+          label="Assembly"
+          value={viewport.sourceRefId || ''}
+          options={[
+            { value: '', label: 'All Parts' },
+            ...assemblies.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          onChange={(v) => handleUpdate({ sourceRefId: v || null })}
+        />
+      )}
+      {viewport.sourceView === 'sketch_part_detail' && (
+        <SelectInput
+          label="Part"
+          value={viewport.sourceRefId || ''}
+          options={[
+            { value: '', label: 'Select part...' },
+            ...selectableParts.map((p) => ({ value: p.id, label: `${p.name} (${p.type})` })),
+          ]}
+          onChange={(v) => handleUpdate({ sourceRefId: v || null })}
+        />
+      )}
+      {viewport.sourceView === 'sketch_part_list' && (
+        <SelectInput
+          label="Assembly"
+          value={viewport.sourceRefId || ''}
+          options={[
+            { value: '', label: 'All Parts' },
+            ...assemblies.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          onChange={(v) => handleUpdate({ sourceRefId: v || null })}
+        />
+      )}
+      <NumberInput label="Scale" value={viewport.scale || 100} suffix=":1" onChange={(v) => handleUpdate({ scale: v })} />
+      <SelectInput
+        label="Caption"
+        value={viewport.captionPosition || 'below'}
+        options={[
+          { value: 'below', label: 'Below' },
+          { value: 'above', label: 'Above' },
+        ]}
+        onChange={(v) => handleUpdate({ captionPosition: v })}
+      />
+      <button className={styles.duplicateBtn} onClick={handleDelete} style={{ color: '#c44' }}>
+        Remove Viewport
+      </button>
+    </>
+  );
+}
+
+function AssemblyProperties({ assembly, project, dispatch }) {
+  const template = assembly.templateType ? getTemplate(assembly.templateType) : null;
+  const [pendingParams, setPendingParams] = useState(
+    assembly.templateParams ? { ...assembly.templateParams } : {}
+  );
+
+  const partCount = assembly.partIds.length;
+
+  const handleNameChange = (name) => {
+    dispatch({ type: 'ASSEMBLY_UPDATE', assembly: { id: assembly.id, name } });
+  };
+
+  const handleParamChange = (key, value) => {
+    setPendingParams((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleApply = () => {
+    dispatch({ type: 'TEMPLATE_REGENERATE', assemblyId: assembly.id, params: pendingParams });
+  };
+
+  const handleDetach = () => {
+    dispatch({ type: 'TEMPLATE_DETACH', assemblyId: assembly.id });
+  };
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>Assembly</div>
+      <div className={styles.content}>
+        <TextInput label="Name" value={assembly.name} onChange={handleNameChange} />
+
+        {template ? (
+          <>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Template</span>
+              <span className={styles.typeBadge}>{template.label}</span>
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Parts</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{partCount}</span>
+            </div>
+
+            <div className={styles.fieldGroup}>
+              <span className={styles.groupTitle}>Parameters</span>
+              <TemplateParamsForm
+                parameters={template.parameters}
+                values={pendingParams}
+                onChange={handleParamChange}
+              />
+            </div>
+
+            <button className={styles.duplicateBtn} onClick={handleApply}>
+              Apply Changes
+            </button>
+            <button className={styles.duplicateBtn} onClick={handleDetach} style={{ color: '#888' }}>
+              Detach Template
+            </button>
+          </>
+        ) : (
+          <>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Category</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{assembly.category || 'general'}</span>
+            </div>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Parts</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{partCount}</span>
+            </div>
+            {assembly.description && (
+              <div className={styles.field}>
+                <span className={styles.fieldLabel}>Description</span>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{assembly.description}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function SketchPropertiesPanel() {
+  const { getPart, dispatch, project } = useSketch();
+  const { selectedId, selectedType, workspaceMode, activeSheetId, dispatch: editorDispatch } = useSketchEditor();
+
+  const isSheetMode = workspaceMode === 'sheet';
+  const activeSheet = isSheetMode
+    ? (project.sheets || []).find((s) => s.id === activeSheetId)
+    : null;
+
+  // Sheet mode properties
+  if (isSheetMode) {
+    if (selectedType === 'sheetViewport' && selectedId && activeSheet) {
+      const viewport = (activeSheet.viewports || []).find((vp) => vp.id === selectedId);
+      if (viewport) {
+        return (
+          <div className={styles.panel}>
+            <div className={styles.header}>Viewport Properties</div>
+            <div className={styles.content}>
+              <SheetViewportProperties
+                viewport={viewport}
+                sheet={activeSheet}
+                project={project}
+                dispatch={dispatch}
+              />
+            </div>
+          </div>
+        );
+      }
+    }
+
+    if (activeSheet) {
+      const handleGenerateAssemblySheet = (assemblyId) => {
+        const sheet = generateAssemblySheet(project, assemblyId);
+        dispatch({ type: 'SKETCH_SHEET_ADD', sheet });
+        editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: sheet.id });
+      };
+
+      const handleExportPdf = async () => {
+        try {
+          await exportActiveSheetAsPdf(activeSheet.title || 'sketch-sheet', activeSheet.paperSize);
+        } catch (err) {
+          console.error('PDF export failed:', err);
+        }
+      };
+
+      const handleExportPng = async () => {
+        try {
+          await exportActiveSheetAsPng(activeSheet.title || 'sketch-sheet');
+        } catch (err) {
+          console.error('PNG export failed:', err);
+        }
+      };
+
+      return (
+        <div className={styles.panel}>
+          <div className={styles.header}>Sheet Properties</div>
+          <div className={styles.content}>
+            <SheetProperties sheet={activeSheet} project={project} dispatch={dispatch} />
+
+            <div className={styles.fieldGroup}>
+              <span className={styles.groupTitle}>Actions</span>
+              {(project.assemblies || []).map((asm) => (
+                <button
+                  key={asm.id}
+                  className={styles.duplicateBtn}
+                  onClick={() => handleGenerateAssemblySheet(asm.id)}
+                >
+                  Generate Sheet: {asm.name}
+                </button>
+              ))}
+              <button className={styles.duplicateBtn} onClick={handleExportPdf}>
+                Export PDF
+              </button>
+              <button className={styles.duplicateBtn} onClick={handleExportPng}>
+                Export PNG
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={styles.panel}>
+        <div className={styles.header}>Properties</div>
+        <div className={styles.empty}>No sheet selected</div>
+      </div>
+    );
+  }
+
+  // Model mode: assembly selection
+  if (selectedType === 'assembly' && selectedId) {
+    const asm = project.assemblies.find((a) => a.id === selectedId);
+    if (asm) {
+      return (
+        <AssemblyProperties key={asm.id} assembly={asm} project={project} dispatch={dispatch} />
+      );
+    }
+  }
+
+  // Model mode properties
+  const part = selectedId ? getPart(selectedId) : null;
+
+  if (!part) {
+    return (
+      <div className={styles.panel}>
+        <div className={styles.header}>Properties</div>
+        <div className={styles.empty}>Select a part to view its properties</div>
+      </div>
+    );
+  }
+
+  const handleUpdate = (changes) => {
+    dispatch({ type: 'PART_UPDATE', part: { id: part.id, ...changes } });
+  };
+
+  const handlePositionUpdate = (posChanges) => {
+    dispatch({ type: 'PART_UPDATE', part: { id: part.id, position: { ...part.position, ...posChanges } } });
+  };
+
+  const handleDuplicate = () => {
+    dispatch({ type: 'PART_CLONE', partId: part.id });
+  };
+
+  const isDimension = part.type === 'dimension';
+  const FieldsComponent = isDimension ? null : partFieldComponents[part.type];
+
+  // Find assembly this part belongs to
+  const assembly = part.assemblyId
+    ? project.assemblies.find((a) => a.id === part.assemblyId)
+    : null;
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>Properties</div>
+
+      <div className={styles.content}>
+        {/* Name */}
+        <TextInput label="Name" value={part.name} onChange={(v) => handleUpdate({ name: v })} />
+
+        {/* Type badge */}
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Type</span>
+          <span className={styles.typeBadge}>{part.type}</span>
+        </div>
+
+        {/* Position (skip for dimensions) */}
+        {!isDimension && (
+          <PositionSection position={part.position} onUpdate={handlePositionUpdate} />
+        )}
+
+        {/* Dimension-specific fields */}
+        {isDimension && (
+          <div className={styles.fieldGroup}>
+            <span className={styles.groupTitle}>Dimension</span>
+            <DimensionFields part={part} onUpdate={handleUpdate} dispatch={dispatch} project={project} />
+          </div>
+        )}
+
+        {/* Type-specific dimensions */}
+        {FieldsComponent && (
+          <div className={styles.fieldGroup}>
+            <span className={styles.groupTitle}>Dimensions</span>
+            <FieldsComponent part={part} onUpdate={handleUpdate} />
+          </div>
+        )}
+
+        {/* Style (skip for dimensions) */}
+        {!isDimension && (
+          <div className={styles.fieldGroup}>
+            <span className={styles.groupTitle}>Style</span>
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Fill</span>
+              <input
+                type="color"
+                value={part.fill === 'none' ? '#ffffff' : part.fill}
+                onChange={(e) => handleUpdate({ fill: e.target.value })}
+                className={styles.colorInput}
+              />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Stroke</span>
+              <input
+                type="color"
+                value={part.stroke || '#1E2433'}
+                onChange={(e) => handleUpdate({ stroke: e.target.value })}
+                className={styles.colorInput}
+              />
+            </label>
+          </div>
+        )}
+
+        {/* Assembly (skip for dimensions) */}
+        {!isDimension && (
+          <div className={styles.fieldGroup}>
+            <span className={styles.groupTitle}>Assembly</span>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>{assembly ? assembly.name : 'None'}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Constraints (skip for dimensions) */}
+        {!isDimension && (
+          <ConstraintsSection part={part} project={project} dispatch={dispatch} />
+        )}
+
+        {/* Duplicate button */}
+        {!isDimension && (
+          <button className={styles.duplicateBtn} onClick={handleDuplicate}>
+            Duplicate
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

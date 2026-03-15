@@ -1,0 +1,134 @@
+/* ── Canvas Preview Thumbnail ── */
+.canvas-preview {
+    position: relative;
+    width: 100%;
+    max-height: 220px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-card);
+    pointer-events: none;
+    user-select: none;
+    border-radius: 12px 12px 0 0;
+}
+
+.canvas-preview.is-1-1 {
+    aspect-ratio: 1 / 1;
+}
+
+.canvas-preview.is-4-5 {
+    aspect-ratio: 4 / 5;
+}
+
+.canvas-preview.is-light {
+    background-color: #FAFAFA;
+}
+
+.canvas-preview.is-dark {
+    background-color: #1A1A1A;
+}
+
+/* Grid dot pattern overlay */
+.canvas-preview-dots {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.35;
+    background-image: radial-gradient(circle, currentColor 0.6px, transparent 0.6px);
+    background-size: 16px 16px;
+}
+
+.canvas-preview.is-light .canvas-preview-dots {
+    color: #c0c0c0;
+}
+
+.canvas-preview.is-dark .canvas-preview-dots {
+    color: #444;
+}
+
+/* Snippet text */
+.canvas-preview-snippet {
+    position: absolute;
+    max-width: 60%;
+    font-size: 18px;
+    line-height: 1.3;
+    white-space: pre-wrap;
+    word-break: break-word;
+    transform-origin: top left;
+}
+
+.canvas-preview.is-light .canvas-preview-snippet {
+    color: #1a1a1a;
+}
+
+.canvas-preview.is-dark .canvas-preview-snippet {
+    color: #e8e8e8;
+}
+
+/* Image element */
+.canvas-preview-image {
+    position: absolute;
+    object-fit: cover;
+    border-radius: 3px;
+    transform-origin: top left;
+}
+
+/* Empty state */
+.canvas-preview-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    opacity: 0.3;
+}
+
+.canvas-preview.is-light .canvas-preview-empty {
+    color: #555;
+}
+
+.canvas-preview.is-dark .canvas-preview-empty {
+    color: #aaa;
+}
+
+/* ── Canvas Card Accent ── */
+.cards.is-canvas-card {
+    border-color: color-mix(in srgb, var(--accent-sage) 30%, var(--border-card));
+}
+
+.cards.is-canvas-card:hover {
+    box-shadow: 0 0 12px 0 color-mix(in srgb, var(--accent-sage) 15%, transparent);
+}
+
+/* Grid view canvas accent */
+.postcards-grid-item.is-canvas-card {
+    border-color: color-mix(in srgb, var(--accent-sage) 30%, var(--border-card));
+}
+
+.postcards-grid-item.is-canvas-card:hover {
+    box-shadow: 0 0 12px 0 color-mix(in srgb, var(--accent-sage) 15%, transparent);
+}
+
+/* Grid view: canvas preview inside grid img wrap */
+.postcards-grid-img-wrap .canvas-preview {
+    max-height: 140px;
+    border-radius: 10px 10px 0 0;
+    border-bottom: none;
+}
+
+/* Profile list view canvas accent */
+.profile-postcards.is-canvas-card {
+    border-color: color-mix(in srgb, var(--accent-sage) 30%, var(--border-card));
+}
+
+.profile-postcards.is-canvas-card:hover {
+    box-shadow: 0 0 12px 0 color-mix(in srgb, var(--accent-sage) 15%, transparent);
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+    .canvas-preview {
+        max-height: 160px;
+        border-radius: 10px 10px 0 0;
+    }
+}

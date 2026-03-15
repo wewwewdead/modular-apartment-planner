@@ -1,0 +1,105 @@
+import React, {useMemo} from 'react';
+import {FlatList, StyleSheet, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {PostCardSkeleton} from '../../components/SkeletonLoader';
+import {EmptyState} from '../../components/EmptyState';
+import {storyApi} from '../../lib/api/storyApi';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {spacing} from '../../theme/spacing';
+import {ProfileStoryCard} from './ProfileStoryCard';
+import type {RootStackParamList} from '../../navigation/types';
+
+const PAGE_SIZE = 10;
+
+interface ProfileStoriesTabProps {
+  userId: string;
+  headerComponent?: React.ReactElement;
+}
+
+export function ProfileStoriesTab({userId, headerComponent}: ProfileStoriesTabProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const {session} = useAuth();
+  const token = session?.access_token;
+
+  const query = useInfiniteQuery({
+    queryKey: ['profileStories', userId],
+    queryFn: ({pageParam}) =>
+      storyApi.getUserStories(userId, token ?? undefined, {
+        limit: PAGE_SIZE,
+        before: pageParam ?? null,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => {
+      if (!lastPage.hasMore || lastPage.data.length < PAGE_SIZE) return undefined;
+      const last = lastPage.data[lastPage.data.length - 1];
+      return last?.created_at ?? undefined;
+    },
+  });
+
+  const stories = useMemo(
+    () => query.data?.pages.flatMap(page => page.data ?? []) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <FlatList
+      data={stories}
+      keyExtractor={item => item.id}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={headerComponent}
+      onEndReachedThreshold={0.3}
+      onEndReached={() => {
+        if (query.hasNextPage && !query.isFetchingNextPage) {
+          query.fetchNextPage();
+        }
+      }}
+      ListEmptyComponent={
+        query.isLoading ? (
+          <View style={styles.skeletons}>
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+          </View>
+        ) : (
+          <EmptyState
+            title="No stories yet"
+            subtitle="Published stories will appear here."
+          />
+        )
+      }
+      ListFooterComponent={
+        query.isFetchingNextPage ? (
+          <View style={styles.footer}>
+            <PostCardSkeleton />
+          </View>
+        ) : null
+      }
+      renderItem={({item}) => (
+        <ProfileStoryCard
+          story={item}
+          onPress={() => navigation.navigate('StoryDetail', {storyId: item.id})}
+        />
+      )}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 100,
+  },
+  skeletons: {
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  footer: {
+    paddingTop: spacing.md,
+  },
+  separator: {
+    height: spacing.md,
+  },
+});

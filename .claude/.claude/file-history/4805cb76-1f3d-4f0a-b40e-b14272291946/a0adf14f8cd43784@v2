@@ -1,0 +1,39 @@
+import { wallLength, wallDirection, positionOnWall } from '@/geometry/wallGeometry';
+import { perpendicular, scale, add, midpoint } from '@/geometry/point';
+
+const DIMENSION_OFFSET = 300; // mm from wall centerline
+
+export function computeWallDimension(wall) {
+  const len = wallLength(wall);
+  const dir = wallDirection(wall);
+  const perp = perpendicular(dir);
+  const offset = scale(perp, -(wall.thickness / 2 + DIMENSION_OFFSET));
+
+  const start = add(wall.start, offset);
+  const end = add(wall.end, offset);
+  const mid = midpoint(start, end);
+  const extStart = add(wall.start, scale(perp, -(wall.thickness / 2 + 50)));
+  const extEnd = add(wall.end, scale(perp, -(wall.thickness / 2 + 50)));
+
+  const meters = len / 1000;
+  const label = meters.toFixed(2) + ' m';
+
+  const angleDeg = Math.atan2(dir.y, dir.x) * (180 / Math.PI);
+  // Flip text if upside down
+  const textAngle = (angleDeg > 90 || angleDeg < -90)
+    ? angleDeg + 180
+    : angleDeg;
+
+  return {
+    start,
+    end,
+    mid,
+    extStart,
+    extEnd,
+    extStartOuter: add(wall.start, offset),
+    extEndOuter: add(wall.end, offset),
+    label,
+    angle: textAngle,
+    length: len,
+  };
+}

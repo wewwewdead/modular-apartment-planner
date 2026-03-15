@@ -1,0 +1,129 @@
+# UI/UX Professional Enhancement Plan
+
+## Context
+The modular apartment planner has a functional but flat UI. Buttons are small and plain, toolbar groups lack visual labels, and the overall aesthetic feels utilitarian rather than polished. The goal is to transform it into a professional-grade CAD interface — think Figma/AutoCAD — while touching **zero behavior logic**.
+
+## Design Direction: Dark Chrome Panels + Light Canvas (User Confirmed)
+Industry-standard for CAD tools. Dark sidebars/toolbar frame a light drawing canvas, creating depth and focus. This is the single biggest upgrade for perceived professionalism.
+
+**Font swap:** DM Sans → **Outfit** (geometric sans-serif, wider weight range 300-700, more architectural feel). Keep JetBrains Mono for blueprint values.
+
+**Accent:** Brighten teal from `#0D7C66` → `#10B981` for better contrast on dark backgrounds.
+
+---
+
+## Files to Modify (12 files, CSS-only except minor JSX label additions)
+
+### 1. `index.html` — Font import swap
+- Replace `DM+Sans:wght@400;500;600` with `Outfit:wght@300;400;500;600;700`
+
+### 2. `src/styles/variables.css` — Full token overhaul
+- **Panel colors → dark charcoal:** `--color-panel-bg: #1E2028`, `--color-surface-elevated: #2E3140`
+- **Text → light-on-dark:** `--color-text-primary: #E8EAED`, secondary `#9AA0AE`, tertiary `#6B7280`
+- **Borders → white-alpha:** `rgba(255,255,255,0.08)` instead of `#D9D9D4`
+- **Accent brighter:** `#10B981` with stronger subtle bg `rgba(16,185,129,0.12)`
+- **Danger → lighter red for dark bg:** `#F87171`
+- **Toolbar height:** 52px → 56px (more breathing room)
+- **Font:** `'Outfit'` replaces `'DM Sans'`
+- **New tokens:** `--radius-xs: 4px`, `--space-xxl: 32px`, `--ease-spring`, `--duration-smooth: 0.3s`
+- Canvas (`--color-background`) stays `#FAFAF8` — light for blueprint readability
+
+### 3. `src/styles/global.css` — Dark theme globals
+- Body background → `var(--color-panel-bg)` (dark wraps light canvas)
+- Scrollbar thumbs → `rgba(255,255,255,0.15)` for dark panels
+- Selection highlight → new accent color
+- Focus ring → new accent
+
+### 4. `src/ui/Toolbar.jsx` — Minimal JSX additions (NO logic changes)
+- Add `<span className={styles.groupLabel}>Tools</span>` before tool palette items
+- Add group labels "Panels" and "Display" in the last group (wrapping in sub-divs)
+- All existing event handlers, state, props remain untouched
+
+### 5. `src/ui/Toolbar.module.css` — Major visual overhaul (highest impact)
+- **Toolbar:** Dark bg, 56px height, deeper shadow, remove border-bottom
+- **Groups:** Subtle container bg `rgba(255,255,255,0.03)` with rounded corners
+- **Icon buttons (.btn):** 34→36px, subtle default border `transparent`, hover border appears, text lightens on hover
+- **Tool palette buttons:** 32→34px, accent glow on active (`box-shadow: 0 0 8px rgba(16,185,129,0.15)`)
+- **Segmented control:** Dark segment bg, white-alpha active state
+- **Toggle buttons:** Accent glow when active
+- **Dividers:** White-alpha
+- **Save dirty dot:** Accent glow effect
+- **New `.groupLabel` class:** 9px uppercase, muted color, letter-spacing 0.1em
+- Update responsive breakpoints for new sizes
+
+### 6. `src/ui/Sidebar.module.css` — Dark theme adaptation
+- Dark bg with right shadow for depth
+- Section headers: subtle dividers, hover states for dark
+- Floor cards: dark card bg (`#252830`), accent border on active
+- Items: white-alpha hover, accent left-border selection
+- Project name input: dark inset bg
+- Sticky header: dark translucent with blur
+
+### 7. `src/ui/PropertiesPanel.module.css` — Dark theme adaptation
+- Dark panel bg, dark surface inputs
+- Segmented unit toggle for dark
+- Delete/action buttons: lighter danger/accent for dark bg
+- Export menu dropdown: dark bg with proper borders
+
+### 8. `src/ui/InputField.module.css` — Dark inputs
+- Input bg: dark inset (`#171920`), light text
+- Focus: accent border + accent-subtle shadow
+- Input height: 28→30px for better touch targets
+- Readonly: dark alt bg, muted text
+
+### 9. `src/ui/Modal.module.css` — Dark modal
+- Darker overlay (0.65 opacity), stronger blur (8px)
+- Dialog: dark bg, white-alpha borders, overlay shadow
+- Buttons: elevated dark surface, proper hover states
+
+### 10. `src/renderers/SvgCanvas.module.css` — Status bar + expand button
+- Canvas container stays light (drawing surface)
+- Status bar: dark to match toolbar, light text
+- Expand button: semi-transparent dark with light icon
+
+### 11. `src/three/viewer/ThreePreviewPanel.module.css` — 3D panel dark theme
+- Dark panel bg with subtle gradients
+- Header/footer: dark with dividers
+- Mode toggle, floor select, buttons: dark surfaces
+- Walk overlay / inspect card: keep light for contrast against 3D scene
+
+### 12. `src/app/App.module.css` — Layout shadow adjustments
+- Canvas inset shadows deeper (dark panels → light canvas creates natural depth)
+- Preview fallback: dark bg
+
+---
+
+## Implementation Order
+1. `index.html` (font)
+2. `variables.css` (tokens — this breaks everything temporarily)
+3. `global.css` (dark globals)
+4. `Toolbar.module.css` + `Toolbar.jsx` (biggest visual payoff)
+5. `Sidebar.module.css`
+6. `PropertiesPanel.module.css`
+7. `InputField.module.css`
+8. `Modal.module.css`
+9. `SvgCanvas.module.css`
+10. `ThreePreviewPanel.module.css`
+11. `App.module.css`
+
+Steps 2-11 should be done in one pass to avoid intermediate broken state.
+
+## What Does NOT Change
+- Zero JS logic, event handlers, state management, or reducers
+- Zero domain model / persistence changes
+- Zero editor tool handler changes
+- SVG icons in `ToolbarIcons.jsx` use `currentColor` — they auto-adapt to new theme
+- Canvas drawing surface stays light
+- All keyboard shortcuts, tool behaviors, clipboard operations unchanged
+
+## Verification
+1. `npm run dev` — app loads without errors
+2. All toolbar buttons visible, clickable, with proper hover/active/disabled states
+3. View mode segmented control works visually
+4. Tool palette shows accent glow on active tool
+5. Sidebar sections expand/collapse, floor cards highlight
+6. Properties panel inputs accept text, color picker works
+7. Modal opens/closes with animation
+8. Status bar shows cursor position, zoom, tool name
+9. 3D preview panel renders with mode toggle
+10. Responsive: check at 1100px and 900px breakpoints

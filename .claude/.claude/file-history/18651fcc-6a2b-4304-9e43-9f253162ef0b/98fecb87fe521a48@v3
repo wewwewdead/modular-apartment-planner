@@ -1,0 +1,59 @@
+-- Weekly Recap RPC
+-- Returns personal + group stats for a user's current week (Monday-Sunday UTC).
+
+CREATE OR REPLACE FUNCTION get_weekly_recap(p_user_id UUID, p_week_start TIMESTAMPTZ)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_week_end TIMESTAMPTZ := p_week_start + INTERVAL '7 days';
+    v_personal JSONB;
+    v_best_post JSONB;
+    v_total_posts INT;
+    v_most_active JSONB;
+    v_most_reacted JSONB;
+BEGIN
+    -- Personal stats
+    SELECT jsonb_build_object(
+        'posts_written', COUNT(*)::INT,
+        'total_words', COALESCE(SUM(array_length(regexp_split_to_array(COALESCE(whole_text, ''), '\s+'), 1)), 0)::INT,
+        'reactions_received', COALESCE(SUM(cached_reaction_count), 0)::INT,
+        'views_received', COALESCE(SUM(view_count), 0)::INT
+    ) INTO v_personal
+    FROM journals
+    WHERE user_id = p_user_id AND created_at >= p_week_start AND created_at < v_week_end AND privacy = 'public';
+
+    -- Best personal post
+    SELECT jsonb_build_object('journal_id', id, 'title', title, 'reaction_count', cached_reaction_count, 'view_count', view_count)
+    INTO v_best_post
+    FROM journals
+    WHERE user_id = p_user_id AND created_at >= p_week_start AND created_at < v_week_end AND privacy = 'public'
+    ORDER BY cached_reaction_count DESC, view_count DESC LIMIT 1;
+
+    -- Total posts this week
+    SELECT COUNT(*)::INT INTO v_total_posts
+    FROM journals WHERE created_at >= p_week_start AND created_at < v_week_end AND privacy = 'public';
+
+    -- Most active writer
+    SELECT jsonb_build_object('user_id', u.id, 'name', u.name, 'avatar', u.image_url, 'post_count', COUNT(*)::INT)
+    INTO v_most_active
+    FROM journals j JOIN users u ON u.id = j.user_id
+    WHERE j.created_at >= p_week_start AND j.created_at < v_week_end AND j.privacy = 'public'
+    GROUP BY u.id, u.name, u.image_url ORDER BY COUNT(*) DESC LIMIT 1;
+
+    -- Most reacted post
+    SELECT jsonb_build_object('journal_id', j.id, 'title', j.title, 'reaction_count', j.cached_reaction_count, 'author_name', u.name, 'author_avatar', u.image_url)
+    INTO v_most_reacted
+    FROM journals j JOIN users u ON u.id = j.user_id
+    WHERE j.created_at >= p_week_start AND j.created_at < v_week_end AND j.privacy = 'public'
+    ORDER BY j.cached_reaction_count DESC LIMIT 1;
+
+    RETURN jsonb_build_object(
+        'personal', v_personal || jsonb_build_object('best_post', v_best_post),
+        'group', jsonb_build_object('total_posts', v_total_posts, 'most_active_writer', v_most_active, 'most_reacted_post', v_most_reacted),
+        'week_start', p_week_start,
+        'week_end', v_week_end
+    );
+END;
+$$;

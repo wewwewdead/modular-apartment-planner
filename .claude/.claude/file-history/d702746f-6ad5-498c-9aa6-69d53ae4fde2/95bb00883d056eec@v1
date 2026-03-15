@@ -1,0 +1,81 @@
+# Type-Specific 3D Window Rendering + Jalousie Window Type
+
+## Context
+All window types (standard, casement, awning, fixed) currently render as identical transparent blue boxes in the 3D preview. The user wants each type to look visually distinct in 3D, matching their plan-view differentiation. Additionally, add a new **jalousie** (louvre) window type with both SVG plan-view and 3D representations.
+
+## Files to Modify (in order)
+
+### 1. `src/three/scene/wallPreviewContext.js` — Pass window type through descriptor
+In `buildOpeningDescriptor()` (line 39-72), add two fields to the returned object:
+```js
+type: source.type || (kind === 'window' ? 'standard' : 'swing'),
+openDirection: source.openDirection || 'left',
+```
+Currently `source.type` is available but never forwarded to the 3D pipeline.
+
+### 2. `src/three/viewer/materials.js` — Add frame material
+Add `windowFrame` entry to `createMaterialPalette()`:
+```js
+windowFrame: new THREE.MeshStandardMaterial({
+  color: 0xe8eaed,    // light grey-white
+  roughness: 0.7,
+  metalness: 0.05,
+  side: THREE.DoubleSide,
+}),
+```
+
+### 3. `src/three/scene/objectBuilders.js` — Window-specific descriptors
+Modify `buildWindowObjects()` to produce `geometry: 'window'` descriptors with `windowType` and `openDirection` fields. Reuse `createBoxDescriptor` then override:
+```js
+function buildWindowObjects(wallContexts) {
+  return wallContexts
+    .flatMap((context) => context.openings)
+    .filter((opening) => opening.kind === 'window')
+    .map((opening) => {
+      const desc = createOpeningInsertDescriptor(opening);
+      desc.geometry = 'window';
+      desc.windowType = opening.type || 'standard';
+      desc.openDirection = opening.openDirection || 'left';
+      return desc;
+    });
+}
+```
+
+### 4. `src/three/viewer/buildPreviewObjects.js` — Type-specific 3D geometry
+Add `createWindowObject(descriptor, materialPalette)` and route `geometry === 'window'` to it in `createObjectForDescriptor`.
+
+Each window becomes a `THREE.Group` with:
+- **Frame**: 4 box rails (top, bottom, left, right) using `windowFrame` material, with outlines
+- **Glass pane**: Thin transparent box using existing `window` material, NO outlines (dark edges look wrong on glass)
+- **Type-specific mullions** (using `windowFrame` material, with outlines):
+  - `standard` — 2 horizontal bars at 1/3 and 2/3 height
+  - `casement` — 1 vertical center bar
+  - `awning` — 1 horizontal bar at ~30% from top (hinge)
+  - `fixed` — no mullions (clean glass only)
+  - `jalousie` — 5 evenly-spaced horizontal bars
+
+Dimensions:
+- Frame rail width: `max(40, min(width, height) * 0.06)` (~50-70mm)
+- Glass thickness: `max(descriptor.size.z * 0.15, 10)` (~7-14mm)
+- Mullion width: `frameWidth * 0.5`
+
+Position/rotate using same `planPointToWorld` + `planAngleToWorldRotation` pattern as `createStairObject`.
+
+### 5. `src/renderers/WindowRenderer.jsx` — Jalousie SVG plan view
+Add `JalousieWindow` component drawing 5 short lines **perpendicular** to the wall axis (across wall thickness), evenly spaced along the window width. This represents louver slats seen from above — distinct from StandardWindow's parallel lines.
+
+Add rendering case: `{type === 'jalousie' && <JalousieWindow ... />}`
+
+### 6. `src/ui/PropertiesPanel.jsx` — Add jalousie to dropdown
+Add `<option value="jalousie">Jalousie</option>` after the awning option (line ~589). No toggle button for jalousie (louvers don't swing to a side).
+
+## No Changes Needed
+- `src/domain/models.js` — `createWindow()` already accepts any `type` string
+- `src/persistence/deserialize.js` — existing backfill handles missing `type` (defaults to `'standard'`)
+
+## Verification
+1. Place windows on walls, change each to standard/casement/awning/fixed/jalousie via Properties Panel
+2. Open 3D preview — each type should show distinct frame + mullion geometry
+3. Rotate 3D camera around to verify frame/glass/mullion alignment
+4. Test jalousie in plan view — should show perpendicular slat lines
+5. Save and reload — jalousie type should persist correctly

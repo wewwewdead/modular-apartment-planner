@@ -1,0 +1,57 @@
+/* ── X.com-style splash screen ── */
+
+.splash-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: #04141d;
+    z-index: 9999;
+}
+
+/* logo container */
+.splash-logo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* the brand text inside the SVG */
+.splash-text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 800;
+    font-size: 42px;
+    letter-spacing: -0.03em;
+    fill: rgba(255, 255, 255, 0.95);
+}
+
+/* thin progress bar at very bottom */
+.splash-progress-track {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.splash-progress-bar {
+    height: 100%;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 0 1px 1px 0;
+}
+
+/* ── legacy class kept for pages still using the old markup ── */
+.homepage-loading-container {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: rgb(4, 20, 29);
+    backdrop-filter: blur(25px);
+    width: 100%;
+    height: 100vh;
+    z-index: 3;
+}

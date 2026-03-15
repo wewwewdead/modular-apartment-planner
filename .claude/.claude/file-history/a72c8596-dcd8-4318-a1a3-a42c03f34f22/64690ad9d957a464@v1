@@ -1,0 +1,127 @@
+# Plan: Render Repost Cards on Feed (matching web app)
+
+## Context
+When a user reposts a post, it appears on the feed looking identical to a normal post — the repost caption, reposter identity, and embedded original post are all missing. The web app (`iskrib_v3`) renders reposts with a distinct layout: a "repost badge" header, the user's quote/caption, and an embedded preview card of the original post. The mobile app has the data (`is_repost`, `repost_caption`, `repost_source` fields on `JournalItem`) but the `PostCard` component ignores them entirely.
+
+## Goal
+Make reposted posts on the mobile feed visually match the web app's repost card layout.
+
+## Web App Reference (PostCards.jsx lines 745-809)
+```
+┌─ Repost Card ──────────────────────────┐
+│ [↔ icon] ReposterName reposted         │  ← repost badge header
+│                                        │
+│ "User's caption text"                  │  ← repost_caption (optional)
+│                                        │
+│ ┌─ Embedded Original Post ──────────┐  │
+│ │ [avatar] OriginalAuthor           │  │  ← repost_source.users
+│ │ Original Post Title               │  │  ← repost_source.title
+│ │ Preview text of original post...  │  │  ← repost_source.content (parsed)
+│ └───────────────────────────────────┘  │
+│                                        │
+│ [Like] [Comment] [Bookmark] [Repost]   │  ← ActionBar (counts from repost item)
+└────────────────────────────────────────┘
+```
+
+## File to Modify
+
+**`apps/mobile/src/components/PostCard/PostCard.tsx`** — the only file that needs changes.
+
+## Implementation
+
+### 1. Add repost props to `PostCardProps`
+
+```ts
+// New optional props
+isRepost?: boolean;
+repostCaption?: string | null;
+repostSourceTitle?: string | null;
+repostSourcePreview?: string | null;
+repostSourceAuthorName?: string | null;
+repostSourceAuthorAvatar?: string | null;
+onEmbeddedPress?: () => void;       // tap embedded card → navigate to original
+```
+
+### 2. Render repost layout when `isRepost` is true
+
+Inside the `<Pressable>` card, when `isRepost`:
+
+**A) Replace banner image** — Don't show `bannerImage` for reposts (the web app doesn't).
+
+**B) Before the author row**, render a **repost badge header**:
+```tsx
+<View style={styles.repostBadge}>
+  <RepostIcon size={14} color={colors.textFaint} />
+  <Text style={...}><Text style={bold}>{authorName}</Text> reposted</Text>
+</View>
+```
+Import `RepostIcon` from `../icons`.
+
+**C) Replace the normal title+body** with:
+- **Caption** (if `repostCaption` exists): `<Text>{repostCaption}</Text>`
+- **Embedded card** — a bordered `<Pressable>` containing:
+  - Author row: `<Avatar>` + `repostSourceAuthorName`
+  - Title: `repostSourceTitle`
+  - Preview text: `repostSourcePreview` (truncated, 3 lines)
+  - If `repostSource` is null: show "This post is no longer available"
+
+**D) Remove the author row** — for reposts, the reposter's identity is already in the badge. The embedded card shows the original author.
+
+### 3. Add styles
+
+```ts
+repostBadge: {
+  flexDirection: 'row', alignItems: 'center', gap: 6,
+  paddingHorizontal: spacing.lg, paddingTop: spacing.md,
+},
+repostBadgeText: { fontSize: 12, fontFamily: fonts.ui.regular },
+repostBadgeName: { fontFamily: fonts.ui.semiBold },
+repostCaption: { fontFamily: fonts.ui.regular, fontSize: 14, lineHeight: 22 },
+embeddedCard: {
+  borderRadius: radii.lg, borderWidth: 1, padding: spacing.md, gap: spacing.sm,
+},
+embeddedAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+embeddedAuthorName: { fontSize: 13, fontFamily: fonts.ui.semiBold },
+embeddedTitle: { ...typeScale.cardTitle, fontSize: 15 },
+embeddedPreview: { ...typeScale.bodySmall, lineHeight: 20 },
+repostUnavailable: { fontFamily: fonts.ui.regular, fontSize: 13, fontStyle: 'italic' },
+```
+
+### 4. Update callers — pass repost data to PostCard
+
+**`screens/Home/HomeFeedScreen.tsx`** — in `renderItem`:
+```tsx
+const isRepost = !!item.is_repost;
+const repostSource = isRepost ? item.repost_source : null;
+const repostSourcePreview = repostSource?.content
+  ? extractPlainText(repostSource.content).slice(0, 180)
+  : '';
+```
+Pass to `<PostCard>`:
+```tsx
+isRepost={isRepost}
+repostCaption={item.repost_caption}
+repostSourceTitle={repostSource?.title}
+repostSourcePreview={repostSourcePreview}
+repostSourceAuthorName={repostSource?.users?.name}
+repostSourceAuthorAvatar={repostSource?.users?.image_url}
+onEmbeddedPress={repostSource ? () => navigation.navigate('PostDetail', {journalId: repostSource.id}) : undefined}
+```
+
+**`screens/Profile/ProfileWritingsTab.tsx`** — same pattern in its `renderItem`.
+
+## Reuse Inventory
+- `RepostIcon` — already exists in `components/icons`
+- `Avatar` — already imported in PostCard
+- `extractPlainText` — already used in both feed screens
+- `JournalItem.repost_source` — data already available from API
+- Web app layout reference: `iskrib_v3/client/src/components/HomePage/postCards/PostCards.jsx` lines 745-809
+
+## Verification
+1. **Normal posts** — unchanged appearance
+2. **Repost without caption** — shows repost badge + embedded original card (no caption section)
+3. **Repost with caption** — shows badge + caption text + embedded original card
+4. **Deleted source** — shows "This post is no longer available" when `repost_source` is null
+5. **Tap embedded card** — navigates to original post's PostDetailScreen
+6. **Tap repost card body** — navigates to the repost's own PostDetailScreen
+7. **Action bar** — like/comment/bookmark counts refer to the repost itself (same as web)

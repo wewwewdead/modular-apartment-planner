@@ -1,0 +1,56 @@
+import { computeWallDimension } from '@/annotations/dimensions';
+
+export default function DimensionRenderer({ walls }) {
+  return (
+    <g className="dimensions">
+      {walls.map(wall => {
+        const dim = computeWallDimension(wall);
+        if (dim.length < 100) return null;
+
+        return (
+          <g key={`dim-${wall.id}`}>
+            {/* Extension lines */}
+            <line
+              x1={dim.extStart.x} y1={dim.extStart.y}
+              x2={dim.extStartOuter.x} y2={dim.extStartOuter.y}
+              stroke="var(--color-text-secondary)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              opacity={0.5}
+            />
+            <line
+              x1={dim.extEnd.x} y1={dim.extEnd.y}
+              x2={dim.extEndOuter.x} y2={dim.extEndOuter.y}
+              stroke="var(--color-text-secondary)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              opacity={0.5}
+            />
+            {/* Dimension line */}
+            <line
+              x1={dim.start.x} y1={dim.start.y}
+              x2={dim.end.x} y2={dim.end.y}
+              stroke="var(--color-text-secondary)"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+              opacity={0.7}
+            />
+            {/* Label */}
+            <text
+              x={dim.mid.x}
+              y={dim.mid.y}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="var(--color-text-secondary)"
+              fontSize={140}
+              fontFamily="var(--font-blueprint)"
+              transform={`rotate(${dim.angle}, ${dim.mid.x}, ${dim.mid.y})`}
+            >
+              <tspan dy={-60}>{dim.label}</tspan>
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}

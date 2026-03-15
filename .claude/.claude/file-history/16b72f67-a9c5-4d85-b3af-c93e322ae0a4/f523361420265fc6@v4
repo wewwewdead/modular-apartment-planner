@@ -1,0 +1,159 @@
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { getRelatedPosts } from "../../../API/Api";
+import formatPostDate from "../../../helpers/formatDateString";
+import VerifiedBadge from "../Badge/VerifiedBadge";
+import './RelatedPosts.css';
+
+function extractExcerpt(content, maxLen = 120) {
+    if (!content) return '';
+    try {
+        const root = typeof content === 'string' ? JSON.parse(content) : content;
+        const texts = [];
+        const walk = (node) => {
+            if (node.text) texts.push(node.text);
+            if (node.children) node.children.forEach(walk);
+        };
+        walk(root.root || root);
+        const full = texts.join(' ').replace(/\s+/g, ' ').trim();
+        if (full.length <= maxLen) return full;
+        return full.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
+    } catch {
+        return '';
+    }
+}
+
+const CONFIDENCE_LABELS = {
+    high:   "Posts you might like",
+    medium: "You might also explore",
+    low:    "More from the community",
+};
+
+function RelatedPostCard({ post, index }) {
+    const navigate = useNavigate();
+
+    const handleClick = () => {
+        navigate(`/home/post/${post.id}`);
+    };
+
+    const title = post.title || 'Untitled';
+    const excerpt = extractExcerpt(post.content);
+
+    // Map similarity to accent opacity (higher = brighter accent line)
+    const accentOpacity = Math.min(1, Math.max(0.3, (post.semantic_similarity - 0.25) / 0.5));
+
+    return (
+        <motion.div
+            className="rp-card"
+            onClick={handleClick}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+                duration: 0.35,
+                delay: index * 0.06,
+                ease: [0.25, 0.46, 0.45, 0.94],
+            }}
+        >
+            <div
+                className="rp-card-accent"
+                style={{ opacity: accentOpacity }}
+            />
+            <div className="rp-card-content">
+                <h4 className="rp-card-title">{title}</h4>
+                {excerpt && <p className="rp-card-excerpt">{excerpt}</p>}
+                <div className="rp-card-meta">
+                    <div className="rp-card-author">
+                        {post.user_image_url ? (
+                            <img
+                                src={post.user_image_url}
+                                alt=""
+                                className="rp-card-avatar"
+                            />
+                        ) : (
+                            <div className="rp-card-avatar rp-card-avatar-placeholder" />
+                        )}
+                        <span className="rp-card-name">
+                            {post.user_name || 'Anonymous'}
+                        </span>
+                        {post.user_badge && (
+                            <VerifiedBadge badge={post.user_badge} size={12} />
+                        )}
+                    </div>
+                    <span className="rp-card-date">
+                        {formatPostDate(post.created_at)}
+                    </span>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
+
+function RelatedPostsSkeleton() {
+    return (
+        <div className="rp-skeleton-container">
+            {[0, 1, 2].map((i) => (
+                <div key={i} className="rp-skeleton-card">
+                    <div className="rp-skeleton-accent" />
+                    <div className="rp-skeleton-content">
+                        <div className="rp-skeleton-title" />
+                        <div className="rp-skeleton-excerpt" />
+                        <div className="rp-skeleton-meta">
+                            <div className="rp-skeleton-avatar" />
+                            <div className="rp-skeleton-name" />
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+export default function RelatedPosts({ journalId }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['relatedPosts', journalId],
+        queryFn: () => getRelatedPosts(journalId),
+        enabled: !!journalId,
+        staleTime: 10 * 60 * 1000,
+        retry: false,
+    });
+
+    if (isLoading) {
+        return (
+            <section className="rp-section">
+                <RelatedPostsSkeleton />
+            </section>
+        );
+    }
+
+    // Don't render anything if no confidence or no posts
+    if (!data || data.confidence === 'none' || !data.posts?.length) {
+        return null;
+    }
+
+    const label = CONFIDENCE_LABELS[data.confidence];
+    if (!label) return null;
+
+    return (
+        <section className="rp-section">
+            <h3 className="rp-heading">
+                <svg className="rp-heading-icon" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1l1.796 4.236L14.5 6.18l-3.25 3.382.588 4.938L8 12.236 4.162 14.5l.588-4.938L1.5 6.18l4.704-.944z"
+                          stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                    <path d="M8 4.5l.898 2.118L11.25 7.09l-1.625 1.691.294 2.469L8 10.118 5.581 11.25l.294-2.469L4.25 7.09l2.352-.472z"
+                          fill="currentColor" opacity="0.3" />
+                </svg>
+                {label}
+            </h3>
+            <div className="rp-grid">
+                {data.posts.map((post, index) => (
+                    <RelatedPostCard
+                        key={post.id}
+                        post={post}
+                        index={index}
+                    />
+                ))}
+            </div>
+        </section>
+    );
+}

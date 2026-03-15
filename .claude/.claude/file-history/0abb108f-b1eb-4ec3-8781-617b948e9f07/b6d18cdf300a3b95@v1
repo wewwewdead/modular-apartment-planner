@@ -1,0 +1,58 @@
+# Fix: Edit reposted journal crashes with null content
+
+## Context
+When clicking "Edit" on a reposted journal in `ProfilePostCards`, the app crashes with:
+```
+Cannot read properties of null (reading 'root')
+```
+**Root cause:** Repost journals have `content: null` (the original post's content lives in `repost_source`). The edit button passes `journal.content` (null) to `EditJournal`, which tries to parse it as a Lexical editor state, crashing `LexicalComposer`.
+
+**User intent:** When editing a repost, only the **repost caption** (`repost_caption`, plain text, max 280 chars) should be editable — NOT the original journal content.
+
+## Plan
+
+### 1. Backend: Add repost caption update endpoint
+
+**File: `server/services/uploadService.js`** — Add `updateRepostCaptionService`:
+- Validate `journalId`, `userId`, `caption` (max 280 chars)
+- Verify journal exists, belongs to user, and `is_repost === true`
+- Update `repost_caption` column on the journal
+
+**File: `server/controller/uploadController.js`** — Add `updateRepostCaptionController`:
+- Extract `journalId`, `caption` from `req.body`, `userId` from `req.userId`
+- Call the service, return success/error
+
+**File: `server/routes/routes.js`** — Add route:
+- `POST /update-repost-caption` with `requireAuth`
+
+**File: `client/API/Api.js`** — Add `updateRepostCaption(token, body)` function
+
+### 2. Frontend: Handle repost edit differently in ProfilePostCards
+
+**File: `ProfilePostCards.jsx`**
+
+In both grid and list views, where the edit button renders:
+```jsx
+{setting.actionEdit && journal?.post_type !== 'canvas' && (
+```
+Add an additional guard: `&& !journal?.is_repost`. Instead, add a new condition for repost editing that calls a new handler `handleClickEditRepostCaption` passing `journal.repost_caption`, `journal.id`.
+
+Add state: `showCaptionEditor` / `captionData` (similar to `showEditor` / `journalData`).
+
+Add a simple inline caption editor (rendered via portal like `EditJournal`) — a `<textarea>` (max 280 chars) with save/cancel buttons. No Lexical needed since `repost_caption` is plain text.
+
+### 3. Files to modify
+
+| File | Change |
+|------|--------|
+| `server/services/uploadService.js` | Add `updateRepostCaptionService` |
+| `server/controller/uploadController.js` | Add `updateRepostCaptionController` |
+| `server/routes/routes.js` | Add `POST /update-repost-caption` route |
+| `client/API/Api.js` | Add `updateRepostCaption` API function |
+| `client/src/components/HomePage/postCards/ProfilePostCards/ProfilePostCards.jsx` | Add repost caption edit handler + simple caption editor UI |
+
+### 4. Verification
+- Click edit on a repost in ProfilePostCards → should open caption editor (textarea), NOT the Lexical editor
+- Edit the caption, save → should persist via the new API endpoint
+- Click edit on a regular (non-repost) journal → should still open the Lexical editor as before
+- No crash on repost edit

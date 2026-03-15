@@ -1,0 +1,48 @@
+# Remove Streak Milestone/Freeze Toasts & Badge Extras
+
+## Context
+User wants to remove milestone toasts, freeze toasts, progress bar, snowflake indicator, and encouragement copy. **Keep** the basic streak badge (flame + count) in sidebar/profile.
+
+## Files to change
+
+### 1. DELETE `client/src/components/Streak/StreakMilestoneToast.jsx`
+### 2. DELETE `client/src/components/Streak/StreakMilestoneToast.css`
+
+### 3. `client/src/components/HomePage/Home.jsx`
+- Remove `import StreakMilestoneToast`
+- Remove `pendingMilestone` and `showFreezeUsedToast` state
+- Remove the two `useEffect` blocks for milestone/freeze event listeners + auto-dismiss
+- Remove `<StreakMilestoneToast>` render
+- Remove freeze toast `<AnimatePresence>` block
+
+### 4. `client/src/components/HomePage/Editor/RichTextEditor.jsx`
+- Remove `streak-milestone` and `streak-freeze-used` event dispatches after save (keep query invalidation)
+
+### 5. `client/src/components/HomePage/Canvas/CanvasEditor.jsx`
+- Remove `streak-milestone` and `streak-freeze-used` event dispatches after save (keep query invalidation)
+
+### 6. `client/src/components/Streak/StreakBadge.jsx`
+- Remove `MILESTONES` array, `getNextMilestone()` function
+- Remove `showProgress` and `freezeAvailable` props
+- Remove freeze indicator (snowflake SVG)
+- Remove progress bar markup
+- Remove encouragement copy / progress hint from title
+
+### 7. `client/src/components/Streak/StreakBadge.css`
+- Remove `.streak-freeze-indicator`, `.streak-progress-hint`, `.streak-progress-bar-track`, `.streak-progress-bar-fill` styles
+
+### 8. `client/src/components/DashboardBriefing/DashboardBriefing.jsx`
+- Remove `showProgress` and `freezeAvailable` props from `<StreakBadge>` usage
+
+### 9. `server/controller/uploadController.js`
+- Remove milestone/freezeUsed fields from response payload
+- Remove the forced test lines (`responsePayload.milestone = 30; responsePayload.freezeUsed = true;`)
+
+### 10. Backend streak recording — KEEP
+- Keep `recordPublishForStreak()` calls in uploadService, chapterService, routes — streak counting still powers the badge
+- Keep streakService.js and GET `/streak/:userId` endpoint
+
+## Verification
+1. Publish a post — no toast appears, streak badge count still increments
+2. Dashboard badge shows flame + count only, no progress bar or snowflake
+3. No console errors

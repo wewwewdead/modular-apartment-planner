@@ -1,0 +1,50 @@
+# Fix: Canvas posts not rendering in PostDetailScreen
+
+## Context
+When a user taps on a canvas post (from CanvasScreen or HomeFeed), the app navigates to `PostDetailScreen`. However, **PostDetailScreen doesn't handle canvas posts** — it only renders content via `LexicalRenderer`, which expects Lexical JSON in `journal.content`. Canvas posts store their visual data in `journal.canvas_doc`, not `content`, so the screen shows nothing.
+
+The `CanvasPreview` component already works correctly in `CanvasScreen` (gallery view) — it just needs to be used in `PostDetailScreen` as well.
+
+## Changes
+
+### File: `apps/mobile/src/screens/Home/PostDetailScreen.tsx`
+
+1. **Add imports**:
+   - Import `CanvasPreview` from `../../components/CanvasPreview/CanvasPreview`
+   - Import `useWindowDimensions` from `react-native` (add to existing import)
+   - Import `parseCanvasDoc` from `../../lib/utils/journalHelpers`
+
+2. **Get window width** (inside the component, near existing hooks):
+   - `const {width: windowWidth} = useWindowDimensions();`
+   - `const contentWidth = windowWidth - spacing.lg * 2;`
+
+3. **Detect canvas posts** (near line 162, after existing `isRepost` logic):
+   - Check if `journal?.canvas_doc` has content using `parseCanvasDoc`
+   - `const canvasDoc = parseCanvasDoc(journal?.canvas_doc);`
+   - `const isCanvas = !!(canvasDoc?.snippets?.length || canvasDoc?.images?.length || canvasDoc?.doodles?.length);`
+
+4. **Render CanvasPreview as banner** (lines 202-205):
+   - Add a canvas branch before the existing banner image check:
+   ```
+   {!isRepost && isCanvas ? (
+     <CanvasPreview canvasDoc={journal?.canvas_doc ?? null} width={windowWidth} />
+   ) : !isRepost && bannerImage ? (
+     <Image ... />
+   ) : null}
+   ```
+
+5. **Skip LexicalRenderer for canvas-only posts** (lines 340-344):
+   - When it's a canvas post with no meaningful `content`, skip the LexicalRenderer to avoid showing a blank area:
+   ```
+   ) : (
+     <>
+       {isCanvas && !journal?.content ? null : <LexicalRenderer content={journal?.content} />}
+       <RelatedPosts journalId={journalId} />
+     </>
+   )}
+   ```
+
+## Verification
+- Navigate to CanvasScreen, tap on a canvas post — the canvas should render at the top of PostDetailScreen
+- Regular journal posts should still render with banner images and LexicalRenderer as before
+- Repost posts should be unaffected

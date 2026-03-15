@@ -1,0 +1,17 @@
+import {useMutation} from '@tanstack/react-query';
+import {socialApi} from '../lib/api/socialApi';
+import {queryClient} from '../lib/queryClient';
+
+export function useFollowMutation(token: string, targetUserId: string) {
+  return useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error('Please log in to follow.');
+      return socialApi.toggleFollow(token, {followingId: targetUserId});
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({queryKey: ['followsData', targetUserId]});
+      queryClient.invalidateQueries({queryKey: ['profile']});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+  });
+}

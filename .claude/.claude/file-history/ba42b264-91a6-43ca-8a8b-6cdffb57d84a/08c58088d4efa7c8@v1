@@ -1,0 +1,120 @@
+# Supabase Egress Audit & Remediation Plan
+
+## Context
+Audit of iskrib_v3 codebase to identify patterns that will blow Supabase egress costs at scale. Findings are prioritized by impact, with recommended fixes.
+
+---
+
+## Findings Summary
+
+### CRITICAL — Will absolutely blow egress at scale
+
+| # | Issue | Where | Impact |
+|---|-------|-------|--------|
+| C1 | **No CDN for images** — all images served directly from Supabase Storage public URLs | Entire app | Every image load = Supabase egress. This is THE #1 cost driver. A feed page with 5 posts, each with avatar + thumbnail = 10 image fetches directly from Supabase per page view. |
+| C2 | **Shotgun `invalidateQueries` on comments/edits/deletes** — one comment invalidates ALL pages of 3 infinite query families | `comments.jsx:149-152`, `ProfilePostCards.jsx:189-191,250-252`, `RichTextEditor.jsx:67-69` | 1000 DAU × 5 comments/day = 15K invalidation bursts, each refetching 5-20 pages × 3 query families = 225K–900K unnecessary API calls/day |
+| C3 | **`following_feed` RPC uses 4 correlated COUNT subqueries per row** instead of cached counts | `following_feed.sql:66-69` | 4 × N COUNT scans per page load. `cached_*_count` columns already exist with triggers but aren't used here |
+| C4 | **Sitemaps fetch ALL rows with no LIMIT** | `sitemapRoutes.js:20-24,53-56` | At 100K posts, each sitemap cache-miss returns the entire table. Sitemap protocol caps at 50K URLs per file anyway |
+| C5 | **Chapter queries use `SELECT *`** returning full Lexical JSON `content` after create/update | `chapterService.js:69,103,212` | Write operations echo back entire chapter content (potentially 100KB+) that the client doesn't need |
+
+### HIGH — Significant amplifiers
+
+| # | Issue | Where | Impact |
+|---|-------|-------|--------|
+| H1 | **No server-side cache for related posts RPC** | `discoveryService.js` | Every post detail view = 1-2 expensive pgvector scans. Viral post with 10K views = 10K identical RPCs |
+| H2 | **Lexical inline images have no lazy loading** | `ImageComponent.jsx` | Post with 5 images loads all 5 at 1280×1280 immediately |
+| H3 | **`["userData"]` wildcard invalidation** | `MyProfile.jsx:188,217,286` | Profile edits invalidate ALL cached user data (own + visited profiles) |
+| H4 | **Share image LRU is per-process, only 200 entries** | `server.js:89-930` | With cluster mode, each worker has separate cache. Social crawlers hit these heavily |
+
+### MODERATE — Worth fixing
+
+| # | Issue | Where | Impact |
+|---|-------|-------|--------|
+| M1 | No `srcset`/`sizes` — mobile loads same image sizes as desktop | All `<img>` tags | Wasted bandwidth on mobile devices |
+| M2 | `getCommentCountsService` fetches all rows to count in JS | `storyInteractService.js:254` | Should be GROUP BY aggregation |
+| M3 | `get_for_you_feed` uses OFFSET pagination | `personalized_feed.sql:141` | Degrades linearly at deep pages |
+| M4 | ILIKE search fallback scans full `content` column | `getService.js:1489-1506` | Full table scan on large text column |
+| M5 | `exploreInterestsService` fires up to 8 parallel RPC calls | `exploreInterestsService.js` | 8 concurrent pgvector scans per explore load |
+| M6 | Realtime sends full row payload, client only needs event signal | `Authcontext.jsx:75-115` | Wasted bytes per notification push |
+
+### Already Well-Designed (no action needed)
+
+- Feed queries exclude `content` — use `JOURNAL_METADATA_WITH_COUNTS_SELECT`
+- `interests_embedding` excluded from user profiles
+- Embeddings never leak to client
+- Query keys use stable `user.id` not rotating `access_token`
+- No polling — uses WebSocket for notifications
+- Cursor-based pagination on all feeds
+- `cacheControl: '31536000'` on all storage uploads
+- `loading="lazy"` on most client `<img>` tags
+- `preview_text`/`thumbnail_url` persisted at write time
+
+---
+
+## Recommended Fixes (ordered by impact/effort)
+
+### Fix 1: Add CDN in front of Supabase Storage [C1]
+- Put Cloudflare (free tier works) in front of your Supabase storage URL
+- OR use Supabase's built-in CDN/image transformation if on Pro plan
+- This alone could cut 60-80% of egress costs
+
+### Fix 2: Targeted `invalidateQueries` instead of shotgun [C2]
+Replace broad invalidations with surgical cache updates:
+```js
+// Instead of invalidating ALL feeds:
+// queryClient.invalidateQueries({ queryKey: ['journals'] });
+
+// Use setQueryData to optimistically update the comment count on the specific post:
+queryClient.setQueryData(['journals'], (old) => /* update comment_count on specific post */);
+// Or at minimum, invalidate only the active page, not all pages
+```
+Files: `comments.jsx`, `ProfilePostCards.jsx`, `RichTextEditor.jsx`
+
+### Fix 3: Use cached counts in `following_feed` RPC [C3]
+```sql
+-- Replace:
+(SELECT COUNT(*) FROM public.likes l WHERE l.journal_id = j.id) AS like_count,
+-- With:
+j.cached_like_count AS like_count,
+j.cached_reaction_count AS reaction_count,
+j.cached_comment_count AS comment_count,
+j.cached_bookmark_count AS bookmark_count
+```
+File: `following_feed.sql`
+
+### Fix 4: Paginate sitemaps [C4]
+Split into `/sitemap-posts-1.xml`, `-2.xml`, etc. with 10K URLs each + sitemap index. Add pagination query with LIMIT/OFFSET.
+File: `sitemapRoutes.js`
+
+### Fix 5: Replace `SELECT *` with explicit columns in chapter service [C5]
+```js
+// Instead of .select('*')
+.select('id, story_id, title, chapter_number, status, word_count, created_at, updated_at')
+```
+File: `chapterService.js` lines 69, 212 (keep `select('*')` on line 103 for chapter read — needs content)
+
+### Fix 6: Add server-side LRU cache for related posts [H1]
+Same pattern as share images — 200-entry cache with 10min TTL keyed by `journalId`.
+File: `discoveryService.js`
+
+### Fix 7: Add `loading="lazy"` to Lexical image components [H2]
+File: `ImageComponent.jsx` — add `loading="lazy"` to the `<img>` tag
+
+### Fix 8: Scope `userData` invalidation to current user [H3]
+```js
+// Instead of:
+queryClient.invalidateQueries({ queryKey: ["userData"] });
+// Use:
+queryClient.invalidateQueries({ queryKey: ["userData", currentUserId] });
+```
+File: `MyProfile.jsx`
+
+---
+
+## Verification
+- Run the app locally, open Network tab, and check:
+  - Comment submission doesn't trigger 3+ feed refetches
+  - Following feed response doesn't show N+1 query latency spikes
+  - Chapter create/update responses are smaller (no full content echo)
+- Load test sitemap routes with simulated 50K+ posts
+- Compare Supabase dashboard egress before/after CDN setup

@@ -1,0 +1,54 @@
+# Fix: Onboarding CTA Button Cutoff
+
+## Context
+
+The "Continue" button (`.onboarding-cta-primary`) is being cut off at the bottom of the onboarding wizard card. The content-heavy steps (especially Interests with 16 chips + 4 goal cards, and Profile with avatar + 3 fields) exceed the card's visible height and the content is being clipped rather than scrolling.
+
+## Root Cause
+
+**File:** `client/src/components/Onboarding/OnboardingWizard.css` — line 37
+
+```css
+.onboarding-wizard-content {
+    overflow: hidden;   /* <-- THIS clips the button */
+}
+```
+
+The layout chain is:
+1. `.onboarding-wizard-card` — `max-height: 90vh` + `overflow-y: auto` (should scroll)
+2. `.onboarding-wizard-content` — `overflow: hidden` (clips content **before** the card's scroll can take effect)
+3. `.onboarding-step-wrapper` — the framer-motion animated wrapper
+4. `.onboarding-step` — the actual step content with the CTA at the bottom
+
+The `overflow: hidden` was added to prevent the horizontal slide animation from leaking outside the card. But it also clips vertical content, hiding the button.
+
+## Fix
+
+**Single file change:** `client/src/components/Onboarding/OnboardingWizard.css`
+
+Change `.onboarding-wizard-content` (line 34-38) from:
+```css
+.onboarding-wizard-content {
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+}
+```
+
+To:
+```css
+.onboarding-wizard-content {
+    width: 100%;
+    position: relative;
+    overflow-x: hidden;    /* Clip horizontal slide animation */
+    overflow-y: visible;   /* Let content flow — card handles scrolling */
+}
+```
+
+This keeps the horizontal clipping (needed for slide transitions between steps) while letting vertical content extend naturally so the card's `overflow-y: auto` handles scrolling.
+
+## Verification
+
+1. Navigate each step of the wizard — the Continue/CTA button should always be visible (scrollable if needed)
+2. Step transitions should still animate horizontally without content leaking sideways
+3. Test on mobile (428px) where the card goes full-height — content should still scroll

@@ -1,0 +1,39 @@
+# Fix: Mobile reaction picker disappears immediately after long-press
+
+## Context
+On mobile, long-pressing `.reaction-button-emoji` briefly shows the `.reaction-picker` but it disappears immediately, preventing the user from selecting a reaction.
+
+**Root cause:** After a touch long-press opens the picker, the browser synthesizes mouse events (`mouseenter` → `mouseleave`). The synthesized `mouseleave` triggers `handleMouseLeave`, which closes the picker after 150ms — too fast to interact with.
+
+Touch event flow on mobile:
+1. `touchstart` → 500ms timer → picker opens
+2. Finger lifts → `touchend` → `click` (handled correctly via `longPressOpenedRef`)
+3. Browser fires synthesized `mouseleave` → **150ms later, picker closes** ← THE BUG
+
+## Fix — `ReactionButton.jsx`
+
+**1. Track touch interactions with a ref:**
+- Add `isTouchRef` to flag when a touch interaction occurs
+- Set it to `true` in `handleTouchStart`
+
+**2. Guard mouse handlers against synthesized events:**
+- In `handleMouseEnter` and `handleMouseLeave`, early-return if `isTouchRef.current` is `true`
+- This prevents synthesized mouse events from interfering with the touch-based picker
+
+**3. Add tap-outside-to-close for mobile:**
+- When the picker is open AND the interaction was touch-based, attach a `touchstart` listener on `document`
+- If the touch is outside the container, close the picker
+- This replaces the `mouseleave` dismiss behavior on mobile
+
+**4. Reset the touch flag:**
+- Reset `isTouchRef` to `false` when the picker closes, so desktop mouse events still work on hybrid devices
+
+## File to modify
+- `client/src/components/Reactions/ReactionButton.jsx`
+
+## Verification
+- On mobile (or device emulation): long-press reaction button → picker should stay open
+- Tap an emoji in the picker → reaction is applied, picker closes
+- Tap outside the picker → picker closes without reacting
+- Quick tap on button still toggles heart reaction
+- On desktop: hover behavior unchanged (picker appears on hover, disappears on mouse leave)

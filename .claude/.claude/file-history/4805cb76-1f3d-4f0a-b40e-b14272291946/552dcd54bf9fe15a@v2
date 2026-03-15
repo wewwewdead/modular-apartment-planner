@@ -1,0 +1,107 @@
+import { createContext, useContext, useReducer } from 'react';
+import { TOOLS } from '@/editor/tools';
+import { DEFAULT_ZOOM } from '@/domain/defaults';
+
+const EditorContext = createContext(null);
+
+function editorReducer(state, action) {
+  switch (action.type) {
+    case 'SET_TOOL':
+      return {
+        ...state,
+        activeTool: action.tool,
+        toolState: {},
+        selectedId: null,
+        selectedType: null,
+      };
+
+    case 'SELECT_OBJECT':
+      return {
+        ...state,
+        selectedId: action.id,
+        selectedType: action.objectType,
+      };
+
+    case 'DESELECT':
+      return {
+        ...state,
+        selectedId: null,
+        selectedType: null,
+      };
+
+    case 'UPDATE_TOOL_STATE':
+      return {
+        ...state,
+        toolState: { ...state.toolState, ...action.payload },
+      };
+
+    case 'SET_VIEWPORT':
+      return {
+        ...state,
+        viewport: { ...action.viewport },
+      };
+
+    case 'PAN':
+      return {
+        ...state,
+        viewport: {
+          ...state.viewport,
+          panX: state.viewport.panX + action.dx,
+          panY: state.viewport.panY + action.dy,
+        },
+      };
+
+    case 'ZOOM': {
+      const { zoom, panX, panY } = action;
+      return {
+        ...state,
+        viewport: { zoom, panX, panY },
+      };
+    }
+
+    case 'TOGGLE_GRID':
+      return { ...state, showGrid: !state.showGrid };
+
+    case 'TOGGLE_SNAP':
+      return { ...state, snapEnabled: !state.snapEnabled };
+
+    case 'SET_ACTIVE_FLOOR':
+      return { ...state, activeFloorId: action.floorId };
+
+    default:
+      return state;
+  }
+}
+
+export function createInitialEditorState(activeFloorId) {
+  return {
+    activeTool: TOOLS.SELECT,
+    selectedId: null,
+    selectedType: null,
+    toolState: {},
+    viewport: { panX: 400, panY: 300, zoom: DEFAULT_ZOOM },
+    showGrid: true,
+    snapEnabled: true,
+    activeFloorId,
+  };
+}
+
+export function EditorProvider({ children, activeFloorId }) {
+  const [state, dispatch] = useReducer(
+    editorReducer,
+    activeFloorId,
+    createInitialEditorState
+  );
+
+  return (
+    <EditorContext.Provider value={{ state, dispatch }}>
+      {children}
+    </EditorContext.Provider>
+  );
+}
+
+export function useEditor() {
+  const ctx = useContext(EditorContext);
+  if (!ctx) throw new Error('useEditor must be used within EditorProvider');
+  return { ...ctx.state, dispatch: ctx.dispatch };
+}

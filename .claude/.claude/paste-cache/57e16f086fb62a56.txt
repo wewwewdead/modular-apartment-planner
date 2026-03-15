@@ -1,0 +1,23 @@
+Uncaught TypeError: f.columns is not iterable
+    at ProjectProvider.jsx:135:30
+    at ProjectProvider.jsx:18:28
+    at Array.map (<anonymous>)
+    at updateFloor (ProjectProvider.jsx:17:36)
+    at projectReducer (ProjectProvider.jsx:134:14)
+    at updateReducerImpl (react-dom-client.development.js:8045:15)
+    at updateReducer (react-dom-client.development.js:7968:14)
+    at Object.useReducer (react-dom-client.development.js:26495:18)
+    at exports.useReducer (react.development.js:1257:34)
+    at ProjectProvider (ProjectProvider.jsx:165:29)
+react-dom-client.development.js:9362  An error occurred in the <ProjectProvider> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+defaultOnUncaughtError @ react-dom-client.development.js:9362
+[NEW] Explain Console errors by using Copilot in Edge: click
+         
+         to explain an error. 
+        Learn more
+        Don't show again
+The deferred DOM Node could not be resolved to a valid node.

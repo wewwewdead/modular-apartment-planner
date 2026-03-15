@@ -1,0 +1,46 @@
+# Make Toolbar Horizontally Scrollable
+
+## Context
+After adding the Fixtures palette, the toolbar now has too many items (file actions, view modes, 12 tool buttons, 6 fixture buttons, toggle buttons) to fit on smaller screens. Items overflow and are hidden/clipped. The fix is to make `.toolbar` scroll horizontally.
+
+## File to Modify
+`src/ui/Toolbar.module.css`
+
+## Changes
+In the `.toolbar` rule (line 1–10), add:
+- `overflow-x: auto` — enables horizontal scrolling when content overflows
+- `overflow-y: hidden` — prevents any vertical scrollbar
+- Hide the scrollbar visually (thin/auto + webkit/Firefox scrollbar-width) so it looks clean but is still usable via mousewheel/trackpad/drag
+
+```css
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-height);
+  background: var(--color-panel-bg);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  padding: 0 var(--space-md);
+  gap: var(--space-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.toolbar::-webkit-scrollbar {
+  height: 3px;
+}
+.toolbar::-webkit-scrollbar-thumb {
+  background: var(--color-border-subtle);
+  border-radius: 2px;
+}
+.toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+```
+
+## Verification
+1. `npm run dev` — resize the browser window narrower than toolbar content
+2. Confirm a thin scrollbar appears and all toolbar items are accessible by scrolling
+3. Confirm no vertical scrollbar appears
+4. Confirm at full width no scrollbar is visible

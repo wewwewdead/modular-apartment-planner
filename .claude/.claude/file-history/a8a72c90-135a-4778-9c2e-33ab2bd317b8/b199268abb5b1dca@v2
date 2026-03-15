@@ -1,0 +1,209 @@
+import React, {useMemo, useRef, useState} from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {AuthStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
+export function LoginScreen({navigation}: Props) {
+  const {signIn, authError} = useAuth();
+  const {colors, isDark} = useTheme();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+
+  const canSubmit = useMemo(
+    () => email.trim().length > 4 && password.length > 5,
+    [email, password],
+  );
+
+  const onSubmit = async () => {
+    try {
+      setLoading(true);
+      await signIn({email: email.trim(), password});
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Sign in failed';
+      Alert.alert('Login failed', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = (field: string) => [
+    styles.input,
+    {
+      backgroundColor: isDark ? colors.bgElevated : colors.bgPrimary,
+      borderColor:
+        focusedField === field ? colors.accentAmber : colors.borderCard,
+      color: colors.textPrimary,
+    },
+    focusedField === field && {
+      shadowColor: colors.accentAmber,
+      shadowOffset: {width: 0, height: 0},
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+    },
+  ];
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.container}>
+          {/* Brand header */}
+          <View style={styles.brandSection}>
+            <Text style={[styles.brandText, {color: colors.textHeading}]}>
+              ISKRIB
+            </Text>
+            <View
+              style={[styles.brandUnderline, {backgroundColor: colors.accentAmber}]}
+            />
+            <Text style={[styles.tagline, {color: colors.textSecondary}]}>
+              Where thoughts find their voice
+            </Text>
+          </View>
+
+          {!!authError && (
+            <Text style={[styles.error, {color: colors.danger}]}>
+              {authError}
+            </Text>
+          )}
+
+          {/* Form */}
+          <View style={styles.form}>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, {color: colors.textMuted}]}>
+                EMAIL
+              </Text>
+              <TextInput
+                placeholder="Enter your email"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                returnKeyType="next"
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                style={inputStyle('email')}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, {color: colors.textMuted}]}>
+                PASSWORD
+              </Text>
+              <TextInput
+                ref={passwordRef}
+                placeholder="Enter your password"
+                placeholderTextColor={colors.textFaint}
+                secureTextEntry
+                autoComplete="password"
+                returnKeyType="go"
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                onSubmitEditing={canSubmit ? onSubmit : undefined}
+                style={inputStyle('password')}
+              />
+            </View>
+
+            <PrimaryButton
+              label="Sign In"
+              onPress={onSubmit}
+              loading={loading}
+              disabled={!canSubmit}
+            />
+
+            <PrimaryButton
+              label="Create Account"
+              onPress={() => navigation.navigate('SignUp')}
+              kind="secondary"
+            />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxl,
+  },
+  brandSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xxxl,
+  },
+  brandText: {
+    fontFamily: fonts.brand.semiBold,
+    fontSize: 36,
+    letterSpacing: 3,
+  },
+  brandUnderline: {
+    width: 48,
+    height: 3,
+    borderRadius: 2,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  tagline: {
+    fontFamily: fonts.serif.italic,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  error: {
+    fontSize: 13,
+    fontFamily: fonts.ui.medium,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  form: {
+    gap: spacing.lg,
+  },
+  fieldGroup: {
+    gap: spacing.xs,
+  },
+  label: {
+    ...typeScale.label,
+    marginLeft: spacing.xs,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontFamily: fonts.ui.regular,
+  },
+});

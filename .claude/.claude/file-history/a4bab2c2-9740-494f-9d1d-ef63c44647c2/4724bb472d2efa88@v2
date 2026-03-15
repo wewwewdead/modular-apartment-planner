@@ -1,0 +1,90 @@
+import React, {useMemo} from 'react';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {OpinionCard} from '../../components/OpinionCard';
+import {EmptyState} from '../../components/EmptyState';
+import {PenIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {opinionsApi} from '../../lib/api/opinionsApi';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, shadows} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'OpinionsFeed'>;
+
+export function OpinionsFeedScreen({navigation}: Props) {
+  const {user} = useAuth();
+  const {colors} = useTheme();
+
+  const query = useInfiniteQuery({
+    queryKey: ['opinions-feed'],
+    queryFn: ({pageParam}) => opinionsApi.getOpinions(pageParam ?? null),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+  });
+
+  const opinions = useMemo(
+    () => query.data?.pages.flatMap(p => p.data ?? []) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={[typeScale.h1, {color: colors.textHeading}]}>Opinions</Text>
+      </View>
+      <FlatList
+        data={opinions}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.list}
+        onEndReachedThreshold={0.3}
+        onEndReached={() => {
+          if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+        }}
+        ListEmptyComponent={
+          query.isLoading ? null : (
+            <EmptyState title="No opinions yet" subtitle="Be the first to share your opinion." />
+          )
+        }
+        renderItem={({item}) => (
+          <OpinionCard
+            opinion={item}
+            onPress={() => navigation.navigate('OpinionDetail', {opinionId: item.id})}
+            onAuthorPress={() => {
+              const authorId = item.users?.id ?? item.user_id;
+              if (authorId && authorId !== user?.id) {
+                navigation.navigate('VisitProfile', {userId: authorId, username: item.users?.username});
+              }
+            }}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+      <Pressable
+        onPress={() => navigation.navigate('OpinionEditor')}
+        style={[styles.fab, {backgroundColor: colors.accentAmber}, shadows(colors).elevated]}>
+        <PenIcon size={22} color="#1A1612" />
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {flex: 1},
+  header: {paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm},
+  list: {paddingHorizontal: spacing.lg, paddingBottom: 100},
+  separator: {height: spacing.md},
+  fab: {
+    position: 'absolute',
+    bottom: spacing.xxl,
+    right: spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

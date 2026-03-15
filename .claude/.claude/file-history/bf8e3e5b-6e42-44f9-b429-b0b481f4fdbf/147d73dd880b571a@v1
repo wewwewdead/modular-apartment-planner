@@ -1,0 +1,226 @@
+# UX/UI Improvement Plan — iskrib_v3
+
+## Context
+The app has a polished editorial aesthetic (glass morphism, amber/sage accents, Playfair Display + Lora typography) but several UX gaps: silent mutation failures, no feed skeletons, no page transitions, inconsistent spacing tokens, and partial accessibility. This plan addresses four areas in priority order.
+
+---
+
+## Phase 1: Foundation — Design Tokens + Toast System
+
+### 1A. Design Tokens
+**File:** `client/src/index.css` — add to `:root` (and mirror in `[data-theme="dark"]` where needed)
+
+```css
+/* Spacing (4px grid) */
+--space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+--space-4: 16px; --space-6: 24px; --space-8: 32px;
+--space-10: 40px; --space-12: 48px; --space-16: 64px;
+
+/* Type scale */
+--text-xs: 0.7rem;     --text-sm: 0.78rem;
+--text-base: 0.875rem;  --text-md: 1rem;
+--text-lg: 1.125rem;    --text-xl: 1.5rem;
+--text-2xl: 2rem;       --text-3xl: 2.5rem;
+
+/* Animation */
+--ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+--duration-fast: 150ms;
+--duration-normal: 250ms;
+--duration-slow: 400ms;
+
+/* Focus */
+--focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent-amber);
+```
+
+### 1B. Global Toast System
+**New files:**
+- `client/src/components/Toast/ToastContext.jsx` — Context + Provider + `useToast()` hook
+- `client/src/components/Toast/Toast.jsx` — Individual toast (Framer Motion enter/exit)
+- `client/src/components/Toast/ToastContainer.jsx` — Portal wrapper, stacks max 3 toasts
+- `client/src/components/Toast/Toast.css` — Glass morphism styling, left accent stripe per type
+
+**API:**
+```jsx
+const { toast } = useToast();
+toast.success('Post bookmarked');
+toast.error('Failed to save. Please try again.');
+toast.warning('You are offline');
+toast.info('Draft auto-saved');
+```
+
+**Design:** Bottom-right on desktop, bottom-center on mobile. Glass morphism bg, left color stripe (success=green, error=red, warning=amber, info=purple). Auto-dismiss: 3.5s success/info, 5s error/warning.
+
+**Integration — modify:**
+- `client/src/main.jsx` — wrap with `<ToastProvider>` inside `ThemeProvider`
+- `client/src/components/HomePage/postCards/PostCards.jsx` — replace ad-hoc `bookmarkedMessage`/`repostToastMessage` state with `toast.success()`. Add `onError` callbacks to mutation `.mutate()` calls.
+- `client/src/components/HomePage/ContentViewer/ContentView.jsx` — same: replace inline bookmark toast, add error toasts to reaction/follow/bookmark mutations
+- `client/src/components/comments/comments.jsx` — replace `throw new Error` in catch block with `toast.error('Failed to post comment')`
+- `client/src/components/HomePage/Editor/Editor.jsx` — add error toast for publish/save failures
+- `client/src/components/RepostModal/RepostModal.jsx` — use toast for repost confirmation
+
+**Pattern:** Error handling at call sites via `mutate({...}, { onError: () => toast.error('...') })`, NOT inside shared hooks.
+
+---
+
+## Phase 2: Feed & Page Polish
+
+### 2A. Feed Skeleton Loaders
+**New files:**
+- `client/src/components/Skeletons/FeedCardSkeleton.jsx` + `FeedCardSkeleton.css`
+
+Reuse shimmer `@keyframes` from `client/src/components/Discovery/RelatedPosts.css` (`rp-shimmer`). Skeleton mimics PostCard layout: avatar circle, name/date bars, title bar, two text bars, action icons row. Render 4 skeletons when `isFeedLoading`.
+
+**Modify:** `PostCards.jsx` — replace `MoonLoader` with `<FeedCardSkeleton count={4} />`
+
+### 2B. Empty States
+**New files:**
+- `client/src/components/EmptyState/EmptyState.jsx` + `EmptyState.css`
+
+Reusable: `<EmptyState icon={} title="" description="" action={{ label, onClick }} />`
+
+**Integrate into:** `PostCards.jsx` (empty feed), Bookmarks (no bookmarks), search (no results)
+
+### 2C. Reading Progress Bar
+**New files:**
+- `client/src/components/ReadingProgress/ReadingProgress.jsx` + `ReadingProgress.css`
+
+Thin fixed bar at viewport top, amber gradient fill, tracks scroll through article via `requestAnimationFrame`.
+
+**Modify:** `ContentView.jsx` — render `<ReadingProgress />` scoped to article content
+
+### 2D. Page Transitions
+**Modify:** `client/src/components/HomePage/Home.jsx` (line 328)
+
+Wrap `<Outlet>` with `AnimatePresence mode="wait"` + `motion.div`:
+```jsx
+<AnimatePresence mode="wait">
+    <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+    >
+        <Outlet context={{ clickOpenSidebar: handleClickMobileProfileLink, handleOpenTextEditor }} />
+    </motion.div>
+</AnimatePresence>
+```
+
+Sidebar stays mounted — only content area transitions. `useLocation()` already imported.
+
+---
+
+## Phase 3: Micro-interactions & Animations
+
+### 3A. Button Press Feedback (Global)
+**Modify:** `client/src/index.css` — add utility:
+```css
+.pressable { transition: transform var(--duration-fast) var(--ease-out-quart); }
+.pressable:active { transform: scale(0.97); }
+```
+Apply `.pressable` to key buttons in PostCards, ContentView, Sidebar.
+
+### 3B. Like/Reaction Pop
+**Modify:** `client/src/components/Reactions/reactions.css` — add:
+```css
+@keyframes reaction-pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.25); }
+    100% { transform: scale(1); }
+}
+.reaction-button.just-reacted { animation: reaction-pop 300ms var(--ease-spring); }
+```
+**Modify:** `ReactionButton.jsx` — briefly toggle `just-reacted` class on click via state
+
+### 3C. Bookmark Bounce
+**Modify:** `postcards.css` — add:
+```css
+@keyframes bookmark-bounce {
+    0% { transform: scale(1); }
+    30% { transform: scale(0.85); }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+```
+**Modify:** `PostCards.jsx` — add conditional class on bookmark button when toggled
+
+### 3D. Feed Cards Staggered Entrance
+**Modify:** `PostCards.jsx` — wrap each card in `motion.div` with:
+```jsx
+initial={{ opacity: 0, y: 16 }}
+animate={{ opacity: 1, y: 0 }}
+transition={{ duration: 0.35, delay: index * 0.05, ease: [0.25, 0.46, 0.45, 0.94] }}
+```
+Only stagger first page (check `pageIndex === 0`); subsequent pages animate without delay.
+
+### 3E. Follow Button + Comment Slide-In
+- Follow button: add `transition` + `:active scale(0.95)` in `contentviewer.css`
+- New comments: wrap optimistic comments in `motion.div` with `initial={{ opacity: 0, x: -20 }}` in `comments.jsx`
+
+---
+
+## Phase 4: Accessibility
+
+### 4A. Focus Rings
+**Modify:** `client/src/index.css` — add:
+```css
+:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
+:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+```
+
+### 4B. Reduced Motion
+**Modify:** `client/src/index.css` — add:
+```css
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+```
+For Framer Motion: use `useReducedMotion()` from framer-motion in key animated components to conditionally disable.
+
+### 4C. Skip-to-Content
+**Modify:** `App.jsx` — add `<a href="#main-content" className="skip-to-content">` as first child
+**Modify:** `Home.jsx` — add `id="main-content"` to `.center-bar-holder-container`
+**Modify:** `index.css` — off-screen by default, visible on `:focus`
+
+### 4D. Aria Labels (Bulk Pass)
+**Modify:**
+- `PostCards.jsx` — `aria-label` on like/comment/bookmark/repost/share buttons, `role="article"` on cards
+- `ReactionButton.jsx` — `aria-label="React"`, `aria-pressed` attribute
+- `comments.jsx` — `aria-label` on close/submit buttons
+- `Sidebar.jsx` — `role="navigation"`, `aria-label="Main navigation"`
+- `ContentView.jsx` — `role="article"`, labels on all action buttons
+
+### 4E. Focus Trap for Modals
+**New file:** `client/src/utils/useFocusTrap.js`
+Traps Tab/Shift+Tab within container, restores focus on unmount.
+
+**Apply to:** AuthModal, RepostModal, CommentsModal, Editor
+
+---
+
+## Build Order (by impact-to-effort)
+
+| Step | What | Why first |
+|------|------|-----------|
+| 1 | Design tokens (1A) | Foundation for everything else |
+| 2 | Toast system (1B) | Highest-impact single change — fixes silent failures |
+| 3 | Feed skeletons (2A) | Huge perceived perf improvement, low effort |
+| 4 | Focus rings + reduced motion (4A, 4B) | Small CSS additions, big a11y win |
+| 5 | Page transitions (2D) | Makes navigation feel premium |
+| 6 | Micro-interactions (3A-3E) | Polish layer across the app |
+| 7 | Empty states (2B) + Reading progress (2C) | Nice-to-haves with moderate impact |
+| 8 | Skip-to-content + aria labels + focus trap (4C-4E) | Accessibility completeness |
+
+## Verification
+- Toast: trigger error by disconnecting network, verify red toast appears + auto-dismisses
+- Skeletons: throttle network in DevTools, confirm shimmer cards show on feed load
+- Page transitions: navigate between feed/bookmarks/notifications, confirm smooth fade
+- Focus rings: Tab through the app, verify amber outline on all interactive elements
+- Reduced motion: enable in OS settings, confirm no animations play
+- Micro-interactions: like/bookmark posts, confirm pop/bounce animations
+- Empty states: view empty bookmarks page, confirm illustration + CTA renders

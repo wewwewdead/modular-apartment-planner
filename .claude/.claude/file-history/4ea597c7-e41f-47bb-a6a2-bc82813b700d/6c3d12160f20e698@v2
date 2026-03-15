@@ -1,0 +1,60 @@
+import { STAR_COLORS } from './starUtils';
+
+// Mulberry32 — fast seeded 32-bit PRNG
+const mulberry32 = (seed) => {
+    let s = seed | 0;
+    return () => {
+        s = (s + 0x6D2B79F5) | 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+
+const WORLD_SPAN = 100000;
+const HALF_SPAN = WORLD_SPAN / 2;
+
+export const generateDeepSpaceStars = (count = 2000, seed = 42) => {
+    const rng = mulberry32(seed);
+    const stars = new Array(count);
+    for (let i = 0; i < count; i++) {
+        stars[i] = {
+            x: rng() * WORLD_SPAN - HALF_SPAN,
+            y: rng() * WORLD_SPAN - HALF_SPAN,
+            radius: 0.5 + rng() * 1.5,
+            opacity: 0.2 + rng() * 0.5,
+        };
+    }
+    return stars;
+};
+
+export const generateMidGalaxyStars = (count = 800, seed = 137) => {
+    const rng = mulberry32(seed);
+    const stars = new Array(count);
+    for (let i = 0; i < count; i++) {
+        const color = STAR_COLORS[Math.floor(rng() * STAR_COLORS.length)];
+        stars[i] = {
+            x: rng() * WORLD_SPAN - HALF_SPAN,
+            y: rng() * WORLD_SPAN - HALF_SPAN,
+            radius: 1 + rng() * 3,
+            opacity: 0.3 + rng() * 0.5,
+            color,
+        };
+    }
+    return stars;
+};
+
+export const generateNebulae = (count = 18, seed = 256) => {
+    const rng = mulberry32(seed);
+    const nebulae = new Array(count);
+    for (let i = 0; i < count; i++) {
+        nebulae[i] = {
+            x: rng() * WORLD_SPAN - HALF_SPAN,
+            y: rng() * WORLD_SPAN - HALF_SPAN,
+            radius: 200 + rng() * 600,
+            opacity: 0.03 + rng() * 0.06,
+            color: STAR_COLORS[Math.floor(rng() * STAR_COLORS.length)],
+        };
+    }
+    return nebulae;
+};

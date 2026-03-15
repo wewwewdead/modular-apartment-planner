@@ -1,0 +1,188 @@
+The action 'NAVIGATE' with payload {"name":"EditProfile"} was not handled by any navigator.
+
+Do you have a screen named 'EditProfile'?
+
+If you're trying to navigate to a screen in a nested navigator, see https://reactnavigation.org/docs/nesting-navigators#navigating-to-a-screen-in-a-nested-navigator.
+
+If you're using conditional rendering, navigation will happen automatically and you shouldn't navigate manually, see.
+
+This is a development-only warning and won't be shown in production.
+anonymous @ console.js:668
+overrideMethod @ backend.js:17416
+reactConsoleErrorHandler @ ExceptionsManager.js:184
+anonymous @ setUpDeveloperTools.js:42
+anonymous @ BaseNavigationContainer.js:329
+latestCallback @ index.js:15
+anonymous @ useNavigationBuilder.js:495
+latestCallback @ index.js:15
+dispatch @ useNavigationHelpers.js:23
+dispatch @ useNavigationCache.js:77
+anonymous @ useNavigationCache.js:105
+withStack @ useNavigationCache.js:91
+anonymous @ useNavigationCache.js:103
+anonymous @ ProfileScreen.tsx:32
+_performTransitionSideEffects @ Pressability.js:757
+_receiveSignal @ Pressability.js:696
+onResponderRelease @ Pressability.js:519
+executeDispatch @ ReactFabric-dev.js:734
+runWithFiberInDEV @ ReactFabric-dev.js:697
+executeDispatchesAndReleaseTopLevel @ ReactFabric-dev.js:1247
+forEachAccumulated @ ReactFabric-dev.js:975
+anonymous @ ReactFabric-dev.js:1291
+batchedUpdatesImpl @ ReactFabric-dev.js:18891
+batchedUpdates$1 @ ReactFabric-dev.js:1216
+dispatchEvent @ ReactFabric-dev.js:1266
+VM6 &platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=true&runModule=true&sourcePaths=url-server&shallow=true:38 React has detected a change in the order of Hooks called by ProfileScreen. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+1. useContext                 useContext
+2. useContext                 useContext
+3. useState                   useState
+4. useContext                 useContext
+5. useContext                 useContext
+6. useContext                 useContext
+7. useEffect                  useEffect
+8. useState                   useState
+9. useCallback                useCallback
+10. useSyncExternalStore      useSyncExternalStore
+11. useEffect                 useEffect
+12. useContext                useContext
+13. useContext                useContext
+14. useContext                useContext
+15. useEffect                 useEffect
+16. useState                  useState
+17. useCallback               useCallback
+18. useSyncExternalStore      useSyncExternalStore
+19. useEffect                 useEffect
+20. useCallback               useMemo
+   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+anonymous @ console.js:668
+overrideMethod @ backend.js:17416
+reactConsoleErrorHandler @ ExceptionsManager.js:184
+anonymous @ setUpDeveloperTools.js:42
+updateHookTypesDev @ ReactFabric-dev.js:5555
+useMemo @ ReactFabric-dev.js:17694
+anonymous @ react.development.js:1251
+ProfileScreen @ VM6 &platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=true&runModule=true&sourcePaths=url-server&shallow=true:38
+react_stack_bottom_frame @ ReactFabric-dev.js:17130
+renderWithHooks @ ReactFabric-dev.js:5648
+updateFunctionComponent @ ReactFabric-dev.js:8081
+beginWork @ ReactFabric-dev.js:9340
+runWithFiberInDEV @ ReactFabric-dev.js:697
+performUnitOfWork @ ReactFabric-dev.js:14134
+workLoopSync @ ReactFabric-dev.js:13966
+renderRootSync @ ReactFabric-dev.js:13947
+performWorkOnRoot @ ReactFabric-dev.js:13087
+performSyncWorkOnRoot @ ReactFabric-dev.js:3688
+flushSyncWorkAcrossRoots_impl @ ReactFabric-dev.js:3538
+flushSyncWork @ ReactFabric-dev.js:13426
+scheduleRefresh @ ReactFabric-dev.js:157
+anonymous @ backend.js:11094
+anonymous @ react-refresh-runtime.development.js:265
+performReactRefresh @ react-refresh-runtime.development.js:254
+performReactRefresh @ setUpReactRefresh.js:39
+anonymous @ require.js:524
+console.js:668 Error: useTheme must be used within a ThemeProvider
+    at useTheme (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:175663:22)
+    at ErrorFallback (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:220997:91)
+    at react_stack_bottom_frame (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:17700:29)
+    at renderWithHooks (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:12336:40)
+    at updateFunctionComponent (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:13622:34)
+    at beginWork (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:14080:41)
+    at run (native)
+    at runWithFiberInDEV (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:9792:73)
+    at performUnitOfWork (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:16140:97)
+    at workLoopSync (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:16035:57)
+    at renderRootSync (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:16020:21)
+    at performWorkOnRoot (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:15714:43)
+    at performSyncWorkOnRoot (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:11397:24)
+    at flushSyncWorkAcrossRoots_impl (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:11316:329)
+    at flushSyncWork (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:15831:113)
+    at scheduleRefresh (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:9375:22)
+    at apply (native)
+    at anonymous (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:39405:45)
+    at anonymous (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:52007:38)
+    at forEach (native)
+    at performReactRefresh (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:51999:39)
+    at performReactRefresh (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:51753:48)
+    at anonymous (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:442:40)
+anonymous @ console.js:668
+overrideMethod @ backend.js:17416
+reactConsoleErrorHandler @ ExceptionsManager.js:184
+anonymous @ setUpDeveloperTools.js:42
+reportException @ ExceptionsManager.js:108
+handleException @ ExceptionsManager.js:173
+onUncaughtError @ ErrorHandlers.js:66
+logUncaughtError @ ReactFabric-dev.js:7478
+runWithFiberInDEV @ ReactFabric-dev.js:697
+anonymous @ ReactFabric-dev.js:7508
+callCallback @ ReactFabric-dev.js:5410
+commitCallbacks @ ReactFabric-dev.js:5430
+runWithFiberInDEV @ ReactFabric-dev.js:700
+commitLayoutEffectOnFiber @ ReactFabric-dev.js:11121
+flushLayoutEffects @ ReactFabric-dev.js:14530
+commitRoot @ ReactFabric-dev.js:14446
+commitRootWhenReady @ ReactFabric-dev.js:13352
+performWorkOnRoot @ ReactFabric-dev.js:13299
+performSyncWorkOnRoot @ ReactFabric-dev.js:3688
+flushSyncWorkAcrossRoots_impl @ ReactFabric-dev.js:3538
+flushSyncWork @ ReactFabric-dev.js:13426
+scheduleRefresh @ ReactFabric-dev.js:157
+anonymous @ backend.js:11094
+anonymous @ react-refresh-runtime.development.js:265
+performReactRefresh @ react-refresh-runtime.development.js:254
+performReactRefresh @ setUpReactRefresh.js:39
+anonymous @ require.js:524
+&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=true&runModule=true&sourcePaths=url-server&shallow=true:62 The action 'NAVIGATE' with payload {"name":"EditProfile"} was not handled by any navigator.
+
+Do you have a screen named 'EditProfile'?
+
+If you're trying to navigate to a screen in a nested navigator, see https://reactnavigation.org/docs/nesting-navigators#navigating-to-a-screen-in-a-nested-navigator.
+
+If you're using conditional rendering, navigation will happen automatically and you shouldn't navigate manually, see.
+
+This is a development-only warning and won't be shown in production.
+anonymous @ console.js:668
+overrideMethod @ backend.js:17416
+reactConsoleErrorHandler @ ExceptionsManager.js:184
+anonymous @ setUpDeveloperTools.js:42
+anonymous @ BaseNavigationContainer.js:329
+latestCallback @ index.js:15
+anonymous @ useNavigationBuilder.js:495
+latestCallback @ index.js:15
+dispatch @ useNavigationHelpers.js:23
+dispatch @ useNavigationCache.js:77
+anonymous @ useNavigationCache.js:105
+withStack @ useNavigationCache.js:91
+anonymous @ useNavigationCache.js:103
+anonymous @ &platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=true&runModule=true&sourcePaths=url-server&shallow=true:62
+_performTransitionSideEffects @ Pressability.js:757
+_receiveSignal @ Pressability.js:696
+onResponderRelease @ Pressability.js:519
+executeDispatch @ ReactFabric-dev.js:734
+runWithFiberInDEV @ ReactFabric-dev.js:697
+executeDispatchesAndReleaseTopLevel @ ReactFabric-dev.js:1247
+forEachAccumulated @ ReactFabric-dev.js:975
+anonymous @ ReactFabric-dev.js:1291
+batchedUpdatesImpl @ ReactFabric-dev.js:18891
+batchedUpdates$1 @ ReactFabric-dev.js:1216
+dispatchEvent @ ReactFabric-dev.js:1266
+console.js:668 Error: useTheme must be used within a ThemeProvider
+    at useTheme (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:175663:22)
+    at ErrorFallback (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:220997:91)
+    at react_stack_bottom_frame (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:17700:29)
+    at renderWithHooks (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:12336:40)
+    at updateFunctionComponent (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:13622:34)
+    at beginWork (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:14080:41)
+    at run (native)
+    at runWithFiberInDEV (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:9792:73)
+    at performUnitOfWork (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:16140:97)
+    at workLoopSync (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:16035:57)
+    at renderRootSync (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:16020:21)
+    at performWorkOnRoot (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:15714:43)
+    at performSyncWorkOnRoot (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:11397:24)
+    at flushSyncWorkAcrossRoots_impl (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:11316:329)
+    at processRootScheduleInMicrotask (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:11334:133)
+    at anonymous (10.0.2.2:8081/index.bundle//&platform=android&dev=true&lazy=true&minify=false&app=com.mobile&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server:11408:184)

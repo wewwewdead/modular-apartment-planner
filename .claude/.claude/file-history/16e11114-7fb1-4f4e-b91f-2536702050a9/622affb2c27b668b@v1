@@ -1,0 +1,59 @@
+# Deduplicate Prompt Responses — 1 Count Per Unique User
+
+## Context
+In `PromptSection`, the avatar strip (`.dashboard-prompt-avatars`) and count (`.dashboard-prompt-count`) currently show **total posts**, not unique users. If a user writes 4 responses to Today's Prompt, their avatar appears up to 4 times and the count inflates by 4. The user wants each person counted/shown only once.
+
+The modal (`PromptResponsesModal`) should continue to show all posts — only the dashboard preview (avatars + count) needs deduplication.
+
+## Files to Change
+
+### 1. Backend — `server/services/promptService.js`
+On the **first page** (no `before` cursor), add a lightweight query to count distinct respondents:
+
+```js
+// After the main query, when !before:
+const { data: userIds } = await supabase
+    .from('journals')
+    .select('user_id')
+    .eq('prompt_id', promptId)
+    .eq('privacy', 'public');
+const uniqueCount = new Set((userIds || []).map(r => r.user_id)).size;
+```
+
+Return `uniqueCount` alongside existing `count` in the result object:
+```js
+if (!before) {
+    result.count = count || 0;
+    result.uniqueCount = uniqueCount;
+}
+```
+
+### 2. Frontend — `client/src/components/DashboardBriefing/PromptSection.jsx`
+Two changes in the component:
+
+**a) Use `uniqueCount` for the displayed count:**
+```js
+const responseCount = responsesData?.uniqueCount || responsesData?.count || 0;
+```
+
+**b) Deduplicate avatars by `user_id`:**
+```js
+const seen = new Set();
+const avatars = (responsesData?.responses || []).filter(r => {
+    if (seen.has(r.user_id)) return false;
+    seen.add(r.user_id);
+    return true;
+}).slice(0, 5);
+```
+
+### No changes needed
+- **PromptResponsesModal.jsx** — modal should still list every post (all responses)
+- **DashboardBriefing.jsx** — passes `responsesData` through unchanged
+- **Controller / API / CSS** — no changes
+
+## Verification
+1. Have a single user write 3+ responses to Today's Prompt
+2. Dashboard avatar strip shows that user's avatar only once
+3. Count shows `1 response` (not `3 responses`)
+4. Opening the modal still shows all 3 individual posts
+5. Multiple distinct users each show 1 avatar, count = number of unique users

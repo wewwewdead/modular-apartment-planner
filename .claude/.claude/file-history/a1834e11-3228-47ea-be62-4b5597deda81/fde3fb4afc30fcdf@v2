@@ -1,0 +1,95 @@
+import { useMemo, useRef } from 'react';
+import { TOOLS } from './tools';
+import { createWallDrawHandler } from './handlers/wallDrawHandler';
+import { createSelectHandler } from './handlers/selectHandler';
+import { createDimensionPlaceHandler } from './handlers/dimensionPlaceHandler';
+import { createDoorPlaceHandler } from './handlers/doorPlaceHandler';
+import { createWindowPlaceHandler } from './handlers/windowPlaceHandler';
+import { createColumnPlaceHandler } from './handlers/columnPlaceHandler';
+import { createRoomPlaceHandler } from './handlers/roomPlaceHandler';
+import { createBeamPlaceHandler } from './handlers/beamPlaceHandler';
+import { createSlabPlaceHandler } from './handlers/slabPlaceHandler';
+import { createStairPlaceHandler } from './handlers/stairPlaceHandler';
+import { createSectionPlaceHandler } from './handlers/sectionPlaceHandler';
+import { createLandingPlaceHandler } from './handlers/landingPlaceHandler';
+import { createElevationSelectHandler } from './handlers/elevationSelectHandler';
+
+function createReadOnlyHandler() {
+  return {
+    onMouseDown() {},
+    onMouseMove() {},
+    onMouseUp() {},
+    onDoubleClick() {},
+    onKeyDown() {},
+    getCursor() {
+      return 'default';
+    },
+  };
+}
+
+export function useEditorTool({ activeTool, dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode }) {
+  const getFloorRef = useRef(getFloor);
+  getFloorRef.current = getFloor;
+
+  const handler = useMemo(() => {
+    if (viewMode?.startsWith('elevation_')) {
+      return createElevationSelectHandler({
+        dispatch,
+        editorDispatch,
+        getFloor: (...args) => getFloorRef.current(...args),
+        activeFloorId,
+        viewport,
+        snapEnabled,
+        viewMode,
+      });
+    }
+
+    if (viewMode !== 'plan') {
+      return createReadOnlyHandler();
+    }
+
+    const ctx = {
+      dispatch, editorDispatch,
+      getFloor: (...args) => getFloorRef.current(...args),
+      activeFloorId, viewport, snapEnabled,
+    };
+
+    switch (activeTool) {
+      case TOOLS.DIMENSION:
+        return createDimensionPlaceHandler(ctx);
+      case TOOLS.WALL:
+        return createWallDrawHandler(ctx);
+      case TOOLS.BEAM:
+        return createBeamPlaceHandler(ctx);
+      case TOOLS.STAIR:
+        return createStairPlaceHandler(ctx);
+      case TOOLS.SECTION:
+        return createSectionPlaceHandler(ctx);
+      case TOOLS.SLAB:
+        return createSlabPlaceHandler(ctx);
+      case TOOLS.ROOM:
+        return createRoomPlaceHandler(ctx);
+      case TOOLS.SELECT:
+        return createSelectHandler(ctx);
+      case TOOLS.DOOR:
+        return createDoorPlaceHandler(ctx);
+      case TOOLS.WINDOW:
+        return createWindowPlaceHandler(ctx);
+      case TOOLS.COLUMN:
+        return createColumnPlaceHandler(ctx);
+      case TOOLS.LANDING:
+        return createLandingPlaceHandler(ctx);
+      default:
+        return null;
+    }
+  }, [activeTool, activeFloorId, viewport.zoom, snapEnabled, viewMode]);
+
+  return {
+    onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),
+    onMouseMove: (modelPos, e) => handler?.onMouseMove?.(modelPos, e, toolState, selectedId, selectedType),
+    onMouseUp: (modelPos, e) => handler?.onMouseUp?.(modelPos, e, toolState),
+    onDoubleClick: (modelPos, e) => handler?.onDoubleClick?.(modelPos, e, toolState),
+    onKeyDown: (e) => handler?.onKeyDown?.(e, toolState, selectedId, selectedType),
+    getCursor: () => handler?.getCursor?.(toolState) || 'default',
+  };
+}

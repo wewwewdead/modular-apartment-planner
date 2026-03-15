@@ -1,0 +1,29 @@
+import { useQuery } from '@tanstack/react-query';
+import { getMyStories, getStoryById, getChapter } from '../../../../API/StoryApi';
+
+export const useMyStories = (token) => {
+    return useQuery({
+        queryKey: ['myStories'],
+        queryFn: () => getMyStories(token),
+        enabled: !!token,
+        staleTime: 30000,
+    });
+};
+
+export const useStoryDetail = (storyId, token) => {
+    return useQuery({
+        queryKey: ['story', storyId],
+        queryFn: () => getStoryById(storyId, token),
+        enabled: !!storyId,
+        staleTime: 30000,
+    });
+};
+
+export const useChapter = (storyId, chapterId, token) => {
+    return useQuery({
+        queryKey: ['chapter', storyId, chapterId],
+        queryFn: () => getChapter(storyId, chapterId, token),
+        enabled: !!storyId && !!chapterId,
+        staleTime: 60000,
+    });
+};

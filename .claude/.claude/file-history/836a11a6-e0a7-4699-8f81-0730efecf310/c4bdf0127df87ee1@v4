@@ -1,0 +1,448 @@
+import { createContext, useContext, useReducer } from 'react';
+import { createProject } from '@/domain/models';
+import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
+
+const ProjectContext = createContext(null);
+const HISTORY_LIMIT = 100;
+
+function snapshotProject(project) {
+  return JSON.stringify(project);
+}
+
+function getFloor(state, floorId) {
+  return state.project.floors.find(f => f.id === floorId);
+}
+
+function applyProjectUpdate(state, nextProject, recordHistory = true) {
+  const nextSnapshot = snapshotProject(nextProject);
+  const history = recordHistory
+    ? [...state.history, state.project].slice(-HISTORY_LIMIT)
+    : state.history;
+
+  return {
+    ...state,
+    history,
+    future: recordHistory ? [] : state.future,
+    project: nextProject,
+    isDirty: nextSnapshot !== state.savedSnapshot,
+  };
+}
+
+function updateFloor(state, floorId, updater, recordHistory = true) {
+  return applyProjectUpdate(state, {
+    ...state.project,
+    updatedAt: new Date().toISOString(),
+    floors: state.project.floors.map(f =>
+      f.id === floorId ? updater(f) : f
+    ),
+  }, recordHistory);
+}
+
+function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
+  const nextWall = { ...existingWall, ...wallUpdate };
+
+  if ('start' in wallUpdate && !('startAttachment' in wallUpdate)) {
+    nextWall.startAttachment = null;
+  }
+  if ('end' in wallUpdate && !('endAttachment' in wallUpdate)) {
+    nextWall.endAttachment = null;
+  }
+
+  return syncWallAttachmentPoints(nextWall, columns);
+}
+
+function projectReducer(state, action) {
+  switch (action.type) {
+    case 'PROJECT_NEW':
+      return {
+        project: action.project,
+        isDirty: false,
+        lastSavedAt: null,
+        savedSnapshot: snapshotProject(action.project),
+        history: [],
+        future: [],
+      };
+
+    case 'PROJECT_LOAD':
+      return {
+        project: action.project,
+        isDirty: false,
+        lastSavedAt: action.savedAt || null,
+        savedSnapshot: snapshotProject(action.project),
+        history: [],
+        future: [],
+      };
+
+    case 'PROJECT_SET_NAME':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        name: action.name,
+        updatedAt: new Date().toISOString(),
+      });
+
+    case 'SHEET_ADD':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        sheets: [...(state.project.sheets || []), action.sheet],
+      });
+
+    case 'SHEET_UPDATE':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        sheets: (state.project.sheets || []).map((sheet) => (
+          sheet.id === action.sheet.id ? { ...sheet, ...action.sheet } : sheet
+        )),
+      });
+
+    case 'SHEET_DELETE':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        sheets: (state.project.sheets || []).filter((sheet) => sheet.id !== action.sheetId),
+      });
+
+    case 'SHEET_VIEWPORT_ADD':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        sheets: (state.project.sheets || []).map((sheet) => (
+          sheet.id === action.sheetId
+            ? { ...sheet, viewports: [...(sheet.viewports || []), action.viewport] }
+            : sheet
+        )),
+      });
+
+    case 'SHEET_VIEWPORT_UPDATE':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        sheets: (state.project.sheets || []).map((sheet) => (
+          sheet.id === action.sheetId
+            ? {
+                ...sheet,
+                viewports: (sheet.viewports || []).map((viewport) => (
+                  viewport.id === action.viewport.id ? { ...viewport, ...action.viewport } : viewport
+                )),
+              }
+            : sheet
+        )),
+      });
+
+    case 'SHEET_VIEWPORT_DELETE':
+      return applyProjectUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        sheets: (state.project.sheets || []).map((sheet) => (
+          sheet.id === action.sheetId
+            ? {
+                ...sheet,
+                viewports: (sheet.viewports || []).filter((viewport) => viewport.id !== action.viewportId),
+              }
+            : sheet
+        )),
+      });
+
+    case 'WALL_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        walls: [...f.walls, syncWallAttachmentPoints(action.wall, f.columns || [])],
+      }));
+
+    case 'WALL_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        walls: f.walls.map(w => (
+          w.id === action.wall.id
+            ? mergeWallUpdate(w, action.wall, f.columns || [])
+            : w
+        )),
+      }));
+
+    case 'WALL_DELETE': {
+      const wallId = action.wallId;
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        walls: f.walls.filter(w => w.id !== wallId),
+        doors: f.doors.filter(d => d.wallId !== wallId),
+        windows: f.windows.filter(w => w.wallId !== wallId),
+      }));
+    }
+
+    case 'DOOR_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        doors: [...f.doors, action.door],
+      }));
+
+    case 'DOOR_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        doors: f.doors.map(d => d.id === action.door.id ? { ...d, ...action.door } : d),
+      }));
+
+    case 'DOOR_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        doors: f.doors.filter(d => d.id !== action.doorId),
+      }));
+
+    case 'WINDOW_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        windows: [...f.windows, action.window],
+      }));
+
+    case 'WINDOW_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        windows: f.windows.map(w => w.id === action.window.id ? { ...w, ...action.window } : w),
+      }));
+
+    case 'WINDOW_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        windows: f.windows.filter(w => w.id !== action.windowId),
+      }));
+
+    case 'BEAM_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        beams: [...(f.beams || []), action.beam],
+      }));
+
+    case 'BEAM_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        beams: (f.beams || []).map(beam => (
+          beam.id === action.beam.id ? { ...beam, ...action.beam } : beam
+        )),
+      }));
+
+    case 'BEAM_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        beams: (f.beams || []).filter(beam => beam.id !== action.beamId),
+      }));
+
+    case 'STAIR_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        stairs: [...(f.stairs || []), action.stair],
+      }));
+
+    case 'STAIR_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        stairs: (f.stairs || []).map(stair => (
+          stair.id === action.stair.id ? { ...stair, ...action.stair } : stair
+        )),
+      }));
+
+    case 'STAIR_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        stairs: (f.stairs || []).filter(stair => stair.id !== action.stairId),
+      }));
+
+    case 'ANNOTATION_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        annotations: [...(f.annotations || []), action.annotation],
+      }));
+
+    case 'ANNOTATION_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        annotations: (f.annotations || []).map((annotation) => (
+          annotation.id === action.annotation.id ? { ...annotation, ...action.annotation } : annotation
+        )),
+      }));
+
+    case 'ANNOTATION_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        annotations: (f.annotations || []).filter((annotation) => annotation.id !== action.annotationId),
+      }));
+
+    case 'ANNOTATION_SETTINGS_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        annotationSettings: {
+          ...(f.annotationSettings || {}),
+          ...action.settings,
+        },
+      }));
+
+    case 'SLAB_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        slabs: [...(f.slabs || []), action.slab],
+      }));
+
+    case 'SLAB_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        slabs: (f.slabs || []).map(s =>
+          s.id === action.slab.id ? { ...s, ...action.slab } : s
+        ),
+      }));
+
+    case 'SLAB_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        slabs: (f.slabs || []).filter(s => s.id !== action.slabId),
+      }));
+
+    case 'SECTION_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        sectionCuts: [...(f.sectionCuts || []), action.sectionCut],
+      }));
+
+    case 'SECTION_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        sectionCuts: (f.sectionCuts || []).map(s =>
+          s.id === action.sectionCut.id ? { ...s, ...action.sectionCut } : s
+        ),
+      }));
+
+    case 'SECTION_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        sectionCuts: (f.sectionCuts || []).filter(s => s.id !== action.sectionId),
+      }));
+
+    case 'ROOM_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: [...f.rooms, action.room],
+      }));
+
+    case 'ROOM_UPDATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: f.rooms.map(r => r.id === action.room.id ? { ...r, ...action.room } : r),
+      }));
+
+    case 'ROOM_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: f.rooms.filter(r => r.id !== action.roomId),
+      }));
+
+    case 'ROOMS_SET':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        rooms: action.rooms,
+      }));
+
+    case 'FLOOR_REPLACE':
+      return updateFloor(state, action.floorId, () => ({
+        ...action.floor,
+      }));
+
+    case 'COLUMN_ADD':
+      return updateFloor(state, action.floorId, f => ({
+        ...f, columns: [...(f.columns || []), action.column],
+      }));
+    case 'COLUMN_DUPLICATE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        columns: [...(f.columns || []), action.column],
+      }));
+    case 'COLUMN_UPDATE':
+      return updateFloor(state, action.floorId, f => {
+        const nextColumns = (f.columns || []).map(c => (
+          c.id === action.column.id ? { ...c, ...action.column } : c
+        ));
+        return {
+          ...f,
+          columns: nextColumns,
+          walls: f.walls.map(w => syncWallAttachmentPoints(w, nextColumns)),
+        };
+      });
+    case 'COLUMN_DELETE':
+      return updateFloor(state, action.floorId, f => ({
+        ...f,
+        columns: (f.columns || []).filter(c => c.id !== action.columnId),
+        walls: f.walls.map(w => detachColumnAttachments(w, f.columns || [], action.columnId)),
+        beams: (f.beams || []).filter(beam => (
+          beam.startRef?.id !== action.columnId && beam.endRef?.id !== action.columnId
+        )),
+      }));
+
+    case 'MARK_SAVED':
+      return {
+        ...state,
+        isDirty: false,
+        lastSavedAt: new Date().toISOString(),
+        savedSnapshot: snapshotProject(state.project),
+      };
+
+    case 'UNDO': {
+      if (state.history.length === 0) return state;
+      const previousProject = state.history[state.history.length - 1];
+      return {
+        ...state,
+        project: previousProject,
+        history: state.history.slice(0, -1),
+        future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
+        isDirty: snapshotProject(previousProject) !== state.savedSnapshot,
+      };
+    }
+
+    case 'REDO': {
+      if (state.future.length === 0) return state;
+      const nextProject = state.future[0];
+      return {
+        ...state,
+        project: nextProject,
+        history: [...state.history, state.project].slice(-HISTORY_LIMIT),
+        future: state.future.slice(1),
+        isDirty: snapshotProject(nextProject) !== state.savedSnapshot,
+      };
+    }
+
+    default:
+      return state;
+  }
+}
+
+const initialProject = createProject();
+
+const initialState = {
+  project: initialProject,
+  isDirty: false,
+  lastSavedAt: null,
+  savedSnapshot: snapshotProject(initialProject),
+  history: [],
+  future: [],
+};
+
+export function ProjectProvider({ children }) {
+  const [state, dispatch] = useReducer(projectReducer, initialState);
+  return (
+    <ProjectContext.Provider value={{ state, dispatch }}>
+      {children}
+    </ProjectContext.Provider>
+  );
+}
+
+export function useProject() {
+  const ctx = useContext(ProjectContext);
+  if (!ctx) throw new Error('useProject must be used within ProjectProvider');
+  const { state, dispatch } = ctx;
+
+  return {
+    project: state.project,
+    isDirty: state.isDirty,
+    lastSavedAt: state.lastSavedAt,
+    canUndo: state.history.length > 0,
+    canRedo: state.future.length > 0,
+    dispatch,
+    getFloor: (floorId) => state.project.floors.find(f => f.id === floorId),
+  };
+}

@@ -1,0 +1,64 @@
+# Support Rooms Inside Rooms (T-Junction Wall Splitting)
+
+## Context
+User wants to draw walls inside an existing box to subdivide it into multiple rooms. Currently this fails because:
+1. **Wall drawing** only snaps to wall endpoints, not to points along wall segments — so divider walls don't connect to outer walls
+2. **Room detection** doesn't handle T-junctions — when a wall endpoint lands on the middle of another wall, that wall isn't split in the graph
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/editor/handlers/wallDrawHandler.js` | Add snap-to-segment (not just endpoints) |
+| `src/geometry/roomDetection.js` | Add T-junction edge splitting before graph traversal |
+
+**Dependency (read-only):** `src/geometry/line.js` — provides `nearestPointOnSegment(p, a, b)` → `{ point, t }`
+
+## Change 1: Snap-to-Segment in wallDrawHandler.js
+
+Add import at top:
+```js
+import { nearestPointOnSegment } from '@/geometry/line';
+```
+
+Replace `snapToEndpoints` with `snapToWalls` that:
+1. First checks chain start (existing, highest priority)
+2. Then checks all wall endpoints (existing)
+3. **NEW**: If no endpoint found, check nearest point on any wall segment using `nearestPointOnSegment`
+   - Skip projections where `t <= 0.001 || t >= 0.999` (too close to endpoints, already covered)
+   - Return the projected point if within `snapDistModel`
+
+Update both call sites (lines 54 and 100) to use `snapToWalls`.
+
+**Key**: Endpoints always win over segment snaps — only try segments if no endpoint is close enough.
+
+## Change 2: T-Junction Splitting in roomDetection.js
+
+Add import at top:
+```js
+import { nearestPointOnSegment } from './line';
+```
+
+Insert new step between edge building (line 41) and adjacency list building (line 44):
+
+**Step A2: Split edges at T-junctions**
+- For each edge, check all vertices (excluding that edge's own endpoints)
+- If a vertex is within `mergeTolerance` of the edge segment (using `nearestPointOnSegment` with `0 < t < 1`), record it as a split point
+- Sort split points by `t`, replace the original edge with N+1 sub-edges
+- Use a `while (edgesChanged)` loop for safety (usually 1 pass suffices)
+- Iterate edges in reverse so `splice` doesn't invalidate indices
+
+## Why This Works
+
+**Simple rectangle (no regression):** 4 walls, 4 vertices, 4 edges. No vertex lies on another edge → zero splits → identical behavior.
+
+**Subdivided rectangle:** Outer box (4 walls) + 1 divider wall. After Step A: 6 vertices, 5 edges. Step A2 finds 2 T-junctions, splits 2 outer walls → 6 vertices, 7 edges. Planar face extraction correctly finds 2 rooms.
+
+**Multiple dividers:** Multiple splits on one edge are sorted by `t` and produce N+1 sub-edges correctly.
+
+## Verification
+1. `npx vite build` — no errors
+2. Draw 4 walls forming a rectangle → Detect Rooms → 1 room (regression check)
+3. Draw a divider wall from top edge to bottom edge → Detect Rooms → 2 rooms
+4. Draw an L-shaped subdivision → Detect Rooms → correct room count
+5. Verify wall preview snaps to mid-segment during mouse move

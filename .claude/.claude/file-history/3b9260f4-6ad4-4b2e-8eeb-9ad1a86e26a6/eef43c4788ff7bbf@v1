@@ -1,0 +1,105 @@
+# Fix Missing Mention Notifications for Opinions
+
+## Context
+
+When a user `@mentions` someone in an opinion or opinion reply, the mentioned user receives no notification. The comment system already handles this correctly — it extracts `@username` patterns from the text, looks up the users, and inserts `type: 'mention'` rows into the `notifications` table. The opinion system simply never does this extraction.
+
+Additionally, the client hardcodes `displayType = 'opinion_reply'` for ALL opinion-source notifications, and `NOTIFICATION_OPINION_SELECT` doesn't include `type`, so even if we insert mention notifications into `notification_opinions`, the client wouldn't display them correctly.
+
+## Changes
+
+### 1. Backend: Add mention extraction to opinion replies
+**File:** `server/services/interactService.js` — `uploadOpinionReplyService` (line ~257)
+
+After the successful insert (after the error check on line 254), add the same non-fatal mention extraction pattern used in `addCommentService` (lines 133-162), but inserting into `notification_opinions` with `opinion_id` instead of `notifications` with `journal_id`:
+
+```js
+// Non-fatal: send @mention notifications
+try {
+    const mentionMatches = opinion.match(/@([\w-]+)/g);
+    if (mentionMatches && mentionMatches.length > 0) {
+        const usernames = [...new Set(mentionMatches.map(m => m.slice(1)))].slice(0, 10);
+        const { data: mentionedUsers } = await supabase
+            .from('users')
+            .select('id, username')
+            .in('username', usernames);
+        if (mentionedUsers && mentionedUsers.length > 0) {
+            const notifs = mentionedUsers
+                .filter(u => u.id !== user_id && u.id !== receiver_id)
+                .map(u => ({
+                    sender_id: user_id,
+                    receiver_id: u.id,
+                    opinion_id: parent_id,
+                    type: 'mention',
+                    read: false,
+                }));
+            if (notifs.length > 0) {
+                await supabase.from('notification_opinions').insert(notifs);
+            }
+        }
+    }
+} catch (mentionErr) {
+    console.error('non-fatal: opinion mention notification error', mentionErr?.message);
+}
+```
+
+### 2. Backend: Add mention extraction to top-level opinions
+**File:** `server/controller/opinionController.js` — `addOpinionController` (line ~63, after streak recording)
+
+Same pattern, but since top-level opinions have no `receiver_id` to exclude, only filter out the sender. We need the inserted opinion's ID for `opinion_id`, so we'll capture it from the insert result by adding `.select('id').single()`.
+
+### 3. Backend: Add `type` to opinion notification SELECT
+**File:** `server/services/notificationService.js` — `NOTIFICATION_OPINION_SELECT` (line 28)
+
+Add `type,` to the select string so the client receives the notification type.
+
+### 4. Client: Use actual `type` for opinion notifications
+**Files:**
+- `client/src/components/Notifications/notificationsCards.jsx` (line 241)
+- `client/src/components/Notifications/UnreadNotificationCard.jsx` (line 200)
+
+Change:
+```js
+const displayType = isOpinion ? 'opinion_reply' : notification?.type;
+```
+To:
+```js
+const displayType = isOpinion
+    ? (notification?.type === 'mention' ? 'mention' : 'opinion_reply')
+    : notification?.type;
+```
+
+This preserves `opinion_reply` for reply-type opinion notifications while showing the `mention` icon/text for mention-type ones. The `mention` icon and `FormatNotificationType` text already exist ("Mentioned you in a post").
+
+### 5. Client: Update mention format text for opinion context
+**File:** `client/helpers/formatNoficationType.js`
+
+The current `mention` text says "Mentioned you in a post". For opinion mentions this is slightly inaccurate but acceptable — no change needed unless user wants "Mentioned you in an opinion" distinction. We'll keep it as-is for simplicity.
+
+### 6. SQL: Add 'mention' to `notification_opinions` type constraint (defensive)
+
+The `notification_opinions` CREATE TABLE isn't in the codebase (created manually in Supabase), so it's unknown whether a CHECK constraint on `type` exists in production. The SQL uses `DROP CONSTRAINT IF EXISTS` so it's safe either way — a no-op if no constraint exists, and a fix if one does. Already appended to `server/sql/add_mention_notification_type.sql`:
+
+```sql
+ALTER TABLE notification_opinions DROP CONSTRAINT IF EXISTS notification_opinions_type_check;
+ALTER TABLE notification_opinions ADD CONSTRAINT notification_opinions_type_check
+  CHECK (type IN ('reply', 'mention'));
+```
+
+Run in Supabase SQL Editor before deploying. If you're certain no constraint exists, this step can be skipped — the inserts will work regardless.
+
+## Files to modify
+1. `server/services/interactService.js` — add mention extraction in `uploadOpinionReplyService`
+2. `server/controller/opinionController.js` — add mention extraction in `addOpinionController`
+3. `server/services/notificationService.js` — add `type` to `NOTIFICATION_OPINION_SELECT`
+4. `client/src/components/Notifications/notificationsCards.jsx` — use actual type for opinion notifs
+5. `client/src/components/Notifications/UnreadNotificationCard.jsx` — same displayType fix
+6. `server/sql/add_mention_notification_type.sql` — add `notification_opinions` constraint update
+
+## Verification
+1. Submit an opinion reply containing `@someuser` → `notification_opinions` row with `type: 'mention'` created for that user
+2. Submit a top-level opinion with `@someuser` → same result
+3. The mentioned user sees the notification with the `@` mention icon and "Mentioned you in a post" text
+4. Clicking the notification navigates to the opinion
+5. Existing opinion reply notifications still show correctly with the reply icon
+6. Self-mentions and mentions of the reply recipient (who already gets a reply notif) are filtered out

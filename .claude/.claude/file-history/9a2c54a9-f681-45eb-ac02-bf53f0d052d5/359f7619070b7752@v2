@@ -1,0 +1,290 @@
+.story-detail {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px 16px;
+}
+
+.story-detail-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+
+.story-detail-error {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 0;
+}
+
+/* Hero */
+.story-detail-hero {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.story-detail-cover {
+    width: 160px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 3 / 4;
+    background: var(--bg-secondary);
+}
+
+.story-detail-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.story-detail-cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.story-detail-hero-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: center;
+}
+
+.story-detail-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.25;
+}
+
+.story-detail-author {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.story-detail-author:hover .story-detail-author-name {
+    text-decoration: underline;
+}
+
+.story-detail-author-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.story-detail-author-name {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.story-detail-stats {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.story-detail-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.story-detail-tag {
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: var(--bg-hover);
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+
+/* Actions */
+.story-detail-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+}
+
+.story-detail-read-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent-dark);
+    color: var(--bg-primary);
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.story-detail-read-btn:hover {
+    opacity: 0.85;
+}
+
+.story-detail-vote-btn,
+.story-detail-library-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.story-detail-vote-btn:hover,
+.story-detail-library-btn:hover {
+    background: var(--bg-hover);
+}
+
+.story-detail-vote-btn-active {
+    color: #f44336;
+    border-color: rgba(244, 67, 54, 0.3);
+    background: rgba(244, 67, 54, 0.06);
+}
+
+.story-detail-library-btn-active {
+    color: var(--accent-purple);
+    border-color: rgba(196, 148, 62, 0.3);
+    background: rgba(196, 148, 62, 0.06);
+}
+
+/* Description */
+.story-detail-description {
+    margin-bottom: 24px;
+}
+
+.story-detail-description h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+}
+
+.story-detail-description p {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+/* Chapter list */
+.story-detail-chapters h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 12px 0;
+}
+
+.story-detail-no-chapters {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+}
+
+.story-detail-chapter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.story-detail-chapter-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.story-detail-chapter-item:hover {
+    background: var(--bg-hover);
+}
+
+.story-detail-chapter-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+}
+
+.story-detail-chapter-number {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.story-detail-chapter-title {
+    font-size: 0.88rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.story-detail-chapter-right {
+    flex-shrink: 0;
+}
+
+.story-detail-chapter-words {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+    .story-detail {
+        padding: 16px 12px;
+    }
+
+    .story-detail-hero {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 14px;
+    }
+
+    .story-detail-cover {
+        width: 140px;
+    }
+
+    .story-detail-hero-info {
+        align-items: center;
+    }
+
+    .story-detail-stats {
+        justify-content: center;
+    }
+
+    .story-detail-tags {
+        justify-content: center;
+    }
+
+    .story-detail-actions {
+        justify-content: center;
+    }
+
+    .story-detail-title {
+        font-size: 1.2rem;
+    }
+}

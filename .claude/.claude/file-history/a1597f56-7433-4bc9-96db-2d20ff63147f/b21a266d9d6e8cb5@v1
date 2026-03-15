@@ -1,0 +1,61 @@
+# Resume Reading Position (Scroll Restoration)
+
+## Context
+Reading progress (chapter_id + scroll_position) is already being **saved** to the DB on every scroll (debounced 3s) and on component unmount. The `getStoryByIdService` already returns `scroll_position` alongside `chapter_id` in the `reading_progress` object. However, when the user clicks "Continue Reading" in StoryDetail, they navigate to the correct chapter but always land at the **top** — the saved scroll position is never restored.
+
+## Changes
+
+### 1. `client/src/components/Stories/StoryDetail/StoryDetail.jsx` (line 34-35)
+Pass `scroll_position` via React Router navigate state when resuming:
+
+```js
+navigate(`/home/stories/${storyId}/chapter/${story.reading_progress.chapter_id}`, {
+    state: { scrollPosition: story.reading_progress.scroll_position }
+});
+```
+
+### 2. `client/src/components/Stories/ChapterReader/ChapterReader.jsx`
+- Import `useLocation` from react-router-dom
+- Read `location.state?.scrollPosition` on mount
+- After the Lexical editor content renders, scroll to the saved position
+- Use a ref to ensure scroll restoration only fires once per "continue reading" entry
+- Clear the location state after restoring (via `navigate(location.pathname, { replace: true, state: {} })`) so refreshing doesn't re-scroll
+
+Scroll restoration logic (new `useEffect` after content loads):
+```js
+const location = useLocation();
+const hasRestoredRef = useRef(false);
+
+useEffect(() => {
+    const savedPosition = location.state?.scrollPosition;
+    if (!savedPosition || hasRestoredRef.current || isLoading || !chapter) return;
+    hasRestoredRef.current = true;
+
+    // Wait for Lexical to render content, then scroll
+    const timer = setTimeout(() => {
+        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+        if (docHeight > 0) {
+            window.scrollTo({ top: docHeight * savedPosition, behavior: 'instant' });
+        }
+        // Clear state so browser refresh doesn't re-scroll
+        navigate(location.pathname, { replace: true, state: {} });
+    }, 150);
+
+    return () => clearTimeout(timer);
+}, [isLoading, chapter]);
+```
+
+## Files Modified
+1. `client/src/components/Stories/StoryDetail/StoryDetail.jsx` — pass scroll_position in navigate state
+2. `client/src/components/Stories/ChapterReader/ChapterReader.jsx` — restore scroll position on mount
+
+## No backend changes needed
+`scroll_position` is already saved and returned by the API.
+
+## Verification
+1. Open a story, start reading, scroll partway through a chapter
+2. Navigate away (back button or leave the page)
+3. Return to the story detail page — button should say "Continue Reading"
+4. Click "Continue Reading" — should land at the saved scroll position (approximately the same paragraph)
+5. Refresh the page after restoration — should NOT re-scroll (state cleared)
+6. Navigate between chapters — should NOT trigger scroll restoration (no scrollPosition in state)

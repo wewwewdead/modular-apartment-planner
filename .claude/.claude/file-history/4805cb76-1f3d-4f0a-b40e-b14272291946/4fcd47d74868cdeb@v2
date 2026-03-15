@@ -1,0 +1,24 @@
+import { wallOutline } from '@/geometry/wallGeometry';
+
+export default function WallRenderer({ walls }) {
+  return (
+    <g className="walls">
+      {walls.map(wall => {
+        const outline = wallOutline(wall);
+        const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+        return (
+          <polygon
+            key={wall.id}
+            data-id={wall.id}
+            data-type="wall"
+            points={points}
+            fill="var(--color-wall-fill)"
+            stroke="var(--color-wall-stroke)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+    </g>
+  );
+}

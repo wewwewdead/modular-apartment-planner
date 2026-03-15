@@ -1,0 +1,143 @@
+# Writer Analytics Dashboard
+
+## Context
+iskrib has no way for writers to see how their content performs over time. The weekly recap shows a snapshot, but writers can't see trends, top posts, or engagement patterns. A dedicated analytics page will make writers feel invested in their growth — a key retention driver.
+
+## What We're Building
+A `/home/analytics` page showing: summary stats, views over time, reactions over time, reaction type breakdown, top-performing posts, and publishing frequency — with a time range selector (7d / 30d / 90d / all).
+
+---
+
+## Data Layer
+
+### Available time-series data
+- `journal_views` — `viewer_id`, `journal_id`, `created_at` (unique per viewer per post)
+- `reactions` — `journal_id`, `user_id`, `reaction_type`, `created_at`
+- `journals` — `created_at`, `views`, `cached_reaction_count`, `cached_comment_count`, `cached_bookmark_count`
+
+### NOT available (no timestamps)
+- `likes`, `follows`, `bookmarks`, `comments` — can't track trends for these
+
+---
+
+## Implementation Plan
+
+### 1. Install recharts
+`npm install recharts` in `client/` — lightweight SVG charting, works with CSS variables and Framer Motion.
+
+### 2. SQL RPC: `server/sql/analytics.sql`
+Single `get_writer_analytics(p_user_id, p_range_start, p_range_end)` function returning JSONB with:
+- **summary** — total_posts, total_views, total_reactions, total_comments, total_bookmarks, avg_engagement_rate (all-time)
+- **views_series** — daily view counts within range (from `journal_views`)
+- **reactions_series** — daily reaction counts within range (from `reactions`)
+- **reaction_breakdown** — count per reaction_type within range
+- **top_posts** — top 10 posts by engagement score `(views*1 + reactions*3 + comments*2 + bookmarks*2)` within range
+- **publishing_frequency** — posts per week within range
+- **streak** — current_streak, longest_streak from `writing_streaks`
+
+Pattern reference: `server/sql/weekly_recap.sql` (same JSONB aggregation style)
+
+### 3. Backend service + controller + route
+
+**Create `server/services/analyticsService.js`**
+- `getWriterAnalyticsService(userId, range)` — computes date range from preset string (7d/30d/90d/all), calls RPC
+- Pattern: follows `server/services/recapService.js`
+
+**Create `server/controller/analyticsController.js`**
+- `getWriterAnalyticsController` — validates `range` query param, calls service
+- Uses `asyncHandler` from `server/utils/controllerHandler.js`
+
+**Modify `server/routes/routes.js`**
+- Add: `router.get('/analytics', requireAuth, getWriterAnalyticsController);`
+- Add import for the controller
+
+### 4. Client API
+
+**Modify `client/API/Api.js`**
+- Add: `getWriterAnalytics(token, range)` using `authedGet`
+
+### 5. Frontend components
+
+**Create directory: `client/src/components/Analytics/`**
+
+| File | Purpose |
+|------|---------|
+| `AnalyticsDashboard.jsx` | Main page — header, range selector, renders all sections |
+| `AnalyticsDashboard.css` | All styles (matches DashboardBriefing patterns) |
+| `useAnalyticsData.js` | React Query hook — queryKey: `['writerAnalytics', userId, range]` |
+| `TimeRangeSelector.jsx` | Pill-style toggle: 7d / 30d / 90d / All time |
+| `AnalyticsSummary.jsx` | 4 stat tiles (reuse `useAnimatedCounter` from DashboardBriefing) |
+| `ViewsChart.jsx` | Recharts AreaChart — amber gradient, daily granularity |
+| `ReactionsChart.jsx` | Recharts AreaChart — same pattern, reactions data |
+| `ReactionBreakdown.jsx` | Horizontal bars by emoji type (CSS bars, no Recharts needed) |
+| `TopPosts.jsx` | Ranked list of top 10 posts, clickable → `/home/post/:id` |
+| `PublishingFrequency.jsx` | Recharts BarChart — posts per week, sage color |
+
+### 6. Routing + navigation
+
+**Modify `client/src/App.jsx`**
+- Add lazy import: `const AnalyticsDashboard = lazy(() => import('./components/Analytics/AnalyticsDashboard'));`
+- Add route under `/home`: `<Route path='analytics' element={<AnalyticsDashboard/>}/>`
+
+**Modify `client/src/components/HomePage/Home.jsx`**
+- Add "Analytics" link with bar-chart icon to `links` array (before Settings, after Bookmarks)
+- Uses `activeColor`/`inactiveColor` pattern matching existing links
+
+### 7. CSS approach
+- All styles in `AnalyticsDashboard.css`
+- Uses existing CSS variables: `--bg-card`, `--border-card`, `--shadow-card-sm`, `--accent-amber`, `--accent-sage`, `--text-primary/secondary/muted`
+- Fonts: Playfair Display (titles/values), Outfit (labels/UI), Lora (italic microcopy)
+- Glass card pattern from `DashboardBriefing.css`
+- Charts grid: 2-column on desktop, 1-column on mobile (480px breakpoint)
+- Summary tiles: 4-column on desktop, 2-column on mobile
+- Dark mode via `[data-theme="dark"]` selectors
+- Recharts uses CSS variable values for stroke/fill colors
+
+---
+
+## Reusable existing code
+- `useAnimatedCounter` — `client/src/components/DashboardBriefing/useAnimatedCounter.js`
+- `StatTile` pattern — `client/src/components/DashboardBriefing/StatTile.jsx` (reference, not import — we'll create analytics-specific tiles)
+- `asyncHandler` — `server/utils/controllerHandler.js`
+- `AppError` — `server/utils/AppError.js`
+- `authedGet` — `client/API/apiHelpers.js`
+- Hot score formula: `views*1 + reactions*3 + comments*2 + bookmarks*2` (from `server/sql/scalability_fixes.sql`)
+
+## Files to create (10)
+1. `server/sql/analytics.sql`
+2. `server/services/analyticsService.js`
+3. `server/controller/analyticsController.js`
+4. `client/src/components/Analytics/AnalyticsDashboard.jsx`
+5. `client/src/components/Analytics/AnalyticsDashboard.css`
+6. `client/src/components/Analytics/useAnalyticsData.js`
+7. `client/src/components/Analytics/TimeRangeSelector.jsx`
+8. `client/src/components/Analytics/AnalyticsSummary.jsx`
+9. `client/src/components/Analytics/ViewsChart.jsx`
+10. `client/src/components/Analytics/ReactionsChart.jsx`
+11. `client/src/components/Analytics/ReactionBreakdown.jsx`
+12. `client/src/components/Analytics/TopPosts.jsx`
+13. `client/src/components/Analytics/PublishingFrequency.jsx`
+
+## Files to modify (4)
+1. `server/routes/routes.js` — add analytics route + import
+2. `client/API/Api.js` — add `getWriterAnalytics` function
+3. `client/src/App.jsx` — add lazy import + route
+4. `client/src/components/HomePage/Home.jsx` — add sidebar link
+
+## Build order
+1. `npm install recharts` in client
+2. Run `analytics.sql` against Supabase
+3. Create backend: service → controller → route
+4. Add API function to `Api.js`
+5. Create `useAnalyticsData.js` hook
+6. Build components: AnalyticsDashboard (shell) → TimeRangeSelector → AnalyticsSummary → ViewsChart → ReactionsChart → ReactionBreakdown → TopPosts → PublishingFrequency
+7. Write CSS
+8. Wire up routing (App.jsx) + sidebar link (Home.jsx)
+
+## Verification
+1. Run `analytics.sql` in Supabase SQL editor
+2. Start server, hit `GET /api/analytics?range=30d` with auth token — verify JSONB response
+3. Start client, navigate to `/home/analytics`
+4. Verify: summary tiles show correct totals, charts render with data, range selector switches data, top posts are clickable, mobile layout collapses to single column
+5. Test empty state: new user with no posts should see friendly empty message
+6. Test dark mode: toggle theme, verify all chart elements use CSS variables

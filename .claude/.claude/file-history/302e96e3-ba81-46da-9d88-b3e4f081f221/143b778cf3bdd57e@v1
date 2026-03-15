@@ -1,0 +1,49 @@
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { useSketchProject } from '../SketchWorkspace';
+import { buildDemoTable } from '../domain/demoObject';
+import styles from './SketchEmptyState.module.css';
+
+export default function SketchEmptyState() {
+  const { dispatch } = useSketch();
+  const { dispatch: editorDispatch } = useSketchEditor();
+  const { setShowTemplateDialog } = useSketchProject();
+
+  const handleStartDrawing = () => {
+    editorDispatch({ type: 'DISMISS_EMPTY_STATE' });
+    editorDispatch({ type: 'SET_TOOL', tool: 'panel' });
+  };
+
+  const handleDemoObject = () => {
+    const { assembly, parts } = buildDemoTable();
+
+    for (const part of parts) {
+      dispatch({ type: 'PART_ADD', part });
+    }
+    dispatch({ type: 'ASSEMBLY_ADD', assembly });
+    editorDispatch({ type: 'SET_ACTIVE_ASSEMBLY', assemblyId: assembly.id });
+    editorDispatch({ type: 'DISMISS_EMPTY_STATE' });
+  };
+
+  return (
+    <div className={styles.overlay}>
+      <div className={styles.card}>
+        <h2 className={styles.title}>Start designing</h2>
+        <p className={styles.subtitle}>
+          Assemble furniture from typed parts — panels, legs, frames — and view in orthographic drafting views
+        </p>
+        <div className={styles.actions}>
+          <button className={styles.btnPrimary} onClick={handleStartDrawing}>
+            Start Drawing
+          </button>
+          <button className={styles.btnSecondary} onClick={() => setShowTemplateDialog(true)}>
+            Create from Template
+          </button>
+          <button className={styles.btnSecondary} onClick={handleDemoObject}>
+            Try Demo Object
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

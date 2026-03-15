@@ -1,0 +1,34 @@
+import tableTemplate from './tableTemplate';
+import cabinetTemplate from './cabinetTemplate';
+import deskTemplate from './deskTemplate';
+import shelfTemplate from './shelfTemplate';
+import bedTemplate from './bedTemplate';
+import boatTemplate from './boatTemplate';
+import carTemplate from './carTemplate';
+
+const templates = [
+  tableTemplate,
+  cabinetTemplate,
+  deskTemplate,
+  shelfTemplate,
+  bedTemplate,
+  boatTemplate,
+  carTemplate,
+];
+const templateMap = new Map(templates.map((t) => [t.type, t]));
+
+export const templateList = templates;
+
+export function getTemplate(type) {
+  return templateMap.get(type) || null;
+}
+
+export function getDefaultParams(type) {
+  const template = getTemplate(type);
+  if (!template) return {};
+  const defaults = {};
+  for (const param of template.parameters) {
+    defaults[param.key] = param.default;
+  }
+  return defaults;
+}

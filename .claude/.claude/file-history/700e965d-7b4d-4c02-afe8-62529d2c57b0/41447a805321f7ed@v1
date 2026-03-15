@@ -1,0 +1,34 @@
+# Fix: Toolbar buttons clipped at ≤480px
+
+## Context
+The mobile toolbar horizontal scroll (added previously) doesn't actually scroll on narrow screens. Buttons (including undo/redo) get clipped and are unreachable. Root cause: classic CSS flexbox gotcha — `.toolbar` is a flex child of `.toolbar-wrapper` (`display: flex`) but lacks `min-width: 0`, so `overflow-x: auto` never activates.
+
+## Root Cause
+- `.toolbar-wrapper` is `display: flex` (line 194)
+- `.toolbar` is a flex child with `overflow-x: auto` (mobile override, line 1077)
+- Flex children default to `min-width: auto`, preventing them from shrinking below content size
+- Result: toolbar expands to full content width instead of scrolling, and `.editor-container`'s `overflow: hidden` clips the right side
+
+## Fix
+**File:** `client/src/components/HomePage/Editor/editor.css` — mobile media query (line ~1075)
+
+Add `min-width: 0` to the existing `.toolbar` mobile override:
+
+```css
+.toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    min-width: 0;  /* ← ADD THIS: allows flex child to shrink, enabling overflow scroll */
+}
+```
+
+That's it — one line. The `overflow-x: auto` was already set but couldn't activate without this.
+
+## Verification
+1. Open editor in devtools responsive mode at 480px, 400px, 375px, 320px
+2. All toolbar buttons should be visible — undo/redo on the left without scrolling
+3. Swiping/scrolling right reveals remaining buttons (alignment, colors)
+4. Thin scrollbar visible at bottom of toolbar
+5. Desktop (>640px) unchanged

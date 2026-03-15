@@ -1,0 +1,64 @@
+import React from 'react';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import {PostCard} from './PostCard/PostCard';
+import {useTheme} from '../theme/ThemeProvider';
+import {extractPlainText, extractBannerImage, resolveCount} from '../lib/utils/journalHelpers';
+import {fonts, typeScale} from '../theme/typography';
+import {spacing} from '../theme/spacing';
+import type {JournalItem} from '../lib/api/mobileApi';
+
+interface InterestSectionProps {
+  name: string;
+  journals: JournalItem[];
+  onPostPress: (journalId: string) => void;
+}
+
+export function InterestSection({name, journals, onPostPress}: InterestSectionProps) {
+  const {colors} = useTheme();
+
+  if (journals.length === 0) return null;
+
+  return (
+    <View style={styles.container}>
+      <Text style={[styles.title, {color: colors.textHeading}]}>{name}</Text>
+      <FlatList
+        data={journals}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.scroll}
+        renderItem={({item}) => {
+          const preview = extractPlainText(item.content).slice(0, 100);
+          const bannerImage = extractBannerImage(item.content, (item as any).images);
+          return (
+            <View style={styles.cardWrap}>
+              <PostCard
+                title={item.title || 'Untitled'}
+                bodyPreview={preview}
+                authorName={item.users?.name || 'Unknown'}
+                authorAvatar={item.users?.image_url}
+                bannerImage={bannerImage}
+                likeCount={resolveCount(item.like_count, item.likes_count)}
+                commentCount={resolveCount(item.comment_count, item.comments_count)}
+                bookmarkCount={resolveCount(item.bookmark_count)}
+                onPress={() => onPostPress(item.id)}
+                onReact={() => {}}
+                onComment={() => {}}
+                onBookmark={() => {}}
+                onRepost={() => {}}
+                onAuthorPress={() => {}}
+              />
+            </View>
+          );
+        }}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {marginBottom: spacing.xl},
+  title: {...typeScale.h3, marginBottom: spacing.sm},
+  scroll: {gap: spacing.md},
+  cardWrap: {width: 280},
+});

@@ -1,0 +1,70 @@
+import { generateId } from './ids';
+import { WALL_THICKNESS, DOOR_WIDTH, WINDOW_WIDTH, ROOM_COLOR } from './defaults';
+import { polygonArea, polygonCentroid } from '@/geometry/polygon';
+
+export function createProject(name = 'Untitled Project') {
+  return {
+    id: generateId('proj'),
+    name,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    floors: [createFloor('Ground Floor', 0)],
+    version: 1,
+  };
+}
+
+export function createFloor(name = 'Floor', level = 0) {
+  return {
+    id: generateId('floor'),
+    name,
+    level,
+    walls: [],
+    rooms: [],
+    doors: [],
+    windows: [],
+  };
+}
+
+export function createWall(start, end, thickness = WALL_THICKNESS) {
+  return {
+    id: generateId('wall'),
+    start: { x: start.x, y: start.y },
+    end: { x: end.x, y: end.y },
+    thickness,
+  };
+}
+
+export function createDoor(wallId, offset, width = DOOR_WIDTH, openDirection = 'left', type = 'swing') {
+  return {
+    id: generateId('door'),
+    wallId,
+    offset,
+    width,
+    openDirection,
+    type,
+  };
+}
+
+export function createWindow(wallId, offset, width = WINDOW_WIDTH, type = 'standard', openDirection = 'left') {
+  return {
+    id: generateId('win'),
+    wallId,
+    offset,
+    width,
+    type,
+    openDirection,
+  };
+}
+
+export function createRoom(name = 'Room', points = [], color = ROOM_COLOR) {
+  const area = polygonArea(points);
+  const centroid = points.length >= 3 ? polygonCentroid(points) : { x: 0, y: 0 };
+  return {
+    id: generateId('room'),
+    name,
+    points: points.map(p => ({ x: p.x, y: p.y })),
+    labelPosition: { ...centroid },
+    color,
+    area,
+  };
+}

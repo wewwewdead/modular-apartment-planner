@@ -1,0 +1,65 @@
+import Matter from 'matter-js';
+
+const { Engine, Bodies, Body, Constraint, World } = Matter;
+
+export const PHYSICS_CONFIG = {
+    anchorSpringK: 0.0015,
+    semanticPullK: 0.0008,
+    constraintStiffness: 0.005,
+    constraintDamping: 0.1,
+    frictionAir: 0.02,
+    restitution: 0.4,
+    sleepThreshold: 60,
+    maxActiveBodies: 300,
+    renderEvery: 3,
+    cleanupInterval: 30000,
+    staticTimeout: 30000,
+    constraintBaseLength: 40,
+    constraintLengthRange: 120,
+};
+
+export function createStarEngine() {
+    const engine = Engine.create({
+        gravity: { x: 0, y: 0 },
+        enableSleeping: true,
+    });
+
+    engine.timing.timeScale = 1;
+
+    return engine;
+}
+
+export function createStarBody(postId, x, y, radius, mass) {
+    const body = Bodies.circle(x, y, radius, {
+        label: postId,
+        mass,
+        frictionAir: PHYSICS_CONFIG.frictionAir,
+        restitution: PHYSICS_CONFIG.restitution,
+        sleepThreshold: PHYSICS_CONFIG.sleepThreshold,
+    });
+
+    return body;
+}
+
+export function createConstellationConstraint(bodyA, bodyB, similarity) {
+    const length =
+        PHYSICS_CONFIG.constraintBaseLength +
+        (1 - similarity) * PHYSICS_CONFIG.constraintLengthRange;
+
+    return Constraint.create({
+        bodyA,
+        bodyB,
+        length,
+        stiffness: PHYSICS_CONFIG.constraintStiffness,
+        damping: PHYSICS_CONFIG.constraintDamping,
+        render: { visible: false },
+    });
+}
+
+export function getStarMass(likeCount) {
+    const likes = Math.min(likeCount || 0, 20);
+    const r = 6 + likes * 0.3;
+    return Math.PI * r * r * 0.01;
+}
+
+export { Engine, Body, World, Constraint };

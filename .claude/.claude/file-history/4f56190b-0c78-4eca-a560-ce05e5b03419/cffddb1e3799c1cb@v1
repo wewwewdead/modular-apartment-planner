@@ -1,0 +1,222 @@
+# Senior Code Review — iskrib_v3
+
+A comprehensive review of the full-stack web application: React/Vite frontend + Express/Supabase backend.
+
+---
+
+## Overall Impression
+
+You've built a genuinely impressive product solo. The feature set — rich text editor, social feed, stories, discovery engine, notifications, SEO, onboarding — is ambitious and functional. Your instincts on separation of concerns (controllers/services/routes) are solid. The SEO pipeline, SSRF protection on share images, and React Query cache management show real engineering maturity.
+
+That said, there are some areas that need attention before this scales further. I've organized everything by priority.
+
+---
+
+## ACTIVE BUGS — Fix These First
+
+### BUG 1 — `console.err()` crashes the addOpinion handler
+**`server/routes/routes.js:721`**
+`console.err` doesn't exist — it's `console.error`. When a Supabase error occurs on opinion insert, this throws a `TypeError` that crashes the handler. The 500 response never gets sent.
+
+### BUG 2 — `req.user?.id` should be `req.userId`
+**`server/controller/getController.js:114`**
+Your auth middleware sets `req.userId`, but `getJournalContentController` reads `req.user?.id` which is always `undefined`. This breaks the "edit from profile" flow (`GET /journal/:journalId/content`).
+
+### BUG 3 — Broken type check due to operator precedence
+**`server/services/interactService.js:194`**
+```js
+if(!opinion || !typeof(opinion) === 'string')  // BUG
+```
+`!typeof(opinion)` evaluates to `false` (since `typeof` always returns a truthy string), so the type check never runs. Should be `typeof opinion !== 'string'`.
+
+### BUG 4 — Error object has string for status
+**`server/services/interactService.js:196`**
+```js
+throw {status: 'opinion is undefined or opinion is not a string'};
+```
+`status` should be a number (400), and the message should go in the `error` field. This causes `res.status('opinion is...')` which is invalid.
+
+### BUG 5 — Notification badge never decrements
+**Client: `Authcontext.jsx:64` vs `useMutation.js:287`**
+Query key mismatch: the query uses `['notifcounts', userId]` (plural) but the read-notification mutation invalidates `['notifcount', ...]` (singular). The optimistic update writes to a key nobody reads, so the badge count never updates until page refresh.
+
+### BUG 6 — `getNotifications` doesn't check response status
+**`client/API/Api.js:743`**
+`if(!response)` should be `if(!response.ok)`. Currently HTTP errors (4xx/5xx) are never caught — they silently proceed to parse a non-JSON error body.
+
+### BUG 7 — Typo: `statu` instead of `status`
+**`server/services/uploadService.js:219`**
+```js
+throw {statu: 500, error: 'error while uploading journal images'};
+```
+Works by accident (defaults to 500) but the intended status code is never read.
+
+### BUG 8 — `onerror` vs `onError` (case-sensitivity)
+**`client/src/utils/useMutation.js:337`**
+`onerror:` (lowercase) should be `onError:`. React Query's callback is never invoked — view-count errors are silently swallowed.
+
+---
+
+## SECURITY — High Priority
+
+### SEC 1 — No rate limiting anywhere
+No `express-rate-limit` or equivalent on any endpoint. Write endpoints (`/addComment`, `/like`, `/addFollows`, `/save-journal`, `/addOpinion`) and search endpoints are completely unbounded. A single script could spam thousands of comments/likes per second. **This is the #1 security gap.**
+
+### SEC 2 — Service role key used for all operations
+**`server/services/supabase.js`**
+The entire app uses `SUPABASE_SERVICE_ROLE` which bypasses all Row Level Security. If any route has an authorization bug, there's no safety net. Consider using the anon key + user JWTs for user-scoped operations, reserving the service role for admin tasks.
+
+### SEC 3 — Controller throws instead of responding
+**`server/controller/uploadController.js:74-77`**
+```js
+} catch (error) {
+    throw {status: 500, error: 'error uploading journal images'}
+}
+```
+Controllers should never `throw` — they should `res.status(500).json(...)`. The thrown plain object (not an Error instance) will produce `undefined` for `err?.message` in the global handler.
+
+### SEC 4 — No input validation on `privacy` field
+**`server/routes/routes.js:682`**
+`/updatePrivacy` accepts any string value for `privacy` from `req.body` without validating against allowed values (`'public'`, `'private'`).
+
+### SEC 5 — Uncaught JSON.parse on user input
+**`server/services/uploadService.js:138`**
+`JSON.parse(profileBg)` will throw an unhandled `SyntaxError` if `profileBg` is malformed JSON. Wrap in try/catch.
+
+---
+
+## ARCHITECTURE — What to Improve
+
+### ARCH 1 — `server.js` is a 1,096-line monolith
+~500 lines of share-image generation (OG image compositing, SVG rendering, remote image fetching, LRU cache) live in the entry point. Extract to `routes/shareRoutes.js` + `services/shareImageService.js`. The entry point should be under 200 lines.
+
+### ARCH 2 — `routes.js` is a 1,069-line monolith
+Contains ~40 routes, inline handlers for notifications/opinions/views/privacy/replies/streaks, multer config, auth middleware, and data transformation utilities. Inline handlers (e.g., `getFollowsData` at line 324, `getNotifications` at line 397, `addOpinion` at line 705) should move to controllers + services.
+
+### ARCH 3 — Auth middleware is duplicated
+`extractBearerToken`, `resolveAuthUser`, `requireAuth`, `optionalAuth` are copy-pasted in both `routes.js` (lines 32-87) and `storyRoutes.js` (lines 43-79). Extract to `middleware/auth.js`.
+
+### ARCH 4 — `storyRoutes.js` is dead code
+**`server/routes/storyRoutes.js`** defines story routes but is never imported or mounted in `server.js`. The same routes are defined inline in `routes.js` (lines 1020-1043). Delete the dead file.
+
+### ARCH 5 — `imageUploader` exported from routes
+**`server/routes/routes.js:198`** exports `imageUploader`, which `uploadService.js` imports at line 2. This creates a circular dependency direction (services importing from routes). Move to `utils/imageUploader.js`.
+
+### ARCH 6 — `PostCards.jsx` is a 945-line god component
+Handles: main feed, Following feed, For You feed, search (posts + people), search suggestions, bookmarking, reactions, reposts, share menus, scroll-based header visibility. 11 state variables, 7 queries, multiple mutations. Extract into `<FeedCard>`, `<SearchBar>`, `<FeedTabs>`.
+
+### ARCH 7 — Feed personalization logic duplicated 4 times
+`getService.js` repeats the same pattern (fetch likes/bookmarks/reactions → build Sets → map over journals) in `getJournalsService`, `getFollowingFeedService`, `getForYouFeedService`, and `getMonthlyHottestJournalsService`. The `attachUserInteractionFlags` helper (line 186) already exists but only one function uses it.
+
+### ARCH 8 — Post card rendering duplicated across 4 files
+The JSX for rendering a post card (avatar, title, preview text, action buttons, SVG icons) is copy-pasted across `PostCards.jsx`, `ProfilePostCards.jsx`, `VisitedProfilePostCards.jsx`, and `Bookmarks.jsx`. Extract a shared `<PostCard>` component.
+
+### ARCH 9 — No protected route wrapper
+Routes like `/profile`, `/home/bookmark`, `/home/settings` are accessible without authentication. Each component individually checks `session` and redirects — error-prone. Add a `<ProtectedRoute>` wrapper.
+
+### ARCH 10 — No 404 catch-all route
+Missing `<Route path="*" element={<NotFound/>}/>` in App.jsx.
+
+---
+
+## INFRASTRUCTURE — What's Missing
+
+### INFRA 1 — Zero tests (CRITICAL)
+No test files, no test framework, no test configuration anywhere. The server `package.json` has `"test": "echo \"Error: no test specified\""`. For a production app with auth, uploads, and complex business logic — this is the highest-risk gap. Start with Vitest + supertest for API endpoint tests.
+
+### INFRA 2 — No CI/CD pipeline
+No GitHub Actions, no Jenkinsfile. Every push to main auto-deploys to production via Render with zero gates — no linting, no testing, no build verification. Add a basic GH Actions workflow: install → lint → build → test.
+
+### INFRA 3 — No `.env.example` files
+A new developer has no documentation of required environment variables. Create `.env.example` in both `client/` and `server/` with placeholder values and comments.
+
+### INFRA 4 — No structured logging / error tracking
+The server uses raw `console.log`/`console.error` only. No winston, pino, or morgan. No Sentry or similar. The global error handler logs `err?.message` but not the stack trace. In production, you lose critical debugging context.
+
+### INFRA 5 — Manual SQL migrations
+20 SQL files in `server/sql/` with no ordering, no versioning, no runner. You presumably copy-paste these into the Supabase SQL editor. This won't survive a staging environment or a second developer. Adopt `supabase db` CLI migrations or `dbmate`.
+
+### INFRA 6 — Split repos with no unified tooling
+`client/` and `server/` are separate git repos. No root `package.json`, no workspaces, no way to run both with one command. Consolidate into a monorepo with npm workspaces + `concurrently` for `npm run dev`.
+
+### INFRA 7 — Default Vite README
+The only README is the Vite boilerplate. No project overview, no setup instructions, no API docs.
+
+---
+
+## CODE QUALITY — Polish Items
+
+### QUALITY 1 — Pervasive typos in identifiers
+`addBoorkmark`, `addBoorkmarkSetvice`, `inserNotifPromise`, `inserLikePromise`, `paresedLimit`, `verfifyTurnstile`, `fetchind`, `loggendUserId`, `intiger`, `initaConfig`. These hurt readability and make grep unreliable.
+
+### QUALITY 2 — Inconsistent route naming
+Old routes use verbs/camelCase (`addComment`, `getFollowsData`, `addBoorkmark`), newer routes use RESTful conventions (`/stories/:id/chapters`). Pick one style — RESTful is the standard.
+
+### QUALITY 3 — Unnecessary multer on non-upload routes
+`upload` middleware is applied to `POST /addComment`, `POST /addBoorkmark`, `POST /addFollows`, etc. — routes that never handle file uploads. Adds unnecessary multipart parsing overhead.
+
+### QUALITY 4 — No `React.memo` anywhere
+Zero `React.memo()` calls in the entire client. Feed cards rendering in lists would benefit significantly.
+
+### QUALITY 5 — 9 Google Fonts loaded, ~6 unused
+`index.css` loads 9 font families. Inter, Nunito, Comfortaa, Patrick Hand, Shadows Into Light, and Sniglet don't appear in CSS variable definitions. Audit and remove unused ones — each is a render-blocking request.
+
+### QUALITY 6 — CORS origins hardcoded
+**`server.js:540`** — CORS origins include `http://localhost:5173` and a Render staging URL. Move to environment variables.
+
+### QUALITY 7 — `cacheTime` → `gcTime`
+Several React Query usages use the deprecated `cacheTime` option. In v5 this is `gcTime`. It works now but will be removed.
+
+### QUALITY 8 — ESLint disables critical rules
+`react-hooks/exhaustive-deps: 'off'` and `no-unused-vars: 'off'` mask real bugs (stale closures, dead code). No ESLint config exists for the server at all.
+
+### QUALITY 9 — No Prettier / code formatter
+No `.prettierrc` or `.editorconfig`. Code formatting relies on discipline alone.
+
+### QUALITY 10 — LRU cache duplicated
+LRU cache implementation is copy-pasted between `server.js` (lines 89-112) and `discoveryService.js` (lines 7-25). Extract to a shared utility.
+
+---
+
+## ACCESSIBILITY — Gaps
+
+- Post cards are `<motion.div onClick>` with no `role`, `tabIndex`, or keyboard handlers — invisible to screen readers
+- Home sidebar links are `<div onClick>` instead of `<button>` or `<a>`
+- No skip-to-content link
+- No focus trapping in modals (Editor, AuthModal, RepostModal)
+- Inline SVG icons mostly lack `aria-label` or `aria-hidden="true"`
+- Auth forms are well done (proper labels, ARIA states) — extend this standard to the rest of the app
+
+---
+
+## Recommended Action Plan (In Order)
+
+| Priority | What | Why |
+|----------|------|-----|
+| **Week 1** | Fix bugs 1-8 | Active bugs affecting users right now |
+| **Week 1** | Add rate limiting | #1 security gap, low effort |
+| **Week 2** | Add `.env.example` + real README | Unblocks future contributors |
+| **Week 2** | Add Vitest + 10 API endpoint tests | Catches bugs like #2 automatically |
+| **Week 3** | Extract auth middleware to `middleware/auth.js` | 15-min refactor, removes duplication |
+| **Week 3** | Extract share-image logic from server.js | Makes entry point maintainable |
+| **Week 3** | Add GitHub Actions CI (lint + build + test) | Prevents shipping broken code |
+| **Month 2** | Extract shared `<PostCard>` component | Biggest DRY win on the client |
+| **Month 2** | Break up PostCards.jsx + routes.js | Maintainability |
+| **Month 2** | DRY feed personalization in getService.js | Use `attachUserInteractionFlags` everywhere |
+| **Month 3** | Add ProtectedRoute + 404 route | Security + UX |
+| **Month 3** | Adopt migration runner | Required before staging env |
+| **Month 3** | Audit fonts + bundle size | Performance |
+| **Ongoing** | Fix typos as you touch files | Don't do a big rename — fix incrementally |
+
+---
+
+## What You're Doing Well
+
+- **Service layer separation** — controllers are thin, business logic is in services
+- **React Query usage** — staleTime, query key strategy with user ID, optimistic updates
+- **SEO pipeline** — sitemaps, JSON-LD, prerendering, `@username` routes
+- **SSRF protection** — private IP detection on share image fetch is thorough
+- **Image pipeline** — Sharp resize per bucket, WebP conversion, proper size limits
+- **Security headers** — Helmet configured, good Render headers, CAPTCHA on signup
+- **Code splitting** — 30+ lazy-loaded route components
+- **Feature velocity** — stories, discovery, onboarding, notes, streaks — impressive output for a solo dev

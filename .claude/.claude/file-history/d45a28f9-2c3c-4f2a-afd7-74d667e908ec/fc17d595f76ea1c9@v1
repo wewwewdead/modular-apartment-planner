@@ -1,0 +1,23 @@
+# Fix: ExplorePage content overflowing center-bar-holder-container
+
+## Context
+The `.explore-page-container` content doesn't fit within `.center-bar-holder-container` — content gets clipped/overflows because the container has `height: 100vh` with no overflow handling. This affects both desktop and mobile.
+
+## Root Cause
+In `client/src/components/HomePage/home.css`, `.center-bar-holder-container` is set to `height: 100vh` at all breakpoints but has no `overflow-y` property. When explore page content (hero card, runner cards, interest sections) exceeds the viewport height, it clips.
+
+## Fix
+Add `overflow-y: auto` to `.center-bar-holder-container` at all breakpoints in `home.css`:
+
+### File: `client/src/components/HomePage/home.css`
+
+1. **Desktop (line ~77-85):** Add `overflow-y: auto` to `.center-bar-holder-container`
+2. **Tablet @768px (line ~325-333):** Add `overflow-y: auto` to `.center-bar-holder-container`
+3. **Mobile @428px (line ~376-385):** Add `overflow-y: auto` to `.center-bar-holder-container`
+4. **Mobile @480px (line ~439-448):** Add `overflow-y: auto` to `.center-bar-holder-container`
+
+## Verification
+- Navigate to `/home/explore` on desktop — hero card, runner cards, and interest sections should all be visible and scrollable
+- Resize to mobile width — same content should scroll without clipping
+- Navigate to `/home` (feed) — verify feed still scrolls correctly (regression check)
+- Navigate to `/home/post/:id` — verify content view still works

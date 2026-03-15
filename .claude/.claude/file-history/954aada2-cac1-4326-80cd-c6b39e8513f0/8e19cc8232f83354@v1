@@ -1,0 +1,990 @@
+.freedom-wall-page{
+    --fw-board: #3a3836;
+    --fw-board-light: #4a4745;
+    --fw-board-dark: #2c2a28;
+    --fw-board-deep: #1f1e1c;
+    --fw-frame: #5c5550;
+    --fw-frame-light: #7a726c;
+    --fw-chalk: rgba(230, 225, 218, 0.9);
+    --fw-chalk-dim: rgba(200, 195, 188, 0.58);
+    --fw-chalk-faint: rgba(175, 170, 163, 0.42);
+    --fw-chalk-pink: #f2a7b3;
+    --fw-chalk-yellow: #f5e6a3;
+    --fw-chalk-blue: #a3c9f5;
+    --fw-chalk-green: #a8e6a3;
+    --fw-chalk-orange: #f5c896;
+
+    width: 100%;
+    padding: 0.8rem;
+    padding-bottom: 5rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    /* Warm concrete / paper background */
+    background:
+        radial-gradient(
+            ellipse at 20% 10%,
+            rgba(90, 85, 78, 0.3) 0%,
+            transparent 55%
+        ),
+        radial-gradient(
+            ellipse at 80% 85%,
+            rgba(70, 65, 58, 0.25) 0%,
+            transparent 50%
+        ),
+        linear-gradient(
+            160deg,
+            #3a3836 0%,
+            #42403e 30%,
+            #3a3836 55%,
+            #33312f 80%,
+            #3a3836 100%
+        );
+    background-attachment: fixed;
+    border-radius: 16px;
+    position: relative;
+}
+
+/* Grain noise overlay */
+.freedom-wall-page::before{
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='6' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    mix-blend-mode: soft-light;
+}
+
+.freedom-wall-page > *{
+    position: relative;
+    z-index: 1;
+}
+
+.freedom-wall-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-title-shell{
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+}
+
+.freedom-wall-title{
+    margin: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1.3rem;
+    color: var(--fw-chalk);
+    text-shadow: 0 0 8px rgba(220, 225, 220, 0.15);
+}
+
+.freedom-wall-subtitle{
+    margin: 0;
+    color: var(--fw-chalk-dim);
+    font-size: 0.78rem;
+}
+
+.freedom-wall-week-pill{
+    border: 1px solid rgba(220, 225, 220, 0.15);
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(4px);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--fw-chalk-dim);
+    font-weight: 600;
+    letter-spacing: 0.01rem;
+}
+
+.freedom-wall-week-shell{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.45rem;
+}
+
+.freedom-wall-countdown-pill{
+    width: fit-content;
+    margin-top: 0.35rem;
+    border: 1px solid rgba(245, 230, 163, 0.25);
+    background: rgba(245, 230, 163, 0.1);
+    border-radius: 999px;
+    padding: 0.3rem 0.62rem;
+    font-size: 0.69rem;
+    color: var(--fw-chalk-yellow);
+    font-weight: 700;
+    letter-spacing: 0.01rem;
+    text-shadow: 0 0 6px rgba(245, 230, 163, 0.2);
+}
+
+/* toolbar styles moved to floating dock section below */
+
+.freedom-wall-tool-group{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fw-tool-btn{
+    border: 1px solid rgba(220, 225, 220, 0.15);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--fw-chalk-dim);
+    border-radius: 10px;
+    padding: 0.4rem 0.72rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.fw-tool-btn:disabled{
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.fw-tool-btn:hover{
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--fw-chalk);
+    transform: translateY(-1px);
+}
+
+.freedom-wall-tool-controls{
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-tool-controls input[type="text"],
+.freedom-wall-tool-controls select{
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 0.34rem 0.45rem;
+    color: var(--fw-chalk);
+    font-size: 0.72rem;
+    min-width: 150px;
+}
+
+.fw-label{
+    color: var(--fw-chalk-faint);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04rem;
+    font-weight: 700;
+}
+
+.fw-stamp-grid{
+    display: flex;
+    gap: 0.4rem;
+}
+
+.fw-stamp-btn{
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.fw-stamp-btn:hover{
+    background: rgba(255, 255, 255, 0.12);
+    transform: scale(1.08);
+}
+
+.fw-sticker-grid{
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.fw-sticker-btn{
+    width: 36px;
+    height: 36px;
+    font-size: 1.15rem;
+}
+
+.fw-stamp-btn.is-active{
+    border-color: var(--fw-chalk-yellow);
+    background: rgba(245, 230, 163, 0.1);
+    box-shadow: 0 0 6px rgba(245, 230, 163, 0.12);
+}
+
+.fw-readonly-pill{
+    width: fit-content;
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.68rem;
+    color: var(--fw-chalk-faint);
+    font-weight: 600;
+}
+
+.freedom-wall-note-editor{
+    border: 1px solid rgba(220, 225, 220, 0.1);
+    background: rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.freedom-wall-note-editor h4{
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fw-chalk);
+}
+
+.freedom-wall-note-editor textarea{
+    min-height: 78px;
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--fw-chalk);
+    padding: 0.4rem;
+    resize: vertical;
+}
+
+.fw-note-controls{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fw-note-controls label{
+    font-size: 0.68rem;
+    color: var(--fw-chalk-faint);
+    font-weight: 700;
+}
+
+.fw-note-controls select{
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--fw-chalk);
+    border-radius: 8px;
+    padding: 0.32rem 0.4rem;
+    font-size: 0.72rem;
+}
+
+.fw-note-actions,
+.freedom-wall-selected-actions{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fw-apply-btn,
+.fw-delete-btn{
+    border-radius: 8px;
+    padding: 0.38rem 0.68rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.fw-apply-btn{
+    background: rgba(168, 230, 163, 0.12);
+    color: var(--fw-chalk-green);
+    border-color: rgba(168, 230, 163, 0.3);
+    text-shadow: 0 0 6px rgba(168, 230, 163, 0.15);
+}
+
+.fw-apply-btn:hover{
+    background: rgba(168, 230, 163, 0.2);
+    transform: translateY(-1px);
+}
+
+.fw-delete-btn{
+    background: rgba(242, 167, 179, 0.1);
+    color: var(--fw-chalk-pink);
+    border-color: rgba(242, 167, 179, 0.3);
+    text-shadow: 0 0 6px rgba(242, 167, 179, 0.15);
+}
+
+.fw-delete-btn:hover{
+    background: rgba(242, 167, 179, 0.2);
+    transform: translateY(-1px);
+}
+
+.freedom-wall-canvas-shell{
+    position: relative;
+    width: 100%;
+    border: 4px solid var(--fw-frame);
+    background: var(--fw-board-dark);
+    border-radius: 6px;
+    padding: 6px;
+    box-sizing: border-box;
+    overflow: hidden;
+    touch-action: none;
+    box-shadow:
+        inset 0 2px 12px rgba(0, 0, 0, 0.15),
+        inset 0 0 24px rgba(0, 0, 0, 0.1),
+        0 4px 20px rgba(0, 0, 0, 0.35),
+        0 1px 3px rgba(0, 0, 0, 0.15);
+    border-image:
+        linear-gradient(
+            135deg,
+            #6e6560 0%,
+            #807870 15%,
+            #5a5450 30%,
+            #6e6862 50%,
+            #5c5550 70%,
+            #6e6560 85%,
+            #5a5450 100%
+        ) 1;
+    animation: fw-ambient-pulse 6s ease-in-out infinite;
+}
+
+.freedom-wall-canvas-shell::after{
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 4px;
+    background: radial-gradient(
+        ellipse at 50% 50%,
+        transparent 55%,
+        rgba(0, 0, 0, 0.18) 100%
+    );
+    pointer-events: none;
+    z-index: 4;
+}
+
+@keyframes fw-ambient-pulse{
+    0%, 100%{ box-shadow: inset 0 2px 12px rgba(0,0,0,0.15), inset 0 0 24px rgba(0,0,0,0.1), 0 4px 20px rgba(0,0,0,0.35), 0 1px 3px rgba(0,0,0,0.15); }
+    50%{ box-shadow: inset 0 2px 14px rgba(0,0,0,0.18), inset 0 0 28px rgba(0,0,0,0.12), 0 5px 24px rgba(0,0,0,0.38), 0 1px 4px rgba(0,0,0,0.18); }
+}
+
+.freedom-wall-canvas-shell.is-eraser-mode,
+.freedom-wall-canvas-shell.is-eraser-mode .konvajs-content,
+.freedom-wall-canvas-shell.is-eraser-mode canvas{
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Cg transform='rotate(-28 15 15)'%3E%3Crect x='4.5' y='9' width='14' height='11' rx='2' fill='%23f3b8c1' stroke='%23824d55' stroke-width='1.5'/%3E%3Crect x='18' y='9' width='8' height='11' rx='2' fill='%23ffeef0' stroke='%23824d55' stroke-width='1.5'/%3E%3C/g%3E%3C/svg%3E") 4 24, crosshair;
+}
+
+.freedom-wall-loading,
+.freedom-wall-error{
+    padding: 2rem;
+    text-align: center;
+    color: var(--fw-chalk-dim);
+}
+
+.fw-draft-note-panel{
+    border: 1px solid rgba(220, 225, 220, 0.1);
+    background: rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.fw-draft-note-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.fw-draft-note-header h4{
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fw-chalk);
+    font-family: "Lexend Deca", sans-serif;
+    text-shadow: 0 0 6px rgba(220, 225, 220, 0.1);
+}
+
+.fw-draft-note-charcount{
+    font-size: 0.68rem;
+    color: var(--fw-chalk-faint);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.fw-draft-note-textarea{
+    width: 100%;
+    min-height: 56px;
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--fw-chalk);
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.fw-draft-note-controls{
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fw-draft-note-row{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.fw-draft-note-row label{
+    font-size: 0.68rem;
+    color: var(--fw-chalk-faint);
+    font-weight: 700;
+}
+
+.fw-draft-note-row select{
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--fw-chalk);
+    border-radius: 8px;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.72rem;
+}
+
+.fw-draft-note-row input[type="color"]{
+    width: 32px;
+    height: 28px;
+    border: 1px solid rgba(220, 225, 220, 0.15);
+    border-radius: 6px;
+    padding: 0;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.fw-draft-note-row input[type="range"]{
+    width: 80px;
+}
+
+.fw-draft-note-actions{
+    display: flex;
+    gap: 0.5rem;
+}
+
+.fw-draft-note-actions .fw-apply-btn:disabled{
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.freedom-wall-error-toast{
+    padding: 0.45rem 0.75rem;
+    border-radius: 10px;
+    background: rgba(242, 167, 179, 0.12);
+    border: 1px solid rgba(242, 167, 179, 0.3);
+    color: var(--fw-chalk-pink);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.fw-modal-backdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.46);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 60;
+    padding: 1rem;
+    box-sizing: border-box;
+}
+
+.fw-modal-card{
+    width: min(420px, 100%);
+    border: 1px solid rgba(220, 225, 220, 0.18);
+    background: rgba(24, 22, 20, 0.95);
+    border-radius: 14px;
+    padding: 0.9rem;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.fw-modal-card h4{
+    margin: 0;
+    color: var(--fw-chalk);
+    font-size: 0.95rem;
+}
+
+.fw-modal-card p{
+    margin: 0;
+    color: var(--fw-chalk-dim);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.fw-modal-actions{
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-footer{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--fw-chalk-faint);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.fw-zoom-controls{
+    position: absolute;
+    bottom: 10px;
+    right: 25px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(220, 225, 220, 0.1);
+    border-radius: 8px;
+    padding: 3px 6px;
+    z-index: 5;
+    font-size: 0.7rem;
+}
+
+.fw-zoom-controls button{
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(220, 225, 220, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--fw-chalk-dim);
+    font-weight: 700;
+    transition: background 0.15s, color 0.15s;
+}
+
+.fw-zoom-controls button:hover{
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--fw-chalk);
+}
+
+.fw-zoom-level{
+    min-width: 36px;
+    text-align: center;
+    color: var(--fw-chalk-faint);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.fw-reset-zoom-btn{
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(220, 225, 220, 0.15);
+    border-radius: 8px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--fw-chalk-dim);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.fw-reset-zoom-btn:hover{
+    background: rgba(0, 0, 0, 0.5);
+    color: var(--fw-chalk);
+}
+
+.fw-minimap{
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: 100px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(220, 225, 220, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    z-index: 5;
+    touch-action: none;
+    user-select: none;
+}
+
+.fw-minimap-viewport{
+    position: absolute;
+    left: 0;
+    top: 0;
+    border: 2px solid var(--fw-chalk-yellow);
+    background: rgba(245, 230, 163, 0.08);
+    border-radius: 2px;
+    pointer-events: auto;
+    cursor: grab;
+    will-change: transform;
+}
+
+@media (max-width: 480px){
+    .freedom-wall-page{
+        padding: 0.5rem;
+        padding-bottom: 5rem;
+    }
+
+    .freedom-wall-week-pill{
+        width: 100%;
+        border-radius: 10px;
+    }
+
+    .freedom-wall-week-shell{
+        width: 100%;
+        align-items: flex-start;
+    }
+
+    .freedom-wall-tool-controls{
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .freedom-wall-tool-controls input[type="text"],
+    .freedom-wall-tool-controls select{
+        width: 100%;
+    }
+
+    .fw-draft-note-controls{
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .fw-dock-controls-popover{
+        max-width: 100%;
+        min-width: 0;
+    }
+}
+
+/* Accent for range inputs */
+.freedom-wall-page input[type="range"]{
+    accent-color: var(--fw-chalk-yellow);
+}
+
+.freedom-wall-page input[type="color"]{
+    border: 1px solid rgba(230, 225, 218, 0.15);
+    border-radius: 6px;
+}
+
+/* ── Step 5: Color Swatch Picker ── */
+.fw-palette-tabs{
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.35rem;
+}
+
+.fw-palette-label{
+    border: 1px solid rgba(230, 225, 218, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fw-chalk-dim);
+    border-radius: 999px;
+    padding: 0.22rem 0.52rem;
+    font-size: 0.62rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.fw-palette-label:hover{
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--fw-chalk);
+}
+
+.fw-palette-label.is-active{
+    border-color: var(--fw-chalk-yellow);
+    color: var(--fw-chalk-yellow);
+    background: rgba(245, 230, 163, 0.1);
+}
+
+.fw-palette-group{
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fw-swatch{
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.12s, border-color 0.15s, box-shadow 0.15s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.fw-swatch:hover{
+    transform: scale(1.18);
+}
+
+.fw-swatch.is-active{
+    border-color: var(--fw-chalk);
+    box-shadow: 0 0 0 2px rgba(230, 225, 218, 0.3), 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.fw-custom-color-toggle{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.2rem;
+}
+
+.fw-custom-color-toggle label{
+    font-size: 0.62rem;
+    color: var(--fw-chalk-faint);
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* ── Step 5: Font Carousel ── */
+.fw-font-carousel{
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(230,225,218,0.15) transparent;
+}
+
+.fw-font-carousel::-webkit-scrollbar{
+    height: 4px;
+}
+
+.fw-font-carousel::-webkit-scrollbar-track{
+    background: transparent;
+}
+
+.fw-font-carousel::-webkit-scrollbar-thumb{
+    background: rgba(230,225,218,0.15);
+    border-radius: 2px;
+}
+
+.fw-font-chip{
+    flex-shrink: 0;
+    border: 1px solid rgba(230, 225, 218, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fw-chalk-dim);
+    border-radius: 999px;
+    padding: 0.24rem 0.58rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.fw-font-chip:hover{
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--fw-chalk);
+}
+
+.fw-font-chip.is-active{
+    border-color: var(--fw-chalk-yellow);
+    color: var(--fw-chalk-yellow);
+    background: rgba(245, 230, 163, 0.1);
+    box-shadow: 0 0 8px rgba(245, 230, 163, 0.15);
+}
+
+/* ── Step 6: Floating Bottom Dock Toolbar ── */
+.freedom-wall-toolbar{
+    position: fixed;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border: 1px solid rgba(230, 225, 218, 0.12);
+    background: rgba(20, 18, 16, 0.72);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    border-radius: 14px;
+    padding: 0.6rem 0.75rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
+    max-width: min(92vw, 720px);
+    width: auto;
+}
+
+.fw-popover-toggle{
+    font-size: 0.68rem;
+    min-width: 32px;
+    text-align: center;
+}
+
+.fw-dock-controls-popover{
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 0.5rem;
+    border: 1px solid rgba(230, 225, 218, 0.12);
+    background: rgba(20, 18, 16, 0.88);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    border-radius: 12px;
+    padding: 0.6rem 0.75rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: min(90vw, 620px);
+    width: max-content;
+    min-width: 200px;
+}
+
+.fw-tool-btn.is-active{
+    border-color: var(--fw-chalk-yellow);
+    color: var(--fw-chalk-yellow);
+    background: rgba(245, 230, 163, 0.12);
+    box-shadow: 0 0 12px rgba(245, 230, 163, 0.18), 0 0 4px rgba(245, 230, 163, 0.08);
+    text-shadow: 0 0 6px rgba(245, 230, 163, 0.25);
+}
+
+/* ── Step 7: Mobile FAB ── */
+.fw-fab-orb{
+    position: fixed;
+    bottom: 10.2rem;
+    right: 1.2rem;
+    z-index: 50;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 1px solid rgba(230, 225, 218, 0.15);
+    background: rgba(20, 18, 16, 0.75);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 12px rgba(245, 230, 163, 0.12);
+    cursor: pointer;
+    font-size: 1.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.fw-fab-orb:hover{
+    transform: scale(1.08);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.4), 0 0 16px rgba(245, 230, 163, 0.18);
+}
+
+.fw-fab-close{
+    position: absolute;
+    top: 0.4rem;
+    right: 0.5rem;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid rgba(230, 225, 218, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--fw-chalk-dim);
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.fw-fab-close:hover{
+    background: rgba(255, 255, 255, 0.15);
+}
+
+@media (max-width: 480px){
+    .freedom-wall-toolbar{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        transform: none;
+        border-radius: 16px 16px 0 0;
+        max-width: 100%;
+        width: 100%;
+        max-height: 55vh;
+        overflow-y: auto;
+        padding: 0.7rem;
+        padding-top: 0.5rem;
+        z-index: 121;
+    }
+
+    .freedom-wall-toolbar .fw-fab-close{
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        margin-left: auto;
+        margin-bottom: 0.3rem;
+        flex-shrink: 0;
+        background: rgba(30, 28, 26, 0.85);
+        backdrop-filter: blur(6px);
+    }
+
+    .fw-dock-controls-popover{
+        position: static;
+        transform: none;
+        margin-bottom: 0;
+        background: transparent;
+        backdrop-filter: none;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+/* ── Step 8: Focus Mode ── */
+.fw-focus-mode{
+    padding: 0;
+    gap: 0;
+}
+
+.fw-focus-mode .freedom-wall-canvas-shell{
+    border: none;
+    border-radius: 0;
+    border-image: none;
+}
+
+.fw-focus-btn{
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba(230, 225, 218, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--fw-chalk-dim);
+    font-weight: 700;
+    transition: background 0.15s, color 0.15s;
+}
+
+.fw-focus-btn:hover{
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--fw-chalk);
+}
+
+.fw-focus-btn.is-active{
+    border-color: var(--fw-chalk-yellow);
+    color: var(--fw-chalk-yellow);
+    background: rgba(245, 230, 163, 0.1);
+}

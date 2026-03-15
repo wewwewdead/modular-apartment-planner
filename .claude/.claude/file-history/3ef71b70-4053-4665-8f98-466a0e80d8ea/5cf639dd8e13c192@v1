@@ -1,0 +1,31 @@
+# Fix Analytics Chart Tooltip — Positioning & Animation
+
+## Context
+Chart tooltips feel "off" when hovering — the Recharts default tooltip has a fade/slide animation that combined with `backdrop-filter: blur()` on the tooltip CSS creates a jittery, laggy feel. The tooltip also drifts from the cursor position.
+
+## Fix
+Disable Recharts tooltip animation and tighten offset in all 3 chart components:
+
+### Files to modify
+1. **`client/src/components/Analytics/ViewsChart.jsx`** (line 51)
+2. **`client/src/components/Analytics/ReactionsChart.jsx`** (line 51)
+3. **`client/src/components/Analytics/PublishingFrequency.jsx`** (line 45)
+
+### Change in each file
+Replace:
+```jsx
+<Tooltip content={<CustomTooltip />} />
+```
+With:
+```jsx
+<Tooltip content={<CustomTooltip />} isAnimationActive={false} offset={10} />
+```
+
+- `isAnimationActive={false}` — removes the fade/slide transition that causes the laggy/offset feel
+- `offset={10}` — keeps tooltip close to cursor without overlapping the data point
+
+## Verification
+1. Hover over each chart (Views, Reactions, Publishing Frequency)
+2. Tooltip should appear instantly at cursor position with no animation delay
+3. Tooltip should track the cursor smoothly as you move across data points
+4. Test in dark mode too — the glass tooltip should still look clean

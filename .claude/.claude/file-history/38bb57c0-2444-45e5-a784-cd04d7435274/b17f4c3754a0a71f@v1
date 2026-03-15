@@ -1,0 +1,89 @@
+# Mobile Touch Controls for Rocket/Pilot Mode
+
+## Context
+
+Rocket mode currently only supports keyboard controls (WASD/QE). On mobile devices, the controls hint is hidden but there's no alternative input — the user can't actually fly. This adds a virtual joystick (left thumb, yaw+pitch) and a throttle button (right thumb, hold to accelerate) so mobile users can pilot through the star field.
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `client/src/components/Universe/components/VirtualJoystick.jsx` | Touch joystick for yaw/pitch control |
+| `client/src/components/Universe/components/TouchThrottle.jsx` | Throttle hold-button + Dock tap-button |
+
+## Files to Modify
+
+| File | Purpose |
+|------|---------|
+| `client/src/components/Universe/hooks/useRocketMode.js` | Add `analogRef` for proportional input, merge into `tick()` |
+| `client/src/components/Universe/components/RocketHUD.jsx` | Detect touch device, render joystick/throttle, update prompt text |
+| `client/src/components/Universe/Universe.module.css` | Mobile layout tweaks for touch control positioning |
+
+---
+
+## Step 1: Add Analog Input to `useRocketMode.js`
+
+**New ref** (after existing refs):
+```js
+const analogRef = useRef({ yaw: 0, pitch: 0, throttle: 0 });
+```
+
+**Modify `tick()` input block** (lines 110-128) to merge analog + keyboard:
+- Yaw: `yawInput = (keys.a ? -1 : 0) + (keys.d ? 1 : 0) + analog.yaw`, clamped [-1,1], applied at `YAW_RATE`
+- Pitch: same pattern with q/e + analog.pitch
+- Throttle: `keys.w || analog.throttle > 0.1` triggers acceleration (proportional for analog)
+- `keys.s` still brakes, else coast with friction
+
+**Reset analog** in `enter()`, `exit()`, `restoreFromSnapshot()`:
+```js
+analogRef.current = { yaw: 0, pitch: 0, throttle: 0 };
+```
+
+**Expose** `analogRef` in the returned `useMemo` object.
+
+## Step 2: Create `VirtualJoystick.jsx`
+
+- 100px circular touch zone, bottom-left of screen
+- 44px draggable knob inside the ring
+- Touch math: normalize finger displacement by radius → [-1,1] for yaw/pitch
+- 12% deadzone in center to prevent drift
+- Invert Y axis (drag up = pitch up)
+- Track touch by `identifier` for multi-touch safety
+- Knob snaps back to center on release, has 60ms CSS transition
+- Respects `inputFrozenRef` (no-op during docking)
+- Inline CSS module (`VirtualJoystick.module.css` not needed — styles go in `Universe.module.css`)
+
+## Step 3: Create `TouchThrottle.jsx`
+
+Two buttons stacked vertically, bottom-right:
+- **THRUST** (72px circle, orange): hold = `analogRef.throttle = 1`, release = 0
+- **DOCK** (56px circle, cyan): tap fires `onInteract()` (replaces ENTER key)
+- Both track touch by identifier, respect `inputFrozenRef`
+
+## Step 4: Update `RocketHUD.jsx`
+
+- Detect touch: `const [showTouch] = useState(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0)`
+- Import and render `VirtualJoystick` + `TouchThrottle` when `showTouch` is true
+- Pass `rocketMode.analogRef`, `rocketMode.inputFrozenRef`, `onInteract`
+- Change prompt text: `showTouch ? 'Tap DOCK to read' : 'Press ENTER to read'`
+
+## Step 5: CSS Adjustments in `Universe.module.css`
+
+Add styles for joystick and throttle controls. In the existing `@media (max-width: 600px)` block:
+- Push `.rocketTarget` up to `bottom: 150px` to clear controls
+- Joystick: `bottom: 80px; left: 30px` — glass-morphism ring
+- Throttle area: `bottom: 80px; right: 30px` — stacked buttons
+- All touch elements: `touch-action: none; user-select: none; pointer-events: auto`
+
+---
+
+## Verification
+
+1. Open on mobile (or Chrome DevTools touch simulation)
+2. Enter rocket mode via "Explore Galaxy"
+3. Joystick appears bottom-left, thrust/dock buttons bottom-right
+4. Drag joystick to steer — smooth proportional yaw/pitch
+5. Hold THRUST — ship accelerates, release to coast
+6. Tap DOCK near a star — triggers docking/navigation
+7. On desktop (no touch) — joystick/buttons should NOT appear
+8. During docking animation — controls should be unresponsive (inputFrozen)

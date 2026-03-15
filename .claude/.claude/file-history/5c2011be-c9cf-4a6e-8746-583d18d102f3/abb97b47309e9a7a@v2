@@ -1,0 +1,42 @@
+export const getPostsCopy = (count) => {
+    if (count === 0) return 'The blank page is waiting';
+    if (count === 1) return 'A seed planted';
+    if (count >= 7) return 'Your most prolific week!';
+    if (count >= 3) return 'Building momentum';
+    return 'Off to a good start';
+};
+
+export const getWordsCopy = (count) => {
+    if (!count || count === 0) return 'Every word counts';
+    if (count >= 5000) return 'A chapter in the making';
+    if (count >= 2000) return 'The ink is flowing';
+    if (count >= 500) return 'Finding your rhythm';
+    return 'First strokes on the canvas';
+};
+
+export const getReactionsCopy = (count) => {
+    if (!count || count === 0) return 'Your readers are out there';
+    if (count >= 50) return 'Resonating deeply';
+    if (count >= 20) return 'Striking a chord';
+    if (count >= 5) return 'Sparking connection';
+    return 'Making an impression';
+};
+
+export const getViewsCopy = (count) => {
+    if (!count || count === 0) return 'Eyes will follow';
+    if (count >= 500) return 'Drawing a crowd';
+    if (count >= 100) return 'Turning heads';
+    if (count >= 20) return 'Catching attention';
+    return 'First glances';
+};
+
+export const getOverallEncouragement = (personal, streakCount) => {
+    const posts = personal?.posts_written || 0;
+
+    if (streakCount >= 7) return "Don't break the streak — your consistency is paying off.";
+    if (posts >= 7) return 'Prolific week — your readers can feel the momentum.';
+    if (posts >= 3) return 'Solid pace this week. Keep the words flowing.';
+    if (posts === 1) return 'You showed up. That matters more than you think.';
+    if (posts === 0) return 'A quiet week — sometimes the best ideas need silence first.';
+    return 'Your weekly writing at a glance.';
+};

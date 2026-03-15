@@ -1,0 +1,18 @@
+import { lazy, Suspense } from 'react';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
+const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'));
+const FloorplanWorkspace = lazy(() => import('./modules/floorplan'));
+const SketchWorkspace = lazy(() => import('./modules/sketch'));
+
+export const router = createBrowserRouter([
+  { path: '/', element: <Suspense><HomePage /></Suspense> },
+  { path: '/floorplan', element: <Suspense><FloorplanWorkspace /></Suspense> },
+  { path: '/sketch', element: <Suspense><SketchWorkspace /></Suspense> },
+  { path: '/playground', element: <Suspense><PlaygroundPage /></Suspense> },
+]);
+
+export function AppRouter() {
+  return <RouterProvider router={router} />;
+}

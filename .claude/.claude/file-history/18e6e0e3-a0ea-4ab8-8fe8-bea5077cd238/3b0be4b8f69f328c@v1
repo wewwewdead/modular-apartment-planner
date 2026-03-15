@@ -1,0 +1,63 @@
+import { createDimension } from '../../domain/partModels';
+import { viewToModelPosition } from '../../domain/viewProjection';
+
+export function createDimensionHandler({ dispatch, editorDispatch, activeView }) {
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      if (!toolState.firstPoint) {
+        // First click - set start point
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            firstPoint: { x: modelPos.x, y: modelPos.y },
+          },
+        });
+        editorDispatch({
+          type: 'SET_STATUS_MESSAGE',
+          message: 'Click second point for dimension.',
+        });
+      } else {
+        // Second click - create dimension
+        const start3D = viewToModelPosition(toolState.firstPoint.x, toolState.firstPoint.y, activeView);
+        const end3D = viewToModelPosition(modelPos.x, modelPos.y, activeView);
+
+        const dim = createDimension({
+          startPoint: start3D,
+          endPoint: end3D,
+          offset: 200,
+        });
+
+        dispatch({ type: 'PART_ADD', part: dim });
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { firstPoint: null },
+        });
+
+        editorDispatch({
+          type: 'SET_STATUS_MESSAGE',
+          message: 'Dimension placed.',
+        });
+      }
+    },
+
+    onMouseMove() {},
+
+    onMouseUp() {},
+
+    onKeyDown(e) {
+      if (e.key === 'Escape') {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { firstPoint: null },
+        });
+      }
+    },
+
+    getCursor() {
+      return 'crosshair';
+    },
+  };
+}

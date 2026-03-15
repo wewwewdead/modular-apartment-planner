@@ -1,0 +1,91 @@
+import React, { useMemo } from 'react';
+import { parseCanvasDoc } from '../../../../utils/canvasDoc';
+import './canvaspreview.css';
+
+const FONT_MAP = {
+    serif: 'Georgia, serif',
+    mono: 'Courier New, monospace',
+    handwritten: 'Comic Sans MS, cursive',
+    bold: 'Trebuchet MS, sans-serif',
+};
+
+const CanvasPreview = ({ canvasDoc }) => {
+    const parsed = useMemo(() => parseCanvasDoc(canvasDoc), [canvasDoc]);
+
+    const { meta, snippets, images } = parsed;
+    const isEmpty = snippets.length === 0 && images.length === 0;
+    const isDark = meta.theme === 'dark';
+    const aspectClass = meta.aspectRatio === '4:5' ? 'is-4-5' : 'is-1-1';
+
+    const allElements = useMemo(() => {
+        const items = [];
+
+        snippets.forEach((s) => {
+            items.push({ type: 'snippet', zIndex: s.zIndex, data: s });
+        });
+
+        images.forEach((img) => {
+            items.push({ type: 'image', zIndex: img.zIndex, data: img });
+        });
+
+        items.sort((a, b) => a.zIndex - b.zIndex);
+        return items;
+    }, [snippets, images]);
+
+    return (
+        <div
+            className={`canvas-preview ${isDark ? 'is-dark' : 'is-light'} ${aspectClass}`}
+            aria-hidden="true"
+        >
+            <div className="canvas-preview-dots" />
+
+            {isEmpty ? (
+                <span className="canvas-preview-empty">Canvas</span>
+            ) : (
+                allElements.map((el) => {
+                    if (el.type === 'snippet') {
+                        const s = el.data;
+                        const truncated = s.text.length > 80 ? `${s.text.substring(0, 80)}...` : s.text;
+                        return (
+                            <span
+                                key={s.id}
+                                className="canvas-preview-snippet"
+                                style={{
+                                    left: `${s.x * 100}%`,
+                                    top: `${s.y * 100}%`,
+                                    zIndex: s.zIndex,
+                                    fontFamily: FONT_MAP[s.fontStyle] || FONT_MAP.serif,
+                                    transform: `rotate(${s.rotation}deg) scaleX(${s.scaleX}) scale(${s.sizeScale * 0.45})`,
+                                }}
+                            >
+                                {truncated}
+                            </span>
+                        );
+                    }
+
+                    const img = el.data;
+                    if (!img.src) return null;
+                    return (
+                        <img
+                            key={img.id}
+                            className="canvas-preview-image"
+                            src={img.src}
+                            alt=""
+                            loading="lazy"
+                            draggable={false}
+                            style={{
+                                left: `${img.x * 100}%`,
+                                top: `${img.y * 100}%`,
+                                width: `${img.width * 100}%`,
+                                zIndex: img.zIndex,
+                                transform: `rotate(${img.rotation}deg) scaleX(${img.scaleX})`,
+                            }}
+                        />
+                    );
+                })
+            )}
+        </div>
+    );
+};
+
+export default CanvasPreview;

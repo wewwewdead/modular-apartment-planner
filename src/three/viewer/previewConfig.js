@@ -11,6 +11,9 @@ export const PRESETS = {
   iso_northwest: new THREE.Vector3(-1, 0.88, 1),
   iso_southeast: new THREE.Vector3(1, 0.88, -1),
   iso_southwest: new THREE.Vector3(-1, 0.88, -1),
+  front_aligned: new THREE.Vector3(0, 0.05, 1.2),
+  side_aligned: new THREE.Vector3(1.2, 0.05, 0),
+  bottom_aligned: new THREE.Vector3(-1.1, -0.92, 1.05),
 };
 
 export const WALK_EYE_HEIGHT = 1700;

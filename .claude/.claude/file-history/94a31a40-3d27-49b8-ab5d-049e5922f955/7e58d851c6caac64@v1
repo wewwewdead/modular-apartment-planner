@@ -1,0 +1,280 @@
+# Phase System for Apartment Blueprint Editor
+
+## Context
+
+The editor currently has no concept of construction/design phases. All building elements render unconditionally. This plan adds a phase system so objects can be assigned to phases (e.g., "Demolition", "New Construction", "Finishes") and filtered by three viewing modes. Phases are project-level, user-assignable, and view-only filters — they never alter actual model data.
+
+---
+
+## 1. Domain Model — New Files
+
+### `src/domain/phaseModels.js` (NEW)
+
+```js
+createPhase(name, order, color)  → { id, name, order, color, visible: true }
+createDefaultPhase()             → createPhase('Base Design', 0, '#4A90D9')
+sortPhases(phases)               → sorted by order ascending
+getOrderedPhases(project)        → sortPhases(project.phases || [])
+getNextPhaseOrder(phases)        → max(order) + 1
+reorderPhases(phases, movedId, newOrder) → re-indexes all order values
+PHASE_COLORS = ['#4A90D9', '#E07B39', '#5BAE5B', '#C75D8E', '#8B6EC1', '#D4A843', '#44B4B4', '#D05555']
+```
+
+Uses `generateId('phase')` from `src/domain/ids.js`.
+
+### `src/domain/phaseFilter.js` (NEW)
+
+Pure functions — no React dependencies. Single source of truth for filtering.
+
+```js
+PHASE_VIEW = { ALL: 'all', SINGLE: 'single', CUMULATIVE: 'cumulative' }
+
+filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode)
+  → returns shallow-copy floor with filtered arrays
+  → ALL mode: returns floor unchanged
+  → SINGLE mode: keeps objects where phaseId === activePhaseId or phaseId is null
+  → CUMULATIVE mode: keeps objects where phase.order <= activePhase.order or phaseId is null
+  → Also filters doors/windows whose parent wall was filtered out
+
+isObjectVisibleInPhase(obj, phases, activePhaseId, phaseViewMode)
+  → returns boolean for a single object
+
+filterProjectByPhase(project, activePhaseId, phaseViewMode)
+  → returns project with all floors filtered (for 3D/elevation/section)
+```
+
+Objects with `phaseId === null` (unassigned) are **always visible** in all modes.
+
+### `src/hooks/usePhaseFilteredFloor.js` (NEW)
+
+```js
+usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode)
+  → useMemo wrapping filterFloorByPhase
+```
+
+---
+
+## 2. Model Changes — Existing Files
+
+### `src/domain/models.js`
+- `createProject`: add `phases: [createDefaultPhase()]` to return object
+- Import `createDefaultPhase` from `phaseModels.js`
+- **No changes to individual object factories** — `phaseId` is set at dispatch time
+
+### `src/persistence/deserialize.js`
+- After existing backfill logic, add:
+  - If `project.phases` is missing/empty, set to `[createDefaultPhase()]`
+  - Validate each phase has `id, name, order, color, visible`
+- No object-level migration needed — missing `phaseId` treated as `null` (always visible)
+
+---
+
+## 3. State Management
+
+### `src/app/ProjectProvider.jsx`
+New reducer actions:
+
+| Action | Behavior |
+|--------|----------|
+| `PHASE_ADD` | Push new phase to `project.phases`, re-sort |
+| `PHASE_UPDATE` | Merge updates by phase id |
+| `PHASE_DELETE` | Remove phase; set `phaseId = null` on all objects across all floors that reference it |
+| `PHASE_REORDER` | Update order values, re-sort |
+
+The `PHASE_DELETE` cascade iterates all floors and all object arrays (walls, doors, windows, columns, beams, slabs, stairs, landings, fixtures, rooms, railings) to nullify orphaned `phaseId` references. Pattern follows `FLOOR_DELETE` cascade.
+
+### `src/app/EditorProvider.jsx`
+New state fields in `createInitialEditorState`:
+```js
+activePhaseId: null,        // selected phase for viewing/assigning
+phaseViewMode: 'all',       // 'all' | 'single' | 'cumulative'
+```
+
+New reducer actions:
+- `SET_ACTIVE_PHASE` → sets `activePhaseId`
+- `SET_PHASE_VIEW_MODE` → sets `phaseViewMode`
+
+Add `useEffect` to sync `activePhaseId` when project phases change (similar to `activeFloorId` sync with `availableFloorIds`). Pass `availablePhaseIds` as a prop.
+
+---
+
+## 4. Object Phase Assignment
+
+### `src/editor/useEditorTool.js`
+- Add `activePhaseId` to the `ctx` object passed to all handlers (line 54-58)
+- Pull from editor state (already available via `useEditor()` in the call site — `SvgCanvas.jsx`)
+
+### All editor handlers (11 files)
+Each handler creates objects and dispatches ADD actions. After creating the object, set `phaseId`:
+
+```js
+// Example in wallDrawHandler.js line 62-66:
+const wall = createWall(toolState.start, endPt, undefined, { ... });
+wall.phaseId = ctx.activePhaseId || null;    // ← add this line
+dispatch({ type: 'WALL_ADD', floorId: activeFloorId, wall });
+```
+
+Files to modify:
+- `src/editor/handlers/wallDrawHandler.js`
+- `src/editor/handlers/doorPlaceHandler.js`
+- `src/editor/handlers/windowPlaceHandler.js`
+- `src/editor/handlers/columnPlaceHandler.js`
+- `src/editor/handlers/beamPlaceHandler.js`
+- `src/editor/handlers/slabPlaceHandler.js`
+- `src/editor/handlers/stairPlaceHandler.js`
+- `src/editor/handlers/landingPlaceHandler.js`
+- `src/editor/handlers/fixturePlaceHandler.js`
+- `src/editor/handlers/roomPlaceHandler.js`
+- `src/editor/handlers/railingPlaceHandler.js`
+
+Also handle auto-detect rooms in Toolbar.jsx (the "Detect Rooms" button).
+
+---
+
+## 5. Rendering Integration
+
+### Plan View — `src/renderers/SvgCanvas.jsx`
+- Import `usePhaseFilteredFloor`
+- After `const floor = getFloor(activeFloorId)` (line 71), compute:
+  ```js
+  const filteredFloor = usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode);
+  ```
+- Pass `filteredFloor` to all renderers (lines 348-364) instead of `floor`
+- Keep `floor` (unfiltered) for `SelectionOverlay` and tool previews so selection/interaction still works on all objects
+- Pass `activePhaseId` and `phaseViewMode` to `useEditorTool` via editor state
+
+### Elevation View — `src/renderers/SvgCanvas.jsx` (line 409-416)
+- Pass filtered project to `ElevationRenderer`:
+  ```jsx
+  <ElevationRenderer project={filteredProject} floor={filteredFloor} ... />
+  ```
+- Where `filteredProject` is computed via `filterProjectByPhase(project, activePhaseId, phaseViewMode)`
+
+### Section View — `src/renderers/SvgCanvas.jsx` (line 403-407)
+- Same pattern: pass `filteredProject` and `filteredFloor` to `SectionRenderer`
+
+### 3D Preview — `src/three/viewer/ThreePreviewPanel.jsx`
+- Import `filterProjectByPhase` from `phaseFilter.js`
+- Access `activePhaseId` and `phaseViewMode` from `useEditor()`
+- Apply filter before building scene descriptor:
+  ```js
+  const filteredProject = useMemo(
+    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
+    [project, activePhaseId, phaseViewMode]
+  );
+  ```
+- Pass `filteredProject` to `buildPreviewScene` (line 35-38)
+
+### Sheet Sources — `src/sheets/sources.js`
+- `collectPlanPoints` and viewport source builders receive floor data
+- Apply `filterFloorByPhase` inside `buildPlanSource`, `buildSectionSource`, `buildElevationSource`
+- Pass phase state through viewport source resolution (from the sheet rendering context)
+- Sheets initially use the current editor phase view mode; future enhancement can add per-viewport overrides
+
+### Export — `src/export/sheetExport.js`
+- **No changes needed** — export captures the already-filtered rendered SVG/canvas
+
+---
+
+## 6. UI Changes
+
+### Sidebar — `src/ui/Sidebar.jsx`
+
+Add a **"Phases"** collapsible section after "Sheets" and before the floor-context sections. Follows the same section pattern as Floors/Sheets.
+
+**Contents:**
+- Phase view mode segmented control: `[All] [Single] [Cumulative]`
+- Phase list with each item showing:
+  - Color dot (circle with phase color)
+  - Phase name
+  - Visibility eye toggle
+  - Up/down reorder arrows
+  - Delete button
+  - Click to select as active phase (highlighted with accent border like floor cards)
+- "+" button to add new phase (auto-named "Phase N", next color from palette)
+
+### Sidebar CSS — `src/ui/Sidebar.module.css`
+- `.phaseItem` / `.phaseItemActive` — item card styling (follows `.floorCard` pattern)
+- `.phaseColorDot` — 12px circle with phase color
+- `.phaseViewControl` — segmented control (follows existing segment pattern)
+
+### Properties Panel — `src/ui/PropertiesPanel.jsx`
+
+**PhaseSelector component** (defined inside PropertiesPanel or extracted to separate file):
+```jsx
+function PhaseSelector({ phaseId, phases, onChange }) {
+  return (
+    <div>
+      <div className={styles.subtitle}>Phase</div>
+      <select value={phaseId || ''} onChange={e => onChange(e.target.value || null)}>
+        <option value="">Unassigned</option>
+        {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </div>
+  );
+}
+```
+
+Add `PhaseSelector` to all 11 object property panels: Wall, Door, Window, Column, Beam, Slab, Stair, Landing, Fixture, Room, Railing.
+
+**PhaseProperties panel** — when a phase is selected via sidebar (`selectedType === 'phase'`):
+- Phase name (InputField)
+- Phase color (color picker — `<input type="color">` + hex input, matching room color pattern)
+- Phase order (read-only)
+- Object count summary
+
+### Properties Panel CSS — `src/ui/PropertiesPanel.module.css`
+- Phase selector dropdown styling (matches existing `<select>` inline style pattern)
+
+### Status Bar — `src/renderers/SvgCanvas.jsx`
+- Show active phase name and view mode in the bottom status bar alongside existing tool/zoom info
+
+---
+
+## 7. Implementation Order
+
+| Step | Description | Files |
+|------|-------------|-------|
+| 1 | Create phase domain model | `src/domain/phaseModels.js` (new) |
+| 2 | Create phase filter logic | `src/domain/phaseFilter.js` (new) |
+| 3 | Add phases to project model | `src/domain/models.js` |
+| 4 | Add phase migration to deserializer | `src/persistence/deserialize.js` |
+| 5 | Add phase CRUD to ProjectProvider | `src/app/ProjectProvider.jsx` |
+| 6 | Add phase state to EditorProvider | `src/app/EditorProvider.jsx` |
+| 7 | Create usePhaseFilteredFloor hook | `src/hooks/usePhaseFilteredFloor.js` (new) |
+| 8 | Pass activePhaseId to handler context | `src/editor/useEditorTool.js` |
+| 9 | Set phaseId on created objects | 11 handler files in `src/editor/handlers/` |
+| 10 | Apply phase filtering in plan view | `src/renderers/SvgCanvas.jsx` |
+| 11 | Add Phase sidebar section | `src/ui/Sidebar.jsx`, `src/ui/Sidebar.module.css` |
+| 12 | Add PhaseSelector + PhaseProperties to panel | `src/ui/PropertiesPanel.jsx`, `src/ui/PropertiesPanel.module.css` |
+| 13 | Apply filtering in 3D preview | `src/three/viewer/ThreePreviewPanel.jsx` |
+| 14 | Apply filtering in elevation/section | `src/renderers/SvgCanvas.jsx` (elevation/section branches) |
+| 15 | Apply filtering in sheet sources | `src/sheets/sources.js` |
+| 16 | Status bar phase indicator | `src/renderers/SvgCanvas.jsx` |
+
+---
+
+## 8. Edge Cases
+
+- **Deleting active phase**: fall back to `phaseViewMode: 'all'`, `activePhaseId: null`
+- **Selecting phase-hidden object**: allow selection in sidebar/properties; show "hidden by phase filter" note in PropertiesPanel
+- **Clipboard copy/paste**: `phaseId` is a plain property, preserved by spread during clone — no changes needed in `src/clipboard/`
+- **Floor duplication**: `phaseId` preserved by spread in `createDuplicatedFloor` — no changes needed
+- **Undo/redo**: phase operations push to history like all other actions — no special handling
+- **Annotations/sectionCuts**: NOT phase-assignable (documentation artifacts transcend phases)
+
+---
+
+## 9. Verification
+
+1. **Create new project** → verify default "Base Design" phase exists
+2. **Load old project** → verify migration adds default phase, no data loss
+3. **Draw walls/doors/windows** → verify new objects get `activePhaseId` assigned
+4. **Switch phase view modes** → verify plan view correctly shows/hides objects
+5. **3D preview** → verify phase filtering applies to 3D scene
+6. **Elevation/section views** → verify filtered objects in cross-section views
+7. **Sheet export** → verify exported PNG/PDF reflects current phase filter
+8. **Phase CRUD** → create, rename, reorder, delete phases; verify cascade on delete
+9. **PropertiesPanel** → change object's phase via dropdown; verify immediate effect
+10. **Undo/redo** → verify phase add/delete/reorder are undoable
+11. **Multi-floor** → verify phases work independently of floor selection

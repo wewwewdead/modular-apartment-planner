@@ -1,0 +1,143 @@
+import { getPartExtents } from './viewProjection';
+
+function getAnchorPosition(part, anchor) {
+  const ext = getPartExtents(part);
+  const pos = part.position;
+
+  switch (anchor) {
+    case 'top': return pos.z + ext.height;
+    case 'bottom': return pos.z;
+    case 'left': return pos.x;
+    case 'right': return pos.x + ext.width;
+    case 'front': return pos.y;
+    case 'back': return pos.y + ext.depth;
+    case 'center': return null; // handled per-type
+    default: return 0;
+  }
+}
+
+function getAnchorAxis(anchor) {
+  switch (anchor) {
+    case 'top':
+    case 'bottom':
+      return 'z';
+    case 'left':
+    case 'right':
+      return 'x';
+    case 'front':
+    case 'back':
+      return 'y';
+    case 'center':
+      return null;
+    default:
+      return null;
+  }
+}
+
+function getAnchorExtentSize(part, anchor) {
+  const ext = getPartExtents(part);
+  switch (anchor) {
+    case 'top':
+    case 'bottom':
+      return ext.height;
+    case 'left':
+    case 'right':
+      return ext.width;
+    case 'front':
+    case 'back':
+      return ext.depth;
+    default:
+      return 0;
+  }
+}
+
+export function resolveConstraints(constraints, parts) {
+  const positions = new Map();
+  const partsById = new Map(parts.map((p) => [p.id, p]));
+
+  for (const constraint of constraints) {
+    const source = partsById.get(constraint.sourcePartId);
+    const target = partsById.get(constraint.targetPartId);
+    if (!source || !target) continue;
+
+    // Use already-resolved position if available
+    const sourcePos = { ...source.position, ...(positions.get(source.id) || {}) };
+    const targetPos = { ...target.position, ...(positions.get(target.id) || {}) };
+
+    const workingSource = { ...source, position: sourcePos };
+    const workingTarget = { ...target, position: targetPos };
+
+    const newPos = { ...sourcePos };
+
+    switch (constraint.type) {
+      case 'attach_face': {
+        const axis = getAnchorAxis(constraint.targetAnchor);
+        if (!axis) break;
+        const targetAnchorVal = getAnchorPosition(workingTarget, constraint.targetAnchor);
+        const sourceExtent = getAnchorExtentSize(workingSource, constraint.sourceAnchor);
+
+        // Position source so its sourceAnchor face touches target's targetAnchor face
+        if (constraint.sourceAnchor === 'bottom' || constraint.sourceAnchor === 'left' || constraint.sourceAnchor === 'front') {
+          newPos[axis] = targetAnchorVal + constraint.offset;
+        } else {
+          newPos[axis] = targetAnchorVal - sourceExtent + constraint.offset;
+        }
+        break;
+      }
+
+      case 'flush_surface': {
+        const axis = getAnchorAxis(constraint.targetAnchor);
+        if (!axis) break;
+        const targetAnchorVal = getAnchorPosition(workingTarget, constraint.targetAnchor);
+        const sourceExtent = getAnchorExtentSize(workingSource, constraint.sourceAnchor);
+
+        if (constraint.sourceAnchor === 'bottom' || constraint.sourceAnchor === 'left' || constraint.sourceAnchor === 'front') {
+          newPos[axis] = targetAnchorVal;
+        } else {
+          newPos[axis] = targetAnchorVal - sourceExtent;
+        }
+        break;
+      }
+
+      case 'align_edge': {
+        const axis = getAnchorAxis(constraint.targetAnchor);
+        if (!axis) break;
+        const targetVal = getAnchorPosition(workingTarget, constraint.targetAnchor);
+        const sourceVal = getAnchorPosition(workingSource, constraint.sourceAnchor);
+        newPos[axis] = sourcePos[axis] + (targetVal - sourceVal) + constraint.offset;
+        break;
+      }
+
+      case 'center_axis': {
+        const targetExt = getPartExtents(workingTarget);
+        const sourceExt = getPartExtents(workingSource);
+        // Center source on target along X
+        newPos.x = targetPos.x + (targetExt.width - sourceExt.width) / 2;
+        // Center along Y
+        newPos.y = targetPos.y + (targetExt.depth - sourceExt.depth) / 2;
+        break;
+      }
+
+      case 'inset_edge': {
+        const axis = getAnchorAxis(constraint.targetAnchor);
+        if (!axis) break;
+        const targetExt = getPartExtents(workingTarget);
+        const sourceExt = getPartExtents(workingSource);
+        const inset = constraint.offset || 0;
+
+        if (constraint.targetAnchor === 'right' || constraint.targetAnchor === 'top' || constraint.targetAnchor === 'back') {
+          const axisSize = axis === 'x' ? targetExt.width : axis === 'y' ? targetExt.depth : targetExt.height;
+          const sourceSize = axis === 'x' ? sourceExt.width : axis === 'y' ? sourceExt.depth : sourceExt.height;
+          newPos[axis] = targetPos[axis] + axisSize - sourceSize - inset;
+        } else {
+          newPos[axis] = targetPos[axis] + inset;
+        }
+        break;
+      }
+    }
+
+    positions.set(source.id, newPos);
+  }
+
+  return positions;
+}

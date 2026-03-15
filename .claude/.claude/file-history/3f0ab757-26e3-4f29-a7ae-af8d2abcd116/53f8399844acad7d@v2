@@ -1,0 +1,50 @@
+import React from 'react';
+import Animated, {
+  interpolate,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { colors } from '../../theme/colors';
+import { motion } from '../../theme/motion';
+import { tabBarIcons } from './tabBarIcons';
+
+const AnimatedIcon = Animated.createAnimatedComponent(MaterialCommunityIcons);
+
+interface TabBarIconProps {
+  routeName: keyof typeof tabBarIcons;
+  focused: boolean;
+}
+
+export function TabBarIcon({ routeName, focused }: TabBarIconProps) {
+  const progress = useSharedValue(focused ? 1 : 0);
+  progress.value = withSpring(focused ? 1 : 0, motion.snappy);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    const scale = interpolate(progress.value, [0, 1], [1.0, 1.15]);
+    const color = interpolateColor(
+      progress.value,
+      [0, 1],
+      [colors.mutedInk, colors.brand]
+    );
+    return {
+      transform: [{ scale }],
+      color,
+    };
+  });
+
+  const iconName = focused
+    ? tabBarIcons[routeName].active
+    : tabBarIcons[routeName].inactive;
+
+  return (
+    <AnimatedIcon
+      name={iconName}
+      size={24}
+      style={animatedStyle}
+    />
+  );
+}

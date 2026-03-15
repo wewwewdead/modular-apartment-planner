@@ -1,0 +1,354 @@
+import * as THREE from 'three';
+import { createMaterialPalette, disposeMaterialPalette } from './materials';
+import { disposeScene } from './disposeScene';
+import { createInspectNavigation } from './createInspectNavigation';
+import { createWalkNavigation } from './createWalkNavigation';
+import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
+import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
+
+export function createPreviewViewport(container) {
+  const materialPalette = createMaterialPalette();
+  const scene = new THREE.Scene();
+  scene.background = null;
+  const raycaster = new THREE.Raycaster();
+  const clock = new THREE.Clock();
+
+  const camera = new THREE.PerspectiveCamera(42, 1, 10, 100000);
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    alpha: true,
+    powerPreference: 'high-performance',
+  });
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(container.clientWidth || 1, container.clientHeight || 1, false);
+  renderer.domElement.style.width = '100%';
+  renderer.domElement.style.height = '100%';
+  renderer.domElement.style.display = 'block';
+  container.appendChild(renderer.domElement);
+
+  const inspectNavigation = createInspectNavigation({
+    camera,
+    domElement: renderer.domElement,
+  });
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+  scene.add(new THREE.HemisphereLight(0xdde7f4, 0xe6ded0, 0.7));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
+  keyLight.position.set(3500, 5000, 2000);
+  scene.add(keyLight);
+
+  let animationFrame = 0;
+  let worldRoot = null;
+  let gridHelper = null;
+  let currentBounds = null;
+  let pickHandler = null;
+  let pickContext = { activeFloorId: null };
+  let pointerDown = null;
+  let navigationMode = 'inspect';
+  let walkUiHandler = null;
+  let walkExitHandler = null;
+  let inspectState = null;
+  let activeFloorContext = {
+    floorId: null,
+    spawn: null,
+  };
+  const walkPoseByFloorId = new Map();
+  const walkNavigation = createWalkNavigation({
+    camera,
+    domElement: renderer.domElement,
+    onStateChange: () => {
+      emitWalkUiState();
+    },
+    onExitRequested: () => {
+      setNavigationMode('inspect');
+      walkExitHandler?.();
+    },
+  });
+
+  const emitWalkUiState = () => {
+    walkUiHandler?.({
+      navigationMode,
+      isLocked: navigationMode === 'walk' && walkNavigation.isLocked(),
+      canLock: navigationMode === 'walk',
+    });
+  };
+
+  const saveCurrentWalkPose = () => {
+    if (!activeFloorContext.floorId) return;
+    walkPoseByFloorId.set(activeFloorContext.floorId, walkNavigation.capturePose());
+  };
+
+  const restoreWalkPose = ({ forceSpawn = false } = {}) => {
+    if (!activeFloorContext.floorId) return;
+
+    const rememberedPose = !forceSpawn
+      ? walkPoseByFloorId.get(activeFloorContext.floorId)
+      : null;
+
+    if (rememberedPose) {
+      walkNavigation.restorePose(rememberedPose);
+      return;
+    }
+
+    const spawn = activeFloorContext.spawn;
+    if (!spawn?.position || !spawn.lookAt) return;
+
+    walkNavigation.restorePose({
+      position: [spawn.position.x, spawn.position.y, spawn.position.z],
+      lookAt: [spawn.lookAt.x, spawn.lookAt.y, spawn.lookAt.z],
+    });
+  };
+
+  const setNavigationMode = (nextMode = 'inspect') => {
+    const resolvedMode = nextMode === 'walk' ? 'walk' : 'inspect';
+    if (navigationMode === resolvedMode) {
+      emitWalkUiState();
+      return;
+    }
+
+    if (navigationMode === 'inspect') {
+      inspectState = inspectNavigation.captureState();
+    }
+
+    if (navigationMode === 'walk') {
+      saveCurrentWalkPose();
+    }
+
+    navigationMode = resolvedMode;
+    inspectNavigation.setEnabled(navigationMode === 'inspect');
+    walkNavigation.setEnabled(navigationMode === 'walk');
+
+    if (navigationMode === 'inspect') {
+      if (!inspectNavigation.restoreState(inspectState)) {
+        inspectNavigation.resetView();
+      }
+    } else {
+      restoreWalkPose();
+    }
+
+    emitWalkUiState();
+  };
+
+  const renderFrame = () => {
+    const deltaSeconds = Math.min(clock.getDelta(), 0.1);
+    if (navigationMode === 'inspect') {
+      inspectNavigation.update(deltaSeconds);
+    } else {
+      walkNavigation.update(deltaSeconds);
+    }
+    renderer.render(scene, camera);
+    animationFrame = window.requestAnimationFrame(renderFrame);
+  };
+
+  const resize = () => {
+    const width = container.clientWidth || 1;
+    const height = container.clientHeight || 1;
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+    renderer.setSize(width, height, false);
+  };
+
+  const resolvePickTarget = (object) => {
+    let current = object;
+    while (current) {
+      if (current.userData?.previewTarget) {
+        return current.userData.previewTarget;
+      }
+      current = current.parent;
+    }
+    return null;
+  };
+
+  const pickObjectAt = (clientX, clientY) => {
+    if (navigationMode !== 'inspect') return;
+    if (!worldRoot || !pickHandler) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const pointer = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -(((clientY - rect.top) / rect.height) * 2 - 1)
+    );
+
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObject(worldRoot, true);
+    const seenTargets = new Set();
+    const targets = [];
+
+    for (const hit of hits) {
+      const target = resolvePickTarget(hit.object);
+      if (!target) continue;
+
+      const key = `${target.floorId || ''}:${target.kind}:${target.sourceId}`;
+      if (seenTargets.has(key)) continue;
+      seenTargets.add(key);
+      targets.push(target);
+    }
+
+    if (!targets.length) {
+      pickHandler(null);
+      return;
+    }
+
+    const preferredTarget = pickContext.activeFloorId
+      ? targets.find((target) => target.floorId === pickContext.activeFloorId) || null
+      : null;
+
+    pickHandler(preferredTarget || targets[0]);
+  };
+
+  const handlePointerDown = (event) => {
+    if (navigationMode !== 'inspect') {
+      pointerDown = null;
+      return;
+    }
+
+    if (event.button !== 0) {
+      pointerDown = null;
+      return;
+    }
+
+    pointerDown = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+  };
+
+  const handlePointerCancel = () => {
+    pointerDown = null;
+  };
+
+  const handlePointerUp = (event) => {
+    if (navigationMode !== 'inspect') {
+      pointerDown = null;
+      return;
+    }
+
+    if (event.button !== 0 || !pointerDown) {
+      pointerDown = null;
+      return;
+    }
+
+    const dx = event.clientX - pointerDown.x;
+    const dy = event.clientY - pointerDown.y;
+    pointerDown = null;
+
+    if (Math.hypot(dx, dy) > CLICK_DISTANCE_THRESHOLD) {
+      return;
+    }
+
+    pickObjectAt(event.clientX, event.clientY);
+  };
+
+  renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+  renderer.domElement.addEventListener('pointerup', handlePointerUp);
+  renderer.domElement.addEventListener('pointercancel', handlePointerCancel);
+  renderer.domElement.addEventListener('pointerleave', handlePointerCancel);
+
+  animationFrame = window.requestAnimationFrame(renderFrame);
+
+  return {
+    setWorld(nextRoot, bounds, groundLevel = 0) {
+      const hadWorld = !!worldRoot;
+      if (worldRoot) {
+        scene.remove(worldRoot);
+        disposeScene(worldRoot, { disposeMaterials: true });
+      }
+
+      if (gridHelper) {
+        scene.remove(gridHelper);
+        gridHelper.geometry?.dispose?.();
+        gridHelper.material?.dispose?.();
+      }
+
+      worldRoot = nextRoot;
+      currentBounds = descriptorBoundsToWorldBox(bounds);
+      inspectNavigation.setBounds(currentBounds);
+      gridHelper = createGrid(bounds, groundLevel);
+      scene.add(gridHelper);
+      scene.add(worldRoot);
+      if (!hadWorld && navigationMode === 'inspect') {
+        inspectNavigation.resetView();
+      }
+    },
+    resetView() {
+      if (navigationMode === 'walk') {
+        if (activeFloorContext.floorId) {
+          walkPoseByFloorId.delete(activeFloorContext.floorId);
+        }
+        restoreWalkPose({ forceSpawn: true });
+        return;
+      }
+      inspectNavigation.resetView();
+    },
+    fit() {
+      inspectNavigation.resetView();
+    },
+    setProjectionPreset(presetName) {
+      inspectNavigation.setProjectionPreset(presetName);
+    },
+    setPickHandler(handler) {
+      pickHandler = typeof handler === 'function' ? handler : null;
+    },
+    setPickContext(nextContext = {}) {
+      pickContext = {
+        ...pickContext,
+        ...nextContext,
+      };
+    },
+    setNavigationMode,
+    setActiveFloorContext(nextContext = {}) {
+      const previousFloorId = activeFloorContext.floorId;
+      const nextFloorId = nextContext.floorId ?? activeFloorContext.floorId;
+      const floorChanged = previousFloorId !== nextFloorId;
+
+      if (navigationMode === 'walk' && floorChanged && previousFloorId) {
+        saveCurrentWalkPose();
+      }
+
+      activeFloorContext = {
+        ...activeFloorContext,
+        ...nextContext,
+      };
+
+      if (navigationMode === 'walk' && floorChanged) {
+        restoreWalkPose();
+      }
+    },
+    setWalkUiHandler(handler) {
+      walkUiHandler = typeof handler === 'function' ? handler : null;
+      emitWalkUiState();
+    },
+    setWalkExitHandler(handler) {
+      walkExitHandler = typeof handler === 'function' ? handler : null;
+    },
+    resize,
+    dispose() {
+      window.cancelAnimationFrame(animationFrame);
+      inspectNavigation.dispose();
+      walkNavigation.dispose();
+      renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      renderer.domElement.removeEventListener('pointerup', handlePointerUp);
+      renderer.domElement.removeEventListener('pointercancel', handlePointerCancel);
+      renderer.domElement.removeEventListener('pointerleave', handlePointerCancel);
+
+      if (worldRoot) {
+        scene.remove(worldRoot);
+        disposeScene(worldRoot, { disposeMaterials: true });
+      }
+
+      if (gridHelper) {
+        scene.remove(gridHelper);
+        gridHelper.geometry?.dispose?.();
+        gridHelper.material?.dispose?.();
+      }
+
+      disposeMaterialPalette(materialPalette);
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
+    materialPalette,
+  };
+}

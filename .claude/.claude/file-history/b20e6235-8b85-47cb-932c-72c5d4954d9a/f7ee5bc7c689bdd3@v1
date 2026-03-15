@@ -1,0 +1,28 @@
+# Plan: Toggle Door Swing Direction During Placement
+
+## Context
+Currently, doors are always placed with `openDirection = 'left'`. The direction can only be changed *after* placement via the PropertiesPanel toggle button. The user wants to toggle swing direction (left/right) *while using the door tool*, before placing.
+
+## Approach
+Add `openDirection` to the door tool state, toggled with the **F** key during placement. The chosen direction carries over to each subsequent door placed in the same session.
+
+## Changes
+
+### 1. `src/editor/handlers/doorPlaceHandler.js`
+- Initialize `openDirection: 'left'` in tool state on first mouse move (or keep it as a persisted tool state field)
+- In `onKeyDown`: listen for `'f'` or `'F'` key to flip `openDirection` between `'left'` and `'right'`
+- In `onMouseDown`: pass `toolState.openDirection` to `createDoor()` instead of the default
+
+### 2. `src/renderers/DoorWindowPreview.jsx`
+- When `activeTool === TOOLS.DOOR`, also render the swing arc preview using `toolState.openDirection` so the user can see which way the door will swing before clicking
+
+### 3. `src/ui/Toolbar.jsx` (optional, minor)
+- Show a small hint near the door tool that F flips direction (or rely on discoverability)
+
+## Verification
+1. Select Door tool (D key)
+2. Hover over a wall — preview shows swing arc direction
+3. Press F — preview arc flips to opposite side
+4. Click to place — door is placed with the previewed swing direction
+5. Place another door — direction persists from last toggle
+6. Existing PropertiesPanel toggle still works for placed doors

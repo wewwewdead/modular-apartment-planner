@@ -1,0 +1,34 @@
+# Fix StoryBrowser Layout in center-bar-holder-container
+
+## Context
+The StoryBrowser component doesn't fill the `.center-bar-holder-container` properly, and the layout shifts/looks inconsistent when switching between filter tabs (All, Ongoing, Completed, Hiatus). The root cause is that `.story-browser` lacks `width: 100%`, so it shrink-wraps to its content. Combined with the parent's `align-items: center`, this means different tab results produce different actual widths.
+
+## Root Cause
+- `.center-bar-holder-container` is a flex column with `align-items: center` and fixed widths (750px desktop, 550px tablet, 100% mobile)
+- `.story-browser` only has `max-width: 750px` but **no explicit `width: 100%`** — so it collapses to content width
+- The grid uses `auto-fill` which produces inconsistent column counts when the container width varies between tabs
+
+## File to Modify
+- `client/src/components/Stories/StoryBrowser/StoryBrowser.css`
+
+## Changes
+
+### 1. Fix `.story-browser` to fill container
+Add `width: 100%` and `box-sizing: border-box` so it always takes the full center-bar width regardless of content.
+
+### 2. Lock grid to 3 columns on desktop
+Change `grid-template-columns: repeat(auto-fill, minmax(200px, 1fr))` to `repeat(3, 1fr)` so the grid is always consistent no matter how many items are displayed. This prevents layout shifts between tabs.
+
+### 3. Match existing app design conventions
+Style the header, filters, and cards to use the same CSS variables and patterns as the rest of the app (font-family: `var(--font-ui)`, border colors from `var(--border-card)`, backgrounds from `var(--bg-card)`, etc.) — keeping it visually consistent with PostCards and other pages in the center bar.
+
+### 4. Responsive grid
+- Desktop (750px container): 3 columns
+- Tablet (550px container): 2 columns
+- Mobile (480px): 2 columns (already handled, just confirm `width: 100%`)
+
+## Verification
+1. Navigate to `/home/stories` — content fills the center bar width
+2. Click All / Ongoing / Completed / Hiatus — layout stays the same width, no shifting
+3. Check on tablet (768px) and mobile (480px) — consistent 2-column grid
+4. Cards, filters, buttons match the app's visual style

@@ -1,0 +1,135 @@
+# Add Fixtures Palette to Toolbar
+
+## Context
+The toolbar currently has a tool palette with 12 drawing tools. The user wants a separate "Fixtures" palette section with 6 furniture items (kitchen top, toilet, lavatory, table, TV, sofa) for complete floor plan layouts. Fixtures are freely placed on the canvas (like columns) with grid snapping, rotation via R key, and an F keyboard shortcut.
+
+## Files to Create
+
+### 1. `src/geometry/fixtureGeometry.js`
+- `fixtureOutline(fixture)` — returns 4 rotated corner points centered on (x, y)
+- `fixtureContainsPoint(fixture, point)` — outline + pointInPolygon
+- Follow `src/geometry/columnGeometry.js` and `src/geometry/landingGeometry.js` patterns
+- Import `rotate` from `point.js`, `pointInPolygon` from `polygon.js`
+
+### 2. `src/editor/handlers/fixturePlaceHandler.js`
+- Follow `columnPlaceHandler.js` pattern
+- Read `toolState.fixtureType` and `toolState.previewRotation` (default 0)
+- `onMouseMove`: snap to grid if enabled, update `previewX`/`previewY` in toolState
+- `onMouseDown`: call `createFixture(fixtureType, x, y, { rotation })`, dispatch `FIXTURE_ADD`
+- `onKeyDown`: R = cycle rotation (0→90→180→270), Escape = back to select
+- `getCursor`: `'crosshair'`
+
+### 3. `src/renderers/FixtureRenderer.jsx`
+- Render each fixture as a polygon from `fixtureOutline()` with `data-id`/`data-type="fixture"`
+- Add type-specific SVG internal details per fixtureType inside rotated `<g>` transforms:
+  - kitchenTop (2400x600): rectangle + burner circles + sink rectangle
+  - toilet (700x400): cistern rectangle + bowl oval
+  - lavatory (500x400): rectangle + basin circle
+  - table (1200x800): rectangle + corner leg indicators
+  - tv (1200x100): thin rectangle + stand
+  - sofa (2000x900): rectangle + backrest line
+- Use `vectorEffect="non-scaling-stroke"`, light fill colors per type
+
+### 4. `src/renderers/FixturePreview.jsx`
+- Follow `ColumnPreview.jsx` pattern
+- Guard: return null unless `activeTool === TOOLS.FIXTURE` and `previewX != null`
+- Build preview fixture from toolState (fixtureType, previewX, previewY, previewRotation)
+- Render ghost polygon with translucent fill, dashed stroke, `pointerEvents: 'none'`
+
+## Files to Modify
+
+### 5. `src/domain/defaults.js`
+Add fixture dimension constants (all in mm):
+```
+FIXTURE_KITCHEN_TOP: 2400 x 600
+FIXTURE_TOILET: 700 x 400
+FIXTURE_LAVATORY: 500 x 400
+FIXTURE_TABLE: 1200 x 800
+FIXTURE_TV: 1200 x 100
+FIXTURE_SOFA: 2000 x 900
+```
+
+### 6. `src/editor/tools.js`
+- Add `FIXTURE: 'fixture'` to TOOLS
+- Export `FIXTURE_TYPES = { KITCHEN_TOP, TOILET, LAVATORY, TABLE, TV, SOFA }`
+- Export `FIXTURE_DEFAULTS` map: fixtureType → { width, depth }
+
+### 7. `src/domain/models.js`
+- Add `createFixture(fixtureType, x, y, options)` factory → `{ id, fixtureType, x, y, width, depth, rotation, name }`
+- Add `fixtures: []` to `createFloor()` return object
+
+### 8. `src/app/ProjectProvider.jsx`
+Add 3 reducer cases following COLUMN pattern:
+- `FIXTURE_ADD` — append to `floor.fixtures`
+- `FIXTURE_UPDATE` — map/merge by id
+- `FIXTURE_DELETE` — filter by fixtureId
+
+### 9. `src/editor/useEditorTool.js`
+- Import `createFixturePlaceHandler`
+- Add `case TOOLS.FIXTURE: return createFixturePlaceHandler(ctx);`
+
+### 10. `src/ui/ToolbarIcons.jsx`
+Add 6 icon components (20x20 viewBox, plan-view symbols):
+- `KitchenTopIcon`, `ToiletIcon`, `LavatoryIcon`, `TableIcon`, `TVIcon`, `SofaIcon`
+
+### 11. `src/ui/Toolbar.jsx`
+- Import 6 fixture icons + `FIXTURE_TYPES`
+- Define `fixtureItems` array with fixtureType/label/Icon
+- Add new `fixturePalette` div after existing `toolPalette` (line ~219)
+- Label "Fixtures" + 6 buttons
+- On click: dispatch `SET_TOOL` then `UPDATE_TOOL_STATE` with `{ fixtureType }`
+- Active state: `activeTool === TOOLS.FIXTURE && toolState.fixtureType === fixtureType`
+- Also need `toolState` from `useEditor()` (already available via `editor`)
+
+### 12. `src/ui/Toolbar.module.css`
+Add `.fixturePalette` and `.fixturePaletteLabel` styles matching existing palette pattern, plus responsive overrides.
+
+### 13. `src/renderers/SvgCanvas.jsx`
+- Import `FixtureRenderer` and `FixturePreview`
+- Add `<FixtureRenderer fixtures={floor.fixtures || []} />` after `ColumnRenderer` (~line 324)
+- Add `<FixturePreview toolState={toolState} activeTool={activeTool} />` after `LandingPreview` (~line 363)
+- Add `case 'f':` keyboard shortcut (~line 246) to activate fixture tool with default type
+
+### 14. `src/editor/handlers/selectHandler.js`
+- Import `fixtureContainsPoint` from fixtureGeometry
+- Add fixture hit testing in `hitTest()` after columns, before walls
+- Add `'fixture'` to `draggableTypes` Set
+- Add `selectedType === 'fixture'` drag branch (update x/y like column)
+- Add `selectedType === 'fixture'` delete branch
+
+### 15. `src/renderers/SelectionOverlay.jsx`
+- Import `fixtureOutline` from fixtureGeometry
+- Add `selectedType === 'fixture'` block: polygon with selection fill/stroke/dash
+
+### 16. `src/ui/PropertiesPanel.jsx`
+- Add `FixtureProperties` component: name, x, y, width, depth, rotation fields
+- Add `selectedType === 'fixture'` in `handleDelete` function
+- Add `selectedType === 'fixture'` in content routing section
+
+### 17. `src/persistence/deserialize.js`
+- Add `if (!floor.fixtures) floor.fixtures = [];` in backfill loop
+- Backfill fixture field defaults (fixtureType, x, y, width, depth, rotation, name)
+
+## Implementation Order
+1. Defaults + tools constants (steps 5-6)
+2. Model factory + floor init (step 7)
+3. Geometry helpers (step 1)
+4. State reducer (step 8)
+5. Placement handler + registration (steps 2, 9)
+6. Icons + toolbar UI + CSS (steps 10-12)
+7. Renderers + preview + SvgCanvas integration (steps 3-4, 13)
+8. Selection + properties + persistence (steps 14-17)
+
+## Verification
+1. Run `npm run dev` and verify the Fixtures palette appears in the toolbar with 6 buttons
+2. Click each fixture button — verify it highlights and cursor changes to crosshair
+3. Move mouse over canvas — verify ghost preview follows cursor with correct shape
+4. Press R — verify preview rotates 90 degrees
+5. Click to place — verify fixture renders with type-specific SVG details
+6. Press F — verify fixture tool activates
+7. Switch to Select tool, click a fixture — verify selection overlay appears
+8. Drag a fixture — verify it moves
+9. Open Properties panel — verify fixture properties display and are editable
+10. Press Delete — verify fixture is removed
+11. Save and reload — verify fixtures persist
+12. Press Ctrl+Z — verify undo removes last placed fixture

@@ -1,0 +1,1417 @@
+     1→     1→import BASE_URL from "../src/utils/apiBaseUrl";
+     2→     2→import apiRequest from "../src/utils/apiRequest";
+     3→     3→
+     4→     4→export const checkUser = async(userId) => {
+     5→     5→    const response = await apiRequest(`${BASE_URL}/check-user?userId=${userId}`,{
+     6→     6→        method: 'GET',
+     7→     7→    })
+     8→     8→
+     9→     9→    if(!response.ok){
+    10→    10→        const error = await response.json();
+    11→    11→        throw new Error(error || 'failed to get user data')
+    12→    12→    }
+    13→    13→    const userData = await response.json()
+    14→    14→    // console.log(userData)
+    15→    15→    return userData;
+    16→    16→}
+    17→    17→export const submitProfileData = async(body, token)=>{
+    18→    18→    const headers = {}
+    19→    19→    if(token) headers['Authorization'] = `Bearer ${token}`;
+    20→    20→
+    21→    21→    const response = await apiRequest(`${BASE_URL}/upload-user-data`, {
+    22→    22→        method: 'POST',
+    23→    23→        headers: headers,
+    24→    24→        body: body
+    25→    25→    })
+    26→    26→    if(!response.ok){
+    27→    27→        const error = await response.json();
+    28→    28→        throw new Error(error || 'Failed to upload data');
+    29→    29→    }
+    30→    30→    const data = await response.json();
+    31→    31→    console.log(data)
+    32→    32→    return data;
+    33→    33→}
+    34→    34→
+    35→    35→export const updateProfileData = async(body, token) => {
+    36→    36→    if(body){
+    37→    37→        console.log(body)
+    38→    38→    }
+    39→    39→    const headers = {};
+    40→    40→    if(token) headers['Authorization'] = `Bearer ${token}`;
+    41→    41→
+    42→    42→    const response = await apiRequest(`${BASE_URL}/update-user-data`, {
+    43→    43→        method: 'POST',
+    44→    44→        headers: headers,
+    45→    45→        body: body
+    46→    46→    })
+    47→    47→    if(!response.ok){
+    48→    48→        const error = await response.json();
+    49→    49→        throw new Error(error || 'failed to update profile data')
+    50→    50→    }
+    51→    51→    const data = await response.json();
+    52→    52→    console.log(data)
+    53→    53→}
+    54→    54→export const getUserByUsername = async(username) => {
+    55→    55→    const response = await apiRequest(`${BASE_URL}/user/${encodeURIComponent(username)}`, {
+    56→    56→        method: 'GET',
+    57→    57→    });
+    58→    58→    if(!response.ok){
+    59→    59→        const error = await response.json().catch(() => ({}));
+    60→    60→        throw new Error(error?.error || 'failed to fetch user by username');
+    61→    61→    }
+    62→    62→    return await response.json();
+    63→    63→}
+    64→    64→
+    65→    65→export const checkUsernameAvailability = async(username) => {
+    66→    66→    const response = await apiRequest(`${BASE_URL}/check-username/${encodeURIComponent(username)}`, {
+    67→    67→        method: 'GET',
+    68→    68→    });
+    69→    69→    if(!response.ok){
+    70→    70→        const error = await response.json().catch(() => ({}));
+    71→    71→        throw new Error(error?.error || 'failed to check username');
+    72→    72→    }
+    73→    73→    return await response.json();
+    74→    74→}
+    75→    75→
+    76→    76→export const updateUsername = async(token, username) => {
+    77→    77→    const headers = {'Content-Type': 'application/json'};
+    78→    78→    if(token) headers['Authorization'] = `Bearer ${token}`;
+    79→    79→
+    80→    80→    const response = await apiRequest(`${BASE_URL}/update-username`, {
+    81→    81→        method: 'POST',
+    82→    82→        headers: headers,
+    83→    83→        body: JSON.stringify({ username })
+    84→    84→    });
+    85→    85→    if(!response.ok){
+    86→    86→        const error = await response.json().catch(() => ({}));
+    87→    87→        throw new Error(error?.error || 'failed to update username');
+    88→    88→    }
+    89→    89→    return await response.json();
+    90→    90→}
+    91→    91→
+    92→    92→export const getUserData = async(userId) =>{
+    93→    93→
+    94→    94→    const response = await apiRequest(`${BASE_URL}/getUserData?userId=${userId}`, {
+    95→    95→        method: 'GET',
+    96→    96→    })
+    97→    97→    if(!response.ok){
+    98→    98→        const error = await response.json()
+    99→    99→        throw new Error(error || 'Failed to fetch user data');
+   100→   100→    }
+   101→   101→     const data = await response.json();
+   102→   102→     return data;
+   103→   103→}
+   104→   104→
+   105→   105→export const updateFontColor = async(token, fontColor) => {
+   106→   106→    const headers = {};
+   107→   107→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   108→   108→
+   109→   109→    const response = await apiRequest(`${BASE_URL}/updateFontColor`, {
+   110→   110→        method: 'POST',
+   111→   111→        headers: headers,
+   112→   112→        body: fontColor
+   113→   113→    })
+   114→   114→
+   115→   115→    if(!response.ok){
+   116→   116→        const error = await response.json()
+   117→   117→        throw new Error(error)
+   118→   118→    }
+   119→   119→
+   120→   120→    const data = await response.json();
+   121→   121→    return data;
+   122→   122→}
+   123→   123→
+   124→   124→export const saveJournalImage = async(token, body) => {
+   125→   125→    const headers = {};
+   126→   126→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   127→   127→    const response = await apiRequest(`${BASE_URL}/save-journal-image`, {
+   128→   128→        method: 'POST',
+   129→   129→        body: body,
+   130→   130→        headers: headers
+   131→   131→    })
+   132→   132→    if(!response.ok){
+   133→   133→        const error = await response.json();
+   134→   134→        throw new Error(error);
+   135→   135→    }
+   136→   136→    const data = await response.json();
+   137→   137→    console.log(data)
+   138→   138→    return data;
+   139→   139→}
+   140→   140→
+   141→   141→export const saveJournal = async(token, body) => {
+   142→   142→    console.log(body)
+   143→   143→    const headers = {}
+   144→   144→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   145→   145→
+   146→   146→    const response = await apiRequest(`${BASE_URL}/save-journal`, {
+   147→   147→        method: 'POST',
+   148→   148→        headers,
+   149→   149→        body: body,
+   150→   150→    })
+   151→   151→    if(!response.ok){
+   152→   152→        const error = await response.json();
+   153→   153→        throw new Error(error);
+   154→   154→    }
+   155→   155→    const data = await response.json();
+   156→   156→    console.log(data)
+   157→   157→    return data;
+   158→   158→}
+   159→   159→
+   160→   160→export const updateJournal = async(token, body) => {
+   161→   161→    const headers = {};
+   162→   162→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   163→   163→
+   164→   164→    const response =  await apiRequest(`${BASE_URL}/update-journal`, {
+   165→   165→        method: 'POST',
+   166→   166→        headers: headers,
+   167→   167→        body: body
+   168→   168→    })
+   169→   169→
+   170→   170→    if(!response.ok){
+   171→   171→        const error = await response.json();
+   172→   172→        throw new Error(error);
+   173→   173→    }
+   174→   174→
+   175→   175→    const message = await response.json();
+   176→   176→    console.log(message)
+   177→   177→    return message;
+   178→   178→}
+   179→   179→
+   180→   180→export const deleteJournalImage = async(token, url) => {
+   181→   181→    console.log(url)
+   182→   182→    let img_url = ''
+   183→   183→    let data = {
+   184→   184→        filepath: []
+   185→   185→    };
+   186→   186→    
+   187→   187→    if(url.length){
+   188→   188→        console.log(url.length)
+   189→   189→        url.forEach(element => {
+   190→   190→            data.filepath.push(element.split('/journal-images/').pop());
+   191→   191→    });
+   192→   192→       
+   193→   193→        // img_url = url.split('/journal-images/').pop()
+   194→   194→        // if(img_url){
+   195→   195→        //     data = {
+   196→   196→        //         filepath: img_url
+   197→   197→        //     }
+   198→   198→
+   199→   199→        // }
+   200→   200→        // console.log(url.split('/journal-images/').pop(),'url') //pop() method will remove the last element in the array and returns it;
+   201→   201→        //in that case i can get the fileName e.g https://hufaxmqdofaycnhdzrxf.supabase.co/storage/v1/object/public/journal-images/user_id_7ceaa0ad-0266-4966-bfe6-ec152b2d9f75/1760963803951_4720148b-c85b-4af3-99e0-dd2ce87c10b0.webp
+   202→   202→    }
+   203→   203→
+   204→   204→    console.log(data.filepath)
+   205→   205→    const headers = {'Content-Type': 'application/json',}
+   206→   206→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   207→   207→    const response = await apiRequest(`${BASE_URL}/delete-journal-images`, {
+   208→   208→        method: 'POST',
+   209→   209→        body: JSON.stringify(data),
+   210→   210→        headers: headers
+   211→   211→    })
+   212→   212→    if(!response.ok){
+   213→   213→        const error = await response.json();
+   214→   214→        throw new Error(error);
+   215→   215→    }
+   216→   216→    const message = await response.json();
+   217→   217→    console.log(message)
+   218→   218→    return message;
+   219→   219→
+   220→   220→}
+   221→   221→
+   222→   222→export const getJournals = async(cursor = null, limit = 5, userId) =>{
+   223→   223→    // console.log(userId)
+   224→   224→    try {
+   225→   225→        let url = cursor
+   226→   226→        ? `${BASE_URL}/journals?limit=${limit}&before=${cursor}`
+   227→   227→        : `${BASE_URL}/journals?limit=${limit}`;
+   228→   228→        if(userId) url += `&userId=${userId}`;
+   229→   229→
+   230→   230→        const response = await apiRequest(url, {
+   231→   231→            method: 'GET'
+   232→   232→        });
+   233→   233→
+   234→   234→        if(!response.ok){
+   235→   235→            throw new Error('Failed to fetch journals');
+   236→   236→        }
+   237→   237→
+   238→   238→        const data = await response.json();
+   239→   239→        // console.log(data)
+   240→   240→        return data;
+   241→   241→    } catch (error) {
+   242→   242→        console.error('Error fetching journals:', error);
+   243→   243→        throw error;
+   244→   244→    }
+   245→   245→}
+   246→   246→
+   247→   247→export const getMonthlyHottestJournals = async(userId, limit = 10) => {
+   248→   248→    const parsedLimit = Number(limit);
+   249→   249→    if(Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 10){
+   250→   250→        throw new Error('limit should be an integer between 1 and 10');
+   251→   251→    }
+   252→   252→
+   253→   253→    let url = `${BASE_URL}/journals/hottest-monthly?limit=${parsedLimit}`;
+   254→   254→    if(userId){
+   255→   255→        url += `&userId=${encodeURIComponent(userId)}`;
+   256→   256→    }
+   257→   257→
+   258→   258→    const response = await apiRequest(url, {
+   259→   259→        method: 'GET'
+   260→   260→    });
+   261→   261→
+   262→   262→    if(!response.ok){
+   263→   263→        const error = await response.json().catch(() => ({}));
+   264→   264→        throw new Error(error?.error || 'failed to fetch monthly hottest journals');
+   265→   265→    }
+   266→   266→
+   267→   267→    const data = await response.json();
+   268→   268→    return data;
+   269→   269→}
+   270→   270→
+   271→   271→export const getCanvasGallery = async(userId, limit = 36, sort = 'hottest', cursor = null) => {
+   272→   272→    const parsedLimit = Number(limit);
+   273→   273→    if(Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 72){
+   274→   274→        throw new Error('limit should be an integer between 1 and 72');
+   275→   275→    }
+   276→   276→
+   277→   277→    const normalizedSort = typeof sort === 'string' && sort.trim().toLowerCase() === 'newest'
+   278→   278→        ? 'newest'
+   279→   279→        : 'hottest';
+   280→   280→
+   281→   281→    let url = `${BASE_URL}/journals/canvas/gallery?limit=${parsedLimit}&sort=${encodeURIComponent(normalizedSort)}`;
+   282→   282→    if(userId){
+   283→   283→        url += `&userId=${encodeURIComponent(userId)}`;
+   284→   284→    }
+   285→   285→    if(cursor){
+   286→   286→        url += `&cursor=${encodeURIComponent(cursor)}`;
+   287→   287→    }
+   288→   288→
+   289→   289→    const response = await apiRequest(url, {
+   290→   290→        method: 'GET'
+   291→   291→    });
+   292→   292→
+   293→   293→    if(!response.ok){
+   294→   294→        const error = await response.json().catch(() => ({}));
+   295→   295→        throw new Error(error?.error || 'failed to fetch canvas gallery');
+   296→   296→    }
+   297→   297→
+   298→   298→    return await response.json();
+   299→   299→}
+   300→   300→
+   301→   301→export const searchUsers = async(query, limit = 10) => {
+   302→   302→    const normalizedQuery = typeof query === 'string' ? query.trim() : '';
+   303→   303→    if(!normalizedQuery){
+   304→   304→        return {data: [], hasMore: false};
+   305→   305→    }
+   306→   306→
+   307→   307→    const url = `${BASE_URL}/users/search?query=${encodeURIComponent(normalizedQuery)}&limit=${limit}`;
+   308→   308→
+   309→   309→    const response = await apiRequest(url, {
+   310→   310→        method: 'GET'
+   311→   311→    });
+   312→   312→
+   313→   313→    if(!response.ok){
+   314→   314→        const error = await response.json().catch(() => ({}));
+   315→   315→        throw new Error(error?.error || 'failed to search users');
+   316→   316→    }
+   317→   317→
+   318→   318→    return await response.json();
+   319→   319→}
+   320→   320→
+   321→   321→export const searchJournals = async(query, limit = 10, userId) => {
+   322→   322→    const normalizedQuery = typeof query === 'string' ? query.trim() : '';
+   323→   323→    if(!normalizedQuery){
+   324→   324→        return {data: [], hasMore: false, mode: 'keyword'};
+   325→   325→    }
+   326→   326→
+   327→   327→    let url = `${BASE_URL}/journals/search?query=${encodeURIComponent(normalizedQuery)}&limit=${limit}`;
+   328→   328→    if(userId){
+   329→   329→        url += `&userId=${encodeURIComponent(userId)}`;
+   330→   330→    }
+   331→   331→
+   332→   332→    const response = await apiRequest(url, {
+   333→   333→        method: 'GET'
+   334→   334→    });
+   335→   335→
+   336→   336→    if(!response.ok){
+   337→   337→        const error = await response.json().catch(() => ({}));
+   338→   338→        throw new Error(error?.error || 'failed to search journals');
+   339→   339→    }
+   340→   340→
+   341→   341→    const data = await response.json();
+   342→   342→    return data;
+   343→   343→}
+   344→   344→
+   345→   345→export const getJournalById = async(journalId, userId) => {
+   346→   346→    if (!journalId) {
+   347→   347→        throw new Error('journalId is required');
+   348→   348→    }
+   349→   349→
+   350→   350→    let url = `${BASE_URL}/journal/${encodeURIComponent(journalId)}`;
+   351→   351→    if (userId) {
+   352→   352→        url += `?userId=${encodeURIComponent(userId)}`;
+   353→   353→    }
+   354→   354→
+   355→   355→    const response = await apiRequest(url, {
+   356→   356→        method: 'GET'
+   357→   357→    });
+   358→   358→
+   359→   359→    if (!response.ok) {
+   360→   360→        const error = await response.json().catch(() => ({}));
+   361→   361→        throw new Error(error?.error || 'failed to fetch journal');
+   362→   362→    }
+   363→   363→
+   364→   364→    const data = await response.json();
+   365→   365→    return data;
+   366→   366→}
+   367→   367→export const getUserJournals = async(cursor = null, limit = 5, userId, token) =>{
+   368→   368→    try {
+   369→   369→        const headers = {};
+   370→   370→        if(token) headers['Authorization'] = `Bearer ${token}`;
+   371→   371→        const url = cursor ? `${BASE_URL}/userJournals?limit=${limit}&before=${cursor}&userId=${userId}` : `${BASE_URL}/userJournals?limit=${limit}&userId=${userId}`;
+   372→   372→
+   373→   373→        const response = await apiRequest(url, {
+   374→   374→            method: 'GET',
+   375→   375→            headers: headers
+   376→   376→        })
+   377→   377→        
+   378→   378→        if(!response.ok){
+   379→   379→            throw new Error('failed to get response');
+   380→   380→        }
+   381→   381→        const data = await response.json();
+   382→   382→        // console.log(data);
+   383→   383→        return data
+   384→   384→    } catch (error) {
+   385→   385→        console.error('Error fetching user journals:', error);
+   386→   386→        throw error;
+   387→   387→    }
+   388→   388→}
+   389→   389→
+   390→   390→export const getProfileMedia = async(token, cursor = null, limit = 5) => {
+   391→   391→    const headers = {};
+   392→   392→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   393→   393→    const params = new URLSearchParams();
+   394→   394→    params.set('limit', String(limit));
+   395→   395→    if(cursor){
+   396→   396→        params.set('cursor', cursor);
+   397→   397→    }
+   398→   398→
+   399→   399→    const response = await apiRequest(`${BASE_URL}/profileMedia?${params.toString()}`, {
+   400→   400→        method: 'GET',
+   401→   401→        headers: headers
+   402→   402→    });
+   403→   403→
+   404→   404→    if(!response.ok){
+   405→   405→        const error = await response.json().catch(() => ({}));
+   406→   406→        throw new Error(error?.error || 'failed to fetch profile media');
+   407→   407→    }
+   408→   408→
+   409→   409→    return await response.json();
+   410→   410→}
+   411→   411→
+   412→   412→export const getVisitedProfileMedia = async(token, userId, cursor = null, limit = 5) => {
+   413→   413→    if(!userId){
+   414→   414→        throw new Error("userId is required");
+   415→   415→    }
+   416→   416→
+   417→   417→    const headers = {};
+   418→   418→    if(token) headers["Authorization"] = `Bearer ${token}`;
+   419→   419→
+   420→   420→    const params = new URLSearchParams();
+   421→   421→    params.set("userId", String(userId));
+   422→   422→    params.set("limit", String(limit));
+   423→   423→    if(cursor){
+   424→   424→        params.set("cursor", cursor);
+   425→   425→    }
+   426→   426→
+   427→   427→    const response = await apiRequest(`${BASE_URL}/visitedProfileMedia?${params.toString()}`, {
+   428→   428→        method: "GET",
+   429→   429→        headers: headers
+   430→   430→    });
+   431→   431→
+   432→   432→    if(!response.ok){
+   433→   433→        const error = await response.json().catch(() => ({}));
+   434→   434→        throw new Error(error?.error || "failed to fetch visited profile media");
+   435→   435→    }
+   436→   436→
+   437→   437→    return await response.json();
+   438→   438→}
+   439→   439→
+   440→   440→export const deleteProfileMediaImage = async(token, payload) => {
+   441→   441→    const headers = {"Content-Type": "application/json"};
+   442→   442→    if(token) headers["Authorization"] = `Bearer ${token}`;
+   443→   443→
+   444→   444→    const response = await apiRequest(`${BASE_URL}/media/image`, {
+   445→   445→        method: "DELETE",
+   446→   446→        headers: headers,
+   447→   447→        body: JSON.stringify(payload || {})
+   448→   448→    });
+   449→   449→
+   450→   450→    if(!response.ok){
+   451→   451→        const error = await response.json().catch(() => ({}));
+   452→   452→        throw new Error(error?.error || "failed to delete profile media image");
+   453→   453→    }
+   454→   454→
+   455→   455→    return await response.json();
+   456→   456→}
+   457→   457→
+   458→   458→export const getVisitedUserJournals = async(cursor = null, limit = 5, userId, loggedInUserId) =>{
+   459→   459→    console.log('getVisit');
+   460→   460→    try {
+   461→   461→        const url = cursor ? `${BASE_URL}/visitedUserJournals?limit=${limit}&before=${cursor}&userId=${userId}&loggedInUserId=${loggedInUserId}` : `${BASE_URL}/visitedUserJournals?limit=${limit}&userId=${userId}&loggedInUserId=${loggedInUserId}`;
+   462→   462→
+   463→   463→        const response = await apiRequest(url, {
+   464→   464→            method: 'GET'
+   465→   465→        })
+   466→   466→        
+   467→   467→        if(!response.ok){
+   468→   468→            throw new Error('failed to get response');
+   469→   469→        }
+   470→   470→        const data = await response.json();
+   471→   471→        // console.log(data);
+   472→   472→        return data
+   473→   473→    } catch (error) {
+   474→   474→        console.error('Error fetching user journals:', error);
+   475→   475→        throw error;
+   476→   476→    }
+   477→   477→}
+   478→   478→
+   479→   479→export const deleteJournal = async(journalId, token) =>{
+   480→   480→    const headers = {};
+   481→   481→
+   482→   482→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   483→   483→
+   484→   484→    const response = await apiRequest(`${BASE_URL}/deleteJournal/${journalId}`, {
+   485→   485→        method: 'delete',
+   486→   486→        headers: headers
+   487→   487→    })
+   488→   488→    if(!response.ok){
+   489→   489→        const error = await response.json();
+   490→   490→        throw new Error(error);
+   491→   491→    }
+   492→   492→    const data = await response.json();
+   493→   493→    console.log(data)
+   494→   494→    return data;
+   495→   495→}
+   496→   496→
+   497→   497→export const clickLike = async(token, body) => {
+   498→   498→    const headers = {'Content-Type': 'application/json'}; //use content type because it will receive a object type of data
+   499→   499→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   500→   500→
+   501→   501→    const response = await apiRequest(`${BASE_URL}/like`, {
+   502→   502→        method: 'POST',
+   503→   503→        headers: headers,
+   504→   504→        body: JSON.stringify(body) //tringify the plain object
+   505→   505→    })
+   506→   506→    if(!response.ok){
+   507→   507→        throw new Error('error adding like')
+   508→   508→    }
+   509→   509→    const message = await response.json();
+   510→   510→    console.log(message)
+   511→   511→    return message;
+   512→   512→}
+   513→   513→
+   514→   514→export const addComment = async(token, body) =>{
+   515→   515→    const headers = {'Content-Type': 'application/json'};
+   516→   516→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   517→   517→    const response = await apiRequest(`${BASE_URL}/addComment`, {
+   518→   518→        method: 'POST',
+   519→   519→        headers: headers,
+   520→   520→        body: JSON.stringify(body)
+   521→   521→    })
+   522→   522→    if(!response.ok){
+   523→   523→        const error = await response.json();
+   524→   524→        throw new Error(error);
+   525→   525→    }
+   526→   526→    const data = await response.json();
+   527→   527→    return data;
+   528→   528→};
+   529→   529→export const getComments = async(cursor= null, limit= 10, postId) =>{
+   530→   530→    try {
+   531→   531→        const url = cursor ? `${BASE_URL}/getComments?postId=${postId}&limit=${limit}&before=${cursor}` : `${BASE_URL}/getComments?postId=${postId}&limit=${limit}`;
+   532→   532→        const response = await apiRequest(url, {
+   533→   533→            method: 'GET'
+   534→   534→        })
+   535→   535→
+   536→   536→        if(!response.ok){
+   537→   537→            throw new Error('failed to fetch comments');
+   538→   538→        }
+   539→   539→        const data = await response.json();
+   540→   540→        // console.log(data);
+   541→   541→        return data;
+   542→   542→    } catch (error) {
+   543→   543→        console.error('Error fetching comments:', error);
+   544→   544→        throw error;
+   545→   545→    }
+   546→   546→}
+   547→   547→
+   548→   548→export const createCanvasRemix = async(token, payload) => {
+   549→   549→    const headers = {'Content-Type': 'application/json'};
+   550→   550→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   551→   551→
+   552→   552→    const response = await apiRequest(`${BASE_URL}/canvas/remix`, {
+   553→   553→        method: 'POST',
+   554→   554→        headers: headers,
+   555→   555→        body: JSON.stringify(payload || {})
+   556→   556→    });
+   557→   557→
+   558→   558→    if(!response.ok){
+   559→   559→        const error = await response.json().catch(() => ({}));
+   560→   560→        throw new Error(error?.error || 'failed to create canvas remix');
+   561→   561→    }
+   562→   562→
+   563→   563→    return await response.json();
+   564→   564→}
+   565→   565→
+   566→   566→export const updateRepostCaption = async(token, {journalId, caption}) => {
+   567→   567→    const headers = {'Content-Type': 'application/json'};
+   568→   568→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   569→   569→
+   570→   570→    const response = await apiRequest(`${BASE_URL}/update-repost-caption`, {
+   571→   571→        method: 'POST',
+   572→   572→        headers: headers,
+   573→   573→        body: JSON.stringify({journalId, caption})
+   574→   574→    });
+   575→   575→
+   576→   576→    if(!response.ok){
+   577→   577→        const error = await response.json().catch(() => ({}));
+   578→   578→        throw new Error(error?.error || 'failed to update repost caption');
+   579→   579→    }
+   580→   580→
+   581→   581→    return await response.json();
+   582→   582→}
+   583→   583→
+   584→   584→export const createRepost = async(token, {sourceJournalId, caption}) => {
+   585→   585→    const headers = {'Content-Type': 'application/json'};
+   586→   586→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   587→   587→
+   588→   588→    const response = await apiRequest(`${BASE_URL}/repost`, {
+   589→   589→        method: 'POST',
+   590→   590→        headers: headers,
+   591→   591→        body: JSON.stringify({sourceJournalId, caption})
+   592→   592→    });
+   593→   593→
+   594→   594→    if(!response.ok){
+   595→   595→        const error = await response.json().catch(() => ({}));
+   596→   596→        throw new Error(error?.error || 'failed to create repost');
+   597→   597→    }
+   598→   598→
+   599→   599→    return await response.json();
+   600→   600→}
+   601→   601→
+   602→   602→export const addBookmark = async(token, journalId) =>{
+   603→   603→    const headers = {'Content-Type': 'application/json'};
+   604→   604→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   605→   605→
+   606→   606→    const response = await apiRequest(`${BASE_URL}/addBoorkmark`, {
+   607→   607→        method: 'POST',
+   608→   608→        headers: headers,
+   609→   609→        body: JSON.stringify(journalId),
+   610→   610→    })
+   611→   611→
+   612→   612→    if(!response.ok){
+   613→   613→        const error = await response.json();
+   614→   614→        throw new Error('error:', error);
+   615→   615→    }
+   616→   616→
+   617→   617→    const message = await response.json();
+   618→   618→    console.log(message);
+   619→   619→    return message;
+   620→   620→}
+   621→   621→
+   622→   622→export const getBookmarks = async(cursor= null, limit= 5, userId, token) =>{
+   623→   623→    const headers = {};
+   624→   624→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   625→   625→    const url = cursor ? `${BASE_URL}/getBookmarks?limit=${limit}&before=${cursor}&userId=${userId}` : `${BASE_URL}/getBookmarks?limit=${limit}&userId=${userId}`;
+   626→   626→    const response = await apiRequest(url, {
+   627→   627→        method: 'GET',
+   628→   628→        headers: headers,
+   629→   629→    })
+   630→   630→
+   631→   631→    if(!response.ok){
+   632→   632→        const error = await response.json();
+   633→   633→        throw new Error(error);
+   634→   634→    }
+   635→   635→    const data = await response.json();
+   636→   636→    console.log(data)
+   637→   637→    return data;
+   638→   638→}
+   639→   639→
+   640→   640→export const addFollows = async(followsData, token) => {
+   641→   641→    const headers ={'Content-Type': 'application/json'}
+   642→   642→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   643→   643→    const response = await apiRequest(`${BASE_URL}/addFollows`, {
+   644→   644→        method: 'POST',
+   645→   645→        headers: headers,
+   646→   646→        body: JSON.stringify(followsData),
+   647→   647→    })
+   648→   648→
+   649→   649→    if(!response.ok){
+   650→   650→        const error = await response.json()
+   651→   651→        throw new Error(error);
+   652→   652→    }
+   653→   653→    const data = await response.json();
+   654→   654→    console.log(data);
+   655→   655→    return data;
+   656→   656→}
+   657→   657→
+   658→   658→export const getFollowsData = async(loggedInUserId, userIdToFollow) =>{
+   659→   659→    const response = await apiRequest(`${BASE_URL}/getFollowsData?userId=${userIdToFollow}&loggedInUserId=${loggedInUserId}`,{
+   660→   660→        method: 'GET'
+   661→   661→    })
+   662→   662→
+   663→   663→    if(!response.ok){
+   664→   664→        const error = await response.json();
+   665→   665→        throw new Error(error);
+   666→   666→    }
+   667→   667→    const data = await response.json();
+   668→   668→    // console.log(data)
+   669→   669→    return data;
+   670→   670→}
+   671→   671→
+   672→   672→export const getNotificationsCount = async(userId, token) => {
+   673→   673→    const headers = {};
+   674→   674→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   675→   675→    const response = await apiRequest(`${BASE_URL}/getCountNotifications?userId=${userId}`, { headers: headers });
+   676→   676→    if(!response.ok){
+   677→   677→        const error = await response.json();
+   678→   678→        throw new Error(error);
+   679→   679→    }
+   680→   680→    const data = await response.json();
+   681→   681→    // console.log(data)
+   682→   682→    return data;
+   683→   683→}
+   684→   684→
+   685→   685→export const getNotifications = async(token, cursor = null, limit = 5) =>{
+   686→   686→    const headers = {}
+   687→   687→    if(token) headers['Authorization'] = `Bearer ${token}`
+   688→   688→    const url = cursor ? `${BASE_URL}/getNotifications?before=${cursor}&limit=${limit}` : `${BASE_URL}/getNotifications?limit=${limit}`;
+   689→   689→    const response = await apiRequest(url, {
+   690→   690→        method: 'GET',
+   691→   691→        headers: headers
+   692→   692→    })
+   693→   693→    if(!response){
+   694→   694→        const error = await response.json();
+   695→   695→        throw new Error(error);
+   696→   696→    }
+   697→   697→    const data = await response.json();
+   698→   698→    return data;
+   699→   699→}
+   700→   700→
+   701→   701→export const readNotification = async(token, notifId, source) =>{
+   702→   702→    const headers = {'Content-Type': 'application/json'};
+   703→   703→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   704→   704→
+   705→   705→    const response = await apiRequest(`${BASE_URL}/readNotification`, {
+   706→   706→        method: 'POST',
+   707→   707→        body: JSON.stringify({notifId, source}),
+   708→   708→        headers: headers
+   709→   709→    })
+   710→   710→
+   711→   711→    if(!response.ok){
+   712→   712→        const error = await response.json();
+   713→   713→        throw new Error(error);
+   714→   714→    }
+   715→   715→    const message = await response.json();
+   716→   716→    console.log(message)
+   717→   717→    return message;
+   718→   718→}
+   719→   719→
+   720→   720→export const deleteNotification = async(token, notifId, source) =>{
+   721→   721→    const headers = {};
+   722→   722→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   723→   723→
+   724→   724→    const url = source ? `${BASE_URL}/deleteNotification/${notifId}?source=${source}` : `${BASE_URL}/deleteNotification/${notifId}`;
+   725→   725→    const response = await apiRequest(url, {
+   726→   726→        method: 'DELETE',
+   727→   727→        headers: headers
+   728→   728→    })
+   729→   729→
+   730→   730→    if(!response.ok){
+   731→   731→        const error = await response.json();
+   732→   732→        throw new Error(error);
+   733→   733→    }
+   734→   734→    const message = await response.json();
+   735→   735→    console.log(message)
+   736→   736→    return message;
+   737→   737→}
+   738→   738→
+   739→   739→export const getUnreadNotification = async(token, cursor, limit=5)=>{
+   740→   740→    const headers = {};
+   741→   741→    if(token)headers['Authorization'] = `Bearer ${token}`;
+   742→   742→
+   743→   743→    const url = cursor ? `${BASE_URL}/getUnreadNotification?before=${cursor}&limit=${limit}` : `${BASE_URL}/getUnreadNotification?limit=${limit}`
+   744→   744→    const response = await apiRequest(url, {
+   745→   745→        method: 'GET',
+   746→   746→        headers: headers
+   747→   747→    })
+   748→   748→
+   749→   749→    if(!response.ok){
+   750→   750→        const error = await response.json();
+   751→   751→        throw new Error(error);
+   752→   752→    }
+   753→   753→    const data = await response.json();
+   754→   754→    // console.log(data);
+   755→   755→    return data;
+   756→   756→}
+   757→   757→
+   758→   758→export const addJournalViews = async(token, body) =>{
+   759→   759→    const headers ={};
+   760→   760→    if(token)headers['Authorization'] = `Bearer ${token}`;
+   761→   761→
+   762→   762→    const response = await apiRequest(`${BASE_URL}/addViews`, {
+   763→   763→        method: 'POST',
+   764→   764→        headers: headers,
+   765→   765→        body: body
+   766→   766→    })
+   767→   767→
+   768→   768→    if(!response.ok){
+   769→   769→        const error = await response.json();
+   770→   770→        throw new Error(error);
+   771→   771→    }
+   772→   772→
+   773→   773→    const message = await response.json();
+   774→   774→    console.log(message);
+   775→   775→    return message;
+   776→   776→}
+   777→   777→
+   778→   778→export const updatePrivacy = async(token, body) =>{
+   779→   779→    const headers = {};
+   780→   780→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   781→   781→
+   782→   782→    const response = await apiRequest(`${BASE_URL}/updatePrivacy`, {
+   783→   783→        method: 'POST',
+   784→   784→        body: body,
+   785→   785→        headers: headers
+   786→   786→    })
+   787→   787→
+   788→   788→    if(!response.ok){
+   789→   789→        const error = await response.json();
+   790→   790→        throw new Error(error);
+   791→   791→    }
+   792→   792→
+   793→   793→    const message = await response.json();
+   794→   794→    console.log(message);
+   795→   795→    return message;
+   796→   796→}
+   797→   797→
+   798→   798→export const addCollections = async(token, body) => {
+   799→   799→    const headers = {};
+   800→   800→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   801→   801→    
+   802→   802→    const response = await apiRequest(`${BASE_URL}/addCollections`, {
+   803→   803→        method: 'POST',
+   804→   804→        headers: headers,
+   805→   805→        body: body
+   806→   806→    })
+   807→   807→
+   808→   808→    if(!response.ok){
+   809→   809→        const error = await response.json();
+   810→   810→        throw new Error(error);
+   811→   811→    }
+   812→   812→
+   813→   813→    const message = await response.json();
+   814→   814→    console.log(message)
+   815→   815→    return message;
+   816→   816→}
+   817→   817→
+   818→   818→export const getCollections = async(userId, cursor, limit, token) =>{
+   819→   819→    const headers = {};
+   820→   820→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   821→   821→    const url = cursor ? `${BASE_URL}/getCollections?userId=${userId}&before=${cursor}&limit=${limit}` : `${BASE_URL}/getCollections?userId=${userId}&limit=${limit}`
+   822→   822→
+   823→   823→    const response = await apiRequest(url, {
+   824→   824→        method: 'GET',
+   825→   825→        headers: headers,
+   826→   826→    })
+   827→   827→
+   828→   828→    if(!response.ok){
+   829→   829→        const error = await response.json();
+   830→   830→        throw new Error(error);
+   831→   831→    }
+   832→   832→
+   833→   833→    const data = await response.json();
+   834→   834→    console.log(data)
+   835→   835→    return data
+   836→   836→}
+   837→   837→
+   838→   838→export const getCollectionJournals = async(collectionId, cursor, limit, token) =>{
+   839→   839→    const headers = {};
+   840→   840→
+   841→   841→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   842→   842→    const url = cursor ? `${BASE_URL}/getCollectionJournals?collectionId=${collectionId}&before=${cursor}&limit=${limit}` : `${BASE_URL}/getCollectionJournals?collectionId=${collectionId}&limit=${limit}`;
+   843→   843→    const response = await apiRequest(url, {
+   844→   844→        method: 'GET',
+   845→   845→        headers: headers
+   846→   846→    })
+   847→   847→
+   848→   848→    if(!response.ok){
+   849→   849→        const error = await response.json();
+   850→   850→        throw new Error(error);
+   851→   851→    }
+   852→   852→
+   853→   853→    const data = await response.json()
+   854→   854→    return data
+   855→   855→}
+   856→   856→
+   857→   857→export const getNotCollectedJournals = async(cursor, limit, userId, collectionId, token) =>{
+   858→   858→    const headers = {};
+   859→   859→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   860→   860→    const url = cursor ? `${BASE_URL}/getNotCollectedPost?before=${cursor}&limit=${limit}&userId=${userId}&collectionId=${collectionId}` :  `${BASE_URL}/getNotCollectedPost?limit=${limit}&userId=${userId}&collectionId=${collectionId}`;
+   861→   861→
+   862→   862→    const response = await apiRequest(url, {
+   863→   863→        method: 'GET',
+   864→   864→        headers: headers,
+   865→   865→    })
+   866→   866→    if(!response.ok){
+   867→   867→        const error = await response.json();
+   868→   868→        throw new Error(error);
+   869→   869→    }
+   870→   870→
+   871→   871→    const data = await response.json();
+   872→   872→    console.log(data)
+   873→   873→    return data;
+   874→   874→}
+   875→   875→export const addJournalCollection = async(token, body) => {
+   876→   876→    const headers = {};
+   877→   877→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   878→   878→    
+   879→   879→    const response = await apiRequest(`${BASE_URL}/updateCollection`, {
+   880→   880→        method: 'post',
+   881→   881→        headers: headers,
+   882→   882→        body: body
+   883→   883→    })
+   884→   884→
+   885→   885→    if(!response.ok){
+   886→   886→        const error = await response.json();
+   887→   887→        throw new Error(error);
+   888→   888→    }
+   889→   889→
+   890→   890→    const message = response.json();
+   891→   891→    console.log(message);
+   892→   892→    return message;
+   893→   893→}
+   894→   894→
+   895→   895→export const deleteCollection = async(token, collectionId) =>{
+   896→   896→    const headers = {};
+   897→   897→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   898→   898→
+   899→   899→    const response = await apiRequest(`${BASE_URL}/deleteCollection/${collectionId}`, {
+   900→   900→        method: 'delete',
+   901→   901→        headers: headers
+   902→   902→    })
+   903→   903→    if(!response.ok){
+   904→   904→        const error = await response.json();
+   905→   905→        throw new Error(error)
+   906→   906→    }
+   907→   907→
+   908→   908→    const message = await response.json();
+   909→   909→    console.log(message)
+   910→   910→    return message;
+   911→   911→}
+   912→   912→
+   913→   913→export const updateCollectionPrivacy = async(body, token) =>{
+   914→   914→    const headers = {};
+   915→   915→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   916→   916→    const response = await apiRequest(`${BASE_URL}/updatePrivacyCollection`, {
+   917→   917→        method: 'post',
+   918→   918→        body: body,
+   919→   919→        headers: headers,
+   920→   920→    })
+   921→   921→
+   922→   922→    if(!response.ok){
+   923→   923→        const error = await response.json();
+   924→   924→        throw new Error(error);
+   925→   925→    }
+   926→   926→
+   927→   927→    const message = await response.json();
+   928→   928→
+   929→   929→    console.log(message);
+   930→   930→    return message;
+   931→   931→}
+   932→   932→
+   933→   933→export const addOpinion = async(body, token) =>{
+   934→   934→    const headers = {};
+   935→   935→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   936→   936→
+   937→   937→    const response = await apiRequest(`${BASE_URL}/addOpinion`, {
+   938→   938→        method: 'POST',
+   939→   939→        body: body,
+   940→   940→        headers: headers
+   941→   941→    })
+   942→   942→
+   943→   943→    if(!response.ok){
+   944→   944→        const error = await response.json();
+   945→   945→        throw new Error(error);
+   946→   946→    }
+   947→   947→    const data = await response.json();
+   948→   948→    console.log(data)
+   949→   949→    return data;
+   950→   950→}
+   951→   951→
+   952→   952→export const getOpinions = async(cursor, limit) =>{
+   953→   953→    const url = cursor ? `${BASE_URL}/getOpinions?before=${cursor}&limit=${limit}` : `${BASE_URL}/getOpinions?limit=${limit}`;
+   954→   954→
+   955→   955→    const response = await apiRequest(url, {
+   956→   956→        method: 'GET'
+   957→   957→    })
+   958→   958→
+   959→   959→    if(!response.ok){
+   960→   960→        const error = await response.json();
+   961→   961→        throw new Error(error)
+   962→   962→    }
+   963→   963→
+   964→   964→    const data = await response.json()
+   965→   965→    console.log(data);
+   966→   966→    return data;
+   967→   967→}
+   968→   968→
+   969→   969→export const getUserOpinions = async(cursor, limit, userId) =>{
+   970→   970→    const url = cursor ? `${BASE_URL}/getUserOpinions?before=${cursor}&limit=${limit}&userId=${userId}` : `${BASE_URL}/getUserOpinions?limit=${limit}&userId=${userId}`;
+   971→   971→
+   972→   972→    const response = await apiRequest(url, {
+   973→   973→        method: 'GET',
+   974→   974→    })
+   975→   975→
+   976→   976→    if(!response.ok){
+   977→   977→        const error = await response.json();
+   978→   978→        throw new Error(error);
+   979→   979→    }
+   980→   980→
+   981→   981→    const data = await response.json();
+   982→   982→    console.log(data);
+   983→   983→    return data;
+   984→   984→}
+   985→   985→
+   986→   986→export const getMyOpinions = async(cursor, limit, token) => {
+   987→   987→    console.log(cursor)
+   988→   988→    const headers ={}
+   989→   989→    if(token) headers['Authorization'] = `Bearer ${token}`;
+   990→   990→
+   991→   991→    const url =  cursor ? `${BASE_URL}/getMyOpinions?before=${cursor}&limit=${limit}` : `${BASE_URL}/getMyOpinions?limit=${limit}`;
+   992→   992→
+   993→   993→    const response = await apiRequest(url, {
+   994→   994→        method: 'get',
+   995→   995→        headers: headers
+   996→   996→    })
+   997→   997→
+   998→   998→    if(!response.ok){
+   999→   999→        const error = await response.json();
+  1000→  1000→        throw new Error(error);
+  1001→  1001→    }
+  1002→  1002→
+  1003→  1003→    const data = await response.json();
+  1004→  1004→    console.log(data);
+  1005→  1005→    return data;
+  1006→  1006→}
+  1007→  1007→
+  1008→  1008→export const addReply = async(userId, postId, parentId, body, receiverId, token) =>{
+  1009→  1009→    const headers = {};
+  1010→  1010→    if(token) headers['Authorization'] = `Bearer ${token}`;
+  1011→  1011→    const response = await apiRequest(`${BASE_URL}/submitReply/${parentId}/${userId}/${postId}/${receiverId}`, {
+  1012→  1012→        method: 'POST',
+  1013→  1013→        body: body,
+  1014→  1014→        headers: headers
+  1015→  1015→    })
+  1016→  1016→
+  1017→  1017→    if(!response.ok){
+  1018→  1018→        const error = await response.json();
+  1019→  1019→        throw new Error(error);
+  1020→  1020→    }
+  1021→  1021→    
+  1022→  1022→    const messsage = await response.json();
+  1023→  1023→    console.log(messsage)
+  1024→  1024→    return messsage;
+  1025→  1025→}
+  1026→  1026→
+  1027→  1027→export const getPostReplies = async(parent_id, limit, cursor) =>{
+  1028→  1028→    const url = cursor ? `${BASE_URL}/getPostReplies/${parent_id}?limit=${limit}&before=${cursor}` : `${BASE_URL}/getPostReplies/${parent_id}?limit=${limit}`;
+  1029→  1029→
+  1030→  1030→    const response = await apiRequest(url, {
+  1031→  1031→        method: 'GET'
+  1032→  1032→    })
+  1033→  1033→
+  1034→  1034→    if(!response.ok){
+  1035→  1035→        const error = await response.json();
+  1036→  1036→        throw new Error(error);
+  1037→  1037→    }
+  1038→  1038→
+  1039→  1039→    const data = await response.json();
+  1040→  1040→    console.log(data);
+  1041→  1041→    return data;
+  1042→  1042→}
+  1043→  1043→
+  1044→  1044→export const getViewOpinion = async(postId, userId) =>{
+  1045→  1045→    const url = `${BASE_URL}/viewOpinion/${postId}/${userId}`;
+  1046→  1046→
+  1047→  1047→    const response = await apiRequest(url, {
+  1048→  1048→        method: 'GET'
+  1049→  1049→    })
+  1050→  1050→
+  1051→  1051→    if(!response.ok){
+  1052→  1052→        const error = await response.json();
+  1053→  1053→        throw new Error(error);
+  1054→  1054→    }
+  1055→  1055→
+  1056→  1056→    const data = await response.json();
+  1057→  1057→    console.log(data);
+  1058→  1058→    return data;
+  1059→  1059→}
+  1060→  1060→
+  1061→  1061→export const addReplyOpinion = async(body, receiver_id, user_id, parent_id, token) =>{
+  1062→  1062→    const headers = {};
+  1063→  1063→    if(token) headers['Authorization'] = `Bearer ${token}`;
+  1064→  1064→    
+  1065→  1065→    const response = await apiRequest(`${BASE_URL}/addOpinionReply/${parent_id}/${user_id}/${receiver_id}`, {
+  1066→  1066→        method: 'POST',
+  1067→  1067→        body: body,
+  1068→  1068→        headers: headers
+  1069→  1069→    })
+  1070→  1070→
+  1071→  1071→    if(!response.ok){
+  1072→  1072→        const error = await response.json();
+  1073→  1073→        throw new Error(error);
+  1074→  1074→    }
+  1075→  1075→    const message = await response.json();
+  1076→  1076→    return message;
+  1077→  1077→}
+  1078→  1078→
+  1079→  1079→export const getOpinionReply = async(parentId, limit, cursor) =>{
+  1080→  1080→    const url =  cursor ? `${BASE_URL}/getOpinionReply/${parentId}?limit=${limit}&cursor=${cursor}` : `${BASE_URL}/getOpinionReply/${parentId}?limit=${limit}`;
+  1081→  1081→
+  1082→  1082→    const response = await apiRequest(url, {
+  1083→  1083→        method: 'GET'
+  1084→  1084→    })
+  1085→  1085→
+  1086→  1086→    if(!response.ok){
+  1087→  1087→        const error = await response.json();
+  1088→  1088→        throw new Error(error);
+  1089→  1089→    }
+  1090→  1090→    const data = await response.json();
+  1091→  1091→    return data;
+  1092→  1092→
+  1093→  1093→}
+  1094→  1094→
+  1095→  1095→export const getCurrentFreedomWallWeek = async(token = null) => {
+  1096→  1096→    const headers = {};
+  1097→  1097→    if(token) headers["Authorization"] = `Bearer ${token}`;
+  1098→  1098→
+  1099→  1099→    const response = await apiRequest(`${BASE_URL}/freedom-wall/current`, {
+  1100→  1100→        method: "GET",
+  1101→  1101→        headers: headers
+  1102→  1102→    });
+  1103→  1103→
+  1104→  1104→    if(!response.ok){
+  1105→  1105→        const error = await response.json().catch(() => ({}));
+  1106→  1106→        throw new Error(error?.error || "failed to fetch freedom wall week");
+  1107→  1107→    }
+  1108→  1108→
+  1109→  1109→    return await response.json();
+  1110→  1110→}
+  1111→  1111→
+  1112→  1112→export const getFreedomWallWeeks = async(options = {}, token = null) => {
+  1113→  1113→    const headers = {};
+  1114→  1114→    if(token) headers["Authorization"] = `Bearer ${token}`;
+  1115→  1115→
+  1116→  1116→    const parsedLimit = Number(options?.limit ?? 8);
+  1117→  1117→    const params = new URLSearchParams();
+  1118→  1118→    params.set("limit", String(Number.isNaN(parsedLimit) ? 8 : parsedLimit));
+  1119→  1119→
+  1120→  1120→    const response = await apiRequest(`${BASE_URL}/freedom-wall/weeks?${params.toString()}`, {
+  1121→  1121→        method: "GET",
+  1122→  1122→        headers: headers
+  1123→  1123→    });
+  1124→  1124→
+  1125→  1125→    if(!response.ok){
+  1126→  1126→        const error = await response.json().catch(() => ({}));
+  1127→  1127→        throw new Error(error?.error || "failed to fetch freedom wall weeks");
+  1128→  1128→    }
+  1129→  1129→
+  1130→  1130→    return await response.json();
+  1131→  1131→}
+  1132→  1132→
+  1133→  1133→export const getFreedomWallStickers = async(token = null) => {
+  1134→  1134→    const headers = {};
+  1135→  1135→    if(token) headers["Authorization"] = `Bearer ${token}`;
+  1136→  1136→
+  1137→  1137→    const response = await apiRequest(`${BASE_URL}/freedom-wall/stickers`, {
+  1138→  1138→        method: "GET",
+  1139→  1139→        headers: headers
+  1140→  1140→    });
+  1141→  1141→
+  1142→  1142→    if(!response.ok){
+  1143→  1143→        const error = await response.json().catch(() => ({}));
+  1144→  1144→        throw new Error(error?.error || "failed to fetch freedom wall stickers");
+  1145→  1145→    }
+  1146→  1146→
+  1147→  1147→    return await response.json();
+  1148→  1148→}
+  1149→  1149→
+  1150→  1150→export const getFreedomWallItems = async(weekId, options = {}, token = null) => {
+  1151→  1151→    if(!weekId){
+  1152→  1152→        throw new Error("weekId is required");
+  1153→  1153→    }
+  1154→  1154→
+  1155→  1155→    const headers = {};
+  1156→  1156→    if(token) headers["Authorization"] = `Bearer ${token}`;
+  1157→  1157→
+  1158→  1158→    const parsedLimit = Number(options?.limit ?? 200);
+  1159→  1159→    const params = new URLSearchParams();
+  1160→  1160→    params.set("limit", String(Number.isNaN(parsedLimit) ? 200 : parsedLimit));
+  1161→  1161→
+  1162→  1162→    if(options?.cursor){
+  1163→  1163→        params.set("cursor", String(options.cursor));
+  1164→  1164→    }
+  1165→  1165→
+  1166→  1166→    if(Array.isArray(options?.types) && options.types.length > 0){
+  1167→  1167→        params.set("types", options.types.join(","));
+  1168→  1168→    } else if(typeof options?.types === "string" && options.types.trim()){
+  1169→  1169→        params.set("types", options.types.trim());
+  1170→  1170→    }
+  1171→  1171→
+  1172→  1172→    const response = await apiRequest(`${BASE_URL}/freedom-wall/${encodeURIComponent(weekId)}/items?${params.toString()}`, {
+  1173→  1173→        method: "GET",
+  1174→  1174→        headers: headers
+  1175→  1175→    });
+  1176→  1176→
+  1177→  1177→    if(!response.ok){
+  1178→  1178→        const error = await response.json().catch(() => ({}));
+  1179→  1179→        throw new Error(error?.error || "failed to fetch freedom wall items");
+  1180→  1180→    }
+  1181→  1181→
+  1182→  1182→    return await response.json();
+  1183→  1183→}
+  1184→  1184→
+  1185→  1185→export const createFreedomWallItem = async(token, payload) => {
+  1186→  1186→    if(!token){
+  1187→  1187→        throw new Error("not authorized");
+  1188→  1188→    }
+  1189→  1189→
+  1190→  1190→    const response = await apiRequest(`${BASE_URL}/freedom-wall/items`, {
+  1191→  1191→        method: "POST",
+  1192→  1192→        headers: {
+  1193→  1193→            "Content-Type": "application/json",
+  1194→  1194→            "Authorization": `Bearer ${token}`
+  1195→  1195→        },
+  1196→  1196→        body: JSON.stringify(payload || {})
+  1197→  1197→    });
+  1198→  1198→
+  1199→  1199→    if(!response.ok){
+  1200→  1200→        const error = await response.json().catch(() => ({}));
+  1201→  1201→        throw new Error(error?.error || "failed to create freedom wall item");
+  1202→  1202→    }
+  1203→  1203→
+  1204→  1204→    return await response.json();
+  1205→  1205→}
+  1206→  1206→
+  1207→  1207→export const updateFreedomWallItem = async(token, itemId, payload) => {
+  1208→  1208→    if(!token){
+  1209→  1209→        throw new Error("not authorized");
+  1210→  1210→    }
+  1211→  1211→    if(!itemId){
+  1212→  1212→        throw new Error("itemId is required");
+  1213→  1213→    }
+  1214→  1214→
+  1215→  1215→    const response = await apiRequest(`${BASE_URL}/freedom-wall/items/${encodeURIComponent(itemId)}`, {
+  1216→  1216→        method: "PATCH",
+  1217→  1217→        headers: {
+  1218→  1218→            "Content-Type": "application/json",
+  1219→  1219→            "Authorization": `Bearer ${token}`
+  1220→  1220→        },
+  1221→  1221→        body: JSON.stringify(payload || {})
+  1222→  1222→    });
+  1223→  1223→
+  1224→  1224→    if(!response.ok){
+  1225→  1225→        const error = await response.json().catch(() => ({}));
+  1226→  1226→        throw new Error(error?.error || "failed to update freedom wall item");
+  1227→  1227→    }
+  1228→  1228→
+  1229→  1229→    return await response.json();
+  1230→  1230→}
+  1231→  1231→
+  1232→  1232→export const deleteFreedomWallItem = async(token, itemId) => {
+  1233→  1233→    if(!token){
+  1234→  1234→        throw new Error("not authorized");
+  1235→  1235→    }
+  1236→  1236→    if(!itemId){
+  1237→  1237→        throw new Error("itemId is required");
+  1238→  1238→    }
+  1239→  1239→
+  1240→  1240→    const response = await apiRequest(`${BASE_URL}/freedom-wall/items/${encodeURIComponent(itemId)}`, {
+  1241→  1241→        method: "DELETE",
+  1242→  1242→        headers: {
+  1243→  1243→            "Authorization": `Bearer ${token}`
+  1244→  1244→        }
+  1245→  1245→    });
+  1246→  1246→
+  1247→  1247→    if(!response.ok){
+  1248→  1248→        const error = await response.json().catch(() => ({}));
+  1249→  1249→        throw new Error(error?.error || "failed to delete freedom wall item");
+  1250→  1250→    }
+  1251→  1251→
+  1252→  1252→    return await response.json();
+  1253→  1253→}
+  1254→  1254→
+  1255→  1255→export const reportFreedomWallItem = async(token, itemId, payload = {}) => {
+  1256→  1256→    if(!token){
+  1257→  1257→        throw new Error("not authorized");
+  1258→  1258→    }
+  1259→  1259→    if(!itemId){
+  1260→  1260→        throw new Error("itemId is required");
+  1261→  1261→    }
+  1262→  1262→
+  1263→  1263→    const response = await apiRequest(`${BASE_URL}/freedom-wall/items/${encodeURIComponent(itemId)}/report`, {
+  1264→  1264→        method: "POST",
+  1265→  1265→        headers: {
+  1266→  1266→            "Content-Type": "application/json",
+  1267→  1267→            "Authorization": `Bearer ${token}`
+  1268→  1268→        },
+  1269→  1269→        body: JSON.stringify(payload || {})
+  1270→  1270→    });
+  1271→  1271→
+  1272→  1272→    if(!response.ok){
+  1273→  1273→        const error = await response.json().catch(() => ({}));
+  1274→  1274→        throw new Error(error?.error || "failed to report freedom wall item");
+  1275→  1275→    }
+  1276→  1276→
+  1277→  1277→    return await response.json();
+  1278→  1278→}
+  1279→  1279→
+  1280→  1280→export const clearMyFreedomWallDoodles = async(token, weekId) => {
+  1281→  1281→    if(!token){
+  1282→  1282→        throw new Error("not authorized");
+  1283→  1283→    }
+  1284→  1284→    if(!weekId){
+  1285→  1285→        throw new Error("weekId is required");
+  1286→  1286→    }
+  1287→  1287→
+  1288→  1288→    const response = await apiRequest(`${BASE_URL}/freedom-wall/${encodeURIComponent(weekId)}/my-doodles`, {
+  1289→  1289→        method: "DELETE",
+  1290→  1290→        headers: {
+  1291→  1291→            "Authorization": `Bearer ${token}`
+  1292→  1292→        }
+  1293→  1293→    });
+  1294→  1294→
+  1295→  1295→    if(!response.ok){
+  1296→  1296→        const error = await response.json().catch(() => ({}));
+  1297→  1297→        throw new Error(error?.error || "failed to clear freedom wall doodles");
+  1298→  1298→    }
+  1299→  1299→
+  1300→  1300→    return await response.json();
+  1301→  1301→}
+  1302→  1302→
+  1303→  1303→export const requestConstellation = async (token, starIdA, starIdB, label = '') => {
+  1304→  1304→    const headers = { 'Content-Type': 'application/json' };
+  1305→  1305→    if (token) headers['Authorization'] = `Bearer ${token}`;
+  1306→  1306→
+  1307→  1307→    const response = await apiRequest(`${BASE_URL}/constellation/request`, {
+  1308→  1308→        method: 'POST',
+  1309→  1309→        headers: headers,
+  1310→  1310→        body: JSON.stringify({ starIdA, starIdB, label }),
+  1311→  1311→    });
+  1312→  1312→
+  1313→  1313→    if (!response.ok) {
+  1314→  1314→        const error = await response.json().catch(() => ({}));
+  1315→  1315→        throw new Error(error?.error || 'failed to request constellation');
+  1316→  1316→    }
+  1317→  1317→
+  1318→  1318→    return await response.json();
+  1319→  1319→};
+  1320→  1320→
+  1321→  1321→export const respondConstellation = async (token, constellationId, accept) => {
+  1322→  1322→    const headers = { 'Content-Type': 'application/json' };
+  1323→  1323→    if (token) headers['Authorization'] = `Bearer ${token}`;
+  1324→  1324→
+  1325→  1325→    const response = await apiRequest(`${BASE_URL}/constellation/respond`, {
+  1326→  1326→        method: 'POST',
+  1327→  1327→        headers: headers,
+  1328→  1328→        body: JSON.stringify({ constellationId, accept }),
+  1329→  1329→    });
+  1330→  1330→
+  1331→  1331→    if (!response.ok) {
+  1332→  1332→        const error = await response.json().catch(() => ({}));
+  1333→  1333→        throw new Error(error?.error || 'failed to respond to constellation');
+  1334→  1334→    }
+  1335→  1335→
+  1336→  1336→    return await response.json();
+  1337→  1337→};
+  1338→  1338→
+  1339→  1339→export const getViewportConstellations = async (postIds) => {
+  1340→  1340→    if (!Array.isArray(postIds) || postIds.length === 0) {
+  1341→  1341→        return { data: [] };
+  1342→  1342→    }
+  1343→  1343→
+  1344→  1344→    const params = new URLSearchParams();
+  1345→  1345→    params.set('postIds', postIds.join(','));
+  1346→  1346→
+  1347→  1347→    const response = await apiRequest(`${BASE_URL}/constellation/viewport?${params.toString()}`, {
+  1348→  1348→        method: 'GET',
+  1349→  1349→    });
+  1350→  1350→
+  1351→  1351→    if (!response.ok) {
+  1352→  1352→        const error = await response.json().catch(() => ({}));
+  1353→  1353→        throw new Error(error?.error || 'failed to fetch constellations');
+  1354→  1354→    }
+  1355→  1355→
+  1356→  1356→    return await response.json();
+  1357→  1357→};
+  1358→  1358→
+  1359→  1359→export const deleteConstellation = async (token, constellationId) => {
+  1360→  1360→    const headers = {};
+  1361→  1361→    if (token) headers['Authorization'] = `Bearer ${token}`;
+  1362→  1362→
+  1363→  1363→    const response = await apiRequest(`${BASE_URL}/constellation/${encodeURIComponent(constellationId)}`, {
+  1364→  1364→        method: 'DELETE',
+  1365→  1365→        headers: headers,
+  1366→  1366→    });
+  1367→  1367→
+  1368→  1368→    if (!response.ok) {
+  1369→  1369→        const error = await response.json().catch(() => ({}));
+  1370→  1370→        throw new Error(error?.error || 'failed to delete constellation');
+  1371→  1371→    }
+  1372→  1372→
+  1373→  1373→    return await response.json();
+  1374→  1374→};
+  1375→  1375→
+  1376→  1376→export const getUniversePosts = async(minX, maxX, minY, maxY, limit = 200) => {
+  1377→  1377→    const params = new URLSearchParams();
+  1378→  1378→    params.set('minX', String(minX));
+  1379→  1379→    params.set('maxX', String(maxX));
+  1380→  1380→    params.set('minY', String(minY));
+  1381→  1381→    params.set('maxY', String(maxY));
+  1382→  1382→    params.set('limit', String(limit));
+  1383→  1383→
+  1384→  1384→    const response = await apiRequest(`${BASE_URL}/universe/posts?${params.toString()}`, {
+  1385→  1385→        method: 'GET'
+  1386→  1386→    });
+  1387→  1387→
+  1388→  1388→    if(!response.ok){
+  1389→  1389→        const error = await response.json().catch(() => ({}));
+  1390→  1390→        throw new Error(error?.error || 'failed to fetch universe posts');
+  1391→  1391→    }
+  1392→  1392→
+  1393→  1393→    return await response.json();
+  1394→  1394→}
+  1395→  1395→
+  1396→  1396→// export const getLikedPosts = async(token) =>{
+  1397→  1397→//     const headers = {}
+  1398→  1398→//     if(token) headers['Authorization'] = `Bearer ${token}`
+  1399→  1399→//     try {
+  1400→  1400→//         const response = await apiRequest(`${BASE_URL}/getLikes`, {
+  1401→  1401→//             method: 'GET',
+  1402→  1402→//             headers: headers
+  1403→  1403→//         });
+  1404→  1404→        
+  1405→  1405→//         if(!response.ok){
+  1406→  1406→//             throw new Error('Error fetching likes data')
+  1407→  1407→//         }
+  1408→  1408→//         const data = await response.json()
+  1409→  1409→//         console.log(data)
+  1410→  1410→//         return data
+  1411→  1411→//     } catch (error) {
+  1412→  1412→//         console.error('Error fetching likes data:', error);
+  1413→  1413→//         throw error;
+  1414→  1414→//     }
+  1415→  1415→// }
+  1416→  1416→
+  1417→  1417→

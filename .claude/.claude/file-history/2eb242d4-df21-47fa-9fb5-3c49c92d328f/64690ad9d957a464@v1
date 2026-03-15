@@ -1,0 +1,104 @@
+# Plan: Comment Modal on PostCard
+
+## Context
+Currently tapping the Comment button on a PostCard navigates to PostDetailScreen. The user wants it to open a comment modal instead — showing existing comments and allowing the user to add new ones (including threaded replies), without leaving the feed.
+
+All comment logic (fetching, posting, reply threading) already exists inside `PostDetailScreen.tsx`. We'll extract it into shared components, then build a `CommentModal` that reuses them.
+
+## Files to Create
+
+| # | File | Purpose |
+|---|------|---------|
+| 1 | `components/Comments/CommentThread.tsx` | Extracted recursive comment renderer (from PostDetailScreen lines 83-194) + `formatRelativeDate` helper |
+| 2 | `hooks/useComments.ts` | Shared hook: comment query, add-comment mutation, reply state, toggle-replies logic (from PostDetailScreen lines 201-339) |
+| 3 | `components/Comments/CommentModal.tsx` | RN `Modal` wrapping a comment list + input. Uses `useComments` + `CommentThread` |
+| 4 | `components/Comments/index.ts` | Barrel exports |
+
+All paths relative to `apps/mobile/src/`.
+
+## Files to Modify
+
+| # | File | Changes |
+|---|------|---------|
+| 5 | `screens/Home/PostDetailScreen.tsx` | Remove inline `CommentThread` + comment state. Import from new shared files instead. |
+| 6 | `screens/Home/HomeFeedScreen.tsx` | Replace `handleComment` navigation with modal state + render `CommentModal` |
+| 7 | `screens/Profile/ProfileWritingsTab.tsx` | Same as HomeFeedScreen |
+
+## Implementation Details
+
+### Step 1 — `CommentThread.tsx`
+Extract from PostDetailScreen:
+- `formatRelativeDate` helper (lines 47-61)
+- `CommentThreadProps` type (lines 83-95)
+- `CommentThread` component (lines 97-194)
+- Related styles: `commentCard`, `commentHeader`, `commentMeta`, `commentAuthor`, `commentTime`, `commentBody`, `commentActions`, `actionButton`, `actionText`, `repliesContainer`, `commentLoading`
+
+Imports: `Avatar`, `ReplyIcon`, `JournalComment`, theme utilities, `Palette` type.
+
+### Step 2 — `useComments.ts` hook
+Signature:
+```ts
+useComments(postId: string, receiverId: string | undefined, token: string, onReplyActivated?: () => void)
+```
+Returns: `{ comments, isLoading, commentInput, setCommentInput, replyingTo, setReplyingTo, expandedReplies, fetchedReplies, loadingReplies, handleReply, handleToggleReplies, submitComment, isSubmitting }`
+
+Extracts from PostDetailScreen:
+- `commentInput`, `replyingTo`, `expandedReplies`, `fetchedReplies`, `loadingReplies` state
+- `handleReply` callback (calls `onReplyActivated` instead of directly focusing refs)
+- `handleToggleReplies` callback (lazy-loads replies via `socialApi.getReplies`)
+- `commentsQuery` (fetches via `socialApi.getComments`)
+- `addCommentMutation` (posts via `socialApi.addComment`, invalidates `['journal-comments']`, `['journal']`, `['feed']`, `['profileWritings']`)
+
+### Step 3 — `CommentModal.tsx`
+Props: `{ visible, postId, receiverId, commentCount?, onClose }`
+
+Structure:
+```
+Modal (animationType="slide", presentationStyle="pageSheet")
+  SafeAreaView
+    Header: "Comments" title + X close button
+    KeyboardAvoidingView
+      ScrollView
+        Loading / Empty / CommentThread list (top-level comments)
+        Reply banner (if replying)
+        TextInput (max 200 chars)
+        PrimaryButton "Post"
+```
+
+Uses `useComments` hook internally. Gets `token` from `useAuth()`, `colors` from `useTheme()`.
+Uses RN built-in `Modal` — no new dependencies needed.
+
+### Step 4 — Refactor `PostDetailScreen.tsx`
+- Remove inline `CommentThread` component and its type (lines 83-194)
+- Remove comment-related state variables (lines 201, 204-207)
+- Remove `handleReply`, `handleToggleReplies`, `commentsQuery`, `addCommentMutation` (lines 211-339)
+- Remove comment-related styles (lines 638-716)
+- Import `CommentThread` and `formatRelativeDate` from `components/Comments`
+- Import `useComments` from `hooks/useComments`
+- Call `useComments(journalId, receiverId, token, onReplyActivated)` where `onReplyActivated` focuses `inputRef` and scrolls
+- Replace comment section JSX (lines 492-564) to use hook data + `CommentThread` component
+- Keep `inputRef`, `scrollViewRef` refs for scroll-to-comment behavior
+
+### Step 5 — `HomeFeedScreen.tsx`
+- Add state: `const [commentModal, setCommentModal] = useState<{postId: string; receiverId?: string; commentCount: number} | null>(null)`
+- Update `handleComment`: `setCommentModal({postId: journalId, receiverId, commentCount})`
+- Update `onComment` prop: `onComment={() => handleComment(item.id, receiverId, commentCount)}`
+- Add `<CommentModal>` before the FAB, with `onClose={() => setCommentModal(null)}`
+
+### Step 6 — `ProfileWritingsTab.tsx`
+Same pattern as HomeFeedScreen. Wrap return in `<>...</>` fragment to add `<CommentModal>` as sibling to `FlatList`.
+
+## Reuse inventory
+- `socialApi.getComments`, `socialApi.getReplies`, `socialApi.addComment` — existing API methods
+- `Avatar`, `ReplyIcon`, `XIcon`, `PrimaryButton` — existing components
+- `useAuth`, `useTheme`, `queryClient` — existing infrastructure
+- RN `Modal` — built-in, no new deps
+
+## Verification
+1. **Home feed** — tap comment icon → modal slides up, shows comments, can post a comment, can reply
+2. **Profile writings** — same behavior
+3. **PostDetailScreen** — still works identically (comments inline in scroll view)
+4. **Reply threading** — tap Reply → banner appears, post reply → appears nested under parent
+5. **Keyboard** — TextInput stays visible when keyboard opens
+6. **Close** — X button and Android back button dismiss the modal
+7. **Cache** — posting a comment invalidates feed queries, comment count updates on PostCard

@@ -1,0 +1,43 @@
+import { TOOLS, FIXTURE_DEFAULTS, FIXTURE_TYPES } from '@/editor/tools';
+import { fixtureOutline } from '@/geometry/fixtureGeometry';
+
+export default function FixturePreview({ toolState, activeTool }) {
+  if (activeTool !== TOOLS.FIXTURE) return null;
+  if (toolState.previewX == null || toolState.previewY == null) return null;
+
+  const fixtureType = toolState.fixtureType || FIXTURE_TYPES.KITCHEN_TOP;
+  const defaults = FIXTURE_DEFAULTS[fixtureType] || { width: 600, depth: 400 };
+
+  const preview = {
+    x: toolState.previewX,
+    y: toolState.previewY,
+    width: defaults.width,
+    depth: defaults.depth,
+    rotation: toolState.previewRotation || 0,
+  };
+
+  const outline = fixtureOutline(preview);
+  const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+
+  const previewFills = {
+    kitchenTop: 'rgba(232,213,183,0.25)',
+    toilet: 'rgba(180,210,230,0.25)',
+    lavatory: 'rgba(180,210,230,0.25)',
+    table: 'rgba(224,212,192,0.25)',
+    tv: 'rgba(51,51,51,0.20)',
+    sofa: 'rgba(200,184,168,0.25)',
+    bed: 'rgba(200,210,225,0.25)',
+  };
+
+  return (
+    <polygon
+      points={points}
+      fill={previewFills[fixtureType] || 'rgba(200, 180, 160, 0.3)'}
+      stroke="var(--color-selection)"
+      strokeWidth={2}
+      strokeDasharray="6 3"
+      vectorEffect="non-scaling-stroke"
+      style={{ pointerEvents: 'none' }}
+    />
+  );
+}

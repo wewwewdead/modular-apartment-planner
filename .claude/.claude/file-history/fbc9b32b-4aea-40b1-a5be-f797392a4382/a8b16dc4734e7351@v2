@@ -1,0 +1,228 @@
+import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjectFloor } from '@/domain/floorModels';
+import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { columnOutline } from '@/geometry/columnGeometry';
+import { computeLandingElevation } from '@/geometry/landingGeometry';
+import { getStairRenderData } from '@/geometry/stairGeometry';
+import { doorOutlineOnWall, windowOutlineOnWall } from '@/geometry/wallGeometry';
+import { getWallRenderData } from '@/geometry/wallColumnGeometry';
+import { buildSlabElevationBands, getSlabBottomLevel, getSlabTopLevel } from './slab';
+import { getElevationView, projectPlanPoints } from './projection';
+
+function createSceneRect(id, category, projection, bottom, top, options = {}) {
+  if (!projection) return null;
+  if (Math.abs(projection.right - projection.left) < 1e-6) return null;
+  if (Math.abs(top - bottom) < 1e-6) return null;
+
+  return {
+    id,
+    category,
+    left: projection.left,
+    right: projection.right,
+    bottom,
+    top,
+    depth: projection.depth,
+    style: options.style || category,
+    sourceId: options.sourceId || null,
+  };
+}
+
+function buildWallRects(floor, view) {
+  const floorElevation = getFloorElevation(floor);
+  return (floor.walls || [])
+    .map((wall) => {
+      const renderData = getWallRenderData(wall, floor.columns || []);
+      return createSceneRect(
+        `wall-elev-${wall.id}`,
+        'wall',
+        projectPlanPoints(view, renderData.outline),
+        floorElevation,
+        floorElevation + (wall.height ?? 0),
+        { sourceId: wall.id }
+      );
+    })
+    .filter(Boolean);
+}
+
+function buildSlabRects(floor, view) {
+  return (floor.slabs || []).flatMap((slab) => {
+    const slabTop = getSlabTopLevel(slab);
+    const slabBottom = getSlabBottomLevel(slab);
+
+    return buildSlabElevationBands(slab, view)
+      .map((band) => createSceneRect(
+        `slab-elev-${slab.id}-${band.edgeIndex}`,
+        'slab',
+        band,
+        slabBottom,
+        slabTop,
+        { sourceId: slab.id }
+      ))
+      .filter(Boolean);
+  });
+}
+
+function buildColumnRects(floor, view) {
+  const floorElevation = getFloorElevation(floor);
+  return (floor.columns || [])
+    .map((column) => createSceneRect(
+      `column-elev-${column.id}`,
+      'column',
+      projectPlanPoints(view, columnOutline(column)),
+      floorElevation,
+      floorElevation + column.height,
+      { sourceId: column.id }
+    ))
+    .filter(Boolean);
+}
+
+function buildBeamRects(floor, view) {
+  return (floor.beams || [])
+    .map((beam) => {
+      const renderData = getBeamRenderData(beam, floor.columns || []);
+      if (!renderData) return null;
+      return createSceneRect(
+        `beam-elev-${beam.id}`,
+        'beam',
+        projectPlanPoints(view, renderData.outline),
+        beam.floorLevel - beam.depth,
+        beam.floorLevel,
+        { sourceId: beam.id }
+      );
+    })
+    .filter(Boolean);
+}
+
+function buildStairRects(floor, view, landingElevationMap) {
+  const floorElevation = getFloorElevation(floor);
+  return (floor.stairs || [])
+    .map((stair) => {
+      const renderData = getStairRenderData(stair);
+      if (!renderData?.outline?.length) return null;
+
+      let baseElevation = floorElevation;
+      if (stair.startLandingAttachment) {
+        const elev = landingElevationMap?.get(stair.startLandingAttachment.landingId);
+        if (elev != null) {
+          baseElevation = floorElevation + elev;
+        }
+      }
+
+      return createSceneRect(
+        `stair-elev-${stair.id}`,
+        'stair',
+        projectPlanPoints(view, renderData.outline),
+        baseElevation,
+        baseElevation + renderData.totalRise,
+        { sourceId: stair.id }
+      );
+    })
+    .filter(Boolean);
+}
+
+function buildDoorRects(floor, view) {
+  const floorElevation = getFloorElevation(floor);
+  return (floor.doors || [])
+    .map((door) => {
+      const wall = (floor.walls || []).find((entry) => entry.id === door.wallId);
+      if (!wall) return null;
+      const info = doorOutlineOnWall(wall, door);
+      return createSceneRect(
+        `door-elev-${door.id}`,
+        'door',
+        projectPlanPoints(view, [info.p1, info.p2, info.p3, info.p4]),
+        floorElevation + (door.sillHeight ?? 0),
+        floorElevation + (door.sillHeight ?? 0) + (door.height ?? 0),
+        { sourceId: door.id }
+      );
+    })
+    .filter(Boolean);
+}
+
+function buildWindowRects(floor, view) {
+  const floorElevation = getFloorElevation(floor);
+  return (floor.windows || [])
+    .map((windowItem) => {
+      const wall = (floor.walls || []).find((entry) => entry.id === windowItem.wallId);
+      if (!wall) return null;
+      const info = windowOutlineOnWall(wall, windowItem);
+      return createSceneRect(
+        `window-elev-${windowItem.id}`,
+        'window',
+        projectPlanPoints(view, [info.p1, info.p2, info.p3, info.p4]),
+        floorElevation + (windowItem.sillHeight ?? 0),
+        floorElevation + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
+        { sourceId: windowItem.id }
+      );
+    })
+    .filter(Boolean);
+}
+
+function computeSceneBounds(elements = [], baseLevel = 0) {
+  if (!elements.length) {
+    return {
+      minX: -1000,
+      maxX: 1000,
+      minZ: baseLevel,
+      maxZ: baseLevel + 3000,
+    };
+  }
+
+  return {
+    minX: Math.min(...elements.map((element) => element.left)),
+    maxX: Math.max(...elements.map((element) => element.right)),
+    minZ: Math.min(baseLevel, ...elements.map((element) => element.bottom)),
+    maxZ: Math.max(...elements.map((element) => element.top)),
+  };
+}
+
+function resolveLandingElevation(landing, stairs, floorLevel) {
+  if (landing.elevation) return landing.elevation;
+  return computeLandingElevation(landing, stairs, floorLevel) - floorLevel;
+}
+
+function buildFloorElevationElements(floor, view) {
+  const floorElevation = getFloorElevation(floor);
+  const landings = floor.landings || [];
+  const stairs = floor.stairs || [];
+
+  const landingElevationMap = new Map(
+    landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorElevation)])
+  );
+
+  return [
+    ...buildWallRects(floor, view),
+    ...buildSlabRects(floor, view),
+    ...buildColumnRects(floor, view),
+    ...buildBeamRects(floor, view),
+    ...buildStairRects(floor, view, landingElevationMap),
+    ...buildDoorRects(floor, view),
+    ...buildWindowRects(floor, view),
+  ];
+}
+
+function buildElevationSceneFromFloors(floors, viewMode) {
+  const view = getElevationView(viewMode);
+  const stackBounds = getFloorStackBounds(floors);
+  const elements = floors
+    .flatMap((floor) => buildFloorElevationElements(floor, view))
+    .sort((a, b) => b.depth - a.depth);
+
+  return {
+    viewKey: view.key,
+    title: view.label,
+    elements,
+    bounds: computeSceneBounds(elements, stackBounds.minElevation),
+    groundLevel: stackBounds.minElevation,
+  };
+}
+
+export function buildElevationScene(floor, viewMode) {
+  if (!floor) return null;
+  return buildElevationSceneFromFloors([floor], viewMode);
+}
+
+export function buildProjectElevationScene(project, sourceFloorId, viewMode) {
+  const sourceFloor = resolveProjectFloor(project, sourceFloorId);
+  if (!sourceFloor) return null;
+  return buildElevationSceneFromFloors(getOrderedFloors(project), viewMode);
+}

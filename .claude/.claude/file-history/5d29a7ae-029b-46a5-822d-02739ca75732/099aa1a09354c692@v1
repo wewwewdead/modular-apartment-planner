@@ -1,0 +1,100 @@
+import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+
+function resolveFromProject(inputPath) {
+  if (!inputPath) {
+    return PROJECT_ROOT;
+  }
+  return path.isAbsolute(inputPath)
+    ? inputPath
+    : path.resolve(PROJECT_ROOT, inputPath);
+}
+
+const DATA_DIR = resolveFromProject(process.env.DATA_DIR || "./data");
+const WA_SESSION_DIR = resolveFromProject(
+  process.env.WA_SESSION_DIR || path.join(DATA_DIR, "wa-session"),
+);
+
+function parseBoolean(value, defaultValue = false) {
+  if (value === undefined || value === null || value === "") return defaultValue;
+  return String(value).trim().toLowerCase() === "true";
+}
+
+function parseInteger(value, defaultValue) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) ? parsed : defaultValue;
+}
+
+export const config = Object.freeze({
+  app: {
+    name: process.env.BOT_NAME || "GradeBot",
+    logLevel: process.env.LOG_LEVEL || "info",
+    singleNumberMode: parseBoolean(process.env.SINGLE_NUMBER_MODE, true),
+    agentTimeoutMs: parseInteger(process.env.AGENT_TIMEOUT_MS, 180000),
+  },
+  ollama: {
+    baseUrl: process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+    model: process.env.OLLAMA_MODEL || "qwen3-vl:8b",
+    requestTimeoutMs: 30000,
+    retries: 2,
+  },
+  python: {
+    bin: process.env.PYTHON_BIN || "python",
+    scriptsDir: path.join(PROJECT_ROOT, "python"),
+  },
+  paths: {
+    projectRoot: PROJECT_ROOT,
+    data: DATA_DIR,
+    grades: path.join(DATA_DIR, "grades"),
+    backups: path.join(DATA_DIR, "backups"),
+    logs: path.join(DATA_DIR, "logs"),
+    memory: path.join(DATA_DIR, "memory"),
+    inbox: path.join(DATA_DIR, "inbox"),
+    reports: path.join(DATA_DIR, "reports"),
+    waSession: WA_SESSION_DIR,
+  },
+  limits: {
+    minScore: 0,
+    maxScore: 100,
+    maxConversationItems: 20,
+  },
+  loopGuard: {
+    processedMessageTtlMs: parseInteger(
+      process.env.LOOP_GUARD_MESSAGE_TTL_MS,
+      10 * 60 * 1000,
+    ),
+    botMessageIdTtlMs: parseInteger(
+      process.env.LOOP_GUARD_BOT_ID_TTL_MS,
+      5 * 60 * 1000,
+    ),
+    botMessageTextTtlMs: parseInteger(
+      process.env.LOOP_GUARD_BOT_TEXT_TTL_MS,
+      2 * 60 * 1000,
+    ),
+    maxCacheEntries: parseInteger(process.env.LOOP_GUARD_MAX_CACHE, 5000),
+  },
+  replyRouting: {
+    verifyTimeoutMs: parseInteger(process.env.REPLY_VERIFY_TIMEOUT_MS, 1500),
+    enableFallback: parseBoolean(process.env.ENABLE_REPLY_FALLBACK, true),
+    strategy: process.env.ONE_NUMBER_REPLY_STRATEGY || "dual_fallback",
+  },
+  supported: {
+    gradeExtensions: [".xlsx", ".csv"],
+    imageExtensions: [".jpg", ".jpeg", ".png", ".webp"],
+  },
+});
+
+export function ensureRuntimeDirectories() {
+  const directories = Object.values(config.paths);
+  for (const dirPath of directories) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}

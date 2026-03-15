@@ -1,0 +1,327 @@
+import { useState } from 'react';
+import { useProject } from '@/app/ProjectProvider';
+import { useEditor } from '@/app/EditorProvider';
+import { wallLength } from '@/geometry/wallGeometry';
+import InputField from './InputField';
+import styles from './PropertiesPanel.module.css';
+
+function useUnits() {
+  const [unit, setUnit] = useState('mm');
+  const isMm = unit === 'mm';
+  return {
+    unit,
+    setUnit,
+    suffix: isMm ? 'mm' : 'm',
+    toDisplay: (mm) => isMm ? Math.round(mm) : +(mm / 1000).toFixed(3),
+    fromDisplay: (v) => isMm ? v : v * 1000,
+    step: (mmStep) => isMm ? mmStep : mmStep / 1000,
+  };
+}
+
+function WallProperties({ wall, dispatch, floorId, u }) {
+  const len = wallLength(wall);
+
+  const updateWall = (updates) => {
+    dispatch({ type: 'WALL_UPDATE', floorId, wall: { id: wall.id, ...updates } });
+  };
+
+  return (
+    <div>
+      <div className={styles.title}>Wall</div>
+      <div className={styles.subtitle}>Start Point</div>
+      <InputField
+        label="X" type="number" suffix={u.suffix}
+        value={u.toDisplay(wall.start.x)}
+        onChange={(v) => updateWall({ start: { ...wall.start, x: u.fromDisplay(v) } })}
+      />
+      <InputField
+        label="Y" type="number" suffix={u.suffix}
+        value={u.toDisplay(wall.start.y)}
+        onChange={(v) => updateWall({ start: { ...wall.start, y: u.fromDisplay(v) } })}
+      />
+      <div className={styles.subtitle}>End Point</div>
+      <InputField
+        label="X" type="number" suffix={u.suffix}
+        value={u.toDisplay(wall.end.x)}
+        onChange={(v) => updateWall({ end: { ...wall.end, x: u.fromDisplay(v) } })}
+      />
+      <InputField
+        label="Y" type="number" suffix={u.suffix}
+        value={u.toDisplay(wall.end.y)}
+        onChange={(v) => updateWall({ end: { ...wall.end, y: u.fromDisplay(v) } })}
+      />
+      <div className={styles.subtitle}>Properties</div>
+      <InputField
+        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+        value={u.toDisplay(wall.thickness)}
+        onChange={(v) => updateWall({ thickness: Math.max(50, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Length" type="number" suffix={u.suffix}
+        value={u.toDisplay(len)}
+        readOnly
+      />
+    </div>
+  );
+}
+
+function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u }) {
+  const updateDoor = (updates) => {
+    dispatch({ type: 'DOOR_UPDATE', floorId, door: { id: door.id, ...updates } });
+  };
+
+  const doorType = door.type || 'swing';
+
+  return (
+    <div>
+      <div className={styles.title}>Door</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+        <select value={doorType} onChange={(e) => updateDoor({ type: e.target.value })}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+                   borderRadius: 'var(--radius-sm)', fontSize: '12px' }}>
+          <option value="swing">Swing</option>
+          <option value="double">Double</option>
+          <option value="sliding">Sliding</option>
+        </select>
+      </div>
+      <InputField
+        label="Width" type="number" suffix={u.suffix} step={u.step(50)}
+        value={u.toDisplay(door.width)}
+        onChange={(v) => updateDoor({ width: Math.max(400, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Offset" type="number" suffix={u.suffix}
+        value={u.toDisplay(door.offset)}
+        onChange={(v) => updateDoor({ offset: Math.max(0, u.fromDisplay(v)) })}
+      />
+      {doorType !== 'double' && (
+        <>
+          <InputField
+            label={doorType === 'sliding' ? 'Slide Dir' : 'Swing'}
+            value={door.openDirection}
+            readOnly={false}
+            onChange={() => updateDoor({
+              openDirection: door.openDirection === 'left' ? 'right' : 'left',
+            })}
+          />
+          <button
+            className={styles.deleteBtn}
+            style={{ marginBottom: '8px', background: 'var(--color-accent)' }}
+            onClick={() => updateDoor({
+              openDirection: door.openDirection === 'left' ? 'right' : 'left',
+            })}
+          >
+            {doorType === 'sliding' ? 'Toggle Slide Direction' : 'Toggle Swing Direction'}
+          </button>
+        </>
+      )}
+      {wall && (
+        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
+      )}
+    </div>
+  );
+}
+
+function WindowProperties({ window: win, wall, dispatch, floorId, u }) {
+  const updateWindow = (updates) => {
+    dispatch({ type: 'WINDOW_UPDATE', floorId, window: { id: win.id, ...updates } });
+  };
+
+  const winType = win.type || 'standard';
+
+  return (
+    <div>
+      <div className={styles.title}>Window</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+        <select value={winType} onChange={(e) => updateWindow({ type: e.target.value })}
+          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+                   borderRadius: 'var(--radius-sm)', fontSize: '12px' }}>
+          <option value="standard">Standard</option>
+          <option value="casement">Casement</option>
+          <option value="fixed">Fixed</option>
+        </select>
+      </div>
+      <InputField
+        label="Width" type="number" suffix={u.suffix} step={u.step(50)}
+        value={u.toDisplay(win.width)}
+        onChange={(v) => updateWindow({ width: Math.max(300, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Offset" type="number" suffix={u.suffix}
+        value={u.toDisplay(win.offset)}
+        onChange={(v) => updateWindow({ offset: Math.max(0, u.fromDisplay(v)) })}
+      />
+      {winType === 'casement' && (
+        <button
+          className={styles.deleteBtn}
+          style={{ marginBottom: '8px', background: 'var(--color-accent)' }}
+          onClick={() => updateWindow({
+            openDirection: win.openDirection === 'left' ? 'right' : 'left',
+          })}
+        >
+          Toggle Open Side
+        </button>
+      )}
+      {wall && (
+        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
+      )}
+    </div>
+  );
+}
+
+function RoomProperties({ room, dispatch, floorId }) {
+  const areaM2 = room.area ? (room.area / 1_000_000).toFixed(2) : '\u2014';
+  const updateRoom = (updates) => {
+    dispatch({ type: 'ROOM_UPDATE', floorId, room: { id: room.id, ...updates } });
+  };
+  return (
+    <div>
+      <div className={styles.title}>Room</div>
+      <InputField label="Name" value={room.name} onChange={(v) => updateRoom({ name: v })} />
+      <InputField label="Area" suffix="m\u00B2" value={areaM2} readOnly />
+      <InputField label="Color" value={room.color} onChange={(v) => updateRoom({ color: v })} />
+    </div>
+  );
+}
+
+function ColumnProperties({ column, dispatch, floorId, u }) {
+  const updateColumn = (updates) => {
+    dispatch({ type: 'COLUMN_UPDATE', floorId, column: { id: column.id, ...updates } });
+  };
+  return (
+    <div>
+      <div className={styles.title}>Column</div>
+      <InputField
+        label="Name" value={column.name}
+        onChange={(v) => updateColumn({ name: v })}
+      />
+      <div className={styles.subtitle}>Position</div>
+      <InputField
+        label="X" type="number" suffix={u.suffix}
+        value={u.toDisplay(column.x)}
+        onChange={(v) => updateColumn({ x: u.fromDisplay(v) })}
+      />
+      <InputField
+        label="Y" type="number" suffix={u.suffix}
+        value={u.toDisplay(column.y)}
+        onChange={(v) => updateColumn({ y: u.fromDisplay(v) })}
+      />
+      <div className={styles.subtitle}>Dimensions</div>
+      <InputField
+        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        value={u.toDisplay(column.width)}
+        onChange={(v) => updateColumn({ width: Math.max(50, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+        value={u.toDisplay(column.depth)}
+        onChange={(v) => updateColumn({ depth: Math.max(50, u.fromDisplay(v)) })}
+      />
+      <InputField
+        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+        value={u.toDisplay(column.height)}
+        onChange={(v) => updateColumn({ height: Math.max(100, u.fromDisplay(v)) })}
+      />
+    </div>
+  );
+}
+
+function ProjectSummary({ project, floor }) {
+  return (
+    <div>
+      <div className={styles.title}>Project Summary</div>
+      <div className={styles.summary}>
+        <p>Name: {project.name}</p>
+        <p>Floors: {project.floors.length}</p>
+        {floor && (
+          <>
+            <p>Walls: {floor.walls.length}</p>
+            <p>Doors: {floor.doors.length}</p>
+            <p>Windows: {floor.windows.length}</p>
+            <p>Columns: {(floor.columns || []).length}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function PropertiesPanel() {
+  const { project, dispatch } = useProject();
+  const { selectedId, selectedType, activeFloorId, dispatch: editorDispatch } = useEditor();
+  const floor = project.floors.find(f => f.id === activeFloorId);
+  const u = useUnits();
+
+  const handleDelete = () => {
+    if (!selectedId) return;
+    if (selectedType === 'wall') {
+      dispatch({ type: 'WALL_DELETE', floorId: activeFloorId, wallId: selectedId });
+    } else if (selectedType === 'door') {
+      dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
+    } else if (selectedType === 'window') {
+      dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+    } else if (selectedType === 'column') {
+      dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
+    } else if (selectedType === 'room') {
+      dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
+    }
+    editorDispatch({ type: 'DESELECT' });
+  };
+
+  let content = <ProjectSummary project={project} floor={floor} />;
+
+  if (selectedId && floor) {
+    if (selectedType === 'wall') {
+      const wall = floor.walls.find(w => w.id === selectedId);
+      if (wall) {
+        content = <WallProperties wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+      }
+    } else if (selectedType === 'door') {
+      const door = floor.doors.find(d => d.id === selectedId);
+      const wall = door ? floor.walls.find(w => w.id === door.wallId) : null;
+      if (door) {
+        content = <DoorProperties door={door} wall={wall} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+      }
+    } else if (selectedType === 'window') {
+      const win = floor.windows.find(w => w.id === selectedId);
+      const wall = win ? floor.walls.find(w => w.id === win.wallId) : null;
+      if (win) {
+        content = <WindowProperties window={win} wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+      }
+    } else if (selectedType === 'column') {
+      const column = (floor.columns || []).find(c => c.id === selectedId);
+      if (column) {
+        content = <ColumnProperties column={column} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+      }
+    } else if (selectedType === 'room') {
+      const room = floor.rooms.find(r => r.id === selectedId);
+      if (room) {
+        content = <RoomProperties room={room} dispatch={dispatch} floorId={activeFloorId} />;
+      }
+    }
+  }
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.unitToggle}>
+        <span>Units:</span>
+        <button
+          className={`${styles.unitBtn} ${u.unit === 'mm' ? styles.unitBtnActive : ''}`}
+          onClick={() => u.setUnit('mm')}
+        >mm</button>
+        <button
+          className={`${styles.unitBtn} ${u.unit === 'm' ? styles.unitBtnActive : ''}`}
+          onClick={() => u.setUnit('m')}
+        >m</button>
+      </div>
+      {content}
+      {selectedId && (
+        <button className={styles.deleteBtn} onClick={handleDelete}>
+          Delete {selectedType}
+        </button>
+      )}
+    </div>
+  );
+}

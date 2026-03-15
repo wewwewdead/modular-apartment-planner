@@ -1,0 +1,96 @@
+/**
+ * Pure force computation functions for star-level physics.
+ * No React or Matter.js dependency — just math.
+ */
+
+/**
+ * Pre-processes server data into O(1) lookup Maps.
+ * @param {Array} starPulls - [{post_id, galaxy_user_id, similarity}, ...]
+ * @param {Array} similarPairs - [{post_a, post_b, similarity}, ...]
+ * @returns {{ starPullMap: Map, pairMap: Map }}
+ */
+export function buildSemanticMaps(starPulls, similarPairs) {
+    const starPullMap = new Map();
+    if (Array.isArray(starPulls)) {
+        for (const pull of starPulls) {
+            if (!pull?.post_id || !pull?.galaxy_user_id) continue;
+            let list = starPullMap.get(pull.post_id);
+            if (!list) {
+                list = [];
+                starPullMap.set(pull.post_id, list);
+            }
+            list.push({
+                galaxyUserId: pull.galaxy_user_id,
+                similarity: Number(pull.similarity) || 0,
+            });
+        }
+    }
+
+    const pairMap = new Map();
+    if (Array.isArray(similarPairs)) {
+        for (const pair of similarPairs) {
+            if (!pair?.post_a || !pair?.post_b) continue;
+            const sim = Number(pair.similarity) || 0;
+
+            let listA = pairMap.get(pair.post_a);
+            if (!listA) {
+                listA = [];
+                pairMap.set(pair.post_a, listA);
+            }
+            listA.push({ otherPostId: pair.post_b, similarity: sim });
+
+            let listB = pairMap.get(pair.post_b);
+            if (!listB) {
+                listB = [];
+                pairMap.set(pair.post_b, listB);
+            }
+            listB.push({ otherPostId: pair.post_a, similarity: sim });
+        }
+    }
+
+    return { starPullMap, pairMap };
+}
+
+/**
+ * Soft spring force toward an anchor (galaxy home) position.
+ * @returns {{ fx: number, fy: number }}
+ */
+export function computeAnchorForce(bodyPos, anchorPos, springK) {
+    const dx = anchorPos.x - bodyPos.x;
+    const dy = anchorPos.y - bodyPos.y;
+    return {
+        fx: dx * springK,
+        fy: dy * springK,
+    };
+}
+
+/**
+ * Cross-galaxy attraction: pulls a star toward galaxies it has semantic affinity with.
+ * @param {{ x: number, y: number }} bodyPos
+ * @param {string} postId
+ * @param {Map} starPullMap - from buildSemanticMaps
+ * @param {Map} galaxyPositions - userId → {x,y}
+ * @param {number} pullK
+ * @returns {{ fx: number, fy: number }}
+ */
+export function computeSemanticPullForce(bodyPos, postId, starPullMap, galaxyPositions, pullK) {
+    const pulls = starPullMap.get(postId);
+    if (!pulls || pulls.length === 0) return { fx: 0, fy: 0 };
+
+    let fx = 0;
+    let fy = 0;
+
+    for (const { galaxyUserId, similarity } of pulls) {
+        const galPos = galaxyPositions.get(galaxyUserId);
+        if (!galPos) continue;
+
+        const dx = galPos.x - bodyPos.x;
+        const dy = galPos.y - bodyPos.y;
+
+        // Force scales with similarity
+        fx += dx * pullK * similarity;
+        fy += dy * pullK * similarity;
+    }
+
+    return { fx, fy };
+}

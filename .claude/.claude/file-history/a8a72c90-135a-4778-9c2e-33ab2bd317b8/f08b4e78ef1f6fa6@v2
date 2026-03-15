@@ -1,0 +1,77 @@
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import {Appearance} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {lightPalette, darkPalette, type Palette} from './tokens';
+
+const STORAGE_KEY = '@iskrib_theme';
+
+type ThemeMode = 'light' | 'dark';
+
+interface ThemeContextValue {
+  theme: ThemeMode;
+  colors: Palette;
+  isDark: boolean;
+  toggleTheme: () => void;
+  setTheme: (mode: ThemeMode) => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
+
+export function ThemeProvider({children}: {children: React.ReactNode}) {
+  const [theme, setThemeState] = useState<ThemeMode>(
+    () => (Appearance.getColorScheme() as ThemeMode) ?? 'dark',
+  );
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY).then(stored => {
+      if (stored === 'light' || stored === 'dark') {
+        setThemeState(stored);
+      }
+      setLoaded(true);
+    });
+  }, []);
+
+  const setTheme = useCallback((mode: ThemeMode) => {
+    setThemeState(mode);
+    AsyncStorage.setItem(STORAGE_KEY, mode);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  }, [theme, setTheme]);
+
+  const value = useMemo<ThemeContextValue>(
+    () => ({
+      theme,
+      colors: theme === 'dark' ? darkPalette : lightPalette,
+      isDark: theme === 'dark',
+      toggleTheme,
+      setTheme,
+    }),
+    [theme, toggleTheme, setTheme],
+  );
+
+  if (!loaded) {
+    return null;
+  }
+
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
+}
+
+export function useTheme(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  if (!ctx) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return ctx;
+}

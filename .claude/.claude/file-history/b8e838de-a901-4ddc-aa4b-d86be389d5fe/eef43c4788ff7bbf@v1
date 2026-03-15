@@ -1,0 +1,130 @@
+# Redesign Opinions & Reply Threads UI
+
+## Context
+The opinions feed and reply threads feel cluttered and dated. Cards use cursive fonts, email-derived handles, excessive nesting wrappers, and basic thread lines. The goal: a clean, Twitter/Threads-inspired timeline that feels premium — simple, aesthetic, delightful — while preserving all existing functionality (API calls, React Query, navigation, mentions, badges).
+
+## Design Direction
+- **Borderless timeline** — separator lines between cards, not bordered boxes
+- **Single-line header** — Avatar + Name + Badge + dot + date (inline)
+- **Full-width body text** — remove the 2.75rem left indent
+- **Connected thread lines** — avatar-column layout with vertical connector (Twitter-style)
+- **Consistent typography** — Outfit for names (drop cursive), Lora for body
+- **Remove email handles** — delete `getUserHandle` everywhere
+- **Amber gradient FAB** with pen icon, spring hover
+- **Staggered entry animations** for card lists
+
+## Files to Modify (6 files)
+
+### 1. `client/src/components/SidebarOpinions/OpinionssPage.jsx`
+- Delete `getUserHandle` function and all `handle` usage
+- Replace nested card structure (`so-user-row > so-user-meta > so-name-block > so-name-line`) with flat `so-header-row`: avatar + name + badge + dot + date inline
+- Remove `so-card--flat` class
+- Replace `so-meta-bar` / `so-reply-pill` with `so-action-row` / `so-reply-btn` using `motion.button` (whileHover/whileTap)
+- Replace FAB SVG (chat bubble → pen icon), add `whileHover={{ scale: 1.08 }}` and `whileTap={{ scale: 0.92 }}`
+- Add stagger animation variants for card list
+
+### 2. `client/src/components/SidebarOpinions/SidebarOpinions.jsx`
+- Delete `getUserHandle` function and `handle` usage
+- Same card restructure: flat `so-header-row` replacing nested wrappers
+- Remove `so-card--flat` class
+
+### 3. `client/src/components/SidebarOpinions/visitedProfileOpinions.jsx`
+- Same card restructure: flat `so-header-row`
+- Remove `so-card--flat` class
+- Keep `.visited-profile-opinions-container` wrapper (glass morphism container stays)
+
+### 4. `client/src/components/SidebarOpinions/opinionViewer.jsx`
+- Restructure parent opinion card with `so-card--parent` variant (keeps border/shadow/radius for the detail view)
+- Replace `ov-reply-row` with `ov-composer`: avatar + input side-by-side, textarea starts at 1 row
+- Add character counter that appears when typing
+- Replace "Submit" button text with "Reply"
+- Add `ov-divider` between sections
+- Add `ov-stats-row` for reply count + full date
+
+### 5. `client/src/components/SidebarOpinions/OpinionsCardRepy.jsx`
+- Reduce `MAX_VISUAL_DEPTH` from 4 to 3
+- Replace `so-card > so-card-content` wrapper with `rc-reply` flex layout: `[rc-avatar-col] [rc-content]`
+- `rc-avatar-col`: avatar image + `rc-connector` (vertical line extending down to next reply)
+- `rc-connector` hidden on last reply when no more pages
+- Replace `so-reply-pill` actions with plain text links: `rc-show-replies` (amber) and `rc-reply-btn` (muted → amber on hover)
+- Replace `rc-reply-input-wrapper` with `rc-inline-composer`
+- Remove the old `rc-card`, `rc-thread-line`, `so-card--flat` wrappers
+- Keep `rc-load-more` aligned with content column
+
+### 6. `client/src/components/SidebarOpinions/sidebarOpinions.css`
+**Major CSS changes:**
+
+**Cards → borderless timeline:**
+- `.so-card`: remove border, shadow, border-radius, bg → transparent, padding: 1rem 0
+- `.so-card-wrapper`: add `border-bottom: 1px solid var(--border-card)`, hover → subtle bg tint
+- Remove `.so-card:hover` shadow
+
+**New `.so-header-row`:**
+- `display: flex; align-items: center; gap: 0.45rem`
+- `.so-username`: font-family → `var(--font-ui)` (was Bradley Hand cursive), font-size 0.88rem, font-weight 600, hover → color change only (no underline)
+- New `.so-dot`: faint color, 0.75rem
+- New `.so-date`: faint color, 0.75rem, nowrap
+
+**Body text:**
+- `.so-body`: `margin-left: 0` (was 2.75rem), font-family → `var(--font-serif)`, padding-top 0.25rem
+- New `.so-body--parent`: larger font for detail view
+
+**Action row:**
+- New `.so-action-row`: replaces `.so-meta-bar`, `margin-left: 0`
+- New `.so-reply-btn`: transparent bg, border-radius 20px, hover → amber bg tint
+
+**Parent card variant:**
+- `.so-card--parent`: bg-card, 1px border, 16px radius, 1.25rem padding, card shadow
+- `.ov-stats-row`: reply count (bold) + dot + full date
+- `.ov-divider`: 1px line separator
+
+**Reply composer:**
+- `.ov-composer`: flex row, avatar + input-wrap
+- `.ov-composer-input`: borderless, border-bottom only, normal font-style (was italic), 1 row start
+- `.ov-composer-actions`: space-between for char count + buttons
+- `.ov-char-count`: small faint text
+
+**Reply threading:**
+- `.rc-reply`: `display: flex; gap: 0.65rem` (avatar-col + content)
+- `.rc-avatar-col`: column flex, 32px wide, centered
+- `.rc-connector`: `flex: 1; width: 2px; bg: var(--border-card)`, hover → amber
+- `.so-avatar-outer--sm` / `.so-avatar--sm`: 28px for reply avatars
+- `.rc-thread`: indent reduced to `calc(var(--depth) * 1rem)` (was 1.25rem)
+- `.rc-show-replies`: plain text, amber, no bg/border
+- `.rc-reply-btn`: plain text, muted → amber on hover
+- `.rc-inline-composer`: column flex, overflow hidden
+- `.rc-load-more`: text link, left-aligned with content column
+
+**FAB:**
+- `.write-opinion-fab`: `background: linear-gradient(135deg, var(--accent-amber), #C49A3E)`, amber shadow glow
+- Remove `.opinion-fab-icon-wrapper` (SVG goes directly in FAB)
+
+**Mobile (max-width: 480px):**
+- `.rc-thread` indent: `calc(var(--depth) * 0.5rem)` (was 0.75rem)
+- `.rc-avatar-col`: 24px wide, avatars 24px
+- `.so-username`: 0.82rem, max-width 120px
+- `.rc-load-more`: margin-left aligned with smaller avatar
+
+**Deprecated classes to remove:**
+- `.so-card--flat`, `.so-handle`, `.so-name-block`, `.so-name-line`, `.so-date-row`, `.so-user-row`, `.so-user-meta`, `.so-meta-bar`, `.so-reply-pill`, `.rc-card`, `.rc-thread-line`
+
+**Note:** `MyOpinions.jsx` uses `.ov-*` classes (not `.so-*`) — it is NOT modified in this redesign. Its `.ov-card`, `.ov-user-row`, `.ov-body`, `.ov-meta-bar` styles are kept intact in CSS.
+
+## Implementation Order
+1. CSS — add new classes alongside old ones (no breakage)
+2. OpinionssPage.jsx — restructure cards + FAB + animations
+3. SidebarOpinions.jsx — mirror card restructure
+4. visitedProfileOpinions.jsx — mirror card restructure
+5. opinionViewer.jsx — parent card + composer redesign
+6. OpinionsCardRepy.jsx — avatar-column thread layout
+7. CSS cleanup — remove deprecated classes
+
+## Verification
+1. OpinionssPage: cards render as borderless timeline, single-line headers, no email handles, full-width body text, amber FAB with pen icon
+2. SidebarOpinions: same clean cards in sidebar context
+3. visitedProfileOpinions: cards inside glass container look correct
+4. OpinionViewer: parent card is prominent with border/shadow, reply composer is avatar + input inline, character counter shows on focus
+5. Reply threads: connected avatar-column lines, proper indentation up to depth 3, show/hide replies works, inline reply textarea expands
+6. MyOpinions: unchanged, still works with ov-* classes
+7. Mobile: threads don't get cramped, avatars scale down, FAB positioned correctly
+8. All interactions preserved: profile clicks, opinion navigation, mentions, badges, infinite scroll, auth gates

@@ -1,0 +1,26 @@
+.layout {
+  display: grid;
+  grid-template-rows: var(--toolbar-height) 1fr;
+  grid-template-columns: var(--sidebar-width) 1fr var(--properties-width);
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "sidebar canvas properties";
+  height: 100%;
+  width: 100%;
+}
+
+.toolbar {
+  grid-area: toolbar;
+}
+
+.sidebar {
+  grid-area: sidebar;
+}
+
+.canvas {
+  grid-area: canvas;
+}
+
+.properties {
+  grid-area: properties;
+}

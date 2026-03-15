@@ -1,0 +1,29 @@
+# Fix Oversized "All / Posts / Users" Tabs on Explore Page
+
+## Context
+The filter tabs ("All", "Posts", "Users") on the Explore search view appear oversized. The shared `Chip` component has generous padding (`paddingHorizontal: 16px`, `paddingVertical: 8px`) that makes the pills look too large compared to similar filter chips elsewhere in the app (e.g. StoryBrowser uses `10px` / `6px`).
+
+## Changes
+
+### 1. Reduce Chip padding — `apps/mobile/src/components/Chip.tsx`
+- Change `paddingHorizontal` from `spacing.lg` (16) → `spacing.md` (12)
+- Change `paddingVertical` from `spacing.sm` (8) → `spacing.xs` (4)
+
+This brings the chips closer to the compact style used in StoryBrowserScreen (10/6) while staying on the design-token grid.
+
+> **Note:** The `Chip` component is also used in `HomeFeedScreen` for "All" / "Journals" filters — the same size reduction will apply there, keeping them consistent.
+
+### 2. Tighten tab row spacing — `apps/mobile/src/screens/Home/ExploreScreen.tsx` (line 449-453)
+- Reduce `tabRow.paddingVertical` from `spacing.md` (12) → `spacing.sm` (8) so the row doesn't add extra height around the now-smaller chips.
+
+## Files Modified
+| File | What changes |
+|---|---|
+| `apps/mobile/src/components/Chip.tsx` | Smaller horizontal & vertical padding |
+| `apps/mobile/src/screens/Home/ExploreScreen.tsx` | Tighter `tabRow` vertical padding |
+
+## Verification
+1. Run the app on Android/iOS
+2. Navigate to Explore → type a search query (≥ 2 chars) to trigger the search view
+3. Confirm "All", "Users", "Posts" tabs are visually compact
+4. Check HomeFeedScreen "All" / "Journals" chips also look correct

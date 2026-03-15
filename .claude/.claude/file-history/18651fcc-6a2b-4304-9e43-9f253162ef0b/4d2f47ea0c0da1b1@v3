@@ -1,0 +1,17 @@
+import supabase from '../supabase/supabase.js';
+
+function getCurrentWeekMonday() {
+    const now = new Date();
+    const day = now.getUTCDay();
+    const diff = day === 0 ? 6 : day - 1;
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff)).toISOString();
+}
+
+export const getWeeklyRecapService = async (userId) => {
+    const { data, error } = await supabase.rpc('get_weekly_recap', {
+        p_user_id: userId,
+        p_week_start: getCurrentWeekMonday(),
+    });
+    if (error) throw new Error(error.message || 'Failed to get weekly recap');
+    return data;
+};

@@ -1,0 +1,152 @@
+import { createContext, useContext, useState, useEffect } from 'react';
+import supabase from '../utils/supabaseClient';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getNotificationsCount, getUserData } from '../../API/Api';
+
+
+export const AuthContext = createContext();
+
+export const AuthProvider = ({children}) => {
+    const [loading, setLoading] = useState(true);
+    const [showAuthModal, setShowAuthModal] = useState(false);
+
+    const openAuthModal = () => setShowAuthModal(true);
+    const closeAuthModal = () => setShowAuthModal(false);
+
+    const queryClient = useQueryClient();
+
+    const {data: authData, isLoading: isAuthLoading} = useQuery({
+        queryKey: ['authsession'],
+        queryFn: async() =>{
+            const {data, error} = await supabase.auth.getSession();
+            if(error) throw error;
+            return data.session
+        },
+        staleTime: 1000 * 60 * 60,
+        cacheTime: 1000 * 60 * 60,
+    })
+
+    // console.log(authData)
+
+    useEffect(() =>{
+        let mounted = true;
+        // (async () =>{
+        //     const {data} = await supabase.auth.getSession();
+        //     if(mounted){
+        //         queryClient.setQueryData(['authsession'], data?.session)
+        //         setLoading(false)
+        //     }
+        // })();
+
+        //listen for login or logout events
+        if(!isAuthLoading && mounted){
+            setLoading(false)
+        }
+        const {data: listener} = supabase.auth.onAuthStateChange((_event, session) => {
+            if(mounted){
+                queryClient.setQueryData(['authsession'], session ?? null);
+                setLoading(false)
+            } 
+        })
+        return() => listener.subscription.unsubscribe();
+        
+    }, [isAuthLoading])
+
+    const {data: userData, isLoading} = useQuery({
+            queryKey: ['userData', authData?.user?.id],
+            queryFn: ({queryKey}) => getUserData(queryKey[1]),
+            enabled: !!authData?.access_token, //only runs if token exists
+            staleTime: 1000 * 60 * 60,
+            cacheTime: 1000 * 60 * 60,
+        })
+
+    const {data: notifCount, isLoading: isLoadingNotifCount} = useQuery({
+        queryKey: ['notifcounts', authData?.user?.id],
+        queryFn: ({queryKey}) => getNotificationsCount(queryKey[1], authData?.access_token),
+        enabled: !!authData?.access_token,
+        staleTime: 1000 * 60 * 60,
+        cacheTime: 1000 * 60 * 60,
+    })
+    
+    //hook for realtime notifications
+    useEffect(() =>{
+        if(!userData) return;
+
+        const channel = supabase
+        .channel('notifications')
+        .on('postgres_changes',
+        {event: 'INSERT', schema: 'public', table: 'notifications', filter: `receiver_id=eq.${userData?.userData?.[0]?.id}`},
+        (payload) => {
+            // console.log('new notification:', payload)
+            queryClient.setQueryData(['notifcounts', authData?.user?.id], (old) => ({count: (old?.count ? old?.count : 0) + 1}));
+        }
+
+
+    )
+    .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    }
+
+    },[userData])
+
+    //hook for realtime opinion notifications
+    useEffect(() =>{
+        if(!userData) return;
+
+        const channel = supabase
+        .channel('opinions-notifications')
+        .on('postgres_changes',
+        {event: 'INSERT', schema: 'public', table: 'notification_opinions', filter: `receiver_id=eq.${userData?.userData?.[0]?.id}`},
+        (payload) => {
+            // console.log('new notification:', payload)
+            queryClient.setQueryData(['notifcounts', authData?.user?.id], (old) => ({count: (old?.count ? old?.count : 0) + 1}));
+        }
+
+
+    )
+    .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    }
+
+    },[userData])
+    
+
+    // useEffect(() => {
+    //     console.log(userData?.userData?.[0].id);
+    // }, [userData])
+
+    const signOut = async() =>{
+        await supabase.auth.signOut({ scope: 'local' });
+        queryClient.setQueryData(['authsession'], null)
+        queryClient.clear();
+
+    }
+
+    const requireAuth = (callback) => {
+        if(authData){
+            callback();
+        } else {
+            openAuthModal();
+        }
+    }
+
+    const value = {
+        session: authData,
+        user: userData,
+        loading: loading,
+        isLoading: isLoading,
+        notifCount: notifCount?.count,
+        signOut,
+        showAuthModal,
+        openAuthModal,
+        closeAuthModal,
+        requireAuth
+    }
+    return <AuthContext.Provider value={value}>
+        {children}
+    </AuthContext.Provider>
+}

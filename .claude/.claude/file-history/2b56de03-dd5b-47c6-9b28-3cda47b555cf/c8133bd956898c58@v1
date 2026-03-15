@@ -1,0 +1,27 @@
+# Fix: Neonize API Mismatch — `NewClient.run()` does not exist
+
+## Context
+The app crashes immediately on `python main.py start` with:
+```
+AttributeError: 'NewClient' object has no attribute 'run'
+```
+at `src/whatsapp/client.py:200`. The installed neonize version (0.3.14.post0) uses `.connect()` instead of `.run()`. The app enters an infinite crash-reconnect loop because of this.
+
+## Fix
+
+### File: `src/whatsapp/client.py` (line 200)
+
+Change:
+```python
+self.client.run()
+```
+to:
+```python
+self.client.connect()
+```
+
+That's it — a single-line fix. The rest of the neonize API usage in this file (event registration, `disconnect()`, `download_any()`, `reply_message()`, `send_message()`) all match the actual installed API.
+
+## Verification
+1. Run `python main.py start` — it should connect to WhatsApp (and show a QR code for pairing on first run) instead of crash-looping.
+2. Run `python main.py status` — should still show all green.

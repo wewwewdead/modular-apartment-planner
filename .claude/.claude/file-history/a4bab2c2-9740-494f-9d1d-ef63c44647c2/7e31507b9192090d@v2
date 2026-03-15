@@ -1,0 +1,424 @@
+import { apiRequest } from './apiClient';
+
+export type UserPreview = {
+  id: string;
+  name: string | null;
+  username?: string | null;
+  image_url?: string | null;
+  badge?: string | null;
+};
+
+export type JournalItem = {
+  id: string;
+  title: string | null;
+  content: string | null;
+  post_type?: string | null;
+  user_id?: string | null;
+  privacy?: string | null;
+  created_at?: string;
+  likes_count?: number;
+  comments_count?: number;
+  has_liked?: boolean;
+  has_bookmarked?: boolean;
+  user_reaction?: string | null;
+  reaction_count?: Array<{count?: number}>;
+  like_count?: Array<{count?: number}>;
+  comment_count?: Array<{count?: number}>;
+  bookmark_count?: Array<{count?: number}>;
+  is_repost?: boolean;
+  repost_caption?: string | null;
+  repost_source?: JournalItem | null;
+  users?: UserPreview | null;
+  hot_score?: number;
+};
+
+export type CursorPage<T> = {
+  data: T[];
+  nextCursor?: string | null;
+  hasMore?: boolean;
+};
+
+export type NotificationItem = {
+  id: string;
+  sender_id?: string;
+  receiver_id?: string;
+  journal_id?: string;
+  repost_journal_id?: string | null;
+  opinion_id?: string | null;
+  type?: string;
+  source?: 'journal' | 'opinion' | string;
+  users?: UserPreview | null;
+  journals?: JournalItem | null;
+  opinions?: {
+    id?: string;
+    opinion?: string;
+    user_id?: string;
+    created_at?: string;
+  } | null;
+  message?: string;
+  created_at?: string;
+  read?: boolean;
+};
+
+export type StreakResponse = {
+  currentStreak?: number;
+  longestStreak?: number;
+  lastPostDate?: string | null;
+};
+
+type UserDataResponse = {
+  userData?: Array<{
+    id: string;
+    name?: string;
+    username?: string;
+    bio?: string;
+    image_url?: string;
+    badge_type?: string;
+    profile_layout?: any;
+    followers_count?: number;
+    following_count?: number;
+    posts_count?: number;
+    background?: Record<string, string> | null;
+    profile_font_color?: string | null;
+    dominant_colors?: string | null;
+    secondary_colors?: string | null;
+  }>;
+};
+
+const authHeaders = (token?: string): Record<string, string> => {
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+export const mobileApi = {
+  async getJournals(cursor: string | null, limit = 10, userId?: string): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) {
+      params.set('before', cursor);
+    }
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    return apiRequest<CursorPage<JournalItem>>(`/journals?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getJournalById(journalId: string, userId?: string): Promise<{ journal: JournalItem }> {
+    const params = new URLSearchParams();
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    return apiRequest<{ journal: JournalItem }>(`/journal/${encodeURIComponent(journalId)}${suffix}`, {
+      method: 'GET',
+    });
+  },
+
+  async searchUsers(query: string, limit = 20): Promise<{ data: UserPreview[]; hasMore: boolean }> {
+    const params = new URLSearchParams();
+    params.set('query', query.trim());
+    params.set('limit', String(limit));
+
+    return apiRequest<{ data: UserPreview[]; hasMore: boolean }>(`/users/search?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async searchJournals(query: string, limit = 20, userId?: string): Promise<{ data: JournalItem[]; hasMore: boolean }> {
+    const params = new URLSearchParams();
+    params.set('query', query.trim());
+    params.set('limit', String(limit));
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    return apiRequest<{ data: JournalItem[]; hasMore: boolean }>(`/journals/search?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getNotifications(token: string, cursor: string | null, limit = 20): Promise<CursorPage<NotificationItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) {
+      params.set('before', cursor);
+    }
+
+    return apiRequest<CursorPage<NotificationItem>>(`/getNotifications?${params.toString()}`, {
+      method: 'GET',
+      headers: {
+        ...authHeaders(token),
+      },
+    });
+  },
+
+  async getStreak(userId: string): Promise<StreakResponse> {
+    return apiRequest<StreakResponse>(`/streak/${encodeURIComponent(userId)}`, {
+      method: 'GET',
+    });
+  },
+
+  async getUserData(userId: string): Promise<UserDataResponse> {
+    const params = new URLSearchParams();
+    params.set('userId', userId);
+
+    return apiRequest<UserDataResponse>(`/getUserData?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getUserByUsername(username: string): Promise<UserDataResponse> {
+    return apiRequest<UserDataResponse>(
+      `/user/${encodeURIComponent(username)}`,
+      {method: 'GET'},
+    );
+  },
+
+  async getHottestMonthly(limit = 5, userId?: string): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (userId) {
+      params.set('userId', userId);
+    }
+
+    return apiRequest<CursorPage<JournalItem>>(`/journals/hottest-monthly?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getRelatedPosts(journalId: string): Promise<{data: JournalItem[]}> {
+    return apiRequest<{data: JournalItem[]}>(
+      `/journal/${encodeURIComponent(journalId)}/related`,
+      {method: 'GET'},
+    );
+  },
+
+  async getUserJournals(token: string, userId: string, cursor: string | null, limit = 10): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('userId', userId);
+    if (cursor) params.set('before', cursor);
+    return apiRequest<CursorPage<JournalItem>>(`/userJournals?${params.toString()}`, {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async deleteJournal(token: string, journalId: string): Promise<{message?: string}> {
+    return apiRequest<{message?: string}>(`/deleteJournal/${encodeURIComponent(journalId)}`, {
+      method: 'DELETE',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async updatePrivacy(token: string, payload: {journalId: string; privacy: string}): Promise<{message?: string}> {
+    const formData = new FormData();
+    formData.append('journalId', payload.journalId);
+    formData.append('privacy', payload.privacy);
+    return apiRequest<{message?: string}>('/updatePrivacy', {
+      method: 'POST',
+      headers: {Authorization: `Bearer ${token}`},
+      body: formData,
+      retries: 0,
+    });
+  },
+
+  async getFollowingFeed(token: string, cursor: string | null, limit = 10): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) params.set('before', cursor);
+    return apiRequest<CursorPage<JournalItem>>(`/journals/following?${params.toString()}`, {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async getForYouFeed(token: string, offset: number, limit = 10): Promise<CursorPage<JournalItem>> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    return apiRequest<CursorPage<JournalItem>>(`/journals/for-you?${params.toString()}`, {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async saveDraft(token: string, payload: {title: string; content: string}): Promise<{message?: string}> {
+    return apiRequest<{message?: string}>('/journal/draft', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      retries: 0,
+    });
+  },
+
+  async publishDraft(token: string, journalId: string): Promise<{message?: string}> {
+    return apiRequest<{message?: string}>('/journal/publish', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({journalId}),
+      retries: 0,
+    });
+  },
+
+  async getDrafts(token: string): Promise<{data: JournalItem[]}> {
+    return apiRequest<{data: JournalItem[]}>('/journal/drafts', {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async getTodaysPrompt(): Promise<{id?: string; prompt_text?: string; created_at?: string}> {
+    return apiRequest<{id?: string; prompt_text?: string; created_at?: string}>('/prompt/today', {
+      method: 'GET',
+    });
+  },
+
+  async getPromptResponses(promptId: string, cursor: string | null, limit = 10): Promise<{responses: JournalItem[]; before?: string}> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) params.set('before', cursor);
+    return apiRequest<{responses: JournalItem[]; before?: string}>(`/prompt/${encodeURIComponent(promptId)}/responses?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  async getInterestSections(token: string): Promise<{sections?: Array<{name: string; journals: JournalItem[]}>}> {
+    return apiRequest<{sections?: Array<{name: string; journals: JournalItem[]}>}>('/explore/interests', {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async getProfileMedia(token: string, cursor: string | null, limit = 20): Promise<{media: Array<{id: string; url: string; bucket?: string; path?: string}>; nextCursor?: string}> {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (cursor) params.set('cursor', cursor);
+    return apiRequest('/profileMedia?' + params.toString(), {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async getVisitedProfileMedia(token: string, userId: string, cursor: string | null, limit = 20): Promise<{media: Array<{id: string; url: string}>; nextCursor?: string}> {
+    const params = new URLSearchParams();
+    params.set('userId', userId);
+    params.set('limit', String(limit));
+    if (cursor) params.set('cursor', cursor);
+    return apiRequest('/visitedProfileMedia?' + params.toString(), {
+      method: 'GET',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+  },
+
+  async completeOnboarding(token: string, payload: {writingInterests: string[]; writingGoal: string}): Promise<{message?: string}> {
+    return apiRequest<{message?: string}>('/complete-onboarding', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      retries: 0,
+    });
+  },
+
+  async updateInterests(token: string, payload: {writingInterests: string[]; writingGoal: string}): Promise<{message?: string}> {
+    return apiRequest<{message?: string}>('/update-interests', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      retries: 0,
+    });
+  },
+
+  async updateFontColor(token: string, fontColor: string): Promise<{message?: string}> {
+    const formData = new FormData();
+    formData.append('fontColor', fontColor);
+    return apiRequest<{message?: string}>('/updateFontColor', {
+      method: 'POST',
+      headers: {Authorization: `Bearer ${token}`},
+      body: formData,
+      retries: 0,
+    });
+  },
+
+  async uploadBackground(token: string, formData: FormData): Promise<{data?: string}> {
+    return apiRequest<{data?: string}>('/uploadBackground', {
+      method: 'POST',
+      headers: {Authorization: `Bearer ${token}`},
+      body: formData,
+      retries: 0,
+      timeoutMs: 30000,
+    });
+  },
+
+  async saveJournal(token: string, payload: { title: string; plainText: string; html?: string; privacy?: string }): Promise<{ message?: string }> {
+    const formData = new FormData();
+
+    const lexicalPayload = {
+      root: {
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'text',
+                text: payload.plainText,
+                detail: 0,
+                format: 0,
+                mode: 'normal',
+                style: '',
+                version: 1,
+              },
+            ],
+            direction: null,
+            format: '',
+            indent: 0,
+            version: 1,
+          },
+        ],
+        direction: null,
+        format: '',
+        indent: 0,
+        type: 'root',
+        version: 1,
+      },
+    };
+
+    formData.append('title', payload.title);
+    formData.append('content', JSON.stringify(lexicalPayload));
+    formData.append('post_type', 'text');
+    if (payload.privacy) {
+      formData.append('privacy', payload.privacy);
+    }
+
+    return apiRequest<{ message?: string }>('/save-journal', {
+      method: 'POST',
+      headers: {
+        ...authHeaders(token),
+      },
+      body: formData,
+      timeoutMs: 30000,
+      retries: 0,
+    });
+  },
+};

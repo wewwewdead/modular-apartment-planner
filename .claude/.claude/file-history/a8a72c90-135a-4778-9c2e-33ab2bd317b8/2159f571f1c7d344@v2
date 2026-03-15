@@ -1,0 +1,330 @@
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {apiRequest} from '../../lib/api/apiClient';
+import type {AuthStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
+
+function suggestUsername(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 20);
+}
+
+export function SignUpScreen({navigation}: Props) {
+  const {signUp, authError} = useAuth();
+  const {colors, isDark} = useTheme();
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [usernameStatus, setUsernameStatus] = useState<
+    'idle' | 'checking' | 'available' | 'taken'
+  >('idle');
+
+  const usernameRef = useRef<TextInput>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const checkTimeout = useRef<ReturnType<typeof setTimeout>>();
+
+  const canSubmit = useMemo(
+    () =>
+      name.trim().length > 0 &&
+      username.trim().length >= 3 &&
+      email.trim().length > 4 &&
+      password.length > 7 &&
+      usernameStatus !== 'taken',
+    [name, username, email, password, usernameStatus],
+  );
+
+  // Auto-suggest username from name
+  useEffect(() => {
+    if (username === '' || username === suggestUsername(name.slice(0, -1))) {
+      const suggested = suggestUsername(name);
+      setUsername(suggested);
+    }
+  }, [name]);
+
+  // Check username availability with debounce
+  const checkUsername = useCallback(
+    (value: string) => {
+      if (checkTimeout.current) clearTimeout(checkTimeout.current);
+      if (value.length < 3) {
+        setUsernameStatus('idle');
+        return;
+      }
+      setUsernameStatus('checking');
+      checkTimeout.current = setTimeout(async () => {
+        try {
+          const res = await apiRequest<{available: boolean}>(
+            `/check-username/${encodeURIComponent(value)}`,
+          );
+          setUsernameStatus(res.available ? 'available' : 'taken');
+        } catch {
+          setUsernameStatus('idle');
+        }
+      }, 400);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    checkUsername(username);
+  }, [username, checkUsername]);
+
+  const onSubmit = async () => {
+    try {
+      setLoading(true);
+      await signUp({email: email.trim(), password});
+      Alert.alert(
+        'Check your inbox',
+        'Account created. Confirm your email, then sign in.',
+      );
+      navigation.navigate('Login');
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Sign up failed';
+      Alert.alert('Sign up failed', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputStyle = (field: string) => [
+    styles.input,
+    {
+      backgroundColor: isDark ? colors.bgElevated : colors.bgPrimary,
+      borderColor:
+        focusedField === field ? colors.accentAmber : colors.borderCard,
+      color: colors.textPrimary,
+    },
+    focusedField === field && {
+      shadowColor: colors.accentAmber,
+      shadowOffset: {width: 0, height: 0},
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+    },
+  ];
+
+  const usernameHintColor =
+    usernameStatus === 'available'
+      ? colors.success
+      : usernameStatus === 'taken'
+        ? colors.danger
+        : colors.textMuted;
+
+  const usernameHint =
+    usernameStatus === 'checking'
+      ? 'Checking...'
+      : usernameStatus === 'available'
+        ? 'Available'
+        : usernameStatus === 'taken'
+          ? 'Already taken'
+          : username.length > 0 && username.length < 3
+            ? 'At least 3 characters'
+            : '';
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.container}>
+          {/* Brand header */}
+          <View style={styles.brandSection}>
+            <Text style={[styles.brandText, {color: colors.textHeading}]}>
+              Join iskrib
+            </Text>
+            <Text style={[styles.tagline, {color: colors.textSecondary}]}>
+              Start writing your story
+            </Text>
+          </View>
+
+          {!!authError && (
+            <Text style={[styles.error, {color: colors.danger}]}>
+              {authError}
+            </Text>
+          )}
+
+          {/* Form */}
+          <View style={styles.form}>
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, {color: colors.textMuted}]}>NAME</Text>
+              <TextInput
+                placeholder="Your display name"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="words"
+                autoComplete="name"
+                returnKeyType="next"
+                value={name}
+                onChangeText={setName}
+                onFocus={() => setFocusedField('name')}
+                onBlur={() => setFocusedField(null)}
+                onSubmitEditing={() => usernameRef.current?.focus()}
+                style={inputStyle('name')}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, {color: colors.textMuted}]}>
+                USERNAME
+              </Text>
+              <TextInput
+                ref={usernameRef}
+                placeholder="Choose a username"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+                value={username}
+                onChangeText={val =>
+                  setUsername(val.toLowerCase().replace(/[^a-z0-9_]/g, ''))
+                }
+                onFocus={() => setFocusedField('username')}
+                onBlur={() => setFocusedField(null)}
+                onSubmitEditing={() => emailRef.current?.focus()}
+                style={inputStyle('username')}
+              />
+              {usernameHint ? (
+                <Text style={[styles.hint, {color: usernameHintColor}]}>
+                  {usernameHint}
+                </Text>
+              ) : null}
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, {color: colors.textMuted}]}>
+                EMAIL
+              </Text>
+              <TextInput
+                ref={emailRef}
+                placeholder="Enter your email"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+                returnKeyType="next"
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                style={inputStyle('email')}
+              />
+            </View>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.label, {color: colors.textMuted}]}>
+                PASSWORD
+              </Text>
+              <TextInput
+                ref={passwordRef}
+                placeholder="Password (8+ characters)"
+                placeholderTextColor={colors.textFaint}
+                secureTextEntry
+                autoComplete="password-new"
+                returnKeyType="go"
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+                onSubmitEditing={canSubmit ? onSubmit : undefined}
+                style={inputStyle('password')}
+              />
+            </View>
+
+            <PrimaryButton
+              label="Create Account"
+              onPress={onSubmit}
+              loading={loading}
+              disabled={!canSubmit}
+            />
+
+            <PrimaryButton
+              label="Back to Login"
+              onPress={() => navigation.goBack()}
+              kind="secondary"
+            />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  flex: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxl,
+  },
+  brandSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xxl,
+  },
+  brandText: {
+    fontFamily: fonts.heading.bold,
+    fontSize: 28,
+    letterSpacing: -0.3,
+  },
+  tagline: {
+    fontFamily: fonts.serif.italic,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: spacing.xs,
+  },
+  error: {
+    fontSize: 13,
+    fontFamily: fonts.ui.medium,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  form: {
+    gap: spacing.lg,
+  },
+  fieldGroup: {
+    gap: spacing.xs,
+  },
+  label: {
+    ...typeScale.label,
+    marginLeft: spacing.xs,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontFamily: fonts.ui.regular,
+  },
+  hint: {
+    fontSize: 12,
+    fontFamily: fonts.ui.medium,
+    marginLeft: spacing.xs,
+  },
+});

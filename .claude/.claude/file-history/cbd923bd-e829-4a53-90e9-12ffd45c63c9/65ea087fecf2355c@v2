@@ -1,0 +1,282 @@
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import * as THREE from 'three';
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { buildSketchPreviewRoot } from './buildSketchPreview';
+import { getSketchPartInspection } from './sketchPreviewInspection';
+import { createPreviewViewport } from '@/three/viewer/createPreviewViewport';
+import { disposeScene } from '@/three/viewer/disposeScene';
+import CompassOverlay from '@/ui/CompassOverlay';
+import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
+import styles from './SketchPreviewPanel.module.css';
+
+export default function SketchPreviewPanel({ isMaximized = false, onToggleMaximize, className = '' }) {
+  const containerRef = useRef(null);
+  const viewportRef = useRef(null);
+  const rootRef = useRef(null);
+  const resizeObserverRef = useRef(null);
+  const compassNeedleRef = useRef(null);
+
+  const [navigationMode, setNavigationMode] = useState('inspect');
+  const [walkUiState, setWalkUiState] = useState({
+    navigationMode: 'inspect',
+    isLocked: false,
+    canLock: false,
+  });
+  const [previewScope, setPreviewScope] = useState('all');
+
+  const { project } = useSketch();
+  const { selectedId, dispatch: editorDispatch } = useSketchEditor();
+
+  const visibleParts = useMemo(() => {
+    const renderable = project.parts.filter(
+      (p) => p.type !== 'dimension' && p.type !== 'cutout' && p.type !== 'hole'
+    );
+    if (previewScope === 'all') return renderable;
+    return renderable.filter((p) => p.assemblyId === previewScope);
+  }, [project.parts, previewScope]);
+
+  const inspection = useMemo(
+    () => getSketchPartInspection(project, selectedId),
+    [project, selectedId]
+  );
+
+  const handlePreviewPick = useCallback((target) => {
+    if (!target?.sourceId || !target?.kind) {
+      editorDispatch({ type: 'DESELECT' });
+      return;
+    }
+    editorDispatch({ type: 'SELECT_OBJECT', id: target.sourceId, objectType: target.kind });
+  }, [editorDispatch]);
+
+  // Initialize viewport
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const viewport = createPreviewViewport(container);
+    viewportRef.current = viewport;
+
+    if ('ResizeObserver' in window) {
+      const observer = new ResizeObserver(() => viewport.resize());
+      observer.observe(container);
+      resizeObserverRef.current = observer;
+    }
+
+    viewport.resize();
+
+    return () => {
+      resizeObserverRef.current?.disconnect?.();
+      resizeObserverRef.current = null;
+      if (rootRef.current) {
+        disposeScene(rootRef.current, { disposeMaterials: true });
+        rootRef.current = null;
+      }
+      viewport.dispose();
+      viewportRef.current = null;
+    };
+  }, []);
+
+  // Pick handler
+  useEffect(() => {
+    viewportRef.current?.setPickHandler(handlePreviewPick);
+  }, [handlePreviewPick]);
+
+  // Walk UI handlers
+  useEffect(() => {
+    viewportRef.current?.setWalkUiHandler(setWalkUiState);
+    viewportRef.current?.setWalkExitHandler(() => {
+      setNavigationMode('inspect');
+    });
+  }, []);
+
+  // Compass heading
+  useEffect(() => {
+    viewportRef.current?.setCompassHeadingHandler((headingDeg) => {
+      if (!compassNeedleRef.current) return;
+      compassNeedleRef.current.style.setProperty('--compass-heading', `${headingDeg}deg`);
+    });
+
+    return () => {
+      viewportRef.current?.setCompassHeadingHandler(null);
+    };
+  }, []);
+
+  // Update scene when parts change
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    // Dispose old root
+    if (rootRef.current) {
+      disposeScene(rootRef.current, { disposeMaterials: true });
+    }
+
+    const root = buildSketchPreviewRoot(visibleParts, selectedId);
+    rootRef.current = root;
+
+    // Compute bounds from parts
+    const box = new THREE.Box3();
+    root.updateMatrixWorld(true);
+    box.expandByObject(root);
+
+    if (box.isEmpty()) {
+      box.set(
+        new THREE.Vector3(-500, 0, -300),
+        new THREE.Vector3(500, 800, 300)
+      );
+    }
+
+    const bounds = {
+      min: { x: box.min.x, y: box.min.y, z: box.min.z },
+      max: { x: box.max.x, y: box.max.y, z: box.max.z },
+    };
+
+    viewport.setWorld(root, bounds, 0);
+  }, [visibleParts, selectedId]);
+
+  // Navigation mode
+  useEffect(() => {
+    viewportRef.current?.setNavigationMode(navigationMode);
+  }, [navigationMode]);
+
+  // Walk floor context — compute spawn from part bounds
+  useEffect(() => {
+    if (navigationMode !== 'walk') return;
+
+    const box = new THREE.Box3();
+    if (rootRef.current) {
+      rootRef.current.updateMatrixWorld(true);
+      box.expandByObject(rootRef.current);
+    }
+
+    if (box.isEmpty()) {
+      box.set(new THREE.Vector3(-500, 0, -300), new THREE.Vector3(500, 800, 300));
+    }
+
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+
+    viewportRef.current?.setActiveFloorContext({
+      floorId: null,
+      spawnPoint: { x: center.x, y: box.max.y + 500, z: center.z + 1000 },
+      floorY: 0,
+    });
+  }, [navigationMode, visibleParts]);
+
+  const resetLabel = navigationMode === 'walk' ? 'Reset Walk' : 'Reset View';
+  const primaryFooter = navigationMode === 'walk'
+    ? (walkUiState.isLocked
+      ? 'Look: mouse · Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Exit: Esc'
+      : 'Walk: click preview to capture mouse · Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Exit: Esc')
+    : 'Orbit: drag · Pan: right drag · Zoom: wheel · Inspect: click object';
+  const secondaryFooter = navigationMode === 'walk'
+    ? 'Noclip flight mode — collision-free exploration.'
+    : 'Perspective preview of sketch parts.';
+
+  return (
+    <section className={`${styles.panel} ${className}`}>
+      <div className={styles.header}>
+        <div className={styles.titleGroup}>
+          <span className={styles.eyebrow}>3D Preview</span>
+          <span className={styles.title}>
+            {visibleParts.length === 1 ? '1 part' : `${visibleParts.length} parts`}
+          </span>
+        </div>
+        <div className={styles.actions}>
+          <div className={styles.modeToggle} role="group" aria-label="Preview navigation mode">
+            <button
+              type="button"
+              className={navigationMode === 'inspect' ? styles.modeButtonActive : styles.modeButton}
+              onClick={() => setNavigationMode('inspect')}
+              aria-pressed={navigationMode === 'inspect'}
+            >
+              Inspect
+            </button>
+            <button
+              type="button"
+              className={navigationMode === 'walk' ? styles.modeButtonActive : styles.modeButton}
+              onClick={() => setNavigationMode('walk')}
+              aria-pressed={navigationMode === 'walk'}
+            >
+              Walk
+            </button>
+          </div>
+          <select
+            className={styles.assemblySelect}
+            value={previewScope}
+            onChange={(e) => setPreviewScope(e.target.value)}
+          >
+            <option value="all">All Parts</option>
+            {project.assemblies.map((asm) => (
+              <option key={asm.id} value={asm.id}>{asm.name}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className={styles.button}
+            onClick={() => viewportRef.current?.resetView()}
+          >
+            {resetLabel}
+          </button>
+          {onToggleMaximize && (
+            <button
+              type="button"
+              className={`${styles.button} ${styles.iconButton}`}
+              onClick={onToggleMaximize}
+              title={isMaximized ? 'Restore split view' : 'Maximize preview'}
+              aria-label={isMaximized ? 'Restore split view' : 'Maximize preview'}
+            >
+              {isMaximized ? <CollapseIcon /> : <ExpandIcon />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.viewportWrap}>
+        <div ref={containerRef} className={styles.viewport} />
+        <CompassOverlay className={styles.compassDock} needleRef={compassNeedleRef} />
+        {navigationMode === 'walk' && (
+          <div className={styles.walkOverlay}>
+            <span className={styles.walkOverlayTitle}>
+              {walkUiState.isLocked ? 'Walk Mode Active' : 'Walk Mode Ready'}
+            </span>
+            <span className={styles.walkOverlayBody}>
+              {walkUiState.isLocked
+                ? 'Noclip flight is live. W/S follow the camera view, A/D strafe, R/F move up and down, Shift goes faster, and Esc exits.'
+                : 'Click inside the preview to capture the mouse, then use W/A/S/D for noclip flight and R/F for vertical movement.'}
+            </span>
+          </div>
+        )}
+        {inspection && (
+          <div className={styles.inspectCard}>
+            <span className={styles.inspectEyebrow}>Selected Part</span>
+            <span className={styles.inspectTitle}>{inspection.title}</span>
+            <span className={styles.inspectMeta}>{inspection.subtitle}</span>
+            <div className={styles.inspectGrid}>
+              {inspection.rows.map((row) => (
+                <div key={`${inspection.id}-${row.label}`} className={styles.inspectRow}>
+                  <span className={styles.inspectLabel}>{row.label}</span>
+                  <span className={styles.inspectValue}>{row.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {visibleParts.length === 0 && (
+          <div className={styles.emptyState}>
+            <span className={styles.emptyTitle}>No Parts</span>
+            <span className={styles.emptyBody}>
+              Add panels, legs, or frames using the sketch toolbar to populate the 3D preview.
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className={styles.footer}>
+        <span>{primaryFooter}</span>
+        <span>{secondaryFooter}</span>
+      </div>
+    </section>
+  );
+}

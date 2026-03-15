@@ -1,0 +1,228 @@
+import React, {useMemo, useState} from 'react';
+import {FlatList, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {SearchInput} from '../../components/SearchInput';
+import {Chip} from '../../components/Chip';
+import {Avatar} from '../../components/Avatar';
+import {EmptyState} from '../../components/EmptyState';
+import {SearchIcon} from '../../components/icons';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {mobileApi} from '../../lib/api/mobileApi';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Explore'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+type Tab = 'all' | 'users' | 'posts';
+
+export function ExploreScreen({navigation}: Props) {
+  const {colors} = useTheme();
+  const [query, setQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('all');
+  const normalizedQuery = useMemo(() => query.trim(), [query]);
+
+  const usersQuery = useQuery({
+    queryKey: ['search-users', normalizedQuery],
+    enabled: normalizedQuery.length >= 2 && activeTab !== 'posts',
+    queryFn: () => mobileApi.searchUsers(normalizedQuery, 10),
+  });
+
+  const journalsQuery = useQuery({
+    queryKey: ['search-journals', normalizedQuery],
+    enabled: normalizedQuery.length >= 2 && activeTab !== 'users',
+    queryFn: () => mobileApi.searchJournals(normalizedQuery, 10),
+  });
+
+  const users = usersQuery.data?.data ?? [];
+  const journals = journalsQuery.data?.data ?? [];
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, {color: colors.textHeading}]}>Explore</Text>
+          <SearchInput
+            placeholder="Search users or posts..."
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+        </View>
+
+        {/* Tab filters */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabRow}>
+          {(['all', 'users', 'posts'] as Tab[]).map(tab => (
+            <Chip
+              key={tab}
+              label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+              active={activeTab === tab}
+              onPress={() => setActiveTab(tab)}
+            />
+          ))}
+        </ScrollView>
+
+        {normalizedQuery.length < 2 ? (
+          <EmptyState
+            icon={<SearchIcon size={40} color={colors.textFaint} />}
+            title="Search iskrib"
+            subtitle="Find writers and stories that inspire you"
+          />
+        ) : (
+          <FlatList
+            data={[]}
+            renderItem={null}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.results}
+            ListHeaderComponent={
+              <>
+                {/* Users section */}
+                {activeTab !== 'posts' && users.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                      Users
+                    </Text>
+                    {users.map(u => (
+                      <Pressable
+                        key={u.id}
+                        style={[styles.userRow, {borderBottomColor: colors.borderCard}]}
+                        onPress={() =>
+                          navigation.navigate('VisitProfile', {
+                            userId: u.id,
+                            username: u.username ?? undefined,
+                          })
+                        }>
+                        <Avatar uri={u.image_url} name={u.name ?? undefined} size={40} />
+                        <View style={styles.userInfo}>
+                          <Text style={[styles.userName, {color: colors.textPrimary}]}>
+                            {u.name || 'Unknown'}
+                          </Text>
+                          {u.username && (
+                            <Text style={[styles.userHandle, {color: colors.textMuted}]}>
+                              @{u.username}
+                            </Text>
+                          )}
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {/* Journals section */}
+                {activeTab !== 'users' && journals.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                      Posts
+                    </Text>
+                    {journals.map(j => (
+                      <Pressable
+                        key={j.id}
+                        style={[styles.journalRow, {borderBottomColor: colors.borderCard}]}
+                        onPress={() =>
+                          navigation.navigate('PostDetail', {journalId: j.id})
+                        }>
+                        <Text
+                          style={[styles.journalTitle, {color: colors.textPrimary}]}
+                          numberOfLines={1}>
+                          {j.title || 'Untitled Post'}
+                        </Text>
+                        <Text style={[styles.journalAuthor, {color: colors.textMuted}]}>
+                          {j.users?.name || 'Unknown'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {/* Empty results */}
+                {activeTab !== 'posts' && users.length === 0 &&
+                 activeTab !== 'users' && journals.length === 0 && (
+                  <EmptyState
+                    title="No results"
+                    subtitle={`Nothing found for "${normalizedQuery}"`}
+                  />
+                )}
+              </>
+            }
+          />
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.md,
+  },
+  title: {
+    ...typeScale.h1,
+  },
+  tabRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  results: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxxl,
+  },
+  section: {
+    marginBottom: spacing.xl,
+  },
+  sectionTitle: {
+    ...typeScale.h3,
+    marginBottom: spacing.md,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+  userHandle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  journalRow: {
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  journalTitle: {
+    ...typeScale.cardTitle,
+  },
+  journalAuthor: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+  },
+});

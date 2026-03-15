@@ -1,0 +1,255 @@
+C:\Users\johnm\iskrib_v3\server\package-lock.json:1141:    "node_modules/content-disposition": {
+C:\Users\johnm\iskrib_v3\server\package-lock.json:1143:      "resolved": "https://registry.npmjs.org/content-disposition/-/content-disposition-1.0.0.tgz",
+C:\Users\johnm\iskrib_v3\server\package-lock.json:1373:        "content-disposition": "^1.0.0",
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:11:import { getBookmarksController, getCanvasGalleryController, getCommentsController, getJournalByIdController, getJournalsController, getMonthlyHottestJournalsController, getProfileMediaController, getReplyOpinionsController, getUniversePostsController, getUserJournalsController, getViewOpinionController, getVisitedProfileMediaController, getVisitedUserJournalsController, searchJournalsController } from "../controller/getController.js";
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:145:router.get('/universe/posts', getUniversePostsController);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:36:    console.log('Fetching posts with no universe coordinates...');
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:41:        .is('universe_x', null)
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:71:            .not('universe_x', 'is', null);
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:78:            const universe_x = home.x + offset.dx;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:79:            const universe_y = home.y + offset.dy;
+C:\Users\johnm\iskrib_v3\server\scripts\backfillUniverseCoords.js:83:                .update({universe_x, universe_y})
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:6:create index if not exists journals_embeddings_ivfflat_idx
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:8:using ivfflat (embeddings vector_cosine_ops)
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:10:where privacy = 'public' and embeddings is not null;
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:13:    query_embedding vector(384),
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:15:    similarity_threshold float default 0.35
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:19:    similarity float
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:26:        1 - (j.embeddings <=> query_embedding) as similarity
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:29:      and j.embeddings is not null
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:30:      and 1 - (j.embeddings <=> query_embedding) >= similarity_threshold
+C:\Users\johnm\iskrib_v3\server\sql\semantic_search.sql:31:    order by j.embeddings <=> query_embedding
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:1:-- Galaxy Gravity System: Embedding-based spatial clustering
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:8:    mean_embedding vector(384),
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:15:-- 2. Galaxy similarity edges
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:19:    similarity FLOAT NOT NULL,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:24:-- 3. Settled star positions on journals
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:34:-- 5. RPC: viewport query (includes both display and original universe coords)
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:35:DROP FUNCTION IF EXISTS public.get_universe_posts_viewport;
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:36:CREATE FUNCTION public.get_universe_posts_viewport(
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:45:    universe_x FLOAT, universe_y FLOAT,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:51:           COALESCE(j.settled_x, j.universe_x) AS display_x,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:52:           COALESCE(j.settled_y, j.universe_y) AS display_y,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:53:           j.universe_x, j.universe_y,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:60:      AND COALESCE(j.settled_x, j.universe_x) BETWEEN vp_min_x AND vp_max_x
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:61:      AND COALESCE(j.settled_y, j.universe_y) BETWEEN vp_min_y AND vp_max_y
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:73:RETURNS TABLE (post_a UUID, post_b UUID, similarity FLOAT)
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:75:    SELECT a.id, b.id, 1 - (a.embeddings <=> b.embeddings)
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:79:      AND a.embeddings IS NOT NULL AND b.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:80:      AND 1 - (a.embeddings <=> b.embeddings) >= threshold
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:89:    min_similarity FLOAT DEFAULT 0.4,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:92:RETURNS TABLE (post_id UUID, galaxy_user_id UUID, similarity FLOAT)
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:94:    SELECT j.id, gc.user_id, 1 - (j.embeddings <=> gc.mean_embedding)
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:98:      AND j.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:99:      AND gc.mean_embedding IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:101:      AND 1 - (j.embeddings <=> gc.mean_embedding) >= min_similarity
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:109:    similarity_threshold FLOAT DEFAULT 0.85,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:114:    post_a UUID, post_b UUID, similarity FLOAT,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:123:        1 - (a.embeddings <=> b.embeddings),
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:124:        COALESCE(a.settled_x, a.universe_x),
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:125:        COALESCE(a.settled_y, a.universe_y),
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:126:        COALESCE(b.settled_x, b.universe_x),
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:127:        COALESCE(b.settled_y, b.universe_y),
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:131:        SELECT j.id, j.title, j.user_id, j.embeddings,
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:132:               j.settled_x, j.settled_y, j.universe_x, j.universe_y
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:135:          AND j.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:137:        ORDER BY j.embeddings <=> a.embeddings
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:141:      AND a.embeddings IS NOT NULL
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:142:      AND 1 - (a.embeddings <=> b.embeddings) >= similarity_threshold
+C:\Users\johnm\iskrib_v3\server\sql\galaxy_gravity.sql:144:             1 - (a.embeddings <=> b.embeddings) DESC
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:3:let embeddingPipelinePromise;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:5:const EMBEDDING_MODEL = 'Supabase/gte-small';
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:6:const MAX_EMBEDDING_INPUT_CHARS = 6000;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:9:const embeddingCache = new Map();
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:11:const getEmbeddingPipeline = () => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:12:    if(!embeddingPipelinePromise){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:13:        embeddingPipelinePromise = pipeline('feature-extraction', EMBEDDING_MODEL);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:15:    return embeddingPipelinePromise;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:27:    if(merged.length <= MAX_EMBEDDING_INPUT_CHARS){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:31:    return merged.slice(0, MAX_EMBEDDING_INPUT_CHARS);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:34:const getCachedEmbedding = (text) => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:35:    const cached = embeddingCache.get(text);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:41:        embeddingCache.delete(text);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:45:    return [...cached.embedding];
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:48:const setCachedEmbedding = (text, embedding) => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:49:    if(embeddingCache.size >= CACHE_MAX_ENTRIES){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:50:        const firstKey = embeddingCache.keys().next().value;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:52:            embeddingCache.delete(firstKey);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:56:    embeddingCache.set(text, {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:57:        embedding: [...embedding],
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:62:const GenerateEmbeddings = async(title = '', body = '') => {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:68:    const cachedEmbedding = getCachedEmbedding(normalizedText);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:69:    if(cachedEmbedding){
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:70:        return cachedEmbedding;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:73:    const genereateEmbedding = await getEmbeddingPipeline();
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:74:    const output = await genereateEmbedding(normalizedText, {
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:79:    const embedding = Array.from(output.data);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:80:    setCachedEmbedding(normalizedText, embedding);
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:82:    return embedding;
+C:\Users\johnm\iskrib_v3\server\utils\GenerateEmbeddings.js:85:export default GenerateEmbeddings;
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:2:import GenerateEmbeddings from "../utils/GenerateEmbeddings.js";
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:330:    const embedding = await GenerateEmbeddings(normalizedTitle, plainText);
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:331:    if(!Array.isArray(embedding) || embedding.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:332:        throw {status: 500, error: 'failed to generate remix embedding'};
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:341:        embeddings: embedding,
+C:\Users\johnm\iskrib_v3\server\services\canvasService.js:364:                embeddings: embedding
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:1:import { getBookmarksService, getCanvasGalleryService, getCommentsService, getJournalByIdService, getJournalsService, getMonthlyHottestJournalsService, getOpinionReplyService, getProfileMediaService, getUniversePostsService, getUserJournalsService, getViewOpinionService, getVisitedUserJournalsService, searchJournalsService } from "../services/getService.js";
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:146:export const getUniversePostsController = async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:150:        const response = await getUniversePostsService(minX, maxX, minY, maxY, limit);
+C:\Users\johnm\iskrib_v3\server\controller\getController.js:154:        return res.status(error?.status || 500).json({error: error?.error || 'failed to fetch universe posts'});
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:71:const normalizePosition = (value, fallback) => clamp(normalizeNumber(value, fallback), 0, 1);
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:82:        throw {status: 400, error: "doodle payload points must contain at least 2 coordinate pairs"};
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:119:        x: normalizePosition(payload?.x, 0.5),
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:120:        y: normalizePosition(payload?.y, 0.5),
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:142:        x: normalizePosition(payload?.x, 0.5),
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:143:        y: normalizePosition(payload?.y, 0.5),
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:160:        x: normalizePosition(payload?.x, 0.45),
+C:\Users\johnm\iskrib_v3\server\services\freedomWallService.js:161:        y: normalizePosition(payload?.y, 0.45),
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:49:    // Get all users who have public posts with embeddings
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:54:        .not('embeddings', 'is', null);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:59:    console.log(`[galaxy-settle] Found ${uniqueUserIds.length} users with embeddings`);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:63:        // Compute mean embedding via RPC or manual fetch
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:66:            .select('embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:69:            .not('embeddings', 'is', null);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:73:        // Compute mean embedding
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:77:            const emb = post.embeddings;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:83:        // Normalize the mean embedding
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:98:                mean_embedding: vectorStr,
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:115:// Step 2: Recompute galaxy edges (similarity between centroids)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:120:        .select('user_id, mean_embedding')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:121:        .not('mean_embedding', 'is', null);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:137:            // Parse embeddings (they come as arrays from Supabase)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:138:            const embA = Array.isArray(a.mean_embedding) ? a.mean_embedding : null;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:139:            const embB = Array.isArray(b.mean_embedding) ? b.mean_embedding : null;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:142:            const similarity = dot(embA, embB);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:143:            if (similarity >= THRESHOLD) {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:148:                edges.push({ user_a: userA, user_b: userB, similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:154:    await supabase.from('galaxy_edges').delete().neq('similarity', -999);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:174:// Step 3: Force-directed galaxy position settle
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:176:export async function settleGalaxyPositions() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:186:        .select('user_a, user_b, similarity');
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:190:    // Initialize positions from hash-based coords
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:244:                const idealDist = 2000 * (1 - edge.similarity);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:245:                const force = ATTRACTION_K * edge.similarity * (dist - idealDist);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:291:    // Write settled positions to galaxy_centroids
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:304:            console.error(`[galaxy-settle] Failed to update position for ${id}:`, updateErr.message);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:308:    console.log(`[galaxy-settle] Settled ${nodeIds.length} galaxy positions`);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:312:// Step 4: Settle star (post) positions within galaxies
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:314:export async function settleStarPositions() {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:317:        .select('user_id, galaxy_x, galaxy_y, mean_embedding')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:331:        .select('user_a, user_b, similarity')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:332:        .gte('similarity', 0.3);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:339:        neighbors.get(e.user_a).push({ userId: e.user_b, similarity: e.similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:340:        neighbors.get(e.user_b).push({ userId: e.user_a, similarity: e.similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:346:        // Fetch this user's public posts with embeddings
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:349:            .select('id, embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:352:            .not('embeddings', 'is', null)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:372:            if (post.embeddings && Array.isArray(post.embeddings)) {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:374:                    if (!nc.mean_embedding || !Array.isArray(nc.mean_embedding)) continue;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:376:                    const similarity = dot(post.embeddings, nc.mean_embedding);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:377:                    if (similarity < 0.4) continue;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:379:                    const strength = (similarity - 0.4) * STAR_PULL_MAX;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:408:    console.log(`[galaxy-settle] Settled ${totalUpdated} star positions`);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:421:            .select('embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:424:            .not('embeddings', 'is', null);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:432:            const emb = post.embeddings;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:451:        // Get or create initial position from hash
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:462:            mean_embedding: vectorStr,
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:472:            .select('user_id, mean_embedding')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:473:            .not('mean_embedding', 'is', null)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:479:                const embB = Array.isArray(other.mean_embedding) ? other.mean_embedding : null;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:482:                const similarity = dot(mean, embB);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:483:                if (similarity >= 0.25) {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:487:                    newEdges.push({ user_a: userA, user_b: userB, similarity });
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:499:        // 3. Re-settle this user's star positions (use current galaxy position)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:502:            .select('galaxy_x, galaxy_y, mean_embedding')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:510:            .select('id, embeddings')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:513:            .not('embeddings', 'is', null)
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:521:            .select('user_a, user_b, similarity')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:523:            .gte('similarity', 0.3);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:533:                .select('user_id, galaxy_x, galaxy_y, mean_embedding')
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:548:            if (post.embeddings && Array.isArray(post.embeddings)) {
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:550:                    if (!nc.mean_embedding || !Array.isArray(nc.mean_embedding)) continue;
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:551:                    const sim = dot(post.embeddings, nc.mean_embedding);
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:593:    await settleGalaxyPositions();
+C:\Users\johnm\iskrib_v3\server\services\galaxySettleService.js:594:    await settleStarPositions();
+C:\Users\johnm\iskrib_v3\server\services\getService.js:2:import GenerateEmbeddings from "../utils/GenerateEmbeddings.js";
+C:\Users\johnm\iskrib_v3\server\services\getService.js:9:const UNIVERSE_POST_LIMIT_DEFAULT = 200;
+C:\Users\johnm\iskrib_v3\server\services\getService.js:10:const UNIVERSE_POST_LIMIT_MAX = 500;
+C:\Users\johnm\iskrib_v3\server\services\getService.js:11:const UNIVERSE_SIMILARITY_THRESHOLD = 0.9;
+C:\Users\johnm\iskrib_v3\server\services\getService.js:12:const UNIVERSE_SIMILARITY_PAIR_LIMIT = 120;
+C:\Users\johnm\iskrib_v3\server\services\getService.js:13:const UNIVERSE_STAR_PULL_MIN_SIMILARITY = 0.4;
+C:\Users\johnm\iskrib_v3\server\services\getService.js:14:const UNIVERSE_STAR_PULL_LIMIT = 500;
+C:\Users\johnm\iskrib_v3\server\services\getService.js:15:const UNIVERSE_POST_SELECT = `
+C:\Users\johnm\iskrib_v3\server\services\getService.js:22:    universe_x,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:23:    universe_y,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:43:const normalizeUniversePost = (post = {}) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:55:        display_x: post?.display_x ?? post?.settled_x ?? post?.universe_x ?? null,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:56:        display_y: post?.display_y ?? post?.settled_y ?? post?.universe_y ?? null,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:61:const loadUniversePostsViaRpc = async(minX, maxX, minY, maxY, limit) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:62:    const {data, error} = await supabase.rpc('get_universe_posts_viewport', {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:74:    return Array.isArray(data) ? data.map(normalizeUniversePost) : [];
+C:\Users\johnm\iskrib_v3\server\services\getService.js:77:const loadUniversePostsFallback = async(minX, maxX, minY, maxY, limit) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:80:        .select(UNIVERSE_POST_SELECT)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:93:        .select(UNIVERSE_POST_SELECT)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:97:        .gte('universe_x', minX)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:98:        .lte('universe_x', maxX)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:99:        .gte('universe_y', minY)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:100:        .lte('universe_y', maxY)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:111:            'supabase fallback error while fetching universe posts:',
+C:\Users\johnm\iskrib_v3\server\services\getService.js:114:        throw {status: 500, error: 'failed to fetch universe posts'};
+C:\Users\johnm\iskrib_v3\server\services\getService.js:124:        mergedById.set(row.id, normalizeUniversePost(row));
+C:\Users\johnm\iskrib_v3\server\services\getService.js:133:const getUniverseCentroids = async(userIds) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:140:        .select('user_id, galaxy_x, galaxy_y, mean_embedding')
+C:\Users\johnm\iskrib_v3\server\services\getService.js:144:        console.warn('supabase warning while fetching universe centroids:', error.message);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:151:const getUniverseEdges = async(userIds) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:158:        .select('user_a, user_b, similarity')
+C:\Users\johnm\iskrib_v3\server\services\getService.js:163:        console.warn('supabase warning while fetching universe edges:', error.message);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:170:const getUniverseSimilarPairs = async(postIds) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:177:        threshold: UNIVERSE_SIMILARITY_THRESHOLD,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:178:        max_pairs: UNIVERSE_SIMILARITY_PAIR_LIMIT
+C:\Users\johnm\iskrib_v3\server\services\getService.js:182:        console.warn('supabase warning while fetching similar universe post pairs:', error.message);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:189:const getUniverseStarPulls = async(postIds) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:196:        min_similarity: UNIVERSE_STAR_PULL_MIN_SIMILARITY,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:197:        max_pulls: UNIVERSE_STAR_PULL_LIMIT
+C:\Users\johnm\iskrib_v3\server\services\getService.js:201:        console.warn('supabase warning while fetching universe star pulls:', error.message);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:546:export const getUniversePostsService = async(minX, maxX, minY, maxY, limit = UNIVERSE_POST_LIMIT_DEFAULT) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:561:    if(!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > UNIVERSE_POST_LIMIT_MAX){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:562:        throw {status: 400, error: `limit should be an integer between 1 and ${UNIVERSE_POST_LIMIT_MAX}`};
+C:\Users\johnm\iskrib_v3\server\services\getService.js:569:        posts = await loadUniversePostsViaRpc(parsedMinX, parsedMaxX, parsedMinY, parsedMaxY, parsedLimit);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:572:        console.warn('universe viewport RPC unavailable, using fallback query:', error?.message || error);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:576:        posts = await loadUniversePostsFallback(parsedMinX, parsedMaxX, parsedMinY, parsedMaxY, parsedLimit);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:587:        getUniverseCentroids(visibleUserIds),
+C:\Users\johnm\iskrib_v3\server\services\getService.js:588:        getUniverseEdges(visibleUserIds),
+C:\Users\johnm\iskrib_v3\server\services\getService.js:589:        getUniverseSimilarPairs(postIds),
+C:\Users\johnm\iskrib_v3\server\services\getService.js:590:        getUniverseStarPulls(postIds)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1309:        const queryEmbedding = await GenerateEmbeddings(normalizedQuery, '');
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1311:        if(Array.isArray(queryEmbedding) && queryEmbedding.length > 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1313:                query_embedding: queryEmbedding,
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1315:                similarity_threshold: 0.35
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1322:                const similarityMap = new Map(matches.map((row) => [row.id, row.similarity]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1341:                        similarity: similarityMap.get(journal.id) || null
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1355:        console.error('semantic embedding/search fallback error:', error?.message || error);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:5:import GenerateEmbeddings from "../utils/GenerateEmbeddings.js";
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:236:    let embeddingBody = '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:263:        embeddingBody = extractCanvasPlainText(parsedCanvasDoc);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:281:        embeddingBody = parseData.wholeText || '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:289:    const embeddingResult = await GenerateEmbeddings(trimmedTitle, embeddingBody);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:291:    if(!embeddingResult || !Array.isArray(embeddingResult) || embeddingResult.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:292:        console.error('error while generating embeddings on a post!');
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:293:        throw {status: 400, error: 'error while generating embeddings on a post!'};
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:298:        embeddings: embeddingResult
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:315:        insertPayload.universe_x = home.x + offset.dx;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:316:        insertPayload.universe_y = home.y + offset.dy;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:318:        console.error('non-fatal: failed to compute universe coords:', coordErr?.message || coordErr);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:330:                embeddings: embeddingResult
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:345:    // Non-fatal: incrementally update galaxy positions for this user
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:396:    let embeddingBody = '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:414:        embeddingBody = extractCanvasPlainText(resolvedCanvasDoc);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:432:        embeddingBody = parseData.wholeText || '';
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:435:    const embeddings = await GenerateEmbeddings(resolvedTitle, embeddingBody);
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:437:    const embeddingResult = embeddings;
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:438:    if(!embeddingResult || !Array.isArray(embeddingResult) || embeddingResult.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:439:        console.error('failed to generate embeddings')
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:440:        throw {status: 400, error: 'failed to generate embeddings'};
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:448:        embeddings: embeddings

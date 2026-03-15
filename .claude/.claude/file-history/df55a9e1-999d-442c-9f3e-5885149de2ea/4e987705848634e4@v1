@@ -1,0 +1,589 @@
+import { useEffect, useRef, useState } from "react";
+import { MoonLoader } from "react-spinners";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { getMonthlyHottestJournals, searchJournals, searchUsers } from "../../../../API/Api";
+import { useAuth } from "../../../Context/useAuth";
+import { handleClickProfile } from "../../../../helpers/handleClicks";
+import ParseContent from "../postCards/parseData";
+import CalculateText from "../postCards/calculateReadingTime";
+import formatPostDate from "../../../../helpers/formatDateString";
+import VerifiedBadge from "../../Badge/VerifiedBadge";
+import { handleImageFallback } from "../../../utils/handleImageFallback";
+import { useAddViewsMutation } from "../../../utils/useMutation";
+import UserSearchResults from "./UserSearchResults";
+import "../postCards/postcards.css";
+import "./explore.css";
+import "./userSearch.css";
+
+const getHotScore = (journal) => {
+    if(typeof journal?.hot_score === "number"){
+        return journal.hot_score;
+    }
+
+    const likes = journal?.like_count?.[0]?.count || 0;
+    const comments = journal?.comment_count?.[0]?.count || 0;
+    const bookmarks = journal?.bookmark_count?.[0]?.count || 0;
+    const views = journal?.views || 0;
+
+    return (views * 6) + (likes * 3) + (comments * 2) + (bookmarks * 2);
+};
+
+const FlameIcon = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C10.97 6.5 6 9.5 6 14C6 17.31 8.69 20 12 20C15.31 20 18 17.31 18 14C18 9.5 13.03 6.5 12 2Z" fill="currentColor"/>
+        <path d="M12 20C10.34 20 9 18.66 9 17C9 15 12 12 12 12C12 12 15 15 15 17C15 18.66 13.66 20 12 20Z" fill="var(--bg-card)" opacity="0.6"/>
+    </svg>
+);
+
+const HeroCard = ({ journal, parsedContent, hotScore, onClick }) => (
+    <motion.div
+        className="explore-hero-wrap"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+    >
+        <div className="explore-hero-glow" />
+        <div
+            className="explore-hero-card"
+            onClick={() => onClick(journal.id)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+                if(e.key === "Enter" || e.key === " "){
+                    e.preventDefault();
+                    onClick(journal.id);
+                }
+            }}
+        >
+
+        {parsedContent?.firstImage && (
+            <div className="explore-hero-image-wrap">
+                <img
+                    className="explore-hero-image"
+                    src={parsedContent.firstImage.src}
+                    alt={journal?.title ? `${journal.title} cover image` : "Post cover image"}
+                    loading="eager"
+                    onError={handleImageFallback}
+                />
+                <div className="explore-hero-image-overlay" />
+            </div>
+        )}
+
+        <div className={`explore-hero-body ${parsedContent?.firstImage ? "explore-hero-body--has-image" : ""}`}>
+            <div className="explore-hero-badge">
+                <FlameIcon className="explore-hero-flame" />
+                <span className="explore-hero-badge-text">#1 Hottest</span>
+            </div>
+
+            <h2 className="explore-hero-title">
+                {journal?.title?.length > 80 ? `${journal.title.substring(0, 80)}...` : (journal?.title || "Untitled")}
+            </h2>
+
+            <p className="explore-hero-excerpt">{parsedContent?.slicedText}</p>
+
+            <div className="explore-hero-footer">
+                <div className="explore-hero-author">
+                    <div className={`user-avatar-container ${journal?.users?.badge === "legend" ? "avatar-ring-legend" : journal?.users?.badge === "og" ? "avatar-ring-og" : ""}`}>
+                        <img
+                            loading="lazy"
+                            className="user-info-avatar"
+                            src={journal?.users?.image_url || "/assets/profile.jpg"}
+                            alt={`${journal?.users?.name || "User"} profile picture`}
+                        />
+                    </div>
+                    <div className="user-name-container">
+                        <p className="user-newsfeed-name">{journal?.users?.name || "Unknown author"}</p>
+                        <VerifiedBadge badge={journal?.users?.badge} size={14} />
+                    </div>
+                    <div className="name-info-separator">•</div>
+                    <p className="user-post-date">{formatPostDate(journal?.created_at)}</p>
+                </div>
+
+                <div className="explore-hero-stats">
+                    <div className="explore-hero-score-pill">
+                        <FlameIcon className="explore-hero-score-flame" />
+                        {hotScore}
+                    </div>
+                    <div className="reading-time-container">
+                        <p className="reading-time-text">{CalculateText(parsedContent?.wholeText)}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </motion.div>
+);
+
+const RunnerCard = ({ journal, index, parsedContent, hotScore, onClick }) => (
+    <motion.div
+        className="explore-runner-card"
+        onClick={() => onClick(journal.id)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+            if(e.key === "Enter" || e.key === " "){
+                e.preventDefault();
+                onClick(journal.id);
+            }
+        }}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.08 * index, ease: [0.22, 1, 0.36, 1] }}
+    >
+        <div className="explore-runner-rank-col">
+            <span className={`explore-runner-rank ${index <= 2 ? "explore-runner-rank--top" : ""}`}>
+                {index + 1}
+            </span>
+        </div>
+
+        <div className="explore-runner-body">
+            <h3 className="explore-runner-title">
+                {journal?.title?.length > 60 ? `${journal.title.substring(0, 60)}...` : (journal?.title || "Untitled")}
+            </h3>
+            <p className="explore-runner-excerpt">{parsedContent?.slicedText}</p>
+            <div className="explore-runner-meta">
+                <div className="explore-runner-author">
+                    <div className={`user-avatar-container ${journal?.users?.badge === "legend" ? "avatar-ring-legend" : journal?.users?.badge === "og" ? "avatar-ring-og" : ""}`}>
+                        <img
+                            loading="lazy"
+                            className="user-info-avatar"
+                            src={journal?.users?.image_url || "/assets/profile.jpg"}
+                            alt={`${journal?.users?.name || "User"} profile picture`}
+                        />
+                    </div>
+                    <p className="user-newsfeed-name">{journal?.users?.name || "Unknown author"}</p>
+                    <VerifiedBadge badge={journal?.users?.badge} size={12} />
+                    <div className="name-info-separator">•</div>
+                    <p className="user-post-date">{formatPostDate(journal?.created_at)}</p>
+                </div>
+                <div className="explore-runner-stats">
+                    <div className="explore-score-pill">
+                        <FlameIcon className="explore-runner-flame-icon" />
+                        {hotScore}
+                    </div>
+                    <div className="reading-time-container">
+                        <p className="reading-time-text">{CalculateText(parsedContent?.wholeText)}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {parsedContent?.firstImage && (
+            <div className="explore-runner-thumb-wrap">
+                <img
+                    className="explore-runner-thumb"
+                    src={parsedContent.firstImage.src}
+                    alt=""
+                    loading="lazy"
+                    onError={handleImageFallback}
+                />
+            </div>
+        )}
+    </motion.div>
+);
+
+const ExplorePage = () => {
+    const navigate = useNavigate();
+    const { session, user, openAuthModal } = useAuth();
+    const userId = user?.userData?.[0]?.id || null;
+    const mutateViews = useAddViewsMutation(session);
+    const searchShellRef = useRef(null);
+
+    const [searchInput, setSearchInput] = useState("");
+    const [debouncedSearchInput, setDebouncedSearchInput] = useState("");
+    const [committedSearchQuery, setCommittedSearchQuery] = useState("");
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [searchType, setSearchType] = useState("posts");
+    const onClickProfile = handleClickProfile(navigate);
+    const currentUtcMonthKey = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, "0")}`;
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchInput(searchInput.trim());
+        }, 350);
+
+        return () => clearTimeout(timer);
+    }, [searchInput]);
+
+    const isSearchMode = committedSearchQuery.length >= 2;
+
+    const { data: feedData, isLoading: isLoadingFeed } = useQuery({
+        queryKey: ["explore-hottest-monthly-feed", userId, currentUtcMonthKey],
+        queryFn: () => getMonthlyHottestJournals(userId, 10),
+        refetchOnWindowFocus: false,
+        staleTime: 1000 * 60 * 5,
+    });
+
+    const {
+        data: searchData,
+        isLoading: isLoadingSearch,
+        isFetching: isFetchingSearch,
+        error: searchError,
+    } = useQuery({
+        queryKey: ["explore-search", userId, committedSearchQuery],
+        queryFn: () => searchJournals(committedSearchQuery, 10, userId),
+        enabled: isSearchMode,
+        refetchOnWindowFocus: false,
+        staleTime: 1000 * 60 * 2,
+    });
+
+    const {
+        data: suggestionData,
+        isLoading: isSuggestionsLoading,
+    } = useQuery({
+        queryKey: ["explore-suggestions", userId, debouncedSearchInput],
+        queryFn: () => searchJournals(debouncedSearchInput, 6, userId),
+        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === "posts",
+        refetchOnWindowFocus: false,
+        staleTime: 1000 * 60 * 2,
+    });
+
+    const {
+        data: userSuggestionData,
+        isLoading: isUserSuggestionsLoading,
+    } = useQuery({
+        queryKey: ["user-suggestions", debouncedSearchInput],
+        queryFn: () => searchUsers(debouncedSearchInput, 6),
+        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === "people",
+        refetchOnWindowFocus: false,
+        staleTime: 1000 * 60 * 2,
+    });
+
+    const journals = isSearchMode ? (searchData?.data || []) : (feedData?.data || []);
+    const isLoading = isSearchMode && searchType === "posts" ? isLoadingSearch : isLoadingFeed;
+    const suggestionItems = searchType === "people" ? (userSuggestionData?.data || []) : (suggestionData?.data || []);
+    const isSugLoading = searchType === "people" ? isUserSuggestionsLoading : isSuggestionsLoading;
+    const showSuggestions = isSearchFocused && debouncedSearchInput.length >= 2;
+
+    const handleSubmitSearch = (rawQuery) => {
+        const normalizedQuery = typeof rawQuery === "string" ? rawQuery.trim() : "";
+        if(normalizedQuery.length < 2){
+            setCommittedSearchQuery("");
+            return;
+        }
+
+        setCommittedSearchQuery(normalizedQuery);
+        setSearchInput(normalizedQuery);
+        setIsSearchFocused(false);
+    };
+
+    const handleClearSearch = () => {
+        setSearchInput("");
+        setDebouncedSearchInput("");
+        setCommittedSearchQuery("");
+        setIsSearchFocused(false);
+        setSearchType("posts");
+    };
+
+    const handleSearchInputKeyDown = (e) => {
+        if(e.key === "Enter"){
+            e.preventDefault();
+            handleSubmitSearch(searchInput);
+        }
+
+        if(e.key === "Escape"){
+            setIsSearchFocused(false);
+        }
+    };
+
+    const handleClickSuggestion = (journal) => {
+        if(!journal?.id){
+            return;
+        }
+        if(!session){
+            openAuthModal();
+            return;
+        }
+        setIsSearchFocused(false);
+        if(journal?.title){
+            setSearchInput(journal.title);
+            setDebouncedSearchInput(journal.title);
+        }
+        const formadata = new FormData();
+        formadata.append('journalId', journal.id);
+        mutateViews.mutate(formadata);
+        navigate(`/home/post/${journal.id}`);
+    };
+
+    const handleClickPost = (journalId) => {
+        if(!journalId){
+            return;
+        }
+        if(!session){
+            openAuthModal();
+            return;
+        }
+        const formadata = new FormData();
+        formadata.append('journalId', journalId);
+        mutateViews.mutate(formadata);
+        navigate(`/home/post/${journalId}`);
+    };
+
+    useEffect(() => {
+        const handleOutsideSearchClick = (e) => {
+            if(searchShellRef.current && !searchShellRef.current.contains(e.target)){
+                setIsSearchFocused(false);
+            }
+        };
+
+        window.addEventListener("mousedown", handleOutsideSearchClick);
+        return () => window.removeEventListener("mousedown", handleOutsideSearchClick);
+    }, []);
+
+    if(isLoading && searchType === "posts"){
+        return (
+            <div className="postcards-parent-loading-container">
+                <MoonLoader loading={true} color="var(--loader-color)" speedMultiplier={1} size={20} />
+            </div>
+        );
+    }
+
+    const heroJournal = !isSearchMode && journals.length > 0 ? journals[0] : null;
+    const runnerJournals = !isSearchMode && journals.length > 1 ? journals.slice(1) : isSearchMode ? journals : [];
+
+    return (
+        <div className="explore-page-container">
+            <div className="search-shell" role="search" ref={searchShellRef}>
+                <div className="search-top-bar">
+                    <div className="search-input-wrap">
+                        <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M10 2a8 8 0 1 0 4.906 14.32l4.387 4.387a1 1 0 0 0 1.414-1.414L16.32 14.906A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12a6 6 0 0 1 0-12Z"/>
+                        </svg>
+                        <input
+                            type="search"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onFocus={() => setIsSearchFocused(true)}
+                            onKeyDown={handleSearchInputKeyDown}
+                            placeholder={searchType === "people" ? "Search people..." : "Search posts..."}
+                            className="search-input"
+                            aria-label={searchType === "people" ? "Search people" : "Search posts"}
+                        />
+                    </div>
+                    {searchInput ? (
+                        <button type="button" className="search-clear-btn" onClick={handleClearSearch}>
+                            Clear
+                        </button>
+                    ) : null}
+                    {isSearchMode ? (
+                        <span className="search-mode-pill">
+                            {isFetchingSearch ? "Searching..." : "Matched"}
+                        </span>
+                    ) : (
+                        <span className="search-mode-pill">
+                            {isSuggestionsLoading && showSuggestions ? "Suggesting..." : "Search"}
+                        </span>
+                    )}
+                </div>
+                {showSuggestions && (
+                    <div className="search-suggestions-dropdown">
+                        {isSugLoading ? (
+                            <div className="search-suggestion-item search-suggestion-muted">Searching...</div>
+                        ) : suggestionItems.length > 0 ? (
+                            searchType === "people" ? (
+                                suggestionItems.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        className="search-suggestion-user"
+                                        onClick={(e) => {
+                                            setIsSearchFocused(false);
+                                            onClickProfile(e, userId, item.id, item.username);
+                                        }}
+                                    >
+                                        <img
+                                            className="search-suggestion-user-avatar"
+                                            src={item.image_url || "/assets/profile.jpg"}
+                                            alt=""
+                                            loading="lazy"
+                                        />
+                                        <div className="search-suggestion-user-info">
+                                            <span className="search-suggestion-user-name">{item.name || "Unknown"}</span>
+                                            {item.username && (
+                                                <span className="search-suggestion-user-handle">@{item.username}</span>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))
+                            ) : (
+                                suggestionItems.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        className="search-suggestion-item"
+                                        onClick={() => handleClickSuggestion(item)}
+                                    >
+                                        <span className="search-suggestion-title">{item.title || "Untitled"}</span>
+                                        <span className="search-suggestion-meta">{item?.users?.name || "Unknown author"}</span>
+                                    </button>
+                                ))
+                            )
+                        ) : (
+                            <div className="search-suggestion-item search-suggestion-muted">No suggestions</div>
+                        )}
+                    </div>
+                )}
+                {(isSearchFocused || searchInput.length > 0 || isSearchMode) && (
+                    <div className="search-type-toggle">
+                        <button
+                            type="button"
+                            className={`search-type-btn ${searchType === "posts" ? "search-type-btn--active" : ""}`}
+                            onClick={() => setSearchType("posts")}
+                        >
+                            Posts
+                        </button>
+                        <button
+                            type="button"
+                            className={`search-type-btn ${searchType === "people" ? "search-type-btn--active" : ""}`}
+                            onClick={() => setSearchType("people")}
+                        >
+                            People
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {isSearchMode && searchType === "people" ? (
+                <>
+                    <div className="explore-section-title">
+                        People
+                    </div>
+                    <UserSearchResults searchQuery={committedSearchQuery} />
+                </>
+            ) : (
+            <>
+            <div className="explore-section-title">
+                {isSearchMode ? "Search results" : "Hottest posts"}
+            </div>
+
+            {journals.length === 0 && (
+                <div className="search-empty-state">
+                    {searchError
+                        ? "Search failed. Please try again."
+                        : isSearchMode
+                            ? "No matching posts found."
+                            : "No posts available right now."}
+                </div>
+            )}
+
+            {heroJournal && (() => {
+                const parsedContent = ParseContent(heroJournal?.content);
+                const hotScore = getHotScore(heroJournal);
+                return (
+                    <div className="explore-hero-section">
+                        <HeroCard
+                            journal={heroJournal}
+                            parsedContent={parsedContent}
+                            hotScore={hotScore}
+                            onClick={handleClickPost}
+                        />
+                    </div>
+                );
+            })()}
+
+            {runnerJournals.length > 0 && (
+                <div className={`explore-runners-section ${isSearchMode ? "explore-runners-section--search" : ""}`}>
+                    {!isSearchMode && (
+                        <div className="explore-section-title explore-section-title--runners">
+                            Runners up
+                        </div>
+                    )}
+                    <div className="explore-runners-list">
+                        {runnerJournals.map((journal, i) => {
+                            const parsedContent = ParseContent(journal?.content);
+                            const hotScore = getHotScore(journal);
+                            const displayIndex = isSearchMode ? i : i + 1;
+
+                            return isSearchMode ? (
+                                <motion.div
+                                    key={journal.id}
+                                    className="cards"
+                                    onClick={() => handleClickPost(journal.id)}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if(e.key === "Enter" || e.key === " "){
+                                            e.preventDefault();
+                                            handleClickPost(journal.id);
+                                        }
+                                    }}
+                                    initial={{ opacity: 0, y: 14 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.35, delay: 0.06 * i, ease: [0.22, 1, 0.36, 1] }}
+                                >
+                                    <div className="explore-rank">#{i + 1}</div>
+
+                                    {parsedContent?.firstImage && (
+                                        <img
+                                            className="card-image-banner"
+                                            src={parsedContent.firstImage.src}
+                                            alt={journal?.title ? `${journal.title} cover image` : "Post cover image"}
+                                            loading="lazy"
+                                            onError={handleImageFallback}
+                                        />
+                                    )}
+
+                                    <div className="card-content">
+                                        <div className="content-container">
+                                            <div className="feed-text-content-container">
+                                                <div className="feed-title-content">
+                                                    <h2 className="feed-title">
+                                                        {journal?.title?.length > 55 ? `${journal.title.substring(0, 55)}...` : (journal?.title || "Untitled")}
+                                                    </h2>
+                                                </div>
+                                                <p className="feed-text-content">{parsedContent?.slicedText}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="card-icons-container">
+                                        <div className="user-info-child-container">
+                                            <div className={`user-avatar-container ${journal?.users?.badge === "legend" ? "avatar-ring-legend" : journal?.users?.badge === "og" ? "avatar-ring-og" : ""}`}>
+                                                <img
+                                                    loading="lazy"
+                                                    className="user-info-avatar"
+                                                    src={journal?.users?.image_url || "/assets/profile.jpg"}
+                                                    alt={`${journal?.users?.name || "User"} profile picture`}
+                                                />
+                                            </div>
+                                            <div className="user-name-container">
+                                                <p className="user-newsfeed-name">{journal?.users?.name || "Unknown author"}</p>
+                                                <VerifiedBadge badge={journal?.users?.badge} size={14} />
+                                            </div>
+                                            <div className="name-info-separator">•</div>
+                                            <p className="user-post-date">{formatPostDate(journal?.created_at)}</p>
+                                        </div>
+
+                                        <div className="explore-meta-right">
+                                            <div className="explore-score-pill">
+                                                Hot score: {hotScore}
+                                            </div>
+                                            <div className="reading-time-container">
+                                                <p className="reading-time-text">{CalculateText(parsedContent?.wholeText)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ) : (
+                                <RunnerCard
+                                    key={journal.id}
+                                    journal={journal}
+                                    index={displayIndex}
+                                    parsedContent={parsedContent}
+                                    hotScore={hotScore}
+                                    onClick={handleClickPost}
+                                />
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+            </>
+            )}
+        </div>
+    );
+};
+
+export default ExplorePage;

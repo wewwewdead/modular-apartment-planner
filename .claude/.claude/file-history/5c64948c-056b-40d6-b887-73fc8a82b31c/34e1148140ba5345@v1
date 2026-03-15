@@ -1,0 +1,286 @@
+.chapter-manager {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px 16px;
+}
+
+.chapter-manager-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+
+.chapter-manager-error {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 0;
+}
+
+.chapter-manager-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.chapter-manager-back {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    flex-shrink: 0;
+}
+
+.chapter-manager-back:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-manager-title-section {
+    flex: 1;
+    min-width: 0;
+}
+
+.chapter-manager-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chapter-manager-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.chapter-manager-edit-story-btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.chapter-manager-edit-story-btn:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-manager-actions {
+    margin-bottom: 16px;
+}
+
+.chapter-manager-new-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chapter-manager-new-title-input {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.chapter-manager-new-title-input:focus {
+    border-color: var(--accent-purple);
+}
+
+.chapter-manager-cancel-btn {
+    padding: 9px 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    white-space: nowrap;
+}
+
+.chapter-manager-cancel-btn:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-manager-add-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent-dark);
+    color: var(--bg-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 130px;
+    min-height: 38px;
+}
+
+.chapter-manager-add-btn:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.chapter-manager-add-btn:disabled {
+    opacity: 0.5;
+}
+
+.chapter-manager-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.chapter-manager-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chapter-manager-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--bg-glass-border);
+    border-radius: 10px;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.chapter-manager-item:hover {
+    background: var(--bg-hover);
+}
+
+.chapter-manager-item-dragging {
+    opacity: 0.5;
+    box-shadow: var(--shadow-card);
+}
+
+.chapter-manager-item-drag {
+    cursor: grab;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 4px;
+}
+
+.chapter-manager-item-drag:active {
+    cursor: grabbing;
+}
+
+.chapter-manager-item-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.chapter-manager-item-number {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.chapter-manager-item-title {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.chapter-manager-item-words {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.chapter-manager-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.chapter-status-toggle {
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: none;
+    font-size: 0.7rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.chapter-status-published {
+    background: rgba(76, 175, 80, 0.12);
+    color: #4caf50;
+}
+
+.chapter-status-published:hover {
+    background: rgba(76, 175, 80, 0.2);
+}
+
+.chapter-status-draft {
+    background: rgba(158, 158, 158, 0.12);
+    color: var(--text-muted);
+}
+
+.chapter-status-draft:hover {
+    background: rgba(158, 158, 158, 0.2);
+}
+
+@media (max-width: 480px) {
+    .chapter-manager {
+        padding: 16px 12px;
+    }
+
+    .chapter-manager-item-content {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .chapter-manager-item-words {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .chapter-manager-edit-story-btn {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+}

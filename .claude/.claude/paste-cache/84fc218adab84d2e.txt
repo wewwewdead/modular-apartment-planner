@@ -1,0 +1,36 @@
+The "Real Physics" Prompt for Claude Code
+Task: Integrate Matter.js Physics into the Iskrib Universe
+
+Goal: Replace manual coordinate placement with a real-world 2D physics simulation.
+
+1. Engine Setup:
+
+Initialize a Matter.Engine and Matter.World.
+
+Disable default gravity (engine.gravity.y = 0) so stars float freely in space.
+
+2. Connecting Konva to Matter:
+
+For every post in the DB, create a Matter.Bodies.circle with a mass and frictionAir.
+
+Store a reference between the Konva Circle and the Matter Body.
+
+3. Implementing Orbital Mechanics:
+
+In the requestAnimationFrame loop, apply a manual Force to each star:
+
+Semantic Attraction: Calculate the vector toward similar stars (based on embeddings) and apply Matter.Body.applyForce.
+
+Repulsion: Apply a tiny outward force if stars get too close to prevent them from overlapping.
+
+4. Interactive Physics:
+
+Tugging: When a user drags a star, use a Matter.Constraint (a virtual rubber band) so the star pulls its "connected constellation" with it.
+
+Collisions: Enable collisions so if two stars hit each other, they "bounce" realistically.
+
+5. Scaling Strategy:
+
+Use Matter.Composite to group user galaxies so the engine treats them as one unit when they are far away.
+
+Output: Provide a useUniversePhysics.js hook that manages the Matter.js engine and returns the updated positions for the React-Konva components.

@@ -1,0 +1,8 @@
+export type RootStackParamList = {
+  Home: undefined;
+  Vault: undefined;
+  History: undefined;
+  Menu: undefined;
+  Paywall: undefined;
+  CartDetail: { cartId: string };
+};

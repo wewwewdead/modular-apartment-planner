@@ -1,0 +1,32 @@
+# Fix: Comment Replies Not Loading
+
+## Context
+Clicking "Show replies" on a comment in `PostDetailScreen` shows nothing. The root cause is two-fold:
+1. **Backend** only fetches top-level comments (`.is('parent_id', null)`) and ignores the `parentId` query param entirely
+2. **Mobile app** never fetches replies from the API — it only filters already-loaded comments locally, which are all top-level
+
+The mobile app already has `socialApi.getReplies()` defined but never calls it.
+
+## Changes
+
+### 1. Backend: Support `parentId` in getComments
+**File:** `C:\Users\johnm\iskrib_v3\server\controller\getController.js`
+- Extract `parentId` from `req.query`
+- Pass it to `getCommentsService`
+
+**File:** `C:\Users\johnm\iskrib_v3\server\services\getService.js`
+- Accept `parentId` parameter in `getCommentsService`
+- When `parentId` is provided: filter `.eq('parent_id', parentId)` instead of `.is('parent_id', null)`
+- When `parentId` is absent: keep existing `.is('parent_id', null)` filter (top-level only)
+
+### 2. Mobile: Fetch replies on expand
+**File:** `C:\Users\johnm\iskrib_mobile_app\apps\mobile\src\screens\Home\PostDetailScreen.tsx`
+- When "Show replies" is clicked and replies aren't already loaded, call `socialApi.getReplies(postId, commentId)` to fetch them
+- Merge fetched replies into the comments list (or store separately) so `CommentThread` can render them
+- Add a loading state while replies are being fetched
+
+## Verification
+- Open a post with comments that have replies (reply_count > 0)
+- Click "Show replies" — replies should appear
+- Click "Hide replies" then "Show replies" again — should show without re-fetching
+- Post a new reply — expanding should show the new reply

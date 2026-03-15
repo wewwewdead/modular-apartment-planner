@@ -1,0 +1,299 @@
+import React from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {Avatar} from '../../components/Avatar';
+import {GlassCard} from '../../components/GlassCard';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {SettingsIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {mobileApi} from '../../lib/api/mobileApi';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Profile'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+export function ProfileScreen({navigation}: Props) {
+  const {user, signOut} = useAuth();
+  const {colors} = useTheme();
+
+  const userDataQuery = useQuery({
+    queryKey: ['profile', user?.id],
+    enabled: Boolean(user?.id),
+    queryFn: () => mobileApi.getUserData(user?.id ?? ''),
+  });
+
+  const profile = userDataQuery.data?.userData?.[0];
+  const bgColor = profile?.profile_layout?.backgroundColor ?? colors.accentAmber;
+
+  const onSignOut = async () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      {text: 'Cancel', style: 'cancel'},
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+          } catch (error) {
+            Alert.alert(
+              'Sign out failed',
+              error instanceof Error ? error.message : 'Unknown error',
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  if (userDataQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={colors.loaderColor} size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header background */}
+        <View style={[styles.headerBg, {backgroundColor: bgColor}]}>
+          <Pressable
+            style={styles.settingsBtn}
+            onPress={() => {
+              // Navigate to settings when available
+              onSignOut();
+            }}
+            hitSlop={12}>
+            <SettingsIcon size={22} color="rgba(255,255,255,0.8)" />
+          </Pressable>
+        </View>
+
+        {/* Profile content */}
+        <View style={styles.profileContent}>
+          {/* Avatar */}
+          <View style={styles.avatarContainer}>
+            <Avatar
+              uri={profile?.image_url}
+              name={profile?.name}
+              size={100}
+              badge={profile?.badge_type as any}
+            />
+          </View>
+
+          {/* Name & username */}
+          <GlassCard style={styles.nameCard}>
+            <Text style={[styles.name, {color: colors.textHeading}]}>
+              {profile?.name || user?.email || 'User'}
+            </Text>
+            {profile?.username && (
+              <Text style={[styles.username, {color: colors.textMuted}]}>
+                @{profile.username}
+              </Text>
+            )}
+            {profile?.badge_type && (
+              <View
+                style={[
+                  styles.badgePill,
+                  {
+                    backgroundColor:
+                      profile.badge_type === 'legend'
+                        ? 'rgba(255,215,0,0.15)'
+                        : 'rgba(155,89,255,0.15)',
+                    borderColor:
+                      profile.badge_type === 'legend'
+                        ? colors.badgeLegendBorder
+                        : colors.badgeOGBorder,
+                  },
+                ]}>
+                <Text
+                  style={[
+                    styles.badgeText,
+                    {
+                      color:
+                        profile.badge_type === 'legend'
+                          ? colors.badgeLegendBorder
+                          : colors.badgeOGBorder,
+                    },
+                  ]}>
+                  {profile.badge_type.toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </GlassCard>
+
+          {/* Bio */}
+          {profile?.bio ? (
+            <GlassCard style={styles.bioCard}>
+              <Text style={[styles.bio, {color: colors.textSecondary}]}>
+                {profile.bio}
+              </Text>
+            </GlassCard>
+          ) : null}
+
+          {/* Stats row */}
+          <View style={styles.statsRow}>
+            <GlassCard style={styles.statCard}>
+              <Text style={[styles.statNumber, {color: colors.textHeading}]}>
+                {profile?.posts_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>
+                Posts
+              </Text>
+            </GlassCard>
+            <GlassCard style={styles.statCard}>
+              <Text style={[styles.statNumber, {color: colors.textHeading}]}>
+                {profile?.followers_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>
+                Followers
+              </Text>
+            </GlassCard>
+            <GlassCard style={styles.statCard}>
+              <Text style={[styles.statNumber, {color: colors.textHeading}]}>
+                {profile?.following_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>
+                Following
+              </Text>
+            </GlassCard>
+          </View>
+
+          {/* Action buttons */}
+          <View style={styles.actionRow}>
+            <View style={styles.actionButton}>
+              <PrimaryButton label="Edit Profile" onPress={() => {}} kind="secondary" />
+            </View>
+            <View style={styles.actionButton}>
+              <PrimaryButton label="My Stories" onPress={() => navigation.navigate('StoryDashboard')} kind="secondary" />
+            </View>
+          </View>
+
+          {/* Sign out */}
+          <View style={styles.signOutSection}>
+            <PrimaryButton label="Sign Out" onPress={onSignOut} kind="danger" />
+          </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBg: {
+    height: 140,
+    borderBottomLeftRadius: radii.hero,
+    borderBottomRightRadius: radii.hero,
+  },
+  settingsBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.lg,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileContent: {
+    marginTop: -50,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxxl,
+  },
+  avatarContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  nameCard: {
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  name: {
+    fontFamily: fonts.heading.bold,
+    fontSize: 22,
+  },
+  username: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  badgePill: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xxs,
+    marginTop: spacing.xs,
+  },
+  badgeText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
+  bioCard: {
+    marginBottom: spacing.md,
+  },
+  bio: {
+    fontFamily: fonts.serif.regular,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  statCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  statNumber: {
+    fontFamily: fonts.heading.semiBold,
+    fontSize: 20,
+  },
+  statLabel: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  signOutSection: {
+    marginTop: spacing.xl,
+  },
+});

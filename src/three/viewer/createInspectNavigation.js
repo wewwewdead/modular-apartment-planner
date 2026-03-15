@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { DEFAULT_PRESET_NAME, PRESETS } from './previewConfig';
 import { fitCameraToBox } from './previewCameraMath';
@@ -9,7 +10,15 @@ export function createInspectNavigation({ camera, domElement }) {
   controls.screenSpacePanning = true;
   controls.minDistance = 400;
   controls.maxDistance = 150000;
-  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.maxPolarAngle = Math.PI;
+
+  const applyMouseBindings = (leftButtonRotateEnabled = true) => {
+    controls.mouseButtons.LEFT = leftButtonRotateEnabled ? THREE.MOUSE.ROTATE : null;
+    controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
+    controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+  };
+
+  applyMouseBindings(true);
 
   let currentBounds = null;
   let currentPreset = DEFAULT_PRESET_NAME;
@@ -23,6 +32,9 @@ export function createInspectNavigation({ camera, domElement }) {
     },
     setEnabled(enabled) {
       controls.enabled = enabled;
+    },
+    setLeftButtonRotateEnabled(enabled) {
+      applyMouseBindings(enabled);
     },
     resetView() {
       if (!currentBounds) return;

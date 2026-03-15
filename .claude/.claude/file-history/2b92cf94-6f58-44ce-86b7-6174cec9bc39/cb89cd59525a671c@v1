@@ -1,0 +1,32 @@
+# Replace ReactionButton with Like Button
+
+## Context
+The app migrated from a simple like/heart button to a multi-emoji ReactionButton system. The user wants to revert to a simple like button across both `ContentView.jsx` and `PostCards.jsx`.
+
+## Changes
+
+### 1. `client/src/components/HomePage/postCards/PostCards.jsx`
+- **Import**: Replace `useReactionMutation` with `useLikeMutation` (line 15), remove `ReactionButton` import (line 16)
+- **Mutation**: Replace `mutationReaction = useReactionMutation(...)` (line 278) with `mutationLike = useLikeMutation(...)`
+- **Handler**: Replace `handleReaction` (lines 280-283) with `handleClickLike(e, journalId)` calling `mutationLike.mutate({ journalId })`
+- **Render** (lines 814-822): Replace `<ReactionButton>` with the existing `icon.likeAction(isLiked)` SVG + click handler. The `likeAction` SVG already exists at lines 89-98 (thumbs-up that fills red `rgb(255, 116, 116)` when liked). Wire the click to call `handleClickLike` and show `like_count` instead of `reaction_count`.
+
+### 2. `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+- **Imports**: Remove `ReactionButton`, `ReactionSummary` imports (lines 15-16). Add `useLikeMutation` to the import from `useMutation` (line 14), remove `useReactionMutation`.
+- **State**: Remove `userReaction`/`reactionCount` state (lines 70-71). Add `isLiked`/`likesCount` state.
+- **Mutation**: Replace `mutationReaction` (line 185) with `mutationLike = useLikeMutation(session, user?.userData?.[0]?.id)`
+- **Handler**: Replace `handleReaction` (lines 187-202) with `handleClickLike` that toggles `isLiked`/`likesCount` optimistically and calls `mutationLike.mutate({ journalId })`
+- **useEffect** (lines 264-270): Sync `isLiked`/`likesCount` from `postData` instead of `userReaction`/`reactionCount`
+- **Normal post view** (lines 520-531): Remove `<ReactionSummary>`, replace `<ReactionButton>` with a like button using the same thumbs-up SVG from PostCards (fills `rgb(255, 116, 116)` when liked), showing `likesCount`
+- **Repost view** (lines 429-441): Same — remove `<ReactionSummary>`, replace `<ReactionButton>` with like button
+
+### Existing code to reuse
+- `useLikeMutation` — `client/src/utils/useMutation.js:151-246` (fully functional, handles optimistic updates)
+- Like SVG icon — `PostCards.jsx:89-98` (thumbs-up, fills red when liked)
+- `normalizeInteractionFlag` / `normalizeCount` / `getNextToggleCount` — already in `ContentView.jsx:33-58`
+
+## Verification
+- Open a post in the feed — should see thumbs-up icon, clicking it toggles red fill and count
+- Open a post detail page (ContentView) — same like button behavior
+- No reaction picker should appear on hover/long-press
+- Like count updates optimistically and persists after refresh

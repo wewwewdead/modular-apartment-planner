@@ -1,0 +1,76 @@
+# Add Emoji Reactions to PostCards
+
+## Context
+
+The v3 web client has a full emoji reaction system (fire, heart, mind-blown, clap, laugh, sad) that replaces simple likes. The mobile app currently only has a heart-like button. The backend already supports reactions via `POST /reaction` and `GET /reactions/:journalId` — we just need to wire up the mobile UI.
+
+---
+
+## Changes
+
+### 1. Add reaction config
+**New file:** `apps/mobile/src/lib/reactions.ts`
+- Define `ReactionType` union: `'fire' | 'heart' | 'mind_blown' | 'clap' | 'laugh' | 'sad'`
+- Export `REACTION_TYPES` array with `{ type, emoji, label }` (matches v3's `reactionConfig.js`)
+- Export `getReactionEmoji(type)` helper
+
+### 2. Add `toggleReaction` to socialApi
+**File:** `apps/mobile/src/lib/api/socialApi.ts`
+- Add `toggleReaction(token, { journalId, receiverId, reactionType })` → `POST /reaction`
+- Same endpoint the v3 web client uses
+
+### 3. Add `user_reaction` and `reaction_count` to JournalItem type
+**File:** `apps/mobile/src/lib/api/mobileApi.ts`
+- Add `user_reaction?: string | null` to `JournalItem`
+- Add `reaction_count?: Array<{count?: number}>` to `JournalItem` (already has `like_count` as fallback)
+
+### 4. Create ReactionPicker component
+**New file:** `apps/mobile/src/components/PostCard/ReactionPicker.tsx`
+- A small horizontal row of 6 emoji buttons that appears above the reaction button
+- Uses React Native `Animated` for fade-in/scale (no extra deps)
+- Props: `visible`, `onSelect(type)`, `currentReaction`, `onClose`
+- Renders as an absolutely-positioned row above the ActionBar
+- Each emoji is a `Pressable` that calls `onSelect`; active reaction highlighted
+- Tap outside (overlay) closes the picker
+
+### 5. Modify ActionBar to support reactions
+**File:** `apps/mobile/src/components/PostCard/ActionBar.tsx`
+- Add new props: `userReaction?: string | null`, `onReact?: (type: string) => void`
+- Replace the like `Pressable` with a reaction button:
+  - Shows the user's reaction emoji if set, or `HeartIcon` if not
+  - `onPress` → quick toggle (heart on / current reaction off)
+  - `onLongPress` → opens ReactionPicker
+- Keep showing reaction count (fallback to `likeCount`)
+- Render `<ReactionPicker>` positioned above the bar when open
+
+### 6. Update PostCard props
+**File:** `apps/mobile/src/components/PostCard/PostCard.tsx`
+- Add `userReaction?: string | null` and `onReact?: (type: string) => void` to `PostCardProps`
+- Pass them through to `ActionBar`
+
+### 7. Wire up reactions in HomeFeedScreen
+**File:** `apps/mobile/src/screens/Home/HomeFeedScreen.tsx`
+- Import `useMutation` from `@tanstack/react-query`
+- Import `socialApi` and `queryClient`
+- Import `useAuth` (already imported) for token
+- Create a `handleReact(journalId, receiverId, reactionType)` function that:
+  - Calls `socialApi.toggleReaction`
+  - Optimistically updates the `['feed']` query cache (toggle `user_reaction`, adjust count)
+  - Invalidates on settle
+- Pass `userReaction={item.user_reaction}` and `onReact` to each `PostCard`
+
+### 8. Wire up reactions in PostDetailScreen
+**File:** `apps/mobile/src/screens/Home/PostDetailScreen.tsx`
+- Replace the existing `likeMutation` with a `reactionMutation` that calls `socialApi.toggleReaction`
+- Pass `userReaction` and `onReact` to the `ActionBar`
+
+---
+
+## Verification
+
+- Long-press the reaction area on a PostCard in the feed → picker appears with 6 emojis
+- Tap an emoji → picker closes, emoji replaces heart icon, count updates
+- Tap the emoji again → reaction removed, reverts to heart icon
+- Quick tap (no long-press) → toggles heart reaction
+- Open PostDetail → same reaction behavior works
+- Users without a session see the button but tapping does nothing (disabled)

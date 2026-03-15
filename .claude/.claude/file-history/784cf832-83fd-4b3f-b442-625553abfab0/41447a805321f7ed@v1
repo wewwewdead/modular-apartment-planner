@@ -1,0 +1,256 @@
+# Lexical Editor Full Upgrade — Implementation Plan
+
+## Context
+
+The iskrib_v3 editor currently has a minimal Lexical setup (5 packages, ~12 features). Writers are missing essential tools like lists, links, markdown shortcuts, and mobile-friendly formatting. This upgrade brings the editor to near-Playground level with features curated for a writing platform, plus a mobile-first toolbar redesign.
+
+**Current state:** Bold, Italic, Underline, H1-H3, Quote, Text/Highlight color, Alignment, Image insert/resize, @Mentions, Undo/Redo (keyboard only)
+
+**After upgrade:** All of the above PLUS bullet/numbered/checklists, links with auto-detection, strikethrough, inline code, code blocks with syntax highlighting, horizontal rules, markdown shortcuts, floating selection toolbar (mobile), image paste/drop, undo/redo buttons, scrollable mobile toolbar
+
+---
+
+## Phase 1 — Shared Config Foundation + Package Install
+
+**Goal:** Install packages, create single source of truth for editor config. Zero UI changes.
+
+### Step 1.1 — Install packages
+```
+cd client && npm install @lexical/list @lexical/link @lexical/markdown @lexical/code
+```
+
+### Step 1.2 — Create `client/src/components/HomePage/Editor/editorConfig.js`
+- Export `EDITOR_NODES` array: ImageNode, MentionNode, HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode, AutoLinkNode, HorizontalRuleNode, CodeNode, CodeHighlightNode
+- Export `EDITOR_THEME` object with CSS classes for all new node types (lists, links, code, strikethrough, inline code, checklist, code highlighting tokens)
+- Export `VIEWER_NODES` (same as EDITOR_NODES — read-only composers need them to deserialize)
+
+### Step 1.3 — Update all LexicalComposer instances to use shared config
+Files to modify:
+- `client/src/App.jsx` — replace inline `editorTheme`/`editorConfig` with imports from `editorConfig.js`
+- `client/src/components/HomePage/ContentViewer/ContentView.jsx` — both read-only composer instances
+- `client/src/components/Stories/ChapterEditor/ChapterEditor.jsx`
+- `client/src/components/Stories/ChapterReader/ChapterReader.jsx`
+- `client/src/components/HomePage/postCards/ProfilePostCards/editJournal.jsx`
+
+---
+
+## Phase 2 — Core Features: Lists, Strikethrough, HR, Undo/Redo, Inline Code
+
+**Goal:** Add the most essential missing features writers need.
+
+### Step 2.1 — Register plugins in `RichTextEditor.jsx`
+```jsx
+import { ListPlugin } from '@lexical/react/LexicalListPlugin';
+import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin';
+import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin';
+```
+Also register in `ChapterEditor.jsx`.
+
+### Step 2.2 — Expand `Toolbar.jsx`
+
+New button layout (grouped with dividers):
+
+| Group | Buttons |
+|---|---|
+| History | Undo, Redo |
+| Image | Insert image |
+| Inline format | Bold, Italic, Underline, **Strikethrough**, **Inline code** |
+| Block type | H1, H2, H3, Quote, **Code block** |
+| Lists | **Bullet list**, **Numbered list**, **Checklist** |
+| Insert | **Horizontal rule** |
+| Color | Text color, Highlight |
+| Alignment | Left, Center, Right |
+
+Key additions:
+- **Undo/Redo:** Use `UNDO_COMMAND`/`REDO_COMMAND`, track `canUndo`/`canRedo` via `CAN_UNDO_COMMAND`/`CAN_REDO_COMMAND` listeners
+- **Lists:** Use `INSERT_UNORDERED_LIST_COMMAND`, `INSERT_ORDERED_LIST_COMMAND`, `INSERT_CHECK_LIST_COMMAND`, `REMOVE_LIST_COMMAND` from `@lexical/list`
+- **Strikethrough/Code:** `FORMAT_TEXT_COMMAND` with `'strikethrough'` / `'code'`
+- **HR:** Dispatch `INSERT_HORIZONTAL_RULE_COMMAND`
+- **Code block:** `$setBlocksType` with `$createCodeNode()` from `@lexical/code`
+
+Update `DEFAULT_ACTIVE_STATES` to include: `strikethrough`, `inlineCode`, `listType`, `isCodeBlock`, `canUndo`, `canRedo`
+
+Update the `registerUpdateListener` to detect list type (`$isListNode`), code blocks, and new format states.
+
+### Step 2.3 — CSS in `editor.css`
+
+Add classes for:
+- `.editor-text-strikethrough` — `text-decoration: line-through`
+- `.editor-text-code` — monospace font, subtle background, border-radius
+- `.editor-list-ul` / `.editor-list-ol` — proper margins/padding
+- `.editor-listitem` — list item spacing
+- `.editor-listitem-checked` / `.editor-listitem-unchecked` — checkbox via `::before` pseudo-element
+- `.editor-nested-listitem` — `list-style-type: none`
+- `.editor-input hr` — styled horizontal rule (border-top, margins)
+- `.editor-code` — code block: monospace, background, padding, border-radius, overflow-x auto
+- `.editor-link` — accent color, underline, cursor pointer
+- Code highlight tokens (`.editor-tokenize-comment`, `.editor-tokenize-keyword`, etc.)
+
+---
+
+## Phase 3 — Mobile Toolbar Redesign
+
+**Goal:** Make toolbar usable on 375px screens.
+
+### Step 3.1 — Switch from flex-wrap to horizontal scroll
+```css
+.toolbar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.toolbar::-webkit-scrollbar { display: none; }
+```
+
+### Step 3.2 — Touch-friendly sizing (44px min tap targets on mobile)
+```css
+@media (max-width: 640px) {
+  .toolbar-bttns, .is-active {
+    padding: 0.55rem;
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+```
+
+### Step 3.3 — Right-edge fade indicator on `.toolbar-wrapper::after`
+
+---
+
+## Phase 4 — Links: LinkPlugin + AutoLinkPlugin + Floating Link Editor
+
+**Goal:** Users can insert/edit links with inline popup (not modal).
+
+### Step 4.1 — Register plugins in `RichTextEditor.jsx`
+- `LinkPlugin` with URL validation
+- `AutoLinkPlugin` with URL regex matcher (auto-converts typed URLs to links)
+
+### Step 4.2 — Create `client/src/components/HomePage/Editor/plugins/FloatingLinkEditor.jsx`
+- Listens to selection changes, detects when cursor is inside a `LinkNode`
+- Renders via `createPortal` to `document.body` (escapes modal overflow)
+- Shows: URL input, Save button, Open in new tab button, Remove link button
+- Positioned below selected text using `getBoundingClientRect()`
+- z-index: 500 (above editor modal at 130)
+- `onMouseDown={(e) => e.preventDefault()}` to prevent focus loss
+
+### Step 4.3 — Add link button to Toolbar.jsx
+- Track `isLink` in active states
+- On click: dispatch `TOGGLE_LINK_COMMAND` or open floating link editor
+
+### Step 4.4 — CSS for `.floating-link-editor`, `.floating-link-input`, `.floating-link-actions`
+
+---
+
+## Phase 5 — Floating Selection Toolbar (Critical for Mobile)
+
+**Goal:** Mini toolbar appears above text selection with quick formatting.
+
+### Step 5.1 — Create `client/src/components/HomePage/Editor/plugins/FloatingSelectionToolbar.jsx`
+- Detects non-collapsed range selection via `registerUpdateListener`
+- Positions above selection (flips below if near top edge)
+- Shows: Bold, Italic, Underline, Strikethrough, Link, Inline code
+- Rendered via `createPortal` (z-index: 600)
+- `onMouseDown` prevents deselection
+- Viewport edge clamping for horizontal position
+- `onLinkClick` prop bridges to FloatingLinkEditor
+
+### Step 5.2 — Register in `RichTextEditor.jsx`
+
+### Step 5.3 — CSS for `.floating-selection-toolbar`, `.fst-btn`, `.fst-active`
+
+---
+
+## Phase 6 — Markdown Shortcuts
+
+**Goal:** Power-user feature — `#` → heading, `**` → bold, `- ` → list, etc.
+
+### Step 6.1 — Register `MarkdownShortcutPlugin` in `RichTextEditor.jsx` and `ChapterEditor.jsx`
+```jsx
+import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin';
+import { TRANSFORMERS } from '@lexical/markdown';
+```
+
+Supported shortcuts (built-in): `# ` H1, `## ` H2, `### ` H3, `> ` quote, `- `/`* ` bullet list, `1. ` numbered list, `- [ ] ` checklist, `---` HR, ` ``` ` code block, `**bold**`, `_italic_`, `` `code` ``, `~~strikethrough~~`
+
+---
+
+## Phase 7 — Image Paste/Drop
+
+**Goal:** Drop or paste images directly into the editor.
+
+### Step 7.1 — Create `client/src/components/HomePage/Editor/plugins/PasteImagePlugin.jsx`
+- Attaches `paste` and `drop` event listeners on editor root element
+- Checks `clipboardData.files` / `dataTransfer.files` for images
+- Reuses existing upload pattern: blob URL → INSERT_IMAGE_COMMAND → upload → replace src
+- Receives `addUploadedImagePath` and `token` as props
+
+### Step 7.2 — Register in `RichTextEditor.jsx` and `ChapterEditor.jsx`
+
+---
+
+## Phase 8 — Code Blocks with Syntax Highlighting
+
+### Step 8.1 — Register `CodeHighlightPlugin` in `RichTextEditor.jsx` and `ChapterEditor.jsx`
+
+### Step 8.2 — Code block toggle in Toolbar.jsx
+- Detect `isCodeBlock` when cursor is inside `CodeNode`
+- Toggle via `$setBlocksType` with `$createCodeNode()` / `$createParagraphNode()`
+
+---
+
+## Phase 9 — Cleanup: Consolidate ToolbarForEdit
+
+### Step 9.1 — Switch `editJournal.jsx` to use main `Toolbar.jsx`
+- The main Toolbar is now feature-complete and superior
+- `ToolbarForEdit.jsx` can be deleted after verification
+
+### Step 9.2 — Register all new plugins in `editJournal.jsx`
+
+---
+
+## New Files to Create
+
+| File | Purpose |
+|---|---|
+| `client/src/components/HomePage/Editor/editorConfig.js` | Shared nodes, theme, config |
+| `client/src/components/HomePage/Editor/plugins/FloatingLinkEditor.jsx` | Inline link edit popup |
+| `client/src/components/HomePage/Editor/plugins/FloatingSelectionToolbar.jsx` | Mini toolbar on text selection |
+| `client/src/components/HomePage/Editor/plugins/PasteImagePlugin.jsx` | Paste/drop image handling |
+
+## Files to Modify
+
+| File | Changes |
+|---|---|
+| `client/package.json` | Add @lexical/list, @lexical/link, @lexical/markdown, @lexical/code |
+| `client/src/App.jsx` | Import from editorConfig.js |
+| `client/src/components/HomePage/Editor/Toolbar.jsx` | Major: add ~10 new buttons, undo/redo, list/code/link detection |
+| `client/src/components/HomePage/Editor/RichTextEditor.jsx` | Register ~8 new plugins |
+| `client/src/components/HomePage/Editor/editor.css` | All new CSS classes + mobile toolbar scroll |
+| `client/src/components/HomePage/ContentViewer/ContentView.jsx` | Use VIEWER_NODES/EDITOR_THEME |
+| `client/src/components/Stories/ChapterEditor/ChapterEditor.jsx` | Use shared config + new plugins |
+| `client/src/components/Stories/ChapterReader/ChapterReader.jsx` | Use VIEWER_NODES/EDITOR_THEME |
+| `client/src/components/HomePage/postCards/ProfilePostCards/editJournal.jsx` | Switch to main Toolbar, shared config |
+
+## File to Delete
+
+| File | Reason |
+|---|---|
+| `client/src/components/HomePage/Editor/ToolbarForEdit.jsx` | Replaced by main Toolbar.jsx |
+
+---
+
+## Verification Plan
+
+1. **Lists:** Create bullet, numbered, and checklist items. Nest lists. Save as draft, reopen — verify content preserved. View published post — verify lists render correctly in ContentView.
+2. **Links:** Type a URL — verify auto-link. Select text, click link button — verify floating editor appears. Edit URL, remove link. Save and verify links render clickable in read-only view.
+3. **Strikethrough/Code:** Select text, apply each format. Verify visual styling. Verify persistence across save/load.
+4. **HR:** Insert horizontal rule. Verify styling. Verify in ContentView read-only rendering.
+5. **Undo/Redo:** Click undo/redo buttons. Verify they work. Verify disabled state when nothing to undo/redo.
+6. **Markdown shortcuts:** Type `# ` → H1, `- ` → bullet list, `**text**` → bold, `` `code` `` → inline code, `---` → HR, ``` ``` ``` → code block.
+7. **Floating toolbar:** Select text on mobile — verify toolbar appears. Apply formatting. Verify toolbar disappears on deselect.
+8. **Image paste/drop:** Paste image from clipboard into editor. Drag image file into editor. Verify upload and rendering.
+9. **Code blocks:** Create code block. Type code. Verify syntax highlighting. Toggle back to paragraph.
+10. **Mobile:** Test full toolbar scroll on 375px width. Verify all buttons accessible via scroll. Verify floating toolbar positioning.
+11. **Backward compat:** Open an existing old post for editing — verify it loads correctly with no errors.
+12. **ChapterEditor:** Verify all new features work in story chapter editing flow.

@@ -1,0 +1,264 @@
+import { createContext, useContext, useReducer, useCallback } from 'react';
+import { createSketchProject, createLayer } from '../domain/sketchModels';
+
+const SketchContext = createContext(null);
+const HISTORY_LIMIT = 80;
+
+function snapshotSketch(sketchProject) {
+  return JSON.stringify(sketchProject);
+}
+
+function applyUpdate(state, nextProject, recordHistory = true) {
+  const nextSnapshot = snapshotSketch(nextProject);
+  const history = recordHistory
+    ? [...state.history, state.project].slice(-HISTORY_LIMIT)
+    : state.history;
+
+  return {
+    ...state,
+    history,
+    future: recordHistory ? [] : state.future,
+    project: nextProject,
+    isDirty: nextSnapshot !== state.savedSnapshot,
+  };
+}
+
+function updateLayer(state, layerId, updater) {
+  const nextLayers = state.project.layers.map((layer) =>
+    layer.id === layerId ? updater(layer) : layer
+  );
+  return applyUpdate(state, {
+    ...state.project,
+    updatedAt: new Date().toISOString(),
+    layers: nextLayers,
+  });
+}
+
+function sketchReducer(state, action) {
+  switch (action.type) {
+    case 'SKETCH_NEW': {
+      const newProject = action.project || createSketchProject();
+      return {
+        project: newProject,
+        isDirty: false,
+        savedSnapshot: snapshotSketch(newProject),
+        history: [],
+        future: [],
+      };
+    }
+
+    case 'SKETCH_LOAD': {
+      const loaded = action.project;
+      return {
+        project: loaded,
+        isDirty: false,
+        savedSnapshot: snapshotSketch(loaded),
+        history: [],
+        future: [],
+      };
+    }
+
+    case 'LAYER_ADD': {
+      const newLayer = action.layer || createLayer();
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        layers: [...state.project.layers, newLayer],
+      });
+    }
+
+    case 'LAYER_UPDATE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        layers: state.project.layers.map((layer) =>
+          layer.id === action.layer.id ? { ...layer, ...action.layer } : layer
+        ),
+      });
+
+    case 'LAYER_DELETE': {
+      if (state.project.layers.length <= 1) return state;
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        layers: state.project.layers.filter((layer) => layer.id !== action.layerId),
+      });
+    }
+
+    case 'LAYER_REORDER':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        layers: action.layers,
+      });
+
+    case 'SHAPE_ADD':
+      return updateLayer(state, action.layerId, (layer) => ({
+        ...layer,
+        shapes: [...layer.shapes, action.shape],
+      }));
+
+    case 'SHAPE_UPDATE':
+      return updateLayer(state, action.layerId, (layer) => ({
+        ...layer,
+        shapes: layer.shapes.map((shape) =>
+          shape.id === action.shape.id ? { ...shape, ...action.shape } : shape
+        ),
+      }));
+
+    case 'SHAPE_DELETE':
+      return updateLayer(state, action.layerId, (layer) => ({
+        ...layer,
+        shapes: layer.shapes.filter((shape) => shape.id !== action.shapeId),
+      }));
+
+    case 'OBJECT_ADD':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        objects: [...(state.project.objects || []), action.object],
+      });
+
+    case 'OBJECT_UPDATE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        objects: (state.project.objects || []).map((obj) =>
+          obj.id === action.object.id ? { ...obj, ...action.object } : obj
+        ),
+      });
+
+    case 'OBJECT_DELETE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        objects: (state.project.objects || []).filter((obj) => obj.id !== action.objectId),
+      });
+
+    case 'ANNOTATION_ADD':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        annotations: [...(state.project.annotations || []), action.annotation],
+      });
+
+    case 'ANNOTATION_UPDATE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        annotations: (state.project.annotations || []).map((a) =>
+          a.id === action.annotation.id ? { ...a, ...action.annotation } : a
+        ),
+      });
+
+    case 'ANNOTATION_DELETE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        annotations: (state.project.annotations || []).filter((a) => a.id !== action.annotationId),
+      });
+
+    case 'PROJECT_UPDATE_META':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        ...action.meta,
+      });
+
+    case 'UNDO': {
+      if (state.history.length === 0) return state;
+      const previous = state.history[state.history.length - 1];
+      return {
+        ...state,
+        project: previous,
+        history: state.history.slice(0, -1),
+        future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
+        isDirty: snapshotSketch(previous) !== state.savedSnapshot,
+      };
+    }
+
+    case 'REDO': {
+      if (state.future.length === 0) return state;
+      const next = state.future[0];
+      return {
+        ...state,
+        project: next,
+        history: [...state.history, state.project].slice(-HISTORY_LIMIT),
+        future: state.future.slice(1),
+        isDirty: snapshotSketch(next) !== state.savedSnapshot,
+      };
+    }
+
+    case 'MARK_SAVED':
+      return {
+        ...state,
+        isDirty: false,
+        savedSnapshot: snapshotSketch(state.project),
+      };
+
+    default:
+      return state;
+  }
+}
+
+function createInitialState(project) {
+  return {
+    project,
+    isDirty: false,
+    savedSnapshot: snapshotSketch(project),
+    history: [],
+    future: [],
+  };
+}
+
+export function SketchProvider({ children, initialProject }) {
+  const [state, dispatch] = useReducer(
+    sketchReducer,
+    initialProject || createSketchProject(),
+    createInitialState
+  );
+
+  return (
+    <SketchContext.Provider value={{ state, dispatch }}>
+      {children}
+    </SketchContext.Provider>
+  );
+}
+
+export function useSketch() {
+  const ctx = useContext(SketchContext);
+  if (!ctx) throw new Error('useSketch must be used within SketchProvider');
+  const { state, dispatch } = ctx;
+
+  const getObject = useCallback(
+    (objectId) => (state.project.objects || []).find((o) => o.id === objectId) || null,
+    [state.project.objects]
+  );
+
+  const getShapesForObject = useCallback(
+    (objectId) => {
+      const obj = (state.project.objects || []).find((o) => o.id === objectId);
+      if (!obj) return [];
+      const idSet = new Set(obj.shapeIds);
+      const result = [];
+      for (const layer of state.project.layers) {
+        for (const shape of layer.shapes) {
+          if (idSet.has(shape.id)) result.push(shape);
+        }
+      }
+      return result;
+    },
+    [state.project.objects, state.project.layers]
+  );
+
+  return {
+    project: state.project,
+    isDirty: state.isDirty,
+    canUndo: state.history.length > 0,
+    canRedo: state.future.length > 0,
+    dispatch,
+    getLayer: (layerId) => state.project.layers.find((l) => l.id === layerId) || null,
+    getObject,
+    getShapesForObject,
+  };
+}

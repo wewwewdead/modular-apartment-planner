@@ -1,0 +1,163 @@
+import React, {useState} from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts} from '../../theme/typography';
+import {spacing} from '../../theme/spacing';
+import {HeartIcon, CommentIcon, BookmarkIcon, RepostIcon} from '../icons';
+import {getReactionEmoji} from '../../lib/reactions';
+import {ReactionPicker} from './ReactionPicker';
+
+interface ActionBarProps {
+  likeCount: number;
+  commentCount: number;
+  bookmarkCount?: number;
+  isLiked?: boolean;
+  isBookmarked?: boolean;
+  userReaction?: string | null;
+  onLike?: () => void;
+  onComment?: () => void;
+  onBookmark?: () => void;
+  onRepost?: () => void;
+  onReact?: (type: string) => void;
+}
+
+export function ActionBar({
+  likeCount,
+  commentCount,
+  bookmarkCount,
+  isLiked,
+  isBookmarked,
+  userReaction,
+  onLike,
+  onComment,
+  onBookmark,
+  onRepost,
+  onReact,
+}: ActionBarProps) {
+  const {colors} = useTheme();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const reactionEmoji = getReactionEmoji(userReaction);
+  const hasReaction = !!userReaction;
+
+  const handleQuickTap = () => {
+    if (onReact) {
+      if (hasReaction) {
+        // Remove current reaction
+        onReact(userReaction!);
+      } else {
+        // Default to heart
+        onReact('heart');
+      }
+    } else {
+      onLike?.();
+    }
+  };
+
+  const handleLongPress = () => {
+    if (onReact) {
+      setPickerOpen(true);
+    }
+  };
+
+  const handlePickerSelect = (type: string) => {
+    setPickerOpen(false);
+    onReact?.(type);
+  };
+
+  return (
+    <View style={styles.container}>
+      <ReactionPicker
+        visible={pickerOpen}
+        currentReaction={userReaction}
+        onSelect={handlePickerSelect}
+        onClose={() => setPickerOpen(false)}
+      />
+
+      <View style={[styles.bar, {borderTopColor: colors.borderCard}]}>
+        <Pressable
+          style={styles.action}
+          onPress={handleQuickTap}
+          onLongPress={handleLongPress}
+          delayLongPress={400}
+          hitSlop={8}>
+          {reactionEmoji ? (
+            <Text style={styles.reactionEmoji}>{reactionEmoji}</Text>
+          ) : (
+            <HeartIcon
+              size={18}
+              color={isLiked ? colors.danger : colors.iconDefault}
+              filled={isLiked}
+            />
+          )}
+          {likeCount > 0 && (
+            <Text
+              style={[
+                styles.count,
+                {color: hasReaction || isLiked ? colors.danger : colors.textMuted},
+              ]}>
+              {likeCount}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable style={styles.action} onPress={onComment} hitSlop={8}>
+          <CommentIcon size={18} color={colors.iconDefault} />
+          {commentCount > 0 && (
+            <Text style={[styles.count, {color: colors.textMuted}]}>
+              {commentCount}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable style={styles.action} onPress={onBookmark} hitSlop={8}>
+          <BookmarkIcon
+            size={18}
+            color={isBookmarked ? colors.accentAmber : colors.iconDefault}
+            filled={isBookmarked}
+          />
+          {(bookmarkCount ?? 0) > 0 && (
+            <Text
+              style={[
+                styles.count,
+                {color: isBookmarked ? colors.accentAmber : colors.textMuted},
+              ]}>
+              {bookmarkCount}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable style={styles.action} onPress={onRepost} hitSlop={8}>
+          <RepostIcon size={18} color={colors.iconDefault} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xl,
+  },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  count: {
+    fontSize: 13,
+    fontFamily: fonts.ui.medium,
+  },
+  reactionEmoji: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
+});

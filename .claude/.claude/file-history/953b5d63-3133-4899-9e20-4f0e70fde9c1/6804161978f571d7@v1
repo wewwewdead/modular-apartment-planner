@@ -1,0 +1,40 @@
+# Fix: Story reading progress not restoring scroll position
+
+## Context
+When a user reads a story chapter, navigates back, then clicks "Continue Reading", the page doesn't scroll to where they left off. Two bugs cause this:
+
+1. **Stale cache**: `useStoryDetail` has 5-min `staleTime`. When the user reads a chapter (saving progress via scroll/unmount), then navigates back to StoryDetail, the cached `story.reading_progress` is stale — it has the old or null progress. So "Continue Reading" passes the wrong (or no) `scrollPosition` via `location.state`.
+
+2. **No self-fetch fallback**: ChapterReader only reads `location.state?.scrollPosition` for restoration. If that's missing (stale cache, page refresh, direct chapter link from chapter list), no scroll restoration happens at all.
+
+## Plan
+
+### Fix 1: ChapterReader fetches its own progress (primary fix)
+**File: `client/src/components/Stories/ChapterReader/ChapterReader.jsx`**
+
+- Import `getReadingProgress` from StoryApi
+- On mount (after `contentReady`), if no `location.state?.scrollPosition` was provided, call `getReadingProgress(token, storyId)` to get the saved progress
+- If the returned `chapter_id` matches the current `chapterId`, use the `scroll_position` to restore
+- This makes restoration work regardless of how the user navigated to the chapter
+
+### Fix 2: Invalidate story cache when leaving ChapterReader
+**File: `client/src/components/Stories/ChapterReader/ChapterReader.jsx`**
+
+- Import `useQueryClient` from `@tanstack/react-query`
+- On unmount (in the scroll tracking effect cleanup), after `saveProgress()`, invalidate `['story', storyId]` query so StoryDetail refetches fresh progress next time
+- This ensures "Continue Reading" button in StoryDetail also gets the latest progress
+
+### Fix 3: More robust scroll restoration timing
+**File: `client/src/components/Stories/ChapterReader/ChapterReader.jsx`**
+
+- Replace double `requestAnimationFrame` with a small `setTimeout(50ms)` after `contentReady` — more reliable for Lexical's async rendering of long chapters
+- Add a retry: if `scrollableHeight` is 0 (content not yet laid out), retry after another short delay
+
+## Files to modify
+- `client/src/components/Stories/ChapterReader/ChapterReader.jsx` — all 3 fixes
+
+## Verification
+- Read a chapter, scroll to middle, go back, click "Continue Reading" → should scroll to where you left off
+- Click a specific chapter from the chapter list → should also restore if you've read it before
+- Refresh the page while on a chapter → should restore position
+- Read a new chapter for the first time → should start at top (no progress saved yet)

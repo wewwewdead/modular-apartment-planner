@@ -1,0 +1,78 @@
+# Fix Mobile Spacing — Opinions Cards Too Flush to Screen Edges
+
+## Context
+After the borderless timeline redesign, `.so-card` lost its horizontal padding (`padding: 1rem 0`), and on mobile the cards sit flush against the screen edges. The content needs breathing room (horizontal padding) so it doesn't feel cramped on small screens.
+
+## Root Cause
+- `.so-card` has `padding: 1rem 0` (desktop) / `padding: 0.75rem 0` (mobile) — **zero horizontal padding**
+- `.opinions-page-parent-container .so-card-wrapper` is `width: 94%` on mobile but the card itself has no internal padding
+- `.so-card--parent` (opinion viewer) has `padding: 1.25rem` which is fine, but needs a mobile reduction
+- `.visited-profile-opinions-container` has `padding: 1rem` which is fine but the cards inside have no padding
+
+## Fix — CSS only (`sidebarOpinions.css`)
+
+### 1. Add horizontal padding to `.so-card` (desktop + mobile)
+```css
+/* Desktop: add small horizontal padding */
+.so-card {
+    padding: 1rem 0.75rem;  /* was: 1rem 0 */
+}
+
+/* Mobile override */
+@media(max-width: 480px) {
+    .so-card {
+        padding: 0.75rem 0.6rem;  /* was: 0.75rem 0 */
+    }
+}
+```
+
+### 2. Ensure `.so-card--parent` scales down on mobile
+```css
+@media(max-width: 480px) {
+    .so-card--parent {
+        padding: 0.85rem;
+        border-radius: 12px;
+    }
+}
+```
+
+### 3. Ensure opinion viewer wrapper has horizontal padding on mobile
+The opinion viewer renders inside the same `.opinions-page-parent-container` or route wrapper. The `.so-card-wrapper` width of 94% on mobile is fine but could use a small bump:
+```css
+@media(max-width: 480px) {
+    .opinions-page-parent-container .so-card-wrapper {
+        width: 92%;  /* was 94%, gives more edge breathing room */
+    }
+}
+```
+
+### 4. Reply threads — add horizontal padding
+The `.rc-reply` content also needs small padding within the `.rc-content` block, and the `.rc-inline-composer` textarea should not touch the edges.
+```css
+@media(max-width: 480px) {
+    .rc-reply {
+        gap: 0.45rem;  /* was 0.65rem, save space on small screens */
+    }
+}
+```
+
+### 5. Visited profile opinions container — tighten on mobile
+```css
+@media(max-width: 480px) {
+    .visited-profile-opinions-container {
+        width: 95%;
+        padding: 0.65rem;
+    }
+}
+```
+
+## File to Modify
+- `client/src/components/SidebarOpinions/sidebarOpinions.css` — CSS-only changes in desktop defaults + `@media(max-width: 480px)` block
+
+## Verification
+1. OpinionsPage on mobile (< 480px): cards have visible horizontal padding, text doesn't touch screen edges
+2. OpinionViewer on mobile: parent card has padding, reply composer has breathing room
+3. Reply threads on mobile: content doesn't touch edges, nested threads still indent properly
+4. Visited profile opinions on mobile: glass container and cards have spacing
+5. Desktop: minimal visual change (slight horizontal padding added, looks intentional)
+6. Sidebar context: unchanged (sidebar already has container padding from `.latest-opinions-container`)

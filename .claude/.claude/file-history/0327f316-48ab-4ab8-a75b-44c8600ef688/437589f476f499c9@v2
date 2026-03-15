@@ -1,0 +1,83 @@
+/* ── Write Journal FAB ── */
+/* Hidden by default on desktop */
+.write-journal-fab {
+    display: none;
+}
+
+/* ── Mobile FAB ── */
+@media (max-width: 480px) {
+    .write-journal-fab {
+        position: fixed;
+        right: 1.25rem;
+        bottom: 6.5rem;
+        z-index: 10;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 54px;
+        height: 54px;
+        background-color: #1a1a1a;
+        border: none;
+        border-radius: 50%;
+        color: #ffffff;
+        cursor: pointer;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18),
+                    0 1.5px 6px rgba(0, 0, 0, 0.10),
+                    0 0 18px rgba(212, 168, 83, 0.18);
+        transition: box-shadow 0.25s ease,
+                    transform 0.25s ease;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .write-journal-fab:hover {
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.24),
+                    0 2px 8px rgba(0, 0, 0, 0.12),
+                    0 0 22px rgba(212, 168, 83, 0.24);
+        transform: translateY(-2px);
+    }
+
+    .write-journal-fab:active {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+    }
+
+    /* ── Icon wrapper ── */
+    .fab-icon-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+        color: #ffffff;
+    }
+
+    .fab-icon-wrapper svg {
+        display: block;
+    }
+
+    /* Hide FAB on home feed (inline Write button replaces it) */
+    .write-journal-fab.fab-hidden-home {
+        display: none;
+    }
+}
+
+/* ── Small phones (≤ 428px) — tighter positioning ── */
+@media (max-width: 428px) {
+    .write-journal-fab {
+        right: 1rem;
+        bottom: 6rem;
+        width: 50px;
+        height: 50px;
+    }
+
+    .fab-icon-wrapper {
+        width: 22px;
+        height: 22px;
+    }
+
+    .fab-icon-wrapper svg {
+        width: 22px;
+        height: 22px;
+    }
+}

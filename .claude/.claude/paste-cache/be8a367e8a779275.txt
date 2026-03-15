@@ -1,0 +1,44 @@
+react-dom_client.js?v=6b9af114:5594 React has detected a change in the order of Hooks called by StoryDetail. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+1. useContext                 useContext
+2. useContext                 useContext
+3. useContext                 useContext
+4. useContext                 useContext
+5. useContext                 useContext
+6. useContext                 useContext
+7. useContext                 useContext
+8. useContext                 useContext
+9. useRef                     useRef
+10. useContext                useContext
+11. useLayoutEffect           useLayoutEffect
+12. useCallback               useCallback
+13. useContext                useContext
+14. useContext                useContext
+15. useContext                useContext
+16. useContext                useContext
+17. useEffect                 useEffect
+18. useState                  useState
+19. useCallback               useCallback
+20. useSyncExternalStore      useSyncExternalStore
+21. useEffect                 useEffect
+22. useContext                useContext
+23. useContext                useContext
+24. useState                  useState
+25. useEffect                 useEffect
+26. useCallback               useCallback
+27. useSyncExternalStore      useSyncExternalStore
+28. useCallback               useCallback
+29. useContext                useContext
+30. useContext                useContext
+31. useState                  useState
+32. useEffect                 useEffect
+33. useCallback               useCallback
+34. useSyncExternalStore      useSyncExternalStore
+35. useCallback               useCallback
+36. undefined                 useMemo
+   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+react-dom_client.js?v=6b9af114:5792 Uncaught Error: Rendered more hooks than during the previous render.
+    at StoryDetail (StoryDetail.jsx:68:24)

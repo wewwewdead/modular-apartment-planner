@@ -1,0 +1,171 @@
+# Build the Sketch Workspace Scaffold
+
+## Context
+
+The Sketch module (`src/modules/sketch/`) already has a working MVP: routes (`/sketch`), providers (SketchProvider + SketchEditorProvider), canvas, tool handlers (select, rectangle, line), layer management, and a HomePage card. However, it's currently a generic 2D drawing tool — shapes live in layers with no higher-level concept.
+
+The goal is to evolve it into an **object design workspace** for furniture/fixtures (tables, chairs, cabinets) by adding:
+- A `SketchObject` grouping concept over existing shapes
+- Dimension/annotation data (reusing floorplan's rendering)
+- Sheet support (data model placeholder)
+- Empty-state UI with a demo object flow
+- Clean architecture that can later grow into parametric modeling + 3D preview
+
+Constraint: **do not overbuild** — add the minimum abstractions that give a clean extensibility path.
+
+---
+
+## Approach
+
+### Step 1: Extend the project model (`src/modules/sketch/domain/sketchModels.js`)
+
+Add factory functions and extend `createSketchProject`:
+
+```js
+export function createSketchObject(name = 'Untitled Object', category = 'general') {
+  return {
+    id: generateId('sobj'),
+    name,
+    category,       // 'table', 'chair', 'cabinet', 'general', etc.
+    description: '',
+    shapeIds: [],    // references to shape IDs in layers
+    // Future: parameters, parametricGenerator, thumbnail
+  };
+}
+
+export function createAnnotation(type, props = {}) {
+  return {
+    id: generateId('annot'),
+    type,  // 'dimension', 'label', 'callout'
+    ...props,
+  };
+}
+```
+
+Extend `createSketchProject` to include:
+```js
+{
+  ...existing fields,
+  description: '',
+  category: 'general',
+  objects: [],        // SketchObject[]
+  annotations: [],    // Annotation[]
+  sheets: [],         // Sheet[] (placeholder)
+}
+```
+
+**Why keep shapes in layers + reference by ID in objects?** This is conservative — existing drawing tools, handlers, and rendering don't need changes. Objects are a grouping overlay. When parametric objects come later, they can own shapes directly.
+
+### Step 2: Add object & annotation actions to SketchProvider (`src/modules/sketch/app/SketchProvider.jsx`)
+
+Add reducer cases:
+- `OBJECT_ADD` — push a new object to `project.objects`
+- `OBJECT_UPDATE` — update an object by ID (name, category, description, shapeIds)
+- `OBJECT_DELETE` — remove an object (does NOT delete referenced shapes)
+- `ANNOTATION_ADD` — push annotation to `project.annotations`
+- `ANNOTATION_UPDATE` — update annotation by ID
+- `ANNOTATION_DELETE` — remove annotation by ID
+- `PROJECT_UPDATE_META` — update project-level metadata (name, description, category)
+
+Add helpers to `useSketch()`:
+- `getObject(objectId)` — find object by ID
+- `getShapesForObject(objectId)` — collect shapes from all layers matching an object's shapeIds
+
+### Step 3: Extend SketchEditorProvider (`src/modules/sketch/app/SketchEditorProvider.jsx`)
+
+Add state fields:
+- `activeObjectId: null` — tracks which object the user is working on
+- `SET_ACTIVE_OBJECT` action
+
+### Step 4: Add Objects section to SketchSidebar (`src/modules/sketch/ui/SketchSidebar.jsx`)
+
+Add an "Objects" panel above the existing "Layers" panel:
+- Lists all `project.objects` with name, category badge, and shape count
+- Active object highlighted (goldenrod accent)
+- "+" button to create a new object
+- Click to select/activate an object
+- Delete button (with confirmation if object has shapes)
+- When an object is active, newly drawn shapes auto-associate with it (their IDs get added to the object's `shapeIds`)
+
+### Step 5: Create empty-state component (`src/modules/sketch/ui/SketchEmptyState.jsx` — NEW)
+
+When the project has no shapes and no objects, render a centered overlay on the canvas area:
+- Title: "Start designing"
+- Subtitle: "Draw shapes to design standalone objects like tables, chairs, and cabinets"
+- Two CTAs:
+  - **"Start Drawing"** — switches to the Rectangle tool
+  - **"Try Demo Object"** — calls the demo flow (Step 6)
+- Styled with the goldenrod sketch accent color
+- Dismisses automatically once any shape is drawn
+
+### Step 6: Add demo object flow (`src/modules/sketch/domain/demoObject.js` — NEW)
+
+Create a `buildDemoTable()` function that returns:
+- A SketchObject: `{ name: 'Office Desk', category: 'table' }`
+- A set of shapes representing a simple top-down desk view:
+  - Rectangle for the tabletop (1200mm x 600mm)
+  - 4 small rectangles for legs (40mm x 40mm at each corner)
+- Optionally a dimension annotation for the width
+
+Wire this into SketchProvider via a `DEMO_LOAD` action or by dispatching multiple `SHAPE_ADD` + `OBJECT_ADD` actions from the empty-state button click.
+
+### Step 7: Wire up the empty state in SketchCanvas (`src/modules/sketch/renderers/SketchCanvas.jsx`)
+
+Check if `project.layers.every(l => l.shapes.length === 0) && project.objects.length === 0`. If true, render `<SketchEmptyState>` as an overlay in the canvas container div (positioned absolutely over the SVG).
+
+### Step 8: Extend defaults (`src/modules/sketch/domain/defaults.js`)
+
+Add object category constants:
+```js
+export const SKETCH_OBJECT_CATEGORIES = [
+  'table', 'chair', 'desk', 'cabinet', 'shelf', 'bed', 'sofa', 'general',
+];
+```
+
+---
+
+## Files to modify
+
+| File | Change |
+|------|--------|
+| `src/modules/sketch/domain/sketchModels.js` | Add `createSketchObject`, `createAnnotation`, extend `createSketchProject` |
+| `src/modules/sketch/domain/defaults.js` | Add `SKETCH_OBJECT_CATEGORIES` |
+| `src/modules/sketch/app/SketchProvider.jsx` | Add OBJECT_*, ANNOTATION_*, PROJECT_UPDATE_META actions; extend useSketch |
+| `src/modules/sketch/app/SketchEditorProvider.jsx` | Add `activeObjectId`, `SET_ACTIVE_OBJECT` |
+| `src/modules/sketch/ui/SketchSidebar.jsx` | Add Objects panel above Layers |
+| `src/modules/sketch/renderers/SketchCanvas.jsx` | Integrate empty-state overlay |
+
+## Files to create
+
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/ui/SketchEmptyState.jsx` | Empty-state overlay component |
+| `src/modules/sketch/ui/SketchEmptyState.module.css` | Styles for empty state |
+| `src/modules/sketch/domain/demoObject.js` | `buildDemoTable()` factory |
+
+## Reused shared systems
+
+- `src/domain/ids.js` — `generateId()` for all new entity IDs
+- `src/renderers/BlueprintAnnotationLayer.jsx` — will be imported into SketchCanvas for annotation rendering (future step, data model laid now)
+- `src/styles/variables.css` — `--color-workspace-sketch` (#B8860B) for accent theming
+
+## What is NOT changed
+
+- Routes, HomePage, WorkspaceCards (already wired)
+- SketchToolbar (no changes needed for scaffold)
+- Tool handlers (selectHandler, rectangleHandler, lineHandler — work as-is)
+- ShapeRenderer, GridRenderer (unchanged)
+- Floorplan module (fully isolated)
+
+---
+
+## Verification
+
+1. Navigate to `/sketch` — empty-state overlay appears with "Start Drawing" and "Try Demo Object" buttons
+2. Click "Try Demo Object" — a desk object appears on canvas with 5 shapes (tabletop + 4 legs), listed in the Objects sidebar panel
+3. Draw shapes manually — they appear on canvas, can be selected
+4. Create an object in the sidebar, draw shapes — shapes associate with the active object
+5. Toggle layer visibility — shapes hide/show correctly
+6. Undo/redo works for object and shape operations
+7. `npm run build` succeeds without errors
+8. Floorplan workspace (`/floorplan`) is completely unaffected

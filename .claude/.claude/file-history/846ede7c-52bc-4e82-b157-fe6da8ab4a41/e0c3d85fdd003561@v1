@@ -1,0 +1,43 @@
+# Fix: Comments Modal Mobile Layout & Scroll Issues
+
+## Context
+The comment modal (`.cm-parent-container`) has two problems on mobile:
+1. **Doesn't fit properly** — uses `position: absolute` with `top: 200px` and `height: 60%`, which doesn't adapt to mobile viewports. On small screens, the modal can overflow or be partially off-screen.
+2. **Page scrolls to bottom on open** — the Framer Motion animation starts from `y: '100vh'`, which temporarily places the element far below the viewport, causing the page to scroll down.
+
+## Files to Modify
+- `client/src/components/comments/comments.css` — mobile positioning & sizing
+- `client/src/components/comments/comments.jsx` — animation props
+
+## Changes
+
+### 1. Fix mobile positioning (comments.css)
+
+**Desktop (no change needed):** Keep `position: absolute` with current values.
+
+**Mobile (`@media max-width: 480px`):**
+- Change to `position: fixed` so the modal is relative to the viewport, not the scrollable parent
+- Use `inset` / viewport-based values: `top: 0; left: 0; width: 100%; height: 100%` (full-screen sheet on mobile)
+- Set `border-radius: 0` for full-screen feel, or use `border-radius: 14px 14px 0 0` with `bottom: 0` for a bottom-sheet style
+- Add `overscroll-behavior: contain` on `.cm-list` to prevent scroll chaining on iOS
+
+**Remove the `@media max-width: 428px` block** — the hardcoded `width: 340px` won't be needed with the full-screen mobile approach.
+
+### 2. Fix animation scroll jump (comments.jsx)
+
+Change the Framer Motion animation from viewport-unit-based to percentage-based transform:
+```jsx
+initial={{ y: '100%', opacity: 0 }}
+animate={{ y: 0, opacity: 1, transition: { type: 'spring', damping: 25, stiffness: 200 } }}
+exit={{ y: '100%', opacity: 0, transition: { duration: 0.2 } }}
+```
+
+Using `y: '100%'` (percentage of the element's own height) instead of `y: '100vh'` (viewport height) keeps the animation within the element's bounds and won't trigger page scroll. Exit also changed from `y: '-100vh'` to `y: '100%'` so it slides back down instead of flying off the top.
+
+## Verification
+1. Open a post with comments on mobile viewport (Chrome DevTools, 375px width)
+2. Confirm the modal fills the screen properly without overflowing
+3. Confirm opening the modal does NOT cause the background page to scroll
+4. Confirm the slide-up animation is smooth
+5. Confirm closing the modal slides it back down
+6. Test on desktop to ensure no regression (modal should still appear positioned as before)

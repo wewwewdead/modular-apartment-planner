@@ -1,0 +1,40 @@
+import { generateId } from '@/domain/ids';
+
+export function createSketchProject(name = 'Untitled Sketch') {
+  return {
+    id: generateId('sketch'),
+    name,
+    canvasWidth: 297000,  // A4 landscape in mm
+    canvasHeight: 210000,
+    layers: [createLayer('Layer 1')],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function createLayer(name = 'Layer') {
+  return {
+    id: generateId('layer'),
+    name,
+    visible: true,
+    locked: false,
+    shapes: [],
+  };
+}
+
+export function createShape(type, props = {}) {
+  return {
+    id: generateId('shape'),
+    type, // 'rect', 'ellipse', 'line', 'path'
+    layerId: props.layerId || null,
+    x: props.x ?? 0,
+    y: props.y ?? 0,
+    width: props.width ?? 0,
+    height: props.height ?? 0,
+    points: props.points ?? [],
+    fill: props.fill ?? 'none',
+    stroke: props.stroke ?? '#1E2433',
+    strokeWidth: props.strokeWidth ?? 2,
+    rotation: props.rotation ?? 0,
+  };
+}

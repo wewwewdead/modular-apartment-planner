@@ -1,0 +1,135 @@
+import { lazy, Suspense } from 'react'
+import './App.css'
+import { Routes, Route, BrowserRouter, Navigate} from 'react-router-dom'
+import { useAuth } from './Context/useAuth.js';
+import { LexicalComposer } from '@lexical/react/LexicalComposer';
+import { HeadingNode, QuoteNode } from "@lexical/rich-text";
+import ImageNode from './components/HomePage/Editor/nodes/ImageNode.jsx';
+import Loader from './components/loadingComponent/BgLoader.jsx';
+import SeoManager from './seo/SeoManager.jsx';
+
+const AuthModal = lazy(() => import('./components/AuthModal/AuthModal.jsx'));
+const HomePage = lazy(() => import('./components/HomePage/home.jsx'));
+const LoginPage = lazy(() => import('./components/LoginPage/login.jsx'));
+const SignUp = lazy(() => import('./components/SignUpPage/signup.jsx'));
+const MyProfile = lazy(() => import('./components/ProfilePage/MyProfile.jsx'));
+const PostCards = lazy(() => import('./components/HomePage/postCards/PostCards.jsx'));
+const ContentView = lazy(() => import('./components/HomePage/ContentViewer/ContentView.jsx'));
+const Bookmarks = lazy(() => import('./components/Bookmarks/Bookmarks.jsx'));
+const Visitprofile = lazy(() => import('./components/VisitProfile/VisitProfile.jsx'));
+const ProfilePostCards = lazy(() => import('./components/HomePage/postCards/ProfilePostCards/ProfilePostCards.jsx'));
+const ProfileMediaSection = lazy(() => import('./components/ProfilePage/components/ProfileMediaSection.jsx'));
+const VisitedProfilePostCards = lazy(() => import('./components/HomePage/postCards/ProfilePostCards/VisitedProfilePostCards.jsx'));
+const VisitedProfileMediaSection = lazy(() => import('./components/VisitProfile/components/VisitedProfileMediaSection.jsx'));
+const Notifications = lazy(() => import('./components/Notifications/Notifications.jsx'));
+const NotificationCards = lazy(() => import('./components/Notifications/notificationsCards.jsx'));
+const UnreadNotification = lazy(() => import('./components/Notifications/UnreadNotificationCard.jsx'));
+const Collections = lazy(() => import('./components/collections/Collection.jsx'));
+const CollectionJournals = lazy(() => import('./components/collections/CollectionJournalCards.jsx'));
+const CollectionViewer = lazy(() => import('./components/collections/CollectionViewer.jsx'));
+const ViewUserCollection = lazy(() => import('./components/collections/ViewUserCollections.jsx'));
+const OpinionsPage = lazy(() => import('./components/SidebarOpinions/OpinionssPage.jsx'));
+const VisitedProfileOpinions = lazy(() => import('./components/SidebarOpinions/visitedProfileOpinions.jsx'));
+const MyOpinions = lazy(() => import('./components/SidebarOpinions/MyOpinions.jsx'));
+const OpinionViewer = lazy(() => import('./components/SidebarOpinions/opinionViewer.jsx'));
+const ExplorePage = lazy(() => import('./components/HomePage/explore/ExplorePage.jsx'));
+const GalleryPage = lazy(() => import('./components/HomePage/gallery/GalleryPage.jsx'));
+const FreedomWallPage = lazy(() => import('./components/HomePage/freedomWall/FreedomWallPage.jsx'));
+const Universe = lazy(() => import('./components/Universe/Universe.jsx'));
+
+const AppAuthModal = () => {
+  const {showAuthModal, closeAuthModal} = useAuth();
+  return <AuthModal isOpen={showAuthModal} onClose={closeAuthModal}/>;
+}
+
+const AppSplash = () => {
+  const { loading } = useAuth();
+  return <Loader isLoading={loading} />;
+}
+
+const App = () => {
+
+  const theme = {
+    paragraph: 'editor-paragraph',
+    heading: {
+      h1: 'editor-heading-h1',
+      h2: 'editor-heading-h2',
+      h3: 'editor-heading-h3',
+    },
+    quote: 'editor-quote',
+    text: {
+      bold: 'editor-text-bold',
+      italic: 'editor-text-italic',
+      underline: 'editor-text-underline',
+    }
+  }
+  
+  const initaConfig = {
+  namespace: "MyLexicalEditor",
+  theme,
+  //register nodes
+  nodes: [ImageNode, HeadingNode, QuoteNode],
+  onError(error){
+  throw error;
+  },
+}
+
+  return (
+    <>
+    <LexicalComposer initialConfig={initaConfig}>
+      <BrowserRouter>
+        <SeoManager />
+        <AppSplash />
+        <Suspense fallback={null}>
+          <AppAuthModal/>
+          <Routes>
+            <Route path='/' element={<Navigate to='/home' replace/>}/>
+            <Route path='/profile' element={<MyProfile/>}>
+              <Route index element={<ProfilePostCards/>} />
+              <Route path='media' element={<ProfileMediaSection/>} />
+              <Route path='myOpinions' element={<MyOpinions/>}/>         
+            </Route>
+
+            <Route path='/visitProfile' element={<Visitprofile/>}> 
+              <Route index element={<VisitedProfilePostCards/>}/>
+              <Route path='media' element={<VisitedProfileMediaSection/>}/>
+              <Route path='visitedCollections' element={<CollectionViewer/>}/>
+              <Route path='visitedOpinions' element={<VisitedProfileOpinions/>}/>
+            </Route>  
+
+            <Route path='/home' element={<HomePage/>}>
+              <Route index element={<PostCards/>}/>
+              <Route path='explore' element={<ExplorePage/>}/>
+              <Route path='gallery' element={<GalleryPage/>}/>
+              <Route path='freedom-wall' element={<FreedomWallPage/>}/>
+              <Route path='contentViewer' element={<ContentView/>}/>
+              <Route path='post/:journalId' element={<ContentView/>}/>
+              <Route path='post/:journalId/:slug' element={<ContentView/>}/>
+              <Route path='bookmark' element={<Bookmarks/>}/>
+              <Route path='userCollections' element={<ViewUserCollection/>}/>
+              <Route path='opinions'element={<OpinionsPage/>}/>
+              <Route path='opinionsViewer' element={<OpinionViewer/>}/>
+
+              <Route path='collections' element={<Collections/>}/>
+              <Route path='collectionCards' element={<CollectionJournals/>}/>
+              
+              {/* route for nested notifications */}
+              <Route path='notifications' element={<Notifications/>}>
+                <Route index element={<NotificationCards/>}/>
+                <Route path='unreadNotification' element={<UnreadNotification/>}/>
+              </Route>  
+            </Route>   
+
+            <Route path='/universe' element={<Universe/>}/>
+
+            <Route path='/login' element={<LoginPage/>}/>
+            <Route path='/signUp' element={<SignUp/>}/>
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </LexicalComposer>
+    </>
+  )
+}
+
+export default App

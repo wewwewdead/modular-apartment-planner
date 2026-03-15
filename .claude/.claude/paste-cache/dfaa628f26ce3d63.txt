@@ -1,0 +1,50 @@
+Refactor Sketch Studio so furniture/object creation is assembly-driven and parameter-driven instead of relying primarily on 2D plan-style drawing.
+
+Main goal:
+Make Sketch Studio better for designing objects like tables, cabinets, desks, and shelves, where pure 2D top-view drawing is not the best primary workflow.
+
+Requirements:
+- do not treat Sketch like floorplan editing
+- build Sketch around assemblies, parameters, orthographic views, and 3D preview
+- keep the system accurate and dimension-driven
+
+Add the following architecture and UX:
+
+1. Object generator workflow
+- support creating objects from templates such as:
+  - table
+  - cabinet
+  - desk
+  - shelf
+- each object template should ask for key dimensions and generate a structured assembly
+
+2. Assembly-based modeling
+- model objects as assemblies made of parts
+- examples:
+  - table = tabletop + legs
+  - cabinet = side panels + top/bottom + shelves + doors
+- expose the assembly tree in the UI
+
+3. Parameter-driven editing
+- allow users to edit dimensions like width, depth, height, thickness, inset, and spacing
+- dimensions must drive geometry updates
+- avoid making manual freehand 2D drawing the primary workflow for these object types
+
+4. Orthographic drafting views
+- maintain top, front, and side views as accurate drafting outputs
+- keep orthographic generation modular and separate from React
+
+5. 3D preview
+- keep a read-only 3D preview that updates from the same source model
+- do not implement full freeform SketchUp-style modeling yet
+
+6. Initial supported templates
+- table
+- cabinet
+- desk
+- shelf
+
+7. Keep architecture modular
+- Sketch must remain separate from Floorplan
+- reuse shared geometry/rendering/export systems where appropriate
+- focus on accurate object assemblies rather than broad freeform modeling

@@ -1,0 +1,42 @@
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+
+import { colors } from '../theme/colors';
+import { elevation } from '../theme/elevation';
+
+interface FloatingActionBarProps {
+  children: React.ReactNode;
+}
+
+export function FloatingActionBar({ children }: FloatingActionBarProps) {
+  return (
+    <Animated.View
+      entering={FadeInDown.springify().damping(20).stiffness(200)}
+      style={styles.container}
+    >
+      <View style={styles.inner}>{children}</View>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 8,
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 24,
+    backgroundColor: colors.surfaceElevated,
+    padding: 16,
+    ...elevation.level4,
+  },
+});

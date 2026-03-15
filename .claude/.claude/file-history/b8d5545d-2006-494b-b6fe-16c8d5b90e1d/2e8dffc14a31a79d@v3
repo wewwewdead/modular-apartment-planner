@@ -1,0 +1,281 @@
+/* ══════════════════════════════════════════
+   SEARCH TYPE TOGGLE — Posts / People
+   Integrated pill-style toggle that sits
+   flush beneath the search bar
+   ══════════════════════════════════════════ */
+.search-type-toggle{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 0.75rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.15rem;
+    background: var(--bg-primary);
+}
+.search-type-btn{
+    position: relative;
+    padding: 0.38rem 0.9rem;
+    border: 1.5px solid var(--border-card);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--text-faint);
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.025rem;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.search-type-btn:hover{
+    color: var(--text-secondary);
+    border-color: rgba(212, 168, 83, 0.25);
+    background: var(--bg-pill);
+}
+.search-type-btn--active{
+    color: var(--accent-amber);
+    border-color: rgba(212, 168, 83, 0.4);
+    background: linear-gradient(135deg, rgba(212, 168, 83, 0.12), rgba(245, 158, 11, 0.06));
+    box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.06);
+}
+.search-type-btn--active:hover{
+    color: var(--accent-amber);
+    border-color: rgba(212, 168, 83, 0.5);
+    background: linear-gradient(135deg, rgba(212, 168, 83, 0.16), rgba(245, 158, 11, 0.08));
+}
+
+
+/* ══════════════════════════════════════════
+   USER SEARCH RESULT CARDS
+   ══════════════════════════════════════════ */
+.user-search-results{
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 8px;
+    padding-bottom: 2rem;
+}
+
+.user-search-card{
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    width: 100%;
+    padding: 0.8rem 1rem;
+    box-sizing: border-box;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: hidden;
+}
+.user-search-card::before{
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 0;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent-amber);
+    transition: height 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.user-search-card:hover{
+    border-color: rgba(212, 168, 83, 0.2);
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.04),
+        0 1px 4px rgba(0, 0, 0, 0.03);
+    transform: translateX(2px);
+}
+.user-search-card:hover::before{
+    height: 55%;
+}
+.user-search-card:active{
+    transform: translateX(2px) scale(0.995);
+}
+
+/* ── Avatar ── */
+.user-search-avatar-wrap{
+    flex-shrink: 0;
+    position: relative;
+}
+.user-search-avatar-wrap .user-avatar-container{
+    width: 44px;
+    height: 44px;
+}
+.user-search-avatar-wrap .user-info-avatar{
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* ── Info block ── */
+.user-search-info{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.user-search-name-row{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.user-search-name{
+    margin: 0;
+    padding: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--text-heading);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.user-search-username{
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 450;
+    color: var(--text-faint);
+    letter-spacing: 0.01rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.25s ease;
+}
+.user-search-card:hover .user-search-username{
+    color: var(--text-muted);
+}
+
+/* ── Chevron arrow ── */
+.user-search-arrow{
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--border-card);
+    transition: color 0.25s ease, transform 0.25s ease;
+}
+.user-search-card:hover .user-search-arrow{
+    color: var(--accent-amber);
+    transform: translateX(2px);
+}
+
+
+/* ══════════════════════════════════════════
+   USER SUGGESTIONS IN DROPDOWN
+   ══════════════════════════════════════════ */
+.search-suggestion-user{
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.5rem 0.85rem;
+    box-sizing: border-box;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+    border-left: 2.5px solid transparent;
+}
+.search-suggestion-user:hover{
+    background: var(--bg-pill);
+    border-left-color: #D4A853;
+}
+.search-suggestion-user-avatar{
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1.5px solid var(--border-card);
+}
+.search-suggestion-user-info{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
+}
+.search-suggestion-user-name{
+    font-family: var(--font-ui);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-suggestion-user-handle{
+    font-family: var(--font-ui);
+    font-size: 0.66rem;
+    font-weight: 400;
+    color: var(--text-faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.01rem;
+}
+
+
+/* ══════════════════════════════════════════
+   MOBILE
+   ══════════════════════════════════════════ */
+@media (max-width: 480px){
+    .search-type-toggle{
+        padding: 0.4rem 0.6rem 0.1rem;
+        gap: 4px;
+    }
+    .search-type-btn{
+        padding: 0.32rem 0.72rem;
+        font-size: 0.66rem;
+        border-radius: 18px;
+    }
+
+    .user-search-results{
+        padding: 0 6px;
+        padding-bottom: 6rem;
+        gap: 3px;
+    }
+    .user-search-card{
+        padding: 0.7rem 0.8rem;
+        gap: 0.7rem;
+        border-radius: 12px;
+    }
+    .user-search-avatar-wrap .user-avatar-container,
+    .user-search-avatar-wrap .user-info-avatar{
+        width: 38px;
+        height: 38px;
+    }
+    .user-search-name{
+        font-size: 0.82rem;
+    }
+    .user-search-username{
+        font-size: 0.68rem;
+    }
+    .user-search-arrow{
+        width: 14px;
+        height: 14px;
+    }
+
+    .search-suggestion-user{
+        padding: 0.45rem 0.65rem;
+        gap: 0.5rem;
+    }
+    .search-suggestion-user-avatar{
+        width: 26px;
+        height: 26px;
+    }
+    .search-suggestion-user-name{
+        font-size: 0.74rem;
+    }
+}

@@ -1,0 +1,23 @@
+# Add Analytics & Settings to Profile Sidebar
+
+## Context
+The profile page sidebar (`/profile`) is missing Analytics and Settings links that exist in the Home sidebar. The user wants feature parity so users can navigate to these pages from the profile view.
+
+## Plan
+
+**File to modify:** `client/src/components/ProfilePage/constants/profileSidebarLinks.jsx`
+
+Add two new link objects — **Analytics** and **Settings** — between the Bookmarks link and the Write button, matching the existing pattern in `Home.jsx` (lines 151-173) but using `location.pathname` for active state (consistent with the other links in this file).
+
+### Changes
+1. Add Analytics link (`/home/analytics`) with chart bar SVG icon after Bookmarks (line 65)
+2. Add Settings link (`/home/settings`) with gear SVG icon after Analytics
+3. Both use `location.pathname` for fill color, matching the profile sidebar convention (`var(--accent-dark)` / `var(--text-muted)`)
+
+Final link order: Home, Explore, Profile, Notifications, Bookmarks, **Analytics**, **Settings**, Write
+
+## Verification
+- Open the app, navigate to `/profile`
+- Confirm Analytics and Settings links appear in sidebar between Bookmarks and Write
+- Click each to verify navigation to `/home/analytics` and `/home/settings`
+- Verify active state highlighting works when on those pages

@@ -1,0 +1,67 @@
+import { createDoor } from '@/domain/models';
+import { distanceToSegment } from '@/geometry/line';
+import { projectPointOnWall, wallLength } from '@/geometry/wallGeometry';
+import { DOOR_WIDTH } from '@/domain/defaults';
+
+const WALL_DETECT_RADIUS = 500; // mm
+
+function findNearestWall(modelPos, walls) {
+  let best = null;
+  let bestDist = WALL_DETECT_RADIUS;
+
+  for (const wall of walls) {
+    const d = distanceToSegment(modelPos, wall.start, wall.end);
+    if (d < bestDist) {
+      best = wall;
+      bestDist = d;
+    }
+  }
+  return best;
+}
+
+export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId }) {
+  return {
+    onMouseMove(modelPos, e, toolState) {
+      const floor = getFloor(activeFloorId);
+      const wall = findNearestWall(modelPos, floor.walls);
+
+      if (wall) {
+        const offset = projectPointOnWall(wall, modelPos);
+        const halfWidth = DOOR_WIDTH / 2;
+        const maxOffset = wallLength(wall) - halfWidth;
+        const clampedOffset = Math.max(halfWidth, Math.min(maxOffset, offset));
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            previewWallId: wall.id,
+            previewOffset: clampedOffset,
+          },
+        });
+      } else {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { previewWallId: null, previewOffset: null },
+        });
+      }
+    },
+
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+      if (!toolState.previewWallId) return;
+
+      const door = createDoor(toolState.previewWallId, toolState.previewOffset);
+      dispatch({ type: 'DOOR_ADD', floorId: activeFloorId, door });
+    },
+
+    onKeyDown(e, toolState) {
+      if (e.key === 'Escape') {
+        editorDispatch({ type: 'SET_TOOL', tool: 'select' });
+      }
+    },
+
+    getCursor(toolState) {
+      return toolState.previewWallId ? 'copy' : 'not-allowed';
+    },
+  };
+}

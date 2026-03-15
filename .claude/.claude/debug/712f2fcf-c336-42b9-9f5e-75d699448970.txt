@@ -1,0 +1,1122 @@
+2026-03-03T13:18:31.237Z [DEBUG] Aborting: tool=ExitPlanMode isAbort=undefined hasFeedback=false isSubagent=false
+2026-03-03T13:18:31.237Z [DEBUG] ExitPlanMode tool permission denied
+2026-03-03T13:18:31.239Z [DEBUG] [useDeferredValue] Messages deferred by 2 (402→404)
+2026-03-03T13:18:31.302Z [DEBUG] High write ratio: blit=22506, write=39373 (63.6% writes), screen=875x121
+2026-03-03T13:18:31.303Z [DEBUG] Full reset (scrollback changes): scrollbackRows=853, firstChangeY=820
+  prev: "                                                                                                                         "
+  next: "  ⎿  User rejected Claude's plan:                                                                                        "
+2026-03-03T13:18:31.316Z [DEBUG] [useDeferredValue] Messages deferred by 2 (402→404)
+2026-03-03T13:18:31.316Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.319Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-03-03T13:18:31.319Z [DEBUG] Getting matching hook commands for SessionEnd with query: clear
+2026-03-03T13:18:31.319Z [DEBUG] Found 0 hook matchers in settings
+2026-03-03T13:18:31.319Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-03-03T13:18:31.319Z [DEBUG] Cleared all session hooks for session ba42b264-91a6-43ca-8a8b-6cdffb57d84a
+2026-03-03T13:18:31.321Z [DEBUG] Getting matching hook commands for SessionStart with query: clear
+2026-03-03T13:18:31.321Z [DEBUG] Found 0 hook matchers in settings
+2026-03-03T13:18:31.321Z [DEBUG] Matched 0 unique hooks for query "clear" (0 before deduplication)
+2026-03-03T13:18:31.321Z [DEBUG] Applying permission update: Setting mode to 'acceptEdits'
+2026-03-03T13:18:31.321Z [DEBUG] FileHistory: Added snapshot for 8f7176b4-2d08-4f19-a478-e82e9ce69cfd, tracking 0 files
+2026-03-03T13:18:31.322Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.322Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.322Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.322Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.674Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.751Z [DEBUG] High write ratio: blit=0, write=47346 (100.0% writes), screen=827x121
+2026-03-03T13:18:31.751Z [DEBUG] Full reset (scrollback changes): scrollbackRows=846, firstChangeY=192
+  prev: "● Searched for 1 pattern, read 1 file (ctrl+o to expand)                                                                 "
+  next: "● Read 1 file (ctrl+o to expand)                                                                                         "
+2026-03-03T13:18:31.771Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.819Z [DEBUG] High write ratio: blit=27860, write=34912 (55.6% writes), screen=827x121
+2026-03-03T13:18:31.820Z [DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.
+2026-03-03T13:18:31.821Z [DEBUG] Loading skills from: managed=C:\ProgramData\ClaudeCode\.claude\skills, user=C:\Users\johnm\.claude\skills, project=[]
+2026-03-03T13:18:31.821Z [DEBUG] getPluginSkills: Processing 3 enabled plugins
+2026-03-03T13:18:31.821Z [DEBUG] Checking plugin example-skills: skillsPath=exists, skillsPaths=12 paths
+2026-03-03T13:18:31.821Z [DEBUG] Attempting to load skills from plugin example-skills default skillsPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills
+2026-03-03T13:18:31.821Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.63.990; cc_entrypoint=cli; cch=00000;
+2026-03-03T13:18:31.822Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.822Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-03T13:18:31.822Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-03T13:18:31.822Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.822Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-03T13:18:31.822Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.824Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-03-03T13:18:31.825Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.825Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.825Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.825Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.825Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.826Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.826Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.826Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.826Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-03-03T13:18:31.826Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-03-03T13:18:31.826Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-03-03T13:18:31.848Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.858Z [DEBUG] High write ratio: blit=0, write=2546 (100.0% writes), screen=63x121
+2026-03-03T13:18:31.858Z [DEBUG] Full reset (scrollback changes): scrollbackRows=798, firstChangeY=8
+  prev: "│ Supabase Egress Audit & Remediation Plan                                                                              │"
+  next: "│ Fix: Mention chip navigates to VisitProfile instead of own profile                                                    │"
+2026-03-03T13:18:31.859Z [DEBUG] Loaded 1 commands from plugin feature-dev default directory
+2026-03-03T13:18:31.859Z [DEBUG] Total plugin commands loaded: 1
+2026-03-03T13:18:31.860Z [DEBUG] Loaded 16 skills from plugin example-skills default directory
+2026-03-03T13:18:31.860Z [DEBUG] Attempting to load skills from plugin example-skills skillsPaths: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-03-03T13:18:31.860Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art for plugin example-skills
+2026-03-03T13:18:31.861Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art
+2026-03-03T13:18:31.861Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines for plugin example-skills
+2026-03-03T13:18:31.861Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines
+2026-03-03T13:18:31.861Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design for plugin example-skills
+2026-03-03T13:18:31.862Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design
+2026-03-03T13:18:31.862Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring for plugin example-skills
+2026-03-03T13:18:31.862Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring
+2026-03-03T13:18:31.862Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design for plugin example-skills
+2026-03-03T13:18:31.862Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design
+2026-03-03T13:18:31.862Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms for plugin example-skills
+2026-03-03T13:18:31.862Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms
+2026-03-03T13:18:31.862Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder for plugin example-skills
+2026-03-03T13:18:31.863Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder
+2026-03-03T13:18:31.863Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator for plugin example-skills
+2026-03-03T13:18:31.863Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator
+2026-03-03T13:18:31.863Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator for plugin example-skills
+2026-03-03T13:18:31.863Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator
+2026-03-03T13:18:31.863Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory for plugin example-skills
+2026-03-03T13:18:31.864Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory
+2026-03-03T13:18:31.864Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder for plugin example-skills
+2026-03-03T13:18:31.864Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder
+2026-03-03T13:18:31.864Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing for plugin example-skills
+2026-03-03T13:18:31.864Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-03-03T13:18:31.864Z [DEBUG] Checking plugin feature-dev: skillsPath=none, skillsPaths=0 paths
+2026-03-03T13:18:31.864Z [DEBUG] Checking plugin frontend-design: skillsPath=exists, skillsPaths=0 paths
+2026-03-03T13:18:31.864Z [DEBUG] Attempting to load skills from plugin frontend-design default skillsPath: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564\skills
+2026-03-03T13:18:31.873Z [DEBUG] Loaded 1 skills from plugin frontend-design default directory
+2026-03-03T13:18:31.873Z [DEBUG] Total plugin skills loaded: 17
+2026-03-03T13:18:31.873Z [DEBUG] getSkills returning: 0 skill dir commands, 17 plugin skills, 5 bundled skills
+2026-03-03T13:18:31.874Z [DEBUG] autocompact: tokens=550 threshold=167000 effectiveWindow=180000
+2026-03-03T13:18:31.875Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-03T13:18:31.878Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.63.464; cc_entrypoint=cli; cch=00000;
+2026-03-03T13:18:31.878Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.878Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-03T13:18:31.878Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-03T13:18:31.878Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.878Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-03T13:18:31.879Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.881Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:31.914Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.914Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.915Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.915Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.916Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.916Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.916Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.919Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.920Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.921Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:31.922Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.012Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.031Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.104Z [DEBUG] Checking for native installer update to version 2.1.63
+2026-03-03T13:18:32.105Z [DEBUG] Found 2.1.63 at C:\Users\johnm\.local\bin\claude.exe, skipping install
+2026-03-03T13:18:32.107Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:32.150Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.150Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.150Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.150Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.209Z [DEBUG] [claudeai-mcp] Fetched 2 servers
+2026-03-03T13:18:32.211Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:32.229Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:32.253Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.253Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.253Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.253Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.271Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.272Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.272Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.272Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:32.747Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:32.781Z [DEBUG] Stream started - received first chunk
+2026-03-03T13:18:33.156Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:33.720Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:34.352Z [DEBUG] Stream started - received first chunk
+2026-03-03T13:18:34.354Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:34.681Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:34.876Z [DEBUG] [useDeferredValue] Messages deferred by 1 (1→2)
+2026-03-03T13:18:34.878Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:34.884Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:34.919Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:34.920Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:34.920Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:34.920Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.385Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.387Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.391Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.396Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.402Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.404Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.407Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.409Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.411Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.415Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.417Z [DEBUG] executePreToolHooks called for tool: Read
+2026-03-03T13:18:35.418Z [DEBUG] Getting matching hook commands for PreToolUse with query: Read
+2026-03-03T13:18:35.418Z [DEBUG] Found 0 hook matchers in settings
+2026-03-03T13:18:35.418Z [DEBUG] Matched 0 unique hooks for query "Read" (0 before deduplication)
+2026-03-03T13:18:35.420Z [DEBUG] [useDeferredValue] Messages deferred by 1 (2→3)
+2026-03-03T13:18:35.422Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.426Z [DEBUG] High write ratio: blit=0, write=2566 (100.0% writes), screen=65x121
+2026-03-03T13:18:35.430Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.434Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.437Z [DEBUG] Getting matching hook commands for PostToolUse with query: Read
+2026-03-03T13:18:35.437Z [DEBUG] Found 5 hook matchers in settings
+2026-03-03T13:18:35.437Z [DEBUG] Matched 1 unique hooks for query "Read" (1 before deduplication)
+2026-03-03T13:18:35.438Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-03T13:18:35.438Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-03T13:18:35.438Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-03T13:18:35.438Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-03T13:18:35.440Z [DEBUG] Sending 21 skills via attachment (initial, 21 total sent)
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:theme-factory" (userFacingName="theme-factory")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:web-artifacts-builder" (userFacingName="web-artifacts-builder")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:doc-coauthoring" (userFacingName="doc-coauthoring")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:algorithmic-art" (userFacingName="algorithmic-art")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:brand-guidelines" (userFacingName="brand-guidelines")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:mcp-builder" (userFacingName="mcp-builder")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:xlsx" (userFacingName="xlsx")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:pptx" (userFacingName="pptx")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:skill-creator" (userFacingName="skill-creator")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:slack-gif-creator" (userFacingName="slack-gif-creator")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:internal-comms" (userFacingName="internal-comms")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:frontend-design" (userFacingName="frontend-design")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:pdf" (userFacingName="pdf")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:canvas-design" (userFacingName="canvas-design")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:webapp-testing" (userFacingName="webapp-testing")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "example-skills:docx" (userFacingName="docx")
+2026-03-03T13:18:35.440Z [DEBUG] Skill prompt: showing "frontend-design:frontend-design" (userFacingName="frontend-design")
+2026-03-03T13:18:35.441Z [DEBUG] autocompact: tokens=25847 threshold=167000 effectiveWindow=180000
+2026-03-03T13:18:35.442Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-03T13:18:35.444Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.63.464; cc_entrypoint=cli; cch=00000;
+2026-03-03T13:18:35.444Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.444Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-03T13:18:35.444Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-03T13:18:35.444Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.444Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-03T13:18:35.444Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.446Z [DEBUG] [useDeferredValue] Messages deferred by 4 (3→7)
+2026-03-03T13:18:35.448Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.454Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:35.463Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.463Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.464Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.464Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.477Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.477Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.477Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.479Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.479Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.479Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.479Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.479Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.480Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.480Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.480Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.485Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.489Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.568Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.568Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.568Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.570Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.575Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:35.652Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:36.297Z [ERROR] Error: Error: 1P event logging: 60 events failed to export (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)
+    at queueFailedEvents (B:/~BUN/root/claude.exe:6275:2403)
+    at async doExport (B:/~BUN/root/claude.exe:6275:1310)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:36.298Z [ERROR] Error: Error: {"message":"Failed to export 60 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 60 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+    at error (B:/~BUN/root/claude.exe:2421:25029)
+    at <anonymous> (B:/~BUN/root/claude.exe:118:92465)
+    at kM0 (B:/~BUN/root/claude.exe:118:93009)
+    at <anonymous> (B:/~BUN/root/claude.exe:119:17366)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:36.298Z [ERROR] [3P telemetry] OTEL diag error: {"message":"Failed to export 60 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 60 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+2026-03-03T13:18:36.625Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:37.593Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:38.558Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:38.743Z [DEBUG] Stream started - received first chunk
+2026-03-03T13:18:38.748Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:38.750Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:38.756Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:39.523Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:39.687Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:39.690Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.157Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.159Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.162Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.165Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.167Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.171Z [DEBUG] [useDeferredValue] Messages deferred by 1 (7→8)
+2026-03-03T13:18:40.174Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.179Z [DEBUG] High write ratio: blit=0, write=2670 (100.0% writes), screen=68x121
+2026-03-03T13:18:40.180Z [DEBUG] executePreToolHooks called for tool: Edit
+2026-03-03T13:18:40.181Z [DEBUG] Getting matching hook commands for PreToolUse with query: Edit
+2026-03-03T13:18:40.181Z [DEBUG] Found 0 hook matchers in settings
+2026-03-03T13:18:40.181Z [DEBUG] Matched 0 unique hooks for query "Edit" (0 before deduplication)
+2026-03-03T13:18:40.185Z [DEBUG] [useDeferredValue] Messages deferred by 1 (7→8)
+2026-03-03T13:18:40.187Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.193Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.203Z [DEBUG] FileHistory: Tracked file modification for C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\nodes\MentionComponent.jsx
+2026-03-03T13:18:40.205Z [DEBUG] Writing to temp file: C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\nodes\MentionComponent.jsx.tmp.19180.1772543920205
+2026-03-03T13:18:40.205Z [DEBUG] Preserving file permissions: 100666
+2026-03-03T13:18:40.208Z [DEBUG] Temp file written successfully, size: 859 bytes
+2026-03-03T13:18:40.208Z [DEBUG] Applied original permissions to temp file
+2026-03-03T13:18:40.208Z [DEBUG] Renaming C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\nodes\MentionComponent.jsx.tmp.19180.1772543920205 to C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\nodes\MentionComponent.jsx
+2026-03-03T13:18:40.209Z [DEBUG] File C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\nodes\MentionComponent.jsx written atomically
+2026-03-03T13:18:40.211Z [DEBUG] Getting matching hook commands for PostToolUse with query: Edit
+2026-03-03T13:18:40.211Z [DEBUG] Found 5 hook matchers in settings
+2026-03-03T13:18:40.211Z [DEBUG] Matched 1 unique hooks for query "Edit" (1 before deduplication)
+2026-03-03T13:18:40.213Z [DEBUG] LSP Diagnostics: getLSPDiagnosticAttachments called
+2026-03-03T13:18:40.213Z [DEBUG] LSP Diagnostics: Checking registry - 0 pending
+2026-03-03T13:18:40.214Z [DEBUG] Hooks: Found 0 total hooks in registry
+2026-03-03T13:18:40.214Z [DEBUG] Hooks: checkForNewResponses returning 0 responses
+2026-03-03T13:18:40.215Z [DEBUG] autocompact: tokens=25958 threshold=167000 effectiveWindow=180000
+2026-03-03T13:18:40.218Z [DEBUG] Auto tool search disabled: 0 tokens (threshold: 20000, 10% of context) [source: query]
+2026-03-03T13:18:40.223Z [DEBUG] attribution header x-anthropic-billing-header: cc_version=2.1.63.464; cc_entrypoint=cli; cch=00000;
+2026-03-03T13:18:40.223Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.224Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-03-03T13:18:40.224Z [DEBUG] [API:auth] OAuth token check starting
+2026-03-03T13:18:40.225Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.225Z [DEBUG] [API:auth] OAuth token check complete
+2026-03-03T13:18:40.226Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.229Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.230Z [DEBUG] [useDeferredValue] Messages deferred by 3 (8→11)
+2026-03-03T13:18:40.233Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.236Z [DEBUG] [lspRecommendation] Looking for LSP plugins for .jsx
+2026-03-03T13:18:40.257Z [DEBUG] [binaryCheck] Cache hit for 'typescript-language-server': false
+2026-03-03T13:18:40.257Z [DEBUG] [lspRecommendation] Skipping typescript-lsp@claude-plugins-official (binary 'typescript-language-server' not found)
+2026-03-03T13:18:40.259Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.259Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.259Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.259Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.259Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.260Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.260Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.263Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:40.267Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.272Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.275Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.275Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.275Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.275Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:40.495Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:41.468Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:42.103Z [DEBUG] Stream started - received first chunk
+2026-03-03T13:18:42.104Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:42.196Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:44.321Z [DEBUG] [useDeferredValue] Messages deferred by 1 (11→12)
+2026-03-03T13:18:44.322Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:44.329Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:44.340Z [DEBUG] Getting matching hook commands for Stop with query: undefined
+2026-03-03T13:18:44.340Z [DEBUG] Found 0 hook matchers in settings
+2026-03-03T13:18:44.340Z [DEBUG] Matched 0 unique hooks for query "no match query" (0 before deduplication)
+2026-03-03T13:18:44.343Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:18:44.363Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.363Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.363Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.363Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.385Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.385Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.386Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:44.386Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:45.225Z [ERROR] Error: Error: 1P event logging: 26 events failed to export (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)
+    at queueFailedEvents (B:/~BUN/root/claude.exe:6275:2403)
+    at async doExport (B:/~BUN/root/claude.exe:6275:1310)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:45.225Z [ERROR] Error: Error: {"message":"Failed to export 26 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 26 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+    at error (B:/~BUN/root/claude.exe:2421:25029)
+    at <anonymous> (B:/~BUN/root/claude.exe:118:92465)
+    at kM0 (B:/~BUN/root/claude.exe:118:93009)
+    at <anonymous> (B:/~BUN/root/claude.exe:119:17366)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:18:45.225Z [ERROR] [3P telemetry] OTEL diag error: {"message":"Failed to export 26 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 26 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+2026-03-03T13:19:44.355Z [DEBUG] Getting matching hook commands for Notification with query: idle_prompt
+2026-03-03T13:19:44.355Z [DEBUG] Found 0 hook matchers in settings
+2026-03-03T13:19:44.355Z [DEBUG] Matched 0 unique hooks for query "idle_prompt" (0 before deduplication)
+2026-03-03T13:19:49.397Z [ERROR] Error: Error: 1P event logging: 1 events failed to export (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)
+    at queueFailedEvents (B:/~BUN/root/claude.exe:6275:2403)
+    at async doExport (B:/~BUN/root/claude.exe:6275:1310)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:19:49.397Z [ERROR] Error: Error: {"message":"Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+    at error (B:/~BUN/root/claude.exe:2421:25029)
+    at <anonymous> (B:/~BUN/root/claude.exe:118:92465)
+    at kM0 (B:/~BUN/root/claude.exe:118:93009)
+    at <anonymous> (B:/~BUN/root/claude.exe:119:17366)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:19:49.397Z [ERROR] [3P telemetry] OTEL diag error: {"message":"Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+2026-03-03T13:19:55.745Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-03-03T13:20:27.038Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:20:29.841Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:20:39.703Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:20:40.260Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:21:03.222Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:21:03.761Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:22:54.549Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:22:56.272Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:23:55.587Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:23:56.121Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:23:59.511Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:23:59.980Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:24:58.871Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:24:59.967Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:26:03.451Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:26:04.467Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:30:32.246Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:30:33.384Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:34:34.669Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:34:35.239Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:09.356Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:13.126Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:20.954Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:21.619Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:48.293Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:52.030Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:52.811Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:36:57.395Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:41:29.459Z [ERROR] Error: Error: 1P event logging: 1 events failed to export (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)
+    at queueFailedEvents (B:/~BUN/root/claude.exe:6275:2403)
+    at async doExport (B:/~BUN/root/claude.exe:6275:1310)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:41:29.460Z [ERROR] Error: Error: {"message":"Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+    at error (B:/~BUN/root/claude.exe:2421:25029)
+    at <anonymous> (B:/~BUN/root/claude.exe:118:92465)
+    at kM0 (B:/~BUN/root/claude.exe:118:93009)
+    at <anonymous> (B:/~BUN/root/claude.exe:119:17366)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:41:29.460Z [ERROR] [3P telemetry] OTEL diag error: {"message":"Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 1 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+2026-03-03T13:48:31.784Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:48:31.825Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:31.922Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:31.925Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:31.942Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:32.130Z [DEBUG] Checking for native installer update to version 2.1.63
+2026-03-03T13:48:32.133Z [DEBUG] Found 2.1.63 at C:\Users\johnm\.local\bin\claude.exe, skipping install
+2026-03-03T13:48:32.137Z [DEBUG] Fast mode unavailable: Fast mode requires extra usage billing · /extra-usage to enable
+2026-03-03T13:48:32.180Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:32.181Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:32.181Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:32.187Z [ERROR] AxiosError: [url=https://api.anthropic.com/api/oauth/claude_cli/client_data,status=429,body=Rate limited. Please try again later.] Error
+    at ZR (B:/~BUN/root/claude.exe:92:1144)
+    at <anonymous> (B:/~BUN/root/claude.exe:93:10067)
+    at emit (node:events:92:22)
+    at endReadableNT (internal:streams/readable:861:50)
+    at processTicksAndRejections (native:7:39)
+    at request (B:/~BUN/root/claude.exe:95:2149)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:36.836Z [ERROR] Error: Error: 1P event logging: 6 events failed to export (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)
+    at queueFailedEvents (B:/~BUN/root/claude.exe:6275:2403)
+    at async doExport (B:/~BUN/root/claude.exe:6275:1310)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:36.837Z [ERROR] Error: Error: {"message":"Failed to export 6 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 6 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+    at error (B:/~BUN/root/claude.exe:2421:25029)
+    at <anonymous> (B:/~BUN/root/claude.exe:118:92465)
+    at kM0 (B:/~BUN/root/claude.exe:118:93009)
+    at <anonymous> (B:/~BUN/root/claude.exe:119:17366)
+    at processTicksAndRejections (native:7:39)
+2026-03-03T13:48:36.837Z [ERROR] [3P telemetry] OTEL diag error: {"message":"Failed to export 6 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)","originalLine":"6275","originalColumn":"1462","line":"6275","column":"1462","sourceURL":"B:/~BUN/root/claude.exe","stack":"Error: Failed to export 6 events (status=429, code=ERR_BAD_REQUEST, Request failed with status code 429)\n    at doExport (B:/~BUN/root/claude.exe:6275:1462)\n    at processTicksAndRejections (native:7:39)","name":"Error"}
+2026-03-03T13:49:55.754Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT

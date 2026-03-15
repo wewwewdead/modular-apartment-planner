@@ -1,0 +1,533 @@
+import { distance } from '@/geometry/point';
+import { clampWallOpeningOffset, doorOutlineOnWall, windowOutlineOnWall, wallLength, projectPointOnWall } from '@/geometry/wallGeometry';
+import { pointInPolygon } from '@/geometry/polygon';
+import { columnOutline } from '@/geometry/columnGeometry';
+import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { getStairRenderData } from '@/geometry/stairGeometry';
+import { landingContainsPoint } from '@/geometry/landingGeometry';
+import { fixtureContainsPoint } from '@/geometry/fixtureGeometry';
+import { slabContainsPoint } from '@/geometry/slabGeometry';
+import { hitTestAnnotation } from '@/annotations/scene';
+import { MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
+import { getWallRenderData, resolveWallEndpoints, snapWallEndpoint } from '@/geometry/wallColumnGeometry';
+import { duplicateColumn } from '@/domain/columnModels';
+import { hitTestSectionCut } from '@/geometry/sectionCutGeometry';
+import { collectPlanRegionSelection, normalizeRectBounds, rectSize } from '@/clipboard/planClipboard';
+
+function hitTest(modelPos, floor, annotationTolerance) {
+  // Hit test doors first (smaller targets, higher priority)
+  for (const door of floor.doors) {
+    const wall = floor.walls.find(w => w.id === door.wallId);
+    if (!wall) continue;
+    const info = doorOutlineOnWall(wall, door);
+    const poly = [info.p1, info.p2, info.p3, info.p4];
+    if (pointInPolygon(modelPos, poly)) {
+      return { id: door.id, type: 'door' };
+    }
+  }
+
+  // Hit test windows
+  for (const win of floor.windows) {
+    const wall = floor.walls.find(w => w.id === win.wallId);
+    if (!wall) continue;
+    const info = windowOutlineOnWall(wall, win);
+    const poly = [info.p1, info.p2, info.p3, info.p4];
+    if (pointInPolygon(modelPos, poly)) {
+      return { id: win.id, type: 'window' };
+    }
+  }
+
+  // Hit test walls
+  // Hit test columns
+  for (const sc of (floor.sectionCuts || [])) {
+    if (hitTestSectionCut(modelPos, sc, annotationTolerance)) {
+      return { id: sc.id, type: 'sectionCut' };
+    }
+  }
+
+  for (const column of (floor.columns || [])) {
+    const outline = columnOutline(column);
+    if (pointInPolygon(modelPos, outline)) {
+      return { id: column.id, type: 'column' };
+    }
+  }
+
+  // Hit test fixtures
+  for (const fixture of (floor.fixtures || [])) {
+    if (fixtureContainsPoint(fixture, modelPos)) {
+      return { id: fixture.id, type: 'fixture' };
+    }
+  }
+
+  // Hit test beams
+  for (const beam of (floor.beams || [])) {
+    const renderData = getBeamRenderData(beam, floor.columns || []);
+    if (!renderData) continue;
+    if (pointInPolygon(modelPos, renderData.outline)) {
+      return { id: beam.id, type: 'beam' };
+    }
+  }
+
+  // Hit test walls
+  for (const wall of floor.walls) {
+    const outline = getWallRenderData(wall, floor.columns || []).outline;
+    if (pointInPolygon(modelPos, outline)) {
+      return { id: wall.id, type: 'wall' };
+    }
+  }
+
+  // Hit test stairs after walls/beams/columns so current editing priority stays intact.
+  for (const stair of (floor.stairs || [])) {
+    const renderData = getStairRenderData(stair);
+    if (!renderData) continue;
+    if (pointInPolygon(modelPos, renderData.outline)) {
+      return { id: stair.id, type: 'stair' };
+    }
+  }
+
+  // Hit test landings
+  for (const landing of (floor.landings || [])) {
+    if (landingContainsPoint(landing, modelPos)) {
+      return { id: landing.id, type: 'landing' };
+    }
+  }
+
+  // Hit test rooms (lowest priority)
+  for (const room of floor.rooms) {
+    if (room.points?.length >= 3 && pointInPolygon(modelPos, room.points)) {
+      return { id: room.id, type: 'room' };
+    }
+  }
+
+  for (const slab of (floor.slabs || [])) {
+    if (slabContainsPoint(slab, modelPos)) {
+      return { id: slab.id, type: 'slab' };
+    }
+  }
+
+  const annotationHit = hitTestAnnotation(modelPos, floor, annotationTolerance);
+  if (annotationHit) {
+    return annotationHit;
+  }
+
+  return null;
+}
+
+export function createSelectHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+
+      // Check if clicking a handle
+      const target = e.target;
+      if (target.dataset.handle) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: true,
+            dragType: 'handle',
+            handle: target.dataset.handle,
+            handleIndex: target.dataset.index != null ? Number(target.dataset.index) : null,
+            startPos: modelPos,
+          },
+        });
+        return;
+      }
+
+      const hit = hitTest(modelPos, floor, SNAP_DISTANCE_PX / viewport.zoom * 2.5);
+      if (hit) {
+        editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
+        const draggableTypes = new Set(['wall', 'column', 'fixture', 'door', 'window', 'stair', 'sectionCut', 'landing']);
+        if (!draggableTypes.has(hit.type)) return;
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: true,
+            dragType: 'move',
+            startPos: modelPos,
+            originalPos: modelPos,
+          },
+        });
+      } else {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: true,
+            dragType: 'marquee',
+            startPos: modelPos,
+            currentPos: modelPos,
+          },
+        });
+      }
+    },
+
+    onMouseMove(modelPos, e, toolState, selectedId, selectedType) {
+      if (toolState.dragging && toolState.dragType === 'marquee') {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { currentPos: modelPos },
+        });
+        return;
+      }
+
+      if (!toolState.dragging || !selectedId) return;
+
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+      const dx = modelPos.x - toolState.startPos.x;
+      const dy = modelPos.y - toolState.startPos.y;
+      const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
+
+      if (selectedType === 'wall') {
+        const wall = floor.walls.find(w => w.id === selectedId);
+        if (!wall) return;
+        const resolved = resolveWallEndpoints(wall, floor.columns || []);
+
+        if (toolState.dragType === 'handle') {
+          const handle = toolState.handle;
+          const oppositeKey = handle === 'start' ? 'end' : 'start';
+          const oppositePoint = resolved[oppositeKey];
+          let nextPoint = modelPos;
+          let nextAttachment = null;
+
+          if (e.shiftKey) {
+            const dx = modelPos.x - oppositePoint.x;
+            const dy = modelPos.y - oppositePoint.y;
+            const angle = Math.atan2(dy, dx);
+            const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+            const len = Math.sqrt(dx * dx + dy * dy);
+            nextPoint = {
+              x: oppositePoint.x + Math.cos(snapAngle) * len,
+              y: oppositePoint.y + Math.sin(snapAngle) * len,
+            };
+          } else if (snapEnabled) {
+            const snapResult = snapWallEndpoint(modelPos, {
+              walls: floor.walls,
+              columns: floor.columns || [],
+              snapDist: snapDistModel,
+              otherPoint: oppositePoint,
+              ignoreWallId: wall.id,
+            });
+            if (snapResult) {
+              nextPoint = snapResult.point;
+              nextAttachment = snapResult.attachment;
+            }
+          }
+
+          if (distance(nextPoint, oppositePoint) < MIN_WALL_LENGTH) return;
+
+          dispatch({
+            type: 'WALL_UPDATE',
+            floorId: activeFloorId,
+            wall: {
+              id: wall.id,
+              [handle]: nextPoint,
+              [`${handle}Attachment`]: nextAttachment,
+            },
+          });
+        } else {
+          let nextStart = { x: resolved.start.x + dx, y: resolved.start.y + dy };
+          let nextEnd = { x: resolved.end.x + dx, y: resolved.end.y + dy };
+          let startAttachment = null;
+          let endAttachment = null;
+
+          if (snapEnabled) {
+            const startSnap = snapWallEndpoint(nextStart, {
+              walls: floor.walls,
+              columns: floor.columns || [],
+              snapDist: snapDistModel,
+              otherPoint: nextEnd,
+              ignoreWallId: wall.id,
+            });
+            if (startSnap) {
+              nextStart = startSnap.point;
+              startAttachment = startSnap.attachment;
+            }
+
+            const endSnap = snapWallEndpoint(nextEnd, {
+              walls: floor.walls,
+              columns: floor.columns || [],
+              snapDist: snapDistModel,
+              otherPoint: nextStart,
+              ignoreWallId: wall.id,
+            });
+            if (endSnap) {
+              nextEnd = endSnap.point;
+              endAttachment = endSnap.attachment;
+            }
+          }
+
+          if (distance(nextStart, nextEnd) < MIN_WALL_LENGTH) return;
+
+          dispatch({
+            type: 'WALL_UPDATE',
+            floorId: activeFloorId,
+            wall: {
+              id: wall.id,
+              start: nextStart,
+              end: nextEnd,
+              startAttachment,
+              endAttachment,
+            },
+          });
+        }
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'column') {
+        const col = (floor.columns || []).find(c => c.id === selectedId);
+        if (!col) return;
+        dispatch({
+          type: 'COLUMN_UPDATE',
+          floorId: activeFloorId,
+          column: { id: col.id, x: col.x + dx, y: col.y + dy },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'fixture') {
+        const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+        if (!fixture) return;
+        dispatch({
+          type: 'FIXTURE_UPDATE',
+          floorId: activeFloorId,
+          fixture: { id: fixture.id, x: fixture.x + dx, y: fixture.y + dy },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'sectionCut') {
+        const sectionCut = (floor.sectionCuts || []).find(s => s.id === selectedId);
+        if (!sectionCut) return;
+
+        if (toolState.dragType === 'handle') {
+          const handle = toolState.handle;
+          const nextSectionCut = handle === 'start'
+            ? { ...sectionCut, startPoint: modelPos }
+            : { ...sectionCut, endPoint: modelPos };
+
+          if (distance(nextSectionCut.startPoint, nextSectionCut.endPoint) < MIN_WALL_LENGTH) return;
+
+          dispatch({
+            type: 'SECTION_UPDATE',
+            floorId: activeFloorId,
+            sectionCut: nextSectionCut,
+          });
+        } else {
+          dispatch({
+            type: 'SECTION_UPDATE',
+            floorId: activeFloorId,
+            sectionCut: {
+              id: sectionCut.id,
+              startPoint: {
+                x: sectionCut.startPoint.x + dx,
+                y: sectionCut.startPoint.y + dy,
+              },
+              endPoint: {
+                x: sectionCut.endPoint.x + dx,
+                y: sectionCut.endPoint.y + dy,
+              },
+            },
+          });
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: { startPos: modelPos },
+          });
+        }
+      } else if (selectedType === 'beam') {
+        return;
+      } else if (selectedType === 'stair') {
+        const stair = (floor.stairs || []).find(entry => entry.id === selectedId);
+        if (!stair) return;
+        dispatch({
+          type: 'STAIR_UPDATE',
+          floorId: activeFloorId,
+          stair: {
+            id: stair.id,
+            startPoint: {
+              x: stair.startPoint.x + dx,
+              y: stair.startPoint.y + dy,
+            },
+          },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'landing') {
+        const landing = (floor.landings || []).find(l => l.id === selectedId);
+        if (!landing) return;
+        dispatch({
+          type: 'LANDING_UPDATE',
+          floorId: activeFloorId,
+          landing: {
+            id: landing.id,
+            position: {
+              x: landing.position.x + dx,
+              y: landing.position.y + dy,
+            },
+          },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'slab') {
+        if (toolState.dragType !== 'handle' || toolState.handle !== 'slab-vertex' || toolState.handleIndex == null) {
+          return;
+        }
+        const slab = (floor.slabs || []).find(s => s.id === selectedId);
+        if (!slab) return;
+
+        const boundaryPoints = slab.boundaryPoints.map((point, index) => (
+          index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point
+        ));
+
+        dispatch({
+          type: 'SLAB_UPDATE',
+          floorId: activeFloorId,
+          slab: {
+            id: slab.id,
+            boundaryPoints,
+          },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'door' || selectedType === 'window') {
+        // Slide along parent wall
+        const items = selectedType === 'door' ? floor.doors : floor.windows;
+        const item = items.find(i => i.id === selectedId);
+        if (!item) return;
+
+        const wall = floor.walls.find(w => w.id === item.wallId);
+        if (!wall) return;
+
+        const newOffset = projectPointOnWall(wall, modelPos);
+        const clampedOffset = clampWallOpeningOffset(wallLength(wall), item.width, newOffset);
+
+        const updateType = selectedType === 'door' ? 'DOOR_UPDATE' : 'WINDOW_UPDATE';
+        dispatch({
+          type: updateType,
+          floorId: activeFloorId,
+          [selectedType]: { id: item.id, offset: clampedOffset },
+        });
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      }
+    },
+
+    onMouseUp(modelPos, e, toolState) {
+      if (toolState.dragging && toolState.dragType === 'marquee') {
+        const floor = getFloor(activeFloorId);
+        const bounds = normalizeRectBounds(toolState.startPos || modelPos, toolState.currentPos || modelPos);
+        const size = rectSize(bounds);
+        const minimumSize = SNAP_DISTANCE_PX / viewport.zoom;
+
+        if (!floor || (size.width < minimumSize && size.height < minimumSize)) {
+          editorDispatch({ type: 'DESELECT' });
+        } else {
+          const regionSelection = collectPlanRegionSelection(floor, bounds);
+          if (regionSelection.objectCount) {
+            editorDispatch({
+              type: 'SET_REGION_SELECTION',
+              bounds: regionSelection.bounds,
+              selection: regionSelection.selection,
+            });
+          } else {
+            editorDispatch({ type: 'DESELECT' });
+          }
+        }
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: false,
+            dragType: null,
+            handle: null,
+            handleIndex: null,
+            startPos: null,
+            currentPos: null,
+          },
+        });
+        return;
+      }
+
+      if (toolState.dragging) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: false,
+            dragType: null,
+            handle: null,
+            handleIndex: null,
+            startPos: null,
+            originalPos: null,
+            currentPos: null,
+          },
+        });
+      }
+    },
+
+    onKeyDown(e, toolState, selectedId, selectedType) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selectedId && selectedType === 'column') {
+        e.preventDefault();
+        const floor = getFloor(activeFloorId);
+        if (!floor) return;
+        const column = (floor.columns || []).find(c => c.id === selectedId);
+        if (!column) return;
+        const duplicate = duplicateColumn(column);
+        dispatch({ type: 'COLUMN_DUPLICATE', floorId: activeFloorId, column: duplicate });
+        editorDispatch({ type: 'SELECT_OBJECT', id: duplicate.id, objectType: 'column' });
+        return;
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        const floor = getFloor(activeFloorId);
+        if (!floor) return;
+        if (selectedType === 'wall') {
+          dispatch({ type: 'WALL_DELETE', floorId: activeFloorId, wallId: selectedId });
+        } else if (selectedType === 'door') {
+          dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
+        } else if (selectedType === 'window') {
+          dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+        } else if (selectedType === 'column') {
+          dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
+        } else if (selectedType === 'fixture') {
+          dispatch({ type: 'FIXTURE_DELETE', floorId: activeFloorId, fixtureId: selectedId });
+        } else if (selectedType === 'beam') {
+          dispatch({ type: 'BEAM_DELETE', floorId: activeFloorId, beamId: selectedId });
+        } else if (selectedType === 'stair') {
+          dispatch({ type: 'STAIR_DELETE', floorId: activeFloorId, stairId: selectedId });
+        } else if (selectedType === 'landing') {
+          dispatch({ type: 'LANDING_DELETE', floorId: activeFloorId, landingId: selectedId });
+        } else if (selectedType === 'annotation') {
+          dispatch({ type: 'ANNOTATION_DELETE', floorId: activeFloorId, annotationId: selectedId });
+        } else if (selectedType === 'slab') {
+          dispatch({ type: 'SLAB_DELETE', floorId: activeFloorId, slabId: selectedId });
+        } else if (selectedType === 'sectionCut') {
+          dispatch({ type: 'SECTION_DELETE', floorId: activeFloorId, sectionId: selectedId });
+        } else if (selectedType === 'room') {
+          dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
+        }
+        editorDispatch({ type: 'DESELECT' });
+      }
+    },
+
+    getCursor(toolState) {
+      if (toolState.dragType === 'marquee') return 'crosshair';
+      if (toolState.dragging) return 'grabbing';
+      return 'default';
+    },
+  };
+}

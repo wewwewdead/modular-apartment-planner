@@ -1,0 +1,61 @@
+import * as THREE from 'three';
+
+export function createMaterialPalette() {
+  return {
+    wall: new THREE.MeshStandardMaterial({
+      color: 0xb7c0ca,
+      roughness: 0.88,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    }),
+    slab: new THREE.MeshStandardMaterial({
+      color: 0xd6d9de,
+      roughness: 0.9,
+      metalness: 0.02,
+      side: THREE.DoubleSide,
+    }),
+    column: new THREE.MeshStandardMaterial({
+      color: 0x95a3b0,
+      roughness: 0.8,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+    }),
+    beam: new THREE.MeshStandardMaterial({
+      color: 0x7a8794,
+      roughness: 0.76,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+    }),
+    stair: new THREE.MeshStandardMaterial({
+      color: 0xc2c9d1,
+      roughness: 0.84,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    }),
+    door: new THREE.MeshStandardMaterial({
+      color: 0xc48f5d,
+      roughness: 0.82,
+      metalness: 0.04,
+      side: THREE.DoubleSide,
+    }),
+    window: new THREE.MeshStandardMaterial({
+      color: 0x8dc8ef,
+      roughness: 0.15,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.48,
+      side: THREE.DoubleSide,
+    }),
+    outline: new THREE.LineBasicMaterial({
+      color: 0x25303d,
+      transparent: true,
+      opacity: 0.7,
+    }),
+  };
+}
+
+export function disposeMaterialPalette(materialPalette) {
+  Object.values(materialPalette || {}).forEach((material) => {
+    material.dispose?.();
+  });
+}

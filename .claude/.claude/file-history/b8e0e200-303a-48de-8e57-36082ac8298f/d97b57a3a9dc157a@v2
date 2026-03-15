@@ -1,0 +1,28 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { IS_SUPABASE_CONFIGURED, MOBILE_ENV } from '../config/env';
+
+const stripTrailingSlashes = (value: string): string => value.replace(/\/+$/, '');
+
+const createSupabaseClient = (): SupabaseClient => {
+  const resolvedSupabaseUrl = stripTrailingSlashes(MOBILE_ENV.SUPABASE_URL);
+  const resolvedSupabaseKey = MOBILE_ENV.SUPABASE_ANON_KEY;
+
+  return createClient(resolvedSupabaseUrl, resolvedSupabaseKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+      storage: AsyncStorage,
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 2,
+      },
+    },
+  });
+};
+
+export const supabase: SupabaseClient | null = IS_SUPABASE_CONFIGURED
+  ? createSupabaseClient()
+  : null;

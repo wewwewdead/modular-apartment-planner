@@ -6,6 +6,8 @@ import { createWalkNavigation } from './createWalkNavigation';
 import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
 import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
 
+let axisIndicatorInstance = null;
+
 export function createPreviewViewport(container) {
   const materialPalette = createMaterialPalette();
   const scene = new THREE.Scene();
@@ -46,6 +48,7 @@ export function createPreviewViewport(container) {
   let pickHandler = null;
   let pickContext = { activeFloorId: null };
   let pointerDown = null;
+  let navigationModifierActive = false;
   let navigationMode = 'inspect';
   let walkUiHandler = null;
   let walkExitHandler = null;
@@ -168,6 +171,9 @@ export function createPreviewViewport(container) {
     }
     emitCompassHeading();
     renderer.render(scene, camera);
+    if (axisIndicatorInstance) {
+      axisIndicatorInstance.render(renderer, camera);
+    }
     animationFrame = window.requestAnimationFrame(renderFrame);
   };
 
@@ -235,6 +241,11 @@ export function createPreviewViewport(container) {
       return;
     }
 
+    if (navigationModifierActive) {
+      pointerDown = null;
+      return;
+    }
+
     if (event.button !== 0) {
       pointerDown = null;
       return;
@@ -252,6 +263,11 @@ export function createPreviewViewport(container) {
 
   const handlePointerUp = (event) => {
     if (navigationMode !== 'inspect') {
+      pointerDown = null;
+      return;
+    }
+
+    if (navigationModifierActive) {
       pointerDown = null;
       return;
     }
@@ -325,6 +341,15 @@ export function createPreviewViewport(container) {
     setProjectionPreset(presetName) {
       inspectNavigation.setProjectionPreset(presetName);
     },
+    setInspectLeftButtonRotateEnabled(enabled) {
+      inspectNavigation.setLeftButtonRotateEnabled(enabled);
+    },
+    setNavigationModifierActive(active) {
+      navigationModifierActive = !!active;
+      if (navigationModifierActive) {
+        pointerDown = null;
+      }
+    },
     setPickHandler(handler) {
       pickHandler = typeof handler === 'function' ? handler : null;
     },
@@ -390,6 +415,21 @@ export function createPreviewViewport(container) {
       renderer.dispose();
       renderer.domElement.remove();
     },
+    setAxisIndicator(indicator) {
+      axisIndicatorInstance = indicator;
+    },
     materialPalette,
+    getCamera() {
+      return camera;
+    },
+    getDomElement() {
+      return renderer.domElement;
+    },
+    getScene() {
+      return scene;
+    },
+    getRaycaster() {
+      return raycaster;
+    },
   };
 }

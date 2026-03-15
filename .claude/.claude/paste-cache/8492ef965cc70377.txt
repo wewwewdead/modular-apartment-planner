@@ -1,0 +1,29 @@
+"I want to implement a 'Temporal Vibe System' for my project, Iskrib. The goal is to style post cards differently based on the created_at timestamp from the database.
+
+1. The Logic: > Create a utility function getPostVibe(timestamp) that categorizes a post into:
+
+
+
+morning (5am-10am): Morning Dew vibe.
+
+midday (11am-3pm): High Sun vibe.
+
+golden (4pm-7pm): Golden Hour vibe.
+
+twilight (8pm-10pm): Twilight vibe.
+
+moonlight (11pm-4am): Written in the Moonlight vibe.
+
+2. The UI Requirements:
+
+
+
+Dynamic Gradients: e.g., Moonlight gets a deep navy-to-indigo border; Golden Hour gets an amber glow.
+
+Badges: Add a small, elegant badge to the top right of the card (e.g., '🌙 Written in the Moonlight')
+
+Conditional Textures: For the moonlight vibe, add a subtle 'starry' SVG background pattern or a soft neon outer glow.
+
+3. Integration: > Ensure this works seamlessly with TanStack Query data mapping. The logic should be efficient and not cause re-render loops.
+
+4. Design Aesthetic: > Keep it consistent with Iskrib's clean, minimalist layout. Use subtle transitions so that as a user scrolls through the feed, the change in 'vibes' feels like a journey through time." "Please split the vibe logic into a separate hooks/useVibeTheme.js file and only update the PostCard.jsx component to consume that hook."

@@ -1,0 +1,48 @@
+# Prompt Responses Modal
+
+## Context
+When users click the `.dashboard-prompt-responses` area (stacked avatars + "X responses" text) in the DashboardBriefing prompt section, a modal should open showing a scrollable list of response post cards. Each card shows the author info, post title, and timestamp, and clicking a card navigates to the full post.
+
+## Current State
+- `PromptSection.jsx` renders avatars + count but they're not clickable
+- API `getPromptResponses` returns up to 10 responses with: `id`, `title`, `created_at`, `user_id`, `users: { id, name, image_url, badge }`
+- The data is already fetched via React Query in `DashboardBriefing.jsx` and passed as `responsesData` prop
+
+## Files to Change
+
+### 1. `client/src/components/DashboardBriefing/PromptSection.jsx`
+- Add `useState` for `showModal` toggle
+- Make `.dashboard-prompt-responses` div clickable (onClick → `setShowModal(true)`)
+- Import and render `PromptResponsesModal` when `showModal` is true
+- Pass `responses`, `count`, `promptText`, and `onClose` to the modal
+
+### 2. NEW `client/src/components/DashboardBriefing/PromptResponsesModal.jsx`
+- Follows existing modal pattern (AnimatePresence + motion.div overlay, like RepostModal)
+- Fixed overlay with backdrop blur, click-outside to close
+- Header: prompt text (truncated) + response count + close button
+- Scrollable list of response cards, each showing:
+  - Author avatar (24→32px) + name + badge if present
+  - Post title
+  - Relative timestamp (e.g. "2h ago")
+  - Clickable → `navigate('/home/post/${response.id}')`
+- Use `useNavigate` from react-router-dom
+
+### 3. `client/src/components/DashboardBriefing/DashboardBriefing.css`
+- Add cursor pointer + hover effect to `.dashboard-prompt-responses`
+- Add modal overlay styles (`.prompt-responses-overlay`)
+- Add modal container styles (`.prompt-responses-modal`)
+- Add response card styles (`.prompt-response-card`, avatar, title, meta)
+- Mobile responsive adjustments
+
+## Reuse
+- Modal pattern: same as `RepostModal.jsx` (overlay with `inset: 0`, `backdrop-filter: blur(4px)`, motion spring entrance)
+- CSS variables: `var(--bg-elevated)`, `var(--border-card)`, `var(--text-heading)`, `var(--text-secondary)`, `var(--shadow-modal)`
+- Navigation: `useNavigate` → `/home/post/${id}` (same as BestPostCard)
+- Avatar fallback: `/assets/profile.jpg`
+
+## Verification
+1. Click the avatars/responses area in dashboard prompt → modal opens
+2. Modal shows list of response cards with author + title + time
+3. Click a card → navigates to the post
+4. Click overlay or close button → modal closes
+5. No console errors, responsive on mobile

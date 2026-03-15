@@ -1,0 +1,200 @@
+# The Wormhole — Fast Travel Landmarks
+
+## Context
+
+The Universe canvas already renders semantic "bridges" (faint curved lines) between similar posts within a viewport. But these only connect nearby posts. **Wormholes** take this further: they find posts that are semantically identical but physically far apart in the universe, and place glowing animated vortices at each endpoint. Clicking one warps the camera to the other side — a literal shortcut through the community's collective mind.
+
+## Data Flow
+
+```
+New RPC: find_wormhole_pairs() — global query, NOT viewport-scoped
+    → LATERAL join with pgvector IVFFlat index (O(N×K×logN))
+    → Filters: similarity ≥ 0.93, spatial distance ≥ 4000, different users
+    → Returns pairs with galaxy centroid positions (stable, gravity-settled targets)
+    → Client fetches ONCE on mount via direct supabase.rpc()
+    → WormholeLayer renders animated vortices at each endpoint
+    → Click → flyTo() the other end + CSS warp overlay
+```
+
+## Implementation Steps
+
+### 1. SQL RPC — `find_wormhole_pairs()`
+
+**File:** `server/sql/galaxy_gravity.sql` (append)
+
+```sql
+DROP FUNCTION IF EXISTS public.find_wormhole_pairs;
+CREATE FUNCTION public.find_wormhole_pairs(
+    similarity_threshold FLOAT DEFAULT 0.93,
+    min_distance FLOAT DEFAULT 4000,
+    max_pairs INT DEFAULT 15
+)
+RETURNS TABLE (
+    post_a UUID, post_b UUID, similarity FLOAT,
+    a_x FLOAT, a_y FLOAT, b_x FLOAT, b_y FLOAT,
+    a_title TEXT, b_title TEXT
+)
+LANGUAGE sql STABLE AS $$
+    SELECT DISTINCT ON (LEAST(a.id, b.id), GREATEST(a.id, b.id))
+        a.id, b.id,
+        1 - (a.embeddings <=> b.embeddings),
+        gc_a.galaxy_x, gc_a.galaxy_y,
+        gc_b.galaxy_x, gc_b.galaxy_y,
+        a.title, b.title
+    FROM public.journals a
+    JOIN public.galaxy_centroids gc_a ON gc_a.user_id = a.user_id
+    CROSS JOIN LATERAL (
+        SELECT j.id, j.title, j.user_id, j.embeddings
+        FROM public.journals j
+        WHERE j.privacy = 'public'
+          AND j.embeddings IS NOT NULL
+          AND j.user_id != a.user_id
+        ORDER BY j.embeddings <=> a.embeddings
+        LIMIT 5
+    ) b
+    JOIN public.galaxy_centroids gc_b ON gc_b.user_id = b.user_id
+    WHERE a.privacy = 'public'
+      AND a.embeddings IS NOT NULL
+      AND 1 - (a.embeddings <=> b.embeddings) >= similarity_threshold
+      AND SQRT(
+          POWER(gc_a.galaxy_x - gc_b.galaxy_x, 2) +
+          POWER(gc_a.galaxy_y - gc_b.galaxy_y, 2)
+      ) >= min_distance
+    ORDER BY LEAST(a.id, b.id), GREATEST(a.id, b.id),
+             1 - (a.embeddings <=> b.embeddings) DESC
+    LIMIT max_pairs;
+$$;
+```
+
+**Why LATERAL:** The IVFFlat index on `embeddings` only accelerates KNN queries (`ORDER BY <=> LIMIT K`). A naive self-join with a threshold filter degrades to O(N²) sequential scan. LATERAL probes the index per-row: O(N × 5 × log N).
+
+**Why galaxy centroid positions:** Post positions are ephemeral (depend on gravity simulation state + viewport). Galaxy centroids from `galaxy_centroids.galaxy_x/y` are the stable gravity targets — the "final resting place" of each galaxy.
+
+### 2. WormholeLayer Component
+
+**File:** `client/src/components/Universe/layers/WormholeLayer.jsx` (new)
+
+**Architecture:**
+- `React.memo` wrapping a Konva `Layer` at parallax 1.0
+- Single batch `Shape` with `sceneFunc` for all vortex visuals (`listening={false}`)
+- Individual invisible `Circle` per endpoint for hit detection (`opacity={0}`)
+- `useRef` + `requestAnimationFrame` loop for animation (same pattern as NebulaLayer)
+
+**Props:** `layerProps, wormholes, zoom, onWormholeClick`
+
+**Vortex visual (per endpoint in sceneFunc):**
+- Radial gradient glow center (color from pair index → `STAR_COLORS`)
+- 4 spinning arc segments at varying radii, different rotation speeds
+- 6-8 small orbiting particle dots
+- Sinusoidal pulse on radius (breathe effect)
+- Each pair shares the same color for visual pairing
+
+**Hit detection circles:**
+- `radius={20 / zoom}` — constant ~20px screen-space hit target
+- `opacity={0}` — invisible
+- Cursor change on hover (pointer ↔ grab), matching GalaxyLabel pattern
+- `onClick/onTap → onWormholeClick(wormhole, 'a' or 'b')`
+
+**Zoom-based opacity:** Wormholes fully visible at low zoom (0.02-0.1), fade out at high zoom (>0.5):
+```js
+const opacity = zoom < 0.1 ? 1.0
+    : zoom < 0.5 ? 1.0 - (zoom - 0.1) * 1.5
+    : 0;
+```
+Skip rendering entirely when opacity ≤ 0.
+
+### 3. Universe.jsx Integration
+
+**File:** `client/src/components/Universe/Universe.jsx`
+
+**New state:**
+```js
+const [wormholes, setWormholes] = useState([]);
+const [isWarping, setIsWarping] = useState(false);
+```
+
+**One-time wormhole fetch (useEffect on mount):**
+- Direct `supabase.rpc('find_wormhole_pairs', {...})` call — matches existing pattern at line 192
+- Cancellation guard, error logging
+
+**handleWormholeClick callback:**
+- Guard: `if (isFlying.current) return`
+- Determine target = other endpoint's position
+- Set `isWarping = true` (triggers CSS overlay)
+- `flyTo(targetX, targetY, zoom, () => setIsWarping(false))`
+
+**Stage additions (after InteractiveLayer):**
+```jsx
+{wormholes.length > 0 && (
+    <WormholeLayer
+        layerProps={getLayerProps(1.0)}
+        wormholes={wormholes}
+        zoom={zoom}
+        onWormholeClick={handleWormholeClick}
+    />
+)}
+```
+
+**Warp overlay (after `</Stage>`, inside `.universeContainer`):**
+```jsx
+{isWarping && <div className={styles.warpOverlay} />}
+```
+
+### 4. CSS Warp Overlay
+
+**File:** `client/src/components/Universe/Universe.module.css`
+
+```css
+.warpOverlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+    background: radial-gradient(
+        ellipse at center,
+        transparent 20%,
+        rgba(95, 146, 255, 0.15) 60%,
+        rgba(0, 0, 0, 0.6) 100%
+    );
+    animation: warpPulse 1.8s ease-in-out forwards;
+}
+
+@keyframes warpPulse {
+    0%   { opacity: 0; }
+    15%  { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+```
+
+Duration matches `flyTo`'s fixed 1800ms. Blue-tinted radial vignette gives a "tunnel through space" feel.
+
+## Key Design Decisions
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Query scope | Global (once on mount) | Wormholes connect distant posts — viewport-scoped queries can't find them |
+| Position source | Galaxy centroids | Stable across sessions, always available, no gravity-sim dependency |
+| Different users only | `a.user_id != b.user_id` | Wormholes bridge different minds, not self-similar posts |
+| Similarity threshold | 0.93 (vs bridges' 0.9) | Wormholes should feel special — only truly identical content |
+| Layer placement | Above InteractiveLayer | Prominent visuals, priority click handling |
+| Warp animation | Existing flyTo + CSS overlay | Reuses proven camera system, overlay adds drama without complexity |
+
+## Files Summary
+
+| File | Action | Purpose |
+|---|---|---|
+| `server/sql/galaxy_gravity.sql` | Append | `find_wormhole_pairs()` RPC |
+| `client/src/.../layers/WormholeLayer.jsx` | Create | Animated vortex visuals + click handling |
+| `client/src/.../Universe.jsx` | Modify | Fetch wormholes, add layer, handle clicks, warp overlay |
+| `client/src/.../Universe.module.css` | Modify | `.warpOverlay` + `@keyframes warpPulse` |
+
+## Verification
+
+1. Run the `find_wormhole_pairs` SQL in the Supabase SQL editor
+2. Start dev server (`npm run dev` in client)
+3. Navigate to Universe view — confirm vortices appear at distant galaxy positions
+4. Pan/zoom — vortices fade out at high zoom, stay visible at cosmic zoom
+5. Click a vortex — camera warps to the paired endpoint with blue vignette overlay
+6. Verify star/galaxy clicks still work near wormhole endpoints
+7. Check console for no errors when no wormhole pairs exist (empty state = invisible feature)

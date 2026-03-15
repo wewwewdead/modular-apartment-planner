@@ -1,0 +1,1125 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Stage } from 'react-konva';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../Context/useAuth';
+import { getUniversePosts, getUserData, getViewportConstellations } from '../../../API/Api';
+import supabase from '../../utils/supabaseClient';
+import useUniverseCamera from './hooks/useUniverseCamera';
+import useCosmicGravity from './hooks/useCosmicGravity';
+import useConstellationLinkMode from './hooks/useConstellationLinkMode';
+
+import DeepSpaceLayer from './layers/DeepSpaceLayer';
+import MidGalaxyLayer from './layers/MidGalaxyLayer';
+import NebulaLayer from './layers/NebulaLayer';
+import InteractiveLayer from './layers/InteractiveLayer';
+import WormholeLayer from './layers/WormholeLayer';
+import ConstellationLayer from './layers/ConstellationLayer';
+import RocketLayer from './layers/RocketLayer';
+import UniverseMinimap from './components/UniverseMinimap';
+import RocketHUD from './components/RocketHUD';
+import useRocketMode, { MAGNET_THRESHOLD_Z } from './hooks/useRocketMode';
+import { extractSnippet, MIN_UNIVERSE_ZOOM, userHomeCoords } from './utils/starUtils';
+import {
+    buildSectorIndex,
+    computeGalaxyCentroids,
+    computeConstellationPullOffsets,
+    computeSectorKey,
+    getNeighborSectorKeys,
+} from './utils/cosmicPhysics';
+import { computeConstellationChains, assignChainColors } from './utils/constellationUtils';
+import { handleClickProfile } from '../../../helpers/handleClicks';
+import styles from './Universe.module.css';
+
+const SECTOR_SIZE = 2000;
+const ENABLE_SETTLED_RPC_SAVE = import.meta.env.VITE_ENABLE_UNIVERSE_SETTLE_SAVE === 'true';
+
+const Universe = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { user, session } = useAuth();
+    const userId = user?.userData?.[0]?.id || null;
+
+    const fetchDebounceRef = useRef(null);
+    const settleDebounceRef = useRef(null);
+    const lastSettledPayloadRef = useRef('');
+    const initialFetchResolvedRef = useRef(false);
+    const hasAutoFocusedOwnGalaxyRef = useRef(false);
+    const ownGalaxyLookupStartedRef = useRef(false);
+    const constellationFlyToRef = useRef(location.state?.flyToConstellation || null);
+
+    const [posts, setPosts] = useState(new Map());
+    const [selectedPost, setSelectedPost] = useState(null);
+    const [selectedGalaxy, setSelectedGalaxy] = useState(null);
+    const [galaxyProfile, setGalaxyProfile] = useState(null);
+    const [pulsingId, setPulsingId] = useState(null);
+    const [hasOwnPosts, setHasOwnPosts] = useState(userId ? null : false);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [ownGalaxyTarget, setOwnGalaxyTarget] = useState(null);
+    const [wormholes, setWormholes] = useState([]);
+    const [isWarping, setIsWarping] = useState(false);
+    const [constellations, setConstellations] = useState([]);
+    const [linkModeError, setLinkModeError] = useState(null);
+    const [focusedConstellation, setFocusedConstellation] = useState(null);
+    const [universeMode, setUniverseMode] = useState('strategic');
+    const [rocketWarpIn, setRocketWarpIn] = useState(false);
+    const [reverseWarpActive, setReverseWarpActive] = useState(false);
+    const selectedGalaxyUserIdRef = useRef(null);
+    const pendingRocketRestoreRef = useRef(null);
+    const warpTimerRef = useRef(null);
+
+    // Gravity data from server (fallback paths when embeddings are unavailable in payload)
+    const [centroids, setCentroids] = useState([]);
+    const [galaxyEdges, setGalaxyEdges] = useState([]);
+    const [similarPairs, setSimilarPairs] = useState([]);
+    const [starPulls, setStarPulls] = useState([]);
+
+    // Shared ref: prevents camera pan while dragging a star
+    const isStarDragging = useRef(false);
+
+    const {
+        stageRef, stageSize, camera, zoom, isDragging, centerWorld,
+        getLayerProps, getViewportBounds, stageEvents, flyTo, jumpTo, isFlying,
+    } = useUniverseCamera(userId, hasOwnPosts, isStarDragging);
+
+    const {
+        isLinkMode, firstStar, secondStar, isSubmitting, linkModeStatus,
+        toggleLinkMode, cancelLinkMode, handleStarClickInLinkMode, submitLink,
+    } = useConstellationLinkMode(userId, session);
+
+    const rocketMode = useRocketMode();
+
+    const [labelInput, setLabelInput] = useState('');
+
+    const focusedStarIds = useMemo(() => {
+        if (!focusedConstellation) return null;
+        return new Set([focusedConstellation.star_id_a, focusedConstellation.star_id_b]);
+    }, [focusedConstellation]);
+
+    const postArray = useMemo(() => Array.from(posts.values()), [posts]);
+    const showTitles = zoom > 0.5;
+
+    // Sector partitioning for scalable local gravity math.
+    const postSectorIndex = useMemo(() => (
+        buildSectorIndex(
+            postArray,
+            (post) => ({
+                x: post?.display_x ?? post?.universe_x,
+                y: post?.display_y ?? post?.universe_y,
+            }),
+            SECTOR_SIZE
+        )
+    ), [postArray]);
+
+    const centerSectorKey = useMemo(
+        () => computeSectorKey(centerWorld.x, centerWorld.y, SECTOR_SIZE),
+        [centerWorld.x, centerWorld.y]
+    );
+
+    const activeSectorKeys = useMemo(
+        () => new Set(getNeighborSectorKeys(centerSectorKey)),
+        [centerSectorKey]
+    );
+
+    const activePosts = useMemo(() => {
+        if (activeSectorKeys.size === 0) return postArray;
+
+        const next = [];
+        for (const key of activeSectorKeys) {
+            const bucket = postSectorIndex.get(key);
+            if (bucket?.length) next.push(...bucket);
+        }
+        return next;
+    }, [postArray, postSectorIndex, activeSectorKeys]);
+
+    const activePostIds = useMemo(() => {
+        const ids = new Set();
+        for (const post of activePosts) {
+            if (post?.id) ids.add(post.id);
+        }
+        return ids;
+    }, [activePosts]);
+
+    const { centroidByUser } = useMemo(
+        () => computeGalaxyCentroids(postArray),
+        [postArray]
+    );
+
+    // ── Hash-based galaxies (STARTING positions — always from hash) ──
+    const hashGalaxies = useMemo(() => {
+        const seen = new Map();
+        for (const post of postArray) {
+            const uid = post.users?.id ?? post.user_id;
+            if (!uid || seen.has(uid)) continue;
+            const hash = userHomeCoords(uid);
+            seen.set(uid, {
+                userId: uid,
+                name: post.users?.name ?? post.user_name ?? 'Anonymous',
+                x: hash.x,
+                y: hash.y,
+            });
+        }
+        return Array.from(seen.values());
+    }, [postArray]);
+
+    // ── Centroid targets (WHERE galaxies should fly TO) ──────────────
+    const centroidTargets = useMemo(() => {
+        const map = new Map();
+        for (const c of centroids) {
+            if (c.galaxy_x != null && c.galaxy_y != null) {
+                map.set(c.user_id, { x: c.galaxy_x, y: c.galaxy_y });
+            }
+        }
+        return map;
+    }, [centroids]);
+
+    // ── Gravity hook: animates galaxies + computes star pull offsets ─
+    const {
+        galaxyPositions,
+        starPullOffsets,
+        isSettled,
+        galaxyEdges: effectiveGalaxyEdges,
+        hasEmbeddingGravity,
+    } = useCosmicGravity({
+        galaxies: hashGalaxies,
+        centroidTargets,
+        edges: galaxyEdges,
+        posts: postArray,
+        starPulls,
+        centroidByUser,
+        activeSectorKeys,
+        activePostIds,
+        sectorSize: SECTOR_SIZE,
+    });
+
+    // ── Render galaxies = hash galaxies with animated positions ──────
+    const galaxies = useMemo(() => {
+        return hashGalaxies.map(g => {
+            const animated = galaxyPositions.get(g.userId);
+            return animated ? { ...g, x: animated.x, y: animated.y } : g;
+        });
+    }, [hashGalaxies, galaxyPositions]);
+
+    // Home position for distance tracker — same resolution as auto-focus.
+    const homePosition = useMemo(() => {
+        if (!userId) return { x: 0, y: 0 };
+        const ownGalaxy = galaxies.find((g) => g.userId === userId);
+        if (ownGalaxy) return { x: ownGalaxy.x, y: ownGalaxy.y };
+        return centroidTargets.get(userId) || ownGalaxyTarget || { x: 0, y: 0 };
+    }, [userId, galaxies, centroidTargets, ownGalaxyTarget]);
+
+    const getComputedStarPosition = useCallback((post) => {
+        if (!post) return null;
+
+        const uid = post.users?.id ?? post.user_id;
+        const hashGal = userHomeCoords(uid);
+        const animGal = galaxyPositions.get(uid);
+        const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+        const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+        const pull = starPullOffsets.get(post.id);
+
+        const baseX = post.universe_x ?? post.display_x;
+        const baseY = post.universe_y ?? post.display_y;
+        if (baseX == null || baseY == null) return null;
+
+        return {
+            x: baseX + galDx + (pull?.dx ?? 0),
+            y: baseY + galDy + (pull?.dy ?? 0),
+        };
+    }, [galaxyPositions, starPullOffsets]);
+
+    // ── Hoisted computedStarPositions for sharing across layers ──────
+    const computedStarPositions = useMemo(() => {
+        const map = new Map();
+        for (const post of postArray) {
+            const uid = post.users?.id ?? post.user_id;
+            const hashGal = userHomeCoords(uid);
+            const animGal = galaxyPositions.get(uid);
+            const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+            const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+            const pull = starPullOffsets.get(post.id);
+
+            const baseX = post.universe_x ?? post.display_x;
+            const baseY = post.universe_y ?? post.display_y;
+            if (baseX == null || baseY == null) continue;
+
+            let x = baseX + galDx + (pull?.dx ?? 0);
+            let y = baseY + galDy + (pull?.dy ?? 0);
+
+            map.set(post.id, { x, y });
+        }
+        return map;
+    }, [postArray, galaxyPositions, starPullOffsets]);
+
+    // ── Constellation pull offsets (spring constraint) ─────────────
+    const acceptedConstellations = useMemo(
+        () => constellations.filter(c => c.status === 'accepted'),
+        [constellations]
+    );
+
+    const constellationPullOffsets = useMemo(
+        () => computeConstellationPullOffsets(acceptedConstellations, computedStarPositions),
+        [acceptedConstellations, computedStarPositions]
+    );
+
+    // ── Final star positions with constellation pull applied ───────
+    const finalStarPositions = useMemo(() => {
+        if (constellationPullOffsets.size === 0) return computedStarPositions;
+
+        const map = new Map(computedStarPositions);
+        for (const [postId, offset] of constellationPullOffsets) {
+            const pos = map.get(postId);
+            if (pos) {
+                map.set(postId, {
+                    x: pos.x + offset.dx,
+                    y: pos.y + offset.dy,
+                });
+            }
+        }
+        return map;
+    }, [computedStarPositions, constellationPullOffsets]);
+
+    // ── Constellation chain colors ────────────────────────────────
+    const chainColors = useMemo(() => {
+        const chains = computeConstellationChains(acceptedConstellations);
+        return assignChainColors(chains);
+    }, [acceptedConstellations]);
+
+    // ── Map star ID → constellation chain color for ring indicators ─
+    const constellationStarColors = useMemo(() => {
+        const map = new Map();
+        for (const c of acceptedConstellations) {
+            const color = chainColors.get(c.id);
+            if (!color) continue;
+            if (!map.has(c.star_id_a)) map.set(c.star_id_a, color);
+            if (!map.has(c.star_id_b)) map.set(c.star_id_b, color);
+        }
+        return map;
+    }, [acceptedConstellations, chainColors]);
+
+    // Resolve logged-in user's galaxy target independently from viewport data.
+    useEffect(() => {
+        if (!userId) return;
+        if (ownGalaxyLookupStartedRef.current) return;
+
+        ownGalaxyLookupStartedRef.current = true;
+        let cancelled = false;
+
+        const resolveOwnGalaxyTarget = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('galaxy_centroids')
+                    .select('galaxy_x, galaxy_y')
+                    .eq('user_id', userId)
+                    .maybeSingle();
+
+                if (cancelled) return;
+
+                if (!error && data?.galaxy_x != null && data?.galaxy_y != null) {
+                    setOwnGalaxyTarget({ x: data.galaxy_x, y: data.galaxy_y });
+                    setHasOwnPosts(true);
+                    return;
+                }
+            } catch (err) {
+                console.warn('[universe] own centroid lookup failed:', err?.message || err);
+            }
+
+            if (!cancelled) {
+                setOwnGalaxyTarget(userHomeCoords(userId));
+            }
+        };
+
+        resolveOwnGalaxyTarget();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [userId]);
+
+    // One-time wormhole fetch on mount
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchWormholes = async () => {
+            try {
+                const { data, error } = await supabase.rpc('find_wormhole_pairs', {
+                    similarity_threshold: 0.7,
+                    min_distance: 0,
+                    max_pairs: 30,
+                });
+                if (cancelled) return;
+                if (error) {
+                    console.warn('[universe] wormhole fetch error:', error.message);
+                    return;
+                }
+                console.log('[universe] wormhole pairs:', data);
+                if (Array.isArray(data) && data.length > 0) {
+                    setWormholes(data);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.warn('[universe] wormhole fetch failed:', err?.message || err);
+                }
+            }
+        };
+
+        fetchWormholes();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Debounced fetch on camera/zoom change
+    useEffect(() => {
+        if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+
+        fetchDebounceRef.current = setTimeout(async () => {
+            const bounds = getViewportBounds();
+            try {
+                const result = await getUniversePosts(
+                    bounds.minX,
+                    bounds.maxX,
+                    bounds.minY,
+                    bounds.maxY,
+                    200
+                );
+                if (result?.data) {
+                    setPosts(prev => {
+                        const next = new Map(prev);
+                        for (const post of result.data) {
+                            next.set(post.id, post);
+                        }
+                        return next;
+                    });
+                    if (userId && hasOwnPosts !== true) {
+                        const ownsAny = result.data.some(p =>
+                            (p.users?.id ?? p.user_id) === userId
+                        );
+                        if (ownsAny) setHasOwnPosts(true);
+                    }
+                }
+                // Keep server gravity data as fallback when embeddings are absent in payload.
+                setCentroids(Array.isArray(result?.centroids) ? result.centroids : []);
+                setGalaxyEdges(Array.isArray(result?.edges) ? result.edges : []);
+                setSimilarPairs(Array.isArray(result?.similarPairs) ? result.similarPairs : []);
+                setStarPulls(Array.isArray(result?.starPulls) ? result.starPulls : []);
+
+                // Fetch constellations for visible posts
+                if (result?.data?.length > 0) {
+                    const visibleIds = result.data.map(p => p.id);
+                    try {
+                        const constResult = await getViewportConstellations(visibleIds);
+                        if (constResult?.data) {
+                            setConstellations(constResult.data);
+                        }
+                    } catch (constErr) {
+                        console.warn('[universe] constellation fetch failed:', constErr?.message || constErr);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch universe posts:', err);
+            } finally {
+                if (!initialFetchResolvedRef.current) {
+                    initialFetchResolvedRef.current = true;
+                    setIsInitialLoading(false);
+                }
+            }
+        }, 400);
+
+        return () => {
+            if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+        };
+    }, [camera, zoom, getViewportBounds, userId, hasOwnPosts]);
+
+    const handleStarClick = useCallback(async (post) => {
+        if (isFlying.current) return;
+
+        // Intercept for link mode
+        if (isLinkMode) {
+            setLinkModeError(null);
+            const result = await handleStarClickInLinkMode(post);
+            if (result?.error) {
+                setLinkModeError(result.error);
+                setTimeout(() => setLinkModeError(null), 3000);
+            }
+            return;
+        }
+
+        setSelectedPost(post);
+        setSelectedGalaxy(null);
+        setGalaxyProfile(null);
+
+        const position = getComputedStarPosition(post);
+        if (!position) return;
+
+        flyTo(position.x, position.y, 1.2, () => {
+            setPulsingId(post.id);
+            setTimeout(() => setPulsingId(null), 700);
+        });
+    }, [flyTo, getComputedStarPosition, isFlying, isLinkMode, handleStarClickInLinkMode]);
+
+    const handleGalaxyClick = useCallback(async (galaxy) => {
+        if (isFlying.current) return;
+        setSelectedGalaxy(galaxy);
+        setSelectedPost(null);
+        setGalaxyProfile(null);
+        flyTo(galaxy.x, galaxy.y, 0.8);
+
+        try {
+            const data = await getUserData(galaxy.userId);
+            const profile = data?.userData?.[0] || null;
+            setGalaxyProfile(profile);
+        } catch (err) {
+            console.error('Failed to fetch galaxy profile:', err);
+        }
+    }, [flyTo, isFlying]);
+
+    const handleReadPost = useCallback(() => {
+        if (!selectedPost) return;
+        navigate(`/home/post/${selectedPost.id}`);
+    }, [selectedPost, navigate]);
+
+    const handleMinimapNavigate = useCallback((worldX, worldY, mode = 'fly') => {
+        if (mode === 'drag') {
+            jumpTo(worldX, worldY);
+            return;
+        }
+        flyTo(worldX, worldY, zoom);
+    }, [flyTo, jumpTo, zoom]);
+
+    // Enrich wormhole positions with live gravity-computed post coords
+    const enrichedWormholes = useMemo(() => {
+        return wormholes.map(wh => {
+            const postA = posts.get(wh.post_a);
+            const postB = posts.get(wh.post_b);
+            const posA = postA ? getComputedStarPosition(postA) : null;
+            const posB = postB ? getComputedStarPosition(postB) : null;
+            return {
+                ...wh,
+                a_x: posA?.x ?? wh.a_x,
+                a_y: posA?.y ?? wh.a_y,
+                b_x: posB?.x ?? wh.b_x,
+                b_y: posB?.y ?? wh.b_y,
+            };
+        });
+    }, [wormholes, posts, getComputedStarPosition]);
+
+    // Find wormhole connection for a given post (if any)
+    const getWormholeForPost = useCallback((postId) => {
+        if (!postId || enrichedWormholes.length === 0) return null;
+        for (const wh of enrichedWormholes) {
+            if (wh.post_a === postId) return { wormhole: wh, side: 'a', targetTitle: wh.b_title };
+            if (wh.post_b === postId) return { wormhole: wh, side: 'b', targetTitle: wh.a_title };
+        }
+        return null;
+    }, [enrichedWormholes]);
+
+    const handleWormholeTravel = useCallback(() => {
+        if (!selectedPost || isFlying.current) return;
+        const match = getWormholeForPost(selectedPost.id);
+        if (!match) return;
+        const { wormhole, side } = match;
+        const targetX = side === 'a' ? wormhole.b_x : wormhole.a_x;
+        const targetY = side === 'a' ? wormhole.b_y : wormhole.a_y;
+        setSelectedPost(null);
+        setIsWarping(true);
+        flyTo(targetX, targetY, zoom, () => setIsWarping(false));
+    }, [selectedPost, getWormholeForPost, flyTo, isFlying, zoom]);
+
+    // Find constellation links for a given post
+    const getConstellationLinksForPost = useCallback((postId) => {
+        if (!postId || acceptedConstellations.length === 0) return [];
+        const links = [];
+        for (const c of acceptedConstellations) {
+            if (c.star_id_a === postId) {
+                links.push({ constellation: c, targetStarId: c.star_id_b, targetTitle: c.b_title || 'Unnamed Star', label: c.label });
+            } else if (c.star_id_b === postId) {
+                links.push({ constellation: c, targetStarId: c.star_id_a, targetTitle: c.a_title || 'Unnamed Star', label: c.label });
+            }
+        }
+        return links;
+    }, [acceptedConstellations]);
+
+    const handleConstellationTravel = useCallback((targetStarId, constellation) => {
+        if (isFlying.current) return;
+        // Try live computed position first
+        let targetPos = finalStarPositions.get(targetStarId);
+        // Fallback to raw RPC positions from the constellation record
+        if (!targetPos && constellation) {
+            if (constellation.star_id_a === targetStarId && constellation.a_universe_x != null) {
+                targetPos = { x: constellation.a_universe_x, y: constellation.a_universe_y };
+            } else if (constellation.star_id_b === targetStarId && constellation.b_universe_x != null) {
+                targetPos = { x: constellation.b_universe_x, y: constellation.b_universe_y };
+            }
+        }
+        if (!targetPos) return;
+        setSelectedPost(null);
+        flyTo(targetPos.x, targetPos.y, zoom);
+    }, [finalStarPositions, flyTo, isFlying, zoom]);
+
+    const handleConstellationFocus = useCallback((link) => {
+        if (isLinkMode) return;
+        setFocusedConstellation(link);
+        setSelectedPost(null);
+    }, [isLinkMode]);
+
+    const handleDismissFocus = useCallback(() => {
+        setFocusedConstellation(null);
+    }, []);
+
+    // ── Rocket mode handlers ─────────────────────────────────────
+    const handleExploreGalaxy = useCallback(() => {
+        if (!selectedGalaxy) return;
+        const galaxyPosts = postArray.filter(p => {
+            const uid = p.users?.id ?? p.user_id;
+            return uid === selectedGalaxy.userId;
+        });
+        if (galaxyPosts.length === 0) return;
+
+        selectedGalaxyUserIdRef.current = selectedGalaxy.userId;
+        setRocketWarpIn(true);
+        setSelectedGalaxy(null);
+        setGalaxyProfile(null);
+
+        warpTimerRef.current = setTimeout(() => {
+            setRocketWarpIn(false);
+            const liveSize = rocketMode.stageSizeRef.current;
+            if (liveSize.width === 0 || liveSize.height === 0) return;
+            setUniverseMode('pilot');
+            rocketMode.enter(galaxyPosts, { x: selectedGalaxy.x, y: selectedGalaxy.y }, liveSize);
+        }, 800);
+    }, [selectedGalaxy, postArray, rocketMode]);
+
+    const handleExitRocket = useCallback(() => {
+        rocketMode.exit();
+        setUniverseMode('strategic');
+    }, [rocketMode]);
+
+    const handleRocketInteract = useCallback(() => {
+        const ds = rocketMode.getDockingState();
+        // Already docking — ignore
+        if (ds === 'approaching' || ds === 'flash' || ds === 'done') return;
+
+        const post = rocketMode.getTargetedPost();
+        if (!post) return;
+
+        const idx = rocketMode.targetIndexRef.current;
+        const stars = rocketMode.starsRef.current;
+        const targetStar = idx >= 0 && idx < stars.length ? stars[idx] : null;
+
+        const saveSessionAndNavigate = (snapshot) => {
+            const sessionData = {
+                ...snapshot,
+                galaxyUserId: selectedGalaxyUserIdRef.current,
+                postId: post.id,
+            };
+            try { sessionStorage.setItem('rocketSession', JSON.stringify(sessionData)); } catch { /* storage full */ }
+            navigate(`/home/post/${post.id}`, { state: { fromRocket: true } });
+        };
+
+        if (targetStar && targetStar.viewZ < MAGNET_THRESHOLD_Z) {
+            // Close enough — trigger cinematic docking sequence
+            rocketMode.triggerDocking(idx, () => saveSessionAndNavigate(rocketMode.getSessionSnapshot()));
+        } else {
+            // Far away — direct navigate (existing fallback for ENTER at distance)
+            saveSessionAndNavigate(rocketMode.getSessionSnapshot());
+        }
+    }, [rocketMode, navigate]);
+
+    // Set docking callback for proximity auto-dock
+    useEffect(() => {
+        rocketMode.setDockingCallback(() => {
+            const idx = rocketMode.dockingTargetIdxRef.current;
+            const stars = rocketMode.starsRef.current;
+            if (idx < 0 || idx >= stars.length) return;
+            const post = stars[idx].post;
+            if (!post) return;
+
+            const snapshot = rocketMode.getSessionSnapshot();
+            const sessionData = {
+                ...snapshot,
+                galaxyUserId: selectedGalaxyUserIdRef.current,
+                postId: post.id,
+            };
+            try { sessionStorage.setItem('rocketSession', JSON.stringify(sessionData)); } catch { /* storage full */ }
+            navigate(`/home/post/${post.id}`, { state: { fromRocket: true } });
+        });
+    }, [rocketMode, navigate]);
+
+    // Restore rocket session on mount (reverse warp)
+    useEffect(() => {
+        const raw = sessionStorage.getItem('rocketSession');
+        if (!raw) return;
+        try {
+            const session = JSON.parse(raw);
+            // Discard if older than 5 minutes
+            if (Date.now() - session.timestamp > 5 * 60 * 1000) {
+                sessionStorage.removeItem('rocketSession');
+                return;
+            }
+            sessionStorage.removeItem('rocketSession');
+            setReverseWarpActive(true);
+            pendingRocketRestoreRef.current = session;
+        } catch {
+            sessionStorage.removeItem('rocketSession');
+        }
+    }, []);
+
+    // Once posts load, restore rocket mode from session
+    useEffect(() => {
+        const session = pendingRocketRestoreRef.current;
+        if (!session || postArray.length === 0) return;
+        if (stageSize.width === 0 || stageSize.height === 0) return;
+
+        const galaxyPosts = postArray.filter(p => {
+            const uid = p.users?.id ?? p.user_id;
+            return uid === session.galaxyUserId;
+        });
+
+        if (galaxyPosts.length === 0) {
+            pendingRocketRestoreRef.current = null;
+            setReverseWarpActive(false);
+            return;
+        }
+
+        pendingRocketRestoreRef.current = null;
+        selectedGalaxyUserIdRef.current = session.galaxyUserId;
+        setUniverseMode('pilot');
+        rocketMode.restoreFromSnapshot(session, galaxyPosts, stageSize);
+
+        // Re-install auto-dock callback (cleared during previous docking completion)
+        rocketMode.setDockingCallback(() => {
+            const idx = rocketMode.dockingTargetIdxRef.current;
+            const stars = rocketMode.starsRef.current;
+            if (idx < 0 || idx >= stars.length) return;
+            const post = stars[idx].post;
+            if (!post) return;
+
+            const snapshot = rocketMode.getSessionSnapshot();
+            const sessionData = {
+                ...snapshot,
+                galaxyUserId: selectedGalaxyUserIdRef.current,
+                postId: post.id,
+            };
+            try { sessionStorage.setItem('rocketSession', JSON.stringify(sessionData)); } catch { /* storage full */ }
+            navigate(`/home/post/${post.id}`, { state: { fromRocket: true } });
+        });
+
+        const reverseWarpTimer = setTimeout(() => setReverseWarpActive(false), 600);
+        return () => clearTimeout(reverseWarpTimer);
+    }, [postArray, rocketMode, stageSize, navigate]);
+
+    // One-time auto focus after first payload is loaded.
+    // Skip if we have a constellation flyTo target — that effect handles it instead.
+    useEffect(() => {
+        if (!userId) return;
+        if (isInitialLoading) return;
+        if (hasAutoFocusedOwnGalaxyRef.current) return;
+        if (constellationFlyToRef.current) return;
+
+        const ownGalaxy = galaxies.find((galaxy) => galaxy.userId === userId);
+        const target = ownGalaxy
+            ? { x: ownGalaxy.x, y: ownGalaxy.y }
+            : (centroidTargets.get(userId) || ownGalaxyTarget);
+
+        // Wait until we have a concrete own target; fallback is resolved asynchronously.
+        if (!target) return;
+
+        hasAutoFocusedOwnGalaxyRef.current = true;
+        flyTo(target.x, target.y, MIN_UNIVERSE_ZOOM);
+    }, [userId, isInitialLoading, galaxies, centroidTargets, ownGalaxyTarget, flyTo]);
+
+    // Fly to constellation midpoint when arriving from a notification link.
+    useEffect(() => {
+        const target = constellationFlyToRef.current;
+        if (!target) return;
+        if (isInitialLoading) return;
+
+        const posA = finalStarPositions.get(target.starIdA);
+        const posB = finalStarPositions.get(target.starIdB);
+        if (!posA || !posB) return;
+
+        constellationFlyToRef.current = null;
+        hasAutoFocusedOwnGalaxyRef.current = true;
+
+        const mx = (posA.x + posB.x) / 2;
+        const my = (posA.y + posB.y) / 2;
+        flyTo(mx, my, 1.0);
+
+        // Clear navigation state so refreshing doesn't re-trigger
+        navigate(location.pathname, { replace: true, state: {} });
+    }, [isInitialLoading, finalStarPositions, flyTo, navigate, location.pathname]);
+
+    const settledPayload = useMemo(() => {
+        if (!isSettled || activePosts.length === 0) return [];
+
+        const payload = [];
+        for (const post of activePosts) {
+            if (!post?.id) continue;
+            const pos = getComputedStarPosition(post);
+            if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+
+            payload.push({
+                post_id: post.id,
+                settled_x: Math.round(pos.x * 100) / 100,
+                settled_y: Math.round(pos.y * 100) / 100,
+            });
+        }
+
+        payload.sort((a, b) => String(a.post_id).localeCompare(String(b.post_id)));
+        return payload;
+    }, [activePosts, getComputedStarPosition, isSettled]);
+
+    // Placeholder persistence hook: debounced Supabase RPC for settled positions.
+    useEffect(() => {
+        if (!ENABLE_SETTLED_RPC_SAVE) return;
+        if (!isSettled || settledPayload.length === 0) return;
+
+        const signature = JSON.stringify(settledPayload);
+        if (signature === lastSettledPayloadRef.current) return;
+
+        if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+        settleDebounceRef.current = setTimeout(async () => {
+            lastSettledPayloadRef.current = signature;
+            try {
+                const { error } = await supabase.rpc('save_universe_settled_positions', {
+                    positions_payload: settledPayload,
+                });
+                if (error) {
+                    console.warn('[universe] settle save placeholder RPC returned error:', error.message);
+                }
+            } catch (err) {
+                console.warn('[universe] settle save placeholder RPC failed:', err?.message || err);
+            }
+        }, 1200);
+
+        return () => {
+            if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+        };
+    }, [isSettled, settledPayload]);
+
+    // ESC key to cancel link mode or dismiss constellation focus
+    useEffect(() => {
+        if (universeMode !== 'strategic') return;
+        if (!isLinkMode && !focusedConstellation) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (isLinkMode) cancelLinkMode();
+                if (focusedConstellation) setFocusedConstellation(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isLinkMode, cancelLinkMode, focusedConstellation, universeMode]);
+
+    useEffect(() => {
+        return () => {
+            if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+            if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+            if (warpTimerRef.current) clearTimeout(warpTimerRef.current);
+            rocketMode.exit();
+        };
+    }, []);
+
+    return (
+        <div className={`${styles.universeContainer} ${isDragging ? styles.grabbing : ''}`}>
+            {universeMode === 'strategic' && (
+                <>
+                    <button className={styles.backButton} onClick={() => navigate('/home')}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                        </svg>
+                        Back
+                    </button>
+
+                    {userId && (
+                        <button
+                            className={`${styles.linkModeButton} ${isLinkMode ? styles.linkModeActive : ''}`}
+                            onClick={toggleLinkMode}
+                            disabled={isSubmitting}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                            </svg>
+                            {isLinkMode
+                                ? (secondStar ? 'Naming link...' : (firstStar ? 'Select second star...' : 'Select your star...'))
+                                : 'Link Stars'}
+                        </button>
+                    )}
+
+                    {isLinkMode && linkModeStatus === 'enter_label' && (
+                        <div className={styles.labelInputPanel}>
+                            <div className={styles.labelInputHeader}>
+                                Link "{firstStar?.title}" ↔ "{secondStar?.title}"
+                            </div>
+                            <input
+                                className={styles.labelInputField}
+                                type="text"
+                                placeholder="Name this constellation (optional)"
+                                value={labelInput}
+                                onChange={(e) => setLabelInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        submitLink(labelInput);
+                                        setLabelInput('');
+                                    }
+                                }}
+                                autoFocus
+                            />
+                            <div className={styles.labelInputActions}>
+                                <button
+                                    className={styles.labelInputCreate}
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                        submitLink(labelInput);
+                                        setLabelInput('');
+                                    }}
+                                >
+                                    {isSubmitting ? 'Creating...' : 'Create Link'}
+                                </button>
+                                <button
+                                    className={styles.labelInputCancel}
+                                    onClick={() => {
+                                        cancelLinkMode();
+                                        setLabelInput('');
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {isLinkMode && linkModeStatus !== 'enter_label' && (
+                        <div className={styles.linkModeIndicator}>
+                            <span>
+                                {linkModeError
+                                    ? linkModeError
+                                    : firstStar
+                                        ? `Selected "${firstStar.title}" — now click another user's star`
+                                        : 'Click one of your stars to begin'}
+                            </span>
+                            <button className={styles.linkModeCancel} onClick={cancelLinkMode}>Cancel</button>
+                        </div>
+                    )}
+
+                    <div className={styles.distanceTracker}>
+                        {(() => {
+                            const dx = centerWorld.x - homePosition.x;
+                            const dy = centerWorld.y - homePosition.y;
+                            const dist = Math.round(Math.sqrt(dx * dx + dy * dy));
+                            return dist < 50
+                                ? 'Home'
+                                : `${dist.toLocaleString()} Lightyears from Home`;
+                        })()}
+                    </div>
+                </>
+            )}
+
+            {isInitialLoading && (
+                <div className={styles.loadingOverlay}>
+                    <div className={styles.loadingCard}>
+                        <div className={styles.loadingSpinner} />
+                        <div className={styles.loadingText}>Loading universe...</div>
+                    </div>
+                </div>
+            )}
+
+            <Stage
+                ref={stageRef}
+                width={stageSize.width}
+                height={stageSize.height}
+                {...(universeMode === 'strategic' ? stageEvents : {})}
+                onClick={(e) => {
+                    if (universeMode !== 'strategic') return;
+                    if (focusedConstellation && e.target === e.target.getStage()) {
+                        handleDismissFocus();
+                    }
+                }}
+                onTap={(e) => {
+                    if (universeMode !== 'strategic') return;
+                    if (focusedConstellation && e.target === e.target.getStage()) {
+                        handleDismissFocus();
+                    }
+                }}
+            >
+                <DeepSpaceLayer layerProps={getLayerProps(0.1)} />
+                {universeMode === 'strategic' && (
+                    <>
+                        <MidGalaxyLayer layerProps={getLayerProps(0.4)} />
+                        <NebulaLayer
+                            layerProps={getLayerProps(0.85)}
+                            galaxies={galaxies}
+                            centroids={centroids}
+                        />
+                        {enrichedWormholes.length > 0 && (
+                            <WormholeLayer
+                                layerProps={getLayerProps(1.0)}
+                                wormholes={enrichedWormholes}
+                                zoom={zoom}
+                            />
+                        )}
+                        {constellations.length > 0 && (
+                            <ConstellationLayer
+                                layerProps={getLayerProps(1.0)}
+                                constellations={constellations}
+                                computedStarPositions={finalStarPositions}
+                                zoom={zoom}
+                                chainColors={chainColors}
+                                userId={userId}
+                                onConstellationFocus={handleConstellationFocus}
+                                focusedConstellationId={focusedConstellation?.id || null}
+                            />
+                        )}
+                        <InteractiveLayer
+                            layerProps={getLayerProps(1.0)}
+                            posts={postArray}
+                            galaxies={galaxies}
+                            zoom={zoom}
+                            showTitles={showTitles}
+                            pulsingId={pulsingId}
+                            onStarClick={handleStarClick}
+                            onGalaxyClick={handleGalaxyClick}
+                            galaxyPositions={galaxyPositions}
+                            starPullOffsets={starPullOffsets}
+                            similarPairs={similarPairs}
+                            galaxyEdges={effectiveGalaxyEdges}
+                            activePostIds={activePostIds}
+                            useEmbeddingBridges={hasEmbeddingGravity}
+                            camera={camera}
+                            stageSize={stageSize}
+                            computedStarPositions={finalStarPositions}
+                            constellationStarColors={constellationStarColors}
+                            focusedStarIds={focusedStarIds}
+                        />
+                    </>
+                )}
+                {universeMode === 'pilot' && (
+                    <RocketLayer rocketMode={rocketMode} />
+                )}
+            </Stage>
+
+            {isWarping && <div className={styles.warpOverlay} />}
+            {rocketWarpIn && <div className={styles.rocketWarpIn} />}
+            {reverseWarpActive && <div className={styles.reverseWarp} />}
+
+            {universeMode === 'strategic' && (
+                <>
+                    <UniverseMinimap
+                        galaxies={galaxies}
+                        camera={camera}
+                        zoom={zoom}
+                        stageSize={stageSize}
+                        onNavigate={handleMinimapNavigate}
+                        constellations={acceptedConstellations}
+                        computedStarPositions={finalStarPositions}
+                        focusedConstellationId={focusedConstellation?.id || null}
+                    />
+
+                    {selectedGalaxy && galaxyProfile && (
+                        <div className={styles.galaxyPreviewPanel}>
+                            <button
+                                className={styles.galaxyPreviewClose}
+                                onClick={() => { setSelectedGalaxy(null); setGalaxyProfile(null); }}
+                            >
+                                &times;
+                            </button>
+                            <div
+                                className={styles.galaxyPreviewBg}
+                                style={galaxyProfile.background || {}}
+                            />
+                            <div className={styles.galaxyPreviewContent}>
+                                <img
+                                    className={styles.galaxyPreviewAvatar}
+                                    src={galaxyProfile.image_url || '/assets/profile.jpg'}
+                                    alt=""
+                                />
+                                <div className={styles.galaxyPreviewHeading}>
+                                    This is {galaxyProfile.name || selectedGalaxy.name}'s galaxy
+                                </div>
+                                {galaxyProfile.bio && (
+                                    <div className={styles.galaxyPreviewBio}>{galaxyProfile.bio}</div>
+                                )}
+                                <button
+                                    className={styles.galaxyPreviewVisitBtn}
+                                    onClick={(e) => handleClickProfile(navigate)(e, userId, selectedGalaxy.userId)}
+                                >
+                                    Visit Profile
+                                </button>
+                                <button
+                                    className={styles.galaxyPreviewExploreBtn}
+                                    onClick={handleExploreGalaxy}
+                                >
+                                    Explore Galaxy
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {selectedPost && (
+                        <div className={styles.previewPanel}>
+                            <button
+                                className={styles.previewClose}
+                                onClick={() => setSelectedPost(null)}
+                            >
+                                &times;
+                            </button>
+                            <div className={styles.previewAuthor}>
+                                <img
+                                    className={styles.previewAvatar}
+                                    src={selectedPost.users?.image_url || selectedPost.user_image_url || '/assets/profile.jpg'}
+                                    alt=""
+                                />
+                                <span className={styles.previewAuthorName}>
+                                    {selectedPost.users?.name || selectedPost.user_name || 'Anonymous'}
+                                </span>
+                            </div>
+                            <div className={styles.previewTitle}>{selectedPost.title}</div>
+                            <div className={styles.previewSnippet}>{extractSnippet(selectedPost)}</div>
+                            <div className={styles.previewLikes}>
+                                {(() => {
+                                    const count = selectedPost.like_count != null
+                                        ? selectedPost.like_count
+                                        : (Array.isArray(selectedPost.likes) && selectedPost.likes[0]?.count != null
+                                            ? selectedPost.likes[0].count : 0);
+                                    return `${count} like${count !== 1 ? 's' : ''}`;
+                                })()}
+                            </div>
+                            <div className={styles.previewActions}>
+                                <button className={styles.previewReadBtn} onClick={handleReadPost}>
+                                    Read
+                                </button>
+                                {getWormholeForPost(selectedPost.id) && (
+                                    <div className={styles.wormholeBtnWrap}>
+                                        <button className={styles.wormholeBtn} onClick={handleWormholeTravel}>
+                                            Wormhole to "{getWormholeForPost(selectedPost.id).targetTitle}"
+                                        </button>
+                                        <div className={styles.wormholeTooltip}>
+                                            This post is semantically linked to a distant post. Click to warp there instantly.
+                                        </div>
+                                    </div>
+                                )}
+                                {getConstellationLinksForPost(selectedPost.id).map((link) => (
+                                    <button
+                                        key={link.constellation.id}
+                                        className={styles.constellationBtn}
+                                        onClick={() => handleConstellationTravel(link.targetStarId, link.constellation)}
+                                    >
+                                        {link.label ? `${link.label} \u2192 "${link.targetTitle}"` : `Fly to "${link.targetTitle}"`}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {universeMode === 'pilot' && (
+                <RocketHUD
+                    rocketMode={rocketMode}
+                    onExit={handleExitRocket}
+                    onInteract={handleRocketInteract}
+                />
+            )}
+        </div>
+    );
+};
+
+export default Universe;

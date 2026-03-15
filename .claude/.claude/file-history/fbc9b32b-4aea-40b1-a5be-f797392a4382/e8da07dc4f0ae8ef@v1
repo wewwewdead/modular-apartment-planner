@@ -1,0 +1,57 @@
+import AnnotationRenderer from './AnnotationRenderer';
+import BeamRenderer from './BeamRenderer';
+import ColumnRenderer from './ColumnRenderer';
+import DoorRenderer from './DoorRenderer';
+import ElevationSceneLayer from './ElevationSceneLayer';
+import RoomRenderer from './RoomRenderer';
+import SectionCutRenderer from './SectionCutRenderer';
+import SectionSceneLayer from './SectionSceneLayer';
+import SlabRenderer from './SlabRenderer';
+import StairRenderer from './StairRenderer';
+import WallRenderer from './WallRenderer';
+import WindowRenderer from './WindowRenderer';
+
+function PlanViewportContent({ floor }) {
+  return (
+    <>
+      {(floor.slabs || []).map(slab => (
+        <SlabRenderer key={slab.id} slab={slab} selectedId={null} />
+      ))}
+      <RoomRenderer rooms={floor.rooms} selectedId={null} />
+      <WallRenderer walls={floor.walls} columns={floor.columns || []} />
+      <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
+      <StairRenderer stairs={floor.stairs || []} />
+      <ColumnRenderer columns={floor.columns || []} />
+      <DoorRenderer doors={floor.doors} walls={floor.walls} />
+      <WindowRenderer windows={floor.windows} walls={floor.walls} />
+      {(floor.sectionCuts || []).map(sc => (
+        <SectionCutRenderer key={sc.id} sectionCut={sc} selectedId={null} />
+      ))}
+      <AnnotationRenderer floor={floor} />
+    </>
+  );
+}
+
+export default function SheetViewportContent({ source }) {
+  if (!source || source.kind === 'empty') return null;
+
+  if (source.kind === 'plan') {
+    return <PlanViewportContent floor={source.floor} />;
+  }
+
+  if (source.kind === 'section') {
+    return <SectionSceneLayer scene={source.scene} showTitle={false} />;
+  }
+
+  if (source.kind === 'elevation') {
+    return (
+      <ElevationSceneLayer
+        scene={source.scene}
+        annotationScene={source.annotationScene}
+        showTitle={false}
+      />
+    );
+  }
+
+  return null;
+}

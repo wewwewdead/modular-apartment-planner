@@ -1,0 +1,151 @@
+# Supabase Egress Audit — Findings & Fix Plan
+
+## Context
+Full codebase audit for patterns that will blow Supabase egress (database transfer + storage bandwidth). Three areas analyzed: DB query payloads, storage/image serving, and client-side refetch behavior.
+
+**Verdict: Yes, this codebase has several patterns that will cause excessive egress at scale.**
+
+---
+
+## CRITICAL — Fix These First
+
+### 1. `content` (Lexical JSON) returned in ALL feed/list queries
+Every feed endpoint returns full post content (5-100KB per post) even though list views only show previews. A `JOURNAL_METADATA_SELECT` constant exists but is **never used**.
+
+| Affected | File | Lines |
+|----------|------|-------|
+| Public feed | `server/services/getService.js` | L441 |
+| User journals | `server/services/getService.js` | L821 |
+| Visited profile | `server/services/getService.js` | L917 |
+| Bookmarks | `server/services/getService.js` | L1117-1129 |
+| Repost sources | `server/services/getService.js` | L95-99 |
+| Following feed RPC | `server/sql/following_feed.sql` | L52 |
+| For-you feed RPC | `server/sql/personalized_feed.sql` | L102 |
+| Related posts RPC | `server/sql/discovery.sql` | L68 |
+| Explore interests | `server/services/exploreInterestsService.js` | L38-83 (8 parallel pgvector scans, up to 64 posts with full content) |
+
+**Fix:** Use `JOURNAL_METADATA_SELECT` (already defined at L35-48) in all list endpoints. Remove `content` from all SQL RPC return signatures. Only return `content` in `getJournalByIdService` (single post detail).
+
+**Estimated savings:** 60-80% of database egress.
+
+---
+
+### 2. No CDN in front of Supabase Storage
+All 5 storage buckets (`avatars`, `background`, `journal-images`, `story-covers`, media gallery) serve images directly from `https://<project>.supabase.co/storage/...`. No CDN configured anywhere. Every image request = full Supabase storage egress.
+
+Avatar URLs are embedded in every feed response, comment, notification, and repost — meaning 5-20 Supabase Storage hits per feed page load across all users.
+
+**Fix:** Put Cloudflare (free tier) or another CDN in front of Supabase Storage via a custom subdomain (e.g., `media.iskrib.com`).
+
+**Estimated savings:** 70-90% of storage egress once cache warms.
+
+---
+
+### 3. `QueryClient` has zero default configuration
+`client/src/main.jsx` L9: `new QueryClient()` with no defaults means:
+- `staleTime: 0` — every query is immediately stale
+- `refetchOnWindowFocus: true` — every tab switch refetches all active queries
+- Any `useQuery` that forgets to set its own `staleTime` silently refetches on every render
+
+**Fix:**
+```js
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,        // 5 min default
+      refetchOnWindowFocus: false,
+    }
+  }
+});
+```
+
+---
+
+### 4. Broad `invalidateQueries` on every social action
+`client/src/utils/useMutation.js` L95-97, L195-197, L455-459: Every like, bookmark, reaction, repost, and comment invalidates `['journals']` which matches ALL feed queries. If a user has scrolled 5 pages deep, this triggers 5 sequential refetches per feed variant — potentially 15+ API calls from a single like.
+
+**Fix:** Use optimistic updates only (already partially implemented) and either remove `onSettled` invalidation or scope it to the specific active feed query key.
+
+---
+
+## HIGH — Fix Next
+
+### 5. `SELECT *` on `users` table includes 384-float vector
+`server/services/getUserDataService.js` L10, L61: `SELECT *` returns `interests_embedding` (~3KB vector), `profile_layout` JSON, and all other wide columns on every profile load and auth check.
+
+**Fix:** Replace with explicit column list excluding `interests_embedding` and other server-only fields.
+
+### 6. Double egress on share image routes
+`server/server.js` L421-488, L621-737, L801-883: Share image routes fetch images FROM Supabase Storage through Express, process them, then serve to crawlers. No caching — every crawler hit = fresh Supabase fetch.
+
+**Fix:** Add in-memory LRU cache (e.g., `lru-cache` with 1-hour TTL) for generated share images.
+
+### 7. Avatar/cover images stored at full resolution
+`server/routes/routes.js` L180-184: `imageUploader` for avatars and backgrounds applies `.webp({quality: 80})` but **no `.resize()`**. A 6000x4000 camera photo is stored and served at full resolution.
+
+**Fix:** Add `.resize(400, 400, { fit: 'inside' })` for avatars, `.resize(1920, 1080, { fit: 'inside' })` for backgrounds, `.resize(800, 1200, { fit: 'inside' })` for story covers.
+
+---
+
+## MEDIUM — Should Fix
+
+### 8. `checkUser` is a raw uncached fetch on every app load
+`client/src/components/HomePage/Home.jsx` L228-242: `checkUser()` called in `useEffect` with no React Query caching. Once onboarding is complete, this check is useless but still fires every session.
+
+**Fix:** Wrap in `useQuery` with `staleTime: Infinity` after onboarding completes, or use the existing `userData` query to check `onboarding_completed`.
+
+### 9. Story chapter comments have no LIMIT
+`server/services/storyInteractService.js` L205-244: All comments + all replies fetched unbounded. A popular chapter with 500+ comments transfers everything at once.
+
+**Fix:** Add pagination (LIMIT 50 with cursor).
+
+### 10. `getDynamicFloor()` COUNT query on every post view
+`server/services/discoveryService.js` L9-23: Runs `SELECT count(*)` on all public journals every time someone views a post's related posts section.
+
+**Fix:** Cache in memory with 5-minute TTL.
+
+### 11. `searchFollowingUsersService` fetches unbounded follows
+`server/services/getService.js` L1265-1268: Fetches ALL follow rows to Node.js, then sends as IN() clause. User following 2000 people = 2000 rows transferred.
+
+**Fix:** Replace with server-side RPC join.
+
+### 12. `promptService` unique count fetches all rows
+`server/services/promptService.js` L82-88: Fetches all `user_id` values to count uniques in JS instead of `COUNT(DISTINCT user_id)` in SQL.
+
+### 13. Explore interests staleTime too short for 8 parallel pgvector scans
+`client/src/components/HomePage/explore/ExplorePage.jsx`: 10-minute staleTime for a query that fires 8 concurrent pgvector scans returning 64 posts.
+
+**Fix:** Increase to 30+ minutes.
+
+### 14. `DashboardBriefing` weekly recap keyed on `access_token`
+`client/src/components/DashboardBriefing/DashboardBriefing.jsx` L39: Query key includes `session?.access_token` — when token rotates, cache key changes and data refetches.
+
+**Fix:** Key on `session?.user?.id` instead.
+
+---
+
+## LOW — Nice to Have
+
+- `SELECT *` on bookmarks/follows for existence checks → use `.select('id')` only
+- Missing `loading="lazy"` on many avatar `<img>` tags (Sidebar, ProfileEditModal, Visitprofile, StoryDetail)
+- `Notifications.jsx` scroll `useEffect` missing dependency array (re-registers listener every render)
+- API `Cache-Control` only 10s for public feeds (`server.js` L89)
+
+---
+
+## Implementation Order
+
+1. **QueryClient defaults** (main.jsx) — 2 lines, immediate global impact
+2. **Remove `content` from list queries** — swap to `JOURNAL_METADATA_SELECT` in getService.js + update SQL RPCs
+3. **Scope mutation invalidations** in useMutation.js
+4. **Replace `SELECT *` on users** with explicit columns in getUserDataService.js
+5. **Add image resize** to imageUploader in routes.js
+6. **Add share image caching** in server.js
+7. **CDN setup** (Cloudflare) — infrastructure, not code
+8. Remaining medium/low items
+
+## Verification
+- After fixes 1-4: Monitor Supabase dashboard egress metrics over 24h; expect 50-70% reduction in database egress
+- After fix 5: Check average image size in storage buckets drops
+- After fix 7: Storage egress should drop 70-90%
+- Run the app through all flows (feed scroll, post view, like/bookmark, profile visit, search, explore) and check Network tab for payload sizes and request counts

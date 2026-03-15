@@ -1,0 +1,29 @@
+# Fix: Replies Saved as Top-Level Comments
+
+## Context
+When a user replies to a comment in `PostDetailScreen`, the reply is created as a new top-level comment instead of being nested under the parent. The mobile app correctly sends `parentId` in the request body, but the backend ignores it — the controller never extracts it and the service never inserts it into the database.
+
+## Root Cause
+The mobile app sends `{ comments, postId, receiverId, parentId }` to `POST /addComment`, but:
+1. **Controller** destructures only `{comments, postId, receiverId}` — `parentId` is dropped
+2. **Service** function signature only accepts `(userId, comments, postId, receiverId)` — no `parentId` param
+3. **Database insert** only includes `{comment, post_id, user_id}` — no `parent_id` field
+
+## Changes (backward-compatible with web app)
+
+### 1. Controller: Extract `parentId`
+**File:** `C:\Users\johnm\iskrib_v3\server\controller\interactController.js` (line 17)
+- Add `parentId` to the destructured `req.body`
+- Pass it to `addCommentService` as the 5th argument
+
+### 2. Service: Insert `parent_id`
+**File:** `C:\Users\johnm\iskrib_v3\server\services\interactService.js` (line 89)
+- Add `parentId` as the 5th parameter
+- Include `parent_id: parentId || null` in the Supabase insert object (line 116-120)
+
+No mobile changes needed — `PostDetailScreen` already sends `parentId: replyingTo?.id`.
+
+## Verification
+- Reply to a comment → it should appear nested under the parent (not as a new top-level comment)
+- Post a top-level comment (no reply) → should still work as before
+- Web app commenting → should still work (it doesn't send `parentId`, so it defaults to `null`)

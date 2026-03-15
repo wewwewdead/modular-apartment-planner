@@ -1,0 +1,711 @@
+import { useRef, useCallback, useMemo } from 'react';
+import { getStarColor, getStarRadius, simpleHash } from '../utils/starUtils';
+
+// ── Constants ──────────────────────────────────────────────────────────
+const MAX_SPEED = 1.75;
+const ACCEL = 0.03;
+const BRAKE = 0.04;
+const FRICTION = 0.995;
+const YAW_RATE = 0.009;
+const PITCH_RATE = 0.006;
+const PITCH_MAX = (89 * Math.PI) / 180; // 89° in radians
+const MIN_VIEW_Z = 0.5;
+const SPAWN_DIST = 800;
+const RECYCLE_Z = 1200;
+const SORT_INTERVAL = 5;
+const TARGET_DIST_MAX = 150;
+const TARGET_Z_MIN = 2;
+const TWO_PI = Math.PI * 2;
+
+// ── Docking constants ─────────────────────────────────────────────────
+const DOCKING_THRESHOLD_Z = 18;
+const DOCKING_CENTER_MAX = 50;
+const MAGNET_THRESHOLD_Z = 80;
+const MAGNET_STRENGTH = 0.015;
+const DOCK_ACCEL = 0.08;
+const DOCK_MAX_SPEED = 1.5;
+
+/** Max viewZ at which labels start fading in */
+export const LABEL_Z_MAX = 800;
+
+/** Export docking thresholds for external use */
+export { MAGNET_THRESHOLD_Z };
+
+/** Parse "#5f92ff" → { r, g, b } */
+const parseHex = (hex) => ({
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+});
+
+/** Seeded pseudo-random from integer seed */
+const seededRandom = (seed) => {
+    let s = seed | 0;
+    return () => {
+        s = (s * 1664525 + 1013904223) | 0;
+        return ((s >>> 0) / 4294967296);
+    };
+};
+
+/** Get forward direction vector from yaw + pitch */
+const getForwardVector = (yaw, pitch) => ({
+    x: Math.sin(yaw) * Math.cos(pitch),
+    y: Math.sin(pitch),
+    z: Math.cos(yaw) * Math.cos(pitch),
+});
+
+const useRocketMode = () => {
+    const isActiveRef = useRef(false);
+    const camPosRef = useRef({ x: 0, y: 0, z: 0 });
+    const yawRef = useRef(0);
+    const pitchRef = useRef(0);
+    const velocityRef = useRef(0);
+    const starsRef = useRef([]);
+    const sortedIndicesRef = useRef([]);
+    const keysRef = useRef({ w: false, s: false, a: false, d: false, q: false, e: false });
+    const targetIndexRef = useRef(-1);
+    const frameRef = useRef(0);
+    const layerRef = useRef(null);
+    const rafRef = useRef(null);
+    const stageSizeRef = useRef({ width: 0, height: 0 });
+    const onKeyDownRef = useRef(null);
+    const onKeyUpRef = useRef(null);
+
+    // ── Docking refs ──────────────────────────────────────────────────
+    const dockingStateRef = useRef('none'); // 'none' | 'magnet' | 'approaching' | 'flash' | 'done'
+    const dockingTargetIdxRef = useRef(-1);
+    const dockingProgressRef = useRef(0);
+    const dockingStartTimeRef = useRef(0);
+    const dockingCallbackRef = useRef(null);
+    const autoDockCbRef = useRef(null); // persistent auto-dock callback, survives manual docking
+    const inputFrozenRef = useRef(false);
+    const dockingStarScaleRef = useRef(1);
+    const dockCooldownRef = useRef(0); // timestamp — suppress auto-dock until this time
+    const galaxyCenterRef = useRef({ x: 0, y: 0 });
+    const analogRef = useRef({ yaw: 0, pitch: 0, throttle: 0 });
+
+    const sortStars = useCallback(() => {
+        const stars = starsRef.current;
+        const indices = sortedIndicesRef.current;
+        // Insertion sort — fast for nearly-sorted arrays, sort by viewZ descending (far first)
+        for (let i = 1; i < indices.length; i++) {
+            const key = indices[i];
+            let j = i - 1;
+            while (j >= 0 && stars[indices[j]].viewZ < stars[key].viewZ) {
+                indices[j + 1] = indices[j];
+                j--;
+            }
+            indices[j + 1] = key;
+        }
+    }, []);
+
+    const tick = useCallback(() => {
+        if (!isActiveRef.current) return;
+
+        const keys = keysRef.current;
+        const cam = camPosRef.current;
+        const stars = starsRef.current;
+        const size = stageSizeRef.current;
+        const dockState = dockingStateRef.current;
+
+        // ── Input processing (frozen during docking) ──────────────────
+        if (!inputFrozenRef.current) {
+            const analog = analogRef.current;
+
+            // ── Yaw (A/D + analog) ────────────────────────────────────
+            const yawInput = Math.max(-1, Math.min(1,
+                (keys.a ? -1 : 0) + (keys.d ? 1 : 0) + analog.yaw
+            ));
+            yawRef.current += yawInput * YAW_RATE;
+
+            // ── Pitch (Q/E + analog), clamped ─────────────────────────
+            const pitchInput = Math.max(-1, Math.min(1,
+                (keys.q ? 1 : 0) + (keys.e ? -1 : 0) + analog.pitch
+            ));
+            pitchRef.current = Math.max(-PITCH_MAX, Math.min(PITCH_MAX,
+                pitchRef.current + pitchInput * PITCH_RATE
+            ));
+
+            // ── Velocity ──────────────────────────────────────────────
+            const hasThrottle = keys.w || analog.throttle > 0.1;
+            if (hasThrottle) {
+                const throttleAmount = keys.w ? 1 : analog.throttle;
+                velocityRef.current = Math.min(velocityRef.current + ACCEL * throttleAmount, MAX_SPEED);
+            } else if (keys.s) {
+                velocityRef.current = Math.max(velocityRef.current - BRAKE, 0);
+            } else {
+                velocityRef.current *= FRICTION;
+                if (velocityRef.current < 0.01) velocityRef.current = 0;
+            }
+        }
+
+        // ── Magnetic pull (auto-aim toward docking target) ────────────
+        if (dockState === 'magnet') {
+            const tidx = dockingTargetIdxRef.current;
+            if (tidx >= 0 && tidx < stars.length) {
+                const target = stars[tidx];
+                const relX = target.worldX - cam.x;
+                const relY = target.worldY - cam.y;
+                const relZ = target.worldZ - cam.z;
+                const dist3D = Math.sqrt(relX * relX + relY * relY + relZ * relZ);
+                if (dist3D > 0.01) {
+                    const desiredYaw = Math.atan2(relX, relZ);
+                    const desiredPitch = Math.asin(Math.max(-1, Math.min(1, relY / dist3D)));
+                    // Proximity factor: 0 at MAGNET_THRESHOLD_Z, 1 at DOCKING_THRESHOLD_Z
+                    const proximityFactor = Math.max(0, Math.min(1,
+                        (MAGNET_THRESHOLD_Z - target.viewZ) / (MAGNET_THRESHOLD_Z - DOCKING_THRESHOLD_Z)
+                    ));
+                    const lerpFactor = MAGNET_STRENGTH * (0.3 + proximityFactor * 0.7);
+                    // Normalize yaw difference to [-PI, PI]
+                    let yawDiff = desiredYaw - yawRef.current;
+                    while (yawDiff > Math.PI) yawDiff -= TWO_PI;
+                    while (yawDiff < -Math.PI) yawDiff += TWO_PI;
+                    yawRef.current += yawDiff * lerpFactor;
+                    pitchRef.current += (desiredPitch - pitchRef.current) * lerpFactor;
+                    pitchRef.current = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitchRef.current));
+                }
+                // Disengage if target drifts beyond magnet zone
+                if (target.viewZ > MAGNET_THRESHOLD_Z * 1.2 || target.viewZ < TARGET_Z_MIN) {
+                    dockingStateRef.current = 'none';
+                    dockingTargetIdxRef.current = -1;
+                    dockCooldownRef.current = performance.now() + 500;
+                }
+            }
+        }
+
+        // ── Docking animation sequence ────────────────────────────────
+        if (dockState === 'approaching' || dockState === 'flash') {
+            const elapsed = performance.now() - dockingStartTimeRef.current;
+            const tidx = dockingTargetIdxRef.current;
+            const target = tidx >= 0 && tidx < stars.length ? stars[tidx] : null;
+
+            if (elapsed < 800 && target) {
+                // Phase 1: Auto-approach (0-800ms)
+                const relX = target.worldX - cam.x;
+                const relY = target.worldY - cam.y;
+                const relZ = target.worldZ - cam.z;
+                const dist3D = Math.sqrt(relX * relX + relY * relY + relZ * relZ);
+                if (dist3D > 0.01) {
+                    const desiredYaw = Math.atan2(relX, relZ);
+                    const desiredPitch = Math.asin(Math.max(-1, Math.min(1, relY / dist3D)));
+                    let yawDiff = desiredYaw - yawRef.current;
+                    while (yawDiff > Math.PI) yawDiff -= TWO_PI;
+                    while (yawDiff < -Math.PI) yawDiff += TWO_PI;
+                    yawRef.current += yawDiff * 0.12;
+                    pitchRef.current += (desiredPitch - pitchRef.current) * 0.12;
+                    pitchRef.current = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, pitchRef.current));
+                }
+                velocityRef.current = Math.min(velocityRef.current + DOCK_ACCEL, DOCK_MAX_SPEED);
+                // Quadratic ease-in scale: 1 → 9
+                const t1 = elapsed / 800;
+                dockingStarScaleRef.current = 1 + 8 * t1 * t1;
+                dockingProgressRef.current = t1 * 0.6;
+            } else if (elapsed < 1200 && target) {
+                // Phase 2: Star explosion (800-1200ms)
+                velocityRef.current *= 0.9;
+                const t2 = (elapsed - 800) / 400;
+                // Ease-out scale: 9 → 50
+                const easeOut = 1 - (1 - t2) * (1 - t2);
+                dockingStarScaleRef.current = 9 + 41 * easeOut;
+                dockingProgressRef.current = 0.6 + t2 * 0.3;
+            } else if (elapsed < 1700) {
+                // Phase 3: White flash (1200-1700ms)
+                velocityRef.current = 0;
+                dockingStateRef.current = 'flash';
+                const t3 = (elapsed - 1200) / 500;
+                dockingProgressRef.current = 0.9 + t3 * 0.1;
+            } else {
+                // Done — stop loop immediately, then trigger callback exactly once
+                isActiveRef.current = false;
+                if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+                dockingStateRef.current = 'done';
+                dockingProgressRef.current = 1;
+                const cb = dockingCallbackRef.current;
+                dockingCallbackRef.current = null;
+                if (cb) cb();
+                // Restore persistent auto-dock callback for next session
+                if (autoDockCbRef.current) {
+                    dockingCallbackRef.current = autoDockCbRef.current;
+                }
+                return; // do not reschedule
+            }
+        }
+
+        const yaw = yawRef.current;
+        const pitch = pitchRef.current;
+        const velocity = velocityRef.current;
+
+        // ── Position (move along forward vector) ─────────────────────
+        const fwd = getForwardVector(yaw, pitch);
+        cam.x += fwd.x * velocity;
+        cam.y += fwd.y * velocity;
+        cam.z += fwd.z * velocity;
+
+        // ── Pre-compute trig for view transform ──────────────────────
+        const cosYaw = Math.cos(-yaw);
+        const sinYaw = Math.sin(-yaw);
+        const cosPitch = Math.cos(pitch);
+        const sinPitch = Math.sin(pitch);
+
+        // ── View transform + recycling ───────────────────────────────
+        const dockingActive = dockState !== 'none';
+        const protectedIdx = dockingTargetIdxRef.current;
+        for (let i = 0; i < stars.length; i++) {
+            const star = stars[i];
+
+            // Translate to camera-relative
+            const relX = star.worldX - cam.x;
+            const relY = star.worldY - cam.y;
+            const relZ = star.worldZ - cam.z;
+
+            // Yaw rotation (around Y axis)
+            const rotX1 = relX * cosYaw + relZ * sinYaw;
+            const rotZ1 = -relX * sinYaw + relZ * cosYaw;
+
+            // Pitch rotation (around X axis)
+            const rotY2 = relY * cosPitch - rotZ1 * sinPitch;
+            const viewZ = relY * sinPitch + rotZ1 * cosPitch;
+
+            // Cache on star for renderer
+            star._rotX1 = rotX1;
+            star._rotY2 = rotY2;
+            star.viewZ = viewZ;
+
+            // Recycle stars that are behind camera or too far
+            // Skip recycling for the docking target star
+            if ((viewZ < MIN_VIEW_Z || viewZ > RECYCLE_Z) && !(dockingActive && i === protectedIdx)) {
+                // Respawn ahead of camera using forward vector + random spread
+                const dist = SPAWN_DIST * (0.5 + Math.random() * 0.5);
+                const spreadX = (Math.random() - 0.5) * 2000;
+                const spreadY = (Math.random() - 0.5) * 2000;
+                star.worldX = cam.x + fwd.x * dist + spreadX;
+                star.worldY = cam.y + fwd.y * dist + spreadY;
+                star.worldZ = cam.z + fwd.z * dist + (Math.random() - 0.5) * 1000;
+
+                // Recompute view-space for the recycled position
+                const rX = star.worldX - cam.x;
+                const rY = star.worldY - cam.y;
+                const rZ = star.worldZ - cam.z;
+                const rX1 = rX * cosYaw + rZ * sinYaw;
+                const rZ1 = -rX * sinYaw + rZ * cosYaw;
+                star._rotX1 = rX1;
+                star._rotY2 = rY * cosPitch - rZ1 * sinPitch;
+                star.viewZ = rY * sinPitch + rZ1 * cosPitch;
+            }
+        }
+
+        // ── Sort (every N frames) ────────────────────────────────────
+        frameRef.current++;
+        if (frameRef.current % SORT_INTERVAL === 0) {
+            sortStars();
+        }
+
+        // ── Target detection ─────────────────────────────────────────
+        const cx = size.width / 2;
+        const cy = size.height / 2;
+        const focalLength = size.width * 0.6;
+        let bestIdx = -1;
+        let bestDist = TARGET_DIST_MAX;
+
+        for (let i = 0; i < stars.length; i++) {
+            const star = stars[i];
+            if (star.viewZ < TARGET_Z_MIN) continue;
+            const projX = cx + (star._rotX1 / star.viewZ) * focalLength;
+            const projY = cy - (star._rotY2 / star.viewZ) * focalLength;
+            const dx = projX - cx;
+            const dy = projY - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+        targetIndexRef.current = bestIdx;
+
+        // ── Docking detection ─────────────────────────────────────────
+        // Read live ref (not stale snapshot) to respect triggerDocking() calls from user input
+        const cooldownActive = performance.now() < dockCooldownRef.current;
+        if (dockingStateRef.current === 'none' && bestIdx >= 0 && !cooldownActive) {
+            const targetStar = stars[bestIdx];
+            const viewZ = targetStar.viewZ;
+            if (viewZ < DOCKING_THRESHOLD_Z && bestDist < DOCKING_CENTER_MAX) {
+                // Close enough and centered — auto-dock
+                dockingStateRef.current = 'approaching';
+                dockingTargetIdxRef.current = bestIdx;
+                dockingStartTimeRef.current = performance.now();
+                dockingProgressRef.current = 0;
+                dockingStarScaleRef.current = 1;
+                inputFrozenRef.current = true;
+            } else if (viewZ < MAGNET_THRESHOLD_Z && viewZ > DOCKING_THRESHOLD_Z) {
+                // In magnet zone — engage gentle pull
+                dockingStateRef.current = 'magnet';
+                dockingTargetIdxRef.current = bestIdx;
+            }
+        }
+        // Disengage magnet if best target changes
+        if (dockingStateRef.current === 'magnet' && bestIdx !== dockingTargetIdxRef.current) {
+            dockingStateRef.current = 'none';
+            dockingTargetIdxRef.current = -1;
+            dockCooldownRef.current = performance.now() + 500; // brief cooldown after target switch
+        }
+        // Transition magnet → approaching when within docking threshold and centered
+        if (dockingStateRef.current === 'magnet') {
+            const tidx = dockingTargetIdxRef.current;
+            if (tidx >= 0 && tidx < stars.length) {
+                const mTarget = stars[tidx];
+                if (!cooldownActive && mTarget.viewZ < DOCKING_THRESHOLD_Z && mTarget.viewZ > TARGET_Z_MIN) {
+                    const mProjX = cx + (mTarget._rotX1 / mTarget.viewZ) * focalLength;
+                    const mProjY = cy - (mTarget._rotY2 / mTarget.viewZ) * focalLength;
+                    const mDist = Math.sqrt((mProjX - cx) ** 2 + (mProjY - cy) ** 2);
+                    if (mDist < DOCKING_CENTER_MAX) {
+                        dockingStateRef.current = 'approaching';
+                        dockingStartTimeRef.current = performance.now();
+                        dockingProgressRef.current = 0;
+                        dockingStarScaleRef.current = 1;
+                        inputFrozenRef.current = true;
+                    }
+                }
+            }
+        }
+
+        // ── Redraw ───────────────────────────────────────────────────
+        if (layerRef.current) {
+            layerRef.current.batchDraw();
+        }
+
+        rafRef.current = requestAnimationFrame(tick);
+    }, [sortStars]);
+
+    const enter = useCallback((galaxyPosts, galaxyCenter, stageSize) => {
+        // Clean up any existing loop/listeners before re-entering
+        isActiveRef.current = false;
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        if (onKeyDownRef.current) {
+            window.removeEventListener('keydown', onKeyDownRef.current);
+            window.removeEventListener('keyup', onKeyUpRef.current);
+            onKeyDownRef.current = null; onKeyUpRef.current = null;
+        }
+
+        stageSizeRef.current = stageSize;
+        camPosRef.current = { x: galaxyCenter.x, y: galaxyCenter.y, z: 0 };
+        galaxyCenterRef.current = { x: galaxyCenter.x, y: galaxyCenter.y };
+        yawRef.current = 0;
+        pitchRef.current = 0;
+        velocityRef.current = 0;
+        frameRef.current = 0;
+        targetIndexRef.current = -1;
+
+        // Reset docking state
+        dockingStateRef.current = 'none';
+        dockingTargetIdxRef.current = -1;
+        dockingProgressRef.current = 0;
+        dockingStarScaleRef.current = 1;
+        inputFrozenRef.current = false;
+        dockCooldownRef.current = 0;
+        analogRef.current = { yaw: 0, pitch: 0, throttle: 0 };
+
+        // Build star array from posts — distributed in 3D volume
+        const stars = [];
+        for (let i = 0; i < galaxyPosts.length; i++) {
+            const post = galaxyPosts[i];
+            const uid = post.users?.id ?? post.user_id;
+            const likeCount = post.like_count != null
+                ? post.like_count
+                : (Array.isArray(post.likes) && post.likes[0]?.count != null
+                    ? post.likes[0].count : 0);
+            const color = getStarColor(uid);
+            const rng = seededRandom(simpleHash(post.id || String(i)));
+            // Always consume two RNG calls for X/Y so worldZ gets a consistent 3rd draw
+            const rngX = rng();
+            const rngY = rng();
+            stars.push({
+                postId: post.id,
+                worldX: post.universe_x ?? post.display_x ?? galaxyCenter.x + (rngX - 0.5) * 2000,
+                worldY: post.universe_y ?? post.display_y ?? galaxyCenter.y + (rngY - 0.5) * 2000,
+                worldZ: (rng() - 0.5) * SPAWN_DIST * 2, // ±SPAWN_DIST from camera z=0
+                viewZ: 0,
+                _rotX1: 0,
+                _rotY2: 0,
+                color,
+                colorRgb: parseHex(color),
+                radius: getStarRadius(likeCount),
+                title: post.title || 'Untitled',
+                authorName: post.users?.name || post.user_name || 'Anonymous',
+                post,
+            });
+        }
+
+        starsRef.current = stars;
+
+        // Build sorted indices (far → near by viewZ, will be sorted properly on first tick)
+        const indices = new Array(stars.length);
+        for (let i = 0; i < stars.length; i++) indices[i] = i;
+        sortedIndicesRef.current = indices;
+
+        // Key listeners
+        const onKeyDown = (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keysRef.current.w = true;
+            if (key === 's') keysRef.current.s = true;
+            if (key === 'a' || key === 'arrowleft') keysRef.current.a = true;
+            if (key === 'd' || key === 'arrowright') keysRef.current.d = true;
+            if (key === 'q' || key === 'arrowup') keysRef.current.q = true;
+            if (key === 'e' || key === 'arrowdown') keysRef.current.e = true;
+        };
+        const onKeyUp = (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keysRef.current.w = false;
+            if (key === 's') keysRef.current.s = false;
+            if (key === 'a' || key === 'arrowleft') keysRef.current.a = false;
+            if (key === 'd' || key === 'arrowright') keysRef.current.d = false;
+            if (key === 'q' || key === 'arrowup') keysRef.current.q = false;
+            if (key === 'e' || key === 'arrowdown') keysRef.current.e = false;
+        };
+
+        onKeyDownRef.current = onKeyDown;
+        onKeyUpRef.current = onKeyUp;
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+
+        // Reset keys
+        keysRef.current = { w: false, s: false, a: false, d: false, q: false, e: false };
+        isActiveRef.current = true;
+
+        // Start rAF
+        rafRef.current = requestAnimationFrame(tick);
+    }, [tick]);
+
+    const exit = useCallback(() => {
+        isActiveRef.current = false;
+        if (rafRef.current) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+        }
+        // Remove key listeners
+        if (onKeyDownRef.current) {
+            window.removeEventListener('keydown', onKeyDownRef.current);
+            window.removeEventListener('keyup', onKeyUpRef.current);
+            onKeyDownRef.current = null;
+            onKeyUpRef.current = null;
+        }
+        keysRef.current = { w: false, s: false, a: false, d: false, q: false, e: false };
+        analogRef.current = { yaw: 0, pitch: 0, throttle: 0 };
+        // Reset docking
+        dockingStateRef.current = 'none';
+        dockingTargetIdxRef.current = -1;
+        dockingProgressRef.current = 0;
+        dockingStarScaleRef.current = 1;
+        inputFrozenRef.current = false;
+        dockingCallbackRef.current = null;
+    }, []);
+
+    const project = useCallback((star, cx, cy) => {
+        if (star.viewZ <= MIN_VIEW_Z) return null; // behind camera
+
+        const stageWidth = stageSizeRef.current.width;
+        const focalLength = stageWidth * 0.6; // ~80° FOV
+        const projX = cx + (star._rotX1 / star.viewZ) * focalLength;
+        const projY = cy - (star._rotY2 / star.viewZ) * focalLength; // negate Y for screen coords
+        const scale = focalLength / star.viewZ;
+
+        return { projX, projY, scale };
+    }, []);
+
+    const getTargetedPost = useCallback(() => {
+        const idx = targetIndexRef.current;
+        if (idx < 0 || idx >= starsRef.current.length) return null;
+        return starsRef.current[idx].post;
+    }, []);
+
+    const getSpeedRatio = useCallback(() => {
+        return velocityRef.current / MAX_SPEED;
+    }, []);
+
+    const getDockingState = useCallback(() => {
+        return dockingStateRef.current;
+    }, []);
+
+    const getSessionSnapshot = useCallback(() => {
+        const cam = camPosRef.current;
+        const gc = galaxyCenterRef.current;
+        // Back up camera along reverse forward vector so restore doesn't land inside the star
+        const RESTORE_BACK_OFFSET = 60;
+        const fwd = getForwardVector(yawRef.current, pitchRef.current);
+        return {
+            camX: cam.x - fwd.x * RESTORE_BACK_OFFSET,
+            camY: cam.y - fwd.y * RESTORE_BACK_OFFSET,
+            camZ: cam.z - fwd.z * RESTORE_BACK_OFFSET,
+            yaw: yawRef.current,
+            pitch: pitchRef.current,
+            velocity: 0,
+            galaxyCenterX: gc.x,
+            galaxyCenterY: gc.y,
+            timestamp: Date.now(),
+        };
+    }, []);
+
+    const restoreFromSnapshot = useCallback((snapshot, galaxyPosts, stageSize) => {
+        // Clean up any existing loop/listeners before restoring
+        isActiveRef.current = false;
+        if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        if (onKeyDownRef.current) {
+            window.removeEventListener('keydown', onKeyDownRef.current);
+            window.removeEventListener('keyup', onKeyUpRef.current);
+            onKeyDownRef.current = null; onKeyUpRef.current = null;
+        }
+
+        stageSizeRef.current = stageSize;
+        camPosRef.current = { x: snapshot.camX, y: snapshot.camY, z: snapshot.camZ };
+        yawRef.current = snapshot.yaw;
+        pitchRef.current = snapshot.pitch;
+        velocityRef.current = 0; // smooth re-entry
+        frameRef.current = 0;
+        targetIndexRef.current = -1;
+
+        // Reset docking state
+        dockingStateRef.current = 'none';
+        dockingTargetIdxRef.current = -1;
+        dockingProgressRef.current = 0;
+        dockingStarScaleRef.current = 1;
+        inputFrozenRef.current = false;
+        analogRef.current = { yaw: 0, pitch: 0, throttle: 0 };
+        // Suppress auto-dock for 2s after restore to prevent redirect loop
+        dockCooldownRef.current = performance.now() + 2000;
+
+        // Build star array — use stored galaxy center for consistent star placement
+        const galaxyCenter = snapshot.galaxyCenterX != null
+            ? { x: snapshot.galaxyCenterX, y: snapshot.galaxyCenterY }
+            : { x: snapshot.camX, y: snapshot.camY };
+        galaxyCenterRef.current = { x: galaxyCenter.x, y: galaxyCenter.y };
+        const stars = [];
+        for (let i = 0; i < galaxyPosts.length; i++) {
+            const post = galaxyPosts[i];
+            const uid = post.users?.id ?? post.user_id;
+            const likeCount = post.like_count != null
+                ? post.like_count
+                : (Array.isArray(post.likes) && post.likes[0]?.count != null
+                    ? post.likes[0].count : 0);
+            const color = getStarColor(uid);
+            const rng = seededRandom(simpleHash(post.id || String(i)));
+            // Always consume two RNG calls for X/Y so worldZ gets a consistent 3rd draw
+            const rngX = rng();
+            const rngY = rng();
+            stars.push({
+                postId: post.id,
+                worldX: post.universe_x ?? post.display_x ?? galaxyCenter.x + (rngX - 0.5) * 2000,
+                worldY: post.universe_y ?? post.display_y ?? galaxyCenter.y + (rngY - 0.5) * 2000,
+                worldZ: (rng() - 0.5) * SPAWN_DIST * 2,
+                viewZ: 0,
+                _rotX1: 0,
+                _rotY2: 0,
+                color,
+                colorRgb: parseHex(color),
+                radius: getStarRadius(likeCount),
+                title: post.title || 'Untitled',
+                authorName: post.users?.name || post.user_name || 'Anonymous',
+                post,
+            });
+        }
+
+        starsRef.current = stars;
+
+        const indices = new Array(stars.length);
+        for (let i = 0; i < stars.length; i++) indices[i] = i;
+        sortedIndicesRef.current = indices;
+
+        // Key listeners
+        const onKeyDown = (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keysRef.current.w = true;
+            if (key === 's') keysRef.current.s = true;
+            if (key === 'a' || key === 'arrowleft') keysRef.current.a = true;
+            if (key === 'd' || key === 'arrowright') keysRef.current.d = true;
+            if (key === 'q' || key === 'arrowup') keysRef.current.q = true;
+            if (key === 'e' || key === 'arrowdown') keysRef.current.e = true;
+        };
+        const onKeyUp = (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') keysRef.current.w = false;
+            if (key === 's') keysRef.current.s = false;
+            if (key === 'a' || key === 'arrowleft') keysRef.current.a = false;
+            if (key === 'd' || key === 'arrowright') keysRef.current.d = false;
+            if (key === 'q' || key === 'arrowup') keysRef.current.q = false;
+            if (key === 'e' || key === 'arrowdown') keysRef.current.e = false;
+        };
+
+        onKeyDownRef.current = onKeyDown;
+        onKeyUpRef.current = onKeyUp;
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+
+        keysRef.current = { w: false, s: false, a: false, d: false, q: false, e: false };
+        isActiveRef.current = true;
+
+        rafRef.current = requestAnimationFrame(tick);
+    }, [tick]);
+
+    const setDockingCallback = useCallback((cb) => {
+        // Don't overwrite a callback that's already mid-animation
+        const state = dockingStateRef.current;
+        if (state === 'none' || state === 'magnet') {
+            dockingCallbackRef.current = cb;
+        }
+        // Always store as persistent auto-dock callback
+        autoDockCbRef.current = cb;
+    }, []);
+
+    const abortDocking = useCallback(() => {
+        if (dockingStateRef.current === 'magnet') {
+            dockingStateRef.current = 'none';
+            dockingTargetIdxRef.current = -1;
+            dockingProgressRef.current = 0;
+            dockingStarScaleRef.current = 1;
+        }
+        // Approaching/flash are non-interruptible
+    }, []);
+
+    const triggerDocking = useCallback((targetIdx, callback) => {
+        if (dockingStateRef.current !== 'none' && dockingStateRef.current !== 'magnet') return;
+        dockingStateRef.current = 'approaching';
+        dockingTargetIdxRef.current = targetIdx;
+        dockingStartTimeRef.current = performance.now();
+        dockingProgressRef.current = 0;
+        dockingStarScaleRef.current = 1;
+        inputFrozenRef.current = true;
+        if (callback) dockingCallbackRef.current = callback;
+    }, []);
+
+    return useMemo(() => ({
+        enter,
+        exit,
+        layerRef,
+        starsRef,
+        sortedIndicesRef,
+        rocketPos: camPosRef,
+        heading: yawRef,
+        pitch: pitchRef,
+        velocity: velocityRef,
+        targetIndexRef,
+        stageSizeRef,
+        project,
+        isActive: isActiveRef,
+        getTargetedPost,
+        getSpeedRatio,
+        // Docking API
+        getDockingState,
+        getSessionSnapshot,
+        restoreFromSnapshot,
+        setDockingCallback,
+        abortDocking,
+        triggerDocking,
+        dockingStateRef,
+        dockingTargetIdxRef,
+        dockingProgressRef,
+        dockingStarScaleRef,
+        inputFrozenRef,
+        analogRef,
+    }), [enter, exit, project, getTargetedPost, getSpeedRatio, getDockingState,
+         getSessionSnapshot, restoreFromSnapshot, setDockingCallback, abortDocking, triggerDocking]);
+};
+
+export default useRocketMode;

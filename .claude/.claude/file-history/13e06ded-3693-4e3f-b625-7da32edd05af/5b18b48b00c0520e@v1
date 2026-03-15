@@ -1,0 +1,67 @@
+# Plan: Show Bearing Input When a Wall Is Selected
+
+## Context
+
+The bearing input (WallDrawingInput) currently only appears when the wall-draw tool is active and a start point has been clicked. The user wants it to also appear when a wall is simply **selected** (Select tool), so they can continue drawing from a selected wall's endpoint without switching tools.
+
+## File to Change
+
+| File | Action |
+|------|--------|
+| `src/ui/PropertiesPanel.jsx` | Modify WallProperties to include bearing input; adjust WallDrawingInput confirm to select new wall |
+
+No CSS or geometry changes needed — all bearing styles and utilities already exist.
+
+## Approach
+
+### Step 1: Add bearing section inside `WallProperties` (line ~287)
+
+After the existing wall property fields (thickness, height, length), add a subtitle "Continue from End" followed by a `<WallDrawingInput>` component:
+
+```jsx
+<div className={styles.subtitle}>Continue from End</div>
+<WallDrawingInput
+  start={wall.end}
+  dispatch={dispatch}
+  editorDispatch={editorDispatch}
+  activeFloorId={floorId}
+  u={u}
+  selectNewWall
+/>
+```
+
+This reuses the existing `WallDrawingInput` component with `wall.end` as the start point.
+
+### Step 2: Thread `editorDispatch` into `WallProperties`
+
+`WallProperties` currently receives `{ wall, dispatch, floorId, u }`. Add `editorDispatch` as a prop, and update the call site (line ~1617):
+
+```jsx
+content = <WallProperties wall={wall} dispatch={dispatch} editorDispatch={editorDispatch} floorId={activeFloorId} u={u} />;
+```
+
+### Step 3: Add `selectNewWall` prop to `WallDrawingInput`
+
+When `selectNewWall` is truthy, after creating the wall, instead of chaining via `UPDATE_TOOL_STATE`, select the newly created wall:
+
+```jsx
+editorDispatch({ type: 'SELECT_OBJECT', id: wall.id, objectType: 'wall' });
+```
+
+This way, after creating a wall from a selected wall's endpoint, the **new** wall gets selected — the bearing input reappears with the new wall's end point, enabling continuous chaining.
+
+The existing behavior (no `selectNewWall` prop → chain via `UPDATE_TOOL_STATE`) remains unchanged for wall-draw mode.
+
+## Key Files
+
+- `src/ui/PropertiesPanel.jsx` — `WallDrawingInput` (line ~49), `WallProperties` (line ~234), render wiring (line ~1614)
+- `src/geometry/bearing.js` — `surveyorBearingToSvgAngle`, `endpointFromBearing` (already exist)
+- `src/domain/models.js` — `createWall` (already imported)
+
+## Verification
+
+1. `npx vite build` — no errors
+2. Select tool → click a wall → WallProperties shows with "Continue from End" bearing section at bottom
+3. Enter bearing + length → new wall created from selected wall's endpoint
+4. New wall auto-selected → can keep chaining
+5. Wall-draw mode bearing input still works as before (unchanged behavior)

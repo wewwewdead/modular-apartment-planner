@@ -1,0 +1,132 @@
+/**
+ * Pure math functions for client-side gravity simulation.
+ * Zero DOM/React dependencies — worker-ready.
+ */
+
+// ─── Galaxy-to-Galaxy Forces (Gravity A) ─────────────────────────────
+
+/**
+ * Compute forces on galaxies:
+ *  1. Spring toward server-settled target positions
+ *  2. Edge-based attraction (similar galaxies pull together)
+ *  3. Repulsion between all galaxy pairs (prevent overlap)
+ *
+ * @param {Map} positions   - Map<userId, {x, y}>  current animated positions
+ * @param {Map} targets     - Map<userId, {x, y}>  server-settled target positions
+ * @param {Array} edges     - [{user_a, user_b, similarity}]
+ * @returns {Map<userId, {fx, fy}>}
+ */
+export const computeGalaxyForces = (positions, targets, edges) => {
+    const forces = new Map();
+    const ids = Array.from(positions.keys());
+
+    for (const id of ids) forces.set(id, { fx: 0, fy: 0 });
+
+    // 1. Spring toward target (the server-settled semantic position)
+    const SPRING_K = 0.06;
+    for (const [id, pos] of positions) {
+        const target = targets.get(id);
+        if (!target) continue;
+        const f = forces.get(id);
+        f.fx += (target.x - pos.x) * SPRING_K;
+        f.fy += (target.y - pos.y) * SPRING_K;
+    }
+
+    // 2. Edge attraction (similar galaxies attract)
+    if (edges) {
+        for (const edge of edges) {
+            const posA = positions.get(edge.user_a);
+            const posB = positions.get(edge.user_b);
+            if (!posA || !posB) continue;
+
+            const fA = forces.get(edge.user_a);
+            const fB = forces.get(edge.user_b);
+            if (!fA || !fB) continue;
+
+            const dx = posB.x - posA.x;
+            const dy = posB.y - posA.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const idealDist = 3000 * (1 - edge.similarity);
+            const strength = edge.similarity * 0.0004 * (dist - idealDist);
+            const fx = (dx / dist) * strength;
+            const fy = (dy / dist) * strength;
+
+            fA.fx += fx;  fA.fy += fy;
+            fB.fx -= fx;  fB.fy -= fy;
+        }
+    }
+
+    // 3. Repulsion between all galaxy pairs
+    const REPULSION = 3e6;
+    for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+            const a = positions.get(ids[i]);
+            const b = positions.get(ids[j]);
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq > 1e8) continue; // skip pairs >10000px apart
+            const dist = Math.sqrt(distSq) || 1;
+
+            const force = REPULSION / distSq;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+
+            const fA = forces.get(ids[i]);
+            const fB = forces.get(ids[j]);
+            fA.fx -= fx;  fA.fy -= fy;
+            fB.fx += fx;  fB.fy += fy;
+        }
+    }
+
+    return forces;
+};
+
+// ─── Star Pull Offsets (Gravity B) ───────────────────────────────────
+
+/**
+ * Compute static pull offsets for stars toward similar galaxy centroids.
+ * Each star gets a summed directional offset, clamped to maxOffset.
+ *
+ * @param {Array} starPulls       - [{post_id, galaxy_user_id, similarity}]
+ * @param {Map}   galaxyTargets   - Map<userId, {x, y}> final galaxy positions
+ * @param {Map}   starBases       - Map<postId, {x, y}> star's hash+spiral base positions
+ * @param {number} pullStrength   - max force multiplier
+ * @param {number} maxOffset      - clamp total offset magnitude
+ * @returns {Map<postId, {dx, dy}>}
+ */
+export const computeStarPullOffsets = (starPulls, galaxyTargets, starBases, pullStrength = 120, maxOffset = 80) => {
+    const offsets = new Map();
+
+    for (const pull of starPulls) {
+        const galaxy = galaxyTargets.get(pull.galaxy_user_id);
+        const base = starBases.get(pull.post_id);
+        if (!galaxy || !base) continue;
+
+        const dx = galaxy.x - base.x;
+        const dy = galaxy.y - base.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        const strength = (pull.similarity - 0.4) * pullStrength;
+        const fx = (dx / dist) * strength;
+        const fy = (dy / dist) * strength;
+
+        if (!offsets.has(pull.post_id)) {
+            offsets.set(pull.post_id, { dx: 0, dy: 0 });
+        }
+        const o = offsets.get(pull.post_id);
+        o.dx += fx;
+        o.dy += fy;
+    }
+
+    // Clamp each offset
+    for (const [, o] of offsets) {
+        const mag = Math.sqrt(o.dx * o.dx + o.dy * o.dy);
+        if (mag > maxOffset) {
+            o.dx = (o.dx / mag) * maxOffset;
+            o.dy = (o.dy / mag) * maxOffset;
+        }
+    }
+
+    return offsets;
+};

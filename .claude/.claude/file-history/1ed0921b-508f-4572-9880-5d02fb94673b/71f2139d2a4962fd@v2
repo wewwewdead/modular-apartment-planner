@@ -1,0 +1,322 @@
+import { publicGet, authedGet, authedJsonRequest, authedFormRequest } from "./apiHelpers";
+
+// ─── Auth / Profile ───
+
+export const checkUser = (userId) =>
+    publicGet(`/check-user?userId=${userId}`, 'failed to get user data');
+
+export const submitProfileData = (body, token) =>
+    authedFormRequest(token, 'POST', '/upload-user-data', body, 'Failed to upload data');
+
+export const updateProfileData = (body, token) =>
+    authedFormRequest(token, 'POST', '/update-user-data', body, 'failed to update profile data');
+
+export const getUserByUsername = (username) =>
+    publicGet(`/user/${encodeURIComponent(username)}`, 'failed to fetch user by username');
+
+export const checkUsernameAvailability = (username) =>
+    publicGet(`/check-username/${encodeURIComponent(username)}`, 'failed to check username');
+
+export const updateUsername = (token, username) =>
+    authedJsonRequest(token, 'POST', '/update-username', { username }, 'failed to update username');
+
+export const getUserData = (userId) =>
+    publicGet(`/getUserData?userId=${userId}`, 'Failed to fetch user data');
+
+export const updateFontColor = (token, fontColor) =>
+    authedFormRequest(token, 'POST', '/updateFontColor', fontColor, 'failed to update font color');
+
+// ─── Journals ───
+
+export const saveJournalImage = (token, body) =>
+    authedFormRequest(token, 'POST', '/save-journal-image', body, 'error uploading journal images');
+
+export const saveJournal = (token, body) =>
+    authedFormRequest(token, 'POST', '/save-journal', body, 'failed to save journal');
+
+export const updateJournal = (token, body) =>
+    authedFormRequest(token, 'POST', '/update-journal', body, 'failed to update journal');
+
+export const deleteJournalImage = async (token, url) => {
+    const data = { filepath: [] };
+    if (url.length) {
+        url.forEach(element => {
+            data.filepath.push(element.split('/journal-images/').pop());
+        });
+    }
+    return authedJsonRequest(token, 'POST', '/delete-journal-images', data, 'failed to delete journal images');
+};
+
+export const getFollowingFeed = (token, cursor = null, limit = 5) => {
+    const path = cursor
+        ? `/journals/following?limit=${limit}&before=${cursor}`
+        : `/journals/following?limit=${limit}`;
+    return authedGet(token, path, 'Failed to fetch following feed');
+};
+
+export const getForYouFeed = (token, offset = 0, limit = 5) =>
+    authedGet(token, `/journals/for-you?limit=${limit}&offset=${offset}`, 'Failed to fetch for-you feed');
+
+export const getInterestSections = (token) =>
+    authedGet(token, '/explore/interests', 'Failed to fetch interest sections');
+
+export const getJournals = async (cursor = null, limit = 5, userId) => {
+    let path = cursor
+        ? `/journals?limit=${limit}&before=${cursor}`
+        : `/journals?limit=${limit}`;
+    if (userId) path += `&userId=${userId}`;
+    return publicGet(path, 'Failed to fetch journals');
+};
+
+export const getMonthlyHottestJournals = (userId, limit = 10) => {
+    const parsedLimit = Number(limit);
+    if (Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 10) {
+        throw new Error('limit should be an integer between 1 and 10');
+    }
+    let path = `/journals/hottest-monthly?limit=${parsedLimit}`;
+    if (userId) path += `&userId=${encodeURIComponent(userId)}`;
+    return publicGet(path, 'failed to fetch monthly hottest journals');
+};
+
+export const searchUsers = (query, limit = 10) => {
+    const q = typeof query === 'string' ? query.trim() : '';
+    if (!q) return Promise.resolve({ data: [], hasMore: false });
+    return publicGet(`/users/search?query=${encodeURIComponent(q)}&limit=${limit}`, 'failed to search users');
+};
+
+export const searchFollowingUsers = (token, query = '', limit = 10) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (query) params.set('query', query);
+    return authedGet(token, `/users/following/search?${params}`, 'failed to search following users');
+};
+
+export const searchJournals = (query, limit = 10, userId) => {
+    const q = typeof query === 'string' ? query.trim() : '';
+    if (!q) return Promise.resolve({ data: [], hasMore: false, mode: 'keyword' });
+    let path = `/journals/search?query=${encodeURIComponent(q)}&limit=${limit}`;
+    if (userId) path += `&userId=${encodeURIComponent(userId)}`;
+    return publicGet(path, 'failed to search journals');
+};
+
+export const getJournalById = (journalId, userId, options = {}) => {
+    if (!journalId) throw new Error('journalId is required');
+    const params = new URLSearchParams();
+    if (userId) params.set('userId', String(userId));
+    if (options.includeRepostContent) params.set('includeRepostContent', 'true');
+    const qs = params.toString();
+    const path = qs
+        ? `/journal/${encodeURIComponent(journalId)}?${qs}`
+        : `/journal/${encodeURIComponent(journalId)}`;
+    return publicGet(path, 'failed to fetch journal');
+};
+
+export const getJournalContent = (journalId) => {
+    if (!journalId) throw new Error('journalId is required');
+    return publicGet(`/journal/${encodeURIComponent(journalId)}/content`, 'failed to fetch journal content');
+};
+
+export const getUserJournals = (cursor = null, limit = 5, userId, token) => {
+    const path = cursor
+        ? `/userJournals?limit=${limit}&before=${cursor}&userId=${userId}`
+        : `/userJournals?limit=${limit}&userId=${userId}`;
+    return authedGet(token, path, 'failed to get response');
+};
+
+export const getProfileMedia = (token, cursor = null, limit = 5) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return authedGet(token, `/profileMedia?${params}`, 'failed to fetch profile media');
+};
+
+export const getVisitedProfileMedia = (token, userId, cursor = null, limit = 5) => {
+    if (!userId) throw new Error('userId is required');
+    const params = new URLSearchParams({ userId: String(userId), limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return authedGet(token, `/visitedProfileMedia?${params}`, 'failed to fetch visited profile media');
+};
+
+export const deleteProfileMediaImage = (token, payload) =>
+    authedJsonRequest(token, 'DELETE', '/media/image', payload || {}, 'failed to delete profile media image');
+
+export const getVisitedUserJournals = (cursor = null, limit = 5, userId, loggedInUserId) => {
+    const path = cursor
+        ? `/visitedUserJournals?limit=${limit}&before=${cursor}&userId=${userId}&loggedInUserId=${loggedInUserId}`
+        : `/visitedUserJournals?limit=${limit}&userId=${userId}&loggedInUserId=${loggedInUserId}`;
+    return publicGet(path, 'failed to get response');
+};
+
+export const deleteJournal = (journalId, token) =>
+    authedFormRequest(token, 'DELETE', `/deleteJournal/${journalId}`, undefined, 'failed to delete journal');
+
+// ─── Interactions ───
+
+export const clickLike = (token, body) =>
+    authedJsonRequest(token, 'POST', '/like', body, 'error adding like');
+
+export const addComment = (token, body) =>
+    authedJsonRequest(token, 'POST', '/addComment', body, 'failed to add comment');
+
+export const getComments = (cursor = null, limit = 10, postId) => {
+    const path = cursor
+        ? `/getComments?postId=${postId}&limit=${limit}&before=${cursor}`
+        : `/getComments?postId=${postId}&limit=${limit}`;
+    return publicGet(path, 'failed to fetch comments');
+};
+
+export const updateRepostCaption = (token, { journalId, caption }) =>
+    authedJsonRequest(token, 'POST', '/update-repost-caption', { journalId, caption }, 'failed to update repost caption');
+
+export const createRepost = (token, { sourceJournalId, caption }) =>
+    authedJsonRequest(token, 'POST', '/repost', { sourceJournalId, caption }, 'failed to create repost');
+
+export const addBookmark = (token, journalId) =>
+    authedJsonRequest(token, 'POST', '/addBookmark', journalId, 'error adding bookmark');
+
+export const getBookmarks = (cursor = null, limit = 5, userId, token) => {
+    const path = cursor
+        ? `/getBookmarks?limit=${limit}&before=${cursor}&userId=${userId}`
+        : `/getBookmarks?limit=${limit}&userId=${userId}`;
+    return authedGet(token, path, 'failed to fetch bookmarks');
+};
+
+export const addFollows = (followsData, token) =>
+    authedJsonRequest(token, 'POST', '/addFollows', followsData, 'failed to add follow');
+
+export const getFollowsData = (loggedInUserId, userIdToFollow) =>
+    publicGet(`/getFollowsData?userId=${userIdToFollow}&loggedInUserId=${loggedInUserId}`, 'failed to fetch follows data');
+
+// ─── Notifications ───
+
+export const getNotificationsCount = (userId, token) =>
+    authedGet(token, `/getCountNotifications?userId=${userId}`, 'failed to fetch notification count');
+
+export const getNotifications = (token, cursor = null, limit = 5) => {
+    const path = cursor
+        ? `/getNotifications?before=${cursor}&limit=${limit}`
+        : `/getNotifications?limit=${limit}`;
+    return authedGet(token, path, 'failed to fetch notifications');
+};
+
+export const readNotification = (token, notifId, source) =>
+    authedJsonRequest(token, 'POST', '/readNotification', { notifId, source }, 'failed to read notification');
+
+export const deleteNotification = (token, notifId, source) => {
+    const path = source
+        ? `/deleteNotification/${notifId}?source=${source}`
+        : `/deleteNotification/${notifId}`;
+    return authedFormRequest(token, 'DELETE', path, undefined, 'failed to delete notification');
+};
+
+export const getUnreadNotification = (token, cursor, limit = 5) => {
+    const path = cursor
+        ? `/getUnreadNotification?before=${cursor}&limit=${limit}`
+        : `/getUnreadNotification?limit=${limit}`;
+    return authedGet(token, path, 'failed to fetch unread notifications');
+};
+
+// ─── Views / Privacy ───
+
+export const addJournalViews = (token, body) =>
+    authedFormRequest(token, 'POST', '/addViews', body, 'failed to add views');
+
+export const updatePrivacy = (token, body) =>
+    authedFormRequest(token, 'POST', '/updatePrivacy', body, 'failed to update privacy');
+
+// ─── Opinions ───
+
+export const addOpinion = (body, token) =>
+    authedFormRequest(token, 'POST', '/addOpinion', body, 'failed to add opinion');
+
+export const getOpinions = (cursor, limit) => {
+    const path = cursor
+        ? `/getOpinions?before=${cursor}&limit=${limit}`
+        : `/getOpinions?limit=${limit}`;
+    return publicGet(path, 'failed to fetch opinions');
+};
+
+export const getUserOpinions = (cursor, limit, userId) => {
+    const path = cursor
+        ? `/getUserOpinions?before=${cursor}&limit=${limit}&userId=${userId}`
+        : `/getUserOpinions?limit=${limit}&userId=${userId}`;
+    return publicGet(path, 'failed to fetch user opinions');
+};
+
+export const getMyOpinions = (cursor, limit, token) => {
+    const path = cursor
+        ? `/getMyOpinions?before=${cursor}&limit=${limit}`
+        : `/getMyOpinions?limit=${limit}`;
+    return authedGet(token, path, 'failed to fetch my opinions');
+};
+
+export const addReply = (userId, postId, parentId, body, receiverId, token) =>
+    authedFormRequest(token, 'POST', `/submitReply/${parentId}/${userId}/${postId}/${receiverId}`, body, 'failed to submit reply');
+
+export const getPostReplies = (parent_id, limit, cursor) => {
+    const path = cursor
+        ? `/getPostReplies/${parent_id}?limit=${limit}&before=${cursor}`
+        : `/getPostReplies/${parent_id}?limit=${limit}`;
+    return publicGet(path, 'failed to fetch post replies');
+};
+
+export const getViewOpinion = (postId, userId) =>
+    publicGet(`/viewOpinion/${postId}/${userId}`, 'failed to fetch view opinion');
+
+export const addReplyOpinion = (body, receiver_id, user_id, parent_id, token) =>
+    authedFormRequest(token, 'POST', `/addOpinionReply/${parent_id}/${user_id}/${receiver_id}`, body, 'failed to add opinion reply');
+
+export const getOpinionReply = (parentId, limit, cursor) => {
+    const path = cursor
+        ? `/getOpinionReply/${parentId}?limit=${limit}&cursor=${cursor}`
+        : `/getOpinionReply/${parentId}?limit=${limit}`;
+    return publicGet(path, 'failed to fetch opinion replies');
+};
+
+// ─── Discovery ───
+
+export const getRelatedPosts = (journalId) => {
+    if (!journalId) return Promise.resolve({ posts: [], confidence: 'none', topSimilarity: 0 });
+    return publicGet(`/journal/${encodeURIComponent(journalId)}/related`, 'failed to fetch related posts');
+};
+
+// ─── Streaks ───
+
+export const getStreak = (userId) => {
+    if (!userId) return Promise.resolve(null);
+    return publicGet(`/streak/${encodeURIComponent(userId)}`, 'failed to fetch streak');
+};
+
+// ─── Daily Prompts ───
+
+export const getTodaysPrompt = () =>
+    publicGet('/prompt/today', 'failed to fetch prompt');
+
+export const getPromptResponses = (promptId, cursor = null, limit = 5) => {
+    if (!promptId) return Promise.resolve({ responses: [] });
+    const path = cursor
+        ? `/prompt/${encodeURIComponent(promptId)}/responses?limit=${limit}&before=${cursor}`
+        : `/prompt/${encodeURIComponent(promptId)}/responses?limit=${limit}`;
+    return publicGet(path, 'failed to fetch prompt responses');
+};
+
+// ─── Reactions ───
+
+export const toggleReaction = (token, body) =>
+    authedJsonRequest(token, 'POST', '/reaction', body, 'error toggling reaction');
+
+export const getPostReactions = (journalId) => {
+    if (!journalId) return Promise.resolve({ reactions: [] });
+    return publicGet(`/reactions/${encodeURIComponent(journalId)}`, 'failed to fetch reactions');
+};
+
+// ─── Interests / Onboarding ───
+
+export const updateInterests = (token, { writingInterests, writingGoal }) =>
+    authedJsonRequest(token, 'POST', '/update-interests', { writingInterests, writingGoal }, 'failed to update interests');
+
+export const completeOnboarding = (token, { writingInterests, writingGoal }) =>
+    authedJsonRequest(token, 'POST', '/complete-onboarding', { writingInterests, writingGoal }, 'failed to complete onboarding');
+
+// ─── Weekly Recap ───
+
+export const getWeeklyRecap = (token) =>
+    authedGet(token, '/recap/weekly', 'failed to fetch weekly recap');

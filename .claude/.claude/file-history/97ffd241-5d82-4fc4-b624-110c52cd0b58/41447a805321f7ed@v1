@@ -1,0 +1,39 @@
+# Fix: Color popover clipped on mobile
+
+## Context
+On mobile (≤640px), clicking the text color or highlight color button in the toolbar shows a `.color-popover` dropdown, but it gets clipped and is invisible/unreachable. This is because the popover drops *downward* into the editor area, but the toolbar's `overflow-x: auto` (mobile scroll) and `.editor-mode-shell`'s `overflow: hidden` both clip it.
+
+## Root Cause
+- `.color-popover` is `position: absolute; top: calc(100% + 6px)` — drops **below** its parent `.toolbar-color-picker` (line 293-305)
+- `.toolbar-color-picker` is `position: relative` (line 262) — positioning anchor
+- On mobile, `.toolbar` has `overflow-x: auto` (line 1077) which creates a clipping boundary
+- `.editor-mode-shell` has `overflow: hidden` (line 136) — another clipping boundary
+- Result: the popover renders but is completely hidden
+
+On desktop this works because the toolbar wraps (`flex-wrap: wrap`) and doesn't have `overflow-x: auto`, so no clipping context is created.
+
+## Fix
+**File:** `client/src/components/HomePage/Editor/editor.css` — mobile media query (line ~1064)
+
+Add a mobile override for `.color-popover` that makes it pop **upward** instead of downward, escaping the toolbar's overflow clipping:
+
+```css
+/* Inside the @media (max-width: 640px) block */
+.color-popover {
+    bottom: calc(100% + 6px);
+    top: auto;
+}
+```
+
+This flips the popover above the toolbar button, where it's not clipped by the toolbar's horizontal scroll overflow or the editor shell below.
+
+## File to modify
+- `client/src/components/HomePage/Editor/editor.css` — add 4 lines in the existing mobile `@media (max-width: 640px)` block
+
+## Verification
+1. Open editor in devtools responsive mode at 375px / 414px
+2. Scroll toolbar to the color buttons (text color "A" and highlight)
+3. Tap text color — popover should appear **above** the toolbar, fully visible
+4. Tap highlight — same behavior
+5. Color swatches should be clickable and apply color to selected text
+6. Desktop (>640px) — popover should still drop downward as before, unchanged

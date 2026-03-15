@@ -1,0 +1,108 @@
+import React, {useMemo, useState} from 'react';
+import {Alert, StyleSheet, Text, TextInput} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {Screen} from '../../components/Screen';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {colors} from '../../theme/colors';
+import type {AuthStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
+
+export function SignUpScreen({navigation}: Props) {
+  const {signUp, authError} = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const canSubmit = useMemo(
+    () => email.trim().length > 4 && password.length > 7,
+    [email, password],
+  );
+
+  const onSubmit = async () => {
+    try {
+      setLoading(true);
+      await signUp({email: email.trim(), password});
+      Alert.alert(
+        'Check your inbox',
+        'Account created. Confirm your email, then sign in.',
+      );
+      navigation.navigate('Login');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Sign up failed';
+      Alert.alert('Sign up failed', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Screen>
+      <Text style={styles.title}>Create Account</Text>
+      <Text style={styles.subtitle}>
+        Native auth uses Supabase session persistence.
+      </Text>
+
+      {!!authError && <Text style={styles.error}>{authError}</Text>}
+
+      <TextInput
+        placeholder="Email"
+        placeholderTextColor={colors.textMuted}
+        autoCapitalize="none"
+        keyboardType="email-address"
+        value={email}
+        onChangeText={setEmail}
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Password (8+ chars)"
+        placeholderTextColor={colors.textMuted}
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+        style={styles.input}
+      />
+
+      <PrimaryButton
+        label="Create Account"
+        onPress={onSubmit}
+        loading={loading}
+        disabled={!canSubmit}
+      />
+      <PrimaryButton
+        label="Back to Login"
+        onPress={() => navigation.goBack()}
+        kind="secondary"
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  error: {
+    color: colors.danger,
+    fontSize: 13,
+  },
+});

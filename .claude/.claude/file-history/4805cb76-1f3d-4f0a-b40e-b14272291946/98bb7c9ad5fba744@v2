@@ -1,0 +1,51 @@
+import { windowOutlineOnWall, wallDirection, positionOnWall } from '@/geometry/wallGeometry';
+import { perpendicular, scale, add } from '@/geometry/point';
+
+export default function WindowRenderer({ windows, walls }) {
+  return (
+    <g className="windows">
+      {windows.map(win => {
+        const wall = walls.find(w => w.id === win.wallId);
+        if (!wall) return null;
+
+        const info = windowOutlineOnWall(wall, win);
+        const dir = wallDirection(wall);
+        const perp = perpendicular(dir);
+        const halfThick = wall.thickness / 2;
+
+        // Three parallel lines across the gap
+        const lines = [-0.3, 0, 0.3].map(fraction => {
+          const offset = scale(perp, halfThick * fraction);
+          return {
+            x1: add(info.start, offset).x,
+            y1: add(info.start, offset).y,
+            x2: add(info.end, offset).x,
+            y2: add(info.end, offset).y,
+          };
+        });
+
+        return (
+          <g key={win.id} data-id={win.id} data-type="window">
+            {/* White rectangle to mask wall */}
+            <polygon
+              points={`${info.p1.x},${info.p1.y} ${info.p2.x},${info.p2.y} ${info.p3.x},${info.p3.y} ${info.p4.x},${info.p4.y}`}
+              fill="white"
+              stroke="none"
+            />
+            {/* Window parallel lines */}
+            {lines.map((l, i) => (
+              <line
+                key={i}
+                x1={l.x1} y1={l.y1}
+                x2={l.x2} y2={l.y2}
+                stroke="var(--color-wall-fill)"
+                strokeWidth={i === 1 ? 2 : 1}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}

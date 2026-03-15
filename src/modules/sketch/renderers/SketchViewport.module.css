@@ -1,0 +1,333 @@
+.viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.6), rgba(243, 243, 240, 0.9)),
+    linear-gradient(180deg, #F3F3F0, #EAEAE7);
+}
+
+.canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+}
+
+.compassDock {
+  position: absolute;
+  right: 16px;
+  bottom: 48px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.statusBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: var(--color-panel-bg);
+  border-top: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xl);
+  padding: 0 var(--space-lg);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--color-text-secondary);
+  font-family: var(--font-blueprint);
+  user-select: none;
+  z-index: 3;
+}
+
+.statusCoords {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-blueprint);
+}
+
+.statusTool {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-workspace-sketch, #B8860B);
+  background: rgba(184, 134, 11, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.statusContext {
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-ui);
+  color: var(--color-text-secondary);
+}
+
+.statusSnap {
+  font-size: 11px;
+  font-weight: 600;
+  color: #00cc66;
+  background: rgba(0, 204, 102, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.toast {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(30, 36, 51, 0.92);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+  animation: toastSlideUp 0.25s var(--ease-out);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.toastProgress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--color-workspace-sketch, #B8860B);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  animation: toastCountdown 2.5s linear forwards;
+}
+
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes toastCountdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+.dimLabel {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+  background: rgba(30, 36, 51, 0.85);
+  color: #fff;
+  font-family: var(--font-blueprint);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.numericInput {
+  position: absolute;
+  bottom: 42px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(30, 36, 51, 0.92);
+  color: #fff;
+  font-family: var(--font-blueprint);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+}
+
+.numericInputLabel {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.emptyState {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.emptyTitle {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.emptyBody {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.overlayControls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 5;
+}
+
+.overlayBtn {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.overlayBtn:hover {
+  background: white;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.placementChooser {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(184, 134, 11, 0.18);
+  border-radius: var(--radius-md);
+  background: rgba(255, 253, 247, 0.92);
+  box-shadow: 0 10px 24px rgba(37, 48, 61, 0.12);
+  backdrop-filter: blur(6px);
+}
+
+.placementLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #5F6470;
+}
+
+.placementBadge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1A1D23;
+}
+
+.placementToggle {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(95, 100, 112, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #3C414D;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+}
+
+.placementToggle:hover {
+  background: white;
+  border-color: rgba(95, 100, 112, 0.32);
+}
+
+.placementToggleActive {
+  color: #1A1D23;
+  border-color: rgba(184, 134, 11, 0.38);
+  background: rgba(184, 134, 11, 0.12);
+}
+
+.inspectCard {
+  position: absolute;
+  top: 50px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+  max-width: min(260px, calc(100% - 24px));
+  padding: 12px 14px;
+  border: 1px solid rgba(184, 134, 11, 0.18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(252, 248, 238, 0.92));
+  box-shadow: 0 12px 28px rgba(37, 48, 61, 0.14);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.inspectEyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5F6470;
+}
+
+.inspectTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A1D23;
+}
+
+.inspectMeta {
+  font-size: 11px;
+  color: #5F6470;
+}
+
+.inspectGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.inspectRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inspectLabel {
+  font-size: 11px;
+  color: #5F6470;
+}
+
+.inspectValue {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1A1D23;
+}

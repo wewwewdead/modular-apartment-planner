@@ -1,0 +1,79 @@
+# WhatsApp Bot with Baileys
+
+## Context
+Set up a Node.js project at `C:\Users\johnm\gilas` that connects to WhatsApp using the Baileys library. When a message is received, it logs the text to the terminal and replies with "Command Received".
+
+## Steps
+
+### 1. Initialize the project
+- `mkdir C:\Users\johnm\gilas && cd C:\Users\johnm\gilas`
+- `npm init -y`
+- `npm install @whiskeysockets/baileys pino`
+- Add `"type": "module"` to `package.json` (Baileys uses ESM)
+
+### 2. Create `index.js`
+
+```js
+import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
+import P from 'pino'
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+    logger: P({ level: 'silent' })
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect }) => {
+    if (connection === 'open') console.log('Connected to WhatsApp!')
+    if (connection === 'close') {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      if (shouldReconnect) startBot()
+      else console.log('Logged out. Delete auth_info folder and restart to re-link.')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      if (msg.key.fromMe) continue
+
+      const text = msg.message?.conversation
+        || msg.message?.extendedTextMessage?.text
+        || ''
+
+      if (!text) continue
+
+      console.log(`[${msg.key.remoteJid}] ${text}`)
+
+      await sock.sendMessage(msg.key.remoteJid, { text: 'Command Received' })
+    }
+  })
+}
+
+startBot()
+```
+
+### 3. Add a start script
+In `package.json`, add `"start": "node index.js"` to `scripts`.
+
+### 4. First run & pairing
+- Run `npm start`
+- A QR code appears in the terminal
+- Scan it with WhatsApp (Settings > Linked Devices > Link a Device)
+- Auth credentials are saved to `auth_info/` so future runs won't need re-scanning
+
+## Files created
+- `C:\Users\johnm\gilas\package.json`
+- `C:\Users\johnm\gilas\index.js`
+
+## Verification
+1. Run `npm start` in the `gilas` directory
+2. Scan the QR code with your phone
+3. Send a message to your own WhatsApp number (or from another phone)
+4. Confirm the terminal prints the message text
+5. Confirm you receive a "Command Received" reply

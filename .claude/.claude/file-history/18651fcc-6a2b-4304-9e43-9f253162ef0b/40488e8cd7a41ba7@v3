@@ -1,0 +1,31 @@
+import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { REACTION_TYPES } from '../../utils/reactionConfig';
+import './reactions.css';
+
+const ReactionPicker = ({ isOpen, onSelect, currentReaction }) => (
+    <AnimatePresence>
+        {isOpen && (
+            <motion.div
+                className="reaction-picker"
+                initial={{ opacity: 0, scale: 0.85, y: 6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.85, y: 6 }}
+                transition={{ duration: 0.15 }}
+            >
+                {REACTION_TYPES.map((r) => (
+                    <button
+                        key={r.type}
+                        className={`reaction-picker-item ${currentReaction === r.type ? 'is-active' : ''}`}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(r.type); }}
+                        title={r.label}
+                    >
+                        {r.emoji}
+                    </button>
+                ))}
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
+
+export default ReactionPicker;

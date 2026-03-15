@@ -1,0 +1,52 @@
+import React from 'react';
+import { AccessibilityProps, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+
+import { motion } from '../theme/motion';
+
+const ReanimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+interface AnimatedPressableProps extends AccessibilityProps {
+  onPress?: () => void;
+  onLongPress?: () => void;
+  disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+  hitSlop?: PressableProps['hitSlop'];
+}
+
+export function AnimatedPressable({
+  onPress,
+  onLongPress,
+  disabled,
+  style,
+  children,
+  hitSlop,
+  ...a11yProps
+}: AnimatedPressableProps) {
+  const pressed = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(pressed.value ? 0.965 : 1, motion.snappy) }],
+    opacity: withSpring(pressed.value ? 0.8 : 1, motion.snappy),
+  }));
+
+  return (
+    <ReanimatedPressable
+      onPress={disabled ? undefined : onPress}
+      onLongPress={disabled ? undefined : onLongPress}
+      onPressIn={() => { pressed.value = 1; }}
+      onPressOut={() => { pressed.value = 0; }}
+      style={[animatedStyle, style]}
+      hitSlop={hitSlop}
+      disabled={disabled}
+      {...a11yProps}
+    >
+      {children}
+    </ReanimatedPressable>
+  );
+}

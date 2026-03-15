@@ -1,0 +1,121 @@
+# Wall Tool Improvements
+
+## Context
+
+The wall drawing tool has three bugs causing incorrect behavior: a triple-applied angle constraint that makes Shift-constrained placement unpredictable, an ordering mismatch between preview and placement so the wall doesn't land where the preview shows, and a stale closure on `getFloor` that prevents snapping to recently-drawn walls when chaining. This plan fixes all three plus extracts a magic number.
+
+## Files to Change
+
+| File | What | Risk |
+|------|------|------|
+| `src/editor/handlers/wallDrawHandler.js` | Fix constraint logic + snap/constrain ordering | Medium |
+| `src/editor/useEditorTool.js` | Fix stale `getFloor` via ref | Low |
+| `src/renderers/WallPreview.jsx` | Extract magic number | Very low |
+| `src/domain/defaults.js` | Add `PREVIEW_LABEL_OFFSET` constant | Very low |
+
+No other files need changes.
+
+---
+
+## Change 1: Fix constraint logic in `wallDrawHandler.js`
+
+### Problem
+`onMouseDown` applies `constrainAngle` up to 3 times (lines 57, 59, 72). Additionally, `onMouseDown` does snap-then-constrain (constrain wins) while `onMouseMove` does constrain-then-snap (snap wins). This means the preview line ends at a different position than where the wall actually gets placed.
+
+### Fix
+Consolidate both `onMouseDown` and `onMouseMove` to use a single pipeline:
+1. Snap to endpoints (if enabled)
+2. Constrain angle (if Shift held AND start point exists)
+
+Constrain-last means Shift overrides snap, matching CAD convention.
+
+**`onMouseDown` lines 52-73** - replace with:
+```js
+let snapped = modelPos;
+if (snapEnabled) {
+  const snapPt = snapToEndpoints(modelPos, floor.walls, snapDistModel, toolState.chainStart);
+  if (snapPt) snapped = { ...snapPt };
+}
+if (shiftHeld && toolState.start) {
+  snapped = constrainAngle(toolState.start, snapped, true);
+}
+
+if (!toolState.start) {
+  editorDispatch({
+    type: 'UPDATE_TOOL_STATE',
+    payload: { start: snapped, chainStart: snapped, preview: null },
+  });
+} else {
+  const endPt = snapped;
+  const len = distance(toolState.start, endPt);
+  // ... rest unchanged
+```
+
+**`onMouseMove` lines 98-109** - replace with same ordering:
+```js
+if (!toolState.start) return;
+let preview = modelPos;
+
+const floor = getFloor(activeFloorId);
+const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
+if (snapEnabled) {
+  const snapPt = snapToEndpoints(modelPos, floor.walls, snapDistModel, toolState.chainStart);
+  if (snapPt) preview = { ...snapPt };
+}
+if (e.shiftKey) {
+  preview = constrainAngle(toolState.start, preview, true);
+}
+```
+
+---
+
+## Change 2: Fix stale `getFloor` in `useEditorTool.js`
+
+### Problem
+`getFloor` (from `useProject()`, line 164 of ProjectProvider.jsx) is an inline closure over `state`, recreated every render. But `useMemo` in useEditorTool only re-runs on `[activeTool, activeFloorId, viewport.zoom, snapEnabled]`. When the user draws wall A then starts wall B, the handler's `getFloor` still returns the floor *before* wall A was added, so snapping to wall A's endpoints fails.
+
+### Fix
+Use a ref to always read the latest `getFloor`:
+
+```js
+import { useMemo, useRef } from 'react';
+
+export function useEditorTool({ ..., getFloor, ... }) {
+  const getFloorRef = useRef(getFloor);
+  getFloorRef.current = getFloor;
+
+  const handler = useMemo(() => {
+    const ctx = {
+      dispatch, editorDispatch,
+      getFloor: (...args) => getFloorRef.current(...args),
+      activeFloorId, viewport, snapEnabled,
+    };
+    // ... switch ...
+  }, [activeTool, activeFloorId, viewport.zoom, snapEnabled]);
+  // ...
+}
+```
+
+---
+
+## Change 3: Extract magic number in `WallPreview.jsx`
+
+### Problem
+`dy={-150}` on line 39 is a hard-coded offset for the length label position.
+
+### Fix
+Add `PREVIEW_LABEL_OFFSET = 150` to `src/domain/defaults.js`, import in WallPreview.
+
+---
+
+## Verification
+
+1. `npx vite build` - compiles without errors
+2. Draw a single wall (click-move-click) - wall appears, preview disappears
+3. Shift-draw - wall constrains to 0/45/90 degree increments
+4. Draw near existing endpoint - snaps to it
+5. Shift-draw near endpoint - constraint overrides snap (wall goes to constrained angle, not snap point)
+6. Preview line matches final wall position in all above cases
+7. Chain: after placing wall A, draw wall B from A's endpoint - snap to A works (tests stale closure fix)
+8. Double-click / Escape terminates chain
+9. Length label shows during preview above the line

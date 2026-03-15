@@ -1,0 +1,142 @@
+# Plan: Freedom Wall Interaction Feedback & Live Cursors
+
+## Context
+The Freedom Wall canvas currently feels static — items appear instantly without visual feedback, and there's no sense of other users being present. Two improvements will make it feel alive: a "puff" particle effect when items are placed, and real-time cursor broadcasting so users can see each other moving around the wall.
+
+## Files to Modify
+- `client/src/components/HomePage/freedomWall/FreedomWallPage.jsx`
+- `client/src/components/HomePage/freedomWall/freedomWall.css`
+
+---
+
+## Feature 1: Placement Puff Animation
+
+Visual particle burst when any item (sticker, stamp, note, doodle) is placed on the canvas.
+
+### Implementation
+
+**1. Add `placementPuffs` state array**
+- Shape: `[{id, x, y, startedAt}]` — pixel coordinates, not normalized
+- Each puff auto-removes after animation completes (~500ms)
+
+**2. Create `PuffEffect` Konva component**
+- Renders inside the items `<Layer>` (after all items, on top)
+- Uses `useRef` + `requestAnimationFrame` loop to animate:
+  - 5–8 small `<Circle>` particles that fly outward from center, shrinking + fading
+  - 1 central expanding `<Ring>` that fades out
+- Each particle gets a random angle, travels outward ~30-50px over 500ms
+- Colors: soft purple/pink tones matching the accent (`#a21caf`, `#e879f9`)
+- On animation complete, calls `onComplete(id)` to remove from state
+
+**3. Trigger puffs on item creation**
+- In `createItemMutation.onMutate`: calculate pixel position from the normalized `x, y` payload, push a new puff into state
+- Convert normalized coords → pixel: `x * stageWidth`, `y * stageHeight`
+- For doodles: use the midpoint of the drawn stroke
+
+**4. Render puffs on canvas**
+- After all items in the Layer, map `placementPuffs` → `<PuffEffect>` components
+- Each `PuffEffect` self-animates and self-destructs via the `onComplete` callback
+
+---
+
+## Feature 2: Live Cursors via Supabase Broadcast
+
+Show other users' cursor positions on the canvas in real-time.
+
+### Implementation
+
+**1. Generate a stable client ID**
+- `useRef` initialized once: `fw-client-${Date.now()}-${random}`
+- Used to filter out own cursor from rendering
+
+**2. Extend the existing Supabase channel**
+- The `freedom-wall-${weekId}` channel already exists for `postgres_changes`
+- Chain `.on("broadcast", {event: "cursor-move"}, handler)` before `.subscribe()`
+- No new channel needed
+
+**3. Broadcast cursor position (throttled)**
+- On `onMouseMove` / `onTouchMove` over the Stage (separate from doodle handling):
+  - Compute normalized position `{x: px/stageWidth, y: py/stageHeight}`
+  - Throttle to every **80ms** using a ref + setTimeout pattern (same as CanvasViewer's `queueDoodleBroadcast`)
+  - Payload: `{clientId, userId, userName, x, y, tool: activeTool, timestamp}`
+- On mouse leave Stage: broadcast a `cursor-leave` event to remove cursor
+- Only broadcast when `canWrite` is true (logged-in users)
+
+**4. Track remote cursors in state**
+- `const [remoteCursors, setRemoteCursors] = useState({})` — keyed by clientId
+- Shape: `{clientId, userId, userName, x, y, tool, updatedAt}`
+- On `cursor-move` broadcast received: upsert into state (skip own clientId)
+- On `cursor-leave` received: remove from state
+
+**5. Auto-cleanup stale cursors**
+- `setInterval` every 1.5s, remove cursors with `updatedAt` older than 3s
+- Handles disconnects/tab-closes where `cursor-leave` never fires
+
+**6. Render remote cursors on canvas**
+- New `<Layer>` on top of the items layer (non-interactive: `listening={false}`)
+- For each remote cursor:
+  - Small colored `<Circle>` (radius 5, fill based on `userId` hash for consistent color)
+  - `<Text>` label showing `userName` (truncated to 10 chars), offset slightly right+below the dot
+  - Position: `x * stageWidth`, `y * stageHeight`
+- Limit rendering to max 15 cursors (sorted by most recent `updatedAt`)
+
+**7. Broadcast cleanup on unmount**
+- Send `cursor-leave` event before channel teardown
+- Clear interval timer
+
+**8. CSS for cursor layer (HTML overlay for name labels — optional)**
+- No CSS needed; all rendering is within Konva canvas layers
+
+---
+
+## Detailed Change Map
+
+### State additions
+```
+const [placementPuffs, setPlacementPuffs] = useState([]);
+const [remoteCursors, setRemoteCursors] = useState({});
+const clientIdRef = useRef(`fw-${Date.now()}-${Math.random().toString(36).slice(2,8)}`);
+const cursorBroadcastTimerRef = useRef(null);
+const lastCursorBroadcastRef = useRef(0);
+const realtimeChannelRef = useRef(null);
+```
+
+### Channel modification (existing useEffect at line ~622)
+- Add `.on("broadcast", {event: "cursor-move"}, handler)` and `.on("broadcast", {event: "cursor-leave"}, handler)` to the channel chain
+- Store channel in `realtimeChannelRef` for broadcast sending
+- On cleanup: send `cursor-leave`, then `removeChannel`
+
+### New components (inside same file)
+- `PuffEffect` — self-animating Konva Group with particles
+- `RemoteCursor` — Konva Group with Circle + Text for one cursor
+
+### New Konva Layer (after items Layer)
+```jsx
+<Layer listening={false}>
+    {remoteCursorItems.map(cursor => <RemoteCursor key={cursor.clientId} ... />)}
+</Layer>
+```
+
+### Puff trigger location
+- Inside `createItemMutation.onMutate` callback, after creating the optimistic item:
+```js
+const pxX = (payload.payload.x || 0.5) * stageWidth;
+const pxY = (payload.payload.y || 0.5) * stageHeight;
+setPlacementPuffs(prev => [...prev, {id: optimisticId, x: pxX, y: pxY, startedAt: Date.now()}]);
+```
+
+### Cursor broadcast location
+- New `handleCursorMove` called from Stage `onMouseMove` (runs alongside existing `handleStagePointerMove` for doodles — separate concern, both fire)
+- Uses throttle pattern: skip if <80ms since last broadcast
+
+---
+
+## Verification
+- Place a sticker/stamp/note → particle puff bursts at placement point, fades in ~500ms
+- Draw a doodle → puff at stroke midpoint on pen-up
+- Open wall in two browser tabs (different accounts) → each sees the other's cursor dot + name
+- Move mouse across canvas → cursor updates smoothly on other tab (~80ms intervals)
+- Mouse leaves canvas → cursor disappears on other tab
+- Close tab → cursor auto-cleans after 3s on other tab
+- 10+ cursors render without lag (Konva Layer with `listening={false}`)
+- Puff animations don't accumulate (cleaned up after 500ms)

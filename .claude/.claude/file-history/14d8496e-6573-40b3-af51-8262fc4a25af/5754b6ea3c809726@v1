@@ -1,0 +1,128 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
+import Animated, { FadeInUp } from 'react-native-reanimated';
+
+import { Cart, computeCartTotal, computeDashboardSummary } from '../../domain/models';
+import { formatCurrency } from '../../lib/format';
+import { MainTabScreenProps } from '../../navigation/types';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { ActiveCartCard } from './components/ActiveCartCard';
+import { CompletedCartCard } from './components/CompletedCartCard';
+import { HomeEmptyState } from './components/HomeEmptyState';
+import { HomeHeader } from './components/HomeHeader';
+import { HomeTabBar, HomeTab } from './components/HomeTabBar';
+import { InsightsPanel } from './components/InsightsPanel';
+import { QuickActions } from './components/QuickActions';
+import { StatCard } from './components/StatCard';
+
+type Props = MainTabScreenProps<'Home'>;
+
+export function HomeScreen({ navigation }: Props) {
+  const appState = useAppStore(state => state.appState);
+  const [tab, setTab] = useState<HomeTab>('active');
+
+  const summary = useMemo(
+    () => (appState ? computeDashboardSummary(appState) : null),
+    [appState]
+  );
+
+  const listData = useMemo(() => {
+    if (!summary) return [];
+    if (tab === 'active') return summary.activeCarts;
+    if (tab === 'completed') return summary.completedCarts;
+    return [];
+  }, [summary, tab]);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: Cart; index: number }) => {
+      if (!appState) return null;
+      const total = computeCartTotal(appState.vault, item);
+
+      if (tab === 'completed') {
+        return (
+          <Animated.View entering={FadeInUp.delay(index * 60)}>
+            <CompletedCartCard
+              cart={item}
+              total={total}
+              onPress={() => navigation.navigate('CartDetail', { cartId: item.id })}
+            />
+          </Animated.View>
+        );
+      }
+
+      return (
+        <Animated.View entering={FadeInUp.delay(index * 60)}>
+          <ActiveCartCard
+            cart={item}
+            total={total}
+            onPress={() => navigation.navigate('CartDetail', { cartId: item.id })}
+          />
+        </Animated.View>
+      );
+    },
+    [appState, tab, navigation]
+  );
+
+  if (!appState || !summary) return null;
+
+  const ListHeader = (
+    <View style={styles.header}>
+      <HomeHeader
+        userName={appState.user.name}
+        activeCarts={summary.activeCarts.length}
+        itemCount={summary.itemCount}
+      />
+      <QuickActions
+        onBrowseVault={() => navigation.navigate('Vault')}
+        onHistory={() => navigation.navigate('History')}
+        onPaywall={() => navigation.navigate('Paywall')}
+      />
+      <View style={styles.statRow}>
+        <StatCard label="Active carts" value={String(summary.activeCarts.length)} />
+        <StatCard label="Vault items" value={String(summary.itemCount)} />
+        <StatCard label="Total spent" value={formatCurrency(summary.totalSpent)} />
+      </View>
+      <HomeTabBar activeTab={tab} onTabChange={setTab} />
+    </View>
+  );
+
+  return (
+    <FlatList
+      data={tab === 'insights' ? [] : listData}
+      keyExtractor={item => item.id}
+      renderItem={renderItem}
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      ListHeaderComponent={ListHeader}
+      ListFooterComponent={
+        tab === 'insights' && summary ? <InsightsPanel summary={summary} /> : null
+      }
+      ListEmptyComponent={
+        tab !== 'insights' ? <HomeEmptyState /> : null
+      }
+      initialNumToRender={6}
+      maxToRenderPerBatch={5}
+      windowSize={5}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  header: {
+    gap: 18,
+  },
+  statRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+});

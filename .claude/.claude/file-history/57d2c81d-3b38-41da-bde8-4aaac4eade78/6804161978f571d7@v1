@@ -1,0 +1,123 @@
+# Fix: Story reading progress not restoring scroll position (v2)
+
+## Context
+Previous implementation (Fixes 1-3 from v1) was partially applied but scroll still doesn't go to the last paragraph. After deep analysis, the root causes are:
+
+## Root Cause Analysis
+
+### Bug A: `hasRestoredRef` never resets on chapter change
+**This is the biggest bug.** The reset effect (line 137-140) resets `contentReady` and `activeComment` when `chapterId` changes, but does NOT reset `hasRestoredRef`. So scroll restoration only ever works for the **first** chapter loaded per component mount. Navigating chapter→chapter or returning to the same chapter won't restore.
+
+### Bug B: `contentReady` fires before DOM is fully laid out
+`onContentReady()` fires synchronously inside `ReaderContent`'s useEffect right after `editor.setEditorState()`. While Lexical reconciles DOM synchronously, the browser hasn't computed layout yet. The current fix uses `setTimeout(50ms)` with 3 retries checking `scrollableHeight <= 0` — but this is fragile:
+- `scrollableHeight` can be **non-zero but wrong** (e.g., partially laid out long chapter)
+- Need to wait for height to **stabilize**, not just become non-zero
+
+### Bug C: Save-then-invalidate race condition
+On unmount, `saveProgress()` fires a POST (async network request), then `invalidateQueries` immediately triggers a refetch of `['story', storyId]`. The refetch can complete BEFORE the save POST lands, so StoryDetail still gets stale `reading_progress`. The self-fetch fallback (`getReadingProgress`) has the same race — it might execute before the save from the previous ChapterReader unmount has completed.
+
+## Plan
+
+All changes in **`client/src/components/Stories/ChapterReader/ChapterReader.jsx`**
+
+### Fix A: Reset `hasRestoredRef` on chapter change
+In the `[chapterId]` reset effect, add `hasRestoredRef.current = false`:
+```js
+useEffect(() => {
+    setContentReady(false);
+    setActiveComment(null);
+    hasRestoredRef.current = false;  // ← ADD THIS
+}, [chapterId]);
+```
+
+### Fix B: Wait for DOM height to stabilize before scrolling
+Replace the current retry logic in `restoreScroll` with a **height-stability poll**: check `scrollableHeight` every 50ms, scroll only when the value doesn't change between two consecutive checks (meaning layout is done). Cap at 10 retries (500ms total) as a safety valve.
+
+```js
+const restoreScroll = (position) => {
+    if (!position || position <= 0) return;
+    const container = getScrollContainer();
+    let lastHeight = -1;
+
+    const attemptScroll = (retries = 0) => {
+        setTimeout(() => {
+            const scrollableHeight = container.scrollHeight - container.clientHeight;
+            if (scrollableHeight <= 0 && retries < 10) {
+                attemptScroll(retries + 1);
+                return;
+            }
+            // Wait until height stabilizes (same value twice in a row)
+            if (scrollableHeight !== lastHeight && retries < 10) {
+                lastHeight = scrollableHeight;
+                attemptScroll(retries + 1);
+                return;
+            }
+            if (scrollableHeight > 0) {
+                container.scrollTo({ top: scrollableHeight * position, behavior: 'instant' });
+            }
+            navigate(location.pathname, { replace: true, state: {} });
+        }, 50);
+    };
+    attemptScroll();
+};
+```
+
+### Fix C: Delay cache invalidation until save completes
+Change `saveProgress` to return the promise, then chain invalidation:
+
+```js
+const saveProgress = useCallback(() => {
+    if (!token || !storyId || !chapterId) return Promise.resolve();
+    return saveReadingProgress(token, storyId, chapterId, scrollRef.current).catch(() => {});
+}, [token, storyId, chapterId]);
+```
+
+On unmount, await the save before invalidating:
+```js
+return () => {
+    container.removeEventListener('scroll', handleScroll);
+    if (progressTimerRef.current) clearTimeout(progressTimerRef.current);
+    saveProgress().then(() => {
+        queryClient.invalidateQueries({ queryKey: ['story', storyId] });
+    });
+};
+```
+
+### Fix D: Signal `contentReady` after Lexical DOM update listener
+In `ReaderContent`, use `editor.registerUpdateListener` to defer `onContentReady` until after Lexical's DOM reconciliation pass completes (fires in a microtask after reconciliation):
+
+```js
+useEffect(() => {
+    if (chapter?.content && editor) {
+        try {
+            const content = typeof chapter.content === 'string'
+                ? chapter.content : JSON.stringify(chapter.content);
+            const state = editor.parseEditorState(content);
+            editor.setEditorState(state);
+        } catch (err) {
+            console.error('Failed to load chapter content:', err);
+        }
+        editor.setEditable(false);
+        // Wait for next update listener tick to ensure DOM is reconciled
+        const removeListener = editor.registerUpdateListener(() => {
+            removeListener();
+            requestAnimationFrame(() => {
+                if (onContentReady) onContentReady();
+            });
+        });
+    }
+}, [chapter?.id, editor]);
+```
+
+This ensures `contentReady` fires AFTER DOM reconciliation + one animation frame (browser has painted).
+
+## Files to modify
+- `client/src/components/Stories/ChapterReader/ChapterReader.jsx` — all 4 fixes (A, B, C, D)
+
+## Verification
+- Read a chapter, scroll to middle, go back, click "Continue Reading" → scrolls to where you left off
+- Click a specific chapter from the chapter list → restores if you've read it before
+- Navigate chapter A → chapter B → back to chapter A → each restores correctly
+- Refresh the page while on a chapter → restores position
+- Read a new chapter for the first time → starts at top
+- Long chapters (many paragraphs) → position accuracy is correct, not off by paragraphs

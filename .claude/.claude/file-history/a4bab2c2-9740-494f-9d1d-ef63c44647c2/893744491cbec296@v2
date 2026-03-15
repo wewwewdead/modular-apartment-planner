@@ -1,0 +1,151 @@
+import React, {useState} from 'react';
+import {Alert, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useMutation} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {launchImageLibrary} from 'react-native-image-picker';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {queryClient} from '../../lib/queryClient';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'ProfileCustomize'>;
+
+const COLOR_PALETTE = [
+  '#FFFFFF', '#000000', '#F59E0B', '#EF4444', '#3B82F6',
+  '#10B981', '#8B5CF6', '#EC4899', '#F97316', '#14B8A6',
+  '#6366F1', '#A855F7', '#D946EF', '#64748B',
+];
+
+export function ProfileCustomizeScreen({navigation}: Props) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [backgroundUri, setBackgroundUri] = useState<string | null>(null);
+
+  const fontColorMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedColor) throw new Error('Select a color');
+      return mobileApi.updateFontColor(token, selectedColor);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['profile']});
+      Alert.alert('Saved', 'Font color updated.');
+    },
+    onError: e => Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const backgroundMutation = useMutation({
+    mutationFn: async () => {
+      const result = await launchImageLibrary({mediaType: 'photo', quality: 0.8});
+      if (result.didCancel || !result.assets?.[0]) throw new Error('Cancelled');
+      const asset = result.assets[0];
+      const formData = new FormData();
+      formData.append('image', {
+        uri: asset.uri,
+        type: asset.type || 'image/jpeg',
+        name: asset.fileName || 'background.jpg',
+      } as any);
+      return mobileApi.uploadBackground(token, formData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['profile']});
+      Alert.alert('Saved', 'Background updated.');
+    },
+    onError: e => {
+      if (e instanceof Error && e.message === 'Cancelled') return;
+      Alert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    },
+  });
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={[typeScale.h1, {color: colors.textHeading}]}>Customize Profile</Text>
+
+        {/* Font Color */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>Font Color</Text>
+          <Text style={[styles.sectionSubtitle, {color: colors.textMuted}]}>
+            Choose a color for your profile text
+          </Text>
+          <View style={styles.colorGrid}>
+            {COLOR_PALETTE.map(color => (
+              <Pressable
+                key={color}
+                style={[
+                  styles.colorSwatch,
+                  {backgroundColor: color},
+                  selectedColor === color && styles.colorSwatchSelected,
+                ]}
+                onPress={() => setSelectedColor(color)}
+              />
+            ))}
+          </View>
+          {selectedColor && (
+            <View style={styles.previewRow}>
+              <Text style={[styles.previewLabel, {color: colors.textMuted}]}>Preview:</Text>
+              <Text style={[styles.previewText, {color: selectedColor}]}>Your Name</Text>
+            </View>
+          )}
+          <PrimaryButton
+            label="Save Font Color"
+            onPress={() => fontColorMutation.mutate()}
+            loading={fontColorMutation.isPending}
+            disabled={!selectedColor}
+          />
+        </View>
+
+        {/* Background */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>Background Image</Text>
+          <Text style={[styles.sectionSubtitle, {color: colors.textMuted}]}>
+            Upload a background image for your profile
+          </Text>
+          <PrimaryButton
+            label="Choose Image"
+            onPress={() => backgroundMutation.mutate()}
+            loading={backgroundMutation.isPending}
+            kind="secondary"
+          />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {flex: 1},
+  content: {padding: spacing.lg, gap: spacing.xxl, paddingBottom: 100},
+  section: {gap: spacing.md},
+  sectionTitle: {fontFamily: fonts.heading.semiBold, fontSize: 18},
+  sectionSubtitle: {fontFamily: fonts.ui.regular, fontSize: 13},
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  colorSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorSwatchSelected: {
+    borderColor: '#F59E0B',
+    borderWidth: 3,
+  },
+  previewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  previewLabel: {fontFamily: fonts.ui.regular, fontSize: 13},
+  previewText: {fontFamily: fonts.heading.bold, fontSize: 20},
+});

@@ -1,0 +1,39 @@
+# CTA Redesign: Dashboard Prompt Text + Write Button
+
+## Context
+The `.dashboard-prompt-text` and `.dashboard-prompt-write-btn` currently blend into the card — plain serif text and a subtle ghost button. The goal is to make them a proper **Call to Action** that draws the eye and compels users to write a response to the daily prompt.
+
+## Files to Modify
+- `client/src/components/DashboardBriefing/DashboardBriefing.css` — restyle both elements
+- `client/src/components/DashboardBriefing/PromptSection.jsx` — add arrow icon to button
+
+## Design Direction
+Warm, editorial CTA that fits the existing amber/gold design system. Not a jarring neon banner — a confident, elevated treatment that says "this is the main thing to do here."
+
+## Changes
+
+### `.dashboard-prompt-text` → Make it the hero
+- Bump font size from 15px → 18px (14px mobile stays proportional)
+- Increase font-weight to 600 for more presence
+- Add a warm amber-tinted left border accent (3px) with padding-left for editorial pull-quote feel
+- Slightly richer line-height (1.6) for breathing room
+
+### `.dashboard-prompt-write-btn` → Solid amber CTA
+- Switch from ghost/outline → **solid amber fill** with white/dark text
+- Larger padding: 10px 24px (more tappable, more prominent)
+- Add a small arrow icon (→) via JSX to indicate action
+- Add subtle box-shadow for depth/lift
+- Hover: darken background, slight translateY(-1px) lift effect
+- Active: press-down effect (translateY(0))
+- Dark mode: use `--accent-amber` with dark text for contrast
+
+### Dark mode support
+- Add dark mode overrides for the new solid button (text contrast)
+- Ensure left-border accent uses dark-mode amber
+
+## Verification
+1. Run dev server, navigate to home feed with a daily prompt visible
+2. Confirm the prompt text is visually larger and has the left accent border
+3. Confirm the button is solid amber with arrow, hover lifts, active presses
+4. Toggle dark mode — verify contrast and colors adapt
+5. Check mobile (≤480px) — text scales down, button remains tappable

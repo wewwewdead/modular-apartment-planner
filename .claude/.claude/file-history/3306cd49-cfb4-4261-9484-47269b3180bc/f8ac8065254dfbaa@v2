@@ -1,0 +1,293 @@
+import { SHEET_COLORS } from '@/sheets/standards';
+import { createDimensionFigure } from '@/annotations/dimensions';
+import PartRenderer from './PartRenderer';
+import DimensionRenderer from './DimensionRenderer';
+
+function AssemblyViewContent({ source }) {
+  return (
+    <g>
+      {source.parts.map((part) => (
+        <PartRenderer
+          key={part.id}
+          part={part}
+          view={source.view}
+          isSelected={false}
+          zoom={1}
+        />
+      ))}
+      {source.dimensions.map((dim) => (
+        <DimensionRenderer
+          key={dim.id}
+          dimension={dim}
+          view={source.view}
+          zoom={1}
+          isSelected={false}
+        />
+      ))}
+    </g>
+  );
+}
+
+function PartDetailContent({ source }) {
+  const { part, viewLayouts } = source;
+  const viewLabels = { top: 'TOP', front: 'FRONT', side: 'SIDE' };
+
+  return (
+    <g>
+      {viewLayouts.map((layout) => {
+        const isHoleInTop = part.type === 'hole' && layout.view === 'top';
+        const isSubtractive = part.type === 'cutout' || part.type === 'hole';
+        const strokeDash = isSubtractive ? '6 4' : undefined;
+
+        return (
+          <g key={layout.view} transform={`translate(${layout.offsetX - layout.svgX}, ${layout.offsetY - layout.svgY})`}>
+            {isHoleInTop ? (
+              <ellipse
+                cx={layout.svgX + layout.width / 2}
+                cy={layout.svgY + layout.height / 2}
+                rx={layout.width / 2}
+                ry={layout.height / 2}
+                fill="none"
+                stroke={SHEET_COLORS.text}
+                strokeWidth={2}
+                strokeDasharray={strokeDash}
+              />
+            ) : (
+              <rect
+                x={layout.svgX}
+                y={layout.svgY}
+                width={layout.width}
+                height={layout.height}
+                fill="none"
+                stroke={SHEET_COLORS.text}
+                strokeWidth={2}
+                strokeDasharray={strokeDash}
+              />
+            )}
+            {/* View label */}
+            <text
+              x={layout.svgX + layout.width / 2}
+              y={layout.svgY + layout.height + 200}
+              textAnchor="middle"
+              fontSize={120}
+              fill={SHEET_COLORS.textMuted}
+              fontWeight={600}
+            >
+              {viewLabels[layout.view]}
+            </text>
+            {/* Auto-dimension: width */}
+            {layout.width > 0 && (() => {
+              const fig = createDimensionFigure({
+                id: `auto-w-${layout.view}`,
+                startPoint: { x: layout.svgX, y: layout.svgY },
+                endPoint: { x: layout.svgX + layout.width, y: layout.svgY },
+                mode: 'aligned',
+                offset: -200,
+                source: 'auto',
+              });
+              if (!fig) return null;
+              return (
+                <g>
+                  {fig.extensionLines.map((line, i) => (
+                    <line
+                      key={`ext-w-${i}`}
+                      x1={line.start.x} y1={line.start.y}
+                      x2={line.end.x} y2={line.end.y}
+                      stroke={SHEET_COLORS.textMuted}
+                      strokeWidth={1}
+                    />
+                  ))}
+                  <line
+                    x1={fig.lineStart.x} y1={fig.lineStart.y}
+                    x2={fig.lineEnd.x} y2={fig.lineEnd.y}
+                    stroke={SHEET_COLORS.text}
+                    strokeWidth={1}
+                  />
+                  {fig.arrowheads.map((arrow, i) => (
+                    <polygon
+                      key={`arr-w-${i}`}
+                      points={`${arrow.tip.x},${arrow.tip.y} ${arrow.left.x},${arrow.left.y} ${arrow.right.x},${arrow.right.y}`}
+                      fill={SHEET_COLORS.text}
+                    />
+                  ))}
+                  <text
+                    x={fig.text.position.x}
+                    y={fig.text.position.y}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    transform={`rotate(${fig.text.angle} ${fig.text.position.x} ${fig.text.position.y})`}
+                    fontSize={100}
+                    fill={SHEET_COLORS.text}
+                  >
+                    {fig.text.value}
+                  </text>
+                </g>
+              );
+            })()}
+            {/* Auto-dimension: height */}
+            {layout.height > 0 && (() => {
+              const fig = createDimensionFigure({
+                id: `auto-h-${layout.view}`,
+                startPoint: { x: layout.svgX, y: layout.svgY },
+                endPoint: { x: layout.svgX, y: layout.svgY + layout.height },
+                mode: 'aligned',
+                offset: -200,
+                source: 'auto',
+              });
+              if (!fig) return null;
+              return (
+                <g>
+                  {fig.extensionLines.map((line, i) => (
+                    <line
+                      key={`ext-h-${i}`}
+                      x1={line.start.x} y1={line.start.y}
+                      x2={line.end.x} y2={line.end.y}
+                      stroke={SHEET_COLORS.textMuted}
+                      strokeWidth={1}
+                    />
+                  ))}
+                  <line
+                    x1={fig.lineStart.x} y1={fig.lineStart.y}
+                    x2={fig.lineEnd.x} y2={fig.lineEnd.y}
+                    stroke={SHEET_COLORS.text}
+                    strokeWidth={1}
+                  />
+                  {fig.arrowheads.map((arrow, i) => (
+                    <polygon
+                      key={`arr-h-${i}`}
+                      points={`${arrow.tip.x},${arrow.tip.y} ${arrow.left.x},${arrow.left.y} ${arrow.right.x},${arrow.right.y}`}
+                      fill={SHEET_COLORS.text}
+                    />
+                  ))}
+                  <text
+                    x={fig.text.position.x}
+                    y={fig.text.position.y}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    transform={`rotate(${fig.text.angle} ${fig.text.position.x} ${fig.text.position.y})`}
+                    fontSize={100}
+                    fill={SHEET_COLORS.text}
+                  >
+                    {fig.text.value}
+                  </text>
+                </g>
+              );
+            })()}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function PartListContent({ source }) {
+  const { rows, columnWidths, headers, rowHeight, headerHeight, bounds } = source;
+  const tableWidth = bounds.maxX - bounds.minX;
+
+  let colX = 0;
+  const colPositions = columnWidths.map((w) => {
+    const x = colX;
+    colX += w;
+    return x;
+  });
+
+  return (
+    <g>
+      {/* Table border */}
+      <rect
+        x={0} y={0}
+        width={tableWidth}
+        height={headerHeight + rows.length * rowHeight}
+        fill="none"
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.5}
+      />
+      {/* Header row */}
+      <rect
+        x={0} y={0}
+        width={tableWidth} height={headerHeight}
+        fill={SHEET_COLORS.panelFill}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      {headers.map((header, i) => (
+        <text
+          key={`hdr-${i}`}
+          x={colPositions[i] + columnWidths[i] / 2}
+          y={headerHeight / 2}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={8}
+          fontWeight={600}
+          fill={SHEET_COLORS.text}
+          letterSpacing={0.3}
+        >
+          {header}
+        </text>
+      ))}
+      {/* Column dividers */}
+      {colPositions.slice(1).map((x, i) => (
+        <line
+          key={`col-${i}`}
+          x1={x} y1={0}
+          x2={x} y2={headerHeight + rows.length * rowHeight}
+          stroke={SHEET_COLORS.divider}
+          strokeWidth={0.2}
+        />
+      ))}
+      {/* Data rows */}
+      {rows.map((row, rowIndex) => {
+        const y = headerHeight + rowIndex * rowHeight;
+        const values = [
+          String(row.item),
+          row.name,
+          row.type,
+          row.material,
+          String(row.qty),
+          row.dims,
+        ];
+        return (
+          <g key={`row-${rowIndex}`}>
+            <line
+              x1={0} y1={y}
+              x2={tableWidth} y2={y}
+              stroke={SHEET_COLORS.divider}
+              strokeWidth={0.15}
+            />
+            {values.map((val, colIndex) => (
+              <text
+                key={`cell-${rowIndex}-${colIndex}`}
+                x={colPositions[colIndex] + columnWidths[colIndex] / 2}
+                y={y + rowHeight / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={7}
+                fill={SHEET_COLORS.text}
+              >
+                {val}
+              </text>
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+export default function SketchSheetViewportContent({ source }) {
+  if (!source || source.kind === 'empty') return null;
+
+  if (source.kind === 'sketch_assembly') {
+    return <AssemblyViewContent source={source} />;
+  }
+
+  if (source.kind === 'sketch_part_detail') {
+    return <PartDetailContent source={source} />;
+  }
+
+  if (source.kind === 'sketch_part_list') {
+    return <PartListContent source={source} />;
+  }
+
+  return null;
+}

@@ -1,0 +1,13 @@
+# Remove border-top from .dashboard-briefing
+
+## Context
+The `border-top: 2px solid var(--accent-amber)` on `.dashboard-briefing` looks ugly. Remove it.
+
+## File to Modify
+`client/src/components/DashboardBriefing/DashboardBriefing.css` (line 4)
+
+## Change
+Remove `border-top: 2px solid var(--accent-amber);` from `.dashboard-briefing`
+
+## Verification
+Visual check — container should have no border at all.

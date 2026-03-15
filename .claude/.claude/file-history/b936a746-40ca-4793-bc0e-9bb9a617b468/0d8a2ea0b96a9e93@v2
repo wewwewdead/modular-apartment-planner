@@ -1,0 +1,58 @@
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.label {
+  flex: 0 0 80px;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.inputWrap {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-active-glow);
+  box-shadow: 0 0 0 2px var(--color-active-glow-subtle), inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.inputNumber {
+  font-family: var(--font-blueprint);
+}
+
+.inputReadonly {
+  background: var(--color-panel-bg-alt);
+  color: var(--color-text-secondary);
+  box-shadow: none;
+}
+
+.suffix {
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-blueprint);
+}

@@ -1,0 +1,585 @@
+2026-02-26T15:17:04.211Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-02-26T15:17:04.212Z [DEBUG] MDM settings load completed in 19ms
+2026-02-26T15:17:04.247Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-26T15:17:04.248Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-26T15:17:04.248Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-26T15:17:04.248Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-26T15:17:04.278Z [DEBUG] Using bash path: "C:\Program Files\Git\bin\bash.exe"
+2026-02-26T15:17:04.291Z [DEBUG] Applying permission update: Adding 26 allow rule(s) to destination 'localSettings': ["WebSearch","WebFetch(domain:www.threads.net)","WebFetch(domain:www.threads.com)","Bash(dir:*)","Bash(ls -la \"C:\\\\Users\\\\johnm\\\\iskrib_v3\\\\client\\\\src\\\\components\\\\HomePage\\\\Editor\"\" 2>&1 || echo \"Directory check \")","Bash(npm install -g @anthropic-ai/claude-code@latest)","Bash(grep:*)","WebFetch(domain:x.ai)","Bash(npx vite build)","Bash(npx vite build:*)","Bash(npx:*)","Bash(node scripts/backfillUniverseCoords.js:*)","Bash(node:*)","Bash(xargs:*)","Bash(curl:*)","Bash(python test_rocket_recon.py:*)","Bash(npm ls:*)","Bash(npm install:*)","Bash(ls:*)","WebFetch(domain:github.com)","WebFetch(domain:baileys.wiki)","WebFetch(domain:www.npmjs.com)","Bash(npm uninstall:*)","WebFetch(domain:cdn.jsdelivr.net)","WebFetch(domain:www.jsdelivr.com)","Bash(find:*)"]
+2026-02-26T15:17:04.292Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-26T15:17:04.298Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-26T15:17:04.298Z [DEBUG] [STARTUP] Running setup()...
+2026-02-26T15:17:04.305Z [DEBUG] Loading skills from: managed=C:\ProgramData\ClaudeCode\.claude\skills, user=C:\Users\johnm\.claude\skills, project=[]
+2026-02-26T15:17:04.306Z [DEBUG] Error log sink initialized
+2026-02-26T15:17:04.315Z [DEBUG] [STARTUP] setup() completed in 17ms
+2026-02-26T15:17:04.315Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-26T15:17:04.316Z [DEBUG] Git remote URL: null
+2026-02-26T15:17:04.316Z [DEBUG] No git remote URL found
+2026-02-26T15:17:04.333Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-02-26T15:17:04.340Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default
+2026-02-26T15:17:04.350Z [DEBUG] Loaded 3 installed plugins from C:\Users\johnm\.claude\plugins\installed_plugins.json
+2026-02-26T15:17:04.368Z [DEBUG] [Claude in Chrome] Found edge profiles: Default
+2026-02-26T15:17:04.369Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-26T15:17:04.382Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024382
+2026-02-26T15:17:04.382Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.386Z [DEBUG] Temp file written successfully, size: 11751 bytes
+2026-02-26T15:17:04.386Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.386Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024382 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.387Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.391Z [DEBUG] Loading plugin example-skills from source: "./"
+2026-02-26T15:17:04.394Z [DEBUG] Loading plugin feature-dev from source: "./plugins/feature-dev"
+2026-02-26T15:17:04.396Z [DEBUG] Loading plugin frontend-design from source: "./plugins/frontend-design"
+2026-02-26T15:17:04.412Z [DEBUG] Using git SHA for example-skills@anthropic-agent-skills: 69c0b1a06741
+2026-02-26T15:17:04.414Z [DEBUG] Plugin example-skills@anthropic-agent-skills version 69c0b1a06741 already cached at C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741
+2026-02-26T15:17:04.414Z [DEBUG] Resolved local plugin example-skills to versioned cache: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741
+2026-02-26T15:17:04.414Z [DEBUG] Using git SHA for frontend-design@claude-plugins-official: 55b58ec6e564
+2026-02-26T15:17:04.414Z [DEBUG] Using git SHA for feature-dev@claude-plugins-official: 55b58ec6e564
+2026-02-26T15:17:04.415Z [DEBUG] Plugin feature-dev@claude-plugins-official version 55b58ec6e564 already cached at C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\feature-dev\55b58ec6e564
+2026-02-26T15:17:04.415Z [DEBUG] Resolved local plugin feature-dev to versioned cache: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\feature-dev\55b58ec6e564
+2026-02-26T15:17:04.415Z [DEBUG] Plugin frontend-design@claude-plugins-official version 55b58ec6e564 already cached at C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564
+2026-02-26T15:17:04.415Z [DEBUG] Resolved local plugin frontend-design to versioned cache: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564
+2026-02-26T15:17:04.415Z [DEBUG] Processing 12 skill paths for plugin example-skills
+2026-02-26T15:17:04.415Z [DEBUG] Checking skill path: ./skills/algorithmic-art -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art (exists: true)
+2026-02-26T15:17:04.415Z [DEBUG] Checking skill path: ./skills/brand-guidelines -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines (exists: true)
+2026-02-26T15:17:04.415Z [DEBUG] Checking skill path: ./skills/canvas-design -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design (exists: true)
+2026-02-26T15:17:04.415Z [DEBUG] Checking skill path: ./skills/doc-coauthoring -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring (exists: true)
+2026-02-26T15:17:04.415Z [DEBUG] Checking skill path: ./skills/frontend-design -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design (exists: true)
+2026-02-26T15:17:04.415Z [DEBUG] Checking skill path: ./skills/internal-comms -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Checking skill path: ./skills/mcp-builder -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Checking skill path: ./skills/skill-creator -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Checking skill path: ./skills/slack-gif-creator -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Checking skill path: ./skills/theme-factory -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Checking skill path: ./skills/web-artifacts-builder -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Checking skill path: ./skills/webapp-testing -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing (exists: true)
+2026-02-26T15:17:04.416Z [DEBUG] Found 12 valid skill paths for plugin example-skills, setting skillsPaths
+2026-02-26T15:17:04.417Z [DEBUG] Found 3 plugins (3 enabled, 0 disabled)
+2026-02-26T15:17:04.417Z [DEBUG] getPluginSkills: Processing 3 enabled plugins
+2026-02-26T15:17:04.417Z [DEBUG] Checking plugin example-skills: skillsPath=exists, skillsPaths=12 paths
+2026-02-26T15:17:04.417Z [DEBUG] Attempting to load skills from plugin example-skills default skillsPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills
+2026-02-26T15:17:04.425Z [DEBUG] Registered 0 hooks from 3 plugins
+2026-02-26T15:17:04.452Z [DEBUG] Loaded 3 agents from plugin feature-dev default directory
+2026-02-26T15:17:04.452Z [DEBUG] Total plugin agents loaded: 3
+2026-02-26T15:17:04.452Z [DEBUG] Loaded 16 skills from plugin example-skills default directory
+2026-02-26T15:17:04.452Z [DEBUG] Attempting to load skills from plugin example-skills skillsPaths: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-02-26T15:17:04.452Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art for plugin example-skills
+2026-02-26T15:17:04.452Z [DEBUG] Loaded 1 commands from plugin feature-dev default directory
+2026-02-26T15:17:04.452Z [DEBUG] Total plugin commands loaded: 1
+2026-02-26T15:17:04.454Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art
+2026-02-26T15:17:04.454Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines for plugin example-skills
+2026-02-26T15:17:04.454Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines
+2026-02-26T15:17:04.455Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design for plugin example-skills
+2026-02-26T15:17:04.455Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design
+2026-02-26T15:17:04.455Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring for plugin example-skills
+2026-02-26T15:17:04.455Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring
+2026-02-26T15:17:04.455Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design for plugin example-skills
+2026-02-26T15:17:04.455Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design
+2026-02-26T15:17:04.455Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms for plugin example-skills
+2026-02-26T15:17:04.455Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms
+2026-02-26T15:17:04.455Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder for plugin example-skills
+2026-02-26T15:17:04.455Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder
+2026-02-26T15:17:04.455Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator for plugin example-skills
+2026-02-26T15:17:04.456Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator
+2026-02-26T15:17:04.456Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator for plugin example-skills
+2026-02-26T15:17:04.456Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator
+2026-02-26T15:17:04.456Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory for plugin example-skills
+2026-02-26T15:17:04.456Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory
+2026-02-26T15:17:04.456Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder for plugin example-skills
+2026-02-26T15:17:04.456Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder
+2026-02-26T15:17:04.456Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing for plugin example-skills
+2026-02-26T15:17:04.456Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-02-26T15:17:04.456Z [DEBUG] Checking plugin feature-dev: skillsPath=none, skillsPaths=0 paths
+2026-02-26T15:17:04.456Z [DEBUG] Checking plugin frontend-design: skillsPath=exists, skillsPaths=0 paths
+2026-02-26T15:17:04.456Z [DEBUG] Attempting to load skills from plugin frontend-design default skillsPath: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564\skills
+2026-02-26T15:17:04.457Z [DEBUG] Loaded 1 skills from plugin frontend-design default directory
+2026-02-26T15:17:04.457Z [DEBUG] Total plugin skills loaded: 17
+2026-02-26T15:17:04.458Z [DEBUG] getSkills returning: 0 skill dir commands, 17 plugin skills, 3 bundled skills
+2026-02-26T15:17:04.458Z [DEBUG] [STARTUP] Commands and agents loaded in 143ms
+2026-02-26T15:17:04.462Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-26T15:17:04.466Z [DEBUG] Grove: Cache stale, returning cached data and refreshing in background
+2026-02-26T15:17:04.489Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-26T15:17:04.490Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-26T15:17:04.492Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-02-26T15:17:04.502Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-26T15:17:04.519Z [DEBUG] [keybindings] Watching for changes to C:\Users\johnm\.claude\keybindings.json
+2026-02-26T15:17:04.662Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024662
+2026-02-26T15:17:04.662Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.665Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.665Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.665Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024662 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.665Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.677Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024677
+2026-02-26T15:17:04.677Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.679Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.679Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.679Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024677 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.680Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.800Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024800
+2026-02-26T15:17:04.800Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.803Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.803Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.803Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024800 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.804Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.853Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024853
+2026-02-26T15:17:04.853Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.855Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.856Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.856Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024853 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.856Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.856Z [DEBUG] [STARTUP] showSetupScreens() completed in 394ms
+2026-02-26T15:17:04.856Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-26T15:17:04.857Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-26T15:17:04.857Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-26T15:17:04.857Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-26T15:17:04.857Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-26T15:17:04.864Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-26T15:17:04.865Z [DEBUG] [STARTUP] MCP configs loaded in 573ms
+2026-02-26T15:17:04.872Z [DEBUG] All plugins already exist, skipping migration
+2026-02-26T15:17:04.872Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-26T15:17:04.875Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-26T15:17:04.875Z [DEBUG] Found 0 hook matchers in settings
+2026-02-26T15:17:04.875Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-26T15:17:04.875Z [DEBUG] Initialized versioned plugins system with 3 plugins
+2026-02-26T15:17:04.880Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-02-26T15:17:04.881Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024881
+2026-02-26T15:17:04.881Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.884Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.884Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.884Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024881 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.884Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.895Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024895
+2026-02-26T15:17:04.895Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.898Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.898Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.898Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024895 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.898Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:04.939Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-26T15:17:04.983Z [DEBUG] High write ratio: blit=0, write=1027 (100.0% writes), screen=17x120
+2026-02-26T15:17:04.990Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119024990
+2026-02-26T15:17:04.990Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:04.993Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:04.993Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:04.993Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119024990 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:04.993Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.005Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-26T15:17:05.006Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-26T15:17:05.007Z [DEBUG] performStartupChecks called
+2026-02-26T15:17:05.007Z [DEBUG] Starting background plugin installations
+2026-02-26T15:17:05.007Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-26T15:17:05.010Z [DEBUG] Loaded 1 CLAUDE.md/rules files:
+  [AutoMem] C:\Users\johnm\.claude\projects\C--Users-johnm-iskrib-v3\memory\MEMORY.md (4766 chars)
+2026-02-26T15:17:05.012Z [DEBUG] Watching for changes in setting files C:\Users\johnm\.claude\settings.json, C:\Users\johnm\iskrib_v3\.claude\settings.json, C:\Users\johnm\iskrib_v3\.claude\settings.local.json...
+2026-02-26T15:17:05.015Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025015
+2026-02-26T15:17:05.015Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.018Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.018Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.018Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025015 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.019Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.029Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025029
+2026-02-26T15:17:05.029Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.032Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.032Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.032Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025029 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.033Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.042Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025042
+2026-02-26T15:17:05.042Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.046Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.046Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.046Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025042 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.046Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.059Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025059
+2026-02-26T15:17:05.059Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.061Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.061Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.061Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025059 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.061Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.115Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-26T15:17:05.117Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-26T15:17:05.117Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-26T15:17:05.117Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-26T15:17:05.118Z [DEBUG] Found 3 enabled plugins
+2026-02-26T15:17:05.118Z [DEBUG] All plugins already exist, skipping migration
+2026-02-26T15:17:05.118Z [DEBUG] Found 3 installed plugins
+2026-02-26T15:17:05.119Z [DEBUG] Found 0 missing plugins (not installed):
+2026-02-26T15:17:05.119Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-26T15:17:05.125Z [DEBUG] Fetching plugin security messages from https://raw.githubusercontent.com/anthropics/claude-plugins-official/refs/heads/security/security.json
+2026-02-26T15:17:05.126Z [DEBUG] Total LSP servers loaded: 0
+2026-02-26T15:17:05.126Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-26T15:17:05.126Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-26T15:17:05.126Z [DEBUG] LSP server manager initialized successfully
+2026-02-26T15:17:05.127Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-26T15:17:05.128Z [DEBUG] Org fast mode: enabled
+2026-02-26T15:17:05.169Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025169
+2026-02-26T15:17:05.169Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.173Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.173Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.173Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025169 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.174Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.178Z [DEBUG] Security messages saved successfully
+2026-02-26T15:17:05.190Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025190
+2026-02-26T15:17:05.190Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.193Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.193Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.193Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025190 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.193Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.202Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025202
+2026-02-26T15:17:05.202Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.205Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.205Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.205Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025202 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.206Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.215Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025215
+2026-02-26T15:17:05.215Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.218Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.218Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.218Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025215 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.219Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.228Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025228
+2026-02-26T15:17:05.228Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.231Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.231Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.231Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025228 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.231Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.245Z [DEBUG] Loaded plugins - Enabled: 3, Disabled: 0, Commands: 1, Agents: 3, Errors: 0
+2026-02-26T15:17:05.373Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=C:\Users\johnm\.local\bin\claude.exe)
+2026-02-26T15:17:05.379Z [DEBUG] [claudeai-mcp] Fetched 2 servers
+2026-02-26T15:17:05.381Z [DEBUG] MCP server "claude.ai Gmail": Initializing claude.ai proxy transport for server mcpsrv_01UAuwXoVTUT2mp1zk6LiDCV
+2026-02-26T15:17:05.381Z [DEBUG] MCP server "claude.ai Gmail": Using claude.ai proxy at https://mcp-proxy.anthropic.com/v1/mcp/mcpsrv_01UAuwXoVTUT2mp1zk6LiDCV
+2026-02-26T15:17:05.381Z [DEBUG] MCP server "claude.ai Gmail": claude.ai proxy transport created successfully
+2026-02-26T15:17:05.383Z [DEBUG] MCP server "claude.ai Gmail": Starting connection with timeout of 30000ms
+2026-02-26T15:17:05.384Z [DEBUG] MCP server "claude.ai Google Calendar": Initializing claude.ai proxy transport for server mcpsrv_019QxDf8TuFNKX7ypu3yp8hu
+2026-02-26T15:17:05.384Z [DEBUG] MCP server "claude.ai Google Calendar": Using claude.ai proxy at https://mcp-proxy.anthropic.com/v1/mcp/mcpsrv_019QxDf8TuFNKX7ypu3yp8hu
+2026-02-26T15:17:05.384Z [DEBUG] MCP server "claude.ai Google Calendar": claude.ai proxy transport created successfully
+2026-02-26T15:17:05.385Z [DEBUG] MCP server "claude.ai Google Calendar": Starting connection with timeout of 30000ms
+2026-02-26T15:17:05.391Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025391
+2026-02-26T15:17:05.391Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.394Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.394Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.394Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025391 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.394Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.404Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025404
+2026-02-26T15:17:05.404Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.407Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.407Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.407Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025404 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.408Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.417Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025417
+2026-02-26T15:17:05.417Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.420Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.420Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.420Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025417 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.421Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.431Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025431
+2026-02-26T15:17:05.431Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.435Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.435Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.435Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025431 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.436Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.501Z [DEBUG] Checking for native installer update to version 2.1.59
+2026-02-26T15:17:05.502Z [DEBUG] Found 2.1.59 at C:\Users\johnm\.local\bin\claude.exe, skipping install
+2026-02-26T15:17:05.510Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025510
+2026-02-26T15:17:05.510Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.512Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.512Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.512Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025510 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.513Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.536Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025536
+2026-02-26T15:17:05.536Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.539Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.539Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.539Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025536 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.540Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.549Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025549
+2026-02-26T15:17:05.549Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.551Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.551Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.551Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025549 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.552Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.560Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025560
+2026-02-26T15:17:05.560Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.564Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.564Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.564Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025560 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.565Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.880Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025880
+2026-02-26T15:17:05.880Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.882Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.882Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.882Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025880 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.883Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.895Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025895
+2026-02-26T15:17:05.895Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.898Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.898Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.898Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025895 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.898Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.911Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025910
+2026-02-26T15:17:05.911Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.914Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.914Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.914Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025910 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.915Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.923Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025923
+2026-02-26T15:17:05.923Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.926Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.926Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.926Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025923 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.927Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.936Z [DEBUG] MCP server "claude.ai Google Calendar": claude.ai proxy connection failed after 552ms: Streamable HTTP error: Error POSTing to endpoint: {"type":"error","error":{"type":"authentication_error","message":"MCP server requires authentication but no OAuth token is configured."},"request_id":"req_011CYWuJ1YTygVMtDzYjMFvP"}
+2026-02-26T15:17:05.936Z [ERROR] MCP server "claude.ai Google Calendar" Error: Streamable HTTP error: Error POSTing to endpoint: {"type":"error","error":{"type":"authentication_error","message":"MCP server requires authentication but no OAuth token is configured."},"request_id":"req_011CYWuJ1YTygVMtDzYjMFvP"}
+2026-02-26T15:17:05.937Z [DEBUG] MCP server "claude.ai Google Calendar": Authentication required for claude.ai proxy server
+2026-02-26T15:17:05.979Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025979
+2026-02-26T15:17:05.979Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.982Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.982Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.982Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025979 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.985Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:05.994Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119025994
+2026-02-26T15:17:05.994Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:05.997Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:05.997Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:05.997Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119025994 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:05.998Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.010Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026010
+2026-02-26T15:17:06.010Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.013Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.013Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.013Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026010 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.014Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.024Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026024
+2026-02-26T15:17:06.024Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.027Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.027Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.027Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026024 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.028Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.037Z [DEBUG] MCP server "claude.ai Gmail": claude.ai proxy connection failed after 656ms: Streamable HTTP error: Error POSTing to endpoint: {"type":"error","error":{"type":"authentication_error","message":"MCP server requires authentication but no OAuth token is configured."},"request_id":"req_011CYWuJ1cRurLaL1xBBKY4S"}
+2026-02-26T15:17:06.037Z [ERROR] MCP server "claude.ai Gmail" Error: Streamable HTTP error: Error POSTing to endpoint: {"type":"error","error":{"type":"authentication_error","message":"MCP server requires authentication but no OAuth token is configured."},"request_id":"req_011CYWuJ1cRurLaL1xBBKY4S"}
+2026-02-26T15:17:06.038Z [DEBUG] MCP server "claude.ai Gmail": Authentication required for claude.ai proxy server
+2026-02-26T15:17:06.050Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026050
+2026-02-26T15:17:06.050Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.052Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.052Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.052Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026050 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.053Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.062Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026062
+2026-02-26T15:17:06.062Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.065Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.065Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.065Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026062 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.066Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.075Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026075
+2026-02-26T15:17:06.075Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.078Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.078Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.078Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026075 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.079Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.089Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026089
+2026-02-26T15:17:06.089Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.091Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.091Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.091Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026089 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.092Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.174Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119026174
+2026-02-26T15:17:06.174Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:06.177Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:06.177Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:06.177Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119026174 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:06.178Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:06.178Z [DEBUG] Passes eligibility cached for org 1666b641-f974-4a14-a0dd-fa9a25afee1f: true
+2026-02-26T15:17:08.022Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119028022
+2026-02-26T15:17:08.022Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:08.026Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:08.026Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:08.026Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119028022 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:08.027Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:08.037Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119028037
+2026-02-26T15:17:08.037Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:08.040Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:08.040Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:08.040Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119028037 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:08.041Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:08.051Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119028051
+2026-02-26T15:17:08.051Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:08.054Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:08.054Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:08.054Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119028051 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:08.055Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:08.066Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119028066
+2026-02-26T15:17:08.066Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:08.069Z [DEBUG] Temp file written successfully, size: 11784 bytes
+2026-02-26T15:17:08.069Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:08.069Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119028066 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:08.070Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:16.036Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119036036
+2026-02-26T15:17:16.036Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:16.040Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:16.040Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:16.040Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119036036 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:16.040Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:16.049Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119036049
+2026-02-26T15:17:16.049Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:16.051Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:16.051Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:16.051Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119036049 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:16.051Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:16.059Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119036059
+2026-02-26T15:17:16.059Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:16.062Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:16.062Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:16.062Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119036059 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:16.062Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:16.071Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119036071
+2026-02-26T15:17:16.071Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:16.074Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:16.074Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:16.074Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119036071 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:16.075Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:35.131Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119055131
+2026-02-26T15:17:35.131Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:35.133Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:35.133Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:35.133Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119055131 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:35.133Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:35.144Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119055144
+2026-02-26T15:17:35.144Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:35.146Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:35.146Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:35.146Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119055144 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:35.146Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:35.156Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119055156
+2026-02-26T15:17:35.156Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:35.158Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:35.158Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:35.158Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119055156 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:35.158Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:35.168Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119055168
+2026-02-26T15:17:35.168Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:35.170Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:35.170Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:35.170Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119055168 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:35.171Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:36.570Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-26T15:17:36.570Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-26T15:17:36.572Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119056572
+2026-02-26T15:17:36.572Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:36.574Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:36.574Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:36.574Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119056572 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:36.574Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:36.574Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-26T15:17:36.574Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-26T15:17:36.909Z [DEBUG] [FileIndex] ripgrep: 972 files in 335ms
+2026-02-26T15:17:36.964Z [DEBUG] [FileIndex] cache refresh completed in 394ms (rust index)
+2026-02-26T15:17:37.204Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-26T15:17:37.204Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-26T15:17:37.204Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-26T15:17:37.204Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 1ms (cache hit)
+2026-02-26T15:17:37.206Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119057206
+2026-02-26T15:17:37.206Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:37.207Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:37.207Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:37.207Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119057206 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:37.208Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:37.208Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-26T15:17:37.221Z [DEBUG] High write ratio: blit=480, write=574 (54.5% writes), screen=14x120
+2026-02-26T15:17:37.251Z [DEBUG] High write ratio: blit=480, write=575 (54.5% writes), screen=14x120
+2026-02-26T15:17:37.439Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 1ms (cache hit)
+2026-02-26T15:17:37.440Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119057440
+2026-02-26T15:17:37.440Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:37.443Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:37.443Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:37.443Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119057440 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:37.443Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:37.455Z [DEBUG] High write ratio: blit=480, write=539 (52.9% writes), screen=14x120
+2026-02-26T15:17:37.501Z [DEBUG] High write ratio: blit=480, write=540 (52.9% writes), screen=14x120
+2026-02-26T15:17:37.531Z [DEBUG] [FileIndex] ripgrep: 972 files in 323ms
+2026-02-26T15:17:37.533Z [DEBUG] [FileIndex] cache refresh completed in 330ms (rust index)
+2026-02-26T15:17:37.702Z [DEBUG] [FileIndex] getProjectFiles called, respectGitignore=true
+2026-02-26T15:17:37.702Z [DEBUG] [FileIndex] getFilesUsingGit called
+2026-02-26T15:17:37.703Z [DEBUG] [FileIndex] not a git repo, returning null
+2026-02-26T15:17:37.703Z [DEBUG] [FileIndex] generateFileSuggestions: 15 results in 1ms (cache hit)
+2026-02-26T15:17:37.704Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119057704
+2026-02-26T15:17:37.704Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:37.707Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:37.707Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:37.707Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119057704 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:37.708Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:37.708Z [DEBUG] [FileIndex] git ls-files returned null, falling back to ripgrep
+2026-02-26T15:17:37.720Z [DEBUG] High write ratio: blit=480, write=568 (54.2% writes), screen=14x120
+2026-02-26T15:17:38.087Z [DEBUG] [FileIndex] ripgrep: 972 files in 379ms
+2026-02-26T15:17:38.089Z [DEBUG] [FileIndex] cache refresh completed in 387ms (rust index)
+2026-02-26T15:17:39.009Z [DEBUG] High write ratio: blit=480, write=568 (54.2% writes), screen=14x120
+2026-02-26T15:17:39.060Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059060
+2026-02-26T15:17:39.060Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.064Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.064Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.064Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059060 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.065Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.074Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059074
+2026-02-26T15:17:39.074Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.075Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.075Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.075Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059074 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.076Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.084Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059084
+2026-02-26T15:17:39.084Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.086Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.086Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.086Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059084 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.086Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.095Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059095
+2026-02-26T15:17:39.095Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.097Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.097Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.097Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059095 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.098Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.098Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-26T15:17:39.110Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059110
+2026-02-26T15:17:39.110Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.111Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.111Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.111Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059110 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.112Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.121Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059121
+2026-02-26T15:17:39.121Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.122Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.122Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.122Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059121 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.122Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.131Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059131
+2026-02-26T15:17:39.131Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.133Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.133Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.133Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059131 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.133Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.142Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059142
+2026-02-26T15:17:39.142Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.145Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.145Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.145Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059142 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.145Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.432Z [DEBUG] Checking for native installer update to version 2.1.59
+2026-02-26T15:17:39.433Z [DEBUG] Found 2.1.59 at C:\Users\johnm\.local\bin\claude.exe, skipping install
+2026-02-26T15:17:39.437Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059437
+2026-02-26T15:17:39.437Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.440Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.440Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.440Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059437 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.441Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.450Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059450
+2026-02-26T15:17:39.450Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.452Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.452Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.452Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059450 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.452Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.462Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059462
+2026-02-26T15:17:39.462Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.463Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.463Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.463Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059462 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.464Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-26T15:17:39.473Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.30584.1772119059473
+2026-02-26T15:17:39.473Z [DEBUG] Preserving file permissions: 100666
+2026-02-26T15:17:39.477Z [DEBUG] Temp file written successfully, size: 11809 bytes
+2026-02-26T15:17:39.477Z [DEBUG] Applied original permissions to temp file
+2026-02-26T15:17:39.477Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.30584.1772119059473 to C:\Users\johnm\.claude.json
+2026-02-26T15:17:39.477Z [DEBUG] File C:\Users\johnm\.claude.json written atomically

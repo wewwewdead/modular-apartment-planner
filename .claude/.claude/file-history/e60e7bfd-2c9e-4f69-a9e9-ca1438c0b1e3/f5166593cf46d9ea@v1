@@ -1,0 +1,146 @@
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import { Layer, Line, Text } from 'react-konva';
+import { STAR_COLORS } from '../utils/starUtils';
+
+const parseHex = (hex) => ({
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+});
+
+const ConstellationLayer = React.memo(({ layerProps, constellations, computedStarPositions, zoom, chainColors, userId }) => {
+    const lineRefsMap = useRef(new Map());
+    const rafRef = useRef(null);
+
+    const linkData = useMemo(() => {
+        if (!Array.isArray(constellations) || constellations.length === 0) return [];
+        return constellations.map((link, i) => {
+            const colorHex = chainColors?.get(link.id) || STAR_COLORS[i % STAR_COLORS.length];
+            const rgb = parseHex(colorHex);
+            const isPending = link.status === 'pending';
+            const isDeclined = link.status === 'declined';
+            const isOwnPending = isPending && (link.user_id_a === userId || link.user_id_b === userId);
+            return { ...link, rgb, colorHex, isPending, isDeclined, isOwnPending };
+        });
+    }, [constellations, chainColors, userId]);
+
+    const animate = useCallback(() => {
+        const offset = -performance.now() * 0.06;
+        let layer = null;
+        lineRefsMap.current.forEach((node) => {
+            if (node) {
+                node.dashOffset(offset);
+                if (!layer) layer = node.getLayer();
+            }
+        });
+        if (layer) layer.batchDraw();
+        rafRef.current = requestAnimationFrame(animate);
+    }, []);
+
+    useEffect(() => {
+        const hasAccepted = linkData.some((l) => !l.isPending);
+        if (!hasAccepted) return;
+        rafRef.current = requestAnimationFrame(animate);
+        return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        };
+    }, [animate, linkData]);
+
+    // Clean up stale refs
+    useEffect(() => {
+        const activeIds = new Set(linkData.map((l) => l.id));
+        lineRefsMap.current.forEach((_, key) => {
+            if (!activeIds.has(key)) lineRefsMap.current.delete(key);
+        });
+    }, [linkData]);
+
+    if (linkData.length === 0) return null;
+
+    return (
+        <Layer {...layerProps} listening={false}>
+            {linkData.map((link) => {
+                if (link.isDeclined) return null;
+
+                const posA = computedStarPositions.get(link.star_id_a)
+                    || (link.a_universe_x != null ? { x: link.a_universe_x, y: link.a_universe_y } : null);
+                const posB = computedStarPositions.get(link.star_id_b)
+                    || (link.b_universe_x != null ? { x: link.b_universe_x, y: link.b_universe_y } : null);
+                if (!posA || !posB) return null;
+
+                const ax = posA.x, ay = posA.y;
+                const bx = posB.x, by = posB.y;
+                const { rgb } = link;
+
+                if (link.isPending) {
+                    if (!link.isOwnPending) return null;
+                    return (
+                        <Line
+                            key={`pending-${link.id}`}
+                            points={[ax, ay, bx, by]}
+                            dash={[6, 10]}
+                            stroke={`rgba(${rgb.r},${rgb.g},${rgb.b},0.12)`}
+                            strokeWidth={1}
+                            lineCap="round"
+                            listening={false}
+                            perfectDrawEnabled={false}
+                        />
+                    );
+                }
+
+                const mx = (ax + bx) / 2;
+                const my = (ay + by) / 2;
+
+                return (
+                    <React.Fragment key={`constellation-${link.id}`}>
+                        {/* Outer glow */}
+                        <Line
+                            points={[ax, ay, bx, by]}
+                            dash={[12, 8]}
+                            stroke={`rgba(${rgb.r},${rgb.g},${rgb.b},0.1)`}
+                            strokeWidth={5}
+                            opacity={1}
+                            lineCap="round"
+                            listening={false}
+                            perfectDrawEnabled={false}
+                        />
+                        {/* Inner energy line — animated dashOffset */}
+                        <Line
+                            ref={(node) => {
+                                if (node) lineRefsMap.current.set(link.id, node);
+                                else lineRefsMap.current.delete(link.id);
+                            }}
+                            points={[ax, ay, bx, by]}
+                            dash={[12, 8]}
+                            stroke={`rgba(${rgb.r},${rgb.g},${rgb.b},0.4)`}
+                            strokeWidth={1.8}
+                            lineCap="round"
+                            listening={false}
+                            perfectDrawEnabled={false}
+                        />
+                        {/* Label at midpoint */}
+                        {link.label && (
+                            <Text
+                                x={mx}
+                                y={my - 14}
+                                text={link.label}
+                                fontSize={12}
+                                fontFamily="sans-serif"
+                                fill={`rgba(${rgb.r},${rgb.g},${rgb.b},0.7)`}
+                                align="center"
+                                offsetX={link.label.length * 3}
+                                scaleX={1 / zoom}
+                                scaleY={1 / zoom}
+                                listening={false}
+                                perfectDrawEnabled={false}
+                            />
+                        )}
+                    </React.Fragment>
+                );
+            })}
+        </Layer>
+    );
+});
+
+ConstellationLayer.displayName = 'ConstellationLayer';
+
+export default ConstellationLayer;

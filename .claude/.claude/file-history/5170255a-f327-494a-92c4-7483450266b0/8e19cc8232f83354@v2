@@ -1,0 +1,551 @@
+.freedom-wall-page{
+    --fw-cork: #c4a47a;
+    --fw-cork-light: #d4b88c;
+    --fw-cork-dark: #a07850;
+    --fw-cork-deep: #7a5c3a;
+    --fw-wood-trim: #6b4226;
+    --fw-wood-trim-light: #8b6240;
+    --fw-pin-red: #e63946;
+    --fw-chalk: rgba(255, 255, 255, 0.85);
+
+    width: 100%;
+    padding: 0.8rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    /* Cork texture background */
+    background:
+        repeating-conic-gradient(
+            rgba(160, 120, 80, 0.03) 0% 25%,
+            transparent 0% 50%
+        ) 0 0 / 14px 14px,
+        radial-gradient(
+            ellipse at 30% 20%,
+            rgba(180, 140, 90, 0.12) 0%,
+            transparent 60%
+        ),
+        radial-gradient(
+            ellipse at 80% 70%,
+            rgba(140, 100, 60, 0.1) 0%,
+            transparent 55%
+        ),
+        linear-gradient(
+            135deg,
+            #c9a97a 0%,
+            #d4b88c 25%,
+            #c4a47a 50%,
+            #b8956a 75%,
+            #c9a97a 100%
+        );
+    background-attachment: fixed;
+    border-radius: 16px;
+    position: relative;
+}
+
+/* Cork grain noise overlay */
+.freedom-wall-page::before{
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+}
+
+.freedom-wall-page > *{
+    position: relative;
+    z-index: 1;
+}
+
+.freedom-wall-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-title-shell{
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+}
+
+.freedom-wall-title{
+    margin: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1.3rem;
+    color: var(--fw-wood-trim);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.freedom-wall-subtitle{
+    margin: 0;
+    color: var(--fw-cork-deep);
+    font-size: 0.78rem;
+}
+
+.freedom-wall-week-pill{
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(4px);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--fw-wood-trim);
+    font-weight: 600;
+    letter-spacing: 0.01rem;
+}
+
+.freedom-wall-toolbar{
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border: 2px solid var(--fw-wood-trim-light);
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 0.7rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 8px rgba(107, 66, 38, 0.12);
+}
+
+.freedom-wall-tool-group{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fw-tool-btn{
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.45);
+    color: var(--fw-wood-trim);
+    border-radius: 10px;
+    padding: 0.4rem 0.72rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.fw-tool-btn:hover{
+    background: rgba(255, 255, 255, 0.6);
+    transform: translateY(-1px);
+}
+
+.fw-tool-btn.is-active{
+    border-color: var(--fw-pin-red);
+    color: var(--fw-pin-red);
+    background: rgba(230, 57, 70, 0.1);
+    box-shadow: 0 2px 6px rgba(230, 57, 70, 0.15);
+}
+
+.freedom-wall-tool-controls{
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.freedom-wall-tool-controls input[type="text"],
+.freedom-wall-tool-controls select{
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.45);
+    border-radius: 8px;
+    padding: 0.34rem 0.45rem;
+    color: var(--fw-wood-trim);
+    font-size: 0.72rem;
+    min-width: 150px;
+}
+
+.fw-label{
+    color: var(--fw-cork-deep);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04rem;
+    font-weight: 700;
+}
+
+.fw-stamp-grid{
+    display: flex;
+    gap: 0.4rem;
+}
+
+.fw-stamp-btn{
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.fw-stamp-btn:hover{
+    background: rgba(255, 255, 255, 0.65);
+    transform: scale(1.08);
+}
+
+.fw-sticker-grid{
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.fw-sticker-btn{
+    width: 36px;
+    height: 36px;
+    font-size: 1.15rem;
+}
+
+.fw-stamp-btn.is-active{
+    border-color: var(--fw-pin-red);
+    background: rgba(230, 57, 70, 0.1);
+    box-shadow: 0 1px 4px rgba(230, 57, 70, 0.18);
+}
+
+.fw-readonly-pill{
+    width: fit-content;
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.68rem;
+    color: var(--fw-cork-deep);
+    font-weight: 600;
+}
+
+.freedom-wall-note-editor{
+    border: 2px solid var(--fw-wood-trim-light);
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 8px rgba(107, 66, 38, 0.12);
+}
+
+.freedom-wall-note-editor h4{
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fw-wood-trim);
+}
+
+.freedom-wall-note-editor textarea{
+    min-height: 78px;
+    border: 1px solid var(--fw-cork-dark);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--fw-wood-trim);
+    padding: 0.4rem;
+    resize: vertical;
+}
+
+.fw-note-controls{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fw-note-controls label{
+    font-size: 0.68rem;
+    color: var(--fw-cork-deep);
+    font-weight: 700;
+}
+
+.fw-note-controls select{
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.45);
+    color: var(--fw-wood-trim);
+    border-radius: 8px;
+    padding: 0.32rem 0.4rem;
+    font-size: 0.72rem;
+}
+
+.fw-note-actions,
+.freedom-wall-selected-actions{
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.fw-apply-btn,
+.fw-delete-btn{
+    border-radius: 8px;
+    padding: 0.38rem 0.68rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: 1px solid var(--fw-cork-dark);
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+
+.fw-apply-btn{
+    background: rgba(46, 125, 50, 0.18);
+    color: #2e7d32;
+    border-color: #2e7d32;
+}
+
+.fw-apply-btn:hover{
+    background: rgba(46, 125, 50, 0.28);
+    transform: translateY(-1px);
+}
+
+.fw-delete-btn{
+    background: rgba(230, 57, 70, 0.12);
+    color: var(--fw-pin-red);
+    border-color: var(--fw-pin-red);
+}
+
+.fw-delete-btn:hover{
+    background: rgba(230, 57, 70, 0.22);
+    transform: translateY(-1px);
+}
+
+.freedom-wall-canvas-shell{
+    position: relative;
+    width: 100%;
+    border: 4px solid var(--fw-wood-trim);
+    background:
+        linear-gradient(135deg, rgba(160, 120, 80, 0.08) 25%, transparent 25%),
+        linear-gradient(225deg, rgba(160, 120, 80, 0.08) 25%, transparent 25%),
+        linear-gradient(315deg, rgba(160, 120, 80, 0.06) 25%, transparent 25%),
+        linear-gradient(45deg, rgba(160, 120, 80, 0.06) 25%, transparent 25%),
+        linear-gradient(to bottom right, #d4b88c, #c4a47a, #b8956a);
+    border-radius: 6px;
+    padding: 6px;
+    box-sizing: border-box;
+    overflow: hidden;
+    touch-action: none;
+    box-shadow:
+        inset 0 2px 4px rgba(107, 66, 38, 0.15),
+        0 4px 16px rgba(107, 66, 38, 0.2),
+        0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.freedom-wall-loading,
+.freedom-wall-error{
+    padding: 2rem;
+    text-align: center;
+    color: var(--fw-cork-deep);
+}
+
+.fw-draft-note-panel{
+    border: 2px solid var(--fw-wood-trim-light);
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 8px rgba(107, 66, 38, 0.12);
+}
+
+.fw-draft-note-header{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.fw-draft-note-header h4{
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fw-wood-trim);
+    font-family: "Lexend Deca", sans-serif;
+}
+
+.fw-draft-note-charcount{
+    font-size: 0.68rem;
+    color: var(--fw-cork-deep);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.fw-draft-note-textarea{
+    width: 100%;
+    min-height: 56px;
+    border: 1px solid var(--fw-cork-dark);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--fw-wood-trim);
+    padding: 0.45rem 0.55rem;
+    font-size: 0.82rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.fw-draft-note-controls{
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.fw-draft-note-row{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.fw-draft-note-row label{
+    font-size: 0.68rem;
+    color: var(--fw-cork-deep);
+    font-weight: 700;
+}
+
+.fw-draft-note-row select{
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.45);
+    color: var(--fw-wood-trim);
+    border-radius: 8px;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.72rem;
+}
+
+.fw-draft-note-row input[type="color"]{
+    width: 32px;
+    height: 28px;
+    border: 1px solid var(--fw-cork-dark);
+    border-radius: 6px;
+    padding: 0;
+    cursor: pointer;
+}
+
+.fw-draft-note-row input[type="range"]{
+    width: 80px;
+}
+
+.fw-draft-note-actions{
+    display: flex;
+    gap: 0.5rem;
+}
+
+.fw-draft-note-actions .fw-apply-btn:disabled{
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.freedom-wall-error-toast{
+    padding: 0.45rem 0.75rem;
+    border-radius: 10px;
+    background: rgba(230, 57, 70, 0.15);
+    border: 1px solid var(--fw-pin-red);
+    color: var(--fw-pin-red);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.freedom-wall-footer{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--fw-cork-deep);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.fw-zoom-controls{
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--fw-cork-dark);
+    border-radius: 8px;
+    padding: 3px 6px;
+    z-index: 5;
+    font-size: 0.7rem;
+}
+
+.fw-zoom-controls button{
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--fw-cork-dark);
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--fw-wood-trim);
+    font-weight: 700;
+    transition: background 0.15s;
+}
+
+.fw-zoom-controls button:hover{
+    background: rgba(255, 255, 255, 0.75);
+}
+
+.fw-zoom-level{
+    min-width: 36px;
+    text-align: center;
+    color: var(--fw-cork-deep);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.fw-minimap{
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: 100px;
+    background: rgba(160, 120, 80, 0.15);
+    border: 1px solid var(--fw-cork-dark);
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    z-index: 5;
+}
+
+.fw-minimap-viewport{
+    position: absolute;
+    border: 2px solid var(--fw-pin-red);
+    background: rgba(230, 57, 70, 0.1);
+    border-radius: 2px;
+    pointer-events: none;
+}
+
+@media (max-width: 480px){
+    .freedom-wall-page{
+        padding: 0.5rem;
+        padding-bottom: 5rem;
+    }
+
+    .freedom-wall-week-pill{
+        width: 100%;
+        border-radius: 10px;
+    }
+
+    .freedom-wall-tool-controls{
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .freedom-wall-tool-controls input[type="text"],
+    .freedom-wall-tool-controls select{
+        width: 100%;
+    }
+
+    .fw-draft-note-controls{
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* Accent color overrides for range/color inputs on the cork theme */
+.freedom-wall-page input[type="range"]{
+    accent-color: var(--fw-pin-red);
+}
+
+.freedom-wall-page input[type="color"]{
+    border: 1px solid var(--fw-cork-dark);
+    border-radius: 6px;
+}

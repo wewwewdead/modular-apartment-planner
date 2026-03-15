@@ -1,0 +1,1141 @@
+     1→import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+     2→import { Stage } from 'react-konva';
+     3→import { useNavigate, useLocation } from 'react-router-dom';
+     4→import { useAuth } from '../../Context/useAuth';
+     5→import { getUniversePosts, getUserData, getViewportConstellations } from '../../../API/Api';
+     6→import supabase from '../../utils/supabaseClient';
+     7→import useUniverseCamera from './hooks/useUniverseCamera';
+     8→import useCosmicGravity from './hooks/useCosmicGravity';
+     9→import useConstellationLinkMode from './hooks/useConstellationLinkMode';
+    10→
+    11→import DeepSpaceLayer from './layers/DeepSpaceLayer';
+    12→import MidGalaxyLayer from './layers/MidGalaxyLayer';
+    13→import NebulaLayer from './layers/NebulaLayer';
+    14→import InteractiveLayer from './layers/InteractiveLayer';
+    15→import WormholeLayer from './layers/WormholeLayer';
+    16→import ConstellationLayer from './layers/ConstellationLayer';
+    17→import RocketLayer from './layers/RocketLayer';
+    18→import UniverseMinimap from './components/UniverseMinimap';
+    19→import ConstellationPanel from './components/ConstellationPanel';
+    20→import RocketHUD from './components/RocketHUD';
+    21→import useRocketMode, { MAGNET_THRESHOLD_Z } from './hooks/useRocketMode';
+    22→import { extractSnippet, MIN_UNIVERSE_ZOOM, userHomeCoords } from './utils/starUtils';
+    23→import {
+    24→    buildSectorIndex,
+    25→    computeGalaxyCentroids,
+    26→    computeConstellationPullOffsets,
+    27→    computeSectorKey,
+    28→    getNeighborSectorKeys,
+    29→} from './utils/cosmicPhysics';
+    30→import { computeConstellationChains, assignChainColors } from './utils/constellationUtils';
+    31→import { handleClickProfile } from '../../../helpers/handleClicks';
+    32→import styles from './Universe.module.css';
+    33→
+    34→const SECTOR_SIZE = 2000;
+    35→const ENABLE_SETTLED_RPC_SAVE = import.meta.env.VITE_ENABLE_UNIVERSE_SETTLE_SAVE === 'true';
+    36→
+    37→const Universe = () => {
+    38→    const navigate = useNavigate();
+    39→    const location = useLocation();
+    40→    const { user, session } = useAuth();
+    41→    const userId = user?.userData?.[0]?.id || null;
+    42→
+    43→    const fetchDebounceRef = useRef(null);
+    44→    const settleDebounceRef = useRef(null);
+    45→    const lastSettledPayloadRef = useRef('');
+    46→    const initialFetchResolvedRef = useRef(false);
+    47→    const hasAutoFocusedOwnGalaxyRef = useRef(false);
+    48→    const ownGalaxyLookupStartedRef = useRef(false);
+    49→    const constellationFlyToRef = useRef(location.state?.flyToConstellation || null);
+    50→
+    51→    const [posts, setPosts] = useState(new Map());
+    52→    const [selectedPost, setSelectedPost] = useState(null);
+    53→    const [selectedGalaxy, setSelectedGalaxy] = useState(null);
+    54→    const [galaxyProfile, setGalaxyProfile] = useState(null);
+    55→    const [pulsingId, setPulsingId] = useState(null);
+    56→    const [hasOwnPosts, setHasOwnPosts] = useState(userId ? null : false);
+    57→    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    58→    const [ownGalaxyTarget, setOwnGalaxyTarget] = useState(null);
+    59→    const [wormholes, setWormholes] = useState([]);
+    60→    const [isWarping, setIsWarping] = useState(false);
+    61→    const [constellations, setConstellations] = useState([]);
+    62→    const [linkModeError, setLinkModeError] = useState(null);
+    63→    const [focusedConstellation, setFocusedConstellation] = useState(null);
+    64→    const [universeMode, setUniverseMode] = useState('strategic');
+    65→    const [rocketWarpIn, setRocketWarpIn] = useState(false);
+    66→    const [reverseWarpActive, setReverseWarpActive] = useState(false);
+    67→    const selectedGalaxyUserIdRef = useRef(null);
+    68→    const pendingRocketRestoreRef = useRef(null);
+    69→    const warpTimerRef = useRef(null);
+    70→
+    71→    // Gravity data from server (fallback paths when embeddings are unavailable in payload)
+    72→    const [centroids, setCentroids] = useState([]);
+    73→    const [galaxyEdges, setGalaxyEdges] = useState([]);
+    74→    const [similarPairs, setSimilarPairs] = useState([]);
+    75→    const [starPulls, setStarPulls] = useState([]);
+    76→
+    77→    // Shared ref: prevents camera pan while dragging a star
+    78→    const isStarDragging = useRef(false);
+    79→
+    80→    const {
+    81→        stageRef, stageSize, camera, zoom, isDragging, centerWorld,
+    82→        getLayerProps, getViewportBounds, stageEvents, flyTo, jumpTo, isFlying,
+    83→    } = useUniverseCamera(userId, hasOwnPosts, isStarDragging);
+    84→
+    85→    const {
+    86→        isLinkMode, firstStar, secondStar, isSubmitting, linkModeStatus,
+    87→        toggleLinkMode, cancelLinkMode, handleStarClickInLinkMode, submitLink,
+    88→    } = useConstellationLinkMode(userId, session);
+    89→
+    90→    const rocketMode = useRocketMode();
+    91→
+    92→    const [labelInput, setLabelInput] = useState('');
+    93→
+    94→    const focusedStarIds = useMemo(() => {
+    95→        if (!focusedConstellation) return null;
+    96→        return new Set([focusedConstellation.star_id_a, focusedConstellation.star_id_b]);
+    97→    }, [focusedConstellation]);
+    98→
+    99→    const postArray = useMemo(() => Array.from(posts.values()), [posts]);
+   100→    const showTitles = zoom > 0.5;
+   101→
+   102→    // Sector partitioning for scalable local gravity math.
+   103→    const postSectorIndex = useMemo(() => (
+   104→        buildSectorIndex(
+   105→            postArray,
+   106→            (post) => ({
+   107→                x: post?.display_x ?? post?.universe_x,
+   108→                y: post?.display_y ?? post?.universe_y,
+   109→            }),
+   110→            SECTOR_SIZE
+   111→        )
+   112→    ), [postArray]);
+   113→
+   114→    const centerSectorKey = useMemo(
+   115→        () => computeSectorKey(centerWorld.x, centerWorld.y, SECTOR_SIZE),
+   116→        [centerWorld.x, centerWorld.y]
+   117→    );
+   118→
+   119→    const activeSectorKeys = useMemo(
+   120→        () => new Set(getNeighborSectorKeys(centerSectorKey)),
+   121→        [centerSectorKey]
+   122→    );
+   123→
+   124→    const activePosts = useMemo(() => {
+   125→        if (activeSectorKeys.size === 0) return postArray;
+   126→
+   127→        const next = [];
+   128→        for (const key of activeSectorKeys) {
+   129→            const bucket = postSectorIndex.get(key);
+   130→            if (bucket?.length) next.push(...bucket);
+   131→        }
+   132→        return next;
+   133→    }, [postArray, postSectorIndex, activeSectorKeys]);
+   134→
+   135→    const activePostIds = useMemo(() => {
+   136→        const ids = new Set();
+   137→        for (const post of activePosts) {
+   138→            if (post?.id) ids.add(post.id);
+   139→        }
+   140→        return ids;
+   141→    }, [activePosts]);
+   142→
+   143→    const { centroidByUser } = useMemo(
+   144→        () => computeGalaxyCentroids(postArray),
+   145→        [postArray]
+   146→    );
+   147→
+   148→    // ── Hash-based galaxies (STARTING positions — always from hash) ──
+   149→    const hashGalaxies = useMemo(() => {
+   150→        const seen = new Map();
+   151→        for (const post of postArray) {
+   152→            const uid = post.users?.id ?? post.user_id;
+   153→            if (!uid || seen.has(uid)) continue;
+   154→            const hash = userHomeCoords(uid);
+   155→            seen.set(uid, {
+   156→                userId: uid,
+   157→                name: post.users?.name ?? post.user_name ?? 'Anonymous',
+   158→                x: hash.x,
+   159→                y: hash.y,
+   160→            });
+   161→        }
+   162→        return Array.from(seen.values());
+   163→    }, [postArray]);
+   164→
+   165→    // ── Centroid targets (WHERE galaxies should fly TO) ──────────────
+   166→    const centroidTargets = useMemo(() => {
+   167→        const map = new Map();
+   168→        for (const c of centroids) {
+   169→            if (c.galaxy_x != null && c.galaxy_y != null) {
+   170→                map.set(c.user_id, { x: c.galaxy_x, y: c.galaxy_y });
+   171→            }
+   172→        }
+   173→        return map;
+   174→    }, [centroids]);
+   175→
+   176→    // ── Gravity hook: animates galaxies + computes star pull offsets ─
+   177→    const {
+   178→        galaxyPositions,
+   179→        starPullOffsets,
+   180→        isSettled,
+   181→        galaxyEdges: effectiveGalaxyEdges,
+   182→        hasEmbeddingGravity,
+   183→    } = useCosmicGravity({
+   184→        galaxies: hashGalaxies,
+   185→        centroidTargets,
+   186→        edges: galaxyEdges,
+   187→        posts: postArray,
+   188→        starPulls,
+   189→        centroidByUser,
+   190→        activeSectorKeys,
+   191→        activePostIds,
+   192→        sectorSize: SECTOR_SIZE,
+   193→    });
+   194→
+   195→    // ── Render galaxies = hash galaxies with animated positions ──────
+   196→    const galaxies = useMemo(() => {
+   197→        return hashGalaxies.map(g => {
+   198→            const animated = galaxyPositions.get(g.userId);
+   199→            return animated ? { ...g, x: animated.x, y: animated.y } : g;
+   200→        });
+   201→    }, [hashGalaxies, galaxyPositions]);
+   202→
+   203→    // Home position for distance tracker — same resolution as auto-focus.
+   204→    const homePosition = useMemo(() => {
+   205→        if (!userId) return { x: 0, y: 0 };
+   206→        const ownGalaxy = galaxies.find((g) => g.userId === userId);
+   207→        if (ownGalaxy) return { x: ownGalaxy.x, y: ownGalaxy.y };
+   208→        return centroidTargets.get(userId) || ownGalaxyTarget || { x: 0, y: 0 };
+   209→    }, [userId, galaxies, centroidTargets, ownGalaxyTarget]);
+   210→
+   211→    const getComputedStarPosition = useCallback((post) => {
+   212→        if (!post) return null;
+   213→
+   214→        const uid = post.users?.id ?? post.user_id;
+   215→        const hashGal = userHomeCoords(uid);
+   216→        const animGal = galaxyPositions.get(uid);
+   217→        const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+   218→        const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+   219→        const pull = starPullOffsets.get(post.id);
+   220→
+   221→        const baseX = post.universe_x ?? post.display_x;
+   222→        const baseY = post.universe_y ?? post.display_y;
+   223→        if (baseX == null || baseY == null) return null;
+   224→
+   225→        return {
+   226→            x: baseX + galDx + (pull?.dx ?? 0),
+   227→            y: baseY + galDy + (pull?.dy ?? 0),
+   228→        };
+   229→    }, [galaxyPositions, starPullOffsets]);
+   230→
+   231→    // ── Hoisted computedStarPositions for sharing across layers ──────
+   232→    const computedStarPositions = useMemo(() => {
+   233→        const map = new Map();
+   234→        for (const post of postArray) {
+   235→            const uid = post.users?.id ?? post.user_id;
+   236→            const hashGal = userHomeCoords(uid);
+   237→            const animGal = galaxyPositions.get(uid);
+   238→            const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+   239→            const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+   240→            const pull = starPullOffsets.get(post.id);
+   241→
+   242→            const baseX = post.universe_x ?? post.display_x;
+   243→            const baseY = post.universe_y ?? post.display_y;
+   244→            if (baseX == null || baseY == null) continue;
+   245→
+   246→            let x = baseX + galDx + (pull?.dx ?? 0);
+   247→            let y = baseY + galDy + (pull?.dy ?? 0);
+   248→
+   249→            map.set(post.id, { x, y });
+   250→        }
+   251→        return map;
+   252→    }, [postArray, galaxyPositions, starPullOffsets]);
+   253→
+   254→    // ── Constellation pull offsets (spring constraint) ─────────────
+   255→    const acceptedConstellations = useMemo(
+   256→        () => constellations.filter(c => c.status === 'accepted'),
+   257→        [constellations]
+   258→    );
+   259→
+   260→    const constellationPullOffsets = useMemo(
+   261→        () => computeConstellationPullOffsets(acceptedConstellations, computedStarPositions),
+   262→        [acceptedConstellations, computedStarPositions]
+   263→    );
+   264→
+   265→    // ── Final star positions with constellation pull applied ───────
+   266→    const finalStarPositions = useMemo(() => {
+   267→        if (constellationPullOffsets.size === 0) return computedStarPositions;
+   268→
+   269→        const map = new Map(computedStarPositions);
+   270→        for (const [postId, offset] of constellationPullOffsets) {
+   271→            const pos = map.get(postId);
+   272→            if (pos) {
+   273→                map.set(postId, {
+   274→                    x: pos.x + offset.dx,
+   275→                    y: pos.y + offset.dy,
+   276→                });
+   277→            }
+   278→        }
+   279→        return map;
+   280→    }, [computedStarPositions, constellationPullOffsets]);
+   281→
+   282→    // ── Constellation chain colors ────────────────────────────────
+   283→    const chainColors = useMemo(() => {
+   284→        const chains = computeConstellationChains(acceptedConstellations);
+   285→        return assignChainColors(chains);
+   286→    }, [acceptedConstellations]);
+   287→
+   288→    // ── Map star ID → constellation chain color for ring indicators ─
+   289→    const constellationStarColors = useMemo(() => {
+   290→        const map = new Map();
+   291→        for (const c of acceptedConstellations) {
+   292→            const color = chainColors.get(c.id);
+   293→            if (!color) continue;
+   294→            if (!map.has(c.star_id_a)) map.set(c.star_id_a, color);
+   295→            if (!map.has(c.star_id_b)) map.set(c.star_id_b, color);
+   296→        }
+   297→        return map;
+   298→    }, [acceptedConstellations, chainColors]);
+   299→
+   300→    // Resolve logged-in user's galaxy target independently from viewport data.
+   301→    useEffect(() => {
+   302→        if (!userId) return;
+   303→        if (ownGalaxyLookupStartedRef.current) return;
+   304→
+   305→        ownGalaxyLookupStartedRef.current = true;
+   306→        let cancelled = false;
+   307→
+   308→        const resolveOwnGalaxyTarget = async () => {
+   309→            try {
+   310→                const { data, error } = await supabase
+   311→                    .from('galaxy_centroids')
+   312→                    .select('galaxy_x, galaxy_y')
+   313→                    .eq('user_id', userId)
+   314→                    .maybeSingle();
+   315→
+   316→                if (cancelled) return;
+   317→
+   318→                if (!error && data?.galaxy_x != null && data?.galaxy_y != null) {
+   319→                    setOwnGalaxyTarget({ x: data.galaxy_x, y: data.galaxy_y });
+   320→                    setHasOwnPosts(true);
+   321→                    return;
+   322→                }
+   323→            } catch (err) {
+   324→                console.warn('[universe] own centroid lookup failed:', err?.message || err);
+   325→            }
+   326→
+   327→            if (!cancelled) {
+   328→                setOwnGalaxyTarget(userHomeCoords(userId));
+   329→            }
+   330→        };
+   331→
+   332→        resolveOwnGalaxyTarget();
+   333→
+   334→        return () => {
+   335→            cancelled = true;
+   336→        };
+   337→    }, [userId]);
+   338→
+   339→    // One-time wormhole fetch on mount
+   340→    useEffect(() => {
+   341→        let cancelled = false;
+   342→
+   343→        const fetchWormholes = async () => {
+   344→            try {
+   345→                const { data, error } = await supabase.rpc('find_wormhole_pairs', {
+   346→                    similarity_threshold: 0.7,
+   347→                    min_distance: 0,
+   348→                    max_pairs: 30,
+   349→                });
+   350→                if (cancelled) return;
+   351→                if (error) {
+   352→                    console.warn('[universe] wormhole fetch error:', error.message);
+   353→                    return;
+   354→                }
+   355→                // console.log('[universe] wormhole pairs:', data);
+   356→                if (Array.isArray(data) && data.length > 0) {
+   357→                    setWormholes(data);
+   358→                }
+   359→            } catch (err) {
+   360→                if (!cancelled) {
+   361→                    console.warn('[universe] wormhole fetch failed:', err?.message || err);
+   362→                }
+   363→            }
+   364→        };
+   365→
+   366→        fetchWormholes();
+   367→        return () => { cancelled = true; };
+   368→    }, []);
+   369→
+   370→    // Debounced fetch on camera/zoom change
+   371→    useEffect(() => {
+   372→        if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+   373→
+   374→        fetchDebounceRef.current = setTimeout(async () => {
+   375→            const bounds = getViewportBounds();
+   376→            try {
+   377→                const result = await getUniversePosts(
+   378→                    bounds.minX,
+   379→                    bounds.maxX,
+   380→                    bounds.minY,
+   381→                    bounds.maxY,
+   382→                    200
+   383→                );
+   384→                if (result?.data) {
+   385→                    setPosts(prev => {
+   386→                        const next = new Map(prev);
+   387→                        for (const post of result.data) {
+   388→                            next.set(post.id, post);
+   389→                        }
+   390→                        return next;
+   391→                    });
+   392→                    if (userId && hasOwnPosts !== true) {
+   393→                        const ownsAny = result.data.some(p =>
+   394→                            (p.users?.id ?? p.user_id) === userId
+   395→                        );
+   396→                        if (ownsAny) setHasOwnPosts(true);
+   397→                    }
+   398→                }
+   399→                // Keep server gravity data as fallback when embeddings are absent in payload.
+   400→                setCentroids(Array.isArray(result?.centroids) ? result.centroids : []);
+   401→                setGalaxyEdges(Array.isArray(result?.edges) ? result.edges : []);
+   402→                setSimilarPairs(Array.isArray(result?.similarPairs) ? result.similarPairs : []);
+   403→                setStarPulls(Array.isArray(result?.starPulls) ? result.starPulls : []);
+   404→
+   405→                // Fetch constellations for visible posts
+   406→                if (result?.data?.length > 0) {
+   407→                    const visibleIds = result.data.map(p => p.id);
+   408→                    try {
+   409→                        const constResult = await getViewportConstellations(visibleIds);
+   410→                        if (constResult?.data) {
+   411→                            setConstellations(constResult.data);
+   412→                        }
+   413→                    } catch (constErr) {
+   414→                        console.warn('[universe] constellation fetch failed:', constErr?.message || constErr);
+   415→                    }
+   416→                }
+   417→            } catch (err) {
+   418→                console.error('Failed to fetch universe posts:', err);
+   419→            } finally {
+   420→                if (!initialFetchResolvedRef.current) {
+   421→                    initialFetchResolvedRef.current = true;
+   422→                    setIsInitialLoading(false);
+   423→                }
+   424→            }
+   425→        }, 400);
+   426→
+   427→        return () => {
+   428→            if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+   429→        };
+   430→    }, [camera, zoom, getViewportBounds, userId, hasOwnPosts]);
+   431→
+   432→    const handleStarClick = useCallback(async (post) => {
+   433→        if (isFlying.current) return;
+   434→
+   435→        // Intercept for link mode
+   436→        if (isLinkMode) {
+   437→            setLinkModeError(null);
+   438→            const result = await handleStarClickInLinkMode(post);
+   439→            if (result?.error) {
+   440→                setLinkModeError(result.error);
+   441→                setTimeout(() => setLinkModeError(null), 3000);
+   442→            }
+   443→            return;
+   444→        }
+   445→
+   446→        setSelectedPost(post);
+   447→        setSelectedGalaxy(null);
+   448→        setGalaxyProfile(null);
+   449→
+   450→        const position = getComputedStarPosition(post);
+   451→        if (!position) return;
+   452→
+   453→        flyTo(position.x, position.y, 1.2, () => {
+   454→            setPulsingId(post.id);
+   455→            setTimeout(() => setPulsingId(null), 700);
+   456→        });
+   457→    }, [flyTo, getComputedStarPosition, isFlying, isLinkMode, handleStarClickInLinkMode]);
+   458→
+   459→    const handleGalaxyClick = useCallback(async (galaxy) => {
+   460→        if (isFlying.current) return;
+   461→        setSelectedGalaxy(galaxy);
+   462→        setSelectedPost(null);
+   463→        setGalaxyProfile(null);
+   464→        flyTo(galaxy.x, galaxy.y, 0.8);
+   465→
+   466→        try {
+   467→            const data = await getUserData(galaxy.userId);
+   468→            const profile = data?.userData?.[0] || null;
+   469→            setGalaxyProfile(profile);
+   470→        } catch (err) {
+   471→            console.error('Failed to fetch galaxy profile:', err);
+   472→        }
+   473→    }, [flyTo, isFlying]);
+   474→
+   475→    const handleReadPost = useCallback(() => {
+   476→        if (!selectedPost) return;
+   477→        navigate(`/home/post/${selectedPost.id}`);
+   478→    }, [selectedPost, navigate]);
+   479→
+   480→    const handleMinimapNavigate = useCallback((worldX, worldY, mode = 'fly') => {
+   481→        if (mode === 'drag') {
+   482→            jumpTo(worldX, worldY);
+   483→            return;
+   484→        }
+   485→        flyTo(worldX, worldY, zoom);
+   486→    }, [flyTo, jumpTo, zoom]);
+   487→
+   488→    // Enrich wormhole positions with live gravity-computed post coords
+   489→    const enrichedWormholes = useMemo(() => {
+   490→        return wormholes.map(wh => {
+   491→            const postA = posts.get(wh.post_a);
+   492→            const postB = posts.get(wh.post_b);
+   493→            const posA = postA ? getComputedStarPosition(postA) : null;
+   494→            const posB = postB ? getComputedStarPosition(postB) : null;
+   495→            return {
+   496→                ...wh,
+   497→                a_x: posA?.x ?? wh.a_x,
+   498→                a_y: posA?.y ?? wh.a_y,
+   499→                b_x: posB?.x ?? wh.b_x,
+   500→                b_y: posB?.y ?? wh.b_y,
+   501→            };
+   502→        });
+   503→    }, [wormholes, posts, getComputedStarPosition]);
+   504→
+   505→    // Find wormhole connection for a given post (if any)
+   506→    const getWormholeForPost = useCallback((postId) => {
+   507→        if (!postId || enrichedWormholes.length === 0) return null;
+   508→        for (const wh of enrichedWormholes) {
+   509→            if (wh.post_a === postId) return { wormhole: wh, side: 'a', targetTitle: wh.b_title };
+   510→            if (wh.post_b === postId) return { wormhole: wh, side: 'b', targetTitle: wh.a_title };
+   511→        }
+   512→        return null;
+   513→    }, [enrichedWormholes]);
+   514→
+   515→    const handleWormholeTravel = useCallback(() => {
+   516→        if (!selectedPost || isFlying.current) return;
+   517→        const match = getWormholeForPost(selectedPost.id);
+   518→        if (!match) return;
+   519→        const { wormhole, side } = match;
+   520→        const targetX = side === 'a' ? wormhole.b_x : wormhole.a_x;
+   521→        const targetY = side === 'a' ? wormhole.b_y : wormhole.a_y;
+   522→        setSelectedPost(null);
+   523→        setIsWarping(true);
+   524→        flyTo(targetX, targetY, zoom, () => setIsWarping(false));
+   525→    }, [selectedPost, getWormholeForPost, flyTo, isFlying, zoom]);
+   526→
+   527→    // Find constellation links for a given post
+   528→    const getConstellationLinksForPost = useCallback((postId) => {
+   529→        if (!postId || acceptedConstellations.length === 0) return [];
+   530→        const links = [];
+   531→        for (const c of acceptedConstellations) {
+   532→            if (c.star_id_a === postId) {
+   533→                links.push({ constellation: c, targetStarId: c.star_id_b, targetTitle: c.b_title || 'Unnamed Star', label: c.label });
+   534→            } else if (c.star_id_b === postId) {
+   535→                links.push({ constellation: c, targetStarId: c.star_id_a, targetTitle: c.a_title || 'Unnamed Star', label: c.label });
+   536→            }
+   537→        }
+   538→        return links;
+   539→    }, [acceptedConstellations]);
+   540→
+   541→    const handleConstellationTravel = useCallback((targetStarId, constellation) => {
+   542→        if (isFlying.current) return;
+   543→        // Try live computed position first
+   544→        let targetPos = finalStarPositions.get(targetStarId);
+   545→        // Fallback to raw RPC positions from the constellation record
+   546→        if (!targetPos && constellation) {
+   547→            if (constellation.star_id_a === targetStarId && constellation.a_universe_x != null) {
+   548→                targetPos = { x: constellation.a_universe_x, y: constellation.a_universe_y };
+   549→            } else if (constellation.star_id_b === targetStarId && constellation.b_universe_x != null) {
+   550→                targetPos = { x: constellation.b_universe_x, y: constellation.b_universe_y };
+   551→            }
+   552→        }
+   553→        if (!targetPos) return;
+   554→        setSelectedPost(null);
+   555→        flyTo(targetPos.x, targetPos.y, zoom);
+   556→    }, [finalStarPositions, flyTo, isFlying, zoom]);
+   557→
+   558→    const handleConstellationFocus = useCallback((link) => {
+   559→        if (isLinkMode) return;
+   560→        setFocusedConstellation(link);
+   561→        setSelectedPost(null);
+   562→    }, [isLinkMode]);
+   563→
+   564→    const handleDismissFocus = useCallback(() => {
+   565→        setFocusedConstellation(null);
+   566→    }, []);
+   567→
+   568→    // ── Rocket mode handlers ─────────────────────────────────────
+   569→    const handleExploreGalaxy = useCallback(() => {
+   570→        if (!selectedGalaxy) return;
+   571→        const galaxyPosts = postArray.filter(p => {
+   572→            const uid = p.users?.id ?? p.user_id;
+   573→            return uid === selectedGalaxy.userId;
+   574→        });
+   575→        if (galaxyPosts.length === 0) return;
+   576→
+   577→        selectedGalaxyUserIdRef.current = selectedGalaxy.userId;
+   578→        const center = { x: selectedGalaxy.x, y: selectedGalaxy.y };
+   579→        const size = { ...stageSize }; // snapshot at click time
+   580→        setRocketWarpIn(true);
+   581→        setSelectedGalaxy(null);
+   582→        setGalaxyProfile(null);
+   583→
+   584→        warpTimerRef.current = setTimeout(() => {
+   585→            setRocketWarpIn(false);
+   586→            if (size.width === 0 || size.height === 0) return;
+   587→            setUniverseMode('pilot');
+   588→            rocketMode.enter(galaxyPosts, center, size);
+   589→        }, 800);
+   590→    }, [selectedGalaxy, postArray, rocketMode, stageSize]);
+   591→
+   592→    const handleExitRocket = useCallback(() => {
+   593→        rocketMode.exit();
+   594→        setUniverseMode('strategic');
+   595→    }, [rocketMode]);
+   596→
+   597→    const handleRocketInteract = useCallback(() => {
+   598→        const ds = rocketMode.getDockingState();
+   599→        // Already docking — ignore
+   600→        if (ds === 'approaching' || ds === 'flash' || ds === 'done') return;
+   601→
+   602→        const post = rocketMode.getTargetedPost();
+   603→        if (!post) return;
+   604→
+   605→        const idx = rocketMode.targetIndexRef.current;
+   606→        const stars = rocketMode.starsRef.current;
+   607→        const targetStar = idx >= 0 && idx < stars.length ? stars[idx] : null;
+   608→
+   609→        const saveSessionAndNavigate = (snapshot) => {
+   610→            const sessionData = {
+   611→                ...snapshot,
+   612→                galaxyUserId: selectedGalaxyUserIdRef.current,
+   613→                postId: post.id,
+   614→            };
+   615→            try { sessionStorage.setItem('rocketSession', JSON.stringify(sessionData)); } catch { /* storage full */ }
+   616→            navigate(`/home/post/${post.id}`, { state: { fromRocket: true } });
+   617→        };
+   618→
+   619→        if (targetStar && targetStar.viewZ < MAGNET_THRESHOLD_Z) {
+   620→            // Close enough — trigger cinematic docking sequence
+   621→            rocketMode.triggerDocking(idx, () => saveSessionAndNavigate(rocketMode.getSessionSnapshot()));
+   622→        } else {
+   623→            // Far away — direct navigate (existing fallback for ENTER at distance)
+   624→            saveSessionAndNavigate(rocketMode.getSessionSnapshot());
+   625→        }
+   626→    }, [rocketMode, navigate]);
+   627→
+   628→    // Set docking callback for proximity auto-dock
+   629→    useEffect(() => {
+   630→        rocketMode.setDockingCallback(() => {
+   631→            const idx = rocketMode.dockingTargetIdxRef.current;
+   632→            const stars = rocketMode.starsRef.current;
+   633→            if (idx < 0 || idx >= stars.length) return;
+   634→            const post = stars[idx].post;
+   635→            if (!post) return;
+   636→
+   637→            const snapshot = rocketMode.getSessionSnapshot();
+   638→            const sessionData = {
+   639→                ...snapshot,
+   640→                galaxyUserId: selectedGalaxyUserIdRef.current,
+   641→                postId: post.id,
+   642→            };
+   643→            try { sessionStorage.setItem('rocketSession', JSON.stringify(sessionData)); } catch { /* storage full */ }
+   644→            navigate(`/home/post/${post.id}`, { state: { fromRocket: true } });
+   645→        });
+   646→    }, [rocketMode, navigate]);
+   647→
+   648→    // Restore rocket session on mount (reverse warp)
+   649→    useEffect(() => {
+   650→        const raw = sessionStorage.getItem('rocketSession');
+   651→        if (!raw) return;
+   652→        try {
+   653→            const session = JSON.parse(raw);
+   654→            // Discard if older than 5 minutes
+   655→            if (Date.now() - session.timestamp > 5 * 60 * 1000) {
+   656→                sessionStorage.removeItem('rocketSession');
+   657→                return;
+   658→            }
+   659→            sessionStorage.removeItem('rocketSession');
+   660→            setReverseWarpActive(true);
+   661→            pendingRocketRestoreRef.current = session;
+   662→        } catch {
+   663→            sessionStorage.removeItem('rocketSession');
+   664→        }
+   665→    }, []);
+   666→
+   667→    // Once posts load, restore rocket mode from session
+   668→    useEffect(() => {
+   669→        const session = pendingRocketRestoreRef.current;
+   670→        if (!session || postArray.length === 0) return;
+   671→        if (stageSize.width === 0 || stageSize.height === 0) return;
+   672→
+   673→        const galaxyPosts = postArray.filter(p => {
+   674→            const uid = p.users?.id ?? p.user_id;
+   675→            return uid === session.galaxyUserId;
+   676→        });
+   677→
+   678→        if (galaxyPosts.length === 0) {
+   679→            pendingRocketRestoreRef.current = null;
+   680→            setReverseWarpActive(false);
+   681→            return;
+   682→        }
+   683→
+   684→        pendingRocketRestoreRef.current = null;
+   685→        selectedGalaxyUserIdRef.current = session.galaxyUserId;
+   686→        setUniverseMode('pilot');
+   687→        rocketMode.restoreFromSnapshot(session, galaxyPosts, stageSize);
+   688→
+   689→        // Re-install auto-dock callback (cleared during previous docking completion)
+   690→        rocketMode.setDockingCallback(() => {
+   691→            const idx = rocketMode.dockingTargetIdxRef.current;
+   692→            const stars = rocketMode.starsRef.current;
+   693→            if (idx < 0 || idx >= stars.length) return;
+   694→            const post = stars[idx].post;
+   695→            if (!post) return;
+   696→
+   697→            const snapshot = rocketMode.getSessionSnapshot();
+   698→            const sessionData = {
+   699→                ...snapshot,
+   700→                galaxyUserId: selectedGalaxyUserIdRef.current,
+   701→                postId: post.id,
+   702→            };
+   703→            try { sessionStorage.setItem('rocketSession', JSON.stringify(sessionData)); } catch { /* storage full */ }
+   704→            navigate(`/home/post/${post.id}`, { state: { fromRocket: true } });
+   705→        });
+   706→
+   707→        const reverseWarpTimer = setTimeout(() => setReverseWarpActive(false), 600);
+   708→        return () => clearTimeout(reverseWarpTimer);
+   709→    }, [postArray, rocketMode, stageSize, navigate]);
+   710→
+   711→    // One-time auto focus after first payload is loaded.
+   712→    // Skip if we have a constellation flyTo target — that effect handles it instead.
+   713→    useEffect(() => {
+   714→        if (!userId) return;
+   715→        if (isInitialLoading) return;
+   716→        if (hasAutoFocusedOwnGalaxyRef.current) return;
+   717→        if (constellationFlyToRef.current) return;
+   718→
+   719→        const ownGalaxy = galaxies.find((galaxy) => galaxy.userId === userId);
+   720→        const target = ownGalaxy
+   721→            ? { x: ownGalaxy.x, y: ownGalaxy.y }
+   722→            : (centroidTargets.get(userId) || ownGalaxyTarget);
+   723→
+   724→        // Wait until we have a concrete own target; fallback is resolved asynchronously.
+   725→        if (!target) return;
+   726→
+   727→        hasAutoFocusedOwnGalaxyRef.current = true;
+   728→        flyTo(target.x, target.y, MIN_UNIVERSE_ZOOM);
+   729→    }, [userId, isInitialLoading, galaxies, centroidTargets, ownGalaxyTarget, flyTo]);
+   730→
+   731→    // Fly to constellation midpoint when arriving from a notification link.
+   732→    useEffect(() => {
+   733→        const target = constellationFlyToRef.current;
+   734→        if (!target) return;
+   735→        if (isInitialLoading) return;
+   736→
+   737→        const posA = finalStarPositions.get(target.starIdA);
+   738→        const posB = finalStarPositions.get(target.starIdB);
+   739→        if (!posA || !posB) return;
+   740→
+   741→        constellationFlyToRef.current = null;
+   742→        hasAutoFocusedOwnGalaxyRef.current = true;
+   743→
+   744→        const mx = (posA.x + posB.x) / 2;
+   745→        const my = (posA.y + posB.y) / 2;
+   746→        flyTo(mx, my, 1.0);
+   747→
+   748→        // Clear navigation state so refreshing doesn't re-trigger
+   749→        navigate(location.pathname, { replace: true, state: {} });
+   750→    }, [isInitialLoading, finalStarPositions, flyTo, navigate, location.pathname]);
+   751→
+   752→    const settledPayload = useMemo(() => {
+   753→        if (!isSettled || activePosts.length === 0) return [];
+   754→
+   755→        const payload = [];
+   756→        for (const post of activePosts) {
+   757→            if (!post?.id) continue;
+   758→            const pos = getComputedStarPosition(post);
+   759→            if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+   760→
+   761→            payload.push({
+   762→                post_id: post.id,
+   763→                settled_x: Math.round(pos.x * 100) / 100,
+   764→                settled_y: Math.round(pos.y * 100) / 100,
+   765→            });
+   766→        }
+   767→
+   768→        payload.sort((a, b) => String(a.post_id).localeCompare(String(b.post_id)));
+   769→        return payload;
+   770→    }, [activePosts, getComputedStarPosition, isSettled]);
+   771→
+   772→    // Placeholder persistence hook: debounced Supabase RPC for settled positions.
+   773→    useEffect(() => {
+   774→        if (!ENABLE_SETTLED_RPC_SAVE) return;
+   775→        if (!isSettled || settledPayload.length === 0) return;
+   776→
+   777→        const signature = JSON.stringify(settledPayload);
+   778→        if (signature === lastSettledPayloadRef.current) return;
+   779→
+   780→        if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+   781→        settleDebounceRef.current = setTimeout(async () => {
+   782→            lastSettledPayloadRef.current = signature;
+   783→            try {
+   784→                const { error } = await supabase.rpc('save_universe_settled_positions', {
+   785→                    positions_payload: settledPayload,
+   786→                });
+   787→                if (error) {
+   788→                    console.warn('[universe] settle save placeholder RPC returned error:', error.message);
+   789→                }
+   790→            } catch (err) {
+   791→                console.warn('[universe] settle save placeholder RPC failed:', err?.message || err);
+   792→            }
+   793→        }, 1200);
+   794→
+   795→        return () => {
+   796→            if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+   797→        };
+   798→    }, [isSettled, settledPayload]);
+   799→
+   800→    // ESC key to cancel link mode or dismiss constellation focus
+   801→    useEffect(() => {
+   802→        if (universeMode !== 'strategic') return;
+   803→        if (!isLinkMode && !focusedConstellation) return;
+   804→        const handleKeyDown = (e) => {
+   805→            if (e.key === 'Escape') {
+   806→                if (isLinkMode) cancelLinkMode();
+   807→                if (focusedConstellation) setFocusedConstellation(null);
+   808→            }
+   809→        };
+   810→        window.addEventListener('keydown', handleKeyDown);
+   811→        return () => window.removeEventListener('keydown', handleKeyDown);
+   812→    }, [isLinkMode, cancelLinkMode, focusedConstellation, universeMode]);
+   813→
+   814→    useEffect(() => {
+   815→        return () => {
+   816→            if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+   817→            if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+   818→            if (warpTimerRef.current) clearTimeout(warpTimerRef.current);
+   819→            rocketMode.exit();
+   820→        };
+   821→    }, []);
+   822→
+   823→    return (
+   824→        <div className={`${styles.universeContainer} ${isDragging ? styles.grabbing : ''}`}>
+   825→            {universeMode === 'strategic' && (
+   826→                <>
+   827→                    <button className={styles.backButton} onClick={() => navigate('/home')}>
+   828→                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+   829→                            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+   830→                        </svg>
+   831→                        Back
+   832→                    </button>
+   833→
+   834→                    {userId && (
+   835→                        <button
+   836→                            className={`${styles.linkModeButton} ${isLinkMode ? styles.linkModeActive : ''}`}
+   837→                            onClick={toggleLinkMode}
+   838→                            disabled={isSubmitting}
+   839→                        >
+   840→                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+   841→                                <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+   842→                            </svg>
+   843→                            {isLinkMode
+   844→                                ? (secondStar ? 'Naming link...' : (firstStar ? 'Select second star...' : 'Select your star...'))
+   845→                                : 'Link Stars'}
+   846→                        </button>
+   847→                    )}
+   848→
+   849→                    {isLinkMode && linkModeStatus === 'enter_label' && (
+   850→                        <div className={styles.labelInputPanel}>
+   851→                            <div className={styles.labelInputHeader}>
+   852→                                Link "{firstStar?.title}" ↔ "{secondStar?.title}"
+   853→                            </div>
+   854→                            <input
+   855→                                className={styles.labelInputField}
+   856→                                type="text"
+   857→                                placeholder="Name this constellation (optional)"
+   858→                                value={labelInput}
+   859→                                onChange={(e) => setLabelInput(e.target.value)}
+   860→                                onKeyDown={(e) => {
+   861→                                    if (e.key === 'Enter') {
+   862→                                        submitLink(labelInput);
+   863→                                        setLabelInput('');
+   864→                                    }
+   865→                                }}
+   866→                                autoFocus
+   867→                            />
+   868→                            <div className={styles.labelInputActions}>
+   869→                                <button
+   870→                                    className={styles.labelInputCreate}
+   871→                                    disabled={isSubmitting}
+   872→                                    onClick={() => {
+   873→                                        submitLink(labelInput);
+   874→                                        setLabelInput('');
+   875→                                    }}
+   876→                                >
+   877→                                    {isSubmitting ? 'Creating...' : 'Create Link'}
+   878→                                </button>
+   879→                                <button
+   880→                                    className={styles.labelInputCancel}
+   881→                                    onClick={() => {
+   882→                                        cancelLinkMode();
+   883→                                        setLabelInput('');
+   884→                                    }}
+   885→                                >
+   886→                                    Cancel
+   887→                                </button>
+   888→                            </div>
+   889→                        </div>
+   890→                    )}
+   891→
+   892→                    {isLinkMode && linkModeStatus !== 'enter_label' && (
+   893→                        <div className={styles.linkModeIndicator}>
+   894→                            <span>
+   895→                                {linkModeError
+   896→                                    ? linkModeError
+   897→                                    : firstStar
+   898→                                        ? `Selected "${firstStar.title}" — now click another user's star`
+   899→                                        : 'Click one of your stars to begin'}
+   900→                            </span>
+   901→                            <button className={styles.linkModeCancel} onClick={cancelLinkMode}>Cancel</button>
+   902→                        </div>
+   903→                    )}
+   904→
+   905→                    <div className={styles.distanceTracker}>
+   906→                        {(() => {
+   907→                            const dx = centerWorld.x - homePosition.x;
+   908→                            const dy = centerWorld.y - homePosition.y;
+   909→                            const dist = Math.round(Math.sqrt(dx * dx + dy * dy));
+   910→                            return dist < 50
+   911→                                ? 'Home'
+   912→                                : `${dist.toLocaleString()} Lightyears from Home`;
+   913→                        })()}
+   914→                    </div>
+   915→                </>
+   916→            )}
+   917→
+   918→            {isInitialLoading && (
+   919→                <div className={styles.loadingOverlay}>
+   920→                    <div className={styles.loadingCard}>
+   921→                        <div className={styles.loadingSpinner} />
+   922→                        <div className={styles.loadingText}>Loading universe...</div>
+   923→                    </div>
+   924→                </div>
+   925→            )}
+   926→
+   927→            <Stage
+   928→                ref={stageRef}
+   929→                width={stageSize.width}
+   930→                height={stageSize.height}
+   931→                {...(universeMode === 'strategic' ? stageEvents : {})}
+   932→                onClick={(e) => {
+   933→                    if (universeMode !== 'strategic') return;
+   934→                    if (focusedConstellation && e.target === e.target.getStage()) {
+   935→                        handleDismissFocus();
+   936→                    }
+   937→                }}
+   938→                onTap={(e) => {
+   939→                    if (universeMode !== 'strategic') return;
+   940→                    if (focusedConstellation && e.target === e.target.getStage()) {
+   941→                        handleDismissFocus();
+   942→                    }
+   943→                }}
+   944→            >
+   945→                <DeepSpaceLayer layerProps={getLayerProps(0.1)} />
+   946→                {universeMode === 'strategic' && (
+   947→                    <>
+   948→                        <MidGalaxyLayer layerProps={getLayerProps(0.4)} />
+   949→                        <NebulaLayer
+   950→                            layerProps={getLayerProps(0.85)}
+   951→                            galaxies={galaxies}
+   952→                            centroids={centroids}
+   953→                        />
+   954→                        {enrichedWormholes.length > 0 && (
+   955→                            <WormholeLayer
+   956→                                layerProps={getLayerProps(1.0)}
+   957→                                wormholes={enrichedWormholes}
+   958→                                zoom={zoom}
+   959→                            />
+   960→                        )}
+   961→                        {constellations.length > 0 && (
+   962→                            <ConstellationLayer
+   963→                                layerProps={getLayerProps(1.0)}
+   964→                                constellations={constellations}
+   965→                                computedStarPositions={finalStarPositions}
+   966→                                zoom={zoom}
+   967→                                chainColors={chainColors}
+   968→                                userId={userId}
+   969→                                onConstellationFocus={handleConstellationFocus}
+   970→                                focusedConstellationId={focusedConstellation?.id || null}
+   971→                            />
+   972→                        )}
+   973→                        <InteractiveLayer
+   974→                            layerProps={getLayerProps(1.0)}
+   975→                            posts={postArray}
+   976→                            galaxies={galaxies}
+   977→                            zoom={zoom}
+   978→                            showTitles={showTitles}
+   979→                            pulsingId={pulsingId}
+   980→                            onStarClick={handleStarClick}
+   981→                            onGalaxyClick={handleGalaxyClick}
+   982→                            galaxyPositions={galaxyPositions}
+   983→                            starPullOffsets={starPullOffsets}
+   984→                            similarPairs={similarPairs}
+   985→                            galaxyEdges={effectiveGalaxyEdges}
+   986→                            activePostIds={activePostIds}
+   987→                            useEmbeddingBridges={hasEmbeddingGravity}
+   988→                            camera={camera}
+   989→                            stageSize={stageSize}
+   990→                            computedStarPositions={finalStarPositions}
+   991→                            constellationStarColors={constellationStarColors}
+   992→                            focusedStarIds={focusedStarIds}
+   993→                        />
+   994→                    </>
+   995→                )}
+   996→                {universeMode === 'pilot' && (
+   997→                    <RocketLayer rocketMode={rocketMode} />
+   998→                )}
+   999→            </Stage>
+  1000→
+  1001→            {isWarping && <div className={styles.warpOverlay} />}
+  1002→            {rocketWarpIn && <div className={styles.rocketWarpIn} />}
+  1003→            {reverseWarpActive && <div className={styles.reverseWarp} />}
+  1004→
+  1005→            {universeMode === 'strategic' && (
+  1006→                <>
+  1007→                    <UniverseMinimap
+  1008→                        galaxies={galaxies}
+  1009→                        camera={camera}
+  1010→                        zoom={zoom}
+  1011→                        stageSize={stageSize}
+  1012→                        onNavigate={handleMinimapNavigate}
+  1013→                        constellations={acceptedConstellations}
+  1014→                        computedStarPositions={finalStarPositions}
+  1015→                        focusedConstellationId={focusedConstellation?.id || null}
+  1016→                    />
+  1017→
+  1018→                    {selectedGalaxy && galaxyProfile && (
+  1019→                        <div className={styles.galaxyPreviewPanel}>
+  1020→                            <button
+  1021→                                className={styles.galaxyPreviewClose}
+  1022→                                onClick={() => { setSelectedGalaxy(null); setGalaxyProfile(null); }}
+  1023→                            >
+  1024→                                &times;
+  1025→                            </button>
+  1026→                            <div
+  1027→                                className={styles.galaxyPreviewBg}
+  1028→                                style={galaxyProfile.background || {}}
+  1029→                            />
+  1030→                            <div className={styles.galaxyPreviewContent}>
+  1031→                                <img
+  1032→                                    className={styles.galaxyPreviewAvatar}
+  1033→                                    src={galaxyProfile.image_url || '/assets/profile.jpg'}
+  1034→                                    alt=""
+  1035→                                />
+  1036→                                <div className={styles.galaxyPreviewHeading}>
+  1037→                                    This is {galaxyProfile.name || selectedGalaxy.name}'s galaxy
+  1038→                                </div>
+  1039→                                {galaxyProfile.bio && (
+  1040→                                    <div className={styles.galaxyPreviewBio}>{galaxyProfile.bio}</div>
+  1041→                                )}
+  1042→                                <button
+  1043→                                    className={styles.galaxyPreviewVisitBtn}
+  1044→                                    onClick={(e) => handleClickProfile(navigate)(e, userId, selectedGalaxy.userId)}
+  1045→                                >
+  1046→                                    Visit Profile
+  1047→                                </button>
+  1048→                                <button
+  1049→                                    className={styles.galaxyPreviewExploreBtn}
+  1050→                                    onClick={handleExploreGalaxy}
+  1051→                                >
+  1052→                                    Explore Galaxy
+  1053→                                </button>
+  1054→                            </div>
+  1055→                        </div>
+  1056→                    )}
+  1057→
+  1058→                    {selectedPost && (
+  1059→                        <div className={styles.previewPanel}>
+  1060→                            <button
+  1061→                                className={styles.previewClose}
+  1062→                                onClick={() => setSelectedPost(null)}
+  1063→                            >
+  1064→                                &times;
+  1065→                            </button>
+  1066→                            <div className={styles.previewAuthor}>
+  1067→                                <img
+  1068→                                    className={styles.previewAvatar}
+  1069→                                    src={selectedPost.users?.image_url || selectedPost.user_image_url || '/assets/profile.jpg'}
+  1070→                                    alt=""
+  1071→                                />
+  1072→                                <span className={styles.previewAuthorName}>
+  1073→                                    {selectedPost.users?.name || selectedPost.user_name || 'Anonymous'}
+  1074→                                </span>
+  1075→                            </div>
+  1076→                            <div className={styles.previewTitle}>{selectedPost.title}</div>
+  1077→                            <div className={styles.previewSnippet}>{extractSnippet(selectedPost)}</div>
+  1078→                            <div className={styles.previewLikes}>
+  1079→                                {(() => {
+  1080→                                    const count = selectedPost.like_count != null
+  1081→                                        ? selectedPost.like_count
+  1082→                                        : (Array.isArray(selectedPost.likes) && selectedPost.likes[0]?.count != null
+  1083→                                            ? selectedPost.likes[0].count : 0);
+  1084→                                    return `${count} like${count !== 1 ? 's' : ''}`;
+  1085→                                })()}
+  1086→                            </div>
+  1087→                            <div className={styles.previewActions}>
+  1088→                                <button className={styles.previewReadBtn} onClick={handleReadPost}>
+  1089→                                    Read
+  1090→                                </button>
+  1091→                                {getWormholeForPost(selectedPost.id) && (
+  1092→                                    <div className={styles.wormholeBtnWrap}>
+  1093→                                        <button className={styles.wormholeBtn} onClick={handleWormholeTravel}>
+  1094→                                            Wormhole to "{getWormholeForPost(selectedPost.id).targetTitle}"
+  1095→                                        </button>
+  1096→                                        <div className={styles.wormholeTooltip}>
+  1097→                                            This post is semantically linked to a distant post. Click to warp there instantly.
+  1098→                                        </div>
+  1099→                                    </div>
+  1100→                                )}
+  1101→                                {getConstellationLinksForPost(selectedPost.id).map((link) => (
+  1102→                                    <button
+  1103→                                        key={link.constellation.id}
+  1104→                                        className={styles.constellationBtn}
+  1105→                                        onClick={() => handleConstellationTravel(link.targetStarId, link.constellation)}
+  1106→                                    >
+  1107→                                        {link.label ? `${link.label} \u2192 "${link.targetTitle}"` : `Fly to "${link.targetTitle}"`}
+  1108→                                    </button>
+  1109→                                ))}
+  1110→                            </div>
+  1111→                        </div>
+  1112→                    )}
+  1113→
+  1114→                    {focusedConstellation && !isLinkMode && (
+  1115→                        <ConstellationPanel
+  1116→                            constellation={focusedConstellation}
+  1117→                            posts={posts}
+  1118→                            onClose={handleDismissFocus}
+  1119→                            onReadPost={(postId) => navigate(`/home/post/${postId}`)}
+  1120→                            onFlyToStar={(starId) => {
+  1121→                                handleConstellationTravel(starId, focusedConstellation);
+  1122→                                handleDismissFocus();
+  1123→                            }}
+  1124→                        />
+  1125→                    )}
+  1126→                </>
+  1127→            )}
+  1128→
+  1129→            {universeMode === 'pilot' && (
+  1130→                <RocketHUD
+  1131→                    rocketMode={rocketMode}
+  1132→                    onExit={handleExitRocket}
+  1133→                    onInteract={handleRocketInteract}
+  1134→                />
+  1135→            )}
+  1136→        </div>
+  1137→    );
+  1138→};
+  1139→
+  1140→export default Universe;
+  1141→

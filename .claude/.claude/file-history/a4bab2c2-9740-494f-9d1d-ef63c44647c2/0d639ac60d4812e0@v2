@@ -1,0 +1,207 @@
+import React, {useState} from 'react';
+import {Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View} from 'react-native';
+import {useMutation} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {queryClient} from '../../lib/queryClient';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
+
+const INTEREST_OPTIONS = [
+  'Fiction', 'Poetry', 'Non-Fiction', 'Memoir', 'Science Fiction',
+  'Fantasy', 'Horror', 'Romance', 'Mystery', 'Self-Help',
+  'Philosophy', 'Technology', 'Travel', 'Food', 'Humor',
+  'Personal Growth', 'Journaling', 'Short Stories',
+];
+
+const GOAL_OPTIONS = [
+  'Write daily',
+  'Share my stories',
+  'Connect with writers',
+  'Improve my writing',
+  'Just exploring',
+];
+
+export function OnboardingScreen({navigation}: Props) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const [step, setStep] = useState(0);
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [writingGoal, setWritingGoal] = useState('');
+
+  const toggleInterest = (interest: string) => {
+    setSelectedInterests(prev =>
+      prev.includes(interest)
+        ? prev.filter(i => i !== interest)
+        : [...prev, interest],
+    );
+  };
+
+  const completeMutation = useMutation({
+    mutationFn: () =>
+      mobileApi.completeOnboarding(token, {
+        writingInterests: selectedInterests,
+        writingGoal,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['profile']});
+      navigation.replace('Main');
+    },
+    onError: e => Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const renderStep = () => {
+    switch (step) {
+      case 0:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={[styles.welcomeTitle, {color: colors.textHeading}]}>
+              Welcome to iskrib!
+            </Text>
+            <Text style={[styles.welcomeSubtitle, {color: colors.textSecondary}]}>
+              Let's personalize your experience. This will only take a moment.
+            </Text>
+            <PrimaryButton label="Get Started" onPress={() => setStep(1)} />
+          </View>
+        );
+      case 1:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={[styles.stepTitle, {color: colors.textHeading}]}>
+              What interests you?
+            </Text>
+            <Text style={[styles.stepSubtitle, {color: colors.textMuted}]}>
+              Select all that apply
+            </Text>
+            <View style={styles.chipGrid}>
+              {INTEREST_OPTIONS.map(interest => {
+                const selected = selectedInterests.includes(interest);
+                return (
+                  <Pressable
+                    key={interest}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: selected ? colors.accentAmber : colors.bgCard,
+                        borderColor: selected ? colors.accentAmber : colors.borderLight,
+                      },
+                    ]}
+                    onPress={() => toggleInterest(interest)}>
+                    <Text style={[styles.chipText, {color: selected ? '#1A1612' : colors.textSecondary}]}>
+                      {interest}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <PrimaryButton
+              label="Continue"
+              onPress={() => setStep(2)}
+              disabled={selectedInterests.length === 0}
+            />
+          </View>
+        );
+      case 2:
+        return (
+          <View style={styles.stepContent}>
+            <Text style={[styles.stepTitle, {color: colors.textHeading}]}>
+              What's your writing goal?
+            </Text>
+            <View style={styles.goalList}>
+              {GOAL_OPTIONS.map(goal => {
+                const selected = writingGoal === goal;
+                return (
+                  <Pressable
+                    key={goal}
+                    style={[
+                      styles.goalOption,
+                      {
+                        backgroundColor: selected ? colors.accentAmber : colors.bgCard,
+                        borderColor: selected ? colors.accentAmber : colors.borderLight,
+                      },
+                    ]}
+                    onPress={() => setWritingGoal(goal)}>
+                    <Text style={[styles.goalText, {color: selected ? '#1A1612' : colors.textPrimary}]}>
+                      {goal}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <PrimaryButton
+              label="Complete"
+              onPress={() => completeMutation.mutate()}
+              loading={completeMutation.isPending}
+              disabled={!writingGoal}
+            />
+          </View>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Progress dots */}
+        <View style={styles.dotsRow}>
+          {[0, 1, 2].map(i => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: i <= step ? colors.accentAmber : colors.borderLight,
+                },
+              ]}
+            />
+          ))}
+        </View>
+        {renderStep()}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {flex: 1},
+  container: {padding: spacing.lg, paddingBottom: 100},
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xxxl,
+    marginTop: spacing.lg,
+  },
+  dot: {width: 8, height: 8, borderRadius: 4},
+  stepContent: {gap: spacing.xl},
+  welcomeTitle: {fontFamily: fonts.heading.bold, fontSize: 28, textAlign: 'center'},
+  welcomeSubtitle: {fontFamily: fonts.ui.regular, fontSize: 16, textAlign: 'center', lineHeight: 24},
+  stepTitle: {fontFamily: fonts.heading.bold, fontSize: 22},
+  stepSubtitle: {fontFamily: fonts.ui.regular, fontSize: 14},
+  chipGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm},
+  chip: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  chipText: {fontFamily: fonts.ui.medium, fontSize: 13},
+  goalList: {gap: spacing.sm},
+  goalOption: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  goalText: {fontFamily: fonts.ui.medium, fontSize: 15},
+});

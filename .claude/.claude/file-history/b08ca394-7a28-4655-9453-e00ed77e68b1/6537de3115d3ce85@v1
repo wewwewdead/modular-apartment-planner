@@ -1,0 +1,31 @@
+# Add Ring Badge to RelatedPosts Avatar
+
+## Context
+The RelatedPosts card already shows a `VerifiedBadge` icon next to the author name, but doesn't show the glowing ring around the avatar that exists elsewhere in the app (PostCards, UserSearchResults, Notifications, etc.). The `post.user_badge` field is already returned by the backend query.
+
+## Changes
+
+### 1. `client/src/components/Discovery/RelatedPosts.jsx` (lines 66-75)
+Wrap the avatar `<img>` / placeholder `<div>` in a container `<div>` with the conditional ring class:
+
+```jsx
+<div className={`rp-card-avatar-container ${post.user_badge === 'legend' ? 'rp-avatar-ring-legend' : post.user_badge === 'og' ? 'rp-avatar-ring-og' : ''}`}>
+    {post.user_image_url ? (
+        <img src={post.user_image_url} alt="" className="rp-card-avatar" />
+    ) : (
+        <div className="rp-card-avatar rp-card-avatar-placeholder" />
+    )}
+</div>
+```
+
+### 2. `client/src/components/Discovery/RelatedPosts.css`
+Add ring styles after `.rp-card-avatar-placeholder` (after line 147), following the existing small-avatar ring pattern (22px avatar, 2px border, subtle glow):
+
+- `.rp-card-avatar-container` — base wrapper (border-radius: 50%, flex-shrink: 0)
+- `.rp-avatar-ring-legend` — gold ring (`#FFD700`, glow, pulse animation)
+- `.rp-avatar-ring-og` — purple ring (`#9B59FF`, glow, pulse animation)
+- Keyframes: `rp-glow-legend` and `rp-glow-og`
+
+## Verification
+- View a post whose author has `badge = 'legend'` or `'og'` — avatar should show glowing ring
+- Authors without a badge should render identically to current behavior

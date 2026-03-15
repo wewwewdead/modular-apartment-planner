@@ -1,0 +1,79 @@
+Refactor Sketch Studio into a more accurate and robust parametric object drafting workspace.
+
+Main goal:
+Make Sketch Studio dimension-driven, assembly-based, and much more reliable for building standalone objects such as tables, desks, chairs, shelves, cabinets, and similar items.
+
+Requirements:
+
+1. Core modeling direction
+- treat Sketch as a serious object-drafting workspace, not a loose drawing toy
+- prioritize geometric accuracy, dimension-driven editing, and robust object relationships
+- use real units in millimeters as the source of truth
+
+2. Domain model
+Create or refactor Sketch domain models to support:
+- SketchProject
+- Assembly
+- Part
+- PartType
+- PartInstance
+- Dimension
+- Constraint
+- Attachment
+
+3. Part system
+Support a first robust set of part primitives:
+- Panel
+- Leg
+- Frame bar
+- Cutout
+- Hole pattern
+
+Each part should support meaningful dimensions such as width, height, depth, thickness, and placement/orientation data.
+
+4. Assembly system
+- allow multiple parts to belong to an assembly
+- support parent/child relationships where useful
+- support object trees for assemblies
+- make assemblies editable as grouped objects
+
+5. Dimension-driven editing
+- dimensions must drive geometry
+- editing width/height/depth/thickness should update the object reliably
+- avoid loose freeform editing as the primary workflow
+
+6. Attachment / relationship system
+Support useful object relationships such as:
+- attach to face
+- align to edge
+- center on axis
+- inset from edge
+- flush with surface
+
+These relationships should be reusable and not hardcoded to specific object names.
+
+7. Orthographic drafting
+- maintain accurate top, front, and side views
+- keep orthographic generation modular and separate from React
+- ensure parts and assemblies render consistently across views
+
+8. 3D preview
+- keep the Three.js preview read-only for now
+- render assemblies and parts consistently from the same source model
+- do not move source-of-truth logic into the 3D layer
+
+9. Sheet/export readiness
+- prepare Sketch for better assembly sheets and part detail sheets
+- keep export modular and compatible with the current sheet system
+
+10. Architecture
+- keep Sketch separate from Floorplan domain logic
+- reuse shared geometry/rendering/annotation utilities where appropriate
+- do not overbuild freeform modeling or manufacturing-grade simulation yet
+- focus on a precise, extensible foundation
+
+Implementation expectations:
+- first identify the weaknesses of the current Sketch workspace
+- refactor incrementally without breaking the existing app shell and routing
+- keep code understandable and modular
+- prioritize robustness and correctness over flashy features

@@ -1,0 +1,42 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthClient } from '@supabase/auth-js';
+import { IS_SUPABASE_CONFIGURED, MOBILE_ENV } from '../config/env';
+
+const stripTrailingSlashes = (value: string): string => value.replace(/\/+$/, '');
+
+const extractProjectRef = (supabaseUrl: string): string => {
+  const match = supabaseUrl.match(/^https?:\/\/([^./]+)\./i);
+  return match?.[1] ?? 'mobile';
+};
+
+type SupabaseClient = {
+  auth: InstanceType<typeof AuthClient>;
+};
+
+const createSupabaseClient = (): SupabaseClient => {
+  const resolvedSupabaseUrl = stripTrailingSlashes(MOBILE_ENV.SUPABASE_URL);
+  const resolvedSupabaseKey = MOBILE_ENV.SUPABASE_ANON_KEY;
+  const authUrl = `${resolvedSupabaseUrl}/auth/v1`;
+  const storageKey = `sb-${extractProjectRef(resolvedSupabaseUrl)}-auth-token`;
+
+  const auth = new AuthClient({
+    url: authUrl,
+    headers: {
+      Authorization: `Bearer ${resolvedSupabaseKey}`,
+      apikey: resolvedSupabaseKey,
+      'X-Client-Platform': 'react-native',
+    },
+    storageKey,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+    storage: AsyncStorage,
+    hasCustomAuthorizationHeader: true,
+  });
+
+  return { auth };
+};
+
+export const supabase: SupabaseClient | null = IS_SUPABASE_CONFIGURED
+  ? createSupabaseClient()
+  : null;

@@ -1,0 +1,89 @@
+# RelatedPosts: Tighten spacing + add excerpt to cards
+
+## Context
+
+Two follow-up issues after the initial UI refinement:
+1. **Too much dead space** — `.cv-body` has `margin-bottom: 80px`, plus `.rp-section` adds `margin-top: 2.5rem` (40px), totaling ~145px before related posts appear. Users may not scroll far enough to see them.
+2. **Cards lack content preview** — Cards only show title + author/date metadata. The API already returns the full `content` field (Lexical JSON state) but it's unused. Adding a 1-line text excerpt gives users a reason to click.
+
+## Files to modify
+
+| File | What |
+|---|---|
+| `client/src/components/Discovery/RelatedPosts.jsx` | Add excerpt extraction + render excerpt line |
+| `client/src/components/Discovery/RelatedPosts.css` | Reduce margin-top, add excerpt styles, update skeleton height |
+
+## Changes
+
+### 1. Reduce spacing — `RelatedPosts.css`
+
+Change `.rp-section` `margin-top` from `2.5rem` → `0`. The `80px` margin-bottom on `.cv-body` already provides plenty of breathing room. Removing `.rp-section`'s own margin makes the related posts feel connected to the article rather than floating in empty space.
+
+Also reduce `padding-top` from `1.5rem` → `1rem` for a slightly tighter feel.
+
+At 480px breakpoint: `margin-top: 0`, `padding-top: 0.75rem`.
+
+### 2. Extract plain text from Lexical JSON — `RelatedPosts.jsx`
+
+Add a small helper function inside the file (no new file needed):
+
+```js
+function extractExcerpt(content, maxLen = 120) {
+    if (!content) return '';
+    try {
+        const root = typeof content === 'string' ? JSON.parse(content) : content;
+        const texts = [];
+        const walk = (node) => {
+            if (node.text) texts.push(node.text);
+            if (node.children) node.children.forEach(walk);
+        };
+        walk(root.root || root);
+        const full = texts.join(' ').replace(/\s+/g, ' ').trim();
+        if (full.length <= maxLen) return full;
+        return full.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
+    } catch {
+        return '';
+    }
+}
+```
+
+This recursively walks the Lexical node tree, concatenates all `text` nodes, and truncates with an ellipsis at word boundaries.
+
+### 3. Render excerpt in RelatedPostCard — `RelatedPosts.jsx`
+
+In `RelatedPostCard`, call `extractExcerpt(post.content)` and render it between the title and meta:
+
+```jsx
+{excerpt && <p className="rp-card-excerpt">{excerpt}</p>}
+```
+
+### 4. Excerpt CSS — `RelatedPosts.css`
+
+Add `.rp-card-excerpt` after `.rp-card-title`:
+
+```css
+.rp-card-excerpt {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin: 0 0 0.375rem 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+```
+
+### 5. Update skeleton — `RelatedPosts.css`
+
+- Bump `.rp-skeleton-card` height from `68px` → `82px` to account for the new excerpt line
+- Add a `.rp-skeleton-excerpt` shimmer bar (height 10px, width 85%) between the title and meta skeleton elements
+
+Add the skeleton excerpt element in `RelatedPosts.jsx`'s `RelatedPostsSkeleton` too.
+
+## Verification
+
+1. Open a post with related posts — section should appear with minimal gap after the article body (only the 80px cv-body margin-bottom + border)
+2. Each card shows: title (2-line clamp) → excerpt (1-line clamp, muted) → author + date
+3. Cards without parseable content gracefully skip the excerpt line
+4. Skeleton loading state matches the new card height

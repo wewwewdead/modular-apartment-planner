@@ -1,0 +1,53 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
+
+interface SectionHeaderProps {
+  emoji?: string | null;
+  title: string;
+  count?: number;
+}
+
+export function SectionHeader({ emoji, title, count }: SectionHeaderProps) {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>
+        {emoji ? `${emoji} ` : ''}{title}
+      </Text>
+      {count !== undefined && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{count}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: colors.canvas,
+  },
+  title: {
+    ...typography.label,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  badge: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    ...typography.caption,
+    color: colors.mutedInk,
+    fontWeight: '700',
+  },
+});

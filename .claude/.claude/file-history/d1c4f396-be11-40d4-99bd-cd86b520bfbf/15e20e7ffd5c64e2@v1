@@ -1,0 +1,53 @@
+# Fix Revision Notes Text Overflow on Sheets
+
+## Context
+
+When users add revisions with long description text, the text overflows the revision column on sheets. The `<text>` element in the `RevisionBlock` component renders the full description string with no clipping or truncation, so it visually bleeds past the revision block boundaries.
+
+The revision block is rendered in `src/renderers/sheet/SheetTitleBlock.jsx` (lines 70-167). The description column starts at `columnX + 16.5` (where `columnX = revisions.x + 10`) and the right edge is `revisions.x + revisions.width`. This gives only ~17.5mm of usable width on the default A3 sheet — easily overflowed by even moderate text.
+
+## Change — `src/renderers/sheet/SheetTitleBlock.jsx`
+
+Add an SVG `<clipPath>` that clips the entire revision block content to its bounding rectangle. This prevents any text (description, date, or code) from visually overflowing.
+
+In the `RevisionBlock` component:
+
+1. Generate a unique `clipPath` id (e.g., `clip-revisions-{x}-{y}`)
+2. Add a `<defs>` block with a `<clipPath>` containing a `<rect>` matching the revision block bounds
+3. Apply `clipPath={`url(#...)`}` to the outer `<g>` wrapping the revision rows
+
+```jsx
+function RevisionBlock({ revisions }) {
+  const columnX = revisions.x + 10;
+  const rowHeight = (revisions.height - revisions.headerHeight) / 4;
+  const clipId = `clip-rev-${revisions.x}-${revisions.y}`;
+  // ... rest unchanged
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={revisions.x} y={revisions.y} width={revisions.width} height={revisions.height} />
+        </clipPath>
+      </defs>
+      {/* border rects and header lines stay outside clip */}
+      ...
+      <g clipPath={`url(#${clipId})`}>
+        {/* header labels + row text go inside clip */}
+        ...
+      </g>
+    </g>
+  );
+}
+```
+
+This is the minimal fix — all text is clipped to the block boundary with no layout changes needed.
+
+## Verification
+
+1. Run `npm run dev`, open the app
+2. Switch to sheet workspace, select a sheet
+3. Add a revision with a very long description (e.g., 50+ characters)
+4. Confirm the text is clipped at the revision block's right edge — no overflow
+5. Confirm short descriptions still render normally
+6. Confirm revision code and date columns are unaffected

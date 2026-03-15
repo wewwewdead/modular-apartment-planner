@@ -1,0 +1,343 @@
+# Modular Apartment Planner - MVP Implementation Plan
+
+## Context
+
+Building a desktop-first apartment blueprint editor from scratch (greenfield project). The app lets users create floor plans with walls, doors, and windows using an SVG-based editor. Architecture is designed for future extensibility (multi-floor, 3D preview, backend) but the MVP focuses on a single-floor working editor with localStorage persistence.
+
+**Tech:** React + Vite, JavaScript only, CSS modules, SVG rendering, localStorage.
+
+---
+
+## Project Structure
+
+```
+modular apartment planner/
+  index.html
+  package.json
+  vite.config.js
+  jsconfig.json
+  src/
+    main.jsx
+    app/
+      App.jsx                   - Root component, layout shell
+      App.module.css            - CSS Grid layout
+      ProjectProvider.jsx       - React Context + useReducer for project state
+      EditorProvider.jsx        - React Context + useReducer for editor/UI state
+    domain/
+      models.js                 - Factory functions (Project, Floor, Wall, Room, Door, Window)
+      ids.js                    - ID generation
+      defaults.js               - Default constants (wall thickness, door width, etc.)
+    geometry/
+      point.js                  - Point math (distance, midpoint, lerp, rotate)
+      line.js                   - Line/segment math (nearest point, intersection)
+      polygon.js                - Area (shoelace), centroid, point-in-polygon
+      wallGeometry.js           - Wall outline from centerline+thickness, door/window positioning
+    annotations/
+      dimensions.js             - Dimension line computation (wall length display data)
+    renderers/
+      SvgCanvas.jsx             - Main SVG viewport, zoom/pan, event delegation
+      SvgCanvas.module.css
+      GridRenderer.jsx          - Background grid (pattern-based)
+      WallRenderer.jsx          - Wall polygon from centerline
+      DoorRenderer.jsx          - Door symbol (gap + arc)
+      WindowRenderer.jsx        - Window symbol (gap + parallel lines)
+      RoomRenderer.jsx          - Room label
+      DimensionRenderer.jsx     - Wall length annotations
+      SelectionOverlay.jsx      - Selection highlight + handles
+    editor/
+      tools.js                  - Tool constants
+      useEditorTool.js          - Hook wiring active tool to canvas events
+      handlers/
+        selectHandler.js        - Click to select, drag to move
+        wallDrawHandler.js      - Two-click wall creation + snapping
+        doorPlaceHandler.js     - Hover wall + click to place door
+        windowPlaceHandler.js   - Hover wall + click to place window
+    persistence/
+      serialize.js              - Project -> JSON
+      deserialize.js            - JSON -> Project (with validation)
+      storage.js                - localStorage read/write + project list index
+    ui/
+      Toolbar.jsx + .module.css      - Top toolbar (tools, file ops)
+      Sidebar.jsx + .module.css      - Left panel (project tree, component list)
+      PropertiesPanel.jsx + .module.css - Right panel (selected object props)
+      InputField.jsx            - Labeled input with unit suffix
+      Modal.jsx                 - Simple modal dialog
+    styles/
+      variables.css             - CSS custom properties
+      reset.css                 - Minimal reset
+      global.css                - Body, typography, imports
+```
+
+---
+
+## Domain Models
+
+All models are plain JS objects created by factory functions. Mutations only through the reducer.
+
+**ID generation:** `prefix_timestamp36_counter36` (e.g., `wall_m1abc_1`)
+
+### Project
+```js
+{ id, name, createdAt, updatedAt, floors: [Floor], version: 1 }
+```
+
+### Floor
+```js
+{ id, name, level: 0, walls: [], rooms: [], doors: [], windows: [] }
+```
+
+### Wall
+```js
+{ id, start: {x, y}, end: {x, y}, thickness: 150 }
+// Stored as centerline. Outline derived by geometry layer. All values in mm.
+```
+
+### Door
+```js
+{ id, wallId, offset, width: 900, openDirection: 'left' }
+// offset = mm from wall start to door center along centerline
+```
+
+### Window
+```js
+{ id, wallId, offset, width: 1200 }
+// offset = mm from wall start to window center along centerline
+```
+
+### Room
+```js
+{ id, name, labelPosition: {x, y}, color: '#E8F0FE' }
+// MVP: manual label placement only
+```
+
+### Relationships
+- Doors/windows reference parent wall via `wallId`
+- Deleting a wall cascade-deletes its doors/windows
+- Walls connect implicitly by sharing endpoint coordinates (via snapping)
+
+---
+
+## State Management
+
+Two React Contexts, each with `useReducer`:
+
+### ProjectContext (model data)
+```
+State: { project, isDirty, lastSavedAt }
+Actions: PROJECT_NEW, PROJECT_LOAD, PROJECT_SET_NAME,
+         WALL_ADD, WALL_UPDATE, WALL_DELETE,
+         DOOR_ADD, DOOR_UPDATE, DOOR_DELETE,
+         WINDOW_ADD, WINDOW_UPDATE, WINDOW_DELETE,
+         ROOM_ADD, ROOM_UPDATE, ROOM_DELETE,
+         MARK_SAVED
+```
+Custom hook: `useProject()` returns state + convenience methods.
+
+### EditorContext (UI/interaction state)
+```
+State: { activeTool, selectedId, selectedType, toolState, viewport: {panX, panY, zoom}, showGrid, snapEnabled, activeFloorId }
+Actions: SET_TOOL, SELECT_OBJECT, DESELECT, UPDATE_TOOL_STATE,
+         SET_VIEWPORT, PAN, TOGGLE_GRID, TOGGLE_SNAP, SET_ACTIVE_FLOOR
+```
+Custom hook: `useEditor()` returns state + dispatch.
+
+---
+
+## SVG Canvas & Coordinate System
+
+- All model coordinates in millimeters
+- SVG uses a `<g transform="translate(panX, panY) scale(zoom)">` wrapper
+- Default zoom: `0.1` (1mm = 0.1px, so a 10m wall = 1000px)
+- Zoom range: `[0.02, 2.0]`, multiplied by `1.1` per scroll step, centered on cursor
+- Pan: middle-mouse drag or Space+left-drag
+- Coordinate conversion helpers: `screenToModel()`, `modelToScreen()`
+
+### Grid
+- Minor: 100mm intervals, `#E4E7EC`, hidden at very low zoom
+- Major: 1000mm intervals, `#CDD5DF`, always visible
+- Rendered via SVG `<pattern>` for performance
+
+---
+
+## Editor Tools
+
+Each tool is a handler object with: `onMouseDown`, `onMouseMove`, `onMouseUp`, `onKeyDown`, `getCursor`.
+
+### Wall Draw Tool (continuous chaining mode)
+1. Click first point -> record start, show guide line with live length label
+2. Mouse move -> update preview (rubber-band line)
+3. Click second point -> create wall, **auto-chain**: end point becomes start of next wall
+4. Continue clicking to chain more walls (polyline-style drawing)
+5. **Double-click** or **Escape** -> finish chain, return to idle (stay in wall tool)
+6. Shift held -> constrain to 0/45/90 degree angles
+7. Endpoint snapping: within 10px screen distance, snap to existing wall endpoints
+8. Snapping to the chain's first point closes the loop
+
+### Select Tool
+1. Click on object -> select (hit test: doors/windows first, then walls)
+2. Click empty -> deselect
+3. Drag selected wall -> move both endpoints
+4. Drag wall endpoint handle -> move single endpoint
+5. Drag door/window -> slide along parent wall
+6. Delete key -> remove selected object
+
+### Door/Window Placement Tools
+1. Mouse move -> find nearest wall within threshold, compute offset along wall
+2. Show preview at projected position
+3. Click -> place door/window at offset
+4. Escape -> return to select tool
+
+---
+
+## SVG Rendering
+
+**Z-order (back to front):** Grid -> Rooms -> Walls -> Doors/Windows -> Dimensions -> Selection -> Preview
+
+### Walls
+- Centerline + thickness -> 4-corner polygon via perpendicular offset
+- Fill: `#2D3748`, Stroke: `#1A202C`
+
+### Doors
+- White rectangle masks wall at door position
+- Quarter-circle arc for swing + straight line for door leaf
+- Stroke: `#2D3748`
+
+### Windows
+- White rectangle masks wall at window position
+- Three parallel lines across the gap (standard architectural symbol)
+- Stroke: `#2D3748`
+
+### Dimensions
+- Offset dimension line parallel to wall with extension lines + arrowheads
+- Text label showing length in "X.XX m" format
+- Font: monospace, positioned at midpoint
+
+### Selection
+- Dashed outline in `#2B7FFF` + 8% opacity fill
+- Square resize handles at wall endpoints
+
+---
+
+## UI Layout
+
+CSS Grid: `48px toolbar | 240px sidebar | 1fr canvas | 280px properties`
+
+### Toolbar
+- Groups: File ops (New, Save, Load) | Tools (Select, Wall, Door, Window) | View (Grid, Snap)
+- Active tool highlighted with accent color
+- Keyboard shortcuts: V=Select, W=Wall, D=Door, N=Window, Escape=cancel, Delete=remove, Ctrl+S=save
+
+### Sidebar
+- Project name (editable)
+- Floor list (one floor for MVP)
+- Component tree: Walls(N), Doors(N), Windows(N) - clickable to select
+
+### Properties Panel
+- Nothing selected: project summary
+- Wall: start/end coords, thickness (editable), length (readonly)
+- Door: width, offset, swing direction (editable), parent wall (readonly)
+- Window: width, offset (editable), parent wall (readonly)
+- Delete button for selected object
+
+### Status Bar
+- Cursor coordinates, zoom level, active tool name
+
+---
+
+## Persistence
+
+### Serialization
+```js
+{ version: 1, data: projectObject, savedAt: ISO8601 }
+```
+
+### Storage
+- Key per project: `apartment-planner-project-{id}`
+- Project list index: `apartment-planner-projects`
+- Manual save with dirty indicator
+- `beforeunload` warning if unsaved changes
+
+---
+
+## Blueprint Styling
+
+| Element | Color |
+|---------|-------|
+| Background | `#FFFFFF` |
+| Wall fill | `#2D3748` |
+| Grid minor | `#E4E7EC` |
+| Grid major | `#CDD5DF` |
+| Selection accent | `#2B7FFF` |
+| UI text primary | `#1D2939` |
+| UI text secondary | `#667085` |
+| Panel backgrounds | `#F9FAFB` / `#FFFFFF` |
+| Borders | `#D0D5DD` |
+
+UI Font: `Inter, system-ui, sans-serif`
+Blueprint Font: `monospace` (for dimension labels)
+
+---
+
+## Implementation Order
+
+### Phase 1: Skeleton (app runs with layout)
+1. `npm create vite@latest . -- --template react`
+2. `vite.config.js` (path alias), `jsconfig.json`
+3. `styles/variables.css`, `styles/reset.css`, `styles/global.css`
+4. `main.jsx`, `app/App.jsx`, `app/App.module.css`
+
+### Phase 2: Domain + State
+5. `domain/ids.js`, `domain/defaults.js`, `domain/models.js`
+6. `app/ProjectProvider.jsx`, `app/EditorProvider.jsx`
+
+### Phase 3: Geometry
+7. `geometry/point.js`, `geometry/line.js`, `geometry/polygon.js`, `geometry/wallGeometry.js`
+
+### Phase 4: Canvas + Grid
+8. `renderers/SvgCanvas.jsx`, `renderers/GridRenderer.jsx`
+9. Wire into App with providers
+
+### Phase 5: Wall Drawing (first interactive feature)
+10. `editor/tools.js`, `editor/handlers/wallDrawHandler.js`, `editor/useEditorTool.js`
+11. `renderers/WallRenderer.jsx`
+12. Wire wall rendering + tool events into SvgCanvas
+
+### Phase 6: UI Shell
+13. `ui/InputField.jsx`, `ui/Toolbar.jsx`, `ui/Sidebar.jsx`, `ui/PropertiesPanel.jsx`
+14. Wire into App layout
+
+### Phase 7: Selection + Properties
+15. `editor/handlers/selectHandler.js`, `renderers/SelectionOverlay.jsx`
+16. Wire properties panel to show/edit selected object
+
+### Phase 8: Doors + Windows
+17. `renderers/DoorRenderer.jsx`, `renderers/WindowRenderer.jsx`
+18. `editor/handlers/doorPlaceHandler.js`, `editor/handlers/windowPlaceHandler.js`
+
+### Phase 9: Dimensions + Rooms
+19. `annotations/dimensions.js`, `renderers/DimensionRenderer.jsx`
+20. `renderers/RoomRenderer.jsx`
+
+### Phase 10: Persistence
+21. `persistence/serialize.js`, `persistence/deserialize.js`, `persistence/storage.js`
+22. `ui/Modal.jsx` (new project / load dialog)
+23. Wire save/load into toolbar + ProjectProvider
+
+---
+
+## Verification
+
+1. Run `npm run dev` - app loads with the desktop layout (toolbar, sidebar, canvas, properties panel)
+2. Click "New Project" - creates a project with one empty floor
+3. Select Wall tool (W key or toolbar) - draw walls by clicking two points on canvas
+4. Walls render as thick polygons with correct dimensions
+5. Select tool (V key) - click walls to select, see properties in right panel
+6. Edit wall thickness in properties panel - wall re-renders
+7. Select Door tool - hover over wall to see preview, click to place
+8. Select Window tool - same interaction
+9. Dimensions show wall lengths
+10. Save button persists to localStorage, Load restores state
+11. Zoom (scroll wheel) and pan (middle-click drag) work on canvas
+12. Delete key removes selected object
+13. Grid displays at correct intervals
+14. Endpoint snapping works when drawing walls near existing endpoints

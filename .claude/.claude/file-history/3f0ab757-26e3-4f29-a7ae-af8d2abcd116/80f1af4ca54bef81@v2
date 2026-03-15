@@ -1,0 +1,86 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { Cart } from '../../../domain/models';
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+import { CartMiniProgress } from './CartMiniProgress';
+
+interface ActiveCartCardProps {
+  cart: Cart;
+  total: number;
+  onPress: () => void;
+}
+
+export const ActiveCartCard = React.memo(function ActiveCartCard({
+  cart,
+  total,
+  onPress,
+}: ActiveCartCardProps) {
+  const fulfilledCount = cart.cartItems.filter(i => i.isFulfilled).length;
+  const budgetRatio = cart.budget > 0 ? total / cart.budget : 0;
+  const budgetDotColor = budgetRatio > 1 ? colors.danger : budgetRatio > 0.9 ? colors.warning : colors.success;
+
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${cart.name}, ${cart.cartItems.length} items, ${formatCurrency(total)}`}
+    >
+      <View style={styles.card}>
+        <View style={styles.header}>
+          <Text style={styles.name}>{cart.name}</Text>
+          <View style={[styles.budgetDot, { backgroundColor: budgetDotColor }]} />
+        </View>
+        <CartMiniProgress fulfilledCount={fulfilledCount} totalCount={cart.cartItems.length} />
+        <View style={styles.footer}>
+          <Text style={styles.meta}>
+            {cart.cartItems.length} item{cart.cartItems.length === 1 ? '' : 's'}
+          </Text>
+          <Text style={styles.total}>{formatCurrency(total)}</Text>
+        </View>
+      </View>
+    </AnimatedPressable>
+  );
+});
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 10,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  name: {
+    ...typography.label,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  budgetDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  meta: {
+    ...typography.caption,
+    color: colors.mutedInk,
+  },
+  total: {
+    ...typography.label,
+    color: colors.brandDeep,
+  },
+});

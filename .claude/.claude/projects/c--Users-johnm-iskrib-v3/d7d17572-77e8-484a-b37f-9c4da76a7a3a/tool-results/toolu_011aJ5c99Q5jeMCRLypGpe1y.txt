@@ -1,0 +1,1505 @@
+     1→import supabase from "./supabase.js";
+     2→import GenerateEmbeddings from "../utils/GenerateEmbeddings.js";
+     3→
+     4→const SEARCH_LIMIT_MAX = 20;
+     5→const SEARCH_QUERY_MIN_LENGTH = 2;
+     6→const CANVAS_GALLERY_LIMIT_DEFAULT = 36;
+     7→const CANVAS_GALLERY_LIMIT_MAX = 72;
+     8→const CANVAS_GALLERY_HOT_FETCH_LIMIT = 220;
+     9→const UNIVERSE_POST_LIMIT_DEFAULT = 200;
+    10→const UNIVERSE_POST_LIMIT_MAX = 500;
+    11→const UNIVERSE_SIMILARITY_THRESHOLD = 0.9;
+    12→const UNIVERSE_SIMILARITY_PAIR_LIMIT = 120;
+    13→const UNIVERSE_STAR_PULL_MIN_SIMILARITY = 0.4;
+    14→const UNIVERSE_STAR_PULL_LIMIT = 500;
+    15→const UNIVERSE_POST_SELECT = `
+    16→    id,
+    17→    title,
+    18→    content,
+    19→    post_type,
+    20→    canvas_doc,
+    21→    created_at,
+    22→    universe_x,
+    23→    universe_y,
+    24→    settled_x,
+    25→    settled_y,
+    26→    user_id,
+    27→    users(id, name, image_url, badge),
+    28→    likes(count)
+    29→`;
+    30→const PROFILE_MEDIA_BUCKETS = ['background', 'journal-images', 'avatars'];
+    31→const PROFILE_MEDIA_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.avif', '.svg'];
+    32→const PROFILE_MEDIA_LIMIT_DEFAULT = 5;
+    33→const PROFILE_MEDIA_LIMIT_MAX = 20;
+    34→const JOURNAL_USER_SELECT = 'id, name, image_url, badge';
+    35→const JOURNAL_BASE_SELECT = `
+    36→    id,
+    37→    user_id,
+    38→    title,
+    39→    content,
+    40→    post_type,
+    41→    canvas_doc,
+    42→    created_at,
+    43→    privacy,
+    44→    views,
+    45→    is_repost,
+    46→    repost_source_journal_id,
+    47→    repost_caption,
+    48→    users(${JOURNAL_USER_SELECT})
+    49→`;
+    50→const JOURNAL_WITH_COUNTS_SELECT = `
+    51→    ${JOURNAL_BASE_SELECT},
+    52→    like_count: likes(count),
+    53→    comment_count: comments(count),
+    54→    bookmark_count: bookmarks(count)
+    55→`;
+    56→const OPINION_USER_SELECT = 'id, name, image_url, badge';
+    57→const OPINION_BASE_SELECT = `
+    58→    id,
+    59→    user_id,
+    60→    parent_id,
+    61→    opinion,
+    62→    reply_count,
+    63→    created_at
+    64→`;
+    65→const OPINION_WITH_USER_SELECT = `
+    66→    ${OPINION_BASE_SELECT},
+    67→    users(${OPINION_USER_SELECT})
+    68→`;
+    69→const COMMENT_WITH_USER_SELECT = `
+    70→    id,
+    71→    post_id,
+    72→    parent_id,
+    73→    user_id,
+    74→    comment,
+    75→    reply_count,
+    76→    created_at,
+    77→    users(${OPINION_USER_SELECT})
+    78→`;
+    79→
+    80→const attachRepostSources = async (journals) => {
+    81→    const items = Array.isArray(journals) ? journals : [journals];
+    82→    const sourceIds = [...new Set(
+    83→        items
+    84→            .filter(j => j.is_repost === true && j.repost_source_journal_id != null)
+    85→            .map(j => j.repost_source_journal_id)
+    86→    )];
+    87→
+    88→    if (sourceIds.length === 0) {
+    89→        items.forEach(j => { j.repost_source = null; });
+    90→        return journals;
+    91→    }
+    92→
+    93→    const { data: sources, error } = await supabase
+    94→        .from('journals')
+    95→        .select('id, title, content, post_type, canvas_doc, created_at, users(id, name, image_url, badge)')
+    96→        .in('id', sourceIds);
+    97→
+    98→    if (error) {
+    99→        console.error('supabase error fetching repost sources:', error.message);
+   100→        items.forEach(j => { j.repost_source = null; });
+   101→        return journals;
+   102→    }
+   103→
+   104→    const sourceMap = new Map(sources.map(s => [s.id, s]));
+   105→    items.forEach(j => {
+   106→        j.repost_source = j.repost_source_journal_id
+   107→            ? (sourceMap.get(j.repost_source_journal_id) || null)
+   108→            : null;
+   109→    });
+   110→
+   111→    return journals;
+   112→};
+   113→
+   114→const parseFiniteNumber = (value, fieldName) => {
+   115→    const parsed = Number(value);
+   116→    if(!Number.isFinite(parsed)){
+   117→        throw {status: 400, error: `${fieldName} should be a finite number`};
+   118→    }
+   119→    return parsed;
+   120→};
+   121→
+   122→const normalizeUniversePost = (post = {}) => {
+   123→    const likes = Array.isArray(post?.likes) ? post.likes : [];
+   124→    const likeCount = post?.like_count != null
+   125→        ? Number(post.like_count)
+   126→        : Number(likes?.[0]?.count ?? 0);
+   127→
+   128→    return {
+   129→        ...post,
+   130→        user_id: post?.user_id ?? post?.users?.id ?? null,
+   131→        user_name: post?.user_name ?? post?.users?.name ?? null,
+   132→        user_image_url: post?.user_image_url ?? post?.users?.image_url ?? null,
+   133→        user_badge: post?.user_badge ?? post?.users?.badge ?? null,
+   134→        display_x: post?.display_x ?? post?.settled_x ?? post?.universe_x ?? null,
+   135→        display_y: post?.display_y ?? post?.settled_y ?? post?.universe_y ?? null,
+   136→        like_count: Number.isFinite(likeCount) ? likeCount : 0
+   137→    };
+   138→};
+   139→
+   140→const loadUniversePostsViaRpc = async(minX, maxX, minY, maxY, limit) => {
+   141→    const {data, error} = await supabase.rpc('get_universe_posts_viewport', {
+   142→        vp_min_x: minX,
+   143→        vp_max_x: maxX,
+   144→        vp_min_y: minY,
+   145→        vp_max_y: maxY,
+   146→        max_count: limit
+   147→    });
+   148→
+   149→    if(error){
+   150→        throw error;
+   151→    }
+   152→
+   153→    return Array.isArray(data) ? data.map(normalizeUniversePost) : [];
+   154→};
+   155→
+   156→const loadUniversePostsFallback = async(minX, maxX, minY, maxY, limit) => {
+   157→    const settledQuery = supabase
+   158→        .from('journals')
+   159→        .select(UNIVERSE_POST_SELECT)
+   160→        .eq('privacy', 'public')
+   161→        .not('settled_x', 'is', null)
+   162→        .not('settled_y', 'is', null)
+   163→        .gte('settled_x', minX)
+   164→        .lte('settled_x', maxX)
+   165→        .gte('settled_y', minY)
+   166→        .lte('settled_y', maxY)
+   167→        .order('created_at', {ascending: false})
+   168→        .limit(limit);
+   169→
+   170→    const unsettledQuery = supabase
+   171→        .from('journals')
+   172→        .select(UNIVERSE_POST_SELECT)
+   173→        .eq('privacy', 'public')
+   174→        .is('settled_x', null)
+   175→        .is('settled_y', null)
+   176→        .gte('universe_x', minX)
+   177→        .lte('universe_x', maxX)
+   178→        .gte('universe_y', minY)
+   179→        .lte('universe_y', maxY)
+   180→        .order('created_at', {ascending: false})
+   181→        .limit(limit);
+   182→
+   183→    const [
+   184→        {data: settledData, error: settledError},
+   185→        {data: unsettledData, error: unsettledError}
+   186→    ] = await Promise.all([settledQuery, unsettledQuery]);
+   187→
+   188→    if(settledError || unsettledError){
+   189→        console.error(
+   190→            'supabase fallback error while fetching universe posts:',
+   191→            settledError?.message || unsettledError?.message
+   192→        );
+   193→        throw {status: 500, error: 'failed to fetch universe posts'};
+   194→    }
+   195→
+   196→    const mergedById = new Map();
+   197→    const mergedRows = [...(settledData || []), ...(unsettledData || [])];
+   198→    for (const row of mergedRows) {
+   199→        if(!row?.id || mergedById.has(row.id)){
+   200→            continue;
+   201→        }
+   202→
+   203→        mergedById.set(row.id, normalizeUniversePost(row));
+   204→        if(mergedById.size >= limit){
+   205→            break;
+   206→        }
+   207→    }
+   208→
+   209→    return Array.from(mergedById.values());
+   210→};
+   211→
+   212→const getUniverseCentroids = async(userIds) => {
+   213→    if(!Array.isArray(userIds) || userIds.length === 0){
+   214→        return [];
+   215→    }
+   216→
+   217→    const {data, error} = await supabase
+   218→        .from('galaxy_centroids')
+   219→        .select('user_id, galaxy_x, galaxy_y, mean_embedding')
+   220→        .in('user_id', userIds);
+   221→
+   222→    if(error){
+   223→        console.warn('supabase warning while fetching universe centroids:', error.message);
+   224→        return [];
+   225→    }
+   226→
+   227→    return Array.isArray(data) ? data : [];
+   228→};
+   229→
+   230→const getUniverseEdges = async(userIds) => {
+   231→    if(!Array.isArray(userIds) || userIds.length < 2){
+   232→        return [];
+   233→    }
+   234→
+   235→    const {data, error} = await supabase
+   236→        .from('galaxy_edges')
+   237→        .select('user_a, user_b, similarity')
+   238→        .in('user_a', userIds)
+   239→        .in('user_b', userIds);
+   240→
+   241→    if(error){
+   242→        console.warn('supabase warning while fetching universe edges:', error.message);
+   243→        return [];
+   244→    }
+   245→
+   246→    return Array.isArray(data) ? data : [];
+   247→};
+   248→
+   249→const getUniverseSimilarPairs = async(postIds) => {
+   250→    if(!Array.isArray(postIds) || postIds.length < 2){
+   251→        return [];
+   252→    }
+   253→
+   254→    const {data, error} = await supabase.rpc('find_similar_post_pairs', {
+   255→        post_ids: postIds,
+   256→        threshold: UNIVERSE_SIMILARITY_THRESHOLD,
+   257→        max_pairs: UNIVERSE_SIMILARITY_PAIR_LIMIT
+   258→    });
+   259→
+   260→    if(error){
+   261→        console.warn('supabase warning while fetching similar universe post pairs:', error.message);
+   262→        return [];
+   263→    }
+   264→
+   265→    return Array.isArray(data) ? data : [];
+   266→};
+   267→
+   268→const getUniverseStarPulls = async(postIds) => {
+   269→    if(!Array.isArray(postIds) || postIds.length === 0){
+   270→        return [];
+   271→    }
+   272→
+   273→    const {data, error} = await supabase.rpc('get_star_galaxy_pulls', {
+   274→        post_ids: postIds,
+   275→        min_similarity: UNIVERSE_STAR_PULL_MIN_SIMILARITY,
+   276→        max_pulls: UNIVERSE_STAR_PULL_LIMIT
+   277→    });
+   278→
+   279→    if(error){
+   280→        console.warn('supabase warning while fetching universe star pulls:', error.message);
+   281→        return [];
+   282→    }
+   283→
+   284→    return Array.isArray(data) ? data : [];
+   285→};
+   286→
+   287→const normalizeSearchQuery = (query) => {
+   288→    if(typeof query !== 'string'){
+   289→        return '';
+   290→    }
+   291→
+   292→    return query
+   293→        .replace(/\s+/g, ' ')
+   294→        .trim();
+   295→};
+   296→
+   297→const attachUserInteractionFlags = async (journals, userId) => {
+   298→    if(!Array.isArray(journals) || journals.length === 0){
+   299→        return [];
+   300→    }
+   301→
+   302→    if(!userId){
+   303→        return journals.map((journal) => ({
+   304→            ...journal,
+   305→            has_liked: false,
+   306→            has_bookmarked: false
+   307→        }));
+   308→    }
+   309→
+   310→    const journalIds = journals.map((journal) => journal.id);
+   311→
+   312→    const [userLikes, userBookmarks] = await Promise.all([
+   313→        supabase
+   314→            .from('likes')
+   315→            .select('journal_id')
+   316→            .in('journal_id', journalIds)
+   317→            .eq('user_id', userId),
+   318→        supabase
+   319→            .from('bookmarks')
+   320→            .select('journal_id')
+   321→            .in('journal_id', journalIds)
+   322→            .eq('user_id', userId)
+   323→    ]);
+   324→
+   325→    const {data: userLikesResult, error: errorUserLikeResult} = userLikes;
+   326→    const {data: userBookmarksResult, error: errorUserBookmarksResult} = userBookmarks;
+   327→
+   328→    if(errorUserLikeResult || errorUserBookmarksResult){
+   329→        console.error('supabase error while fetching journal interactions:', errorUserLikeResult?.message || errorUserBookmarksResult?.message);
+   330→        throw {status: 500, error: 'supabase error on fetching user likes or user bookmarks'};
+   331→    }
+   332→
+   333→    const userHasLikedSet = new Set(userLikesResult?.map((journal) => journal.journal_id) || []);
+   334→    const userHasBookmarkedSet = new Set(userBookmarksResult?.map((journal) => journal.journal_id) || []);
+   335→
+   336→    return journals.map((journal) => ({
+   337→        ...journal,
+   338→        has_liked: userHasLikedSet.has(journal.id),
+   339→        has_bookmarked: userHasBookmarkedSet.has(journal.id)
+   340→    }));
+   341→};
+   342→
+   343→const hasSupportedMediaExtension = (fileName = '') => {
+   344→    const lowerFileName = fileName.toLowerCase();
+   345→    return PROFILE_MEDIA_EXTENSIONS.some((ext) => lowerFileName.endsWith(ext));
+   346→};
+   347→
+   348→const parseMediaTimestamp = (item = {}) => {
+   349→    const fileName = item?.name || '';
+   350→    const timestampPrefix = fileName.match(/^(\d+)_/);
+   351→
+   352→    if(timestampPrefix?.[1]){
+   353→        const parsedPrefix = Number(timestampPrefix[1]);
+   354→        if(!Number.isNaN(parsedPrefix)){
+   355→            return parsedPrefix;
+   356→        }
+   357→    }
+   358→
+   359→    const parsedDate = Date.parse(item?.created_at || item?.updated_at || '');
+   360→    return Number.isNaN(parsedDate) ? 0 : parsedDate;
+   361→};
+   362→
+   363→const createInitialMediaCursorState = () => ({
+   364→    offsets: Object.fromEntries(PROFILE_MEDIA_BUCKETS.map((bucket) => [bucket, 0])),
+   365→    exhausted: Object.fromEntries(PROFILE_MEDIA_BUCKETS.map((bucket) => [bucket, false])),
+   366→    pending: []
+   367→});
+   368→
+   369→const parseMediaCursor = (cursor) => {
+   370→    if(!cursor){
+   371→        return createInitialMediaCursorState();
+   372→    }
+   373→
+   374→    try {
+   375→        const decoded = Buffer.from(cursor, 'base64').toString('utf8');
+   376→        const parsed = JSON.parse(decoded);
+   377→        const initial = createInitialMediaCursorState();
+   378→
+   379→        if(parsed?.offsets && typeof parsed.offsets === 'object'){
+   380→            PROFILE_MEDIA_BUCKETS.forEach((bucket) => {
+   381→                const value = Number(parsed.offsets[bucket]);
+   382→                initial.offsets[bucket] = Number.isNaN(value) || value < 0 ? 0 : value;
+   383→            });
+   384→        }
+   385→
+   386→        if(parsed?.exhausted && typeof parsed.exhausted === 'object'){
+   387→            PROFILE_MEDIA_BUCKETS.forEach((bucket) => {
+   388→                initial.exhausted[bucket] = Boolean(parsed.exhausted[bucket]);
+   389→            });
+   390→        }
+   391→
+   392→        if(Array.isArray(parsed?.pending)){
+   393→            initial.pending = parsed.pending
+   394→                .filter((item) => PROFILE_MEDIA_BUCKETS.includes(item?.bucket) && typeof item?.path === 'string' && typeof item?.name === 'string')
+   395→                .map((item) => ({
+   396→                    bucket: item.bucket,
+   397→                    path: item.path,
+   398→                    name: item.name,
+   399→                    createdAt: item.createdAt || null,
+   400→                    timestamp: Number(item.timestamp) || 0
+   401→                }));
+   402→        }
+   403→
+   404→        return initial;
+   405→    } catch {
+   406→        return createInitialMediaCursorState();
+   407→    }
+   408→};
+   409→
+   410→const encodeMediaCursor = (state) => {
+   411→    const payload = JSON.stringify(state);
+   412→    return Buffer.from(payload, 'utf8').toString('base64');
+   413→};
+   414→
+   415→const parseCanvasGalleryCursor = (cursor, expectedSort = 'hottest') => {
+   416→    const fallback = {
+   417→        offset: 0,
+   418→        sort: expectedSort
+   419→    };
+   420→
+   421→    if(!cursor){
+   422→        return fallback;
+   423→    }
+   424→
+   425→    try {
+   426→        const decoded = Buffer.from(cursor, 'base64').toString('utf8');
+   427→        const parsed = JSON.parse(decoded);
+   428→        const parsedSort = typeof parsed?.sort === 'string' && parsed.sort.toLowerCase().trim() === 'newest'
+   429→            ? 'newest'
+   430→            : 'hottest';
+   431→
+   432→        if(parsedSort !== expectedSort){
+   433→            return fallback;
+   434→        }
+   435→
+   436→        const parsedOffset = Number(parsed?.offset);
+   437→        const normalizedOffset = Number.isNaN(parsedOffset) || parsedOffset < 0
+   438→            ? 0
+   439→            : Math.floor(parsedOffset);
+   440→
+   441→        return {
+   442→            offset: normalizedOffset,
+   443→            sort: parsedSort
+   444→        };
+   445→    } catch {
+   446→        return fallback;
+   447→    }
+   448→};
+   449→
+   450→const encodeCanvasGalleryCursor = (offset, sort) => {
+   451→    const payload = JSON.stringify({
+   452→        offset: offset,
+   453→        sort: sort
+   454→    });
+   455→    return Buffer.from(payload, 'utf8').toString('base64');
+   456→};
+   457→
+   458→const resolveMediaUrl = async(bucket, path) => {
+   459→    const {data: publicUrlData} = supabase.storage
+   460→        .from(bucket)
+   461→        .getPublicUrl(path);
+   462→
+   463→    const publicUrl = publicUrlData?.publicUrl || null;
+   464→    if(publicUrl){
+   465→        return publicUrl;
+   466→    }
+   467→
+   468→    const {data: signedUrlData, error: signedUrlError} = await supabase.storage
+   469→        .from(bucket)
+   470→        .createSignedUrl(path, 60 * 60);
+   471→
+   472→    if(!signedUrlError && signedUrlData?.signedUrl){
+   473→        return signedUrlData.signedUrl;
+   474→    }
+   475→
+   476→    return null;
+   477→};
+   478→
+   479→const listMediaChunkForBucket = async(bucket, userId, offset, limit) => {
+   480→    const folderPath = `user_id_${userId}`;
+   481→
+   482→    const {data: bucketItems, error: bucketError} = await supabase.storage
+   483→        .from(bucket)
+   484→        .list(folderPath, {
+   485→            limit: limit,
+   486→            offset: offset,
+   487→            sortBy: {column: 'name', order: 'desc'}
+   488→        });
+   489→
+   490→    if(bucketError){
+   491→        return {
+   492→            bucket: bucket,
+   493→            nextOffset: offset,
+   494→            exhausted: true,
+   495→            items: [],
+   496→            error: bucketError.message
+   497→        };
+   498→    }
+   499→
+   500→    const listedItems = Array.isArray(bucketItems) ? bucketItems : [];
+   501→    const normalizedItems = listedItems
+   502→        .filter((item) => item?.name && hasSupportedMediaExtension(item.name))
+   503→        .map((item) => {
+   504→            const path = `${folderPath}/${item.name}`;
+   505→            const createdAt = item.created_at || item.updated_at || null;
+   506→
+   507→            return {
+   508→                bucket: bucket,
+   509→                path: path,
+   510→                name: item.name,
+   511→                createdAt: createdAt,
+   512→                timestamp: parseMediaTimestamp(item)
+   513→            };
+   514→        });
+   515→
+   516→    return {
+   517→        bucket: bucket,
+   518→        nextOffset: offset + listedItems.length,
+   519→        exhausted: listedItems.length < limit,
+   520→        items: normalizedItems,
+   521→        error: null
+   522→    };
+   523→};
+   524→
+   525→const hydrateMediaItems = async(items) => {
+   526→    if(!Array.isArray(items) || items.length === 0){
+   527→        return [];
+   528→    }
+   529→
+   530→    const hydrated = await Promise.all(items.map(async(item) => {
+   531→        const url = await resolveMediaUrl(item.bucket, item.path);
+   532→        if(!url){
+   533→            return null;
+   534→        }
+   535→
+   536→        return {
+   537→            id: `${item.bucket}-${item.path}`,
+   538→            bucket: item.bucket,
+   539→            path: item.path,
+   540→            name: item.name,
+   541→            createdAt: item.createdAt || null,
+   542→            timestamp: item.timestamp || 0,
+   543→            url: url
+   544→        };
+   545→    }));
+   546→
+   547→    return hydrated.filter(Boolean);
+   548→};
+   549→
+   550→export const getProfileMediaService = async(userId, limit = PROFILE_MEDIA_LIMIT_DEFAULT, cursor = null) => {
+   551→    if(!userId){
+   552→        throw {status: 400, error: 'userId is undefined'};
+   553→    }
+   554→
+   555→    const parsedLimit = Number(limit);
+   556→    if(Number.isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > PROFILE_MEDIA_LIMIT_MAX){
+   557→        throw {status: 400, error: `limit should be an integer between 1 and ${PROFILE_MEDIA_LIMIT_MAX}`};
+   558→    }
+   559→
+   560→    const cursorState = parseMediaCursor(cursor);
+   561→    const offsets = {...cursorState.offsets};
+   562→    const exhausted = {...cursorState.exhausted};
+   563→    const pending = Array.isArray(cursorState.pending) ? [...cursorState.pending] : [];
+   564→    const unavailableBuckets = [];
+   565→    const maxIterations = 6;
+   566→    let iterationCount = 0;
+   567→
+   568→    while(
+   569→        pending.length < parsedLimit &&
+   570→        PROFILE_MEDIA_BUCKETS.some((bucket) => !exhausted[bucket]) &&
+   571→        iterationCount < maxIterations
+   572→    ){
+   573→        iterationCount += 1;
+   574→        const activeBuckets = PROFILE_MEDIA_BUCKETS.filter((bucket) => !exhausted[bucket]);
+   575→        const chunkResults = await Promise.all(
+   576→            activeBuckets.map((bucket) => listMediaChunkForBucket(bucket, userId, offsets[bucket] || 0, parsedLimit))
+   577→        );
+   578→
+   579→        chunkResults.forEach((result) => {
+   580→            offsets[result.bucket] = result.nextOffset;
+   581→            exhausted[result.bucket] = result.exhausted;
+   582→
+   583→            if(result.error){
+   584→                console.error(`supabase storage list error on ${result.bucket}:`, result.error);
+   585→                unavailableBuckets.push(result.bucket);
+   586→                return;
+   587→            }
+   588→
+   589→            pending.push(...result.items);
+   590→        });
+   591→
+   592→        if(chunkResults.every((result) => result.items.length === 0)){
+   593→            break;
+   594→        }
+   595→    }
+   596→
+   597→    pending.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+   598→
+   599→    const selectedItems = pending.slice(0, parsedLimit);
+   600→    const remainingItems = pending.slice(parsedLimit);
+   601→    const hydratedSelectedItems = await hydrateMediaItems(selectedItems);
+   602→
+   603→    // If a URL cannot be created for some selected items, try to fill from remaining items.
+   604→    if(hydratedSelectedItems.length < parsedLimit && remainingItems.length > 0){
+   605→        const neededItemsCount = parsedLimit - hydratedSelectedItems.length;
+   606→        const fallbackCandidates = remainingItems.splice(0, neededItemsCount);
+   607→        const hydratedFallbackItems = await hydrateMediaItems(fallbackCandidates);
+   608→        hydratedSelectedItems.push(...hydratedFallbackItems);
+   609→    }
+   610→
+   611→    const hasMore = remainingItems.length > 0 || PROFILE_MEDIA_BUCKETS.some((bucket) => !exhausted[bucket]);
+   612→    const dedupedUnavailableBuckets = [...new Set(unavailableBuckets)];
+   613→
+   614→    const nextCursor = hasMore
+   615→        ? encodeMediaCursor({
+   616→            offsets: offsets,
+   617→            exhausted: exhausted,
+   618→            pending: remainingItems
+   619→        })
+   620→        : null;
+   621→
+   622→    return {
+   623→        data: hydratedSelectedItems,
+   624→        hasMore: hasMore,
+   625→        nextCursor: nextCursor,
+   626→        unavailableBuckets: dedupedUnavailableBuckets
+   627→    };
+   628→}
+   629→
+   630→export const getUniversePostsService = async(minX, maxX, minY, maxY, limit = UNIVERSE_POST_LIMIT_DEFAULT) => {
+   631→    const parsedMinX = parseFiniteNumber(minX, 'minX');
+   632→    const parsedMaxX = parseFiniteNumber(maxX, 'maxX');
+   633→    const parsedMinY = parseFiniteNumber(minY, 'minY');
+   634→    const parsedMaxY = parseFiniteNumber(maxY, 'maxY');
+   635→    const parsedLimit = Number(limit);
+   636→
+   637→    if(parsedMinX > parsedMaxX){
+   638→        throw {status: 400, error: 'minX should be less than or equal to maxX'};
+   639→    }
+   640→
+   641→    if(parsedMinY > parsedMaxY){
+   642→        throw {status: 400, error: 'minY should be less than or equal to maxY'};
+   643→    }
+   644→
+   645→    if(!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > UNIVERSE_POST_LIMIT_MAX){
+   646→        throw {status: 400, error: `limit should be an integer between 1 and ${UNIVERSE_POST_LIMIT_MAX}`};
+   647→    }
+   648→
+   649→    let posts = [];
+   650→    let usedFallback = false;
+   651→
+   652→    try {
+   653→        posts = await loadUniversePostsViaRpc(parsedMinX, parsedMaxX, parsedMinY, parsedMaxY, parsedLimit);
+   654→    } catch (error) {
+   655→        usedFallback = true;
+   656→        console.warn('universe viewport RPC unavailable, using fallback query:', error?.message || error);
+   657→    }
+   658→
+   659→    if(usedFallback){
+   660→        posts = await loadUniversePostsFallback(parsedMinX, parsedMaxX, parsedMinY, parsedMaxY, parsedLimit);
+   661→    }
+   662→
+   663→    const postIds = Array.from(new Set(posts.map((post) => post?.id).filter(Boolean)));
+   664→    const visibleUserIds = Array.from(new Set(
+   665→        posts
+   666→            .map((post) => post?.users?.id ?? post?.user_id)
+   667→            .filter(Boolean)
+   668→    ));
+   669→
+   670→    const [centroids, edges, similarPairs, starPulls] = await Promise.all([
+   671→        getUniverseCentroids(visibleUserIds),
+   672→        getUniverseEdges(visibleUserIds),
+   673→        getUniverseSimilarPairs(postIds),
+   674→        getUniverseStarPulls(postIds)
+   675→    ]);
+   676→
+   677→    return {
+   678→        data: posts,
+   679→        centroids: centroids,
+   680→        edges: edges,
+   681→        similarPairs: similarPairs,
+   682→        starPulls: starPulls
+   683→    };
+   684→}
+   685→
+   686→export const getJournalsService = async(limit, userId, before) => {
+   687→    if(isNaN(limit) || limit > 20 || limit < 1){
+   688→        console.error('limit should be intiger, not below 1 and higher than 20');
+   689→        throw {status: 400, error: 'limit should be intiger, not below 1 and higher than 20'};
+   690→    }
+   691→
+   692→    const parsedLimit = parseInt(limit);
+   693→
+   694→    let query = supabase
+   695→    .from('journals')
+   696→    .select(JOURNAL_WITH_COUNTS_SELECT)
+   697→    .eq('privacy', 'public')
+   698→    .order('created_at', {ascending: false})
+   699→    .order('id', {ascending: false})
+   700→    .limit(parsedLimit + 1);
+   701→
+   702→    if(before){
+   703→        query = query.lt('created_at', before);
+   704→    }
+   705→
+   706→    const {data, error} = await query;
+   707→
+   708→    if(error){
+   709→        console.error('supabase error while fetching journals:', error.message);
+   710→        throw{status: 500, error: 'supabase error while fetching journals'}
+   711→    }
+   712→
+   713→    if(data.length === 0){
+   714→        const journalData = {
+   715→            data: [],
+   716→            hasMore: false
+   717→        }
+   718→        return journalData
+   719→    }
+   720→
+   721→    // If userId is provided, fetch personalization (likes/bookmarks)
+   722→    // Otherwise return journals with has_liked/has_bookmarked defaulting to false
+   723→    let userHasLikedSet = new Set();
+   724→    let userHasBookmarkedSet = new Set();
+   725→
+   726→    if(userId){
+   727→        const journalIds = data.map((journal) => journal.id);
+   728→
+   729→        const [userLikes, userBookmarks] = await Promise.all([
+   730→            supabase
+   731→            .from('likes')
+   732→            .select('journal_id')
+   733→            .in('journal_id', journalIds)
+   734→            .eq('user_id', userId),
+   735→
+   736→            supabase
+   737→            .from('bookmarks')
+   738→            .select('journal_id')
+   739→            .in('journal_id', journalIds)
+   740→            .eq('user_id', userId)
+   741→        ]);
+   742→
+   743→        const {data: userLikesResult, error: errorUserLikeResult} = userLikes;
+   744→        const {data: userBookmarksResult, error: errorUserBookmarksResult} = userBookmarks;
+   745→
+   746→        if(errorUserLikeResult || errorUserBookmarksResult) {
+   747→            console.error('supabase error:', errorUserLikeResult?.message || errorUserBookmarksResult?.message);
+   748→            throw {status: 500, error: 'supabase error on fetching user likes or user bookmarks'}
+   749→        }
+   750→
+   751→        userHasLikedSet = new Set(userLikesResult?.map((j) => j.journal_id) || []);
+   752→        userHasBookmarkedSet = new Set(userBookmarksResult?.map((j) => j.journal_id)|| []);
+   753→    }
+   754→
+   755→    await attachRepostSources(data);
+   756→
+   757→    const formattedData = data?.map((journal) => ({
+   758→        ...journal,
+   759→        has_liked: userHasLikedSet.has(journal.id),
+   760→        has_bookmarked: userHasBookmarkedSet.has(journal.id)
+   761→    }))
+   762→
+   763→    const hasMore = data?.length > parsedLimit;
+   764→    const slicedData = hasMore ? formattedData.slice(0, parsedLimit) : formattedData;
+   765→
+   766→    const journalData = {
+   767→        data: slicedData,
+   768→        hasMore: hasMore
+   769→    }
+   770→    return journalData;
+   771→}
+   772→
+   773→export const getMonthlyHottestJournalsService = async(limit, userId) => {
+   774→    if(isNaN(limit) || limit < 1 || limit > 10){
+   775→        throw {status: 400, error: 'limit should be an integer between 1 and 10'};
+   776→    }
+   777→
+   778→    const parsedLimit = parseInt(limit);
+   779→    const now = new Date();
+   780→    const monthStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+   781→    const nextMonthStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+   782→
+   783→    const {data: journals, error: journalsError} = await supabase
+   784→        .from('journals')
+   785→        .select(JOURNAL_WITH_COUNTS_SELECT)
+   786→        .eq('privacy', 'public')
+   787→        .gte('created_at', monthStartUtc.toISOString())
+   788→        .lt('created_at', nextMonthStartUtc.toISOString());
+   789→
+   790→    if(journalsError){
+   791→        console.error('supabase error while fetching monthly hottest journals:', journalsError.message);
+   792→        throw {status: 500, error: 'supabase error while fetching monthly hottest journals'};
+   793→    }
+   794→
+   795→    const journalsWithInteractions = await attachUserInteractionFlags(journals || [], userId);
+   796→    const scored = journalsWithInteractions.map((journal) => {
+   797→        const likes = journal?.like_count?.[0]?.count || 0;
+   798→        const comments = journal?.comment_count?.[0]?.count || 0;
+   799→        const bookmarks = journal?.bookmark_count?.[0]?.count || 0;
+   800→        const views = journal?.views || 0;
+   801→        const hotScore = (views * 6) + (likes * 3) + (comments * 2) + (bookmarks * 2);
+   802→
+   803→        return {
+   804→            ...journal,
+   805→            hot_score: hotScore
+   806→        };
+   807→    });
+   808→
+   809→    scored.sort((a, b) => {
+   810→        const scoreDiff = (b?.hot_score || 0) - (a?.hot_score || 0);
+   811→        if(scoreDiff !== 0){
+   812→            return scoreDiff;
+   813→        }
+   814→
+   815→        const dateDiff = new Date(b?.created_at || 0) - new Date(a?.created_at || 0);
+   816→        if(dateDiff !== 0){
+   817→            return dateDiff;
+   818→        }
+   819→
+   820→        return (b?.id || 0) - (a?.id || 0);
+   821→    });
+   822→
+   823→    return {
+   824→        data: scored.slice(0, parsedLimit),
+   825→        period: {
+   826→            startUtc: monthStartUtc.toISOString(),
+   827→            endUtc: nextMonthStartUtc.toISOString(),
+   828→            timezone: 'UTC'
+   829→        },
+   830→        totalCandidates: scored.length
+   831→    };
+   832→}
+   833→
+   834→const scoreJournalHotness = (journal) => {
+   835→    const likes = journal?.like_count?.[0]?.count || 0;
+   836→    const comments = journal?.comment_count?.[0]?.count || 0;
+   837→    const bookmarks = journal?.bookmark_count?.[0]?.count || 0;
+   838→    const views = journal?.views || 0;
+   839→    return (views * 6) + (likes * 3) + (comments * 2) + (bookmarks * 2);
+   840→}
+   841→
+   842→export const getCanvasGalleryService = async(limit = CANVAS_GALLERY_LIMIT_DEFAULT, userId, sort = 'hottest', cursor = null) => {
+   843→    if(isNaN(limit) || limit < 1 || limit > CANVAS_GALLERY_LIMIT_MAX){
+   844→        throw {status: 400, error: `limit should be an integer between 1 and ${CANVAS_GALLERY_LIMIT_MAX}`};
+   845→    }
+   846→
+   847→    const parsedLimit = parseInt(limit);
+   848→    const normalizedSort = typeof sort === 'string' ? sort.toLowerCase().trim() : 'hottest';
+   849→    const isNewest = normalizedSort === 'newest';
+   850→    const parsedCursor = parseCanvasGalleryCursor(cursor, isNewest ? 'newest' : 'hottest');
+   851→    const cursorOffset = parsedCursor.offset;
+   852→
+   853→    const baseQuery = supabase
+   854→        .from('journals')
+   855→        .select(JOURNAL_WITH_COUNTS_SELECT)
+   856→        .eq('privacy', 'public')
+   857→        .eq('post_type', 'canvas')
+   858→        .order('created_at', {ascending: false})
+   859→        .order('id', {ascending: false});
+   860→
+   861→    const {data: journals, error: journalsError} = isNewest
+   862→        ? await baseQuery.range(cursorOffset, cursorOffset + parsedLimit)
+   863→        : await baseQuery.limit(CANVAS_GALLERY_HOT_FETCH_LIMIT);
+   864→
+   865→    if(journalsError){
+   866→        console.error('supabase error while fetching canvas gallery journals:', journalsError.message);
+   867→        throw {status: 500, error: 'supabase error while fetching canvas gallery journals'};
+   868→    }
+   869→
+   870→    const enrichedJournals = await attachUserInteractionFlags(journals || [], userId);
+   871→    const normalizedJournals = enrichedJournals.map((journal) => ({
+   872→        ...journal,
+   873→        hot_score: scoreJournalHotness(journal)
+   874→    }));
+   875→
+   876→    if(!isNewest){
+   877→        normalizedJournals.sort((a, b) => {
+   878→            const scoreDiff = (b.hot_score || 0) - (a.hot_score || 0);
+   879→            if(scoreDiff !== 0){
+   880→                return scoreDiff;
+   881→            }
+   882→
+   883→            const dateDiff = new Date(b?.created_at || 0) - new Date(a?.created_at || 0);
+   884→            if(dateDiff !== 0){
+   885→                return dateDiff;
+   886→            }
+   887→
+   888→            return (b?.id || 0) - (a?.id || 0);
+   889→        });
+   890→    }
+   891→
+   892→    const paginatedJournals = isNewest
+   893→        ? normalizedJournals
+   894→        : normalizedJournals.slice(cursorOffset, cursorOffset + parsedLimit + 1);
+   895→    const hasMore = paginatedJournals.length > parsedLimit;
+   896→    const data = hasMore ? paginatedJournals.slice(0, parsedLimit) : paginatedJournals;
+   897→    const nextCursor = hasMore
+   898→        ? encodeCanvasGalleryCursor(cursorOffset + data.length, isNewest ? 'newest' : 'hottest')
+   899→        : null;
+   900→
+   901→    return {
+   902→        data: data,
+   903→        sort: isNewest ? 'newest' : 'hottest',
+   904→        totalCandidates: normalizedJournals.length,
+   905→        hasMore: hasMore,
+   906→        nextCursor: nextCursor
+   907→    };
+   908→}
+   909→
+   910→export const getJournalByIdService = async (journalId, userId) => {
+   911→    if (!journalId) {
+   912→        console.error('journalId is undefined');
+   913→        throw { status: 400, error: 'journalId is undefined' };
+   914→    }
+   915→
+   916→    const { data: journal, error: journalError } = await supabase
+   917→        .from('journals')
+   918→        .select(JOURNAL_WITH_COUNTS_SELECT)
+   919→        .eq('id', journalId)
+   920→        .eq('privacy', 'public')
+   921→        .maybeSingle();
+   922→
+   923→    if (journalError) {
+   924→        console.error('supabase error while fetching journal by id:', journalError.message);
+   925→        throw { status: 500, error: 'supabase error while fetching journal by id' };
+   926→    }
+   927→
+   928→    if (!journal) {
+   929→        return null;
+   930→    }
+   931→
+   932→    await attachRepostSources(journal);
+   933→
+   934→    let hasLiked = false;
+   935→    let hasBookmarked = false;
+   936→
+   937→    if (userId) {
+   938→        const [likeResult, bookmarkResult] = await Promise.all([
+   939→            supabase
+   940→                .from('likes')
+   941→                .select('journal_id', { count: 'exact', head: true })
+   942→                .eq('journal_id', journalId)
+   943→                .eq('user_id', userId),
+   944→            supabase
+   945→                .from('bookmarks')
+   946→                .select('journal_id', { count: 'exact', head: true })
+   947→                .eq('journal_id', journalId)
+   948→                .eq('user_id', userId)
+   949→        ]);
+   950→
+   951→        if (likeResult.error || bookmarkResult.error) {
+   952→            console.error(
+   953→                'supabase error while fetching journal interactions:',
+   954→                likeResult.error?.message || bookmarkResult.error?.message
+   955→            );
+   956→            throw { status: 500, error: 'supabase error while fetching journal interactions' };
+   957→        }
+   958→
+   959→        hasLiked = (likeResult.count || 0) > 0;
+   960→        hasBookmarked = (bookmarkResult.count || 0) > 0;
+   961→    }
+   962→
+   963→    return {
+   964→        ...journal,
+   965→        has_liked: hasLiked,
+   966→        has_bookmarked: hasBookmarked
+   967→    };
+   968→}
+   969→
+   970→export const getUserJournalsService = async(limit, before, userId) =>{
+   971→    if(!userId){
+   972→        console.error('userid is undefined');
+   973→        throw {status: 400, error: 'userid is undefined'};
+   974→    }
+   975→
+   976→    if(isNaN(limit)|| limit > 20 || limit < 1){
+   977→        console.error('limit should be intiger and not more than 20 and less than 1')
+   978→        throw {status: 400, error: 'limit should be intiger and not more than 20 and less than 1'};
+   979→    }
+   980→
+   981→    const parsedLimit = parseInt(limit);
+   982→
+   983→    let query = supabase
+   984→    .from('journals')
+   985→    .select(JOURNAL_WITH_COUNTS_SELECT)
+   986→    .eq('user_id', userId)
+   987→    .order('created_at', {ascending: false})
+   988→    .order('id', {ascending: false})
+   989→    .limit(parsedLimit + 1)
+   990→
+   991→    if(before){
+   992→        query = query.lt('created_at', before);
+   993→    }
+   994→
+   995→    const {data: journals, error: errorJournals} = await query;
+   996→
+   997→    if(errorJournals){
+   998→        console.error('supabase error while fetching user journals:', errorJournals.message);
+   999→        throw {status: 500, error: 'supabase error while fetching user journals'};
+  1000→    }
+  1001→
+  1002→    const journalIds = journals?.map((journal) => journal.id);
+  1003→
+  1004→    if(journalIds.length === 0){
+  1005→        const data = {data: [], hasMore: false};
+  1006→        return data;
+  1007→    }
+  1008→
+  1009→    await attachRepostSources(journals);
+  1010→
+  1011→    let userLikesPromise;
+  1012→    let userBookmarksPromise;
+  1013→    if(journalIds){
+  1014→        userLikesPromise = supabase
+  1015→        .from('likes')
+  1016→        .select('journal_id')
+  1017→        .in('journal_id', journalIds)
+  1018→        .eq('user_id', userId)
+  1019→
+  1020→        userBookmarksPromise = supabase
+  1021→        .from('bookmarks')
+  1022→        .select('journal_id')
+  1023→        .in('journal_id', journalIds)
+  1024→        .eq('user_id', userId)
+  1025→    }
+  1026→
+  1027→    const [userLikesResult, userBookmarksResult] = await Promise.all([
+  1028→        userLikesPromise, userBookmarksPromise
+  1029→    ])
+  1030→    
+  1031→    const {data: userLikes, error: errorUserLikeResult} = userLikesResult;
+  1032→    const {data: userBookmarks, error: errorBookmarksResult} = userBookmarksResult;
+  1033→
+  1034→    if(errorBookmarksResult || errorUserLikeResult){
+  1035→        console.error('supabase error:', errorBookmarksResult.message || errorUserLikeResult.message);
+  1036→        return {status: 500, error: 'supabase error while fetching userlikes or userbookmarks'}
+  1037→    }
+  1038→
+  1039→    const userLikesSet = new Set(userLikes?.map((j) => j.journal_id) || []);
+  1040→    const userBookmarksSet = new Set(userBookmarks?.map((j) => j.journal_id) || []);
+  1041→
+  1042→    const formattedData = journals?.map((journal) => ({
+  1043→        ...journal, 
+  1044→        has_liked: userLikesSet.has(journal.id),
+  1045→        has_bookmarked: userBookmarksSet.has(journal.id)
+  1046→    }))
+  1047→
+  1048→    const hasMore = journals.length > parsedLimit;
+  1049→    const slicedData = hasMore ? formattedData.slice(0, parsedLimit) : formattedData;
+  1050→
+  1051→    const journalData = {data: slicedData, hasMore: hasMore};
+  1052→
+  1053→    return journalData;
+  1054→}
+  1055→
+  1056→export const getVisitedUserJournalsService = async(limit, before, userId, loggedInUserId) =>{
+  1057→    if(!userId || !loggedInUserId){
+  1058→        console.error('userid or loggedInUserId is undefined');
+  1059→        throw {status: 400, error:'userid or loggedInUserId is undefined'};
+  1060→    }
+  1061→
+  1062→    if(isNaN(limit) || limit > 20 || limit < 1){
+  1063→        console.error('lmit must be an intiger and not more than 20 and less than 1');
+  1064→        throw {status: 400, error: 'lmit must be an intiger and not more than 20 and less than 1'};
+  1065→    }
+  1066→
+  1067→    const parsedLimit = parseInt(limit);
+  1068→
+  1069→    let query = supabase
+  1070→    .from('journals')
+  1071→    .select(JOURNAL_WITH_COUNTS_SELECT)
+  1072→    .eq('user_id', userId)
+  1073→    .eq('privacy', 'public')
+  1074→    .order('created_at', {ascending: false})
+  1075→    .order('id', {ascending: false})
+  1076→    .limit(parsedLimit + 1)
+  1077→
+  1078→    if(before){
+  1079→        query = query.lt('created_at', before);
+  1080→    }
+  1081→
+  1082→    const {data: journals, error: errorJournals} = await query;
+  1083→
+  1084→    if(errorJournals){
+  1085→        console.error('supabase error while fetching user journals:', errorJournals.message);
+  1086→        throw {status: 500, error: 'supabase error while fetching user journals' }
+  1087→    }
+  1088→
+  1089→    const journalIds = journals?.map((journal) => journal.id);
+  1090→
+  1091→    if(journalIds.length === 0){
+  1092→        return {data: [], hasMore: false}
+  1093→    }
+  1094→
+  1095→    await attachRepostSources(journals);
+  1096→
+  1097→    let userLikesPromise;
+  1098→    let userBookmarksPromise;
+  1099→
+  1100→    if(journalIds){
+  1101→        userLikesPromise = supabase
+  1102→        .from('likes')
+  1103→        .select('journal_id')
+  1104→        .in('journal_id', journalIds)
+  1105→        .eq('user_id', loggedInUserId)
+  1106→
+  1107→        userBookmarksPromise = supabase
+  1108→        .from('bookmarks')
+  1109→        .select('journal_id')
+  1110→        .in('journal_id', journalIds)
+  1111→        .eq('user_id', loggedInUserId)
+  1112→    }
+  1113→
+  1114→    const [userLikes, userBookmarks] = await Promise.all([
+  1115→        userLikesPromise, userBookmarksPromise
+  1116→    ])
+  1117→
+  1118→    const {data: userLikesResult, error: errorUserLikeResult} = userLikes;
+  1119→    const {data: userBookmarksResult, error: errorBookmarksResult} = userBookmarks;
+  1120→
+  1121→    if(errorUserLikeResult || errorBookmarksResult){
+  1122→        console.error('supabase error while fetching user journals:', errorBookmarksResult.message || errorUserLikeResult.message);
+  1123→        return {status: 500, error: 'supabase error while fetching user journals'};
+  1124→    }
+  1125→
+  1126→    const userLikesSet = new Set(userLikesResult?.map((x) => x.journal_id) || [])
+  1127→    const userBookmarksSet = new Set(userBookmarksResult?.map((y) => y.journal_id) || []);
+  1128→
+  1129→    const formattedData = journals?.map((j) => ({
+  1130→        ...j, 
+  1131→        has_liked: userLikesSet.has(j.id),
+  1132→        has_bookmarked: userBookmarksSet.has(j.id)
+  1133→    }))
+  1134→
+  1135→    const hasMore = journals?.length > parsedLimit;
+  1136→
+  1137→    const slicedData = hasMore ? formattedData.slice(0, parsedLimit) : formattedData;
+  1138→
+  1139→    const data = {data: slicedData, hasMore: hasMore}
+  1140→    return data;
+  1141→}
+  1142→
+  1143→export const getViewOpinionService = async(postId, userId) => {
+  1144→    if(!postId || !userId){
+  1145→        console.error('postId OR userId is undefined');
+  1146→        throw {status: 400, error: 'postId or userId is undefined'}
+  1147→    }
+  1148→
+  1149→    let query = supabase
+  1150→    .from('opinions')
+  1151→    .select(OPINION_WITH_USER_SELECT)
+  1152→    .eq('id', postId)
+  1153→    .eq('user_id', userId)
+  1154→
+  1155→    const {data: opinion, error: errorOpinion} = await query;
+  1156→
+  1157→    if(errorOpinion){
+  1158→        console.error('supabase error:', errorOpinion.message);
+  1159→        throw { status: 500, error: 'supabase error while fetching opinions'};
+  1160→    }
+  1161→
+  1162→    return {data: opinion};
+  1163→
+  1164→}
+  1165→
+  1166→export const getCommentsService = async(postId, limit, before) => {
+  1167→    if(!postId){
+  1168→        console.error('postId is undefined');
+  1169→        throw {status:400, error: 'postId is undefined'}
+  1170→    }
+  1171→
+  1172→    if(isNaN(limit) || limit > 20 || limit < 1){
+  1173→        console.error('limit must be a intiger and not more than 20 or less than 1');
+  1174→        throw {status: 400, error: 'limit must be a intiger and not more than 20 or less than 1'}
+  1175→    }
+  1176→
+  1177→    const parsedLimit = parseInt(limit);
+  1178→
+  1179→    let query = supabase
+  1180→        .from('comments')
+  1181→        .select(COMMENT_WITH_USER_SELECT)
+  1182→        .eq('post_id', postId)
+  1183→        .is('parent_id', null)
+  1184→        .order('created_at', {ascending: false})
+  1185→        .order('id', {ascending: false})
+  1186→        .limit(parseInt(limit) + 1) //peek ahead +1, get 1 more data if the data in the table has more than the limit
+  1187→
+  1188→    if(before){
+  1189→        query = query.lt('created_at', before);
+  1190→    }
+  1191→
+  1192→    const {data: comments, error: errorFetchComments} = await query;
+  1193→
+  1194→    if(errorFetchComments){
+  1195→        console.error('supabase error while fetching comments:', errorFetchComments.message);
+  1196→        throw {status: 500, error: 'supabase error while fetching comments'}
+  1197→    }
+  1198→
+  1199→    const hasMore = comments.length > parsedLimit;
+  1200→    const slicedData = hasMore ? comments.splice(0, parsedLimit) : comments;
+  1201→
+  1202→    return {comments: slicedData, hasMore: hasMore};
+  1203→}
+  1204→
+  1205→export const getOpinionReplyService = async(parentId, limit, before) =>{
+  1206→    if(!parentId){
+  1207→        console.error('parentId is undefined');
+  1208→        throw {status: 400, error: 'parentId is undefined'};
+  1209→    }
+  1210→
+  1211→    if(isNaN(limit) || limit > 20 || limit < 1){
+  1212→        console.error('limit should be an integer and not more than 20 and less than 1');
+  1213→        throw {status: 400, error: 'limit should be an integer and not more than 20 and less than 1'};
+  1214→    }
+  1215→
+  1216→    const parsedLimit = parseInt(limit);
+  1217→
+  1218→    let query = supabase
+  1219→    .from('opinions')
+  1220→    .select(OPINION_WITH_USER_SELECT)
+  1221→    .eq('parent_id', parentId)
+  1222→    .order('id', {ascending: false})
+  1223→    .limit(parsedLimit + 1)
+  1224→
+  1225→    if(before){
+  1226→        query = query.lt('id', before);
+  1227→    }
+  1228→    
+  1229→
+  1230→    const {data: replyData, error: errorReplyData} = await query;
+  1231→
+  1232→    if(errorReplyData){
+  1233→        console.error('supabase error:', errorReplyData.message);
+  1234→        throw {status: 500, error: 'supabase error while fetching opinions reply'}
+  1235→    }
+  1236→
+  1237→    const hasMore = replyData.length > parsedLimit;
+  1238→    const slicedData = hasMore ? replyData.splice(0, parsedLimit) : replyData;
+  1239→
+  1240→    return {data: slicedData, hasMore: hasMore};
+  1241→}
+  1242→
+  1243→export const getBookmarksService = async(userId, before, limit) => {
+  1244→    if(!userId){
+  1245→        console.error('userId is undefined');
+  1246→        throw {status: 400, error: 'userId is undefined'}
+  1247→    }
+  1248→
+  1249→    if(isNaN(limit) || limit > 20 || limit < 1){
+  1250→        console.error('limit must be an integer and not more than 20 or less than 1');
+  1251→        throw {status: 400, error: 'limit must be an integer and not more than 20 or less than 1'};
+  1252→    }
+  1253→    const paresedLimit = parseInt(limit);
+  1254→    let query = supabase
+  1255→    .from('bookmarks')
+  1256→    .select(`id, created_at, journal_id,
+  1257→        journals(
+  1258→        id, created_at, user_id, content, title, 
+  1259→        comment_count: comments(count),
+  1260→        bookmark_count: bookmarks(count),
+  1261→
+  1262→        users(name, image_url, badge),
+  1263→
+  1264→        like_count: likes(count)
+  1265→        )
+  1266→        `, {count: 'exact'})
+  1267→
+  1268→    .eq('user_id', userId)
+  1269→    .order('created_at', {ascending: false})
+  1270→    .order('id', {ascending: false})
+  1271→    .limit(parseInt(limit) + 1)
+  1272→
+  1273→    if(before){
+  1274→        query = query.lt('created_at', before);
+  1275→    }
+  1276→
+  1277→    const {data: bookMarksData, error: errorBookmarks, count} = await query;
+  1278→
+  1279→    if(errorBookmarks){
+  1280→        console.error('supabase error:', errorBookmarks.message);
+  1281→        throw {status: 500, error: 'supabase error while fetching bookmarks'}
+  1282→    }
+  1283→
+  1284→    const journalIds = bookMarksData?.map((bookmark) => bookmark.journals.id);
+  1285→
+  1286→    if(journalIds.length === 0){
+  1287→        return {data: [], hasMore: false}
+  1288→    }
+  1289→
+  1290→    let hasLikedPromise;
+  1291→    let hasBookmarkedPromise;
+  1292→
+  1293→    if(journalIds){
+  1294→        hasLikedPromise = supabase
+  1295→        .from('likes')
+  1296→        .select('journal_id')
+  1297→        .in('journal_id', journalIds)
+  1298→        .eq('user_id', userId)
+  1299→
+  1300→        hasBookmarkedPromise = supabase
+  1301→        .from('bookmarks')
+  1302→        .select('journal_id')
+  1303→        .in('journal_id', journalIds)
+  1304→        .eq('user_id', userId)
+  1305→    }
+  1306→
+  1307→    const [hasLiked, hasBookMarked] = await Promise.all([
+  1308→        hasLikedPromise, hasBookmarkedPromise
+  1309→    ])
+  1310→
+  1311→    const {data: hasLikedResult, error: errorHasLikedResult} = hasLiked;
+  1312→    const {data: hasBookMarkedResult, error: errorHasbookmarkedResult} = hasBookMarked;
+  1313→
+  1314→    if(errorHasLikedResult || errorHasbookmarkedResult){
+  1315→        console.error('supabase error while fetching data:', errorHasLikedResult.message || errorHasbookmarkedResult.message);
+  1316→        throw {status: 500, error: 'supabase error while fetching data'};
+  1317→    }
+  1318→    
+  1319→    const userHasLikedSet = new Set(hasLikedResult.map((journal) => journal.journal_id) || []);
+  1320→    const userHasBookmarkedSet = new Set(hasBookMarkedResult.map((bookmark) => bookmark.journal_id) || []);
+  1321→
+  1322→    const hasMore = bookMarksData.length > paresedLimit;
+  1323→
+  1324→
+  1325→    const formattedData = bookMarksData.map((b) => ({
+  1326→        ...b,
+  1327→        has_liked: userHasLikedSet.has(b.journals.id),
+  1328→        has_bookmarked: userHasBookmarkedSet.has(b.journals.id),
+  1329→    }))
+  1330→
+  1331→    const slicedData = hasMore ? formattedData.splice(0, paresedLimit) : formattedData;
+  1332→
+  1333→    return {
+  1334→        bookmarks: slicedData,
+  1335→        hasMore: hasMore,
+  1336→        totalBookmarks: before ? null : count
+  1337→    }
+  1338→}
+  1339→
+  1340→export const searchUsersService = async(query, limit = 10) => {
+  1341→    const normalizedQuery = normalizeSearchQuery(query);
+  1342→    if(!normalizedQuery || normalizedQuery.length < SEARCH_QUERY_MIN_LENGTH){
+  1343→        throw {status: 400, error: `query should be at least ${SEARCH_QUERY_MIN_LENGTH} characters`};
+  1344→    }
+  1345→
+  1346→    const parsedLimit = parseInt(limit);
+  1347→    if(isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > SEARCH_LIMIT_MAX){
+  1348→        throw {status: 400, error: `limit should be an integer between 1 and ${SEARCH_LIMIT_MAX}`};
+  1349→    }
+  1350→
+  1351→    const escapedQuery = normalizedQuery.replace(/[%_]/g, (match) => `\\${match}`);
+  1352→    const selectColumns = 'id, name, username, image_url, badge';
+  1353→
+  1354→    const [nameResult, usernameResult] = await Promise.all([
+  1355→        supabase
+  1356→            .from('users')
+  1357→            .select(selectColumns)
+  1358→            .ilike('name', `%${escapedQuery}%`)
+  1359→            .limit(parsedLimit + 1),
+  1360→        supabase
+  1361→            .from('users')
+  1362→            .select(selectColumns)
+  1363→            .ilike('username', `%${escapedQuery}%`)
+  1364→            .limit(parsedLimit + 1)
+  1365→    ]);
+  1366→
+  1367→    if(nameResult.error || usernameResult.error){
+  1368→        console.error('user search error:', nameResult.error?.message || usernameResult.error?.message);
+  1369→        throw {status: 500, error: 'supabase error while searching users'};
+  1370→    }
+  1371→
+  1372→    const userMap = new Map();
+  1373→    (nameResult.data || []).forEach((user) => {
+  1374→        userMap.set(user.id, user);
+  1375→    });
+  1376→    (usernameResult.data || []).forEach((user) => {
+  1377→        if(!userMap.has(user.id)){
+  1378→            userMap.set(user.id, user);
+  1379→        }
+  1380→    });
+  1381→
+  1382→    const users = [...userMap.values()];
+  1383→    const hasMore = users.length > parsedLimit;
+  1384→
+  1385→    return {
+  1386→        data: hasMore ? users.slice(0, parsedLimit) : users,
+  1387→        hasMore: hasMore
+  1388→    };
+  1389→}
+  1390→
+  1391→export const searchJournalsService = async(query, limit, userId) => {
+  1392→    const normalizedQuery = normalizeSearchQuery(query);
+  1393→    if(!normalizedQuery || normalizedQuery.length < SEARCH_QUERY_MIN_LENGTH){
+  1394→        throw {status: 400, error: `query should be at least ${SEARCH_QUERY_MIN_LENGTH} characters`};
+  1395→    }
+  1396→
+  1397→    if(isNaN(limit) || limit < 1 || limit > SEARCH_LIMIT_MAX){
+  1398→        throw {status: 400, error: `limit should be an integer between 1 and ${SEARCH_LIMIT_MAX}`};
+  1399→    }
+  1400→
+  1401→    const parsedLimit = parseInt(limit);
+  1402→    const fetchLimit = Math.min(parsedLimit * 3, 60);
+  1403→
+  1404→    const selectColumns = JOURNAL_WITH_COUNTS_SELECT;
+  1405→
+  1406→    // Prefer semantic retrieval. If pgvector RPC is unavailable or errors,
+  1407→    // fallback to keyword search so endpoint still returns useful data.
+  1408→    try {
+  1409→        const queryEmbedding = await GenerateEmbeddings(normalizedQuery, '');
+  1410→
+  1411→        if(Array.isArray(queryEmbedding) && queryEmbedding.length > 0){
+  1412→            const {data: matches, error: matchError} = await supabase.rpc('match_public_journals', {
+  1413→                query_embedding: queryEmbedding,
+  1414→                match_count: fetchLimit,
+  1415→                similarity_threshold: 0.35
+  1416→            });
+  1417→
+  1418→            if(matchError){
+  1419→                console.error('semantic search rpc error:', matchError.message);
+  1420→            } else if(Array.isArray(matches) && matches.length > 0){
+  1421→                const matchIds = matches.map((row) => row.id);
+  1422→                const similarityMap = new Map(matches.map((row) => [row.id, row.similarity]));
+  1423→
+  1424→                const {data: journals, error: errorJournals} = await supabase
+  1425→                    .from('journals')
+  1426→                    .select(selectColumns)
+  1427→                    .in('id', matchIds)
+  1428→                    .eq('privacy', 'public');
+  1429→
+  1430→                if(errorJournals){
+  1431→                    console.error('supabase error while fetching semantic search journals:', errorJournals.message);
+  1432→                    throw {status: 500, error: 'supabase error while fetching semantic search journals'};
+  1433→                }
+  1434→
+  1435→                const journalById = new Map((journals || []).map((journal) => [journal.id, journal]));
+  1436→                const orderedSemantic = matchIds
+  1437→                    .map((id) => journalById.get(id))
+  1438→                    .filter(Boolean)
+  1439→                    .map((journal) => ({
+  1440→                        ...journal,
+  1441→                        similarity: similarityMap.get(journal.id) || null
+  1442→                    }));
+  1443→
+  1444→                const withInteraction = await attachUserInteractionFlags(orderedSemantic, userId);
+  1445→                const hasMore = withInteraction.length > parsedLimit;
+  1446→
+  1447→                return {
+  1448→                    data: hasMore ? withInteraction.slice(0, parsedLimit) : withInteraction,
+  1449→                    hasMore: hasMore,
+  1450→                    mode: 'semantic'
+  1451→                };
+  1452→            }
+  1453→        }
+  1454→    } catch (error) {
+  1455→        console.error('semantic embedding/search fallback error:', error?.message || error);
+  1456→    }
+  1457→
+  1458→    const escapedQuery = normalizedQuery.replace(/[%_]/g, (match) => `\\${match}`);
+  1459→
+  1460→    const [titleResult, contentResult] = await Promise.all([
+  1461→        supabase
+  1462→            .from('journals')
+  1463→            .select(selectColumns)
+  1464→            .eq('privacy', 'public')
+  1465→            .ilike('title', `%${escapedQuery}%`)
+  1466→            .order('created_at', {ascending: false})
+  1467→            .order('id', {ascending: false})
+  1468→            .limit(parsedLimit + 1),
+  1469→        supabase
+  1470→            .from('journals')
+  1471→            .select(selectColumns)
+  1472→            .eq('privacy', 'public')
+  1473→            .ilike('content', `%${escapedQuery}%`)
+  1474→            .order('created_at', {ascending: false})
+  1475→            .order('id', {ascending: false})
+  1476→            .limit(parsedLimit + 1)
+  1477→    ]);
+  1478→
+  1479→    if(titleResult.error || contentResult.error){
+  1480→        console.error('keyword search error:', titleResult.error?.message || contentResult.error?.message);
+  1481→        throw {status: 500, error: 'supabase error while searching journals'};
+  1482→    }
+  1483→
+  1484→    const keywordMap = new Map();
+  1485→    (titleResult.data || []).forEach((journal) => {
+  1486→        keywordMap.set(journal.id, journal);
+  1487→    });
+  1488→    (contentResult.data || []).forEach((journal) => {
+  1489→        if(!keywordMap.has(journal.id)){
+  1490→            keywordMap.set(journal.id, journal);
+  1491→        }
+  1492→    });
+  1493→
+  1494→    const keywordJournals = [...keywordMap.values()];
+  1495→
+  1496→    const withInteraction = await attachUserInteractionFlags(keywordJournals || [], userId);
+  1497→    const hasMore = withInteraction.length > parsedLimit;
+  1498→
+  1499→    return {
+  1500→        data: hasMore ? withInteraction.slice(0, parsedLimit) : withInteraction,
+  1501→        hasMore: hasMore,
+  1502→        mode: 'keyword'
+  1503→    };
+  1504→}
+  1505→

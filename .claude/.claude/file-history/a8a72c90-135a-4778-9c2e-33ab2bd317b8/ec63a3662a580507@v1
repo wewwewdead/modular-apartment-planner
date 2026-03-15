@@ -1,0 +1,77 @@
+import React from 'react';
+import {StatusBar, StyleSheet, Text, View} from 'react-native';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
+import {QueryClientProvider} from '@tanstack/react-query';
+import {RootNavigator} from './src/navigation/RootNavigator';
+import {queryClient} from './src/lib/queryClient';
+import * as authProviderModule from './src/features/auth/AuthProvider';
+import {AppErrorBoundary} from './src/components/AppErrorBoundary';
+import {colors} from './src/theme/colors';
+
+function App(): React.JSX.Element {
+  const AuthProvider = authProviderModule.AuthProvider as
+    | React.ComponentType<{children: React.ReactNode}>
+    | undefined;
+
+  if (!AuthProvider) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <AppErrorBoundary>
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorTitle}>Auth module failed to load</Text>
+              <Text style={styles.errorBody}>
+                Restart Metro with --reset-cache and relaunch the app.
+              </Text>
+            </View>
+          </AppErrorBoundary>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <AppErrorBoundary>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <StatusBar barStyle="light-content" backgroundColor={colors.background} />
+              <RootNavigator />
+            </AuthProvider>
+          </QueryClientProvider>
+        </AppErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: colors.background,
+  },
+  errorTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorBody: {
+    color: colors.textMuted,
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+});
+
+export default App;

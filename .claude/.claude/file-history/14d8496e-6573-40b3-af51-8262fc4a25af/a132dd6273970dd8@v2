@@ -1,0 +1,66 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { colors } from '../theme/colors';
+import { typography } from '../theme/typography';
+
+interface SectionHeaderProps {
+  emoji?: string | null;
+  title: string;
+  count?: number;
+}
+
+export function SectionHeader({ emoji, title, count }: SectionHeaderProps) {
+  return (
+    <View style={styles.container}>
+      <View style={styles.titleRow}>
+        <View style={styles.stripe} />
+        <Text style={styles.title}>
+          {emoji ? `${emoji} ` : ''}{title}
+        </Text>
+      </View>
+      {count !== undefined && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{count}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: colors.canvas,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stripe: {
+    width: 3,
+    height: 18,
+    borderRadius: 1.5,
+    backgroundColor: colors.brand,
+  },
+  title: {
+    ...typography.subtitle,
+    color: colors.ink,
+  },
+  badge: {
+    backgroundColor: colors.brandLight,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    ...typography.caption,
+    color: colors.brandDeep,
+    fontFamily: 'SourceSans3-Bold',
+  },
+});

@@ -1,0 +1,151 @@
+import { buildSheetScene } from '@/sheets/layout';
+import { getViewportHandleRects } from '@/sheets/hitTest';
+import SheetViewportContent from './SheetViewportContent';
+
+const HANDLE_SIZE = 4;
+
+function TitleBlock({ titleBlock }) {
+  const rowHeight = titleBlock.height / titleBlock.rows.length;
+
+  return (
+    <g className="sheet-title-block">
+      <rect
+        x={titleBlock.x}
+        y={titleBlock.y}
+        width={titleBlock.width}
+        height={titleBlock.height}
+        fill="#ffffff"
+        stroke="#4c5b70"
+        strokeWidth={0.5}
+      />
+      {titleBlock.rows.map((row, index) => {
+        const y = titleBlock.y + rowHeight * index;
+        return (
+          <g key={row.label}>
+            <line
+              x1={titleBlock.x}
+              y1={y}
+              x2={titleBlock.x + titleBlock.width}
+              y2={y}
+              stroke="#4c5b70"
+              strokeWidth={0.35}
+            />
+            <line
+              x1={titleBlock.x + titleBlock.width * 0.28}
+              y1={y}
+              x2={titleBlock.x + titleBlock.width * 0.28}
+              y2={y + rowHeight}
+              stroke="#4c5b70"
+              strokeWidth={0.35}
+            />
+            <text x={titleBlock.x + 2} y={y + rowHeight * 0.67} fontSize={2.5} fill="#4c5b70">
+              {row.label}
+            </text>
+            <text x={titleBlock.x + titleBlock.width * 0.31} y={y + rowHeight * 0.67} fontSize={2.8} fill="#223247">
+              {row.value}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function EmptyViewportMessage({ viewport, message }) {
+  return (
+    <text
+      x={viewport.x + viewport.width / 2}
+      y={viewport.y + viewport.height / 2}
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fill="#66768a"
+      fontSize={4}
+    >
+      {message}
+    </text>
+  );
+}
+
+export default function SheetRenderer({ project, sheet, selectedId, selectedType }) {
+  const scene = buildSheetScene(project, sheet);
+  if (!scene) return null;
+
+  return (
+    <g className="sheet">
+      <rect
+        x={0}
+        y={0}
+        width={scene.paper.width}
+        height={scene.paper.height}
+        fill="#f2f4f7"
+        stroke="none"
+      />
+      <rect
+        x={scene.border.x}
+        y={scene.border.y}
+        width={scene.border.width}
+        height={scene.border.height}
+        fill="#ffffff"
+        stroke={selectedType === 'sheet' && selectedId === sheet.id ? '#0f8f74' : '#4c5b70'}
+        strokeWidth={selectedType === 'sheet' && selectedId === sheet.id ? 1 : 0.7}
+      />
+      <TitleBlock titleBlock={scene.titleBlock} />
+      {scene.viewports.map((viewport) => {
+        const isSelected = selectedType === 'sheetViewport' && selectedId === viewport.id;
+        return (
+          <g
+            key={viewport.id}
+            className="sheet-viewport"
+            transform={viewport.rotation ? `rotate(${viewport.rotation}, ${viewport.x + viewport.width / 2}, ${viewport.y + viewport.height / 2})` : undefined}
+          >
+            <text
+              x={viewport.x}
+              y={viewport.y - 2}
+              fontSize={3.4}
+              fill="#4c5b70"
+            >
+              {viewport.title}
+            </text>
+            <rect
+              x={viewport.x}
+              y={viewport.y}
+              width={viewport.width}
+              height={viewport.height}
+              fill="#ffffff"
+              stroke={isSelected ? '#0f8f74' : '#4c5b70'}
+              strokeWidth={isSelected ? 0.8 : 0.45}
+            />
+            {viewport.source.kind === 'empty' ? (
+              <EmptyViewportMessage viewport={viewport} message={viewport.source.message} />
+            ) : (
+              <svg
+                x={viewport.clipRect.x}
+                y={viewport.clipRect.y}
+                width={viewport.clipRect.width}
+                height={viewport.clipRect.height}
+                viewBox={`0 0 ${viewport.clipRect.width} ${viewport.clipRect.height}`}
+                overflow="hidden"
+              >
+                <g transform={`translate(${viewport.contentTransform.translateX}, ${viewport.contentTransform.translateY}) scale(${viewport.contentTransform.scale})`}>
+                  <SheetViewportContent source={viewport.source} />
+                </g>
+              </svg>
+            )}
+            {isSelected && Object.values(getViewportHandleRects(viewport, HANDLE_SIZE)).map((handleRect) => (
+              <rect
+                key={`${viewport.id}-${handleRect.x}-${handleRect.y}`}
+                x={handleRect.x}
+                y={handleRect.y}
+                width={handleRect.width}
+                height={handleRect.height}
+                fill="#ffffff"
+                stroke="#0f8f74"
+                strokeWidth={0.5}
+              />
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}

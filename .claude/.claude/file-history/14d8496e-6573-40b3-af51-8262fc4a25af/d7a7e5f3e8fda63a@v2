@@ -1,0 +1,116 @@
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import React, { useCallback, useState } from 'react';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+import { elevation } from '../../theme/elevation';
+import { AnimatedPressable } from '../AnimatedPressable';
+import { TabBarBadge } from './TabBarBadge';
+import { TabBarIcon } from './TabBarIcon';
+import { TabBarIndicatorPill } from './TabBarIndicatorPill';
+import { tabBarIcons } from './tabBarIcons';
+
+export function GrockTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const [tabWidth, setTabWidth] = useState(0);
+  const appState = useAppStore(s => s.appState);
+
+  const cartItemCount = appState
+    ? appState.vault.carts
+        .filter(c => !c.isDeleted && c.status !== 'completed')
+        .reduce((sum, c) => sum + c.cartItems.length, 0)
+    : 0;
+
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    const width = e.nativeEvent.layout.width;
+    setTabWidth(width / state.routes.length);
+  }, [state.routes.length]);
+
+  return (
+    <View
+      style={styles.container}
+      onLayout={onLayout}
+      accessibilityRole="tablist"
+    >
+      {tabWidth > 0 && (
+        <TabBarIndicatorPill
+          tabCount={state.routes.length}
+          activeIndex={state.index}
+          tabWidth={tabWidth}
+        />
+      )}
+      {state.routes.map((route, index) => {
+        const { options } = descriptors[route.key];
+        const isFocused = state.index === index;
+        const routeName = route.name as keyof typeof tabBarIcons;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        const label = options.tabBarLabel
+          ? String(options.tabBarLabel)
+          : options.title ?? route.name;
+
+        const badgeCount = routeName === 'Cart' ? cartItemCount : 0;
+        const accessibilityLabel = badgeCount > 0
+          ? `${label}, ${badgeCount} item${badgeCount === 1 ? '' : 's'}`
+          : label;
+
+        return (
+          <AnimatedPressable
+            key={route.key}
+            onPress={onPress}
+            style={styles.tab}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isFocused }}
+            accessibilityLabel={accessibilityLabel}
+          >
+            <View>
+              <TabBarIcon routeName={routeName} focused={isFocused} />
+              {routeName === 'Cart' && <TabBarBadge count={badgeCount} />}
+            </View>
+            <Text style={[styles.label, isFocused && styles.labelActive]}>
+              {label}
+            </Text>
+          </AnimatedPressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    height: 72,
+    backgroundColor: colors.surfaceElevated,
+    paddingBottom: 8,
+    ...elevation.level4,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 48,
+    minWidth: 48,
+  },
+  label: {
+    fontSize: 11,
+    color: colors.mutedInk,
+    fontFamily: 'SourceSans3-SemiBold',
+  },
+  labelActive: {
+    color: colors.brand,
+    fontFamily: 'SourceSans3-Bold',
+  },
+});

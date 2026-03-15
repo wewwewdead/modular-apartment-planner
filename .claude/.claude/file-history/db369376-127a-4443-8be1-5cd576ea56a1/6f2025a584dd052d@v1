@@ -1,0 +1,191 @@
+# Onboarding Wizard — Implementation Plan
+
+## Context
+
+The current onboarding is bare: signup → profile modal (name/bio/username) → confetti → dumped into the feed. No feature discovery, no personalization, no guided first action. This plan replaces that with a 5-step premium onboarding wizard with a **warm editorial luxury** aesthetic (cream/gold, serif typography, ink accents — like opening a leather journal).
+
+---
+
+## What Gets Replaced
+
+The new `OnboardingWizard` replaces **all** of these in `Home.jsx`:
+- State variables: `showProfileEditor`, `profilePreview`, `imageFile`, `name`, `bio`, `setupUsername`, `usernameAvailable`, `usernameChecking`, `usernameCheckTimer`, `uploadingUserData`, `showWelcomeMessage` (lines 155-169)
+- Handler functions: `handleClickUploadPhoto`, `handleImageChange`, `handleNameChangeForSetup`, `handleUsernameChange`, `checkUsernameDebounced`, `handleSubmit`, `handleCloseWelcomeMessage` (lines 174-292)
+- First-time user detection useEffect (lines 333-347) — modified, not removed
+- Profile editor modal JSX (lines 380-469)
+- WelcomeMessage render (lines 359-361)
+- `WelcomeMessage` component import
+
+---
+
+## Step 1: Database Migration
+
+**File:** `server/sql/onboarding.sql` (new)
+
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed boolean DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS writing_interests text[] DEFAULT '{}';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS writing_goal text;
+
+-- Backfill: mark all existing users as onboarded
+UPDATE users SET onboarding_completed = true WHERE onboarding_completed IS NULL;
+```
+
+---
+
+## Step 2: Backend Changes
+
+### 2a. `server/services/checkUserService.js`
+- Change `.select('id')` → `.select('id, onboarding_completed')` so the client knows whether to gate the wizard
+
+### 2b. `server/controller/checkUserController.js`
+- Return `onboardingCompleted` alongside `exist` in the response
+
+### 2c. New endpoint: `POST /api/complete-onboarding`
+- **Service:** Add `completeOnboardingService` in `server/services/uploadService.js`
+  - Accepts `{ userId, writingInterests, writingGoal }`
+  - Updates user row: `onboarding_completed = true`, `onboarding_completed_at = now()`, `writing_interests`, `writing_goal`
+- **Controller:** Add handler in `server/controller/uploadController.js`
+- **Route:** Add in `server/routes/routes.js` with `requireAuth` middleware
+
+---
+
+## Step 3: Client API
+
+**File:** `client/API/Api.js`
+- Add `completeOnboarding(token, { writingInterests, writingGoal })` function
+- Modify `checkUser` response handling to pass through `onboardingCompleted`
+
+---
+
+## Step 4: Onboarding Components
+
+### File Structure
+```
+client/src/components/Onboarding/
+  OnboardingWizard.jsx        — Container, step orchestration, shared state
+  OnboardingWizard.css        — All styles (single file)
+  steps/
+    WelcomeStep.jsx           — Step 0: Animated greeting
+    ProfileSetupStep.jsx      — Step 1: Photo, name, bio, username
+    InterestsStep.jsx         — Step 2: Writing topics + primary goal
+    FeatureShowcaseStep.jsx   — Step 3: Animated feature previews
+    FirstActionStep.jsx       — Step 4: Final CTA + confetti
+  components/
+    StepProgressBar.jsx       — Progress dots
+    TypewriterText.jsx        — Typewriter text reveal effect
+```
+
+### OnboardingWizard.jsx (Container)
+- Full-screen overlay (fixed, z-index 140)
+- Manages `currentStep` (0-4), direction, and all shared form state
+- `<AnimatePresence mode="wait">` wraps steps for page transitions
+- Step transitions: spring-based horizontal slide + opacity (directional)
+- Passes `goNext()`, `goBack()`, shared state to each step
+- On final completion: calls `completeOnboarding` API → `onComplete()` callback
+
+### WelcomeStep (Step 0)
+- ISKRIB brand in Playfair Display serif
+- TypewriterText: "Welcome to Iskrib"
+- Subtitle in Lora italic: "A quiet place for your thoughts, stories, and reflections."
+- Warm amber gradient blob background (reuse `@keyframes morph` from login.css)
+- Confetti burst using `canvas-confetti` (existing dep) with ISKRIB palette
+- Single CTA: "Let's set up your space"
+
+### ProfileSetupStep (Step 1)
+- Extracted from `Home.jsx` lines 389-468 — same logic, same validation
+- Photo upload with camera overlay, name (max 20), bio (max 150), username with availability check
+- On "Continue": calls `submitProfileData()` to create user row with `onboarding_completed: false`
+- Reuses existing input classes scoped under `.onboarding-wizard`
+
+### InterestsStep (Step 2)
+- Header: "What draws you to write?" (Playfair Display)
+- Grid of selectable topic chips (glass morphism, amber border on select, spring scale):
+  Poetry, Fiction, Journals, Essays, Philosophy, Self-Reflection, Creative Nonfiction, Short Stories, Science, Nature, Music, Art, Travel, Technology, Mental Health, Spirituality
+- "What's your main goal?" — 4 options with icons:
+  - Keep a journal (notebook), Publish & share (globe), Write long stories (book), Just explore (compass)
+- No API call here — data saved in final step
+- "Skip for now" subtle link available
+
+### FeatureShowcaseStep (Step 3)
+- Header: "Your writing toolkit" (Playfair Display)
+- 3-4 staggered `motion.div` feature cards (glass morphism, `staggerChildren: 0.15`):
+  1. **Rich Editor** — miniature editor illustration, "A beautiful space to write"
+  2. **Writing Streaks** — flame icon + animated counter, "Build momentum daily"
+  3. **Stories** — book with chapter pages, "Serialize your long-form work"
+  4. **Community** — connected avatars, "Discover writers you admire"
+- "Skip for now" available
+
+### FirstActionStep (Step 4)
+- Confetti burst (same ISKRIB palette as WelcomeMessage)
+- Pen icon (reuse existing SVG)
+- "You're ready" heading + "Your quiet writing space awaits." subtitle
+- Two CTAs dynamically ordered by `writingGoal`:
+  - journal/publish → Primary: "Write your first post"
+  - stories → Primary: "Start a story"
+  - explore/none → Primary: "Explore Iskrib"
+  - Secondary CTA always available as alternative
+- Calls `completeOnboarding()` on click, then `onComplete(action)`
+
+### StepProgressBar
+- 5 connected dots, amber fill for completed/current, faint for upcoming
+- `layoutId` on active indicator for sliding animation
+
+### TypewriterText
+- Character-by-character reveal with `setInterval` (40ms default)
+- Blinking cursor at end
+
+---
+
+## Step 5: Integration into Home.jsx
+
+**File:** `client/src/components/HomePage/Home.jsx`
+
+1. Remove all old profile editor state, handlers, and JSX (lines 154-169, 174-280, 333-347, 359-361, 380-469)
+2. Add `const [showOnboarding, setShowOnboarding] = useState(false)`
+3. Modify the `useEffect` to check both `exist` and `onboardingCompleted`:
+   ```jsx
+   if (!userData.exist || !userData.onboardingCompleted) {
+       setShowOnboarding(true);
+   }
+   ```
+4. Render `OnboardingWizard` with `onComplete` callback that:
+   - Sets `showOnboarding = false`
+   - Invalidates `userData` query
+   - Opens editor / navigates based on chosen action
+5. Remove `WelcomeMessage` import
+
+---
+
+## Step 6: Aesthetic Direction
+
+**Warm editorial luxury** — like opening a leather journal:
+- **Typography:** Playfair Display for all headings, Lora italic for subtitles/descriptions, Outfit for UI/labels
+- **Colors:** All existing CSS vars — `--bg-primary` (cream), `--accent-amber` (#D4A853), `--text-heading` (warm dark)
+- **Surfaces:** Glass morphism cards with `var(--bg-glass)`, warm shadows, 16px border-radius
+- **Accents:** Amber gold highlights, ink-inspired decorative elements, organic blob shapes
+- **Motion:** framer-motion springs for page transitions, staggered reveals, subtle scale/hover micro-interactions
+- **Confetti:** Gold, cream, sage palette (`['#D4A853', '#C4943E', '#E0BA6A', '#FAF9F6', '#8A9E7A']`)
+- **Dark mode:** Works automatically via CSS variables
+- **Reduced motion:** Respected via `prefers-reduced-motion` media query
+
+---
+
+## Step 7: Mobile Responsiveness
+
+- `@media (max-width: 768px)` — wizard card `max-width: 92%`, reduced padding
+- `@media (max-width: 480px)` — smaller typography, 2-column interest grid
+- `@media (max-width: 428px)` — full-width card, stacked goal options
+
+---
+
+## Verification
+
+1. **Signup flow:** Create new account → wizard appears → complete all 5 steps → lands on feed with correct action
+2. **Interrupted flow:** Close tab mid-wizard → reopen → wizard resumes (profile data pre-filled if step 1 was completed)
+3. **Skip behavior:** Skip from step 2+ → `onboarding_completed` set to true → wizard never shows again
+4. **Dark mode:** Toggle theme → all wizard steps render correctly
+5. **Mobile:** Test at 428px, 480px, 768px breakpoints
+6. **Existing users:** Should never see the wizard (backfill sets `onboarding_completed = true`)
+7. **DB check:** Verify `writing_interests` and `writing_goal` columns populated after completion

@@ -1,0 +1,111 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  min-width: 340px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-panel-bg);
+  cursor: pointer;
+  transition: border-color var(--duration-fast), background var(--duration-fast);
+  text-align: center;
+}
+
+.card:hover {
+  border-color: var(--color-workspace-sketch, #B8860B);
+  background: rgba(184, 134, 11, 0.04);
+}
+
+.card:active {
+  transform: scale(0.98);
+}
+
+.cardIcon {
+  width: 40px;
+  height: 40px;
+  color: var(--color-workspace-sketch, #B8860B);
+}
+
+.cardLabel {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.cardDesc {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.paramView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 300px;
+}
+
+.paramHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.backBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--color-text-primary);
+}
+
+.paramTitle {
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.createBtn {
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--color-workspace-sketch, #B8860B);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast), transform var(--duration-micro);
+  margin-top: var(--space-sm);
+}
+
+.createBtn:hover {
+  background: #9A7209;
+}
+
+.createBtn:active {
+  transform: scale(0.97);
+}

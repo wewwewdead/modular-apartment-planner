@@ -1,0 +1,230 @@
+# Plan: Add Railing Tool
+
+## Context
+
+The user wants a new **Railing** tool added to the toolbar. Railings are linear structural/safety elements placed point-to-point on the floor plan. Three types are required: **glass**, **handrail**, and **guardrail**.
+
+## Design Decisions
+
+- **Placement model**: Free point-to-point (like section cuts), NOT column-to-column (like beams). This gives maximum flexibility — railings can be placed anywhere.
+- **Data model**: `startPoint`, `endPoint`, `type` (glass/handrail/guardrail), `height`, `width`
+- **Visual differentiation**: Each type renders with a distinct SVG style in plan view
+- **Keyboard shortcut**: `H` (unused, mnemonic for "handrail/railing")
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/editor/handlers/railingPlaceHandler.js` | Two-click placement handler (pattern: `sectionPlaceHandler.js`) |
+| `src/renderers/RailingRenderer.jsx` | Render railings on canvas (pattern: `BeamRenderer.jsx`) |
+| `src/renderers/RailingPreview.jsx` | Ghost preview while placing (pattern: `SectionCutPreview.jsx`) |
+| `src/geometry/railingGeometry.js` | Geometry helpers: outline, hit-test, length, render data |
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/editor/tools.js` | Add `RAILING: 'railing'` to `TOOLS`, add `RAILING_TYPES` constant |
+| `src/domain/defaults.js` | Add `RAILING_HEIGHT` (1000mm), `RAILING_WIDTH` (50mm) |
+| `src/domain/models.js` | Add `createRailing()` factory, add `railings: []` to `createFloor()` |
+| `src/app/ProjectProvider.jsx` | Add `RAILING_ADD`, `RAILING_UPDATE`, `RAILING_DELETE` reducer cases |
+| `src/editor/useEditorTool.js` | Import + add `case TOOLS.RAILING` |
+| `src/ui/ToolbarIcons.jsx` | Add `RailingIcon` SVG component |
+| `src/ui/Toolbar.jsx` | Add railing to `toolItems` array |
+| `src/renderers/SvgCanvas.jsx` | Import + render `RailingRenderer` and `RailingPreview`, add `H` shortcut |
+| `src/editor/handlers/selectHandler.js` | Add railing hit-test + delete + drag support |
+| `src/renderers/SelectionOverlay.jsx` | Add `selectedType === 'railing'` case |
+| `src/ui/PropertiesPanel.jsx` | Add `RailingProperties` component + selection/delete routing |
+
+## Implementation Steps
+
+### Step 1: Constants & Types (`src/editor/tools.js`, `src/domain/defaults.js`)
+
+**tools.js** — Add to `TOOLS`:
+```js
+RAILING: 'railing',
+```
+Add railing type constants:
+```js
+export const RAILING_TYPES = {
+  GLASS: 'glass',
+  HANDRAIL: 'handrail',
+  GUARDRAIL: 'guardrail',
+};
+```
+
+**defaults.js** — Add:
+```js
+export const RAILING_HEIGHT = 1000; // mm
+export const RAILING_WIDTH = 50;    // mm
+```
+
+### Step 2: Domain Model (`src/domain/models.js`)
+
+Add `railings: []` to `createFloor()` return object.
+
+Add factory function:
+```js
+export function createRailing(startPoint, endPoint, options = {}) {
+  return {
+    id: generateId('rail'),
+    startPoint: { x: startPoint.x, y: startPoint.y },
+    endPoint: { x: endPoint.x, y: endPoint.y },
+    type: options.type ?? 'guardrail',
+    height: options.height ?? RAILING_HEIGHT,
+    width: options.width ?? RAILING_WIDTH,
+  };
+}
+```
+
+### Step 3: Reducer (`src/app/ProjectProvider.jsx`)
+
+Add three cases following the BEAM pattern:
+```js
+case 'RAILING_ADD':
+  return updateFloor(state, action.floorId, f => ({
+    ...f,
+    railings: [...(f.railings || []), action.railing],
+  }));
+case 'RAILING_UPDATE':
+  return updateFloor(state, action.floorId, f => ({
+    ...f,
+    railings: (f.railings || []).map(r =>
+      r.id === action.railing.id ? { ...r, ...action.railing } : r
+    ),
+  }));
+case 'RAILING_DELETE':
+  return updateFloor(state, action.floorId, f => ({
+    ...f,
+    railings: (f.railings || []).filter(r => r.id !== action.railingId),
+  }));
+```
+
+### Step 4: Geometry (`src/geometry/railingGeometry.js`) — NEW FILE
+
+Provides `getRailingRenderData()`, `railingContainsPoint()`, `railingLength()`.
+
+Uses `makeOutline` pattern from `beamGeometry.js` — compute a rectangle outline from `startPoint`→`endPoint` with the railing's width. Hit-test via `pointInPolygon` on that outline.
+
+Reuse from `src/geometry/point.js`: `add`, `subtract`, `scale`, `normalize`, `perpendicular`, `distance`, `midpoint`.
+
+### Step 5: Placement Handler (`src/editor/handlers/railingPlaceHandler.js`) — NEW FILE
+
+Two-click handler following `sectionPlaceHandler.js` pattern:
+1. First click → store `railingStartPoint` in toolState
+2. Mouse move → update `railingPreviewPoint` in toolState
+3. Second click → create railing via `createRailing()`, dispatch `RAILING_ADD`
+4. Escape → cancel, return to select tool
+5. Grid snapping when enabled
+
+### Step 6: Renderers (`src/renderers/`) — 2 NEW FILES
+
+**RailingRenderer.jsx**: Renders each railing as an SVG `<polygon>` using `getRailingRenderData()`. Visual style varies by type:
+- **glass**: thin, lighter stroke, semi-transparent blue fill
+- **handrail**: thin solid line, no fill, just a centerline with circles at ends
+- **guardrail**: thicker, solid fill with cross-hatching or solid color
+
+All use `data-id` and `data-type="railing"` for hit-testing.
+
+**RailingPreview.jsx**: Shows dashed ghost polygon while placing (when `activeTool === TOOLS.RAILING` and toolState has `railingStartPoint`).
+
+### Step 7: Toolbar (`src/ui/Toolbar.jsx`, `src/ui/ToolbarIcons.jsx`)
+
+**ToolbarIcons.jsx** — Add `RailingIcon`:
+```jsx
+export function RailingIcon(props) {
+  return <I {...props}><line x1="3" y1="10" x2="17" y2="10" {...p} /><circle cx="3" cy="10" r="1.5" {...p} /><circle cx="17" cy="10" r="1.5" {...p} /><line x1="6" y1="7" x2="6" y2="13" {...p} /><line x1="10" y1="7" x2="10" y2="13" {...p} /><line x1="14" y1="7" x2="14" y2="13" {...p} /></I>;
+}
+```
+
+**Toolbar.jsx** — Add to `toolItems` and imports:
+```js
+{ tool: TOOLS.RAILING, label: 'Railing', shortcut: 'H', Icon: RailingIcon },
+```
+
+### Step 8: SvgCanvas Integration (`src/renderers/SvgCanvas.jsx`)
+
+- Import `RailingRenderer` and `RailingPreview`
+- Render `<RailingRenderer railings={floor.railings || []} />` after ColumnRenderer (z-order)
+- Render `<RailingPreview toolState={toolState} activeTool={activeTool} />` after ColumnPreview
+- Add `case 'h': editorDispatch({ type: 'SET_TOOL', tool: TOOLS.RAILING }); return;` to keyboard shortcuts
+
+### Step 9: useEditorTool.js
+
+Import and add case:
+```js
+import { createRailingPlaceHandler } from './handlers/railingPlaceHandler';
+// ...
+case TOOLS.RAILING:
+  return createRailingPlaceHandler(ctx);
+```
+
+### Step 10: Select Handler (`src/editor/handlers/selectHandler.js`)
+
+- Import `railingContainsPoint` from `@/geometry/railingGeometry`
+- Add railing hit-test in `hitTest()` function (after beams, before walls):
+  ```js
+  for (const railing of (floor.railings || [])) {
+    if (railingContainsPoint(railing, modelPos)) {
+      return { id: railing.id, type: 'railing' };
+    }
+  }
+  ```
+- Add to `draggableTypes` set: `'railing'`
+- Add railing drag logic in `onMouseMove` (move both startPoint and endPoint by dx/dy)
+- Add to delete handler in `onKeyDown`:
+  ```js
+  } else if (selectedType === 'railing') {
+    dispatch({ type: 'RAILING_DELETE', floorId: activeFloorId, railingId: selectedId });
+  }
+  ```
+
+### Step 11: Selection Overlay (`src/renderers/SelectionOverlay.jsx`)
+
+- Import `getRailingRenderData` from `@/geometry/railingGeometry`
+- Add `selectedType === 'railing'` case showing polygon outline + start/end handles
+
+### Step 12: Properties Panel (`src/ui/PropertiesPanel.jsx`)
+
+Add `RailingProperties` component with fields:
+- Label (read-only, auto-generated)
+- Type (dropdown: glass / handrail / guardrail)
+- Start Point X, Y (editable)
+- End Point X, Y (editable)
+- Height (editable)
+- Width (editable)
+- Length (read-only, computed)
+
+Add selection routing:
+```js
+} else if (selectedType === 'railing') {
+  const railing = (floor.railings || []).find(r => r.id === selectedId);
+  if (railing) {
+    content = <RailingProperties railing={railing} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  }
+}
+```
+
+Add delete routing in the delete handler.
+
+## Key Patterns to Reuse
+
+- **`sectionPlaceHandler.js`** — two-click placement with grid snapping
+- **`beamGeometry.js` `makeOutline()`** — rectangle outline from two points + width (reimplement in railingGeometry)
+- **`BeamRenderer.jsx`** — polygon rendering with `data-id`/`data-type`
+- **`SectionCutPreview.jsx`** — preview during placement
+- **Point utilities** (`src/geometry/point.js`): `add`, `subtract`, `scale`, `normalize`, `perpendicular`, `distance`, `midpoint`
+- **Reducer pattern** from BEAM_ADD/UPDATE/DELETE
+
+## Verification
+
+1. `npx vite build` — no errors
+2. Press `H` or click Railing tool in toolbar → crosshair cursor
+3. Click two points → railing created, selected, visible on canvas
+4. Properties panel shows railing fields; can change type, dimensions, endpoints
+5. Drag railing → moves both endpoints
+6. Delete key → removes railing
+7. Escape during placement → cancels
+8. All three types (glass, handrail, guardrail) render with distinct visual styles
+9. Undo/redo works for railing operations
+10. Grid snapping works during placement

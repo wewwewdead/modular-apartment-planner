@@ -1,0 +1,203 @@
+import { useMemo, useState } from "react";
+import { MoonLoader } from "react-spinners";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { getCanvasGallery } from "../../../../API/Api";
+import { useAuth } from "../../../Context/useAuth";
+import formatPostDate from "../../../../helpers/formatDateString";
+import VerifiedBadge from "../../Badge/VerifiedBadge";
+import { parseCanvasDoc } from "../../../utils/canvasDoc";
+import { handleImageFallback } from "../../../utils/handleImageFallback";
+import "./gallery.css";
+
+const getAspectRatioValue = (aspectRatio) => (aspectRatio === "4:5" ? "4 / 5" : "1 / 1");
+
+const extractCount = (value) => {
+    if(Array.isArray(value) && value.length > 0){
+        return value[0]?.count || 0;
+    }
+    return 0;
+};
+
+const CanvasPreview = ({canvasDoc}) => {
+    const parsedCanvasDoc = useMemo(() => parseCanvasDoc(canvasDoc), [canvasDoc]);
+    const previewSnippets = (parsedCanvasDoc?.snippets || []).slice(0, 6);
+    const firstImage = parsedCanvasDoc?.images?.[0]?.src || null;
+    const aspectRatioValue = getAspectRatioValue(parsedCanvasDoc?.meta?.aspectRatio);
+
+    return (
+        <div className={`gallery-preview-shell ${parsedCanvasDoc?.meta?.theme === 'dark' ? 'is-dark' : ''}`} style={{aspectRatio: aspectRatioValue}}>
+            {firstImage && (
+                <img
+                    className="gallery-preview-image"
+                    src={firstImage}
+                    alt="Canvas visual"
+                    loading="lazy"
+                    onError={handleImageFallback}
+                />
+            )}
+
+            <div className="gallery-preview-snippets">
+                {previewSnippets.map((snippet) => (
+                    <div
+                        key={snippet.id}
+                        className={`gallery-preview-snippet ${snippet.fontStyle === 'bold' ? 'is-bold' : ''}`}
+                        style={{
+                            left: `${Math.min(Math.max((snippet?.x || 0.2) * 100, 5), 85)}%`,
+                            top: `${Math.min(Math.max((snippet?.y || 0.2) * 100, 6), 88)}%`,
+                            transform: `translate(-50%, -50%) rotate(${snippet?.rotation || 0}deg)`
+                        }}
+                    >
+                        {(snippet?.text || '').slice(0, 44)}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+const FireIcon = () => (
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8.5 1C8.5 1 9.5 4 9.5 5.5C9.5 6.5 9 7 8 7C7 7 6 6.5 6 5C6 3.5 8.5 1 8.5 1ZM12 9.5C12 12 10.2 14 8 14C5.8 14 4 12 4 9.5C4 7 6 4.5 8 3C10 4.5 12 7 12 9.5Z" fill="currentColor" fillOpacity="0.65"/>
+    </svg>
+);
+
+const StampIcon = () => (
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 1.5C4.96 1.5 2.5 3.96 2.5 7C2.5 8.8 3.4 10.38 4.78 11.28L4.5 14.5H11.5L11.22 11.28C12.6 10.38 13.5 8.8 13.5 7C13.5 3.96 11.04 1.5 8 1.5Z" fill="currentColor" fillOpacity="0.55"/>
+    </svg>
+);
+
+const DoodleIcon = () => (
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.5 13.5L4.5 11.5C5.5 10.5 6 9 5.5 7.5C5 6 4.5 5 5 3.5C5.5 2 7 1.5 8.5 2C10 2.5 11 4 10.5 5.5C10 7 9 8 9.5 9.5C10 11 11.5 11.5 13 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.6"/>
+    </svg>
+);
+
+const GalleryPage = ({
+    userIdOverride = null,
+    queryKeyPrefix = 'canvasGallery',
+    isEmbedded = false,
+}) => {
+    const navigate = useNavigate();
+    const {user} = useAuth();
+    const userId = userIdOverride || user?.userData?.[0]?.id || null;
+    const [sortMode, setSortMode] = useState('hottest');
+
+    const {data, isLoading, isFetching} = useQuery({
+        queryKey: [queryKeyPrefix, userId, sortMode],
+        queryFn: () => getCanvasGallery(userId, 60, sortMode),
+        refetchOnWindowFocus: false,
+        staleTime: 1000 * 45
+    });
+
+    const journals = useMemo(() => (
+        (data?.data || []).filter((journal) => journal?.post_type === "canvas")
+    ), [data?.data]);
+
+    if(isLoading){
+        return (
+            <div className="gallery-loading-state">
+                <MoonLoader loading={isLoading} color="var(--loader-color)" size={20} />
+            </div>
+        );
+    }
+
+    return (
+        <div className={`gallery-page-root ${isEmbedded ? 'gallery-page-root--embedded' : ''}`}>
+            <div className="gallery-top-bar">
+                <div className="gallery-title-shell">
+                    <h2 className="gallery-title">Gallery</h2>
+                    <p className="gallery-subtitle">Canvas posts arranged as visual pieces</p>
+                </div>
+
+                <div className="gallery-sort-shell">
+                    <button
+                        type="button"
+                        className={`gallery-sort-btn ${sortMode === 'hottest' ? 'is-active' : ''}`}
+                        onClick={() => setSortMode('hottest')}
+                    >
+                        Hottest
+                    </button>
+                    <button
+                        type="button"
+                        className={`gallery-sort-btn ${sortMode === 'newest' ? 'is-active' : ''}`}
+                        onClick={() => setSortMode('newest')}
+                    >
+                        Newest
+                    </button>
+                </div>
+            </div>
+
+            {isFetching && (
+                <div className="gallery-refresh-pill">
+                    <span className="gallery-refresh-dot" />
+                    Refreshing...
+                </div>
+            )}
+
+            {journals.length === 0 ? (
+                <div className="gallery-empty-state">
+                    <div className="gallery-empty-inner">
+                        <span className="gallery-empty-icon">&#9671;</span>
+                        <p>No public canvases yet</p>
+                    </div>
+                </div>
+            ) : (
+                <div className="gallery-masonry">
+                    {journals.map((journal) => {
+                        const stampCount = extractCount(journal?.stamp_count);
+                        const marginCount = extractCount(journal?.margin_count);
+
+                        return (
+                            <article
+                                key={journal.id}
+                                className="gallery-card"
+                                onClick={() => navigate(`/home/post/${journal.id}`)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(event) => {
+                                    if(event.key === 'Enter' || event.key === ' '){
+                                        event.preventDefault();
+                                        navigate(`/home/post/${journal.id}`);
+                                    }
+                                }}
+                            >
+                                <CanvasPreview canvasDoc={journal?.canvas_doc} />
+                                <div className="gallery-card-body">
+                                    <h3 className="gallery-card-title">{journal?.title || 'Untitled Canvas'}</h3>
+                                    <div className="gallery-card-meta">
+                                        <span className="gallery-author">{journal?.users?.name || 'Unknown'}</span>
+                                        <VerifiedBadge badge={journal?.users?.badge} size={13} />
+                                        <span className="gallery-meta-dot">&middot;</span>
+                                        <span>{formatPostDate(journal?.created_at)}</span>
+                                    </div>
+                                    <div className="gallery-card-stats">
+                                        <div className="gallery-card-score">
+                                            <FireIcon />
+                                            <span className="gallery-score-value">{journal?.hot_score || 0}</span>
+                                        </div>
+                                        {stampCount > 0 && (
+                                            <div className="gallery-stat-pill">
+                                                <StampIcon />
+                                                <span>{stampCount}</span>
+                                            </div>
+                                        )}
+                                        {marginCount > 0 && (
+                                            <div className="gallery-stat-pill">
+                                                <DoodleIcon />
+                                                <span>{marginCount}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </article>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default GalleryPage;

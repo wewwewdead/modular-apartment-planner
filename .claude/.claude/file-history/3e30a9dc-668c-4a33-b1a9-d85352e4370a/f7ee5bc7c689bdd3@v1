@@ -1,0 +1,61 @@
+# Plan: Fix "Add Viewport" Button on Sheets
+
+## Context
+Clicking the "Add viewport" button in the Properties Panel (while in sheet mode with a sheet selected) does nothing. The button exists and is clickable, but no viewport appears on the sheet and no visual feedback is given.
+
+**Root cause (most likely):** The `addViewport` function in `SheetProperties` calls `resolveSheetViewportSource()` before dispatching. This function traverses floor geometry via `collectPlanPoints()`, calling `getWallRenderData`, `doorOutlineOnWall`, `getBeamRenderData`, etc. If any geometry function throws (e.g., malformed wall data, zero-length segment), the error is unhandled — the entire `addViewport` stops before reaching the `dispatch` calls, so the viewport is never added and no feedback is shown.
+
+## Approach
+1. **Wrap the source resolution in try-catch** so that if geometry processing fails, we fall back to an "empty" source with default bounds — the viewport still gets added.
+2. **Add a status message** confirming the viewport was added (or reporting an error), so the user always gets feedback.
+
+## Changes
+
+### 1. `src/ui/PropertiesPanel.jsx` — `addViewport` in `SheetProperties` (~line 762)
+
+Wrap the viewport creation in try-catch. On error, fall back to default rect and an empty source so the viewport is still created:
+
+```javascript
+const addViewport = () => {
+  try {
+    const sourceFloorId = activeFloorId || project.floors?.[0]?.id || null;
+    const sourceView = 'plan';
+    const viewportBase = createSheetViewport(sourceView, sourceFloorId, { scale: 100 });
+
+    let rect;
+    try {
+      const source = resolveSheetViewportSource(project, viewportBase);
+      rect = getDefaultViewportRect(sheet, source, viewportBase.scale);
+    } catch {
+      // Geometry resolution failed — use default dimensions
+      rect = { x: 20, y: 20, width: 160, height: 100 };
+    }
+
+    const viewport = { ...viewportBase, ...rect };
+    dispatch({ type: 'SHEET_VIEWPORT_ADD', sheetId: sheet.id, viewport });
+    editorDispatch({ type: 'SELECT_OBJECT', id: viewport.id, objectType: 'sheetViewport' });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Viewport added.' });
+  } catch (err) {
+    console.error('Failed to add viewport:', err);
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Failed to add viewport.' });
+  }
+};
+```
+
+### Key files
+- `src/ui/PropertiesPanel.jsx` — the `addViewport` function (~line 762-775)
+
+### What stays the same
+- `src/domain/sheetModels.js` — `createSheetViewport` (no change)
+- `src/sheets/sources.js` — `resolveSheetViewportSource` (no change — the fix is at the call site)
+- `src/sheets/layout.js` — `getDefaultViewportRect`, `buildSheetScene` (no change)
+- `src/renderers/SheetRenderer.jsx`, `SheetCanvas.jsx` (no change)
+- `src/app/ProjectProvider.jsx` — `SHEET_VIEWPORT_ADD` reducer (no change)
+
+## Verification
+1. Create a sheet via Sidebar → "Add Sheet"
+2. Click "Add viewport" in the Properties Panel
+3. A viewport rectangle should appear on the sheet canvas
+4. The Properties Panel should switch to showing viewport properties (Title, Source, Frame, Scale)
+5. Open browser console — check for any `Failed to add viewport` error logs
+6. If the error IS logged, it reveals the actual geometry bug to fix next

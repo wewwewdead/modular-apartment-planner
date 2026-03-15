@@ -1,0 +1,61 @@
+# Add Bed Fixture
+
+## Context
+The fixture system currently has 6 types (kitchenTop, toilet, lavatory, table, tv, sofa). The user wants to add a "bed" fixture for bedroom furnishing. The pattern for adding a new fixture is well-established across ~10 files.
+
+## Bed Dimensions
+- **Default**: 1400mm wide x 2000mm deep (standard double bed)
+- **3D height**: 550mm (frame + mattress)
+
+## Changes (10 files)
+
+### 1. `src/domain/defaults.js` — Add dimension constants
+```js
+export const FIXTURE_BED_WIDTH = 1400;
+export const FIXTURE_BED_DEPTH = 2000;
+```
+
+### 2. `src/editor/tools.js` — Register type + defaults
+- Add `BED: 'bed'` to `FIXTURE_TYPES`
+- Import `FIXTURE_BED_WIDTH/DEPTH` from defaults
+- Add entry in `FIXTURE_DEFAULTS`
+
+### 3. `src/ui/ToolbarIcons.jsx` — Add `BedIcon`
+Plan-view SVG icon: rectangle with headboard bar at top, two pillow rounded-rects.
+
+### 4. `src/ui/Toolbar.jsx` — Add to `fixtureItems` array
+- Import `BedIcon`
+- Add `{ fixtureType: FIXTURE_TYPES.BED, label: 'Bed', Icon: BedIcon }`
+
+### 5. `src/renderers/FixtureDefs.jsx` — Add gradient
+Soft blue-white/light fabric gradient `grad-bed`.
+
+### 6. `src/renderers/FixtureRenderer.jsx` — Add 2D detail case
+`case 'bed':` — headboard rect, two pillow rounded-rects, blanket fold line.
+
+### 7. `src/renderers/FixturePreview.jsx` — Add preview fill
+`bed: 'rgba(200,210,225,0.25)'`
+
+### 8. `src/three/viewer/materials.js` — Add 3D material
+`fixture_bed` — soft fabric-like material (light blue-grey, high roughness, low metalness).
+
+### 9. `src/three/scene/objectBuilders.js` — Add 3D height
+`bed: 550` in `FIXTURE_3D_HEIGHTS`.
+
+### 10. `src/three/viewer/buildPreviewObjects.js` — Add 3D builder
+`buildBedFixture` using `addBox`:
+- Bed frame (box, full W/D, short)
+- Headboard (tall box at back edge)
+- Mattress (slightly inset, sits on frame)
+- 2 pillows (small boxes at headboard end)
+
+Register in `FIXTURE_BUILDERS`.
+
+## Verification
+1. `npm run dev`
+2. Open toolbar — bed icon should appear in fixture dropdown
+3. Click bed icon, move mouse over plan — dashed preview polygon appears
+4. Click to place — 2D bed renders with headboard, pillows, blanket line
+5. Press R to rotate while placing
+6. Switch to 3D preview — bed should render with frame, headboard, mattress, pillows
+7. Select bed in plan view — properties panel shows dimensions

@@ -1,0 +1,13 @@
+import React from 'react';
+
+import { SectionHeader } from '../../../components/SectionHeader';
+
+interface VaultSectionHeaderProps {
+  emoji: string | null;
+  name: string;
+  count: number;
+}
+
+export function VaultSectionHeader({ emoji, name, count }: VaultSectionHeaderProps) {
+  return <SectionHeader emoji={emoji} title={name} count={count} />;
+}

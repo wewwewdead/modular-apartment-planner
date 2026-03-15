@@ -1,0 +1,33 @@
+export const SKETCH_TOOLS = {
+  SELECT: 'select',
+  PANEL: 'panel',
+  LEG: 'leg',
+  FRAME: 'frame',
+  CUTOUT: 'cutout',
+  HOLE: 'hole',
+  DIMENSION: 'dimension',
+  PUSH_PULL: 'pushpull',
+};
+
+export const SKETCH_VIEWS = {
+  TOP: 'top',
+  FRONT: 'front',
+  SIDE: 'side',
+};
+
+export const DEFAULT_SKETCH_ZOOM = 0.15;
+export const DEFAULT_CANVAS_WIDTH = 297000;
+export const DEFAULT_CANVAS_HEIGHT = 210000;
+
+export const SKETCH_MIN_ZOOM = 0.02;
+export const SKETCH_MAX_ZOOM = 3.0;
+export const SKETCH_ZOOM_FACTOR = 1.1;
+
+export const SKETCH_GRID_MINOR = 50;   // mm
+export const SKETCH_GRID_MAJOR = 1000; // mm
+
+export const SKETCH_SNAP_DISTANCE_PX = 8;
+
+export const SKETCH_OBJECT_CATEGORIES = [
+  'table', 'chair', 'desk', 'cabinet', 'shelf', 'bed', 'sofa', 'general',
+];

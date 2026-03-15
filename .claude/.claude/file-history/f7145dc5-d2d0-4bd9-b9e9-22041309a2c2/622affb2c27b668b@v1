@@ -1,0 +1,37 @@
+# Bug Fix: Reaction icon not showing on ContentView when navigating from profile
+
+## Context
+When visiting someone's profile and clicking a post in `.postcards-grid-view`, the user's reaction (e.g. fire) doesn't display in ContentView — it falls back to the default "like" icon. The root cause is that `getVisitedUserJournalsService` and `getUserJournalsService` in the backend don't query the `reactions` table, so `user_reaction` is never included in the response. The post click handler passes `journal?.user_reaction` (which is `undefined`), causing `ReactionButton` to show the default icon.
+
+## Root Cause
+`server/services/getService.js`:
+- `getVisitedUserJournalsService` (line 1199) — fetches `likes` and `bookmarks` but **not** `reactions`
+- `getUserJournalsService` (line 1113) — same problem
+
+The feed function (line 338) already does this correctly — it queries `reactions` in `Promise.all` and builds a `userReactionMap`.
+
+## Fix — `server/services/getService.js`
+
+### 1. `getVisitedUserJournalsService` (line 1199)
+Add a `userReactionsPromise` alongside the existing likes/bookmarks queries:
+
+```js
+userReactionsPromise = supabase
+    .from('reactions')
+    .select('journal_id, reaction_type')
+    .in('journal_id', journalIds)
+    .eq('user_id', loggedInUserId)
+```
+
+Update `Promise.all` to include it, build a `userReactionMap`, and add `user_reaction` to `formattedData`.
+
+### 2. `getUserJournalsService` (line 1113)
+Same fix — add a reactions query alongside likes/bookmarks, build a map, add `user_reaction` to each journal in the final map.
+
+Both follow the exact pattern already used in the feed function (lines 338–374).
+
+## Verification
+1. Log in, react with "fire" to a post
+2. Visit the post author's profile
+3. Click that post in their grid → ContentView should show the fire emoji, not the default like icon
+4. Check own profile page too — same fix applies

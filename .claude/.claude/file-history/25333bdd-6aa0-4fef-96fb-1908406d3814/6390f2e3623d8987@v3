@@ -1,0 +1,121 @@
+/* ── Vibe Theme - Temporal post styling ── */
+
+/* ── Badge ── */
+.vibe-badge {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.22rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 550;
+    letter-spacing: 0.015em;
+    line-height: 1;
+    color: var(--vibe-badge-text);
+    background: var(--vibe-badge-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 20px;
+    border: 1px solid var(--vibe-border);
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.vibe-badge-emoji {
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+/* ── Card subtle glow (no border override) ── */
+.cards[class*="vibe-"] {
+    box-shadow: 0 1px 6px var(--vibe-glow);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.cards[class*="vibe-"]:hover {
+    box-shadow: 0 4px 16px var(--vibe-glow), 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+/* ── Gradient accent line at top ── */
+.cards[class*="vibe-"]::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--vibe-gradient);
+    border-radius: 12px 12px 0 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* ── Moonlight star overlay ── */
+.vibe-moonlight-stars {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.12;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' viewBox='0 0 200 120'%3E%3Ccircle cx='20' cy='15' r='1.2' fill='white'/%3E%3Ccircle cx='55' cy='42' r='0.8' fill='white'/%3E%3Ccircle cx='90' cy='10' r='1' fill='white'/%3E%3Ccircle cx='130' cy='35' r='0.7' fill='white'/%3E%3Ccircle cx='160' cy='18' r='1.1' fill='white'/%3E%3Ccircle cx='185' cy='50' r='0.9' fill='white'/%3E%3Ccircle cx='40' cy='70' r='0.6' fill='white'/%3E%3Ccircle cx='75' cy='88' r='1' fill='white'/%3E%3Ccircle cx='110' cy='65' r='0.8' fill='white'/%3E%3Ccircle cx='150' cy='95' r='1.2' fill='white'/%3E%3Ccircle cx='175' cy='78' r='0.7' fill='white'/%3E%3Ccircle cx='10' cy='100' r='0.9' fill='white'/%3E%3Ccircle cx='195' cy='105' r='0.6' fill='white'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 200px 120px;
+    border-radius: inherit;
+}
+
+/* ── Dark mode overrides ── */
+[data-theme="dark"] .vibe-badge {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .cards.vibe-morning {
+    --vibe-badge-text: #b8dfb2;
+    --vibe-glow: rgba(168, 213, 162, 0.1);
+}
+
+[data-theme="dark"] .cards.vibe-midday {
+    --vibe-badge-text: #f0d87a;
+    --vibe-glow: rgba(247, 215, 110, 0.1);
+}
+
+[data-theme="dark"] .cards.vibe-golden {
+    --vibe-badge-text: #f0b86a;
+    --vibe-glow: rgba(232, 164, 74, 0.1);
+}
+
+[data-theme="dark"] .cards.vibe-twilight {
+    --vibe-badge-text: #d4a8e0;
+    --vibe-glow: rgba(176, 124, 198, 0.1);
+}
+
+[data-theme="dark"] .cards.vibe-moonlight {
+    --vibe-badge-text: #d0daea;
+    --vibe-glow: rgba(107, 127, 163, 0.1);
+}
+
+[data-theme="dark"] .vibe-moonlight-stars {
+    opacity: 0.2;
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+    .vibe-badge {
+        padding: 0.18rem 0.45rem;
+        font-size: 0.62rem;
+        top: 0.45rem;
+        right: 0.45rem;
+    }
+
+    .vibe-badge-emoji {
+        font-size: 0.7rem;
+    }
+
+    .cards[class*="vibe-"]::before {
+        height: 2px;
+    }
+}

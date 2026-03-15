@@ -1,0 +1,65 @@
+Build Sketch Generators V1 for Sketch Studio.
+
+Main goal:
+Make Sketch Studio immediately useful by adding parameter-driven object generators instead of relying on manual 2D drawing as the primary workflow.
+
+Requirements:
+- keep Sketch separate from Floorplan
+- use the existing assembly-driven and dimension-driven architecture
+- keep all dimensions in millimeters
+- geometry must be generated from parameters, not loose drawing
+
+Add these object generators first:
+1. Table generator
+- inputs:
+  - width
+  - depth
+  - height
+  - tabletop thickness
+  - leg thickness
+  - leg inset
+- outputs:
+  - tabletop part
+  - four leg parts
+  - assembly tree
+  - top/front/side views
+  - read-only 3D preview
+  - basic part list
+
+2. Cabinet generator
+- inputs:
+  - width
+  - height
+  - depth
+  - panel thickness
+  - shelf count
+  - door count
+  - toe kick
+  - back panel thickness
+- outputs:
+  - side panels
+  - top/bottom panels
+  - shelves
+  - doors if supported in first pass
+  - assembly tree
+  - top/front/side views
+  - read-only 3D preview
+  - basic part list
+
+3. Shelf and desk generator scaffold
+- create architecture so shelf and desk generators can be added next using the same pattern
+
+UI requirements:
+- add a “New Object” flow in Sketch Studio
+- let users choose object type
+- show a parameter form
+- generate the object assembly from the parameters
+- expose generated parts in the assembly tree
+- allow editing generated parameters after creation
+
+Architecture requirements:
+- reuse shared geometry/rendering/sheet/export systems where useful
+- keep generator logic modular and separate from React
+- keep orthographic and 3D output derived from the same source model
+- do not overbuild freeform modeling yet
+- prioritize correctness, clarity, and trustworthiness

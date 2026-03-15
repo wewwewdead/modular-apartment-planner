@@ -1,0 +1,37 @@
+# Fix: Mobile App Receives No Notifications
+
+## Context
+The Notifications tab always shows "No notifications yet" even when other users have liked/commented on the user's posts. Notifications are being stored correctly in Supabase, but the mobile app's API request is rejected by the backend every time.
+
+## Root Cause
+**Limit mismatch — mobile sends `limit=30`, backend rejects anything over `20`.**
+
+The chain:
+1. `NotificationsScreen.tsx:90` calls `mobileApi.getNotifications(token, null, 30)` — hardcoded `30`
+2. `mobileApi.ts:159` sends `GET /getNotifications?limit=30`
+3. Backend `routes.js:91` has `NOTIFICATION_LIMIT_MAX = 20`
+4. `parseLimitWithinRange()` returns `null` when `30 > 20`
+5. Backend returns **400 error**: `"limit must be between 1 and 20"`
+6. React Query catches the error silently → `items = []` → empty screen
+
+Note: `mobileApi.getNotifications` already has a default parameter of `limit = 20`, but the caller overrides it with `30`.
+
+## Fix (one-line change)
+
+**File:** `apps/mobile/src/screens/Notifications/NotificationsScreen.tsx` (line 90)
+
+```diff
+- queryFn: () => mobileApi.getNotifications(token, null, 30),
++ queryFn: () => mobileApi.getNotifications(token, null, 20),
+```
+
+The backend is **not changed** — its validation is correct and shared with the web app.
+
+## Push Notifications (not implemented)
+There is currently zero push notification infrastructure (no `expo-notifications`, no FCM, no device token registration, no backend push sending). This is a separate feature that would require significant work to add.
+
+## Verification
+- Open Notifications tab → notifications should now load (no longer empty)
+- Verify network request uses `limit=20` and returns 200
+- Pull-to-refresh works
+- Unread count badge displays correctly

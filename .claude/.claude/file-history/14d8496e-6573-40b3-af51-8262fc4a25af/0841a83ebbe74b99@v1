@@ -1,0 +1,30 @@
+import { ReduceMotion, WithSpringConfig } from 'react-native-reanimated';
+
+const base = { reduceMotion: ReduceMotion.System } as const;
+
+export const motion = {
+  snappy: {
+    ...base,
+    damping: 20,
+    stiffness: 300,
+    mass: 0.8,
+  } satisfies WithSpringConfig,
+  gentle: {
+    ...base,
+    damping: 20,
+    stiffness: 120,
+    mass: 1,
+  } satisfies WithSpringConfig,
+  bouncy: {
+    ...base,
+    damping: 12,
+    stiffness: 180,
+    mass: 0.8,
+  } satisfies WithSpringConfig,
+  quick: {
+    ...base,
+    damping: 26,
+    stiffness: 400,
+    mass: 0.6,
+  } satisfies WithSpringConfig,
+} as const;

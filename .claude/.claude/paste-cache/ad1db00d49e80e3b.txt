@@ -1,0 +1,17 @@
+This is the "Community" feature that turns Iskrib from a solo simulation into a collaborative world. By allowing users to form Constellations, you are essentially letting them build "Digital Monuments" together.
+
+In terms of physics, a Constellation is a Rigid Composite or a Group Constraint. Instead of stars pulling on each other, they are "bolted" together by a glowing line.
+
+1. The Mechanic: "The Celestial Handshake"
+The Gesture: User A selects one of their stars and "drags" a line to a star owned by User B.
+
+The Approval: User B gets a notification: "User A wants to form a Constellation with you."
+
+The Result: Once accepted, a Matter.js Constraint (a stiff spring) is created between the two stars. They now move, drift, and rotate as a single physical object.
+
+2. The Visual: "The Neural Connection"
+When stars are linked, a thin, glowing, pulse-animated line connects them.
+
+A label appears in the center of the link (e.g., "The Philosophy of 2026").
+
+As the stars move, the line stretches and bends slightly, making it feel like a physical thread.

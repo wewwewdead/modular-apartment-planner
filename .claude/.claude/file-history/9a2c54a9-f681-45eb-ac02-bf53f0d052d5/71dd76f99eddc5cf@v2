@@ -1,0 +1,65 @@
+# iskrib_v3 Project Memory
+
+## Architecture
+- **Frontend:** React + Vite, BrowserRouter, Lexical rich text editor
+- **Backend:** Express.js on port 3000, Supabase (PostgreSQL + Storage)
+- **State:** React Query for caching, Context for auth
+- **Styling:** CSS variables, glass morphism, Framer Motion animations
+
+## Key Patterns
+- Single `<LexicalComposer>` wraps entire app in `App.jsx` (nodes: ImageNode, HeadingNode, QuoteNode)
+- New independent editors need their own `<LexicalComposer>` instance
+- API calls use `fetch` with Bearer token auth, FormData for file uploads
+- Backend validates via service layer, controllers are thin wrappers
+- Profile customization stored in `profile_layout` JSON column on `users` table
+- Image uploads: multer → Sharp (WebP) → Supabase Storage
+
+## File Locations
+- Routes: `server/routes/routes.js`
+- Sitemap routes: `server/routes/sitemapRoutes.js`
+- Upload services: `server/services/uploadService.js`
+- URL utils (SITE_URL, makePostUrl): `server/utils/urlUtils.js`
+- Client API: `client/API/Api.js`
+- SEO config: `client/src/seo/seoConfig.js`
+- SEO DOM helpers: `client/src/seo/seoUtils.js`
+- SEO manager: `client/src/seo/SeoManager.jsx`
+- Post SEO hook: `client/src/seo/usePostSeo.js`
+- Profile SEO hook: `client/src/seo/useProfileSeo.js`
+- Profile layout: `client/src/utils/profileLayout/`
+- Profile page: `client/src/components/ProfilePage/`
+- Visited profile: `client/src/components/VisitProfile/`
+- Editor: `client/src/components/HomePage/Editor/`
+
+## SEO Features (Feb 2026)
+- Dynamic sitemaps: `/api/sitemap-index.xml`, `/api/sitemap-posts.xml`, `/api/sitemap-profiles.xml`
+- Post pages get Article JSON-LD, proper og:type/title/description/image via `usePostSeo` hook
+- Profile pages get Person JSON-LD via `useProfileSeo` hook
+- `/@username` routes added alongside legacy `/visitProfile?userId=` (backward compatible)
+- `username` column on `users` table (unique, case-insensitive)
+- Backfill script: `server/scripts/backfillUsernames.js`
+- Username endpoints: `GET /api/user/:username`, `GET /api/check-username/:username`, `POST /api/update-username`
+- Signup flow includes username field (auto-suggested from name, real-time availability check)
+- `handleClickProfile` accepts optional `clickedUsername` param for `/@username` navigation
+- `seoConfig.js` DYNAMIC_PATTERNS support function-based seo (receives pathname)
+
+## Notes Feature (Feb 2026)
+- Added customizable notes section to profile pages
+- Data in `profile_layout.notes` array, max 10 notes
+- Dedicated endpoint `POST /updateProfileLayout` (avoids name/bio validation)
+- Each note has its own LexicalComposer instance
+- Components: ProfileNotesSection, NoteContainer, NoteStyleEditor, InlineNoteEditor, ReadOnlyNoteView
+
+## Stories Feature (Feb 2026) - Phase 1+2
+- Wattpad-style serialized content with chapters + paragraph-level comments
+- DB tables: stories, chapters, story_comments, story_votes, reading_progress, story_library
+- Migration SQL: `server/sql/stories.sql`
+- Storage bucket: `story-covers`
+- Backend: `server/services/storyService.js`, `chapterService.js`, `storyInteractService.js`
+- Controllers: `server/controller/storyController.js`, `chapterController.js`, `storyInteractController.js`
+- Routes: `server/routes/storyRoutes.js` (mounted in server.js via `/api`)
+- Client API: `client/API/StoryApi.js`
+- Hooks: `client/src/components/Stories/hooks/useStoryData.js`, `useStoryMutations.js`
+- Components built (Phase 2): StoryDashboard, StoryEditor, StoryChapterManager, ChapterEditor
+- Routes: `/home/stories/dashboard`, `/home/stories/new`, `/:storyId/edit`, `/:storyId/manage`, `/:storyId/chapter/:chapterId/edit`
+- Sidebar "Stories" link added to Home.jsx (book icon)
+- Future phases: StoryBrowser, StoryDetail, ChapterReader, paragraph comments, profile tabs, SEO

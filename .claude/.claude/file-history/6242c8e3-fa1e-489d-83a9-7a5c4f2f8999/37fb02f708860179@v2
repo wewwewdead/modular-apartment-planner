@@ -1,0 +1,32 @@
+import * as XLSX from 'xlsx'
+
+export function parseDocument(buffer, mimetype, filename) {
+  try {
+    // Determine if the file is a supported spreadsheet format
+    const isXlsx = mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      || mimetype === 'application/vnd.ms-excel'
+      || filename?.endsWith('.xlsx')
+      || filename?.endsWith('.xls')
+    const isCsv = mimetype === 'text/csv'
+      || mimetype === 'application/csv'
+      || filename?.endsWith('.csv')
+
+    if (!isXlsx && !isCsv) {
+      return { success: false, message: `Unsupported file type: ${mimetype || filename}. Please send a CSV or Excel file.` }
+    }
+
+    const workbook = XLSX.read(buffer, { type: 'buffer' })
+    const sheetName = workbook.SheetNames[0]
+    const sheet = workbook.Sheets[sheetName]
+    const data = XLSX.utils.sheet_to_json(sheet)
+
+    return {
+      success: true,
+      data,
+      sheetName,
+      rowCount: data.length,
+    }
+  } catch (err) {
+    return { success: false, message: `Failed to parse document: ${err.message}` }
+  }
+}

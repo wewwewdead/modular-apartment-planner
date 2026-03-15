@@ -1,0 +1,88 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../Context/useAuth';
+import { handleClickProfile } from '../../../../helpers/handleClicks';
+import VerifiedBadge from '../../Badge/VerifiedBadge';
+import formatPostDate from '../../../../helpers/formatDateString';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const ChapterCommentCard = ({ comment, onReply, isReply = false }) => {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const clickProfile = handleClickProfile(navigate);
+    const userId = user?.userData?.[0]?.id;
+
+    const [showReplies, setShowReplies] = useState(false);
+    const replies = comment.replies || [];
+
+    return (
+        <div className={`ccc-card ${isReply ? 'ccc-reply' : ''}`}>
+            {isReply && <div className="ccc-thread-line" />}
+
+            <div className="ccc-content">
+                <div className="ccc-user-row">
+                    <div
+                        className={`ccc-avatar-wrap ${comment.users?.badge === 'legend' ? 'ccc-ring-legend' : comment.users?.badge === 'og' ? 'ccc-ring-og' : ''}`}
+                        onClick={(e) => clickProfile(e, userId, comment.user_id, comment.users?.username)}
+                    >
+                        <img
+                            className="ccc-avatar"
+                            src={comment.users?.image_url || '/assets/profile.jpg'}
+                            alt={comment.users?.name || 'User'}
+                        />
+                    </div>
+                    <span
+                        className="ccc-name"
+                        onClick={(e) => clickProfile(e, userId, comment.user_id, comment.users?.username)}
+                    >
+                        {comment.users?.name}
+                    </span>
+                    <VerifiedBadge badge={comment.users?.badge} size={13} />
+                    <span className="ccc-dot">&middot;</span>
+                    <span className="ccc-date">{formatPostDate(comment.created_at)}</span>
+                </div>
+
+                <p className="ccc-body">{comment.body}</p>
+
+                <div className="ccc-actions">
+                    {!isReply && (
+                        <button className="ccc-action-btn" onClick={() => onReply(comment)}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="9 17 4 12 9 7" />
+                                <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                            </svg>
+                            Reply
+                        </button>
+                    )}
+
+                    {!isReply && replies.length > 0 && (
+                        <button className="ccc-action-btn" onClick={() => setShowReplies(!showReplies)}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                            </svg>
+                            {showReplies ? 'Hide' : 'Show'} {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                        </button>
+                    )}
+                </div>
+
+                <AnimatePresence>
+                    {showReplies && (
+                        <motion.div
+                            className="ccc-replies"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                        >
+                            {replies.map((r) => (
+                                <ChapterCommentCard key={r.id} comment={r} isReply />
+                            ))}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
+        </div>
+    );
+};
+
+export default ChapterCommentCard;

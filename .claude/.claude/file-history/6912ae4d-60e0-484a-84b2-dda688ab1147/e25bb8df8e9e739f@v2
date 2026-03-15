@@ -1,0 +1,147 @@
+import { create } from 'zustand';
+
+import { AddItemInput, CompleteOnboardingInput, CreateCartInput, VaultAppState } from '../domain/models';
+import { emptySubscriptionSnapshot, subscriptionService, SubscriptionSnapshot } from '../services/subscriptionService';
+import { appRepository } from '../storage/repository';
+
+type DraftSelections = Record<string, number>;
+
+interface AppStoreState {
+  isBootstrapping: boolean;
+  errorMessage: string | null;
+  appState: VaultAppState | null;
+  draftSelections: DraftSelections;
+  subscription: SubscriptionSnapshot;
+  bootstrap: () => Promise<void>;
+  refresh: () => Promise<void>;
+  completeOnboarding: (input: CompleteOnboardingInput) => Promise<void>;
+  updateUserName: (name: string) => Promise<void>;
+  addCategory: (name: string, emoji: string) => Promise<void>;
+  addItem: (input: AddItemInput) => Promise<void>;
+  createCart: (input: CreateCartInput) => Promise<void>;
+  toggleCartItemFulfillment: (cartId: string, cartItemId: string) => Promise<void>;
+  advanceCartStatus: (cartId: string) => Promise<void>;
+  deleteItem: (itemId: string) => Promise<void>;
+  toggleDraftItem: (itemId: string) => void;
+  setDraftQuantity: (itemId: string, quantity: number) => void;
+  clearDraftSelections: () => void;
+  resetApp: () => Promise<void>;
+}
+
+async function refreshSubscription(
+  set: (partial: Partial<AppStoreState>) => void,
+  current: SubscriptionSnapshot
+): Promise<SubscriptionSnapshot> {
+  const loading = { ...current, isLoading: true };
+  set({ subscription: loading });
+  const next = await subscriptionService.refresh(loading);
+  set({ subscription: next });
+  return next;
+}
+
+export const useAppStore = create<AppStoreState>((set, get) => ({
+  isBootstrapping: true,
+  errorMessage: null,
+  appState: null,
+  draftSelections: {},
+  subscription: emptySubscriptionSnapshot,
+
+  bootstrap: async () => {
+    try {
+      set({ isBootstrapping: true, errorMessage: null });
+      const appState = await appRepository.loadState();
+      set({ appState, isBootstrapping: false });
+      await refreshSubscription(set, get().subscription);
+    } catch (error) {
+      set({
+        isBootstrapping: false,
+        errorMessage: error instanceof Error ? error.message : 'Failed to bootstrap Grock.',
+      });
+    }
+  },
+
+  refresh: async () => {
+    try {
+      const appState = await appRepository.loadState();
+      set({ appState, errorMessage: null });
+      await refreshSubscription(set, get().subscription);
+    } catch (error) {
+      set({ errorMessage: error instanceof Error ? error.message : 'Refresh failed.' });
+    }
+  },
+
+  completeOnboarding: async input => {
+    const appState = await appRepository.completeOnboarding(input);
+    set({ appState, errorMessage: null });
+  },
+
+  updateUserName: async name => {
+    const appState = await appRepository.updateUserName(name);
+    set({ appState, errorMessage: null });
+  },
+
+  addCategory: async (name, emoji) => {
+    const appState = await appRepository.addCategory(name, emoji);
+    set({ appState, errorMessage: null });
+  },
+
+  addItem: async input => {
+    const appState = await appRepository.addItem(input);
+    set({ appState, errorMessage: null });
+  },
+
+  createCart: async input => {
+    const appState = await appRepository.createCart(input);
+    set({ appState, errorMessage: null, draftSelections: {} });
+  },
+
+  toggleCartItemFulfillment: async (cartId, cartItemId) => {
+    const appState = await appRepository.toggleCartItemFulfillment(cartId, cartItemId);
+    set({ appState, errorMessage: null });
+  },
+
+  advanceCartStatus: async cartId => {
+    const appState = await appRepository.advanceCartStatus(cartId);
+    set({ appState, errorMessage: null });
+  },
+
+  deleteItem: async itemId => {
+    const appState = await appRepository.deleteItem(itemId);
+    const draftSelections = { ...get().draftSelections };
+    delete draftSelections[itemId];
+    set({ appState, draftSelections, errorMessage: null });
+  },
+
+  toggleDraftItem: itemId => {
+    const current = get().draftSelections;
+    if (current[itemId]) {
+      const next = { ...current };
+      delete next[itemId];
+      set({ draftSelections: next });
+      return;
+    }
+
+    set({ draftSelections: { ...current, [itemId]: 1 } });
+  },
+
+  setDraftQuantity: (itemId, quantity) => {
+    const safeQuantity = Math.max(1, quantity);
+    set({
+      draftSelections: {
+        ...get().draftSelections,
+        [itemId]: safeQuantity,
+      },
+    });
+  },
+
+  clearDraftSelections: () => set({ draftSelections: {} }),
+
+  resetApp: async () => {
+    const appState = await appRepository.resetState();
+    set({
+      appState,
+      draftSelections: {},
+      errorMessage: null,
+    });
+  },
+}));

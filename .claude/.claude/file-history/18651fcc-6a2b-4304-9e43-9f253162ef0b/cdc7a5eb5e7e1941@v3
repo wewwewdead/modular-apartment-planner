@@ -1,0 +1,30 @@
+.streak-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+.streak-flame-icon {
+    flex-shrink: 0;
+}
+
+.streak-count {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Default: 1-6 days — amber */
+.streak-default .streak-flame-icon { fill: #f59e0b; }
+.streak-default .streak-count { color: #f59e0b; }
+
+/* Warm: 7-29 days — orange */
+.streak-warm .streak-flame-icon { fill: #f97316; filter: drop-shadow(0 0 3px rgba(249, 115, 22, 0.4)); }
+.streak-warm .streak-count { color: #f97316; }
+
+/* Hot: 30+ days — red */
+.streak-hot .streak-flame-icon { fill: #ef4444; filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.5)); }
+.streak-hot .streak-count { color: #ef4444; }

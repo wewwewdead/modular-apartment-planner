@@ -1,0 +1,66 @@
+import React from 'react';
+import { useMediaQuery } from 'react-responsive';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+const formatDate = (dateStr) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+        <div className="analytics-chart-tooltip">
+            <span className="analytics-tooltip-date">{formatDate(label)}</span>
+            <span className="analytics-tooltip-value">{payload[0].value} reactions</span>
+        </div>
+    );
+};
+
+const ReactionsChart = ({ data }) => {
+    const isMobile = useMediaQuery({ query: '(max-width: 480px)' });
+
+    if (!data?.length) return null;
+
+    return (
+        <div className="analytics-chart-card">
+            <h3 className="analytics-chart-title">Reactions</h3>
+            <div className="analytics-chart-container">
+                <ResponsiveContainer width="100%" height={isMobile ? 180 : 220}>
+                    <AreaChart data={data} margin={{ top: 8, right: 8, left: isMobile ? -15 : -20, bottom: 0 }}>
+                        <defs>
+                            <linearGradient id="reactionsGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="var(--accent-sage, #6b9e7b)" stopOpacity={0.3} />
+                                <stop offset="95%" stopColor="var(--accent-sage, #6b9e7b)" stopOpacity={0} />
+                            </linearGradient>
+                        </defs>
+                        <XAxis
+                            dataKey="date"
+                            tickFormatter={formatDate}
+                            tick={{ fontSize: 11, fill: 'var(--text-muted, #9ca3af)' }}
+                            axisLine={false}
+                            tickLine={false}
+                            interval="preserveStartEnd"
+                        />
+                        <YAxis
+                            tick={{ fontSize: 11, fill: 'var(--text-muted, #9ca3af)' }}
+                            axisLine={false}
+                            tickLine={false}
+                            allowDecimals={false}
+                        />
+                        <Tooltip content={<CustomTooltip />} isAnimationActive={false} offset={10} />
+                        <Area
+                            type="monotone"
+                            dataKey="count"
+                            stroke="var(--accent-sage, #6b9e7b)"
+                            strokeWidth={2}
+                            fill="url(#reactionsGradient)"
+                        />
+                    </AreaChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    );
+};
+
+export default ReactionsChart;

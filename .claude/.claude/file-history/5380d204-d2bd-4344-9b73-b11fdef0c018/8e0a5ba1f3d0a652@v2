@@ -1,0 +1,256 @@
+import { createMMKV } from 'react-native-mmkv';
+
+import {
+  AddItemInput,
+  cloneState,
+  completeOnboardingState,
+  CompleteOnboardingInput,
+  computeDashboardSummary,
+  createCartItemFromVaultItem,
+  createInitialAppState,
+  CreateCartInput,
+  getCategoryById,
+  VaultAppState,
+} from '../domain/models';
+import { createId } from '../lib/id';
+import { getDatabase } from './database';
+
+const storage = createMMKV({ id: 'grock.preferences' });
+
+export class AppRepository {
+  async loadState(): Promise<VaultAppState> {
+    const database = await getDatabase();
+    const [result] = await database.executeSql('SELECT payload FROM app_state WHERE id = 1;');
+
+    if (result.rows.length === 0) {
+      const state = createInitialAppState();
+      await this.persistState(state);
+      return state;
+    }
+
+    const payload = result.rows.item(0).payload as string;
+    const state = JSON.parse(payload) as VaultAppState;
+
+    return this.hydratePreferences(state);
+  }
+
+  async persistState(state: VaultAppState): Promise<VaultAppState> {
+    const database = await getDatabase();
+    const updatedAt = new Date().toISOString();
+    const payload = JSON.stringify(state);
+
+    await database.executeSql(
+      `INSERT INTO app_state (id, payload, updated_at)
+       VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at;`,
+      [payload, updatedAt]
+    );
+
+    this.persistPreferences(state);
+    return state;
+  }
+
+  async mutate(mutator: (state: VaultAppState) => VaultAppState): Promise<VaultAppState> {
+    const current = await this.loadState();
+    const next = mutator(cloneState(current));
+    return this.persistState(next);
+  }
+
+  async completeOnboarding(input: CompleteOnboardingInput): Promise<VaultAppState> {
+    return this.mutate(state => completeOnboardingState(state, input));
+  }
+
+  async updateUserName(name: string): Promise<VaultAppState> {
+    return this.mutate(state => {
+      state.user.name = name.trim();
+      state.preferences.userName = name.trim();
+      return state;
+    });
+  }
+
+  async addCategory(name: string, emoji: string): Promise<VaultAppState> {
+    return this.mutate(state => {
+      state.vault.categories.push({
+        uid: createId('category'),
+        name: name.trim(),
+        emoji: emoji.trim() || null,
+        sortOrder: state.vault.categories.length,
+        colorHex: null,
+        isPlanSuppressed: false,
+        planSuppressedAt: null,
+        planSuppressedReason: null,
+        items: [],
+      });
+      return state;
+    });
+  }
+
+  async addItem(input: AddItemInput): Promise<VaultAppState> {
+    return this.mutate(state => {
+      const category = getCategoryById(state.vault, input.categoryId);
+      if (!category) {
+        throw new Error('Category not found.');
+      }
+
+      const normalizedStore = input.store.trim();
+      const existingStore = state.vault.stores.find(store => store.name.toLowerCase() === normalizedStore.toLowerCase());
+      if (!existingStore) {
+        state.vault.stores.push({
+          id: createId('store'),
+          name: normalizedStore,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      category.items.unshift({
+        id: createId('item'),
+        name: input.name.trim(),
+        categoryId: category.uid,
+        priceOptions: [
+          {
+            id: createId('priceOption'),
+            store: normalizedStore,
+            pricePerUnit: {
+              priceValue: input.price,
+              unit: input.unit.trim(),
+            },
+          },
+        ],
+        createdAt: new Date().toISOString(),
+        isTemporaryShoppingItem: false,
+        shoppingPrice: null,
+        shoppingUnit: null,
+        isOnSale: false,
+        notes: null,
+        saleType: null,
+        discountValue: null,
+        regularPrice: null,
+        isDeleted: false,
+        deletedAt: null,
+        deletedFromCategoryName: null,
+        isPlanSuppressed: false,
+        planSuppressedAt: null,
+        planSuppressedReason: null,
+      });
+
+      return state;
+    });
+  }
+
+  async createCart(input: CreateCartInput): Promise<VaultAppState> {
+    return this.mutate(state => {
+      const cartItems = input.selectedItems.map(selection =>
+        createCartItemFromVaultItem(state.vault, selection.itemId, selection.quantity, selection.selectedStore)
+      );
+
+      state.vault.carts.unshift({
+        id: createId('cart'),
+        name: input.name.trim(),
+        budget: input.budget,
+        fulfillmentStatus: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        startedAt: null,
+        completedAt: null,
+        status: 'planning',
+        isDeleted: false,
+        deletedAt: null,
+        cartItems,
+      });
+
+      return state;
+    });
+  }
+
+  async toggleCartItemFulfillment(cartId: string, cartItemId: string): Promise<VaultAppState> {
+    return this.mutate(state => {
+      const cart = state.vault.carts.find(entry => entry.id === cartId);
+      const cartItem = cart?.cartItems.find(entry => entry.id === cartItemId);
+
+      if (!cart || !cartItem) {
+        return state;
+      }
+
+      cartItem.isFulfilled = !cartItem.isFulfilled;
+      cartItem.shouldShowCheckmark = cartItem.isFulfilled;
+      cartItem.shouldStrikethrough = cartItem.isFulfilled;
+      cartItem.fulfillmentAnimationState = cartItem.isFulfilled ? 2 : 0;
+      cartItem.actualQuantity = cartItem.quantity;
+      cartItem.actualPrice = cartItem.actualPrice ?? cartItem.plannedPrice;
+      cartItem.actualUnit = cartItem.actualUnit ?? cartItem.plannedUnit;
+      cartItem.actualStore = cartItem.actualStore ?? cartItem.plannedStore;
+      cart.updatedAt = new Date().toISOString();
+      cart.fulfillmentStatus = cart.cartItems.length === 0
+        ? 0
+        : cart.cartItems.filter(entry => entry.isFulfilled).length / cart.cartItems.length;
+
+      return state;
+    });
+  }
+
+  async advanceCartStatus(cartId: string): Promise<VaultAppState> {
+    return this.mutate(state => {
+      const cart = state.vault.carts.find(entry => entry.id === cartId);
+      if (!cart) {
+        return state;
+      }
+
+      const now = new Date().toISOString();
+      if (cart.status === 'planning') {
+        cart.status = 'shopping';
+        cart.startedAt = now;
+      } else if (cart.status === 'shopping') {
+        cart.status = 'completed';
+        cart.completedAt = now;
+      }
+
+      cart.updatedAt = now;
+      return state;
+    });
+  }
+
+  async resetState(): Promise<VaultAppState> {
+    const next = createInitialAppState();
+    return this.persistState(next);
+  }
+
+  async getDashboard(): Promise<ReturnType<typeof computeDashboardSummary>> {
+    const state = await this.loadState();
+    return computeDashboardSummary(state);
+  }
+
+  private hydratePreferences(state: VaultAppState): VaultAppState {
+    const next = state;
+    next.preferences.hasCompletedOnboarding = storage.getBoolean('hasCompletedOnboarding') ?? next.preferences.hasCompletedOnboarding;
+    next.preferences.userName = storage.getString('userName') ?? next.preferences.userName;
+    next.preferences.hasPromptedForNameAfterOnboarding = storage.getBoolean('hasPromptedForNameAfterOnboarding') ?? next.preferences.hasPromptedForNameAfterOnboarding;
+    next.preferences.hasPromptedForNameAfterVaultCelebration = storage.getBoolean('hasPromptedForNameAfterVaultCelebration') ?? next.preferences.hasPromptedForNameAfterVaultCelebration;
+    next.preferences.hasShownAddItemGuideAfterName = storage.getBoolean('hasShownAddItemGuideAfterName') ?? next.preferences.hasShownAddItemGuideAfterName;
+    next.preferences.isPro = storage.getBoolean('isPro') ?? next.preferences.isPro;
+    const storeKeysJson = storage.getString('freeEditableStoreKeys');
+    next.preferences.freeEditableStoreKeys = storeKeysJson
+      ? JSON.parse(storeKeysJson) as string[]
+      : next.preferences.freeEditableStoreKeys;
+    next.preferences.freePrimaryEditableCartId = storage.getString('freePrimaryEditableCartId') ?? next.preferences.freePrimaryEditableCartId;
+    next.user.name = next.preferences.userName || next.user.name;
+    return next;
+  }
+
+  private persistPreferences(state: VaultAppState): void {
+    storage.set('hasCompletedOnboarding', state.preferences.hasCompletedOnboarding);
+    storage.set('userName', state.preferences.userName);
+    storage.set('hasPromptedForNameAfterOnboarding', state.preferences.hasPromptedForNameAfterOnboarding);
+    storage.set('hasPromptedForNameAfterVaultCelebration', state.preferences.hasPromptedForNameAfterVaultCelebration);
+    storage.set('hasShownAddItemGuideAfterName', state.preferences.hasShownAddItemGuideAfterName);
+    storage.set('isPro', state.preferences.isPro);
+    storage.set('freeEditableStoreKeys', JSON.stringify(state.preferences.freeEditableStoreKeys));
+
+    if (state.preferences.freePrimaryEditableCartId) {
+      storage.set('freePrimaryEditableCartId', state.preferences.freePrimaryEditableCartId);
+    } else {
+      storage.remove('freePrimaryEditableCartId');
+    }
+  }
+}
+
+export const appRepository = new AppRepository();

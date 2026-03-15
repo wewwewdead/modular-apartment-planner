@@ -1,0 +1,10 @@
+export function snapToGrid(value, gridSize) {
+  return Math.round(value / gridSize) * gridSize;
+}
+
+export function snapPoint(point, gridSize) {
+  return {
+    x: snapToGrid(point.x, gridSize),
+    y: snapToGrid(point.y, gridSize),
+  };
+}

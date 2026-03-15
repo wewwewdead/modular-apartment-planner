@@ -1,0 +1,80 @@
+import Matter from 'matter-js';
+
+const { Engine, Bodies, Body, Constraint, World } = Matter;
+
+export const PHYSICS_CONFIG = {
+    constraintStiffness: 0.005,
+    constraintDamping: 0.1,
+    frictionAir: 0.07,
+    restitution: 0.4,
+    sleepThreshold: 120,
+    maxActiveBodies: 600,
+    renderEvery: 3,
+    cleanupInterval: 30000,
+    staticTimeout: 30000,
+    constraintBaseLength: 40,
+    constraintLengthRange: 120,
+    nBodyG: 2,
+    nBodyTheta: 0.5,
+    nBodySoftening: 30,
+    nBodyMaxForce: 0.008,
+    orbitSpringK: 0.0006,   // radial spring — overdamped with frictionAir=0.07 (ζ≈1.43)
+    orbitalDrive: 0.002,    // tangential push — ~5 min per orbit at r=80 with higher friction
+    minSeparation: 50,      // anti-clumping: repel bodies closer than this (px)
+    separationStrength: 0.0005,
+};
+
+export function createStarEngine() {
+    const engine = Engine.create({
+        gravity: { x: 0, y: 0 },
+        enableSleeping: true,
+    });
+
+    engine.timing.timeScale = 1;
+
+    return engine;
+}
+
+export function createStarBody(postId, x, y, radius, mass) {
+    const body = Bodies.circle(x, y, radius, {
+        label: postId,
+        mass,
+        frictionAir: PHYSICS_CONFIG.frictionAir,
+        restitution: PHYSICS_CONFIG.restitution,
+        sleepThreshold: PHYSICS_CONFIG.sleepThreshold,
+        inertia: Infinity,
+    });
+
+    return body;
+}
+
+export function createConstellationConstraint(bodyA, bodyB, similarity) {
+    const length =
+        PHYSICS_CONFIG.constraintBaseLength +
+        (1 - similarity) * PHYSICS_CONFIG.constraintLengthRange;
+
+    return Constraint.create({
+        bodyA,
+        bodyB,
+        length,
+        stiffness: PHYSICS_CONFIG.constraintStiffness,
+        damping: PHYSICS_CONFIG.constraintDamping,
+        render: { visible: false },
+    });
+}
+
+export function getStarMass(likeCount) {
+    const likes = Math.min(likeCount || 0, 20);
+    const r = 6 + likes * 0.3;
+    return Math.PI * r * r * 0.01;
+}
+
+/**
+ * Virtual mass for a galaxy center in the N-body simulation.
+ * Scales with how many posts the user has.
+ */
+export function getGalaxyMass(postCount) {
+    return 10 + (postCount || 0) * 2;
+}
+
+export { Engine, Body, World, Constraint };

@@ -1,0 +1,131 @@
+import React from 'react';
+import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
+
+export function SettingsScreen({navigation}: Props) {
+  const {user, signOut} = useAuth();
+  const {colors, isDark, toggleTheme} = useTheme();
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      {text: 'Cancel', style: 'cancel'},
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+          } catch (error) {
+            Alert.alert(
+              'Sign out failed',
+              error instanceof Error ? error.message : 'Unknown error',
+            );
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <View style={styles.container}>
+        {/* Account section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, {color: colors.textMuted}]}>Account</Text>
+          <View style={[styles.card, {backgroundColor: colors.bgCard, borderColor: colors.borderCard}]}>
+            <View style={styles.row}>
+              <Text style={[styles.rowLabel, {color: colors.textSecondary}]}>Email</Text>
+              <Text style={[styles.rowValue, {color: colors.textPrimary}]}>
+                {user?.email || 'Not set'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Appearance section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, {color: colors.textMuted}]}>Appearance</Text>
+          <View style={[styles.card, {backgroundColor: colors.bgCard, borderColor: colors.borderCard}]}>
+            <View style={styles.row}>
+              <Text style={[styles.rowLabel, {color: colors.textPrimary}]}>Dark Mode</Text>
+              <Switch
+                value={isDark}
+                onValueChange={toggleTheme}
+                trackColor={{false: colors.borderLight, true: colors.accentAmber}}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Sign out */}
+        <View style={styles.section}>
+          <Pressable
+            style={[styles.signOutBtn, {borderColor: colors.danger}]}
+            onPress={handleSignOut}>
+            <Text style={[styles.signOutText, {color: colors.danger}]}>Sign Out</Text>
+          </Pressable>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    padding: spacing.lg,
+    gap: spacing.xl,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  sectionTitle: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginLeft: spacing.xs,
+  },
+  card: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  rowLabel: {
+    fontFamily: fonts.ui.medium,
+    fontSize: 15,
+  },
+  rowValue: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  signOutBtn: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  signOutText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+});

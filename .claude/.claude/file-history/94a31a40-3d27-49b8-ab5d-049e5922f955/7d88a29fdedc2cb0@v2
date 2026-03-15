@@ -1,0 +1,347 @@
+.sidebar {
+  background: var(--color-panel-bg);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast);
+  border-bottom: 1px solid var(--color-divider);
+  padding-bottom: 6px;
+}
+
+.sectionHeaderClickable {
+  cursor: pointer;
+}
+
+.sectionHeaderClickable:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.sectionHeaderClickable:hover .sectionTitle {
+  color: var(--color-text-primary);
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  transition: color var(--duration-fast);
+}
+
+/* SVG chevron */
+.chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.chevronIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+/* Section header with action button */
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.sectionHeaderContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.sectionAddBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.sectionAddBtn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-accent);
+}
+
+.count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0 6px;
+  border-radius: 10px;
+  line-height: 18px;
+}
+
+/* Sticky floor context header */
+.contextHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: var(--color-sticky-bg);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--color-divider);
+  margin-bottom: var(--space-xs);
+}
+
+.projectName {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.projectName:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-subtle);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-left-color: rgba(0, 0, 0, 0.08);
+}
+
+.item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.itemSelected {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  font-weight: 500;
+  border-left-color: var(--color-accent);
+}
+
+.itemSelected:hover {
+  background: rgba(13, 124, 102, 0.12);
+}
+
+/* Floor cards */
+.floorCard {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+  overflow: hidden;
+}
+
+.floorCard:hover {
+  background: var(--color-card-bg-hover);
+}
+
+.floorCard:hover .floorActions {
+  opacity: 1;
+}
+
+.floorCardActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+
+.floorButton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.floorName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.floorMeta {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.floorActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.floorActionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.floorActionBtn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
+}
+
+.floorActionBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.floorActionDanger:hover:not(:disabled) {
+  background: var(--color-danger-ghost-bg-hover);
+  color: var(--color-danger);
+}
+
+.floorActionIcon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+/* Phase items */
+.phaseItem {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card-bg);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+  overflow: hidden;
+}
+
+.phaseItem:hover {
+  background: var(--color-card-bg-hover);
+}
+
+.phaseItem:hover .floorActions {
+  opacity: 1;
+}
+
+.phaseItemActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+}
+
+.phaseColorDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.phaseNameRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Phase view mode toggle */
+.phaseViewControl {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: var(--space-xs);
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  width: 100%;
+}
+
+.phaseViewBtn {
+  flex: 1;
+  height: 24px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  border: none;
+}
+
+.phaseViewBtn:hover {
+  color: var(--color-text-primary);
+}
+
+.phaseViewBtnActive {
+  composes: phaseViewBtn;
+  background: var(--color-panel-bg);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}

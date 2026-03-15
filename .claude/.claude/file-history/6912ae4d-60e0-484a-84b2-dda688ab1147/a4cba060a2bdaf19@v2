@@ -1,0 +1,213 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import { Alert, SectionList, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+import { Category, Item } from '../../domain/models';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { AddCategorySheet } from './components/AddCategorySheet';
+import { AddItemSheet } from './components/AddItemSheet';
+import { CategoryChipRow } from './components/CategoryChipRow';
+import { VaultEmptyState } from './components/VaultEmptyState';
+import { VaultFAB } from './components/VaultFAB';
+import { VaultItemCard } from './components/VaultItemCard';
+import { VaultSearchBar } from './components/VaultSearchBar';
+import { VaultSectionHeader } from './components/VaultSectionHeader';
+
+const ITEM_HEIGHT = 72;
+
+type Section = {
+  category: Category;
+  data: Item[];
+};
+
+export function VaultScreen() {
+  const appState = useAppStore(state => state.appState);
+  const draftSelections = useAppStore(state => state.draftSelections);
+  const toggleDraftItem = useAppStore(state => state.toggleDraftItem);
+  const setDraftQuantity = useAppStore(state => state.setDraftQuantity);
+  const addCategory = useAppStore(state => state.addCategory);
+  const addItem = useAppStore(state => state.addItem);
+  const deleteItem = useAppStore(state => state.deleteItem);
+
+  const [search, setSearch] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+
+  const sections: Section[] = useMemo(() => {
+    if (!appState) return [];
+    const query = search.trim().toLowerCase();
+
+    return appState.vault.categories
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .filter(cat => {
+        if (filterCategoryId && cat.uid !== filterCategoryId) return false;
+        if (!query) return true;
+        return (
+          cat.name.toLowerCase().includes(query) ||
+          cat.items.some(item => item.name.toLowerCase().includes(query))
+        );
+      })
+      .map(cat => {
+        const filteredItems = query
+          ? cat.items.filter(item => item.name.toLowerCase().includes(query))
+          : cat.items;
+        return { category: cat, data: filteredItems };
+      });
+  }, [appState, search, filterCategoryId]);
+
+  const handleAddItem = useCallback(
+    async (categoryId: string, name: string, store: string, price: number, unit: string) => {
+      await addItem({ categoryId, name, store, price, unit });
+      setShowAddItem(false);
+    },
+    [addItem]
+  );
+
+  const handleDeleteItem = useCallback(
+    (item: Item) => {
+      Alert.alert('Delete item?', `This will remove ${item.name} from your vault.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteItem(item.id).catch(() => undefined);
+          },
+        },
+      ]);
+    },
+    [deleteItem]
+  );
+
+  const handleAddCategory = useCallback(
+    async (name: string, emoji: string) => {
+      await addCategory(name, emoji);
+      setShowAddCategory(false);
+    },
+    [addCategory]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Item }) => {
+      const quantity = draftSelections[item.id] ?? 0;
+      return (
+        <VaultItemCard
+          item={item}
+          quantity={quantity}
+          onToggle={() => toggleDraftItem(item.id)}
+          onIncrement={() => setDraftQuantity(item.id, quantity + 1)}
+          onDecrement={() => setDraftQuantity(item.id, Math.max(1, quantity - 1))}
+          onDelete={() => handleDeleteItem(item)}
+        />
+      );
+    },
+    [draftSelections, toggleDraftItem, setDraftQuantity, handleDeleteItem]
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: Section }) => (
+      <VaultSectionHeader
+        emoji={section.category.emoji}
+        name={section.category.name}
+        count={section.data.length}
+      />
+    ),
+    []
+  );
+
+  const getItemLayout = useCallback(
+    (_data: any, index: number) => ({
+      length: ITEM_HEIGHT,
+      offset: ITEM_HEIGHT * index,
+      index,
+    }),
+    []
+  );
+
+  if (!appState) return null;
+
+  return (
+    <GestureHandlerRootView style={styles.screen}>
+      <SectionList
+        sections={sections}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        getItemLayout={getItemLayout}
+        stickySectionHeadersEnabled
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <VaultSearchBar value={search} onChangeText={setSearch} />
+            <CategoryChipRow
+              categories={appState.vault.categories}
+              selectedId={filterCategoryId}
+              onSelect={setFilterCategoryId}
+            />
+          </View>
+        }
+        ListEmptyComponent={<VaultEmptyState />}
+        contentContainerStyle={styles.content}
+        initialNumToRender={10}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        ItemSeparatorComponent={ItemSeparator}
+      />
+
+      {!showAddItem && !showAddCategory && (
+        <VaultFAB
+          onAddItem={() => setShowAddItem(true)}
+          onAddCategory={() => setShowAddCategory(true)}
+        />
+      )}
+
+      {showAddItem && (
+        <AddItemSheet
+          categories={appState.vault.categories}
+          onSubmit={(catId, name, store, price, unit) => {
+            handleAddItem(catId, name, store, price, unit).catch(() => undefined);
+          }}
+          onClose={() => setShowAddItem(false)}
+        />
+      )}
+
+      {showAddCategory && (
+        <AddCategorySheet
+          onSubmit={(name, emoji) => {
+            handleAddCategory(name, emoji).catch(() => undefined);
+          }}
+          onClose={() => setShowAddCategory(false)}
+        />
+      )}
+    </GestureHandlerRootView>
+  );
+}
+
+function ItemSeparator() {
+  return <View style={separatorStyles.separator} />;
+}
+
+const separatorStyles = StyleSheet.create({
+  separator: {
+    height: 1,
+    backgroundColor: colors.line,
+    marginHorizontal: 18,
+  },
+});
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    paddingBottom: 100,
+  },
+  header: {
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+});

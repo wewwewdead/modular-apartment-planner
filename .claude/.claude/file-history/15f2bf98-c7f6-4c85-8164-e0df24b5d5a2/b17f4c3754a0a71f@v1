@@ -1,0 +1,182 @@
+# Event Horizon: Proximity-Based Docking in Rocket Mode
+
+## Context
+
+Currently, reading a post in rocket/pilot mode requires pressing ENTER when a star is targeted. This feels disconnected — the user should be able to **fly into** a star and have it envelop them, seamlessly transitioning into the post viewer. The "Event Horizon" mechanic adds proximity-based docking with a cinematic visual sequence, enhanced targeting UI, and session state preservation for a seamless round-trip experience.
+
+## Files to Modify
+
+| File | Purpose |
+|------|---------|
+| `client/src/components/Universe/hooks/useRocketMode.js` | Docking state machine, magnetic pull, input freezing, animation phases, session save/restore |
+| `client/src/components/Universe/layers/RocketLayer.jsx` | Enhanced bracket (color/size/distance), docking star scale-up, canvas flash overlay |
+| `client/src/components/Universe/components/RocketHUD.jsx` | Distance readout, docking indicator, key suppression |
+| `client/src/components/Universe/Universe.jsx` | Wire docking callback, session save before navigate, session restore on mount, reverse warp overlay |
+| `client/src/components/Universe/Universe.module.css` | Reverse warp CSS animation |
+
+---
+
+## Step 1: New Constants & Refs in `useRocketMode.js`
+
+Add after existing constants (line 18):
+
+```
+DOCKING_THRESHOLD_Z = 18     // viewZ below this + centered → auto-dock
+DOCKING_CENTER_MAX  = 50     // px from screen center to qualify
+MAGNET_THRESHOLD_Z  = 80     // magnetic pull begins at this viewZ
+MAGNET_STRENGTH     = 0.015  // lerp factor per frame toward target
+DOCK_ACCEL          = 0.5    // acceleration during auto-approach
+DOCK_MAX_SPEED      = 8      // speed cap during docking
+```
+
+Add new refs inside the hook:
+- `dockingStateRef` — `'none' | 'magnet' | 'approaching' | 'flash' | 'done'`
+- `dockingTargetIdxRef` — index of star being docked to
+- `dockingProgressRef` — 0-1 for flash rendering
+- `dockingStartTimeRef` — `performance.now()` when approaching began
+- `dockingCallbackRef` — function called when docking completes (navigate)
+- `inputFrozenRef` — gates keyboard input in tick()
+- `dockingStarScaleRef` — scale multiplier for target star (1→50)
+
+Export: `getDockingState()`, `getSessionSnapshot()`, `restoreFromSnapshot()`, `setDockingCallback()`, `abortDocking()`, and all docking refs.
+
+## Step 2: Input Freezing in `tick()`
+
+Wrap lines 84-100 (yaw/pitch/velocity processing) with `if (!inputFrozenRef.current) { ... }`. Existing behavior unchanged when ref is false.
+
+## Step 3: Recycling Protection
+
+In the recycling check (line 141), skip recycling if `i === dockingTargetIdxRef.current` and docking is active. This prevents the target star from being respawned behind the camera mid-dock.
+
+## Step 4: Magnetic Pull (Auto-Aim)
+
+After input processing, when `dockingStateRef === 'magnet'`:
+1. Compute desired yaw/pitch from camera→target vector using `atan2`
+2. Normalize yaw difference to [-PI, PI]
+3. Lerp current yaw/pitch toward desired at `MAGNET_STRENGTH * proximityFactor`
+4. `proximityFactor` increases from 0 (at viewZ=80) to 1 (at viewZ=18) — pull strengthens as you approach
+5. Disengage if target drifts beyond magnet zone or best target changes
+
+## Step 5: Docking Detection
+
+After target detection (line 188), when `dockingState === 'none'` and `bestIdx >= 0`:
+- If targeted star's `viewZ < MAGNET_THRESHOLD_Z` and `> DOCKING_THRESHOLD_Z` → set state to `'magnet'`
+- If targeted star's `viewZ < DOCKING_THRESHOLD_Z` AND screen-center distance < 50px → set state to `'approaching'`, freeze input, record start time
+
+## Step 6: Docking Animation Sequence in `tick()`
+
+Three phases when `dockingState === 'approaching'`:
+
+**Phase 1 — Auto-Approach (0–800ms):**
+- Hard-steer toward target (lerp factor 0.12)
+- Accelerate to `DOCK_MAX_SPEED`
+- Scale target star: 1x → 9x (quadratic ease-in)
+- `dockingProgress`: 0 → 0.6
+
+**Phase 2 — Star Explosion (800–1200ms):**
+- Decelerate (velocity *= 0.9)
+- Scale target star: 9x → 50x (ease-out)
+- `dockingProgress`: 0.6 → 0.9
+
+**Phase 3 — White Flash (1200–1700ms):**
+- Velocity = 0, state → `'flash'`
+- `dockingProgress`: 0.9 → 1.0
+- At 1700ms: state → `'done'`, call `dockingCallbackRef.current()`
+
+## Step 7: Enhanced Targeting Bracket in `RocketLayer.jsx`
+
+Replace the bracket block (lines 142-181) with:
+
+**a) Color transition based on distance:**
+- viewZ > 100: cyan (0,255,255)
+- viewZ 40-100: cyan → orange interpolation
+- viewZ < 40: orange → red interpolation
+
+**b) Growing bracket:**
+- `closeFactor = max(0, 1 - viewZ/200)`
+- `sizeMultiplier = 1 + closeFactor * 2.5` (up to 3.5x at close range)
+- Line width increases: `1.5 + closeFactor * 1`
+
+**c) Distance readout:**
+- `distanceLY = round(viewZ * 7)` displayed as monospace text
+- Positioned top-right of bracket: `"{N} LY"`
+- Same color/opacity as bracket
+
+**d) Docking star scale-up:**
+- In the star draw loop, check if `idx === dockingTargetIdxRef` and docking is active
+- Apply `dockingStarScaleRef` to `drawR` (capped at 300px)
+
+**e) Canvas flash overlay:**
+- After all stars drawn, if `dockingProgress > 0.6`:
+  - `flashAlpha = (progress - 0.6) / 0.4`
+  - Draw radial gradient: white center → blue-white edge at `flashAlpha` opacity
+  - `ctx.fillRect(0, 0, width, height)`
+
+## Step 8: RocketHUD Updates
+
+**Polling:** Add `distance` (viewZ * 7) and `dockingState` to the 100ms poll.
+
+**Display:** Show `"{N} LY"` below author name. When docking is active, replace "Press ENTER to read" with "DOCKING..." indicator.
+
+**Key suppression:** During `'approaching'` or `'flash'`, ignore all key events. During `'magnet'`, ESC calls `abortDocking()` instead of `onExit()`.
+
+## Step 9: Session State Persistence
+
+**`getSessionSnapshot()`** returns:
+```json
+{ camX, camY, camZ, yaw, pitch, velocity, timestamp }
+```
+
+**Save trigger (Universe.jsx):** The docking callback saves to `sessionStorage('rocketSession')`:
+```json
+{ ...snapshot, galaxyUserId, postId }
+```
+Then navigates to `/home/post/{id}` with `state: { fromRocket: true }`.
+
+Need a `selectedGalaxyUserIdRef` in Universe.jsx, set in `handleExploreGalaxy`.
+
+**`restoreFromSnapshot(snapshot, galaxyPosts, stageSize)`:**
+- Rebuilds stars from posts (same logic as `enter()`)
+- Restores camera position, yaw, pitch (velocity=0 for smooth re-entry)
+- Starts RAF loop
+
+## Step 10: Reverse Warp on Return
+
+**Universe.jsx mount effect:**
+1. Check `sessionStorage.getItem('rocketSession')`
+2. If found and < 5 min old: set `reverseWarpActive=true`, store session, remove from storage
+3. Once `postArray` loads, filter galaxy posts by saved `galaxyUserId`
+4. Call `rocketMode.restoreFromSnapshot(...)`, set `universeMode='pilot'`
+5. After 600ms, set `reverseWarpActive=false`
+
+**CSS (`.reverseWarp`):**
+- Full-screen overlay, z-index 1030
+- Radial gradient: white center → dark edges
+- `reverseWarpFade` keyframe: opacity 1 → 0 over 600ms
+
+**JSX:** `{reverseWarpActive && <div className={styles.reverseWarp} />}`
+
+## Step 11: Modified `handleRocketInteract` in Universe.jsx
+
+Dual-path:
+- If targeted star's viewZ < `MAGNET_THRESHOLD_Z` (80): trigger docking sequence with callback (save + navigate)
+- If far away: direct `navigate()` (existing fallback for ENTER at distance)
+- If already docking: ignore
+
+## Edge Cases
+
+- **Star recycled during dock:** Protected by Step 3
+- **ESC during approaching/flash:** Ignored (1.5s non-interruptible)
+- **ESC during magnet:** Calls `abortDocking()`, returns to normal flight
+- **Session expiry:** Discard if > 5 min old
+- **No galaxy posts on restore:** Skip restore, enter strategic mode normally
+
+## Verification
+
+1. Enter rocket mode, fly toward a star — bracket should transition cyan→orange→red with distance countdown
+2. Within viewZ < 80, observe gentle magnetic pull toward centered star
+3. Within viewZ < 18 and centered: auto-dock triggers — star expands, white flash, navigate to post
+4. Press ENTER on a semi-close star (viewZ < 80): manual dock trigger with same animation
+5. Read the post, press Back — reverse warp plays, rocket mode resumes at saved position
+6. Press ESC during magnet phase — docking aborts, normal flight resumes
+7. Verify stars far from docking target still render normally during animation

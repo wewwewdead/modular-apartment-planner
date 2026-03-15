@@ -1,0 +1,327 @@
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useUnsavedChangesGuard } from '@/app/useUnsavedChangesGuard';
+import { SketchProvider, useSketch } from './app/SketchProvider';
+import { SketchEditorProvider, useSketchEditor } from './app/SketchEditorProvider';
+import SketchToolbar from './ui/SketchToolbar';
+import SketchSidebar from './ui/SketchSidebar';
+import SketchViewport from './renderers/SketchViewport';
+import SketchPropertiesPanel from './ui/SketchPropertiesPanel';
+import { saveSketchProject, loadSketchProject, listSketchProjects, deleteSketchProject } from './persistence/sketchStorage';
+import { exportSketchProjectFile, openSketchProjectFile, importSketchProjectFile, isFilePickerAbortError } from './persistence/sketchFileTransfer';
+import { useSketchAutosave } from './persistence/useSketchAutosave';
+import Modal from '@/ui/Modal';
+import TemplateDialog from './ui/TemplateDialog';
+import { generateId } from '@/domain/ids';
+import { createAssembly } from './domain/assemblyModels';
+import { createSketchObject } from './domain/objectModels';
+import { SKETCH_TOOLS } from './domain/defaults';
+import styles from './SketchWorkspace.module.css';
+
+const SketchSheetCanvas = lazy(() => import('./renderers/SketchSheetCanvas'));
+
+const SketchProjectContext = createContext(null);
+
+export function useSketchProject() {
+  const ctx = useContext(SketchProjectContext);
+  if (!ctx) throw new Error('useSketchProject must be used within SketchWorkspace');
+  return ctx;
+}
+
+function SketchLoadModal({ onClose }) {
+  const { project, dispatch } = useSketch();
+  const [savedProjects, setSavedProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const importInputRef = useRef(null);
+  const { setFileHandle } = useSketchProject();
+
+  useEffect(() => {
+    listSketchProjects().then((list) => {
+      setSavedProjects(list);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleOpenFile = async () => {
+    try {
+      const result = await openSketchProjectFile();
+      dispatch({ type: 'SKETCH_LOAD', project: result.project });
+      setFileHandle(result.fileHandle || null);
+      onClose();
+    } catch (err) {
+      if (!isFilePickerAbortError(err)) {
+        alert('Failed to open sketch file: ' + err.message);
+      }
+    }
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await importSketchProjectFile(file);
+      dispatch({ type: 'SKETCH_LOAD', project: result.project });
+      setFileHandle(null);
+      onClose();
+    } catch (err) {
+      alert('Failed to import sketch file: ' + err.message);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleLoadDraft = async (id) => {
+    try {
+      const result = await loadSketchProject(id);
+      if (result) {
+        dispatch({ type: 'SKETCH_LOAD', project: result.project });
+        setFileHandle(null);
+        onClose();
+      }
+    } catch (err) {
+      alert('Failed to load sketch draft: ' + err.message);
+    }
+  };
+
+  const handleDeleteDraft = async (id, name) => {
+    if (!window.confirm(`Delete "${name}"?`)) return;
+    try {
+      await deleteSketchProject(id);
+      setSavedProjects((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      alert('Failed to delete sketch draft: ' + err.message);
+    }
+  };
+
+  return (
+    <Modal title="Open Sketch Project" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '360px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={handleOpenFile}
+            style={{
+              flex: 1, padding: '10px 16px', borderRadius: '6px', border: '1px solid var(--color-border)',
+              background: 'var(--color-panel-bg)', cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: '13px',
+            }}
+          >
+            Open Project File...
+          </button>
+          <button
+            onClick={() => importInputRef.current?.click()}
+            style={{
+              flex: 1, padding: '10px 16px', borderRadius: '6px', border: '1px solid var(--color-border)',
+              background: 'var(--color-panel-bg)', cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: '13px',
+            }}
+          >
+            Import File...
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImportFile}
+            style={{ display: 'none' }}
+          />
+        </div>
+
+        <div>
+          <h4 style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>
+            Browser Drafts
+          </h4>
+          {loading ? (
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Loading...</p>
+          ) : savedProjects.length === 0 ? (
+            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>No saved drafts.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
+              {savedProjects.map((entry) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 10px',
+                    borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-panel-bg)',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.name || 'Untitled'}
+                    </div>
+                    {entry.savedAt && (
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '2px' }}>
+                        {new Date(entry.savedAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleLoadDraft(entry.id)}
+                    style={{
+                      padding: '4px 12px', borderRadius: '4px', border: '1px solid var(--color-border)',
+                      background: 'var(--color-panel-bg)', cursor: 'pointer', fontSize: '12px',
+                    }}
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={() => handleDeleteDraft(entry.id, entry.name)}
+                    style={{
+                      padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)',
+                      background: 'var(--color-panel-bg)', cursor: 'pointer', fontSize: '12px', color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SketchInner() {
+  const { project, isDirty, dispatch } = useSketch();
+  const { workspaceMode, activeSheetId, dispatch: editorDispatch } = useSketchEditor();
+  const [showLoadModal, setShowLoadModal] = useState(false);
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [fileHandle, setFileHandle] = useState(null);
+
+  // Autosave
+  useSketchAutosave(project, isDirty, dispatch);
+  useUnsavedChangesGuard(isDirty);
+
+  // Ctrl+S file save
+  useEffect(() => {
+    const handler = async (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        try {
+          const result = await exportSketchProjectFile(project, { fileHandle });
+          if (result.fileHandle) setFileHandle(result.fileHandle);
+          try {
+            await saveSketchProject(project);
+          } catch {
+            // Browser draft sync is secondary to file save.
+          }
+          dispatch({ type: 'MARK_SAVED' });
+        } catch (err) {
+          if (!isFilePickerAbortError(err)) {
+            alert('Failed to save sketch project: ' + err.message);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [project, fileHandle, dispatch]);
+
+  // If active sheet was deleted, revert to model mode
+  useEffect(() => {
+    if (workspaceMode === 'sheet' && activeSheetId) {
+      const sheetExists = (project.sheets || []).some((s) => s.id === activeSheetId);
+      if (!sheetExists) {
+        editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+        editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: null });
+      }
+    }
+  }, [workspaceMode, activeSheetId, project.sheets, editorDispatch]);
+
+  const handleNew = useCallback(() => {
+    if (isDirty && !window.confirm('You have unsaved changes. Start a new project?')) return;
+    dispatch({ type: 'SKETCH_NEW' });
+    setFileHandle(null);
+  }, [isDirty, dispatch]);
+
+  const handleSave = useCallback(async () => {
+    try {
+      const result = await exportSketchProjectFile(project, { fileHandle });
+      if (result.fileHandle) setFileHandle(result.fileHandle);
+      try {
+        await saveSketchProject(project);
+      } catch {
+        // Browser draft sync is secondary to file save.
+      }
+      dispatch({ type: 'MARK_SAVED' });
+    } catch (err) {
+      if (isFilePickerAbortError(err)) return;
+      alert('Failed to save sketch project: ' + err.message);
+    }
+  }, [project, fileHandle, dispatch]);
+
+  const handleLoadClick = useCallback(() => {
+    setShowLoadModal(true);
+  }, []);
+
+  const isSheetMode = workspaceMode === 'sheet';
+
+  return (
+    <SketchProjectContext.Provider value={{ handleNew, handleSave, handleLoadClick, fileHandle, setFileHandle, showTemplateDialog, setShowTemplateDialog }}>
+      <div className={styles.layout}>
+        <div className={styles.toolbar}>
+          <SketchToolbar />
+        </div>
+        <div className={styles.sidebar}>
+          <SketchSidebar />
+        </div>
+        <div className={styles.canvas}>
+          {isSheetMode ? (
+            <Suspense fallback={<div className={styles.previewFallback}>Loading sheet...</div>}>
+              <SketchSheetCanvas />
+            </Suspense>
+          ) : (
+            <SketchViewport />
+          )}
+        </div>
+        <div className={styles.rightPanel}>
+          <SketchPropertiesPanel />
+        </div>
+      </div>
+      {showLoadModal && <SketchLoadModal onClose={() => setShowLoadModal(false)} />}
+      {showTemplateDialog && (
+        <TemplateDialog
+          onClose={() => setShowTemplateDialog(false)}
+          onGenerate={(templateType, params) => {
+            if (templateType === '__free_canvas__') {
+              const object = createSketchObject((params.objectName || 'Custom Object').trim() || 'Custom Object', {
+                id: generateId('obj'),
+                category: params.category || 'general',
+                summary: 'Free-canvas custom object',
+                editingPolicy: 'manual',
+                source: 'custom',
+              });
+              const assembly = createAssembly((params.moduleName || 'Module 1').trim() || 'Module 1', {
+                objectId: object.id,
+                category: params.category || 'general',
+                description: 'Primary editable module',
+                source: 'manual',
+              });
+              dispatch({ type: 'OBJECT_CREATE', object, assemblies: [assembly] });
+              editorDispatch({ type: 'DISMISS_EMPTY_STATE' });
+              editorDispatch({ type: 'SET_TOOL', tool: SKETCH_TOOLS.SOLID });
+              editorDispatch({ type: 'ENTER_ASSEMBLY_EDIT', assemblyId: assembly.id });
+              return;
+            }
+
+            const objectId = generateId('obj');
+            dispatch({ type: 'TEMPLATE_GENERATE', templateType, params, objectId });
+            editorDispatch({ type: 'DISMISS_EMPTY_STATE' });
+            editorDispatch({ type: 'SET_ACTIVE_ASSEMBLY', assemblyId: null });
+            editorDispatch({ type: 'SELECT_OBJECT', id: objectId, objectType: 'object' });
+          }}
+        />
+      )}
+    </SketchProjectContext.Provider>
+  );
+}
+
+export default function SketchWorkspace({ initialProject }) {
+  return (
+    <div className="editorRoot">
+      <SketchProvider initialProject={initialProject}>
+        <SketchEditorProvider>
+          <SketchInner />
+        </SketchEditorProvider>
+      </SketchProvider>
+    </div>
+  );
+}

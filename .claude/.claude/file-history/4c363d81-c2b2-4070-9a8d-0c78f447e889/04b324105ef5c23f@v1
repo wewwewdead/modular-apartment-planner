@@ -1,0 +1,59 @@
+import React from 'react';
+import {StyleSheet, Text, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {FeatureTodoCard} from '../../components/FeatureTodoCard';
+import {Screen} from '../../components/Screen';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {useTheme} from '../../theme/ThemeProvider';
+
+export function CanvasScreen() {
+  const {colors} = useTheme();
+  const {user} = useAuth();
+  const galleryQuery = useQuery({
+    queryKey: ['canvas-gallery', user?.id],
+    queryFn: () => mobileApi.getCanvasGallery(user?.id, 12, 'hottest'),
+  });
+
+  return (
+    <Screen>
+      <Text style={[styles.title, {color: colors.textPrimary}]}>Canvas</Text>
+      <FeatureTodoCard
+        title="Native canvas parity in progress"
+        description="This route is active in the app shell. Next implementation slice ports react-konva features (text/stickers/doodles/snapping/remix) to native rendering and gestures."
+      />
+      <View
+        style={[
+          styles.card,
+          {backgroundColor: colors.bgElevated, borderColor: colors.borderLight},
+        ]}>
+        <Text style={[styles.cardTitle, {color: colors.textPrimary}]}>Canvas gallery snapshot</Text>
+        <Text style={[styles.cardText, {color: colors.textMuted}]}>
+          {galleryQuery.isLoading
+            ? 'Loading...'
+            : `${galleryQuery.data?.data?.length ?? 0} canvas posts loaded`}
+        </Text>
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  card: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  cardTitle: {
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  cardText: {
+    fontSize: 14,
+  },
+});

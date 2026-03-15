@@ -1,0 +1,59 @@
+Task: Implement the 'Iskrib Interstellar' Navigation & Simulation System
+
+Goal: Create a 3-tier navigation experience (Map → Galaxy Focus → Rocket POV) that is mobile-responsive, physics-based, and integrates with the ContentViewer component.
+
+1. System Architecture & State Machine
+Implement a central UniverseController using a state machine:
+
+STRATEGIC Mode: Top-down view of all galaxies (Matter.js physics active).
+
+FOCUS Mode: Camera zoomed into a specific galaxy (Physics "freezes" for stability).
+
+PILOT Mode: First-person 3D parallax "Rocket" perspective.
+
+WARP Mode: High-speed motion-blur transition between states.
+
+2. Tiered Interaction Flow
+Step 1 (The Fly-To): When a user clicks a Galaxy Centroid, use Konva.Tween to animate the stage scale (zoom) and position (center).
+
+Step 2 (The Gateway): Once the zoom is complete, show a floating, glassmorphism button: "Explore Galaxy".
+
+Step 3 (The Rocket POV): Clicking "Explore" triggers a 1-second WARP animation. Swap the coordinate system from 2D (x, y) to 3D Parallax (x, y, z).
+
+3. Rocket POV & Physics (The 100x Experience)
+Movement: Users move freely via W/A/S/D (Desktop) or a Virtual Joystick (Mobile).
+
+First-Person Parallax: * Give every post in the galaxy a z depth.
+
+Project coordinates: pos = (original_pos - camera_pos) / z.
+
+As the user moves "Forward," decrease z. If z < 0.1, the post has been passed; loop it back to the distance.
+
+Mobile-Friendly Steering: Use the Device Orientation API (Gyroscope). Tilting the phone steers the rocket; a thumb-slider on the right controls speed.
+
+4. Selection & ContentViewer Integration
+Proximity Detection: In Pilot mode, the star closest to the screen center gets a "Targeting Bracket."
+
+The Transition: If a user "hits" a star or taps a targeted star:
+
+Play a "Hyper-jump" white-out animation.
+
+Call openContentViewer(postId).
+
+Persistence: Save the current rocket coordinates in localStorage so the user returns to the exact same spot when closing the post.
+
+5. Robust Performance Optimization (No-Lag Architecture)
+Layer Management: Use separate Konva.Layer instances for the background nebula (static), the star field (active), and the UI/HUD (overlay).
+
+Culling: Only calculate and render stars within the active Viewport.
+
+Physics Freezing: Deactivate the Matter.js engine entirely while in PILOT mode to free up CPU for the 3D parallax math.
+
+Offscreen Canvas: If star count > 1,000, use a FastLayer or OffscreenCanvas for the background stars.
+
+6. Mobile Requirements
+Hitbox: Increase star hitStrokeWidth to 40px for touch accuracy.
+
+Haptics: Trigger window.navigator.vibrate(20) when passing near a star or docking.
+
+HUD: Ensure the "Explore" button is in the "Thumb Zone" (bottom 30% of the screen).

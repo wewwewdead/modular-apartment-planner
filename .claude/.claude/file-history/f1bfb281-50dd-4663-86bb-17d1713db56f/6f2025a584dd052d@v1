@@ -1,0 +1,83 @@
+# Add Interests & Writing Goal to Settings Page
+
+## Context
+
+Users can set `writing_interests` and `writing_goal` during onboarding, but there's no way to view or modify them afterward. These values drive the For You feed and Explore interest sections, so users need a way to update them from Settings.
+
+---
+
+## Approach
+
+Add a new "Writing Preferences" section to the existing SettingsPage, reusing the same TOPICS/GOALS constants and chip/card UI patterns from the onboarding InterestsStep. Create a dedicated backend endpoint to update interests + goal and regenerate the interests embedding.
+
+---
+
+## Backend
+
+### New endpoint: `POST /api/update-interests`
+
+**`server/services/uploadService.js`** — add `updateInterestsService(userId, writingInterests, writingGoal)`
+- Validates interests (array of strings, max 16) and goal (string)
+- Updates `writing_interests` and `writing_goal` on users table
+- Fire-and-forget call to `updateUserInterestsEmbedding(userId, writingInterests)` to regenerate the embedding (same pattern as onboarding hook)
+
+**`server/controller/uploadController.js`** — add `updateInterestsController`
+- Reads `req.userId`, `req.body.writingInterests`, `req.body.writingGoal`
+- Calls service, returns 200
+
+**`server/routes/routes.js`** — add route:
+```
+router.post('/update-interests', requireAuth, updateInterestsController);
+```
+
+---
+
+## Frontend
+
+### API: `client/API/Api.js`
+- Add `updateInterests(token, { writingInterests, writingGoal })` — POST JSON body
+
+### SettingsPage: `client/src/components/SettingsPage/SettingsPage.jsx`
+- Import `useAuth` (already imported), `useQueryClient` from react-query
+- Import `updateInterests` from Api
+- Read current `writing_interests` and `writing_goal` from `user?.userData?.[0]`
+- Add state: `interests` (array, init from user data), `goal` (string, init from user data), `interestsLoading`, `interestsError`, `interestsSuccess`
+- Add new `<section className="settings-section">` after the email section with:
+  - "Writing Preferences" title
+  - Current goal display with selectable goal cards (reuse GOALS array + onboarding CSS patterns)
+  - Interest topic chips (reuse TOPICS array + onboarding CSS patterns) with toggle on click
+  - "Save Preferences" button
+  - Success/error message
+- On save: call `updateInterests`, invalidate `['userData', userId]` query cache so the For You tab and Explore sections pick up changes immediately
+
+### CSS: `client/src/components/SettingsPage/SettingsPage.css`
+- Add `.settings-interests-grid` (flex wrap chips)
+- Add `.settings-interest-chip` (pill style, selected state with amber accent)
+- Add `.settings-goal-grid` (2-column grid)
+- Add `.settings-goal-card` (card with icon, selected amber state)
+- Reuse the same visual language as onboarding but adapted to settings section width
+
+---
+
+## Files
+
+**New:** none (all additions to existing files)
+
+**Modified (6):**
+1. `server/services/uploadService.js` — add `updateInterestsService`
+2. `server/controller/uploadController.js` — add `updateInterestsController`
+3. `server/routes/routes.js` — add route
+4. `client/API/Api.js` — add `updateInterests`
+5. `client/src/components/SettingsPage/SettingsPage.jsx` — add Writing Preferences section
+6. `client/src/components/SettingsPage/SettingsPage.css` — add chip/card styles
+
+---
+
+## Verification
+
+1. Go to `/home/settings` — new "Writing Preferences" section visible below email
+2. Current interests and goal should be pre-selected from user data
+3. Toggle interests, change goal, click Save → success message
+4. Navigate to For You tab → feed should reflect updated interests
+5. Navigate to Explore → interest sections should update
+6. User with no prior interests → section shows empty state with all chips unselected

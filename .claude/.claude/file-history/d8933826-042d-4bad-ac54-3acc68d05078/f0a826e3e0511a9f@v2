@@ -1,0 +1,591 @@
+import React, {useCallback, useMemo, useRef, useState} from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {Avatar} from '../../components/Avatar';
+import {BadgeCheckIcon, RepostIcon, XIcon} from '../../components/icons';
+import {CommentThread, formatRelativeDate} from '../../components/Comments';
+import {ActionBar} from '../../components/PostCard/ActionBar';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {SkeletonLoader} from '../../components/SkeletonLoader';
+import {CanvasPreview} from '../../components/CanvasPreview/CanvasPreview';
+import {LexicalRenderer} from '../../lib/content/LexicalRenderer';
+import {RelatedPosts} from '../../components/Discovery/RelatedPosts';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {useComments} from '../../hooks/useComments';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {queryClient} from '../../lib/queryClient';
+import {extractPlainText, parseCanvasDoc} from '../../lib/utils/journalHelpers';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'PostDetail'>;
+
+const toCount = (value: unknown): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
+const resolveCount = (
+  aggregate: Array<{count?: number}> | undefined,
+  fallback?: number,
+): number => {
+  return toCount(aggregate?.[0]?.count) ?? toCount(fallback) ?? 0;
+};
+
+const extractBannerImage = (content: string | null | undefined): string | null => {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content);
+    const findImage = (node: any): string | null => {
+      if (node.type === 'image' && node.src) return node.src;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = findImage(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findImage(parsed.root ?? parsed);
+  } catch {
+    return null;
+  }
+};
+
+export function PostDetailScreen({route, navigation}: Props) {
+  const {user, session} = useAuth();
+  const {colors} = useTheme();
+  const {width: windowWidth} = useWindowDimensions();
+  const {journalId} = route.params;
+  const token = session?.access_token ?? '';
+  const [repostCaption, setRepostCaption] = useState('');
+  const [showRepost, setShowRepost] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  const onReplyActivated = useCallback(() => {
+    setTimeout(() => {
+      inputRef.current?.focus();
+      scrollViewRef.current?.scrollToEnd({animated: true});
+    }, 100);
+  }, []);
+
+  const detailQuery = useQuery({
+    queryKey: ['journal', journalId, user?.id],
+    queryFn: () => mobileApi.getJournalById(journalId, user?.id),
+  });
+
+  const receiverId = (detailQuery.data?.journal?.user_id ?? detailQuery.data?.journal?.users?.id) || undefined;
+
+  const {
+    comments,
+    isLoading: commentsLoading,
+    commentInput,
+    setCommentInput,
+    replyingTo,
+    setReplyingTo,
+    expandedReplies,
+    fetchedReplies,
+    loadingReplies,
+    handleReply,
+    handleToggleReplies,
+    submitComment,
+    isSubmitting,
+  } = useComments(journalId, receiverId, token, onReplyActivated);
+
+  const reactionMutation = useMutation({
+    mutationFn: async (reactionType: string) => {
+      const journal = detailQuery.data?.journal;
+      const rid = journal?.user_id ?? journal?.users?.id;
+      if (!token) throw new Error('Please log in to react.');
+      if (!journal?.id || !rid) throw new Error('Missing journal data.');
+      return socialApi.toggleReaction(token, {
+        journalId: journal.id,
+        receiverId: rid,
+        reactionType,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['journal', journalId]});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: e => Alert.alert('Reaction failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error('Please log in to bookmark.');
+      return socialApi.toggleBookmark(token, {journalId});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['journal', journalId]});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: e => Alert.alert('Bookmark failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const repostMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error('Please log in to repost.');
+      return socialApi.createRepost(token, {
+        sourceJournalId: journalId,
+        caption: repostCaption.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      setRepostCaption('');
+      setShowRepost(false);
+      Alert.alert('Reposted', 'Post was reposted to your feed.');
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: e => Alert.alert('Repost failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const journal = detailQuery.data?.journal;
+  const likeCount = resolveCount(journal?.like_count, journal?.likes_count);
+  const commentCount = resolveCount(journal?.comment_count, journal?.comments_count);
+  const bookmarkCount = resolveCount(journal?.bookmark_count);
+  const bannerImage = useMemo(() => extractBannerImage(journal?.content), [journal?.content]);
+  const isRepost = !!journal?.is_repost;
+  const canvasDoc = parseCanvasDoc(journal?.canvas_doc);
+  const isCanvas = !!(canvasDoc?.snippets?.length || canvasDoc?.images?.length || canvasDoc?.doodles?.length);
+  const repostSource = isRepost ? journal?.repost_source : null;
+  const repostSourcePreview = repostSource?.content
+    ? extractPlainText(repostSource.content).slice(0, 200)
+    : '';
+
+  if (detailQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.loadingContainer}>
+          <SkeletonLoader height={200} borderRadius={0} />
+          <View style={styles.contentPadding}>
+            <SkeletonLoader width="70%" height={24} />
+            <SkeletonLoader width="40%" height={16} style={{marginTop: 12}} />
+            <SkeletonLoader width="100%" height={16} style={{marginTop: 20}} />
+            <SkeletonLoader width="100%" height={16} style={{marginTop: 8}} />
+            <SkeletonLoader width="60%" height={16} style={{marginTop: 8}} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (detailQuery.isError) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.contentPadding}>
+          <Text style={[styles.errorText, {color: colors.danger}]}>
+            Unable to load this post.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <ScrollView
+      ref={scrollViewRef}
+      style={[styles.scroll, {backgroundColor: colors.bgPrimary}]}
+      showsVerticalScrollIndicator={false}>
+      {/* Banner image / Canvas preview */}
+      {!isRepost && isCanvas ? (
+        <CanvasPreview canvasDoc={journal?.canvas_doc ?? null} width={windowWidth} />
+      ) : !isRepost && bannerImage ? (
+        <Image source={{uri: bannerImage}} style={styles.banner} resizeMode="cover" />
+      ) : null}
+
+      <View style={styles.contentPadding}>
+        {/* Title / Repost badge */}
+        {isRepost ? (
+          <View style={styles.repostBadge}>
+            <RepostIcon size={14} color={colors.textFaint} />
+            <Text style={[styles.repostBadgeText, {color: colors.textFaint}]}>
+              <Text style={[styles.repostBadgeName, {color: colors.textSecondary}]}>
+                {journal?.users?.name || 'Someone'}
+              </Text>
+              {' reposted'}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.title, {color: colors.textHeading}]}>
+            {journal?.title || 'Untitled Post'}
+          </Text>
+        )}
+
+        {/* Author section */}
+        <Pressable
+          style={styles.authorRow}
+          onPress={() => {
+            const authorId = journal?.users?.id ?? journal?.user_id;
+            if (!authorId) return;
+            if (authorId === user?.id) {
+              navigation.navigate('Main' as any, {screen: 'Profile'});
+            } else {
+              navigation.navigate('VisitProfile', {
+                userId: authorId,
+                username: journal?.users?.username ?? undefined,
+              });
+            }
+          }}>
+          <Avatar
+            uri={journal?.users?.image_url}
+            name={journal?.users?.name}
+            size={36}
+            badge={journal?.users?.badge as 'legend' | 'og' | undefined}
+          />
+          <View style={styles.authorInfo}>
+            <View style={styles.authorNameRow}>
+              <Text style={[styles.authorName, {color: colors.textPrimary}]}>
+                {journal?.users?.name || 'Unknown author'}
+              </Text>
+              {journal?.users?.badge ? (
+                <BadgeCheckIcon size={16} badge={journal.users.badge as 'legend' | 'og'} />
+              ) : null}
+            </View>
+            <Text style={[styles.dateText, {color: colors.textMuted}]}>
+              {formatRelativeDate(journal?.created_at)}
+            </Text>
+          </View>
+        </Pressable>
+
+        {/* Repost caption */}
+        {isRepost && journal?.repost_caption ? (
+          <Text style={[styles.repostCaptionText, {color: colors.textPrimary}]}>
+            {journal.repost_caption}
+          </Text>
+        ) : null}
+
+        {/* Action bar */}
+        <ActionBar
+          likeCount={likeCount}
+          commentCount={commentCount}
+          bookmarkCount={bookmarkCount}
+          isLiked={journal?.has_liked}
+          isBookmarked={journal?.has_bookmarked}
+          userReaction={journal?.user_reaction}
+          onReact={type => reactionMutation.mutate(type)}
+          onComment={() => {/* scroll to comments */}}
+          onBookmark={() => bookmarkMutation.mutate()}
+          onRepost={() => setShowRepost(!showRepost)}
+        />
+
+        {/* Repost section */}
+        {showRepost && (
+          <View style={[styles.repostSection, {backgroundColor: colors.bgSecondary, borderColor: colors.borderLight}]}>
+            <TextInput
+              value={repostCaption}
+              onChangeText={setRepostCaption}
+              placeholder="Add an optional caption"
+              placeholderTextColor={colors.textFaint}
+              style={[styles.commentInput, {backgroundColor: colors.bgElevated, borderColor: colors.borderCard, color: colors.textPrimary}]}
+              maxLength={280}
+              multiline
+            />
+            <PrimaryButton
+              label={repostMutation.isPending ? 'Reposting...' : 'Repost to feed'}
+              onPress={() => repostMutation.mutate()}
+              disabled={repostMutation.isPending}
+            />
+          </View>
+        )}
+
+        {/* Divider */}
+        <View style={[styles.divider, {backgroundColor: colors.borderLight}]} />
+
+        {/* Content body / Embedded original post */}
+        {isRepost ? (
+          repostSource ? (
+            <Pressable
+              style={[styles.embeddedCard, {borderColor: colors.borderLight}]}
+              onPress={() => navigation.push('PostDetail', {journalId: repostSource.id})}>
+              <View style={styles.embeddedAuthorRow}>
+                <Avatar
+                  uri={repostSource.users?.image_url ?? undefined}
+                  name={repostSource.users?.name ?? undefined}
+                  size={28}
+                  badge={repostSource.users?.badge as 'legend' | 'og' | undefined}
+                />
+                <Text style={[styles.embeddedAuthorName, {color: colors.textPrimary}]}>
+                  {repostSource.users?.name || 'Unknown author'}
+                </Text>
+              </View>
+              {repostSource.title ? (
+                <Text style={[styles.embeddedTitle, {color: colors.textHeading}]}>
+                  {repostSource.title}
+                </Text>
+              ) : null}
+              {repostSourcePreview ? (
+                <Text style={[styles.embeddedPreview, {color: colors.textSecondary}]} numberOfLines={3}>
+                  {repostSourcePreview}
+                </Text>
+              ) : null}
+            </Pressable>
+          ) : (
+            <View style={[styles.embeddedCard, {borderColor: colors.borderLight}]}>
+              <Text style={[styles.repostUnavailable, {color: colors.textMuted}]}>
+                This post is no longer available
+              </Text>
+            </View>
+          )
+        ) : (
+          <>
+            {isCanvas && !journal?.content ? null : <LexicalRenderer content={journal?.content} />}
+            <RelatedPosts journalId={journalId} />
+          </>
+        )}
+
+        {/* Divider */}
+        <View style={[styles.divider, {backgroundColor: colors.borderLight}]} />
+
+        {/* Comments section */}
+        <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+          Comments ({commentCount})
+        </Text>
+
+        {commentsLoading ? (
+          <View style={styles.commentLoading}>
+            <ActivityIndicator color={colors.loaderColor} />
+          </View>
+        ) : comments.filter(c => !c.parent_id).length === 0 ? (
+          <Text style={[styles.noComments, {color: colors.textMuted}]}>
+            No comments yet. Be the first!
+          </Text>
+        ) : (
+          comments
+            .filter(c => !c.parent_id)
+            .map(comment => (
+              <CommentThread
+                key={comment.id}
+                comment={comment}
+                postId={journalId}
+                allComments={comments}
+                fetchedReplies={fetchedReplies}
+                loadingReplies={loadingReplies}
+                isLoggedIn={!!token}
+                onReply={handleReply}
+                onToggleReplies={handleToggleReplies}
+                expandedReplies={expandedReplies}
+                colors={colors}
+                depth={0}
+              />
+            ))
+        )}
+
+        {/* Comment input */}
+        {token ? (
+          <View style={styles.commentInputRow}>
+            {replyingTo && (
+              <View style={[styles.replyBanner, {backgroundColor: colors.bgSecondary}]}>
+                <Text style={[styles.replyBannerText, {color: colors.textPrimary}]}>
+                  Replying to {replyingTo.userName}
+                </Text>
+                <Pressable onPress={() => setReplyingTo(null)} hitSlop={8}>
+                  <XIcon size={16} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            )}
+            <TextInput
+              ref={inputRef}
+              value={commentInput}
+              onChangeText={setCommentInput}
+              placeholder={replyingTo ? `Reply to ${replyingTo.userName}...` : 'Write a comment...'}
+              placeholderTextColor={colors.textFaint}
+              style={[
+                styles.commentInput,
+                {
+                  backgroundColor: colors.bgSecondary,
+                  borderColor: colors.borderCard,
+                  color: colors.textPrimary,
+                },
+              ]}
+              maxLength={200}
+              multiline
+            />
+            <PrimaryButton
+              label={isSubmitting ? 'Posting...' : 'Post'}
+              onPress={submitComment}
+              disabled={commentInput.trim().length === 0 || isSubmitting}
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.bottomSpacer} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+  },
+  contentPadding: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  banner: {
+    width: '100%',
+    height: 220,
+  },
+  title: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 26,
+    lineHeight: 34,
+    marginBottom: spacing.lg,
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  authorInfo: {
+    flex: 1,
+  },
+  authorNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  authorName: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+  dateText: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    marginVertical: spacing.xl,
+  },
+  sectionTitle: {
+    ...typeScale.h3,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    fontFamily: fonts.ui.medium,
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: spacing.xxxl,
+  },
+  repostSection: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  noComments: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+  },
+  replyBannerText: {
+    fontFamily: fonts.ui.medium,
+    fontSize: 13,
+  },
+  commentLoading: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  commentInputRow: {
+    gap: spacing.md,
+    marginTop: spacing.lg,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    textAlignVertical: 'top',
+    minHeight: 60,
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  repostBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.md,
+  },
+  repostBadgeText: {
+    fontSize: 13,
+    fontFamily: fonts.ui.regular,
+  },
+  repostBadgeName: {
+    fontFamily: fonts.ui.semiBold,
+  },
+  repostCaptionText: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    marginBottom: spacing.md,
+  },
+  embeddedCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  embeddedAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  embeddedAuthorName: {
+    fontSize: 14,
+    fontFamily: fonts.ui.semiBold,
+  },
+  embeddedTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  embeddedPreview: {
+    ...typeScale.bodySmall,
+    lineHeight: 20,
+  },
+  repostUnavailable: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    fontStyle: 'italic',
+  },
+  bottomSpacer: {
+    height: spacing.xxxxl,
+  },
+});

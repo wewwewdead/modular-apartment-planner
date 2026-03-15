@@ -1,0 +1,211 @@
+# 100% Feature Parity: iskrib_v3 Web → Mobile App
+
+## Context
+The iskrib web app (React, at `C:\Users\johnm\iskrib_v3\client`) has ~15 features that the React Native mobile app (`C:\Users\johnm\iskrib_mobile_app\apps\mobile`) is missing. The shared Express server already has all endpoints — no server changes needed. This plan implements every missing feature to achieve full parity.
+
+## Conventions (follow existing patterns)
+- **API**: Functions in `src/lib/api/` use `apiRequest<T>()` from `apiClient.ts`, auth via `authHeaders(token)`
+- **Screens**: TypeScript, `useTheme()` for colors, `SafeAreaView` with `edges={['top']}`, `useQuery`/`useInfiniteQuery` for data
+- **Navigation**: All routes in `types.ts` → `RootStackParamList`, registered in `RootNavigator.tsx`
+- **Mutations**: `useMutation` with optimistic updates, invalidate relevant query keys on settle
+
+---
+
+## Feature 1: Follow/Unfollow System
+**Files to modify:**
+- `src/lib/api/socialApi.ts` — Add `toggleFollow(token, {followingId})` → `POST /addFollows` and `getFollowsData(token, userId)` → `GET /getFollowsData`
+- `src/screens/Profile/VisitProfileScreen.tsx` — Replace placeholder `<PrimaryButton label="Follow" onPress={() => {}} />` with functional toggle using `useMutation` calling `socialApi.toggleFollow`. Fetch initial follow state from `getFollowsData`.
+
+**Files to create:**
+- `src/screens/Social/FollowListScreen.tsx` — Two-tab screen (Followers/Following) with FlatList of users. Each row: Avatar + name + follow/unfollow button. Tap row → `VisitProfile`.
+- `src/hooks/useFollowMutation.ts` — Reusable hook wrapping the follow toggle mutation with optimistic cache update.
+
+**Nav changes:**
+- `types.ts` — `FollowList` already declared ✓
+- `RootNavigator.tsx` — Register `FollowListScreen`
+
+---
+
+## Feature 2: Feed Tabs (Following + For You)
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add:
+  - `getFollowingFeed(token, cursor, limit)` → `GET /journals/following`
+  - `getForYouFeed(token, offset, limit)` → `GET /journals/for-you`
+- `src/screens/Home/HomeFeedScreen.tsx` — Replace `QUICK_ACTIONS` chips with a 3-tab bar: **All** | **Following** | **For You**. Add `activeTab` state, conditional `useInfiniteQuery` per tab. Following/ForYou require auth token. Show empty state per tab.
+
+**Files to create:**
+- `src/components/FeedTabBar.tsx` — Horizontal tab bar matching `ProfileTabBar` style (underline indicator, theme colors)
+
+---
+
+## Feature 3: Post Delete
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add `deleteJournal(token, journalId)` → `DELETE /deleteJournal/:journalId`
+- `src/screens/Home/PostDetailScreen.tsx` — Add 3-dot menu / "Delete" action (visible when `user_id === currentUser.id`). Confirm via Alert, call mutation, invalidate `['feed']`, go back.
+- `src/screens/Profile/ProfileWritingsTab.tsx` — Add long-press or menu delete option per card.
+
+---
+
+## Feature 4: Post Privacy Toggle
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add `updatePrivacy(token, {journalId, privacy})` → `POST /updatePrivacy`
+- `src/screens/Editor/JournalEditorScreen.tsx` — Add a Public/Private segmented control above the Save button. Append `privacy` field to the FormData in `saveJournal`. Default to `'public'`.
+
+---
+
+## Feature 5: Drafts Management
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add:
+  - `saveDraft(token, {title, content})` → `POST /journal/draft`
+  - `publishDraft(token, journalId)` → `POST /journal/publish`
+  - `getDrafts(token)` → `GET /journal/drafts`
+- `src/screens/Editor/JournalEditorScreen.tsx` — Add "Save Draft" button alongside existing "Save Journal" (which becomes "Publish"). Support `mode: 'edit'` to load existing draft.
+- `src/navigation/types.ts` — Add `Drafts: undefined`
+- `src/navigation/RootNavigator.tsx` — Register `DraftsScreen`
+- `src/screens/Profile/ProfileScreen.tsx` — Add "Drafts" link in profile area
+
+**Files to create:**
+- `src/screens/Editor/DraftsScreen.tsx` — FlatList of drafts. Tap to edit, swipe to delete. Each item shows title + date.
+
+---
+
+## Feature 6: Writing Prompts
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add:
+  - `getTodaysPrompt()` → `GET /prompt/today`
+  - `getPromptResponses(promptId, cursor, limit)` → `GET /prompt/:promptId/responses`
+- `src/screens/Home/HomeFeedScreen.tsx` — Add `DailyPromptCard` as `ListHeaderComponent`. "Write a Response" navigates to `JournalEditor` with prompt context.
+- `src/navigation/types.ts` — Add `PromptResponses: {promptId: string}`
+- `src/navigation/RootNavigator.tsx` — Register `PromptResponsesScreen`
+
+**Files to create:**
+- `src/components/DailyPromptCard.tsx` — Card with prompt text + "Write" CTA
+- `src/screens/Home/PromptResponsesScreen.tsx` — FlatList of responses to a prompt
+
+---
+
+## Feature 7: Opinions Feature
+**Files to modify:**
+- `src/navigation/types.ts` — Add `OpinionsFeed`, `OpinionDetail`, `OpinionEditor`, `MyOpinions` routes
+- `src/navigation/RootNavigator.tsx` — Register all opinion screens
+- `src/screens/Profile/ProfileTabBar.tsx` — Extend `ProfileTab` to `'writings' | 'stories' | 'opinions'`, add Opinions tab to `TABS`
+- `src/screens/Profile/ProfileScreen.tsx` — Render `ProfileOpinionsTab` when active
+- `src/screens/Profile/VisitProfileScreen.tsx` — Same
+
+**Files to create:**
+- `src/lib/api/opinionsApi.ts` — Full opinions API module: `addOpinion`, `getOpinions`, `getMyOpinions`, `getUserOpinions`, `submitReply`, `getPostReplies`, `addOpinionReply`, `getOpinionReplies`
+- `src/screens/Opinions/OpinionsFeedScreen.tsx` — Infinite scroll list of opinions
+- `src/screens/Opinions/OpinionDetailScreen.tsx` — Single opinion with reply thread
+- `src/screens/Opinions/OpinionEditorScreen.tsx` — 280-char text input + submit
+- `src/screens/Profile/ProfileOpinionsTab.tsx` — User's opinions list (follows `ProfileWritingsTab` pattern)
+- `src/components/OpinionCard.tsx` — Reusable opinion card
+
+---
+
+## Feature 8: Explore / Interest Sections
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add `getInterestSections(token)` → `GET /explore/interests`
+- `src/screens/Home/ExploreScreen.tsx` — Below the hottest monthly section, add interest-based horizontal scroll sections fetched from `getInterestSections`
+
+**Files to create:**
+- `src/components/InterestSection.tsx` — Horizontal FlatList of PostCards for one interest category
+
+---
+
+## Feature 9: Profile Media Gallery
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add `getProfileMedia(token)` → `GET /profileMedia` and `getVisitedProfileMedia(token, userId)` → `GET /visitedProfileMedia`
+- `src/screens/Profile/ProfileTabBar.tsx` — Extend `ProfileTab` to include `'media'`
+- `src/screens/Profile/ProfileScreen.tsx` — Render `ProfileMediaTab` for media tab
+- `src/screens/Profile/VisitProfileScreen.tsx` — Same
+
+**Files to create:**
+- `src/screens/Profile/ProfileMediaTab.tsx` — 3-column image grid, tap for fullscreen. Uses `useInfiniteQuery`.
+
+---
+
+## Feature 10: Streak UI Enhancement
+**Files to modify:**
+- `src/screens/Profile/ProfileHeroSection.tsx` — Replace simple streak number with richer display (flame icon, current + longest streak)
+- `src/screens/Home/HomeFeedScreen.tsx` — Optionally show streak badge in header
+
+**Files to create:**
+- `src/components/StreakDisplay.tsx` — Visual streak component with fire icon, current/longest streaks
+
+---
+
+## Feature 11: Analytics Dashboard
+**Files to modify:**
+- `src/navigation/types.ts` — Add `Analytics: undefined`
+- `src/navigation/RootNavigator.tsx` — Register `AnalyticsDashboardScreen`
+- `src/screens/Profile/ProfileScreen.tsx` — Add "Analytics" button in profile area
+
+**Files to create:**
+- `src/lib/api/analyticsApi.ts` — `getWriterAnalytics(token, range)` → `GET /analytics` and `getWeeklyRecap(token)` → `GET /recap/weekly`
+- `src/screens/Analytics/AnalyticsDashboardScreen.tsx` — Time range selector (7d/30d/90d), views summary, reactions breakdown, top posts list, publishing frequency. Uses simple bar/number visualizations (no chart library needed initially — use colored bars with percentage widths).
+
+---
+
+## Feature 12: Weekly Recap
+**Files to modify:**
+- `src/screens/Home/HomeFeedScreen.tsx` — On mount, check recap availability. If available, show `WeeklyRecapModal`.
+
+**Files to create:**
+- `src/components/WeeklyRecapModal.tsx` — Modal with weekly stats: posts written, views, new followers, top post. Card layout with dismiss button.
+
+---
+
+## Feature 13: Settings Screen
+**Files to modify:**
+- `src/navigation/RootNavigator.tsx` — Register `SettingsScreen`
+- `src/screens/Profile/ProfileScreen.tsx` — Change `onSettingsPress` from sign-out Alert to `navigation.navigate('Settings')`
+
+**Files to create:**
+- `src/screens/Settings/SettingsScreen.tsx` — Sections: Account (username, email display), Appearance (theme toggle via `useTheme().toggleTheme()`), Sign Out (destructive button, move existing logic here)
+
+---
+
+## Feature 14: Onboarding Flow
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add `completeOnboarding(token, {writingInterests, writingGoal})` → `POST /complete-onboarding` and `updateInterests(token, {writingInterests, writingGoal})` → `POST /update-interests`
+- `src/navigation/types.ts` — Add `Onboarding: undefined`
+- `src/navigation/RootNavigator.tsx` — Show `Onboarding` screen after login if user has no `writing_interests`. Gate between `Main` and `Onboarding` based on profile data.
+
+**Files to create:**
+- `src/screens/Onboarding/OnboardingScreen.tsx` — Multi-step wizard: Welcome → Interest selection (chip grid, multi-select) → Writing goal → Complete. Calls `completeOnboarding` API.
+
+---
+
+## Feature 15: Profile Customization (Font Color / Background)
+**Files to modify:**
+- `src/lib/api/mobileApi.ts` — Add `updateFontColor(token, formData)` → `POST /updateFontColor` and `uploadBackground(token, formData)` → `POST /uploadBackground`
+- `src/navigation/types.ts` — Add `ProfileCustomize: undefined`
+- `src/navigation/RootNavigator.tsx` — Register `ProfileCustomizeScreen`
+- `src/screens/Profile/EditProfileScreen.tsx` — Add "Customize" link that navigates to `ProfileCustomize`
+
+**Files to create:**
+- `src/screens/Profile/ProfileCustomizeScreen.tsx` — Color palette picker for font color + background image upload via image picker. Live preview.
+
+---
+
+## Implementation Order
+| Phase | Features | Files Created | Files Modified |
+|-------|----------|---------------|----------------|
+| 1 | Follow System (#1), Post Delete (#3), Privacy (#4) | 2 new | 5 modified |
+| 2 | Feed Tabs (#2), Settings (#13) | 2 new | 4 modified |
+| 3 | Drafts (#5), Writing Prompts (#6) | 3 new | 5 modified |
+| 4 | Opinions (#7) | 6 new | 5 modified |
+| 5 | Explore Interests (#8), Media Gallery (#9), Streaks (#10) | 3 new | 6 modified |
+| 6 | Analytics (#11), Weekly Recap (#12) | 3 new | 3 modified |
+| 7 | Onboarding (#14), Profile Customization (#15) | 2 new | 5 modified |
+
+**Total: ~21 new files, ~15 existing files modified**
+
+## Verification
+After each phase:
+1. Run `npx react-native start` and test on emulator
+2. Verify navigation to new screens works
+3. Verify API calls succeed against the shared server (`iskrib_v3/server`)
+4. Test auth-gated features with a logged-in user
+5. Test optimistic updates and cache invalidation
+6. Final check: compare each feature side-by-side with web app

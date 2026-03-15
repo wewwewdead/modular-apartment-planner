@@ -1,0 +1,42 @@
+export function snapToGrid(value, gridSize) {
+  return Math.round(value / gridSize) * gridSize;
+}
+
+export function snapPoint(point, gridSize) {
+  return {
+    x: snapToGrid(point.x, gridSize),
+    y: snapToGrid(point.y, gridSize),
+  };
+}
+
+/**
+ * Snap a 3D point to the nearest grid intersection on a given plane.
+ * Projects to plane local coords, snaps, then converts back.
+ */
+export function snapPoint3d(point, gridSize, plane) {
+  if (!plane) {
+    return {
+      x: snapToGrid(point.x, gridSize),
+      y: snapToGrid(point.y, gridSize),
+      z: snapToGrid(point.z, gridSize),
+    };
+  }
+
+  // Project point onto plane local coords
+  const dx = point.x - plane.origin.x;
+  const dy = point.y - plane.origin.y;
+  const dz = point.z - plane.origin.z;
+  const u = dx * plane.uAxis.x + dy * plane.uAxis.y + dz * plane.uAxis.z;
+  const v = dx * plane.vAxis.x + dy * plane.vAxis.y + dz * plane.vAxis.z;
+
+  // Snap in local coords
+  const su = snapToGrid(u, gridSize);
+  const sv = snapToGrid(v, gridSize);
+
+  // Convert back to world
+  return {
+    x: plane.origin.x + su * plane.uAxis.x + sv * plane.vAxis.x,
+    y: plane.origin.y + su * plane.uAxis.y + sv * plane.vAxis.y,
+    z: plane.origin.z + su * plane.uAxis.z + sv * plane.vAxis.z,
+  };
+}

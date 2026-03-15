@@ -1,0 +1,87 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import styles from '../Universe.module.css';
+
+const RocketHUD = ({ rocketMode, onExit, onInteract }) => {
+    const [speed, setSpeed] = useState(0);
+    const [targetInfo, setTargetInfo] = useState(null);
+    const pollRef = useRef(null);
+
+    // Poll refs at 10 Hz for HUD display
+    useEffect(() => {
+        pollRef.current = setInterval(() => {
+            setSpeed(rocketMode.getSpeedRatio());
+
+            const idx = rocketMode.targetIndexRef.current;
+            const stars = rocketMode.starsRef.current;
+            if (idx >= 0 && idx < stars.length) {
+                const star = stars[idx];
+                setTargetInfo({ title: star.title, author: star.authorName });
+            } else {
+                setTargetInfo(null);
+            }
+        }, 100);
+
+        return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+        };
+    }, [rocketMode]);
+
+    // Key bindings for Enter/Space (interact) and Escape (exit)
+    const handleKey = useCallback((e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onInteract();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            onExit();
+        }
+    }, [onInteract, onExit]);
+
+    useEffect(() => {
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [handleKey]);
+
+    return (
+        <div className={styles.rocketHud}>
+            {/* Exit button */}
+            <button className={styles.rocketExitBtn} onClick={onExit}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Exit Rocket
+            </button>
+
+            {/* Target info (below center) */}
+            {targetInfo && (
+                <div className={styles.rocketTarget}>
+                    <div className={styles.rocketTargetTitle}>{targetInfo.title}</div>
+                    <div className={styles.rocketTargetAuthor}>by {targetInfo.author}</div>
+                    <div className={styles.rocketTargetPrompt}>Press ENTER to read</div>
+                </div>
+            )}
+
+            {/* Speed bar */}
+            <div className={styles.rocketSpeedBar}>
+                <span className={styles.rocketSpeedLabel}>SPD</span>
+                <div className={styles.rocketSpeedTrack}>
+                    <div
+                        className={styles.rocketSpeedFill}
+                        style={{ width: `${Math.round(speed * 100)}%` }}
+                    />
+                </div>
+                <span className={styles.rocketSpeedValue}>{Math.round(speed * 100)}%</span>
+            </div>
+
+            {/* Controls hint */}
+            <div className={styles.rocketControls}>
+                <span>W/S Throttle</span>
+                <span>A/D Turn</span>
+                <span>ENTER Read</span>
+                <span>ESC Exit</span>
+            </div>
+        </div>
+    );
+};
+
+export default RocketHUD;

@@ -1,0 +1,102 @@
+import { projectPartToView } from '../../domain/viewProjection';
+
+export function createSketchSelectHandler({ dispatch, editorDispatch, project, activeView, viewport }) {
+  function hitTestParts(modelPos) {
+    const tolerance = 6 / viewport.zoom;
+    const parts = project.parts.filter((p) => p.type !== 'dimension');
+
+    // Iterate in reverse for top-most first
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      const { svgX, svgY, svgWidth, svgHeight } = projectPartToView(part, activeView);
+
+      if (
+        modelPos.x >= svgX - tolerance &&
+        modelPos.x <= svgX + svgWidth + tolerance &&
+        modelPos.y >= svgY - tolerance &&
+        modelPos.y <= svgY + svgHeight + tolerance
+      ) {
+        return { id: part.id, type: 'part' };
+      }
+    }
+    return null;
+  }
+
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      const hit = hitTestParts(modelPos);
+      if (hit) {
+        editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { dragging: true, startPos: modelPos, dragPartId: hit.id },
+        });
+        return;
+      }
+
+      editorDispatch({ type: 'DESELECT' });
+    },
+
+    onMouseMove(modelPos, e, toolState, selectedId) {
+      if (!toolState.dragging || !toolState.startPos || !toolState.dragPartId) return;
+
+      const dx = modelPos.x - toolState.startPos.x;
+      const dy = modelPos.y - toolState.startPos.y;
+
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+
+      const part = project.parts.find((p) => p.id === toolState.dragPartId);
+      if (!part) return;
+
+      // Compute position delta based on view
+      const pos = { ...part.position };
+      switch (activeView) {
+        case 'top':
+          pos.x += dx;
+          pos.y += dy;
+          break;
+        case 'front':
+          pos.x += dx;
+          pos.z -= dy;
+          break;
+        case 'side':
+          pos.y += dx;
+          pos.z -= dy;
+          break;
+      }
+
+      dispatch({
+        type: 'PART_UPDATE',
+        part: { id: toolState.dragPartId, position: pos },
+      });
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { startPos: modelPos },
+      });
+    },
+
+    onMouseUp(modelPos, e, toolState) {
+      if (toolState.dragging) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { dragging: false, startPos: null, dragPartId: null },
+        });
+      }
+    },
+
+    onKeyDown(e, toolState, selectedId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        dispatch({ type: 'PART_DELETE', partId: selectedId });
+        editorDispatch({ type: 'DESELECT' });
+      }
+    },
+
+    getCursor(toolState) {
+      if (toolState?.dragging) return 'grabbing';
+      return 'default';
+    },
+  };
+}

@@ -1,0 +1,40 @@
+# Fix: Hottest Post Notifications — Add View Trigger
+
+## Context
+We already fixed the SQL function (`hottest_tracker.sql`) to use cached columns and added `checkHottestPost()` calls to like/comment/bookmark in `interactService.js`. But the user tested by manually setting a post's views to 1 million in Supabase — and got no notification.
+
+**Why:** Views are handled in `inlineController.js` (`addViewsController`), not `interactService.js`. That controller has no `checkHottestPost()` call. Manual DB edits bypass Node.js entirely, so only the 5-min cron could catch it — but the tracker row from a previous run may cause early return.
+
+## Fix
+
+### 1. Add `checkHottestPost()` to `addViewsController` — `server/controller/inlineController.js`
+- After a successful view increment (line 48, `counted: true` response), fire-and-forget call `check_hottest_post_tracker` RPC
+- Only trigger when the view actually counted (not on duplicate view)
+
+```js
+// At top of file, add:
+const checkHottestPost = () => {
+    supabase.rpc('check_hottest_post_tracker').then(({ error }) => {
+        if (error) console.error('hottest tracker check failed:', error.message);
+    });
+};
+
+// After successful increment (line 48), before the return:
+checkHottestPost();
+```
+
+### 2. Important note for manual DB testing
+Manual Supabase edits bypass all Node.js code. To test manually:
+```sql
+DELETE FROM hottest_tracker WHERE month_key = to_char(now() at time zone 'UTC', 'YYYY-MM');
+SELECT public.check_hottest_post_tracker();
+```
+
+## Files Modified
+- `server/controller/inlineController.js` — add `checkHottestPost()` after view increment
+
+## Verification
+1. Restart Node server
+2. Open a public post in the app (triggers view increment)
+3. Check `SELECT * FROM hottest_tracker` — should update
+4. For manual DB testing: always run the DELETE + SELECT pair above

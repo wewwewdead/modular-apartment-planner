@@ -1,0 +1,102 @@
+import { fixtureOutline } from '@/geometry/fixtureGeometry';
+
+const FIXTURE_FILLS = {
+  kitchenTop: '#E8D5B7',
+  toilet: '#D4E8F0',
+  lavatory: '#D4E8F0',
+  table: '#E0D4C0',
+  tv: '#333',
+  sofa: '#C8B8A8',
+};
+
+function FixtureDetails({ fixture }) {
+  const { fixtureType, x, y, width, depth, rotation } = fixture;
+  const hw = width / 2, hd = depth / 2;
+
+  // Render type-specific SVG internal details inside a rotated group
+  const transform = `translate(${x},${y}) rotate(${rotation || 0})`;
+
+  switch (fixtureType) {
+    case 'kitchenTop':
+      return (
+        <g transform={transform}>
+          {/* Burner circles */}
+          <circle cx={-hw + width * 0.2} cy={0} r={depth * 0.15} fill="none" stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          <circle cx={-hw + width * 0.4} cy={0} r={depth * 0.15} fill="none" stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          {/* Sink rectangle */}
+          <rect x={hw - width * 0.3} y={-hd * 0.6} width={width * 0.2} height={depth * 0.6} rx={2} fill="none" stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        </g>
+      );
+    case 'toilet':
+      return (
+        <g transform={transform}>
+          {/* Cistern rectangle */}
+          <rect x={-hw} y={-hd} width={width} height={depth * 0.35} rx={2} fill="none" stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          {/* Bowl oval */}
+          <ellipse cx={0} cy={hd * 0.3} rx={width * 0.35} ry={depth * 0.35} fill="none" stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        </g>
+      );
+    case 'lavatory':
+      return (
+        <g transform={transform}>
+          {/* Basin circle */}
+          <circle cx={0} cy={0} r={Math.min(width, depth) * 0.3} fill="none" stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        </g>
+      );
+    case 'table':
+      return (
+        <g transform={transform}>
+          {/* Corner leg indicators */}
+          <circle cx={-hw + width * 0.1} cy={-hd + depth * 0.1} r={width * 0.03} fill="#888" stroke="none" />
+          <circle cx={hw - width * 0.1} cy={-hd + depth * 0.1} r={width * 0.03} fill="#888" stroke="none" />
+          <circle cx={-hw + width * 0.1} cy={hd - depth * 0.1} r={width * 0.03} fill="#888" stroke="none" />
+          <circle cx={hw - width * 0.1} cy={hd - depth * 0.1} r={width * 0.03} fill="#888" stroke="none" />
+        </g>
+      );
+    case 'tv':
+      return (
+        <g transform={transform}>
+          {/* Stand */}
+          <line x1={-width * 0.15} y1={hd} x2={width * 0.15} y2={hd} stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        </g>
+      );
+    case 'sofa':
+      return (
+        <g transform={transform}>
+          {/* Backrest line */}
+          <line x1={-hw + width * 0.05} y1={-hd + depth * 0.25} x2={hw - width * 0.05} y2={-hd + depth * 0.25} stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          {/* Armrests */}
+          <line x1={-hw + width * 0.08} y1={-hd + depth * 0.25} x2={-hw + width * 0.08} y2={hd - depth * 0.1} stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+          <line x1={hw - width * 0.08} y1={-hd + depth * 0.25} x2={hw - width * 0.08} y2={hd - depth * 0.1} stroke="#888" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+        </g>
+      );
+    default:
+      return null;
+  }
+}
+
+export default function FixtureRenderer({ fixtures }) {
+  return (
+    <g className="fixtures">
+      {fixtures.map(fixture => {
+        const outline = fixtureOutline(fixture);
+        const points = outline.map(p => `${p.x},${p.y}`).join(' ');
+        const fill = FIXTURE_FILLS[fixture.fixtureType] || '#DDD';
+        return (
+          <g key={fixture.id}>
+            <polygon
+              data-id={fixture.id}
+              data-type="fixture"
+              points={points}
+              fill={fill}
+              stroke="#666"
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+            <FixtureDetails fixture={fixture} />
+          </g>
+        );
+      })}
+    </g>
+  );
+}

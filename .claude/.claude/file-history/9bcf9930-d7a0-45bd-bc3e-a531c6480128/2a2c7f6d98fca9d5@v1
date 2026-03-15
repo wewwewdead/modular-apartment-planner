@@ -1,0 +1,74 @@
+# Fix: Reaction icon not visible + no dynamic update after `cached_like_count` removal
+
+## Context
+The user deleted the `cached_like_count` column from the `journals` table because it was redundant with `cached_reaction_count`. Two symptoms appeared:
+1. The reaction icon in ContentView (and PostCards) may not be clearly visible
+2. Reacting on posts produces no dynamic update — likely because the **deployed** database trigger `trg_update_journal_like_count` still references the deleted column, causing transactions to fail silently
+
+## Root Cause Analysis
+
+### A. Icon fill mismatch
+- `ReactionButton.jsx` (line 124-131): SVG paths use hardcoded `fill="#5e5e5eff"` (cold gray)
+- Every other icon in ContentView and PostCards uses `fill="var(--icon-default)"` (`#8A8480` light / `#908880` dark)
+- Same issue in PostCards.jsx `likeAction` SVG (line 93-94) — also uses `#5e5e5eff`
+
+### B. Database trigger likely crashing
+- The **SQL file** `scalability_fixes.sql` (line 46) already references `cached_reaction_count` in the like trigger
+- But if the trigger wasn't **re-deployed** to the live database after the SQL file was updated, the deployed version still tries to `UPDATE journals SET cached_like_count = ...`
+- When the deleted column is referenced, the trigger raises a runtime error → the entire INSERT/DELETE on `likes` table rolls back → API returns 500 → client `onError` reverts the optimistic update
+- **Note:** The reactions trigger (`trg_update_journal_reaction_count`) in `reactions.sql` already references `cached_reaction_count` correctly — so reactions via `POST /reaction` should work, but `POST /like` (legacy) would fail
+
+### C. Dead like code
+- `handleClickLike` + `useLikeMutation` exist in both `PostCards.jsx` (line 284-291) and `ContentView.jsx` but are never called — ReactionButton replaced the old like button
+- The `icon.action` in PostCards (line 101-105) references `handleClickLike` but is never rendered in JSX
+
+## Plan
+
+### 1. Fix ReactionButton SVG fill — `client/src/components/Reactions/ReactionButton.jsx`
+Change both `<path>` elements (lines 127-128) from `fill="#5e5e5eff"` to `fill="var(--icon-default)"`:
+```jsx
+// Line 127 — was fill="#5e5e5eff"
+<path id="Subtract" ... fill="var(--icon-default)"/>
+// Line 128 — was fill="#5e5e5eff"
+<path id="rec" ... fill="var(--icon-default)"/>
+```
+
+### 2. Fix PostCards likeAction SVG fill — `client/src/components/HomePage/postCards/PostCards.jsx`
+Lines 93-94: change the default fill from `"#5e5e5eff"` to `"var(--icon-default)"`:
+```jsx
+fill={isLiked ? 'rgb(255, 116, 116)' : "var(--icon-default)"}
+```
+Also line 110 and 113 (comment SVG) and line 126 (bookmark SVG) — same change for consistency.
+
+### 3. Re-deploy database triggers (manual — Supabase SQL Editor) ← CONFIRMED NEEDED
+User confirmed triggers haven't been re-deployed. Re-run these in Supabase SQL editor:
+1. `server/sql/scalability_fixes.sql` lines 42-57 — fixes `trg_update_journal_like_count` to use `cached_reaction_count`
+2. `server/sql/personalized_feed.sql` — the BIGINT fix from the previous commit
+
+### 4. Remove dead like code — `client/src/components/HomePage/postCards/PostCards.jsx` ← CONFIRMED
+- Remove `handleClickLike` function (lines 287-291)
+- Remove the `action:` property from the like icon config (lines 101-105)
+- Remove `countLike` property (line 106) — count is now rendered by ReactionButton
+- Remove unused `useLikeMutation` import/call (line 284) if no longer referenced anywhere
+- Keep `useLikeMutation` import in `useMutation.js` — other pages may still import it
+
+### 5. Remove dead like code — `client/src/components/HomePage/ContentViewer/ContentView.jsx` ← CONFIRMED
+- Remove `mutationLike` (line 188) and `useLikeMutation` import (line 14)
+- Remove `handleClickLike` function (lines 208-229)
+- Remove `isLiked` / `setIsliked` state (line 71) and `likesCount` / `setLikesCount` state (line 72)
+- Remove `likeInFlightRef` (line 67)
+- Update the `useEffect` sync (line 291-299): remove `setLikesCount`, `setIsliked` lines
+- Update ReactionButton prop: `reactionCount={reactionCount || likesCount}` → `reactionCount={reactionCount}`
+- Remove `normalizeInteractionFlag(postData?.isLiked)` and `normalizeCount(postData?.likesCount)` from useEffect deps
+
+## Files to modify
+1. `client/src/components/Reactions/ReactionButton.jsx` — SVG fill color
+2. `client/src/components/HomePage/postCards/PostCards.jsx` — SVG fills + dead code removal
+3. `client/src/components/HomePage/ContentViewer/ContentView.jsx` — dead code cleanup
+
+## Verification
+1. Re-run trigger SQL in Supabase → no errors
+2. Re-run `personalized_feed.sql` in Supabase → no errors
+3. Open a post in ContentView → reaction icon visible in theme-appropriate color
+4. React on a post → emoji appears, count increments, persists after page refresh
+5. Check PostCards feed → same behavior

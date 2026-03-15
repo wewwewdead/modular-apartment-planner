@@ -1,0 +1,112 @@
+/**
+ * Pure math functions for client-side gravity simulation.
+ * Zero DOM/React dependencies — worker-ready.
+ */
+
+/** Sector key for spatial partitioning */
+export const sectorKey = (x, y, size = 2000) =>
+    `${Math.floor(x / size)},${Math.floor(y / size)}`;
+
+/** 9-sector neighborhood keys around (sx, sy) */
+export const getNearbySectors = (sx, sy) => {
+    const keys = [];
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            keys.push(`${sx + dx},${sy + dy}`);
+        }
+    }
+    return keys;
+};
+
+/** Build sector index from positioned items */
+export const buildSectorIndex = (items, getX, getY, sectorSize = 2000) => {
+    const index = new Map();
+    for (const item of items) {
+        const key = sectorKey(getX(item), getY(item), sectorSize);
+        if (!index.has(key)) index.set(key, []);
+        index.get(key).push(item);
+    }
+    return index;
+};
+
+/**
+ * Compute Gravity B forces for stars given their pulls and galaxy positions.
+ * Returns Map<postId, {fx, fy}>
+ *
+ * @param {Array} starPulls - [{post_id, galaxy_user_id, similarity}]
+ * @param {Map} galaxyPositions - Map<userId, {x, y}>
+ * @param {Map} starPositions - Map<postId, {x, y, baseX, baseY}>
+ */
+export const computeStarForces = (starPulls, galaxyPositions, starPositions, pullStrength = 120) => {
+    const forces = new Map();
+
+    for (const pull of starPulls) {
+        const star = starPositions.get(pull.post_id);
+        const galaxy = galaxyPositions.get(pull.galaxy_user_id);
+        if (!star || !galaxy) continue;
+
+        const dx = galaxy.x - star.x;
+        const dy = galaxy.y - star.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        // Force scales with similarity above 0.4 threshold
+        const strength = (pull.similarity - 0.4) * pullStrength;
+        const fx = (dx / dist) * strength;
+        const fy = (dy / dist) * strength;
+
+        if (!forces.has(pull.post_id)) {
+            forces.set(pull.post_id, { fx: 0, fy: 0 });
+        }
+        const f = forces.get(pull.post_id);
+        f.fx += fx;
+        f.fy += fy;
+    }
+
+    return forces;
+};
+
+/**
+ * Apply forces with cooling/damping, return new positions.
+ * Pure: (positions, forces, temperature, damping) => newPositions
+ *
+ * @param {Map} positions - Map<postId, {x, y, baseX, baseY}>
+ * @param {Map} forces - Map<postId, {fx, fy}>
+ * @param {number} temperature
+ * @param {number} damping
+ * @param {number} maxDisp - max displacement from base position
+ * @returns {{ positions: Map, maxDisplacement: number }}
+ */
+export const applyForces = (positions, forces, temperature, damping, maxDisp = 80) => {
+    const newPositions = new Map();
+    let maxDisplacement = 0;
+
+    for (const [id, pos] of positions) {
+        const force = forces.get(id);
+        let nx = pos.x;
+        let ny = pos.y;
+
+        if (force) {
+            nx += force.fx * temperature * damping;
+            ny += force.fy * temperature * damping;
+        }
+
+        // Clamp total displacement from base position
+        const offsetX = nx - pos.baseX;
+        const offsetY = ny - pos.baseY;
+        const offsetMag = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+
+        if (offsetMag > maxDisp) {
+            nx = pos.baseX + (offsetX / offsetMag) * maxDisp;
+            ny = pos.baseY + (offsetY / offsetMag) * maxDisp;
+        }
+
+        const dispX = nx - pos.x;
+        const dispY = ny - pos.y;
+        const disp = Math.sqrt(dispX * dispX + dispY * dispY);
+        if (disp > maxDisplacement) maxDisplacement = disp;
+
+        newPositions.set(id, { x: nx, y: ny, baseX: pos.baseX, baseY: pos.baseY });
+    }
+
+    return { positions: newPositions, maxDisplacement };
+};

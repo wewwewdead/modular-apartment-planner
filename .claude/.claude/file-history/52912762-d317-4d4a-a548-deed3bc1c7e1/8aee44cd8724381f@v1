@@ -1,0 +1,100 @@
+# Fix Truss Detail Tag Overlapping
+
+## Context
+
+The truss detail view annotation tags (W1, W2... web labels, TC1, TC2... chord labels, bearing tags, pitch tag) overlap severely, especially when many web members converge near the ridge. The root cause: **no collision avoidance** — tags are placed at fixed offsets from their members with no overlap detection. The floor plan annotations already have collision avoidance (`applyCollisionOffsets` in `src/annotations/tags.js`), but truss detail tags don't use anything similar.
+
+Previous changes (bumping spacing constants + adding leader line anchor dots) were already applied but are insufficient — the core overlap issue requires collision detection.
+
+## File to Modify
+
+### `src/geometry/trussGeometry.js`
+
+All changes are in this single file. No renderer changes needed.
+
+#### Change 1: Add collision avoidance constants (~line 40)
+
+```javascript
+const DETAIL_TAG_GAP = 40;
+const DETAIL_TAG_OFFSETS = [
+  { x: 0, y: 0 },         // ideal position
+  { x: 0, y: -200 },      // up
+  { x: 0, y: 200 },       // down
+  { x: 0, y: -400 },      // further up
+  { x: 0, y: 400 },       // further down
+  { x: 250, y: 0 },       // right
+  { x: -250, y: 0 },      // left
+  { x: 250, y: -200 },    // right+up
+  { x: -250, y: -200 },   // left+up
+  { x: 250, y: 200 },     // right+down
+  { x: -250, y: 200 },    // left+down
+  { x: 0, y: -600 },      // much further up (last resort)
+  { x: 0, y: 600 },       // much further down (last resort)
+];
+```
+
+13 candidate offsets (vs 7 in floor plan) because truss tags are larger and denser. Y-offsets predominate because vertical displacement keeps tags closest to their members visually.
+
+#### Change 2: Add `applyDetailTagCollisionOffsets()` function (~after `extendDetailBounds`)
+
+Greedy placement algorithm (same pattern as `applyCollisionOffsets` in `tags.js`):
+
+1. Pre-populate `placed` array with dimension figure bounds (fixed obstacles that can't move)
+2. Sort all tags by descending `priority` — high-priority tags get first pick of ideal positions
+3. For each tag, try each of the 13 offset candidates:
+   - Shift tag position by offset
+   - Shift `leaderLine.end` by the same offset (leader `start` stays anchored at member)
+   - Check bounds (via existing `estimateTagBounds`) against all placed items, inflated by `DETAIL_TAG_GAP/2`
+   - If no overlap, place it and move on
+4. Fallback: keep original position if no clear slot found
+
+Key: uses existing `estimateTagBounds()` (line 679) which already handles fontSize, lineHeight, maskPadding, textAnchor, and rotation.
+
+#### Change 3: Add priority values to tag creation calls
+
+| Tag type | Priority | Rationale |
+|----------|----------|-----------|
+| Pitch | 3 | Fixed at ridge, most important |
+| Bearing A/B | 2 | Fixed at eaves, structural reference |
+| Top chord (TC1...) | 1 | Important but can shift if needed |
+| Web (W1...) | 0 (default) | Most numerous, most flexible |
+
+Locations:
+- Pitch tag: `createDetailTag` call at ~line 910, add `priority: 3`
+- Bearing tags: `createDetailTag` calls at ~lines 916, 926, add `priority: 2`
+- Top chord tags: `createDetailTag` call at ~line 1048, add `priority: 1`
+- Web tags: already default to `priority: 0`
+
+#### Change 4: Integrate collision resolution into `buildTrussDetailScene()` (~line 1154)
+
+After building all tags, before `extendDetailBounds`:
+
+```javascript
+// Collect dimension bounds as fixed obstacles
+const dimensionObstacles = detailAnnotations.dimensions
+  .map((fig) => estimateDimensionBounds(fig))
+  .filter(Boolean);
+
+// Apply collision avoidance to all tags together
+const allTags = [...detailAnnotations.tags, ...topChordTags, ...webTags];
+const resolvedTags = applyDetailTagCollisionOffsets(allTags, dimensionObstacles);
+
+// Separate back by sourceType for API compatibility
+const resolvedFixedTags = resolvedTags.filter((t) => t.sourceType === 'truss_detail');
+const resolvedTopChordTags = resolvedTags.filter((t) => t.sourceType === 'truss_top_chord');
+const resolvedWebTags = resolvedTags.filter((t) => t.sourceType === 'truss_web');
+```
+
+Pass `resolvedTags` to `extendDetailBounds` so shifted tags expand the viewport correctly. Return the resolved arrays in the scene object.
+
+The `TrussDetailRenderer.jsx` merges all three arrays into `BlueprintAnnotationLayer` at line 100 — no renderer changes needed.
+
+## Verification
+
+1. Open a project with a truss that has 4+ web members (e.g. gable truss with panelCount >= 4)
+2. Switch to the truss detail view
+3. Verify tags no longer overlap each other — especially web tags near the ridge
+4. Verify tags don't overlap dimension lines (span, panels, purlin spacing)
+5. Verify leader lines still connect correctly from shifted tags back to their members
+6. Verify the viewport/bounds expand to include any tags that shifted outward
+7. Check sheet export with a truss detail viewport — tags should render cleanly

@@ -1,0 +1,224 @@
+# Refactor Sketch Studio to 3D-First Modeling
+
+## Context
+
+Sketch Studio currently uses a **2D SVG canvas** as the primary editing surface, with a secondary 3D preview panel for inspection. The goal is to invert this: make the **3D Three.js viewport the primary workspace** for creating and editing objects, and demote 2D views to derived output for sheet/export only. The interaction model should follow SketchUp-style direct modeling: draw rectangles on planes, push/pull faces to extrude, select and move parts — all in 3D with millimeter precision.
+
+**Key architectural insight:** Most of the 3D infrastructure already exists. `createPreviewViewport()` provides a full Three.js viewport with OrbitControls, raycasting, lighting, and scene management. The domain models (parts with mm positions) are already 3D — the 2D canvas just projects them. The sheet system reads domain data directly, not the 2D canvas. This means promoting the 3D view to primary is primarily a UI/interaction refactor, not a geometry engine rewrite.
+
+---
+
+## Design Decisions
+
+### Geometry: Keep box-based parts (no B-rep)
+Current part types (panel, leg, frame) map to real furniture stock — sheets of plywood, posts, rails. Push/pull creates **new parts** attached to faces rather than deforming parts into arbitrary polyhedra. This keeps the domain model simple, serializable, and compatible with existing templates, constraints, and sheets.
+
+### Push/pull: Creates new parts with auto-constraints
+Dragging outward from a face creates a new panel/frame whose dimensions match the face, positioned flush. An `attach_face` constraint is automatically added. This uses existing `PART_ADD` + `CONSTRAINT_ADD` actions — no new domain model changes.
+
+### Drawing planes: Face-based targeting
+Default is ground plane. Clicking a face sets the drawing plane to that face. Drawing planes are pure geometry (origin + normal + axes) stored in editor state, not domain state.
+
+### 3D handler pattern: Parallel to existing 2D handlers
+New `handlers3d/` directory with the same `onPointerDown/Move/Up/KeyDown/getCursor` interface, but receiving 3D raycasting results instead of 2D SVG coordinates. Existing 2D handlers stay for reference but are no longer invoked in model mode.
+
+---
+
+## Phase 1 — Promote 3D Viewport to Primary with Select/Move
+
+**Goal:** Replace the 2D+3D split with a single 3D viewport. Implement select and move in 3D.
+
+**After this phase:** Opening Sketch Studio shows a full-width Three.js viewport. Users orbit/pan/zoom, click parts to select, drag to move. Sidebar, toolbar, properties panel all work. Sheets still work.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/renderers/SketchViewport.jsx` | Primary 3D editing viewport. Wraps `createPreviewViewport()` with tool event routing, enhanced raycasting (returns face info + 3D point), selection highlighting, status bar with 3D cursor coords. Replaces `SketchPreviewPanel` + `SketchCanvas` as the model-mode editing surface. |
+| `src/modules/sketch/renderers/SketchViewport.module.css` | Viewport container, status bar, overlay styles |
+| `src/modules/sketch/editor/handlers3d/selectHandler3d.js` | 3D select/move. `onPointerDown`: uses raycasting intersection `{point, partId, objectId}` to dispatch `SELECT_OBJECT`/`DESELECT`. Enters drag state. `onPointerMove`: projects mouse delta onto movement plane (ground or perpendicular to camera through drag start), dispatches `PART_UPDATE`/`ASSEMBLY_MOVE`/`OBJECT_MOVE`. Snaps to 50mm grid. `onKeyDown`: Delete/Backspace for deletion, Escape to deselect. Same selection hierarchy as 2D (part → assembly → parametric object). |
+| `src/modules/sketch/editor/handlers3d/index.js` | Tool dispatcher — maps `activeTool` to the appropriate 3D handler constructor |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `SketchWorkspace.jsx` | Replace the `modelWorkspace` div (2D canvas + 3D preview split) with `<SketchViewport />`. Remove lazy import of `SketchPreviewPanel`. Remove `maximizedPanel` logic. Sheet mode path unchanged. |
+| `SketchWorkspace.module.css` | Remove `.modelWorkspace`, `.primaryCanvas`, `.preview`, `.workspaceMaximized`. The `.canvas` grid area now holds the viewport directly. |
+| `SketchEditorProvider.jsx` | Add `drawingPlane` state (default: ground plane `{origin: {x:0,y:0,z:0}, normal: {x:0,y:0,z:1}, up: {x:0,y:1,z:0}}`). Add `SET_DRAWING_PLANE` / `RESET_DRAWING_PLANE` actions. Remove `maximizedPanel` state + `TOGGLE_MAXIMIZE_PANEL` action. Keep `activeView` for now (used by toolbar camera presets). |
+| `SketchToolbar.jsx` | Replace Top/Front/Side view buttons with 3D camera preset buttons (calls `viewport.setProjectionPreset('plan_aligned')` etc). Remove `activeView` dispatch. Keep all other toolbar sections. |
+| `buildSketchPreview.js` | Add `userData.faceId` to each box face ('+x', '-x', '+y', '-y', '+z', '-z') by attaching face metadata to the mesh geometry's groups. This enables face-level picking in later phases. |
+| `createPreviewViewport.js` | 1) Extend `pickObjectAt` return value to include `{point, normal, faceIndex, distance}` alongside the existing `previewTarget`. 2) Add `raycastPlane(clientX, clientY, plane)` method that intersects camera ray with a `THREE.Plane` — needed for drawing and movement tools. 3) Expose `getCamera()` and `getDomElement()` for handler access. |
+
+### Key implementation details
+
+**SketchViewport** wires pointer events to the active 3D handler:
+```
+pointerdown → viewport.raycast(e) → handler.onPointerDown(intersection, e, toolState)
+pointermove → viewport.raycast(e) → handler.onPointerMove(intersection, e, toolState)
+pointerup   → handler.onPointerUp(intersection, e, toolState)
+keydown     → handler.onKeyDown(e, toolState)
+```
+
+The viewport handles orbit/pan/zoom natively via OrbitControls. Tool handlers only receive events when the orbit gesture doesn't consume them (left-click for tools, right-click for pan, middle/scroll for orbit/zoom — same as SketchUp).
+
+**Movement plane for select/drag:** When dragging starts, compute a movement plane perpendicular to the camera view direction, passing through the drag start point. Project all subsequent mouse movements onto this plane to get 3D deltas. This gives intuitive movement regardless of camera angle.
+
+---
+
+## Phase 2 — Rectangle Drawing on Ground Plane
+
+**Goal:** Draw rectangles on the ground plane to create parts directly in 3D.
+
+**After this phase:** User selects Panel tool, moves cursor over ground (grid visible), click-drags a rectangle, releases to create a panel. Feedback shows dimensions during draw.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/editor/handlers3d/drawRectHandler3d.js` | `onPointerDown`: raycast against active drawing plane, record start point. `onPointerMove`: raycast for current point, update tool state with preview rect corners. `onPointerUp`: compute width/depth from corners projected onto plane local axes, create part via `PART_ADD`. Snap: 50mm grid on plane. |
+| `src/modules/sketch/renderers/DrawingPlaneOverlay.js` | Three.js Group showing: 1) translucent grid on the active plane, 2) rectangle preview during draw. Managed by SketchViewport — added to scene when draw tool is active. |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `handlers3d/index.js` | Route `panel`/`leg`/`frame` tools to `drawRectHandler3d` |
+| `SketchViewport.jsx` | Integrate `DrawingPlaneOverlay`. Show dimension feedback near cursor during draw ("600 × 400 mm"). Pass plane intersection to handler. |
+| `snap.js` | Add `snapPoint3d(point, gridSize, plane)` — snaps a 3D point to nearest grid intersection on a given plane |
+
+### Coordinate mapping (domain ↔ Three.js)
+The existing `buildSketchPreview.js` already handles this:
+- Domain X → Three.js X (width, left-right)
+- Domain Y → Three.js Z (depth, front-back)
+- Domain Z → Three.js Y (height, up-down)
+
+Drawing on the ground plane (Three.js XZ) maps to domain XY at Z=0.
+
+---
+
+## Phase 3 — Face Selection and Drawing Plane Switching
+
+**Goal:** Click a face on any part to set the drawing plane. Draw on vertical surfaces and on top of existing parts.
+
+**After this phase:** User clicks the top face of a panel → grid overlay appears on that face → drawing a new rectangle creates a part on top. Clicking front face of a leg → grid on vertical face. Clicking empty space → back to ground plane.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/domain/drawingPlane.js` | Pure geometry (no React, no Three.js). `faceToDrawingPlane(part, faceId)` → `{origin, normal, up, uAxis, vAxis}` in domain coords. `projectToPlane(point3d, plane)` — project point onto plane. `planeLocalToWorld(u, v, plane)` — local 2D→3D. `identifyFace(part, faceNormal)` — maps Three.js face normal to canonical face name. |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `SketchEditorProvider.jsx` | `SET_DRAWING_PLANE` stores `{origin, normal, up, uAxis, vAxis, sourcePartId, sourceFace}`. `RESET_DRAWING_PLANE` reverts to ground. |
+| `buildSketchPreview.js` | Ensure face metadata (`userData.faceId`) is accessible during raycasting |
+| `SketchViewport.jsx` | On click with select tool on a face: set drawing plane. On empty space: reset. Update `DrawingPlaneOverlay` to render on current plane. |
+| `selectHandler3d.js` | When clicking a face (not dragging), set the drawing plane via `SET_DRAWING_PLANE`. Add hover face highlight. |
+| `drawRectHandler3d.js` | Use active drawing plane from editor state. Position new part relative to source face. |
+
+---
+
+## Phase 4 — Push/Pull Extrusion
+
+**Goal:** SketchUp-style push/pull. Select face → drag outward → new part grows from face. Numeric input for exact distance.
+
+**After this phase:** User selects Push/Pull tool, hovers a face (highlights), click-drags outward → translucent preview grows, release → new part created with `attach_face` constraint. Alternatively: click face, type "18", Enter → 18mm thick panel.
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `src/modules/sketch/editor/handlers3d/pushPullHandler3d.js` | `onPointerDown`: raycast face, record plane + start point. `onPointerMove`: project mouse onto face normal axis, compute extrusion distance, update preview. `onPointerUp`: call `computeExtrusionFromFace()`, dispatch `PART_ADD` + `CONSTRAINT_ADD`. `onKeyDown`: numeric input mode — type distance, Enter to confirm. |
+| `src/modules/sketch/domain/extrusion.js` | `computeExtrusionFromFace(part, faceId, distance)` → `{type, position, dimensions, constraintConfig}`. Pure function. Handles all part types × 6 faces. Returns the new part spec + an `attach_face` constraint linking new part to source face. |
+| `src/modules/sketch/renderers/ExtrusionPreview.js` | Three.js mesh showing translucent extrusion preview + dimension label. Managed by SketchViewport. |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `handlers3d/index.js` | Route `pushpull` tool |
+| `defaults.js` | Add `SKETCH_TOOLS.PUSH_PULL = 'pushpull'` |
+| `tools.js` | Add shortcut `e: 'pushpull'` |
+| `SketchToolbar.jsx` | Add Push/Pull button |
+| `SketchEditorProvider.jsx` | Add `pushpull` to tool set |
+| `SketchViewport.jsx` | Integrate `ExtrusionPreview`. Add numeric input overlay (small text field near cursor for typed distance). |
+
+---
+
+## Phase 5 — Verify Sheets & 2D Output
+
+**Goal:** Confirm sheet system still works. Fix any breakage from removing the 2D canvas.
+
+**Key insight:** The sheet system (`viewProjection.js`, `objectDrafting.js`, `sketchSources.js`, `SketchSheetCanvas.jsx`) operates on domain data, not on the 2D canvas. Removing the 2D canvas from model mode has **zero impact** on sheets.
+
+### Files to verify (read-only checks, fix if broken)
+- `SketchSheetCanvas.jsx` — should be unaffected
+- `SketchSheetRenderer.jsx` — uses `resolveSketchViewportSource`, reads domain data
+- `SketchToolbar.jsx` — sheet mode toolbar path is separate from model mode
+- `SketchPropertiesPanel.jsx` — viewport source selection uses explicit `sourceView` strings, not `activeView`
+
+### Potential issue
+If any toolbar/properties code references `activeView` for non-sheet purposes, update to use camera preset names or remove. The `activeView` field can be kept in editor state for sheet viewport defaults but is no longer used for model-mode rendering.
+
+---
+
+## What Does NOT Change
+
+| Area | Why |
+|------|-----|
+| `SketchProvider.jsx` (reducer) | All operations use existing actions: `PART_ADD`, `PART_UPDATE`, `CONSTRAINT_ADD`, etc. |
+| `partModels.js`, `assemblyModels.js`, `objectModels.js` | Domain model shapes unchanged |
+| `viewProjection.js`, `objectDrafting.js` | 2D projection for sheets — reads domain data directly |
+| All sheet files | Independent of 2D canvas |
+| `constraintModels.js`, `constraintResolver.js` | Reused by push/pull (auto-constraints) |
+| Serialization/persistence | Part format unchanged, no migration needed |
+| Templates | Continue generating parts in existing format |
+
+---
+
+## Files Summary
+
+### New files (10)
+```
+src/modules/sketch/renderers/SketchViewport.jsx          — Primary 3D editing viewport
+src/modules/sketch/renderers/SketchViewport.module.css    — Viewport styles
+src/modules/sketch/renderers/DrawingPlaneOverlay.js       — Drawing plane grid + rect preview
+src/modules/sketch/renderers/ExtrusionPreview.js          — Push/pull preview mesh
+src/modules/sketch/editor/handlers3d/index.js             — 3D handler dispatcher
+src/modules/sketch/editor/handlers3d/selectHandler3d.js   — 3D select/move
+src/modules/sketch/editor/handlers3d/drawRectHandler3d.js — 3D rectangle drawing on planes
+src/modules/sketch/editor/handlers3d/pushPullHandler3d.js — Push/pull extrusion
+src/modules/sketch/domain/drawingPlane.js                 — Drawing plane geometry math
+src/modules/sketch/domain/extrusion.js                    — Extrusion computation
+```
+
+### Modified files (10)
+```
+src/modules/sketch/SketchWorkspace.jsx            — Remove 2D/3D split, use SketchViewport
+src/modules/sketch/SketchWorkspace.module.css      — Remove split layout rules
+src/modules/sketch/app/SketchEditorProvider.jsx    — Drawing plane state, remove maximizedPanel
+src/modules/sketch/ui/SketchToolbar.jsx            — Camera presets, push/pull button
+src/modules/sketch/renderers/buildSketchPreview.js — Face metadata on meshes
+src/modules/sketch/editor/snap.js                  — 3D plane-aware snapping
+src/modules/sketch/domain/defaults.js              — Add PUSH_PULL tool
+src/modules/sketch/editor/tools.js                 — Add push/pull shortcut
+src/three/viewer/createPreviewViewport.js          — Plane raycasting, richer pick data
+src/modules/sketch/editor/handlers3d/index.js      — (created in P1, updated in P2/P4)
+```
+
+---
+
+## Verification
+
+1. **Phase 1**: Open Sketch Studio → 3D viewport fills canvas area. Orbit/pan/zoom work. Click a part → selected in properties panel. Drag part → moves in 3D. Sidebar shows parts. Undo/redo works. Switch to sheet mode → sheets render correctly.
+
+2. **Phase 2**: Select Panel tool → ground plane grid visible. Click-drag → rectangle preview. Release → panel created. Dimensions shown during draw. Snap to 50mm. Verify part appears in sidebar and properties panel.
+
+3. **Phase 3**: Click top face of panel → grid overlay on face. Draw rectangle on face → new part on top. Click front face of leg → vertical grid. Click empty space → back to ground plane.
+
+4. **Phase 4**: Select Push/Pull → hover face (highlights). Click-drag outward → preview grows. Release → new part with constraint. Type "18" + Enter → exact 18mm extrusion. Verify constraint in properties panel. Verify 3D preview matches.
+
+5. **Phase 5**: Create parts via 3D tools. Switch to sheet mode. Add viewports (top/front/side). Verify orthographic projections are correct. Export PDF/PNG. Verify parts list.

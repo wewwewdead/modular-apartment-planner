@@ -1,0 +1,55 @@
+# Bug Fix: Phase switching doesn't filter plan view
+
+## Context
+
+The phase system was just implemented but has a critical UX bug: when the user clicks a phase in the sidebar to select it, objects are not filtered by that phase. Switching between Phase 1 and Phase 2 shows all objects regardless. The root cause is that **selecting a phase only sets `activePhaseId` but leaves `phaseViewMode` as `'all'`**, and the filtering logic short-circuits when mode is `'all'`.
+
+## Root Cause
+
+In `src/ui/Sidebar.jsx`, the `selectPhase` function:
+
+```js
+const selectPhase = (phaseId) => {
+  editorDispatch({ type: 'SET_ACTIVE_PHASE', phaseId });
+  editorDispatch({ type: 'SELECT_OBJECT', id: phaseId, objectType: 'phase' });
+};
+```
+
+It sets `activePhaseId` but **never changes `phaseViewMode`** from its default `'all'`.
+
+In `src/domain/phaseFilter.js`, `filterFloorByPhase` returns the floor **unfiltered** when `phaseViewMode === 'all'`:
+
+```js
+if (phaseViewMode === PHASE_VIEW.ALL) return floor;  // early return, no filtering
+```
+
+So regardless of which phase is selected, everything is always shown.
+
+## Fix
+
+### File: `src/ui/Sidebar.jsx`
+
+**Change `selectPhase`** to auto-switch view mode to `'single'` when a phase is clicked:
+
+```js
+const selectPhase = (phaseId) => {
+  editorDispatch({ type: 'SET_ACTIVE_PHASE', phaseId });
+  if (phaseViewMode === 'all') {
+    editorDispatch({ type: 'SET_PHASE_VIEW_MODE', mode: 'single' });
+  }
+  editorDispatch({ type: 'SELECT_OBJECT', id: phaseId, objectType: 'phase' });
+};
+```
+
+This way:
+- If user is in `'all'` mode (default), clicking a phase auto-switches to `'single'` so filtering kicks in
+- If user manually chose `'cumulative'`, clicking a different phase respects that choice
+- The view mode buttons still work independently for manual override
+
+## Verification
+
+1. Create 2+ phases, draw walls on each phase
+2. Click Phase 1 in sidebar → only Phase 1 walls visible
+3. Click Phase 2 → only Phase 2 walls visible
+4. Click "All" view mode button → all walls visible again
+5. Click "Cumulative" → click Phase 2 → Phase 1 + Phase 2 walls visible

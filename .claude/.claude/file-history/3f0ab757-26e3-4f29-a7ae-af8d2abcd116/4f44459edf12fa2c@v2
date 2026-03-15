@@ -1,0 +1,89 @@
+import React, { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Circle, Path } from 'react-native-svg';
+
+import { colors } from '../../../theme/colors';
+import { FulfillmentAnimationState } from '../../../domain/models';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+interface FulfillmentCheckmarkProps {
+  animationState: FulfillmentAnimationState;
+  isFulfilled: boolean;
+  size?: number;
+}
+
+export function FulfillmentCheckmark({
+  animationState,
+  isFulfilled,
+  size = 32,
+}: FulfillmentCheckmarkProps) {
+  const scale = useSharedValue(isFulfilled ? 1 : 0);
+  const fillOpacity = useSharedValue(isFulfilled ? 1 : 0);
+
+  useEffect(() => {
+    if (isFulfilled) {
+      scale.value = withSequence(
+        withTiming(0.8, { duration: 100 }),
+        withSpring(1.15, { damping: 8, stiffness: 200 }),
+        withSpring(1, { damping: 15, stiffness: 300 })
+      );
+      fillOpacity.value = withDelay(100, withTiming(1, { duration: 200 }));
+    } else {
+      scale.value = withTiming(0, { duration: 150 });
+      fillOpacity.value = withTiming(0, { duration: 100 });
+    }
+  }, [isFulfilled, scale, fillOpacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: fillOpacity.value,
+  }));
+
+  return (
+    <View style={[styles.container, { width: size, height: size }]}>
+      <View
+        style={[
+          styles.circle,
+          { width: size, height: size, borderRadius: size / 2 },
+          isFulfilled && styles.circleFilled,
+        ]}
+      >
+        <Animated.View style={animatedStyle}>
+          <Svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24">
+            <Path
+              d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"
+              fill="#ffffff"
+            />
+          </Svg>
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circle: {
+    borderWidth: 2,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleFilled: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+});

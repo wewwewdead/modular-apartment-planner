@@ -1,0 +1,331 @@
+import React, {useMemo, useState} from 'react';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PostCard} from '../../components/PostCard/PostCard';
+import {PostCardSkeleton} from '../../components/SkeletonLoader';
+import {Chip} from '../../components/Chip';
+import {EmptyState} from '../../components/EmptyState';
+import {PenIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii, shadows} from '../../theme/spacing';
+import {
+  mobileApi,
+  type CursorPage,
+  type JournalItem,
+} from '../../lib/api/mobileApi';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+const PAGE_SIZE = 10;
+
+const extractPlainText = (rawContent: string | null | undefined): string => {
+  if (!rawContent) return '';
+  try {
+    const parsed = JSON.parse(rawContent) as {
+      root?: {children?: Array<{children?: Array<{text?: string}>}>};
+    };
+    const parts: string[] = [];
+    parsed.root?.children?.forEach(node => {
+      node.children?.forEach(child => {
+        if (child.text) parts.push(child.text);
+      });
+    });
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch {
+    return rawContent.replace(/\s+/g, ' ').trim();
+  }
+};
+
+const extractBannerImage = (
+  rawContent: string | null | undefined,
+  images?: string | string[] | null,
+): string | null => {
+  // Check images field first
+  if (images) {
+    if (typeof images === 'string') {
+      try {
+        const parsed = JSON.parse(images);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+      } catch {
+        if (images.startsWith('http')) return images;
+      }
+    }
+    if (Array.isArray(images) && images.length > 0) return images[0];
+  }
+  // Try to find image node in Lexical content
+  if (!rawContent) return null;
+  try {
+    const parsed = JSON.parse(rawContent);
+    const findImage = (node: any): string | null => {
+      if (node.type === 'image' && node.src) return node.src;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = findImage(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findImage(parsed.root ?? parsed);
+  } catch {
+    return null;
+  }
+};
+
+const getNextCursor = (page: CursorPage<JournalItem>): string | undefined => {
+  if (page.nextCursor) return page.nextCursor;
+  if (page.hasMore && page.data.length > 0)
+    return page.data[page.data.length - 1]?.created_at ?? undefined;
+  if (page.data.length >= PAGE_SIZE)
+    return page.data[page.data.length - 1]?.created_at ?? undefined;
+  return undefined;
+};
+
+const normalizeCount = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+const resolveCount = (
+  aggregate: Array<{count?: number}> | undefined,
+  fallback?: number,
+): number => {
+  if (Array.isArray(aggregate) && aggregate.length > 0)
+    return normalizeCount(aggregate[0]?.count);
+  return normalizeCount(fallback);
+};
+
+const QUICK_ACTIONS = [
+  {key: 'all', label: 'All'},
+  {key: 'journal', label: 'Journals'},
+  {key: 'canvas', label: 'Canvas'},
+  {key: 'freedom_wall', label: 'Freedom Wall'},
+  {key: 'universe', label: 'Universe'},
+] as const;
+
+export function HomeFeedScreen({navigation}: Props) {
+  const {user} = useAuth();
+  const {colors} = useTheme();
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  const feedQuery = useInfiniteQuery({
+    queryKey: ['feed', user?.id],
+    queryFn: ({pageParam}) =>
+      mobileApi.getJournals(pageParam ?? null, PAGE_SIZE, user?.id),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => getNextCursor(lastPage),
+  });
+
+  const posts = useMemo(
+    () => feedQuery.data?.pages.flatMap(page => page.data ?? []) ?? [],
+    [feedQuery.data?.pages],
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await feedQuery.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleQuickAction = (key: string) => {
+    if (key === 'canvas') {
+      navigation.navigate('Canvas');
+    } else if (key === 'freedom_wall') {
+      navigation.navigate('FreedomWall');
+    } else if (key === 'universe') {
+      navigation.navigate('Universe');
+    } else {
+      setActiveFilter(key);
+    }
+  };
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, {backgroundColor: colors.bgPrimary}]}
+      edges={['top']}>
+      {/* Branded header */}
+      <View
+        style={[
+          styles.header,
+          {borderBottomColor: colors.borderCard},
+        ]}>
+        <Text style={[styles.brandText, {color: colors.textHeading}]}>
+          iskrib
+        </Text>
+      </View>
+
+      {/* Filter chips */}
+      <View style={styles.chipRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScroll}>
+          {QUICK_ACTIONS.map(action => (
+            <Chip
+              key={action.key}
+              label={action.label}
+              active={activeFilter === action.key}
+              onPress={() => handleQuickAction(action.key)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Feed */}
+      <FlatList
+        data={posts}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        onEndReachedThreshold={0.25}
+        onEndReached={() => {
+          if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
+            feedQuery.fetchNextPage();
+          }
+        }}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          feedQuery.isLoading ? (
+            <View style={styles.skeletonList}>
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+            </View>
+          ) : (
+            <EmptyState
+              title="No posts yet"
+              subtitle="Pull to refresh or create your first journal post."
+            />
+          )
+        }
+        ListFooterComponent={
+          feedQuery.isFetchingNextPage ? (
+            <View style={styles.loadingMore}>
+              <PostCardSkeleton />
+            </View>
+          ) : null
+        }
+        keyExtractor={item => item.id}
+        renderItem={({item}) => {
+          const preview = extractPlainText(item.content).slice(0, 180);
+          const likeCount = resolveCount(
+            item.like_count,
+            item.likes_count,
+          );
+          const commentCount = resolveCount(
+            item.comment_count,
+            item.comments_count,
+          );
+          const bookmarkCount = resolveCount(item.bookmark_count);
+          const bannerImage = extractBannerImage(
+            item.content,
+            (item as any).images,
+          );
+
+          return (
+            <PostCard
+              title={item.title || 'Untitled Post'}
+              bodyPreview={preview || 'No preview text available.'}
+              authorName={item.users?.name || 'Unknown author'}
+              authorAvatar={item.users?.image_url}
+              authorBadge={item.users?.badge_type as 'legend' | 'og' | undefined}
+              bannerImage={bannerImage}
+              postType={item.post_type}
+              likeCount={likeCount}
+              commentCount={commentCount}
+              bookmarkCount={bookmarkCount}
+              onPress={() =>
+                navigation.navigate('PostDetail', {journalId: item.id})
+              }
+            />
+          );
+        }}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+
+      {/* FAB Write Button */}
+      <Pressable
+        onPress={() => navigation.navigate('JournalEditor', {mode: 'create'})}
+        style={({pressed}) => [
+          styles.fab,
+          {backgroundColor: colors.accentAmber},
+          shadows(colors).elevated,
+          pressed && styles.fabPressed,
+        ]}>
+        <PenIcon size={22} color="#1A1612" />
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  brandText: {
+    fontFamily: fonts.brand.semiBold,
+    fontSize: 24,
+    letterSpacing: 1,
+  },
+  chipRow: {
+    paddingVertical: spacing.sm,
+  },
+  chipScroll: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  listContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 100,
+  },
+  separator: {
+    height: spacing.md,
+  },
+  skeletonList: {
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  loadingMore: {
+    paddingTop: spacing.md,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: spacing.xxl,
+    right: spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabPressed: {
+    transform: [{scale: 0.95}],
+    opacity: 0.9,
+  },
+});

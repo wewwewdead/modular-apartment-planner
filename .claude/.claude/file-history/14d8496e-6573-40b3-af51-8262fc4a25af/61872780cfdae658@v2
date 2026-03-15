@@ -1,0 +1,158 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { CartItem } from '../../../domain/models';
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { motion } from '../../../theme/motion';
+import { typography } from '../../../theme/typography';
+import { FulfillmentCheckmark } from './FulfillmentCheckmark';
+import { PlannedVsActualPill } from './PlannedVsActualPill';
+
+interface CartItemRowProps {
+  item: CartItem;
+  isShopping: boolean;
+  onFulfill: () => void;
+}
+
+const SWIPE_THRESHOLD = 120;
+
+export const CartItemRow = React.memo(function CartItemRow({
+  item,
+  isShopping,
+  onFulfill,
+}: CartItemRowProps) {
+  const translateX = useSharedValue(0);
+  const itemName = item.vaultItemNameSnapshot ?? item.shoppingOnlyName ?? 'Item';
+  const price = item.actualPrice ?? item.plannedPrice ?? 0;
+  const quantity = item.actualQuantity ?? item.quantity;
+
+  const panGesture = Gesture.Pan()
+    .enabled(isShopping && !item.isFulfilled)
+    .onUpdate(e => {
+      translateX.value = Math.max(0, e.translationX);
+    })
+    .onEnd(e => {
+      if (e.translationX > SWIPE_THRESHOLD) {
+        translateX.value = withSpring(0, motion.snappy);
+        runOnJS(onFulfill)();
+      } else {
+        translateX.value = withSpring(0, motion.snappy);
+      }
+    });
+
+  const rowStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const revealStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value > 20 ? 1 : 0,
+  }));
+
+  return (
+    <View style={styles.container}>
+      <Animated.View style={[styles.revealBg, revealStyle]}>
+        <MaterialCommunityIcons name="check-circle" size={28} color={colors.success} />
+      </Animated.View>
+
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={[styles.row, rowStyle]}>
+          <FulfillmentCheckmark
+            animationState={item.fulfillmentAnimationState}
+            isFulfilled={item.isFulfilled}
+          />
+
+          <View style={styles.info}>
+            <Text
+              style={[styles.name, item.shouldStrikethrough && styles.strikethrough]}
+            >
+              {itemName}
+            </Text>
+            <Text style={styles.detail}>
+              {quantity} x {formatCurrency(price)} - {item.actualStore ?? item.plannedStore}
+            </Text>
+            {item.actualPrice !== null && item.plannedPrice !== null && (
+              <PlannedVsActualPill
+                planned={item.plannedPrice}
+                actual={item.actualPrice}
+              />
+            )}
+          </View>
+
+          {isShopping && !item.isFulfilled && (
+            <AnimatedPressable
+              onPress={onFulfill}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: item.isFulfilled }}
+              accessibilityLabel={`Mark ${itemName} as done`}
+            >
+              <View style={styles.markButton}>
+                <Text style={styles.markButtonText}>Done</Text>
+              </View>
+            </AnimatedPressable>
+          )}
+        </Animated.View>
+      </GestureDetector>
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  container: {
+    overflow: 'hidden',
+  },
+  revealBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#e8f5e9',
+    justifyContent: 'center',
+    paddingLeft: 24,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    backgroundColor: colors.surface,
+  },
+  info: {
+    flex: 1,
+    gap: 4,
+  },
+  name: {
+    fontFamily: 'SourceSans3-SemiBold',
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  strikethrough: {
+    textDecorationLine: 'line-through',
+    color: colors.subtleInk,
+  },
+  detail: {
+    ...typography.caption,
+    color: colors.mutedInk,
+  },
+  markButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.success,
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  markButtonText: {
+    color: colors.success,
+    fontFamily: 'SourceSans3-Bold',
+    fontSize: 13,
+  },
+});

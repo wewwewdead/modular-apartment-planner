@@ -1,0 +1,192 @@
+# Fullscreen Toggle for Canvas & 3D Preview
+
+## Context
+The modular apartment planner has a split model workspace: SVG plan canvas (left) and 3D preview panel (right) in a CSS grid. Users want to be able to maximize either panel to use the full canvas area, then toggle back. Currently there is no expand/maximize functionality.
+
+## Approach
+Add a `maximizedPanel` state to EditorProvider (`null | 'canvas' | 'preview'`). When set, the `.modelWorkspace` grid hides the non-maximized panel and the active one takes the full width. Each panel gets a small expand/collapse toggle button.
+
+---
+
+## Step 1: EditorProvider State
+
+**File: `src/app/EditorProvider.jsx`**
+
+- Add `maximizedPanel: null` to initial state in `createInitialEditorState` (line ~217)
+- Add reducer case `TOGGLE_MAXIMIZE_PANEL`:
+  ```js
+  case 'TOGGLE_MAXIMIZE_PANEL':
+    return {
+      ...state,
+      maximizedPanel: state.maximizedPanel === action.panel ? null : action.panel,
+    };
+  ```
+- Expose `maximizedPanel` via `useEditor()` (already happens - it spreads `ctx.state`)
+
+## Step 2: App Layout CSS
+
+**File: `src/app/App.module.css`**
+
+Add modifier classes that override `.modelWorkspace` grid when a panel is maximized:
+
+```css
+.canvasMaximized {
+  grid-template-columns: 1fr;
+}
+
+.canvasMaximized .preview {
+  display: none;
+}
+
+.previewMaximized {
+  grid-template-columns: 1fr;
+}
+
+.previewMaximized .primaryCanvas {
+  display: none;
+}
+```
+
+Note: CSS Modules scopes class names, so we can't use nested `.preview` selectors directly. Instead, add standalone `.previewHidden` and `.primaryCanvasHidden` classes with `display: none`, and apply them conditionally in JSX.
+
+## Step 3: App.jsx Layout Wiring
+
+**File: `src/app/App.jsx`** (EditorShell component, ~line 60-100)
+
+- Read `maximizedPanel` from `useEditor()`
+- Apply CSS class on `.modelWorkspace`:
+  ```jsx
+  <div className={`${styles.modelWorkspace} ${maximizedPanel ? styles.workspaceMaximized : ''}`}>
+  ```
+- Conditionally hide panels:
+  ```jsx
+  {maximizedPanel !== 'preview' && (
+    <div className={styles.primaryCanvas}><SvgCanvas /></div>
+  )}
+  {maximizedPanel !== 'canvas' && (
+    <div className={styles.preview}>
+      <Suspense ...><ThreePreviewPanel ... /></Suspense>
+    </div>
+  )}
+  ```
+- The `.workspaceMaximized` class sets `grid-template-columns: 1fr` (single column)
+
+## Step 4: Expand Icon
+
+**File: `src/ui/ToolbarIcons.jsx`**
+
+Add two icons:
+
+```jsx
+export function ExpandIcon(props) {
+  // arrows pointing outward from center
+  return <I {...props}><path d="M4 12V16h4" {...p} /><path d="M16 8V4h-4" {...p} /><path d="M4 16l5-5" {...p} /><path d="M16 4l-5 5" {...p} /></I>;
+}
+
+export function CollapseIcon(props) {
+  // arrows pointing inward
+  return <I {...props}><path d="M9 15v-4H5" {...p} /><path d="M11 5v4h4" {...p} /><path d="M5 15l4-4" {...p} /><path d="M15 5l-4 4" {...p} /></I>;
+}
+```
+
+## Step 5: SvgCanvas Expand Button
+
+**File: `src/renderers/SvgCanvas.jsx`**
+
+Add a small expand/collapse button in the status bar area (bottom-right corner of the canvas container). The button sits inside `.canvasContainer` as an absolutely positioned element.
+
+```jsx
+const { maximizedPanel, dispatch: editorDispatch } = useEditor();
+const isCanvasMaximized = maximizedPanel === 'canvas';
+
+// Inside the canvasContainer div, add:
+<button
+  className={styles.expandBtn}
+  onClick={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'canvas' })}
+  title={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
+  aria-label={isCanvasMaximized ? 'Restore split view' : 'Maximize canvas'}
+>
+  {isCanvasMaximized ? <CollapseIcon /> : <ExpandIcon />}
+</button>
+```
+
+**File: `src/renderers/SvgCanvas.module.css`**
+
+```css
+.expandBtn {
+  position: absolute;
+  bottom: 32px;  /* above status bar */
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--duration-fast), background var(--duration-fast);
+  z-index: 5;
+}
+
+.expandBtn:hover {
+  opacity: 1;
+  background: white;
+}
+
+.expandBtnIcon {
+  width: 14px;
+  height: 14px;
+}
+```
+
+## Step 6: ThreePreviewPanel Expand Button
+
+**File: `src/three/viewer/ThreePreviewPanel.jsx`**
+
+- Accept new props: `isMaximized`, `onToggleMaximize`
+- Add expand/collapse button in the `.actions` div (next to "Reset View"):
+  ```jsx
+  <button type="button" className={styles.button} onClick={onToggleMaximize}>
+    {isMaximized ? <CollapseIcon /> : <ExpandIcon />}
+  </button>
+  ```
+
+**File: `src/app/App.jsx`** (where ThreePreviewPanel is rendered):
+- Pass props:
+  ```jsx
+  <ThreePreviewPanel
+    project={project}
+    activeFloorId={activeFloorId}
+    isMaximized={maximizedPanel === 'preview'}
+    onToggleMaximize={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'preview' })}
+  />
+  ```
+
+---
+
+## Files Modified
+| File | Change |
+|------|--------|
+| `src/app/EditorProvider.jsx` | Add `maximizedPanel` state + `TOGGLE_MAXIMIZE_PANEL` action |
+| `src/app/App.module.css` | Add `.workspaceMaximized` class |
+| `src/app/App.jsx` | Read `maximizedPanel`, conditionally hide panels, pass props to ThreePreviewPanel |
+| `src/ui/ToolbarIcons.jsx` | Add `ExpandIcon` and `CollapseIcon` |
+| `src/renderers/SvgCanvas.jsx` | Add expand button in canvas container |
+| `src/renderers/SvgCanvas.module.css` | Add `.expandBtn` styles |
+| `src/three/viewer/ThreePreviewPanel.jsx` | Add expand button in header actions |
+
+## Verification
+1. `npm run dev` - open app in browser
+2. In plan view, verify split layout shows SVG canvas + 3D preview side by side
+3. Click expand button on SVG canvas -> 3D preview disappears, canvas takes full width
+4. Click collapse button -> split view restores
+5. Click expand button on 3D preview header -> SVG canvas disappears, preview takes full width
+6. Click collapse on preview -> split view restores
+7. Switch to elevation/section view -> maximize state persists correctly
+8. Switch to sheet workspace -> maximize doesn't apply (sheets have no split)
+9. Verify 3D preview ResizeObserver fires correctly when maximizing/restoring (viewport resizes properly)
+10. Verify keyboard shortcuts still work in both states

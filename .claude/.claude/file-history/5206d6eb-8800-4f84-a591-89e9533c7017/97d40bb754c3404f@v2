@@ -1,0 +1,45 @@
+/**
+ * Shared SVG <defs> for fixture gradients and drop shadow filter.
+ * Rendered once inside SvgCanvas before FixtureRenderer.
+ */
+export default function FixtureDefs() {
+  return (
+    <defs>
+      {/* Fixture gradients */}
+      <linearGradient id="grad-kitchenTop" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#F0E4CE" />
+        <stop offset="100%" stopColor="#D8C5A4" />
+      </linearGradient>
+
+      <linearGradient id="grad-toilet" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#EAF3F8" />
+        <stop offset="100%" stopColor="#C2D8E6" />
+      </linearGradient>
+
+      <radialGradient id="grad-lavatory" gradientUnits="objectBoundingBox" cx="0.5" cy="0.5" r="0.5">
+        <stop offset="0%" stopColor="#EDF5F9" />
+        <stop offset="100%" stopColor="#C4D9E8" />
+      </radialGradient>
+
+      <linearGradient id="grad-table" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#EDE5D8" />
+        <stop offset="100%" stopColor="#D0C4B0" />
+      </linearGradient>
+
+      <linearGradient id="grad-tv" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#444444" />
+        <stop offset="100%" stopColor="#1A1A1A" />
+      </linearGradient>
+
+      <linearGradient id="grad-sofa" gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#D8CABC" />
+        <stop offset="100%" stopColor="#B8A898" />
+      </linearGradient>
+
+      {/* Drop shadow filter */}
+      <filter id="fixture-shadow" x="-10%" y="-10%" width="130%" height="130%">
+        <feDropShadow dx="0" dy="30" stdDeviation="25" floodColor="rgba(0,0,0,0.10)" />
+      </filter>
+    </defs>
+  );
+}

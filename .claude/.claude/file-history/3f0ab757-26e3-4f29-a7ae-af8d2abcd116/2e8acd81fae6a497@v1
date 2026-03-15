@@ -1,0 +1,194 @@
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { computeCartTotal } from '../../domain/models';
+import { capitalize, formatCurrency, formatDate } from '../../lib/format';
+import { RootStackParamList } from '../../navigation/types';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'CartDetail'>;
+
+export function CartDetailScreen({ route }: Props) {
+  const appState = useAppStore(state => state.appState);
+  const toggleCartItemFulfillment = useAppStore(state => state.toggleCartItemFulfillment);
+  const advanceCartStatus = useAppStore(state => state.advanceCartStatus);
+
+  const cart = useMemo(
+    () => appState?.vault.carts.find(entry => entry.id === route.params.cartId),
+    [appState, route.params.cartId]
+  );
+
+  if (!appState || !cart) {
+    return null;
+  }
+
+  const total = computeCartTotal(appState.vault, cart);
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.hero}>
+        <Text style={styles.title}>{cart.name}</Text>
+        <Text style={styles.subtitle}>
+          {capitalize(cart.status)} • Budget {formatCurrency(cart.budget)}
+        </Text>
+      </View>
+
+      <View style={styles.summaryRow}>
+        <SummaryPill label="Total" value={formatCurrency(total)} />
+        <SummaryPill label="Started" value={formatDate(cart.startedAt)} />
+        <SummaryPill label="Completed" value={formatDate(cart.completedAt)} />
+      </View>
+
+      <Pressable
+        style={styles.primaryButton}
+        onPress={() => {
+          advanceCartStatus(cart.id).catch(() => undefined);
+        }}
+      >
+        <Text style={styles.primaryButtonText}>
+          {cart.status === 'planning'
+            ? 'Start shopping'
+            : cart.status === 'shopping'
+              ? 'Finish trip'
+              : 'Completed'}
+        </Text>
+      </Pressable>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Items</Text>
+        {cart.cartItems.map(item => (
+          <View key={item.id} style={styles.itemRow}>
+            <View style={styles.itemMeta}>
+              <Text style={styles.itemName}>{item.vaultItemNameSnapshot ?? item.shoppingOnlyName ?? 'Item'}</Text>
+              <Text style={styles.itemCopy}>
+                {item.quantity} x {formatCurrency(item.plannedPrice ?? 0)} • {item.plannedStore}
+              </Text>
+            </View>
+            <Pressable
+              style={[styles.fulfillButton, item.isFulfilled && styles.fulfillButtonActive]}
+              onPress={() => {
+                toggleCartItemFulfillment(cart.id, item.id).catch(() => undefined);
+              }}
+            >
+              <Text style={[styles.fulfillButtonText, item.isFulfilled && styles.fulfillButtonTextActive]}>
+                {item.isFulfilled ? 'Fulfilled' : 'Mark done'}
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function SummaryPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryPill}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: 20,
+    gap: 16,
+  },
+  hero: {
+    gap: 6,
+  },
+  title: {
+    fontSize: 30,
+    color: colors.ink,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: colors.mutedInk,
+  },
+  summaryRow: {
+    gap: 10,
+  },
+  summaryPill: {
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAlt,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  summaryLabel: {
+    color: colors.mutedInk,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  summaryValue: {
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  primaryButton: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 18,
+    backgroundColor: colors.brand,
+  },
+  primaryButtonText: {
+    color: colors.surface,
+    fontWeight: '800',
+  },
+  card: {
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 16,
+    gap: 12,
+  },
+  cardTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  itemMeta: {
+    flex: 1,
+    gap: 4,
+  },
+  itemName: {
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  itemCopy: {
+    color: colors.mutedInk,
+  },
+  fulfillButton: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.brand,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  fulfillButtonActive: {
+    backgroundColor: colors.brand,
+  },
+  fulfillButtonText: {
+    color: colors.brandDeep,
+    fontWeight: '700',
+  },
+  fulfillButtonTextActive: {
+    color: colors.surface,
+  },
+});

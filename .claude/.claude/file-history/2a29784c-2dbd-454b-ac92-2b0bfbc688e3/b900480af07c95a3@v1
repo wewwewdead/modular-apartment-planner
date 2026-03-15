@@ -1,0 +1,72 @@
+import React from 'react';
+import { Group, Circle, Text } from 'react-konva';
+import { hexToRgba } from '../utils/starUtils';
+
+const StarGroup = React.memo(({ x, y, radius, color, title, showTitle, isPulsing, onClick }) => {
+    const r = radius;
+
+    return (
+        <Group
+            x={x}
+            y={y}
+            scaleX={isPulsing ? 1.8 : 1}
+            scaleY={isPulsing ? 1.8 : 1}
+        >
+            {/* Outer atmosphere — shadow glow */}
+            <Circle
+                radius={r * 3}
+                fill="transparent"
+                shadowColor={color}
+                shadowBlur={r * 5}
+                shadowOpacity={1}
+                perfectDrawEnabled={false}
+                shadowForStrokeEnabled={false}
+                listening={false}
+            />
+            {/* Inner glow — radial gradient */}
+            <Circle
+                radius={r * 2.2}
+                fillRadialGradientStartPoint={{ x: 0, y: 0 }}
+                fillRadialGradientEndPoint={{ x: 0, y: 0 }}
+                fillRadialGradientStartRadius={0}
+                fillRadialGradientEndRadius={r * 2.2}
+                fillRadialGradientColorStops={[
+                    0, color,
+                    0.4, hexToRgba(color, 0.65),
+                    1, hexToRgba(color, 0),
+                ]}
+                perfectDrawEnabled={false}
+                listening={false}
+            />
+            {/* Bright core */}
+            <Circle
+                radius={r * 0.5}
+                fill="#ffffffee"
+                shadowColor="#ffffff"
+                shadowBlur={4}
+                shadowOpacity={1}
+                perfectDrawEnabled={false}
+                hitStrokeWidth={r + 12}
+                onClick={onClick}
+                onTap={onClick}
+            />
+            {showTitle && title && (
+                <Text
+                    text={title.length > 24 ? title.slice(0, 22) + '...' : title}
+                    y={r * 2.2 + 4}
+                    fontSize={10}
+                    fill="rgba(255,255,255,0.6)"
+                    align="center"
+                    width={120}
+                    offsetX={60}
+                    listening={false}
+                    perfectDrawEnabled={false}
+                />
+            )}
+        </Group>
+    );
+});
+
+StarGroup.displayName = 'StarGroup';
+
+export default StarGroup;

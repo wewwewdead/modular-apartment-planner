@@ -1,0 +1,47 @@
+import { doorOutlineOnWall } from '@/geometry/wallGeometry';
+
+export default function DoorRenderer({ doors, walls }) {
+  return (
+    <g className="doors">
+      {doors.map(door => {
+        const wall = walls.find(w => w.id === door.wallId);
+        if (!wall) return null;
+
+        const info = doorOutlineOnWall(wall, door);
+        const angleDeg = (info.angle * 180) / Math.PI;
+        const flipSign = door.openDirection === 'right' ? -1 : 1;
+
+        return (
+          <g key={door.id} data-id={door.id} data-type="door">
+            {/* White rectangle to mask wall */}
+            <polygon
+              points={`${info.p1.x},${info.p1.y} ${info.p2.x},${info.p2.y} ${info.p3.x},${info.p3.y} ${info.p4.x},${info.p4.y}`}
+              fill="white"
+              stroke="none"
+            />
+            {/* Door swing arc */}
+            <g transform={`translate(${info.start.x},${info.start.y}) rotate(${angleDeg})`}>
+              {/* Door leaf line */}
+              <line
+                x1={0} y1={0}
+                x2={0} y2={flipSign * -door.width}
+                stroke="var(--color-wall-fill)"
+                strokeWidth={2}
+                vectorEffect="non-scaling-stroke"
+              />
+              {/* Arc */}
+              <path
+                d={`M ${door.width} 0 A ${door.width} ${door.width} 0 0 ${door.openDirection === 'left' ? 1 : 0} 0 ${flipSign * -door.width}`}
+                fill="none"
+                stroke="var(--color-wall-fill)"
+                strokeWidth={1}
+                strokeDasharray="4 3"
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          </g>
+        );
+      })}
+    </g>
+  );
+}

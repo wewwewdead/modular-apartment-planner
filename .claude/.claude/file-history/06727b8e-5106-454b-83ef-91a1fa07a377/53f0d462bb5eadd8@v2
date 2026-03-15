@@ -1,0 +1,1741 @@
+/* ── Reset ── */
+p {
+    padding: 0;
+    margin: 0;
+}
+
+/* ── Utility classes ── */
+.text-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Animations ── */
+@keyframes skeleton-pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 0.3; }
+    100% { opacity: 0.6; }
+}
+@keyframes dropdown-enter {
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Button system ── */
+.btn-collection {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+}
+.btn-collection:active {
+    transform: scale(0.97);
+}
+.btn-collection:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+}
+.btn-collection:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.btn-collection:disabled:active {
+    transform: none;
+}
+.btn-collection--primary {
+    background-color: var(--accent-dark);
+    color: var(--bg-primary);
+}
+.btn-collection--primary:hover:not(:disabled) {
+    background-color: var(--accent-dark-hover);
+}
+.btn-collection--secondary {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+.btn-collection--secondary:hover:not(:disabled) {
+    background-color: var(--border-light);
+}
+.btn-collection--danger {
+    background-color: transparent;
+    color: var(--color-danger);
+}
+.btn-collection--danger:hover:not(:disabled) {
+    background-color: var(--color-danger-bg);
+}
+
+/* ── Character counter progress bar ── */
+.char-counter-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.35rem;
+}
+.char-counter-bar {
+    width: 60px;
+    height: 4px;
+    border-radius: 2px;
+    background-color: var(--bg-hover);
+    overflow: hidden;
+}
+.char-counter-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.2s ease, background-color 0.2s ease;
+}
+.char-counter-fill--normal {
+    background-color: var(--accent-sage);
+}
+.char-counter-fill--warning {
+    background-color: var(--accent-amber);
+}
+.char-counter-fill--danger {
+    background-color: var(--color-danger);
+}
+.char-counter-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Privacy badge pills ── */
+.privacy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.18rem 0.6rem;
+    border-radius: 10px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    user-select: none;
+    border: 1px solid var(--border-card);
+    background-color: var(--bg-pill);
+}
+.privacy-badge--public {
+    color: var(--accent-sage);
+}
+.privacy-badge--private {
+    color: var(--text-faint);
+}
+
+/* ── Selection checkmark ── */
+.selection-check {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: var(--accent-purple);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+}
+.selection-check svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ── Skeleton card ── */
+.skeleton-card {
+    width: 31%;
+    height: 220px;
+    border-radius: 12px;
+    background-color: var(--bg-hover);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-card:nth-child(2) { animation-delay: 0.15s; }
+.skeleton-card:nth-child(3) { animation-delay: 0.3s; }
+.skeleton-card:nth-child(4) { animation-delay: 0.45s; }
+.skeleton-card:nth-child(5) { animation-delay: 0.6s; }
+.skeleton-card:nth-child(6) { animation-delay: 0.75s; }
+
+/* ── Header (fixed) ── */
+.collection-header {
+    position: fixed;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    width: 716px;
+    height: 60px;
+    user-select: none;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(25px);
+    z-index: 125;
+    border-bottom: 0.7px solid var(--border-light);
+}
+.collections-header-text {
+    padding: 0;
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* ── Intro banner ── */
+.collection-intro-container {
+    position: relative;
+    top: 95px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-direction: column;
+    width: 95%;
+    height: fit-content;
+    padding: 1rem;
+    background-color: var(--bg-primary);
+    z-index: 119;
+}
+.collections-intro {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 95%;
+    padding: 1.5rem 1rem;
+    height: 120px;
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent-dark-hover));
+    color: var(--bg-primary);
+    border-radius: 15px;
+}
+.collections-intro-h3 {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.8rem;
+    font-family: var(--font-serif);
+    font-weight: 700;
+    padding: 0;
+    margin: 0;
+}
+.collections-intro-text {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+}
+
+/* ── Create button area ── */
+.create-collection-container {
+    position: relative;
+    top: 97px;
+    display: flex;
+    width: 95%;
+    padding: 1rem;
+    justify-content: flex-end;
+    align-items: center;
+    color: var(--text-primary);
+    z-index: 120;
+}
+
+/* ── Collection editor modal ── */
+.collection-editor {
+    position: absolute;
+    top: 100px;
+    transform: translateX(-50%);
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--bg-glass-border);
+    box-shadow: var(--shadow-modal);
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
+    z-index: 128;
+    border-radius: 16px;
+}
+.is-saving-collections {
+    width: 98%;
+    padding: 0.5rem;
+}
+.collection-input-name {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+}
+.input-name-container {
+    display: flex;
+    justify-content: flex-start;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.field-name {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.input-name-collection {
+    width: 80%;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-family: var(--font-ui);
+    background-color: var(--bg-secondary);
+    padding: 0.5rem 0.5rem;
+    color: var(--text-primary);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input-name-collection:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.1);
+}
+.collection-input-description {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+}
+.input-description-container {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+.collection-description-limit {
+    font-size: 0.8rem;
+    padding: 0;
+    margin: 0;
+    color: var(--text-muted);
+}
+.collection-description {
+    resize: none;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    color: var(--text-primary);
+    width: 80%;
+    height: 80px;
+    font-family: var(--font-ui);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.collection-description:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 3px rgba(212, 168, 83, 0.1);
+}
+.create-or-add-container {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 95%;
+    height: 50px;
+    border-radius: 10px;
+    background-color: var(--bg-hover);
+    padding: 1rem;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+/* ── Editor: selected old post cards ── */
+.collection-cards-selected-old-post {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    flex-direction: column;
+    width: 25%;
+    height: fit-content;
+    padding: 1rem;
+    gap: 0.5rem;
+    background-color: var(--bg-card);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: ease-in-out 0.3s;
+}
+.editor-container-collection {
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    height: 100%;
+    background-color: var(--accent-dark);
+    color: var(--bg-primary);
+    border-radius: 15px;
+    padding: 1rem;
+}
+.journal-list {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: 1rem;
+    width: 95%;
+    padding: 1rem;
+    height: 30%;
+    background-color: var(--bg-hover);
+    overflow-y: auto;
+    flex-wrap: wrap;
+    border-radius: 10px;
+}
+
+/* ── Older posts modal ── */
+.older-post-container {
+    position: absolute;
+    top: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 90%;
+    height: 80%;
+    background-color: var(--bg-elevated);
+    z-index: 129;
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: var(--shadow-modal);
+    overflow-y: hidden;
+    overflow-x: hidden;
+    gap: 1rem;
+}
+.older-loading-container {
+    position: absolute;
+    top: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 90%;
+    height: 80%;
+    background-color: var(--bg-elevated);
+    z-index: 115;
+    border-radius: 16px;
+    padding: 1rem;
+    box-shadow: var(--shadow-modal);
+}
+.old-post-cards {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    width: 98%;
+    height: fit-content;
+    background-color: var(--bg-hover);
+    padding: 0.5rem;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.old-post-cards:hover {
+    background-color: var(--bg-selection);
+}
+.inview-container {
+    display: flex;
+    width: 100%;
+    height: 10px;
+}
+.old-post-cards-selected {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    width: 98%;
+    height: fit-content;
+    background-color: var(--bg-selection);
+    padding: 0.5rem;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid var(--accent-purple);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.collection-journal-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.collection-title-text-limit {
+    margin: 0;
+    padding: 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.collection-sliced-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.cards-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.save-older-post-container {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 0.5rem;
+}
+.save-child-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+}
+.selected-post {
+    padding: 0;
+    margin: 0;
+    font-weight: 660;
+    color: var(--text-primary);
+}
+
+/* ── Journal entries ── */
+.journal-title {
+    display: flex;
+    width: 100%;
+    height: fit-content;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.journal-text {
+    display: flex;
+    width: 100%;
+    height: fit-content;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* ── Collection cards container ── */
+.collection-cards-container {
+    position: relative;
+    top: 115px;
+    padding: 1rem;
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    max-height: fit-content;
+    min-height: 100%;
+    width: 95%;
+    background-color: var(--bg-primary);
+    z-index: 119;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+.collection-cards-loading-container {
+    position: relative;
+    top: 115px;
+    padding: 1rem;
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    height: fit-content;
+    width: 95%;
+    background-color: var(--bg-primary);
+    z-index: 120;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+.collection-cards-inview-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 50px;
+    z-index: 122;
+}
+
+/* ── Collection card (individual) ── */
+.collection-cards {
+    position: relative;
+    display: flex;
+    justify-content: flex-start;
+    align-items: stretch;
+    flex-direction: column;
+    width: calc(50% - 0.5rem);
+    height: 220px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    box-shadow: none;
+    overflow: hidden;
+}
+.collection-cards:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
+}
+
+/* ── Gradient header with data-accent variants ── */
+.collection-gradient-header {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 14px 14px 0 0;
+    width: 100%;
+    height: 110px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-card);
+    transition: opacity 0.3s ease, filter 0.3s ease;
+}
+.collection-cards:hover .collection-gradient-header {
+    opacity: 0.96;
+    filter: brightness(1.05);
+}
+.collection-gradient-header[data-accent="0"] {
+    background: linear-gradient(135deg, #6B8F71, #4a7a52);
+}
+.collection-gradient-header[data-accent="1"] {
+    background: linear-gradient(135deg, #D4A853, #C4943E);
+}
+.collection-gradient-header[data-accent="2"] {
+    background: linear-gradient(135deg, #e6a040, #d4880a);
+}
+.collection-gradient-header[data-accent="3"] {
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent-dark-hover));
+}
+.collection-gradient-header svg {
+    opacity: 0.2;
+}
+
+/* ── CollectionViewer enhanced cards ── */
+.cv-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    width: 100%;
+}
+.cv-skeleton {
+    height: 190px;
+    border-radius: 14px;
+    background-color: var(--bg-hover);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.cv-skeleton:nth-child(2) { animation-delay: 0.15s; }
+.cv-skeleton:nth-child(3) { animation-delay: 0.3s; }
+.cv-skeleton:nth-child(4) { animation-delay: 0.45s; }
+.cv-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.cv-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+    border-color: var(--bg-glass-border);
+}
+.cv-gradient-header {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 80px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-card);
+    transition: filter 0.3s ease;
+}
+.cv-card:hover .cv-gradient-header {
+    filter: brightness(1.06);
+}
+.cv-gradient-header[data-accent="0"] {
+    background: linear-gradient(135deg, #6B8F71, #4a7a52);
+}
+.cv-gradient-header[data-accent="1"] {
+    background: linear-gradient(135deg, #D4A853, #C4943E);
+}
+.cv-gradient-header[data-accent="2"] {
+    background: linear-gradient(135deg, #e6a040, #d4880a);
+}
+.cv-gradient-header[data-accent="3"] {
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent-dark-hover));
+}
+.cv-gradient-header svg {
+    color: #ffffff;
+    opacity: 0.18;
+}
+.cv-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    user-select: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+.cv-badge svg {
+    opacity: 1 !important;
+}
+.cv-badge--public {
+    background: rgba(255, 255, 255, 0.18);
+    border: 0.5px solid rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.9);
+}
+.cv-badge--private {
+    background: rgba(0, 0, 0, 0.2);
+    border: 0.5px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.7);
+}
+.cv-card-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0.65rem 0.8rem 0.75rem;
+    gap: 0.15rem;
+}
+.cv-card-name {
+    font-family: "Lexend Deca", sans-serif;
+    font-weight: 700;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    letter-spacing: -0.02rem;
+    color: var(--text-heading);
+}
+.cv-card-date {
+    font-family: var(--font-ui);
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-faint);
+}
+.cv-card-description {
+    margin-top: 0.2rem;
+    font-family: var(--font-serif);
+    font-size: 0.76rem;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+/* ── Legacy illustration (kept for CollectionViewer) ── */
+.collection-illustration {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 12px 12px 0 0;
+    width: 100%;
+    height: 180px;
+    background: linear-gradient(135deg, var(--bg-hover), var(--bg-secondary));
+}
+.collection-illustration-img {
+    width: 90%;
+    height: 90%;
+    object-fit: contain;
+}
+
+/* ── Settings button ── */
+.setting-bttn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 0.3rem;
+    display: flex;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    z-index: 130;
+    user-select: none;
+    cursor: pointer;
+}
+.setting-bttn:hover {
+    background-color: var(--bg-hover);
+}
+
+/* ── Settings dropdown ── */
+.collection-settings-container {
+    position: absolute;
+    background-color: var(--bg-elevated);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.4rem;
+    width: 160px;
+    height: fit-content;
+    top: 28px;
+    right: 0;
+    border-radius: 12px;
+    box-shadow: var(--shadow-dropdown);
+    font-weight: 600;
+    z-index: 135;
+    animation: dropdown-enter 0.15s ease;
+}
+.collection-settings-bttn {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.5rem;
+    transition: background-color 0.1s ease;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+.collection-settings-bttn:hover {
+    background-color: var(--bg-hover);
+}
+.collection-settings-bttn--danger {
+    color: var(--color-danger);
+    border-top: 1px solid var(--border-light);
+    margin-top: 0.2rem;
+    padding-top: 0.55rem;
+}
+.collection-settings-bttn--danger:hover {
+    background-color: var(--color-danger-bg);
+}
+
+/* ── Card name / date / description ── */
+.collection-name-container {
+    display: flex;
+    width: 93%;
+    padding: 0.7rem 0.9rem 0.25rem 0.9rem;
+    justify-content: space-between;
+    font-family: "Lexend Deca", sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    letter-spacing: -0.02rem;
+    color: var(--text-heading);
+    transition: color 0.2s ease;
+}
+.collection-date-created {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-faint);
+    padding: 0.1rem 0.9rem;
+    width: 93%;
+    transition: color 0.2s ease;
+}
+.collection-card-description {
+    padding: 0rem 0.9rem;
+    width: 93%;
+    height: 100%;
+    color: var(--text-muted);
+    font-family: var(--font-serif);
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+/* ── Delete confirmation overlay ── */
+.delete-confirm-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    background-color: var(--bg-backdrop-heavy);
+    backdrop-filter: blur(6px);
+    border-radius: 12px;
+    z-index: 136;
+    padding: 1rem;
+}
+.delete-confirm-overlay p {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    text-align: center;
+}
+.delete-confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* ── Collection journal cards page ── */
+.collection-journal-cards-container {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    top: 95px;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+}
+.add-collection-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    width: 95%;
+    padding: 1rem;
+    height: 60px;
+}
+.add-collection-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem 0.8rem;
+    border-radius: 10px;
+    background-color: var(--accent-dark);
+    color: var(--bg-primary);
+    user-select: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+.add-collection-button:hover {
+    background-color: var(--accent-dark-hover);
+}
+.add-collection-button:active {
+    transform: scale(0.97);
+}
+.add-collection-button:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+}
+.collection-journal-cards {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: 95%;
+    min-height: 100vh;
+    padding: 1rem;
+    z-index: 3;
+    gap: 0.8rem;
+    background-color: var(--bg-primary);
+    flex-wrap: wrap;
+}
+.collections {
+    display: flex;
+    flex-direction: column;
+    width: 31%;
+    height: 320px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    overflow: hidden;
+}
+.collections:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.07);
+}
+.collections-title {
+    display: flex;
+    justify-content: flex-start;
+    font-family: "Lexend Deca", sans-serif;
+    font-weight: 700;
+    align-items: center;
+    width: 100%;
+    padding: 0.6rem 0.9rem 0.2rem 0.9rem;
+    color: var(--text-heading);
+    font-size: 1rem;
+    letter-spacing: -0.02rem;
+}
+.collections-text {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: 100%;
+    padding: 0 0.9rem 0.8rem;
+    height: 100%;
+    color: var(--text-body);
+    font-family: var(--font-serif);
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.6;
+}
+.journal-collection-image {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 1px solid var(--border-card);
+    transition: opacity 0.2s ease;
+}
+.collections:hover .journal-collection-image {
+    opacity: 0.96;
+}
+.close-bttn-collection-cards {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 0 0.5rem 0;
+}
+.svg-close {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    color: var(--text-primary);
+}
+.svg-close:hover {
+    transform: scale(1.15);
+}
+
+/* ── Empty state ── */
+.no-collections-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 200px;
+    z-index: 129;
+    background-color: transparent;
+    gap: 0.6rem;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    border-radius: 14px;
+}
+.empty-state-icon-ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background-color: var(--bg-glass);
+    border: 0.5px solid var(--bg-glass-border);
+    color: var(--text-faint);
+    margin-bottom: 0.25rem;
+}
+.empty-state-icon {
+    width: 64px;
+    height: 64px;
+    color: var(--text-faint);
+}
+.empty-state-title {
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+.empty-state-description {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    max-width: 240px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* ── Not collected journals modal ── */
+.notCollectedJournalList {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    background-color: var(--bg-elevated);
+    box-shadow: var(--shadow-modal);
+    border-radius: 16px;
+    z-index: 130;
+    width: 85%;
+    height: 95%;
+    padding: 1rem;
+    top: 100px;
+    gap: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.close-bttn-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    width: 100%;
+    height: fit-content;
+}
+.close-bttn {
+    display: flex;
+    justify-content: center;
+    width: fit-content;
+    height: fit-content;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    color: var(--text-primary);
+}
+.close-bttn:hover {
+    background-color: var(--bg-hover);
+}
+.close-bttn:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+}
+.notCollectedJournalList-loading-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.not-collected-cards {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    width: 98%;
+    height: fit-content;
+    background-color: var(--bg-hover);
+    padding: 0.5rem;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.not-collected-cards:hover {
+    background-color: var(--bg-selection);
+}
+.collected-cards {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    flex-direction: column;
+    width: 98%;
+    height: fit-content;
+    background-color: var(--bg-selection);
+    padding: 0.5rem;
+    border-radius: 10px;
+    cursor: pointer;
+    border: 2px solid var(--accent-purple);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.not-collected-title {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.if-collected-text {
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.6rem !important;
+    font-weight: 600 !important;
+    color: var(--bg-primary);
+    background-color: var(--accent-sage);
+    border-radius: 5px;
+}
+.not-collected-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+.not-collected-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* ── Collection name & description (journal cards page) ── */
+.collection-Name-description {
+    display: flex;
+    justify-content: space-between;
+    width: 95%;
+    padding: 1rem;
+    height: fit-content;
+    border-top: 0.7px solid var(--border-light);
+    border-bottom: 0.7px solid var(--border-light);
+}
+.container1 {
+    display: flex;
+    flex-direction: column;
+    width: 50%;
+    height: 100%;
+    gap: 0.5rem;
+}
+.collection-name {
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    font-family: "Lexend Deca", sans-serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    line-height: 1.4;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+.collection-description-container {
+    display: flex;
+    width: fit-content;
+    height: fit-content;
+    font-weight: 400;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+.container2 {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    width: 50%;
+    height: fit-content;
+}
+.save-button-container {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+    color: var(--text-primary);
+}
+.save-collected-post-bttn {
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    background-color: var(--accent-dark);
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    color: var(--bg-primary);
+    font-weight: 600;
+    font-family: inherit;
+}
+.save-collected-post-bttn:hover {
+    background-color: var(--accent-dark-hover);
+}
+.save-collected-post-bttn:active {
+    transform: scale(0.97);
+}
+.save-collected-post-bttn:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+}
+
+/* ── Saving/loading overlays ── */
+.saving-loding-container {
+    display: flex;
+    position: absolute;
+    width: 95%;
+    height: 95%;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(5px);
+    border-radius: 15px;
+    gap: 1rem;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: var(--text-primary);
+    z-index: 131;
+}
+.deleting-collection-loading-container {
+    position: absolute;
+    display: flex;
+    z-index: 132;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(5px);
+    border-radius: 15px;
+}
+
+/* ── Toast: deleted message ── */
+.deleted-message-container {
+    position: fixed;
+    z-index: 200;
+    background-color: var(--color-danger);
+    padding: 0.6rem 1.2rem;
+    border-radius: 10px;
+    color: #ffffff;
+    font-weight: 600;
+    bottom: 2rem;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: fit-content;
+    transform: translateY(0);
+    max-width: calc(100% - 2rem);
+    text-align: center;
+    box-shadow: var(--shadow-dropdown);
+    animation: toast-enter 0.2s ease;
+    white-space: nowrap;
+}
+
+/* ── Toast: privacy updated ── */
+.update-privacy-message-container {
+    position: fixed;
+    z-index: 200;
+    background-color: var(--color-success);
+    padding: 0.6rem 1.2rem;
+    border-radius: 10px;
+    color: #ffffff;
+    font-weight: 600;
+    bottom: 2rem;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: fit-content;
+    transform: translateY(0);
+    max-width: calc(100% - 2rem);
+    text-align: center;
+    box-shadow: var(--shadow-dropdown);
+    animation: toast-enter 0.2s ease;
+    white-space: nowrap;
+}
+
+/* ── Profile/viewer collection cards ── */
+.collection-container {
+    display: flex;
+    justify-content: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    width: 90%;
+    padding: 1.25rem;
+    height: fit-content;
+    margin-top: 1rem;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-radius: 20px;
+    border: 0.7px solid var(--border-light);
+    margin-bottom: 4rem;
+    transition: box-shadow 0.35s ease, border-color 0.35s ease;
+}
+.collection-container:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    border-color: var(--bg-glass-border);
+}
+.collection-container-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding-bottom: 0.5rem;
+    border-bottom: 0.5px solid var(--border-light);
+    margin-bottom: 0.25rem;
+}
+.collection-container-title {
+    margin: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: inherit;
+    letter-spacing: -0.01em;
+}
+.collection-container-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 0.35rem;
+    border-radius: 10px;
+    background-color: var(--bg-glass);
+    border: 0.5px solid var(--bg-glass-border);
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.collection-profile-loading-container {
+    display: flex;
+    width: 100%;
+    min-height: 180px;
+    justify-content: center;
+    align-items: center;
+}
+.collection-private-blocker {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(12px) saturate(0.8);
+    -webkit-backdrop-filter: blur(12px) saturate(0.8);
+    z-index: 136;
+    border-radius: 14px;
+    cursor: default;
+    user-select: none;
+}
+.private-blocker-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+}
+.private-blocker-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.85);
+}
+.private-blocker-label {
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.viewer {
+    display: flex;
+    width: 100%;
+    height: 20px;
+}
+
+/* ── View User Collection page (enhanced) ── */
+.view-collection-header {
+    position: fixed;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0 1rem;
+    width: inherit;
+    height: 60px;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-bottom: 0.7px solid var(--border-light);
+    z-index: 135;
+    user-select: none;
+}
+.view-collection-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 0.35rem;
+    border-radius: 10px;
+    background-color: var(--bg-glass);
+    border: 0.5px solid var(--bg-glass-border);
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.view-collection-body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 1rem;
+    padding-top: 80px;
+    min-height: 100vh;
+}
+.view-collection-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    min-height: 200px;
+}
+.view-collection-description-bar {
+    font-family: var(--font-serif);
+    font-size: 0.88rem;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    padding: 0.75rem 0;
+    margin-bottom: 0.75rem;
+    border-bottom: 0.7px solid var(--border-light);
+}
+
+/* ── Card grid ── */
+.view-collection-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.85rem;
+}
+
+/* ── Individual card ── */
+.view-collection-card {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.view-collection-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+    border-color: var(--bg-glass-border);
+}
+
+/* ── Card image ── */
+.view-card-image-wrapper {
+    position: relative;
+    width: 100%;
+    height: 160px;
+    overflow: hidden;
+}
+.view-card-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.35s ease, opacity 0.2s ease;
+}
+.view-collection-card:hover .view-card-image {
+    transform: scale(1.03);
+    opacity: 0.95;
+}
+.view-card-image-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.06) 0%, transparent 40%);
+    pointer-events: none;
+}
+
+/* ── Card content ── */
+.view-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.7rem 0.85rem 0.85rem;
+}
+.view-card-author {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.1rem;
+}
+.view-card-avatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 0.5px solid var(--border-card);
+}
+.view-card-author-name {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-faint);
+    letter-spacing: 0.01em;
+}
+.view-card-title {
+    font-family: "Lexend Deca", sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    letter-spacing: -0.02rem;
+    color: var(--text-heading);
+}
+.view-card-text {
+    font-family: var(--font-serif);
+    font-size: 0.82rem;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-body);
+}
+
+/* ── Legacy (kept for other usages) ── */
+.close-viewer-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+.close-button {
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: background-color 0.15s ease;
+    color: var(--text-primary);
+}
+.close-button:hover {
+    background-color: var(--bg-hover);
+}
+.close-button:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+}
+
+/* ── Back button ── */
+.back-button {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
+    color: var(--text-primary);
+}
+.back-button:hover {
+    background-color: var(--bg-hover);
+}
+.back-button:focus-visible {
+    outline: 2px solid var(--accent-purple);
+    outline-offset: 2px;
+}
+
+/* ══════════════════════════════════════════════
+   Responsive: 768px
+   ══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .collection-cards {
+        width: calc(50% - 0.5rem);
+    }
+    .collections {
+        width: calc(50% - 0.5rem);
+    }
+    .skeleton-card {
+        width: calc(50% - 0.5rem);
+    }
+    .collection-Name-description {
+        flex-direction: column-reverse;
+        width: 92%;
+    }
+    .container1 {
+        width: 100%;
+    }
+    .container2 {
+        width: 100%;
+        justify-content: center;
+    }
+    .view-collection-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .cv-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ══════════════════════════════════════════════
+   Responsive: 480px
+   ══════════════════════════════════════════════ */
+@media (max-width: 480px) {
+    .collection-header {
+        width: 100%;
+    }
+    .collections-intro-h3 {
+        font-size: 1.4rem;
+    }
+    .collections-intro {
+        text-align: center;
+        font-size: 0.8rem;
+        padding: 1rem;
+        height: auto;
+    }
+    .collection-cards {
+        width: 100%;
+        height: 200px;
+    }
+    .collection-gradient-header {
+        height: 100px;
+    }
+    .collections {
+        width: 100%;
+    }
+    .view-collection-grid {
+        grid-template-columns: 1fr;
+    }
+    .view-card-image-wrapper {
+        height: 140px;
+    }
+    .view-collection-header {
+        width: 100%;
+    }
+    .cv-grid {
+        grid-template-columns: 1fr;
+    }
+    .skeleton-card {
+        width: 100%;
+        height: 160px;
+    }
+    .collection-cards-selected-old-post {
+        width: 45%;
+    }
+    .create-or-add-container {
+        width: 90%;
+        height: 40px;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .collection-journal-cards-container {
+        display: flex;
+        position: relative;
+        top: 335px;
+        width: 100%;
+        min-height: 100vh;
+        align-items: flex-start;
+        justify-content: center;
+    }
+    .collection-journal-cards {
+        width: 95%;
+        height: auto;
+    }
+    .collection-name-container {
+        font-size: 1rem;
+    }
+    .collections-title {
+        font-size: 0.85rem;
+    }
+    .bookshelf {
+        width: 150px !important;
+        height: 150px !important;
+    }
+    .view-collection-body {
+        margin-bottom: 4rem;
+    }
+    .collection-container {
+        width: 95%;
+        margin-bottom: 4rem;
+        height: fit-content;
+        padding: 0.75rem;
+    }
+    .saving-loding-container {
+        width: 93%;
+    }
+    .notCollectedJournalList {
+        width: 90%;
+        border-radius: 12px;
+    }
+    .older-post-container {
+        width: 92%;
+        border-radius: 12px;
+    }
+    .collection-editor {
+        position: absolute;
+        top: 100px;
+        transform: translateX(-50%);
+        background-color: var(--bg-glass);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--bg-glass-border);
+        box-shadow: var(--shadow-modal);
+        width: 90%;
+        max-height: 85vh;
+        overflow-y: auto;
+        z-index: 128;
+        border-radius: 16px;
+    }
+}

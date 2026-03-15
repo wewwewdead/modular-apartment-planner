@@ -1,0 +1,48 @@
+import React from 'react';
+import {StyleSheet, TextInput, View, type TextInputProps} from 'react-native';
+import {useTheme} from '../theme/ThemeProvider';
+import {fonts} from '../theme/typography';
+import {spacing, radii} from '../theme/spacing';
+import {SearchIcon} from './icons';
+
+interface SearchInputProps extends Omit<TextInputProps, 'style'> {
+  containerStyle?: any;
+}
+
+export function SearchInput({containerStyle, ...props}: SearchInputProps) {
+  const {colors} = useTheme();
+
+  return (
+    <View
+      style={[
+        styles.container,
+        {backgroundColor: colors.bgSecondary, borderColor: colors.borderLight},
+        containerStyle,
+      ]}>
+      <SearchIcon size={18} color={colors.textMuted} />
+      <TextInput
+        style={[styles.input, {color: colors.textPrimary}]}
+        placeholderTextColor={colors.textMuted}
+        {...props}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+    height: 44,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.ui.regular,
+    padding: 0,
+  },
+});

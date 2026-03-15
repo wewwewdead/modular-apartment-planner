@@ -1,0 +1,82 @@
+# Plan: Make Dimension "Measured" Length Editable
+
+## Context
+
+When a dimension annotation is selected, the properties panel shows a "Measured" field that displays the computed distance — but it's **read-only**. The user wants to type a new length value and have the dimension's endpoint move accordingly, so they can adjust dimension length directly from the panel.
+
+## File to Change
+
+| File | Action |
+|------|--------|
+| `src/ui/PropertiesPanel.jsx` | In `AnnotationProperties` (~line 530), replace the read-only "Measured" `InputField` with an editable one that computes a new `endPoint` based on the entered length |
+
+No other files need changes — all geometry utilities (`normalize`, `subtract`, `distance`) are already available via `src/geometry/point.js`.
+
+## Approach
+
+### Step 1: Import `normalize`, `subtract`, `add`, `scale` from point geometry
+
+These are already imported in `dimensions.js` but not in `PropertiesPanel.jsx`. Add:
+
+```js
+import { normalize, subtract, add, scale } from '@/geometry/point';
+```
+
+### Step 2: Replace the read-only "Measured" field with an editable one
+
+In `AnnotationProperties` (~line 530), change:
+
+```jsx
+<InputField
+  label="Measured" type="number" suffix={u.suffix}
+  value={u.toDisplay(measuredValue)}
+  readOnly
+/>
+```
+
+to an editable field with an `onChange` handler that computes a new `endPoint`:
+
+```jsx
+<InputField
+  label="Measured" type="number" suffix={u.suffix} step={u.step(100)}
+  value={u.toDisplay(measuredValue)}
+  onChange={(value) => {
+    const newLen = u.fromDisplay(value);
+    if (newLen <= 0) return;
+    const s = annotation.startPoint;
+    const e = annotation.endPoint;
+    const mode = annotation.mode;
+    let newEnd;
+    if (mode === 'horizontal') {
+      const sign = e.x >= s.x ? 1 : -1;
+      newEnd = { ...e, x: s.x + sign * newLen };
+    } else if (mode === 'vertical') {
+      const sign = e.y >= s.y ? 1 : -1;
+      newEnd = { ...e, y: s.y + sign * newLen };
+    } else {
+      // aligned — move endPoint along the start→end direction
+      const dir = normalize(subtract(e, s));
+      newEnd = add(s, scale(dir, newLen));
+    }
+    updateAnnotation({ endPoint: newEnd });
+  }}
+/>
+```
+
+**Mode-specific logic:**
+- **aligned**: Preserves the direction from start→end, places endPoint at the new length along that vector
+- **horizontal**: Only adjusts `endPoint.x`, preserving `endPoint.y` and the left/right direction
+- **vertical**: Only adjusts `endPoint.y`, preserving `endPoint.x` and the top/bottom direction
+
+## Key Files
+
+- `src/ui/PropertiesPanel.jsx` — `AnnotationProperties` (line ~473)
+- `src/geometry/point.js` — `normalize`, `subtract`, `add`, `scale` (to import)
+
+## Verification
+
+1. `npx vite build` — no errors
+2. Select a dimension annotation → "Measured" field is now editable
+3. Type a new length → endPoint moves, dimension updates visually
+4. Works correctly for all three modes (aligned, horizontal, vertical)
+5. Existing start/end point fields still work independently

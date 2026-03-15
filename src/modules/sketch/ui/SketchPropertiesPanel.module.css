@@ -1,0 +1,273 @@
+.panel {
+  background: var(--color-panel-bg);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.header {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-primary);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-workspace-sketch, #B8860B);
+}
+
+.content {
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.empty {
+  padding: var(--space-xl) var(--space-lg);
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.groupTitle {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.fieldLabel {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  min-width: 50px;
+}
+
+.fieldInput {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
+.fieldRow {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.fieldRow .field {
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.fieldRow .fieldInput {
+  width: 100%;
+}
+
+.numberInput {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  text-align: right;
+}
+
+.numberInput:focus {
+  outline: none;
+  border-color: var(--color-workspace-sketch, #B8860B);
+  box-shadow: 0 0 0 1px rgba(184, 134, 11, 0.2);
+}
+
+.textInput {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.textInput:focus {
+  outline: none;
+  border-color: var(--color-workspace-sketch, #B8860B);
+}
+
+.selectInput {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.selectInput:focus {
+  outline: none;
+  border-color: var(--color-workspace-sketch, #B8860B);
+}
+
+.colorInput {
+  width: 28px;
+  height: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.suffix {
+  font-family: var(--font-blueprint);
+  font-size: 9px;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.duplicateBtn {
+  margin-top: var(--space-sm);
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.duplicateBtn:hover {
+  background: rgba(184, 134, 11, 0.08);
+  color: var(--color-workspace-sketch, #B8860B);
+  border-color: rgba(184, 134, 11, 0.3);
+}
+
+.duplicateBtn:active {
+  transform: scale(0.97);
+}
+
+.constraintSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.constraintItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.constraintDelete {
+  background: none;
+  border: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+}
+
+.constraintDelete:hover {
+  color: #CD5C5C;
+}
+
+.quickRotateBtn {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.quickRotateBtn:hover {
+  background: rgba(184, 134, 11, 0.08);
+  color: var(--color-workspace-sketch, #B8860B);
+  border-color: rgba(184, 134, 11, 0.3);
+}
+
+.quickRotateBtn:active {
+  transform: scale(0.97);
+}
+
+.flipBtn {
+  flex: 1;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.flipBtn:hover {
+  background: rgba(184, 134, 11, 0.08);
+  color: var(--color-workspace-sketch, #B8860B);
+  border-color: rgba(184, 134, 11, 0.3);
+}
+
+.flipBtnActive {
+  background: rgba(184, 134, 11, 0.15);
+  color: var(--color-workspace-sketch, #B8860B);
+  border-color: var(--color-workspace-sketch, #B8860B);
+  font-weight: 600;
+}
+
+.flipBtnActive:hover {
+  background: rgba(184, 134, 11, 0.2);
+}
+
+.typeBadge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-workspace-sketch, #B8860B);
+  background: rgba(184, 134, 11, 0.1);
+  padding: 2px 8px;
+  border-radius: 8px;
+}

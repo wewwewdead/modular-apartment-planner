@@ -1,0 +1,58 @@
+# Plan: Make PostCard ActionBar Buttons Functional
+
+## Context
+The PostCard ActionBar renders 4 action buttons (React/Like, Comment, Bookmark, Repost) but only the React button is wired in HomeFeedScreen. The other three are dead buttons. ProfileWritingsTab has none wired at all. All the necessary APIs (`toggleBookmark`, `createRepost`, `toggleReaction`) already exist in `socialApi.ts`, and PostDetailScreen already has working implementations we can follow.
+
+## Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `apps/mobile/src/hooks/useSocialMutations.ts` | **NEW** — shared `useBookmarkMutation` and `useRepostMutation` hooks |
+| `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` | Wire `onComment`, `onBookmark`, `onRepost`, `isBookmarked` to PostCard |
+| `apps/mobile/src/screens/Profile/ProfileWritingsTab.tsx` | Wire all action callbacks (`onReact`, `onComment`, `onBookmark`, `onRepost`, `isBookmarked`) to PostCard |
+
+No changes needed to PostCard.tsx, ActionBar.tsx, or socialApi.ts — they already support everything.
+
+## Implementation
+
+### 1. Create shared hooks — `hooks/useSocialMutations.ts`
+
+Two hooks to avoid duplicating mutation logic across screens:
+
+**`useBookmarkMutation(token, queryKey)`**
+- `mutationFn`: calls `socialApi.toggleBookmark(token, {journalId})`
+- `onMutate`: optimistic toggle of `has_bookmarked` and `bookmark_count` on the item in the infinite query cache (same paginated `setQueryData` pattern the existing `reactionMutation` uses in HomeFeedScreen)
+- `onError`: rollback + Alert
+- `onSettled`: invalidate query
+
+**`useRepostMutation(token)`**
+- `mutationFn`: calls `socialApi.createRepost(token, {sourceJournalId})`
+- `onSuccess`: `Alert.alert('Reposted', ...)` + invalidate `['feed']`
+- `onError`: Alert
+- No optimistic update needed (repost creates a new item, not a toggle)
+
+### 2. HomeFeedScreen — wire missing callbacks
+
+- Import and instantiate `useBookmarkMutation(token, ['feed', user?.id])` and `useRepostMutation(token)`
+- Add three handlers:
+  - `handleComment(journalId)` → `navigation.navigate('PostDetail', {journalId})` (navigates to post detail where comments work)
+  - `handleBookmark(journalId)` → `bookmarkMutation.mutate(journalId)`
+  - `handleRepost(journalId)` → `Alert.alert('Repost', 'Repost this to your feed?', [Cancel, {Repost → repostMutation.mutate(journalId)}])`
+- Pass to PostCard: `onComment`, `onBookmark`, `onRepost`, `isBookmarked={!!item.has_bookmarked}`
+
+### 3. ProfileWritingsTab — wire all action callbacks
+
+Currently has zero action callbacks. Add:
+
+- **Reaction**: inline `reactionMutation` (same pattern as HomeFeedScreen but keyed to `['profileWritings', userId]`) with optimistic update
+- **Bookmark/Repost**: use the shared hooks from step 1
+- **Comment**: same `navigation.navigate('PostDetail', {journalId})` pattern
+- Pass all to PostCard: `onReact`, `onComment`, `onBookmark`, `onRepost`, `isBookmarked`
+
+## Verification
+1. **Home feed — Bookmark**: Tap bookmark icon → icon fills/unfills instantly (optimistic), count updates
+2. **Home feed — Comment**: Tap comment icon → navigates to PostDetailScreen
+3. **Home feed — Repost**: Tap repost icon → confirmation alert → "Reposted" success alert
+4. **Profile writings — all buttons**: Same behavior as home feed
+5. **Profile writings — React**: Long-press heart → reaction picker works
+6. **Error case**: Log out token → tapping any action shows appropriate error message

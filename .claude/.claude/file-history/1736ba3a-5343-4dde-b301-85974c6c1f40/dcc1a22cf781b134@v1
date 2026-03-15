@@ -1,0 +1,67 @@
+# Fix GradeBot "waiting for this message" WhatsApp delivery issue
+
+## Context
+The GradeBot WhatsApp bot (single-number mode) logs show replies as sent and verified, but the WhatsApp phone client displays "waiting for this message. This may take a while." The Baileys logs show `Closing session` and `Decrypted message with closed session` — indicating the Signal Protocol encryption session between the bot's multi-device instance and the phone is desynchronized.
+
+**Root cause:** The bot's `makeWASocket` configuration at `handler.js:117-123` is missing a `getMessage` callback. When WhatsApp detects the recipient (the phone) can't decrypt a message, it asks the sender (the bot) to retry. Without `getMessage`, Baileys can't fulfill the retry request, so the phone permanently shows "waiting for this message."
+
+## Changes
+
+### 1. Add a sent-message store and `getMessage` handler
+
+**File:** `C:\Users\johnm\teacher-gradebot\src\whatsapp\handler.js`
+
+**a)** Add a `sentMessageStore` Map in the constructor (alongside the existing caches around lines 93-102) to temporarily hold outgoing messages keyed by `remoteJid::messageId`:
+
+```js
+this.sentMessageStore = new Map();
+```
+
+**b)** In `connect()`, add the `getMessage` callback to `makeWASocket` options (lines 117-123):
+
+```js
+this.socket = makeWASocket({
+  version,
+  auth: state,
+  browser: ["Teacher GradeBot", "Terminal", "1.0.0"],
+  logger: pino({ level: "silent" }),
+  syncFullHistory: false,
+  getMessage: async (key) => {
+    const storeKey = `${key.remoteJid}::${key.id}`;
+    return this.sentMessageStore.get(storeKey) || undefined;
+  },
+});
+```
+
+**c)** In `sendReplyToTarget()` (line 318), after the `sendMessage` call succeeds, store the message content in the map with a TTL cleanup:
+
+```js
+const sendResult = await this.socket.sendMessage(targetJid, { text: replyText });
+const outboundId = sendResult?.key?.id || "";
+
+// Store for getMessage retry callback
+if (outboundId) {
+  const storeKey = `${targetJid}::${outboundId}`;
+  this.sentMessageStore.set(storeKey, { conversation: replyText });
+  setTimeout(() => this.sentMessageStore.delete(storeKey), 5 * 60 * 1000);
+}
+```
+
+### 2. Clear stale session files (one-time operational step)
+
+After the code change, stop the bot, delete the session files, and re-scan QR:
+
+```bash
+# Stop the bot first, then:
+rm teacher-gradebot/data/wa-session/session-*.json
+# Restart and scan QR again
+```
+
+This forces fresh Signal Protocol session negotiation. The `getMessage` handler then prevents the issue from recurring.
+
+## Verification
+1. Start the bot, scan QR code
+2. Send "hello" from WhatsApp phone to yourself (single-number mode)
+3. Confirm the reply appears normally (no "waiting for this message")
+4. Check logs: no more `Closing session` / `Decrypted message with closed session` warnings
+5. Send a few more messages to confirm stability

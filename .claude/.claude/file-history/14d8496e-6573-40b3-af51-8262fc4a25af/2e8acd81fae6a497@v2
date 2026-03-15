@@ -1,0 +1,154 @@
+import React, { useCallback, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+
+import { EmptyState } from '../../components/EmptyState';
+import { CartItem, computeCartTotal } from '../../domain/models';
+import { RootStackScreenProps } from '../../navigation/types';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+import { spacing } from '../../theme/spacing';
+import { BudgetBar } from './components/BudgetBar';
+import { CartHero } from './components/CartHero';
+import { CartItemRow } from './components/CartItemRow';
+import { CartStatusButton } from './components/CartStatusButton';
+import { CartSummaryBar } from './components/CartSummaryBar';
+import { StoreGroupToggle } from './components/StoreGroupToggle';
+
+type Props = RootStackScreenProps<'CartDetail'>;
+
+export function CartDetailScreen({ route }: Props) {
+  const appState = useAppStore(state => state.appState);
+  const toggleCartItemFulfillment = useAppStore(state => state.toggleCartItemFulfillment);
+  const advanceCartStatus = useAppStore(state => state.advanceCartStatus);
+  const [groupByStore, setGroupByStore] = useState(false);
+
+  const cart = useMemo(
+    () => appState?.vault.carts.find(entry => entry.id === route.params.cartId),
+    [appState, route.params.cartId]
+  );
+
+  const total = useMemo(
+    () => (appState && cart ? computeCartTotal(appState.vault, cart) : 0),
+    [appState, cart]
+  );
+
+  const sortedItems = useMemo(() => {
+    if (!cart) return [];
+    const items = [...cart.cartItems];
+    if (groupByStore) {
+      items.sort((a, b) => {
+        const storeA = a.actualStore ?? a.plannedStore;
+        const storeB = b.actualStore ?? b.plannedStore;
+        return storeA.localeCompare(storeB);
+      });
+    }
+    // Show unfulfilled first
+    items.sort((a, b) => Number(a.isFulfilled) - Number(b.isFulfilled));
+    return items;
+  }, [cart, groupByStore]);
+
+  const fulfilledCount = useMemo(
+    () => (cart ? cart.cartItems.filter(i => i.isFulfilled).length : 0),
+    [cart]
+  );
+
+  const handleFulfill = useCallback(
+    (cartItemId: string) => {
+      if (!cart) return;
+      toggleCartItemFulfillment(cart.id, cartItemId).catch(() => undefined);
+    },
+    [cart, toggleCartItemFulfillment]
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: CartItem }) => (
+      <CartItemRow
+        item={item}
+        isShopping={cart?.status === 'shopping'}
+        onFulfill={() => handleFulfill(item.id)}
+      />
+    ),
+    [cart?.status, handleFulfill]
+  );
+
+  if (!appState || !cart) return null;
+
+  const isShopping = cart.status === 'shopping';
+  const isCompleted = cart.status === 'completed';
+
+  return (
+    <GestureHandlerRootView style={styles.screen}>
+      <FlatList
+        data={sortedItems}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <CartHero cart={cart} />
+            <BudgetBar spent={total} budget={cart.budget} />
+            {!isCompleted && (
+              <View style={styles.controls}>
+                <StoreGroupToggle
+                  grouped={groupByStore}
+                  onToggle={() => setGroupByStore(prev => !prev)}
+                />
+              </View>
+            )}
+            <CartStatusButton
+              status={cart.status}
+              onPress={() => { advanceCartStatus(cart.id).catch(() => undefined); }}
+            />
+          </View>
+        }
+        ListEmptyComponent={
+          <EmptyState title="No items" message="This cart has no items yet." />
+        }
+        initialNumToRender={10}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        ItemSeparatorComponent={ItemSeparator}
+      />
+
+      {(isShopping || isCompleted) && (
+        <CartSummaryBar
+          fulfilledCount={fulfilledCount}
+          totalCount={cart.cartItems.length}
+          runningTotal={total}
+        />
+      )}
+    </GestureHandlerRootView>
+  );
+}
+
+function ItemSeparator() {
+  return <View style={separatorStyles.separator} />;
+}
+
+const separatorStyles = StyleSheet.create({
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
+    marginHorizontal: 20,
+  },
+});
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    paddingBottom: 100,
+  },
+  header: {
+    padding: spacing.xl,
+    gap: 16,
+  },
+  controls: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+});

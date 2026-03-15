@@ -1,0 +1,30 @@
+To make the physics feel like a "cosmic dance" rather than a chaotic collision, we need to implement Newton’s Law of Universal Gravitation, but tweaked for a 2D digital interface.In a real universe, gravity is $F = G \frac{m_1 m_2}{r^2}$. However, in a web app, if $r$ (distance) gets too small, the force becomes infinite and stars fly off the screen like bullets. We’ll use "Softening" to keep it smooth.The Physics LogicWe need to calculate the force vector between Star A and Star B.Direction: The angle between the two stars.Magnitude: How strong the pull is (based on Similarity + Mass).Softening ($e$): A small constant added to the distance to prevent "infinite gravity" explosions.🛠️ The "Universal Gravitation" Code for ClaudeCopy this into your project or give it to Claude to implement within your requestAnimationFrame loop:JavaScript/**
+ * Calculates the gravitational pull between two stars
+ * @param {Object} p1 - Star A (x, y, mass, embedding)
+ * @param {Object} p2 - Star B (x, y, mass, embedding)
+ * @param {number} similarity - Cosine similarity (0 to 1)
+ */
+function calculateSemanticGravity(p1, p2, similarity) {
+  const G = 0.5; // Gravitational Constant (Adjust for "strength")
+  const softening = 20; // Prevents stars from "exploding" when too close
+  
+  // 1. Calculate Distance
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const distanceSq = dx * dx + dy * dy;
+  const distance = Math.sqrt(distanceSq);
+
+  // 2. Semantic Multiplier
+  // We amplify gravity if they are semantically similar
+  const semanticPower = Math.pow(similarity, 2); 
+
+  // 3. Newton's Formula: F = G * (m1 * m2) / (r^2 + e)
+  const forceMagnitude = (G * (p1.mass * p2.mass) * semanticPower) / (distanceSq + softening);
+
+  // 4. Convert to Vector
+  return {
+    fx: forceMagnitude * (dx / distance),
+    fy: forceMagnitude * (dy / distance)
+  };
+}
+🚀 Scaling the Math for 1 Million UsersIf you run this for every star against every other star, the complexity is $O(n^2)$.For 3 Users: You are doing 9 calculations (easy).For 1,000 Users: You are doing 1,000,000 calculations (your browser will lag).The Solution: The Barnes-Hut Algorithm.Instead of calculating every star, you group distant stars into a single "Super-Star" (the Galaxy Centroid).If a Galaxy is far away, just calculate the pull toward the Galaxy Sun.If the Galaxy is close, calculate the pull of the individual stars.

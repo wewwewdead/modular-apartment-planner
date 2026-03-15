@@ -1,0 +1,536 @@
+.notifications-header{
+    position: fixed;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    width: 716px;
+    height: 60px;
+    user-select: none;
+    background-color: rgba(255, 255, 255, 0.23);
+    backdrop-filter: blur(25px);
+    z-index: 2;
+    border-bottom: 0.7px solid rgba(151, 151, 151, 0.168);
+}
+.first-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    gap: 1rem;
+}
+.second-container{
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    height: 80px;
+    gap: 1rem;
+}
+.all-notification-container{
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+.unread-notification-container{
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+.notification-loading-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100vh;
+}
+
+.notifications-header-text{
+    padding: 0;
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.notifications-container{
+    position: absolute;
+    top: 95px;
+    width: 100%;
+    height: fit-content;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    overflow-y: auto;
+}
+.notification-cards{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-backdrop);
+    width: 100%;
+    height: 180px;
+    border-bottom: 0.7px solid rgba(151, 151, 151, 0.363);
+}
+.notification-cards-unread{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(237, 250, 255, 0.544);
+    width: 100%;
+    height: 180px;
+    border-bottom: 0.7px solid rgba(151, 151, 151, 0.363);
+}
+.notification-cards-child-container{
+    display: flex;
+    width: 95%;
+    height: 85%;
+    align-items: center;
+    justify-content: space-between;
+}
+.notification-inview-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 50px;
+    width: 100%;
+}
+.notification-icon-container{
+    height: 100%;
+    width: fit-content;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+.notification-contents-container{
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 95%;
+}
+.notification-icon{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.notification-sender-user-metadata{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.notification-sender-user-metadata-child{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    gap: 0.5rem;
+}
+.notification-settings{
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    cursor: pointer;
+}
+.settings-container{
+    position: absolute;
+    width: 200px;
+    height: 80px;
+    top: 20px;
+    right: 20px;
+    z-index: 11;
+    background-color: rgb(255, 255, 255);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: 10px;
+    padding: 0.5rem;
+}
+.delete-notification{
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: 660;
+    gap: 0.5rem;
+    border-radius: 5px;
+    padding: 0.5rem;
+    transition: ease-in-out 0.2s;
+}
+.delete-notification:hover{
+    background-color: rgb(244, 244, 244);
+}
+.notif-sender-name-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    gap: 0.5rem;
+}
+.notif-sender-name{
+    padding: 0;
+    margin: 0;
+    font-weight: 660;
+}
+.notif-type{
+    padding: 0;
+    margin: 0;
+    font-size: 0.8rem;
+}
+.notification-date-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    padding: 0.2rem;
+    background-color: rgb(239, 239, 239);
+    border-radius: 5px;
+}
+.notification-date{
+    padding: 0;
+    margin: 0;
+    font-size: 0.6rem;
+    font-weight: 550;
+    color: rgb(120, 120, 120);
+}
+.notification-content{
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    height: 100%;
+    cursor: pointer;
+    user-select: none;
+}
+.notification-content-text{
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    width: 84%;
+    height: 100%;
+    color: var(--text-body);
+}
+.notif-content-title{
+    padding: 0;
+    margin: 0rem;
+    font-size: 1.4rem;
+    font-weight: 760;
+    color: var(--text-heading);
+}
+.notif-content-sliced-text{
+    padding: 0;
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    font-weight: 550;
+    color: var(--text-body);
+}
+.notif-content-image-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: 100%;
+}
+.notif-content-image{
+    width: 100px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 5px;
+}
+.notif-sender-profilepic-container{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    border-radius: 50%;
+}
+.notif-sender-profilepic-container.notif-avatar-ring-legend{
+    border: 2px solid #FFD700;
+    box-shadow: 0 0 8px 1px rgba(255, 215, 0, 0.3);
+}
+.notif-sender-profilepic-container.notif-avatar-ring-og{
+    border: 2px solid #9B59FF;
+    box-shadow: 0 0 8px 1px rgba(155, 89, 255, 0.3);
+}
+.notif-sender-profilepic{
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+
+/* unread notification css */
+.unread-notification-component-container{
+    position: absolute;
+    top: 95px;
+    width: 100%;
+    height: fit-content;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    overflow-y: auto;
+}
+
+/* Constellation notification buttons */
+.constellation-respond-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.constellation-accept-btn {
+    padding: 6px 16px;
+    background: rgba(95, 255, 176, 0.12);
+    border: 1px solid rgba(95, 255, 176, 0.4);
+    border-radius: 8px;
+    color: #5fffb0;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.constellation-accept-btn:hover {
+    background: rgba(95, 255, 176, 0.2);
+    border-color: rgba(95, 255, 176, 0.6);
+}
+
+.constellation-decline-btn {
+    padding: 6px 16px;
+    background: rgba(255, 95, 95, 0.1);
+    border: 1px solid rgba(255, 95, 95, 0.3);
+    border-radius: 8px;
+    color: rgba(255, 95, 95, 0.8);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.constellation-decline-btn:hover {
+    background: rgba(255, 95, 95, 0.18);
+    border-color: rgba(255, 95, 95, 0.5);
+}
+
+/* mobile responsive */
+@media(max-width: 768px){
+    .notifications-header {
+        position: fixed;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+        width: 514px;
+        height: 60px;
+        user-select: none;
+        background-color: rgba(255, 255, 255, 0.23);
+        backdrop-filter: blur(25px);
+        z-index: 2;
+        border-bottom: 0.7px solid rgba(151, 151, 151, 0.168);
+}
+}
+
+@media (max-width: 428px){
+    .notifications-header {
+        position: fixed;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+        width: 400px;
+        height: 60px;
+        user-select: none;
+        background-color: rgba(255, 255, 255, 0.23);
+        backdrop-filter: blur(25px);
+        z-index: 2;
+        border-bottom: 0.7px solid rgba(151, 151, 151, 0.168);
+    }
+
+    .notification-loading-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 430px;
+        height: 100vh;
+    }
+
+    .notifications-container {
+        position: absolute;
+        top: 95px;
+        width: 430px;
+        height: fit-content;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        overflow-y: auto;
+    }
+
+    .notif-sender-name {
+        padding: 0;
+        margin: 0;
+        font-weight: 660;
+        font-size: 0.8rem;
+    }
+
+    .notif-type {
+        padding: 0;
+        margin: 0;
+        font-size: 0.8rem;
+    }
+
+    .notif-content-title {
+        padding: 0;
+        margin: 0rem;
+        font-size: 1rem;
+        font-weight: 760;
+        color: var(--text-heading);
+    }
+
+    .notif-content-sliced-text {
+        padding: 0;
+        margin: 0;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        font-weight: 550;
+        color: var(--text-body);
+    }
+    .notif-content-image {
+        width: 120px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 5px;
+    }
+
+
+    .unread-notification-component-container {
+        position: absolute;
+        top: 95px;
+        width: 430px;
+        height: fit-content;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        overflow-y: auto;
+    }
+}
+
+@media (max-width: 480px){
+    .notifications-header {
+        position: fixed;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 1rem;
+        width: 100%;
+        height: 60px;
+        user-select: none;
+        background-color: rgba(255, 255, 255, 0.23);
+        backdrop-filter: blur(25px);
+        z-index: 2;
+        border-bottom: 0.7px solid rgba(151, 151, 151, 0.168);
+    }
+
+    .second-container {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+        height: 80px;
+        gap:1rem;
+        padding: 0rem 1rem;
+    }
+
+    .notification-loading-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 430px;
+        height: 100vh;
+    }
+
+    .notifications-container {
+        position: absolute;
+        top: 95px;
+        width: 430px;
+        height: fit-content;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        overflow-y: auto;
+    }
+
+    .notif-sender-name {
+        padding: 0;
+        margin: 0;
+        font-weight: 660;
+        font-size: 0.8rem;
+    }
+
+    .notif-type {
+        padding: 0;
+        margin: 0;
+        font-size: 0.8rem;
+    }
+
+    .notif-content-title {
+        padding: 0;
+        margin: 0rem;
+        font-size: 1rem;
+        font-weight: 760;
+        color: var(--text-heading);
+    }
+
+    .notif-content-sliced-text {
+        padding: 0;
+        margin: 0;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        font-weight: 550;
+        color: var(--text-body);
+    }
+    .notif-content-image {
+        width: 120px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 5px;
+    }
+
+
+    .unread-notification-component-container {
+        position: absolute;
+        top: 95px;
+        width: 430px;
+        height: fit-content;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        overflow-y: auto;
+    }
+}

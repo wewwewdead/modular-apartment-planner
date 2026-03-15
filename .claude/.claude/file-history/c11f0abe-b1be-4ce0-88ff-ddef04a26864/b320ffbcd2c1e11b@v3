@@ -1,0 +1,111 @@
+import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys'
+import P from 'pino'
+import qrcode from 'qrcode-terminal'
+
+const OLLAMA_URL = 'http://localhost:11434/api/chat'
+const MODEL = 'llama3'
+const SYSTEM_PROMPT = 'You are a helpful personal AI assistant responding via WhatsApp. Keep responses concise and conversational.'
+
+// Per-chat conversation history
+const chatHistories = new Map()
+
+async function chatWithOllama(remoteJid, userMessage) {
+  if (!chatHistories.has(remoteJid)) {
+    chatHistories.set(remoteJid, [])
+  }
+  const history = chatHistories.get(remoteJid)
+
+  history.push({ role: 'user', content: userMessage })
+
+  const res = await fetch(OLLAMA_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      stream: false,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history
+      ]
+    })
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Ollama error ${res.status}: ${err}`)
+  }
+
+  const data = await res.json()
+  const reply = data.message.content
+
+  history.push({ role: 'assistant', content: reply })
+
+  // Keep history from growing too large (last 50 messages)
+  if (history.length > 50) {
+    chatHistories.set(remoteJid, history.slice(-50))
+  }
+
+  return reply
+}
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: P({ level: 'silent' })
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) qrcode.generate(qr, { small: true })
+    if (connection === 'open') console.log('Connected to WhatsApp!')
+    if (connection === 'close') {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      if (shouldReconnect) startBot()
+      else console.log('Logged out. Delete auth_info folder and restart to re-link.')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    for (const msg of messages) {
+      const text = msg.message?.conversation
+        || msg.message?.extendedTextMessage?.text
+        || ''
+
+      if (!text || !text.startsWith('/')) continue
+
+      const jid = msg.key.remoteJid
+
+      // /clear command — reset conversation history
+      if (text.toLowerCase().startsWith('/clear')) {
+        chatHistories.delete(jid)
+        await sock.sendMessage(jid, { text: 'Conversation cleared.' })
+        console.log(`[${jid}] Conversation history cleared`)
+        continue
+      }
+
+      const userMessage = text.slice(1) // strip the "/" prefix
+      console.log(`[${jid}] > ${userMessage}`)
+
+      // React with a "thinking" emoji while processing
+      await sock.sendMessage(jid, { react: { text: '🤔', key: msg.key } })
+
+      try {
+        const reply = await chatWithOllama(jid, userMessage)
+        console.log(`[${jid}] < ${reply}`)
+        await sock.sendMessage(jid, { text: reply })
+      } catch (err) {
+        console.error(`[${jid}] Ollama error:`, err.message)
+        await sock.sendMessage(jid, { text: `Error: ${err.message}` })
+      }
+
+      // Remove the thinking reaction
+      await sock.sendMessage(jid, { react: { text: '', key: msg.key } })
+    }
+  })
+}
+
+startBot()

@@ -1,0 +1,746 @@
+     1→     1→import './profilepostcards.css';
+     2→     2→import '../../../RepostModal/repostmodal.css';
+     3→     3→import { createPortal } from 'react-dom';
+     4→     4→import { useAuth } from '../../../../Context/useAuth';
+     5→     5→import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+     6→     6→import { deleteJournal, deleteJournalImage, getJournalContent, getUserJournals, updateRepostCaption } from '../../../../../API/Api';
+     7→     7→import { useEffect, useCallback } from 'react';
+     8→     8→import { FadeLoader, MoonLoader } from 'react-spinners';
+     9→     9→import { useInView } from 'react-intersection-observer';
+    10→    10→import { useState } from 'react';
+    11→    11→import { AnimatePresence, motion } from 'framer-motion';
+    12→    12→import { handleCLickContent } from '../../../../../helpers/handleClicks';
+    13→    13→import { useNavigate } from 'react-router-dom';
+    14→    14→import EditJournal from './editJournal';
+    15→    15→import { useAddViewsMutation, useUpdateJournalPrivacyMutation } from '../../../../utils/useMutation';
+    16→    16→import VerifiedBadge from '../../../Badge/VerifiedBadge';
+    17→    17→import { handleImageFallback } from '../../../../utils/handleImageFallback';
+    18→    18→
+    19→    19→const ProfilePostCards = () =>{
+    20→    20→    const queryClient = useQueryClient();
+    21→    21→    const {user, session}= useAuth();
+    22→    22→    const navigate = useNavigate();
+    23→    23→
+    24→    24→    const [showEditor, setShowEditor] = useState(null);
+    25→    25→
+    26→    26→    const {ref, inView} = useInView({
+    27→    27→        threshold: 0.2
+    28→    28→    })
+    29→    29→
+    30→    30→    const settingsList = [
+    31→    31→        {
+    32→    32→            label: 'Delete journal',
+    33→    33→            className: 'delete-button',
+    34→    34→            actionDelete: (e, journalId) => handleClickDeleteJournal(e, journalId),
+    35→    35→            icon:
+    36→    36→            <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24" fill="none">
+    37→    37→                <path d="M10 12V17" stroke="rgb(255, 48, 48)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    38→    38→                <path d="M14 12V17" stroke="rgb(255, 48, 48)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    39→    39→                <path d="M4 7H20" stroke="rgb(255, 48, 48)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    40→    40→                <path d="M6 10V18C6 19.6569 7.34315 21 9 21H15C16.6569 21 18 19.6569 18 18V10" stroke="rgb(255, 48, 48)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    41→    41→                <path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z" stroke="rgb(255, 48, 48)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    42→    42→            </svg>
+    43→    43→        },
+    44→    44→        {
+    45→    45→            label: 'Edit journal',
+    46→    46→            className: 'edit-button',
+    47→    47→            actionEdit: (e, journalContent, journalId, journalTitle) => handleClickEdit(e, journalContent, journalId, journalTitle), // still in progress
+    48→    48→            icon: 
+    49→    49→            <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24" fill="none">
+    50→    50→                <path d="M18.3785 8.44975L11.4637 15.3647C11.1845 15.6439 10.8289 15.8342 10.4417 15.9117L7.49994 16.5L8.08829 13.5582C8.16572 13.1711 8.35603 12.8155 8.63522 12.5363L15.5501 5.62132M18.3785 8.44975L19.7927 7.03553C20.1832 6.64501 20.1832 6.01184 19.7927 5.62132L18.3785 4.20711C17.988 3.81658 17.3548 3.81658 16.9643 4.20711L15.5501 5.62132M18.3785 8.44975L15.5501 5.62132" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    51→    51→                <path d="M5 20H19" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    52→    52→            </svg>
+    53→    53→        },
+    54→    54→        {
+    55→    55→            label: 'Only me',
+    56→    56→            className: 'only-me-bttn',
+    57→    57→            actionOnlyMe: (e, privacy, journalId) => {handleEditJournalPrivacy(e, privacy, journalId)},
+    58→    58→            icon: 
+    59→    59→            <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 16 16" fill="none">
+    60→    60→                <g fill="#000000">
+    61→    61→                    <path fillRule="evenodd" d="M5.58 7C5.835 5.124 6.667 3.335 8 1.836a10.074 10.074 0 011.806 2.878.75.75 0 101.388-.568 11.412 11.412 0 00-1.322-2.372A6.503 6.503 0 0114.5 8 .75.75 0 0016 8a8 8 0 10-11.31 7.285.75.75 0 10.622-1.365A6.504 6.504 0 011.519 8.5h2.503c.04.563.122 1.12.248 1.668a.75.75 0 101.462-.336c-.1-.438-.17-.883-.205-1.332H7A.75.75 0 007 7H5.58zM4.07 7H1.576a6.508 6.508 0 014.552-5.226A11.095 11.095 0 004.068 7z" clipRule="evenodd"/>
+    62→    62→                    <path d="M11.75 12.25a.75.75 0 00-1.5 0v.5a.75.75 0 001.5 0v-.5z"/>
+    63→    63→                    <path fillRule="evenodd" d="M8.518 9.012c.035-.627.13-1.235.366-1.738.174-.37.435-.704.816-.94C10.08 6.101 10.52 6 11 6c.48 0 .921.1 1.3.334.381.236.642.57.816.94.236.503.331 1.111.366 1.738A2.25 2.25 0 0115.5 11.25v2.5A2.25 2.25 0 0113.25 16h-4.5a2.25 2.25 0 01-2.25-2.25v-2.5a2.25 2.25 0 012.018-2.238zM10.022 9c.032-.481.102-.838.22-1.087a.662.662 0 01.245-.302c.09-.055.243-.111.513-.111s.423.056.513.111c.087.054.17.141.246.302.117.249.187.606.219 1.087h-1.956zm3.228 1.5a.75.75 0 01.75.75v2.5a.75.75 0 01-.75.75h-4.5a.75.75 0 01-.75-.75v-2.5a.75.75 0 01.75-.75h4.5z" clipRule="evenodd"/>
+    64→    64→                </g>
+    65→    65→            </svg>
+    66→    66→        },
+    67→    67→        {
+    68→    68→            label: 'public',
+    69→    69→            className: 'public-post-bttn',
+    70→    70→            actionPublic: (e, privacy, journalId) => {handleEditJournalPrivacy(e, privacy, journalId)},
+    71→    71→            icon:
+    72→    72→            <svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 16 16" fill="none"><path fill="#000000" fillRule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM6.128 1.774A6.508 6.508 0 001.576 7H4.07a11.095 11.095 0 012.06-5.226zm3.744 0A11.096 11.096 0 0111.932 7h2.492a6.508 6.508 0 00-4.552-5.226zM10.42 7C10.165 5.124 9.333 3.335 8 1.836 6.667 3.335 5.835 5.124 5.58 7h4.84zM5.527 8.5h4.946C10.31 10.557 9.451 12.533 8 14.164 6.55 12.533 5.691 10.557 5.527 8.5zm-1.505 0H1.52a6.505 6.505 0 004.61 5.726C4.896 12.525 4.163 10.555 4.021 8.5zm5.85 5.726c1.231-1.701 1.964-3.671 2.106-5.726h2.503a6.505 6.505 0 01-4.61 5.726z" clipRule="evenodd"/></svg>
+    73→    73→        }
+    74→    74→    ]
+    75→    75→
+    76→    76→    const [showSettings, setShowSettings] = useState(null);
+    77→    77→    const [showConfirmationBttn, setShowConfirmationBttn] = useState(null);
+    78→    78→    const [journalData, setJournalData] = useState(null);
+    79→    79→    const [isDeletingJournal, setIsDeletingJournal] = useState(false);
+    80→    80→    const [journalIsDeleted, setJournalIsDeleted] = useState(false);
+    81→    81→    const [viewMode, setViewMode] = useState('grid');
+    82→    82→    const [showCaptionEditor, setShowCaptionEditor] = useState(null);
+    83→    83→    const [captionData, setCaptionData] = useState(null);
+    84→    84→    const [captionText, setCaptionText] = useState('');
+    85→    85→    const [isSavingCaption, setIsSavingCaption] = useState(false);
+    86→    86→    
+    87→    87→    const {
+    88→    88→        data,
+    89→    89→        fetchNextPage,
+    90→    90→        hasNextPage,
+    91→    91→        isFetchingNextPage,
+    92→    92→        isLoading,
+    93→    93→    } = useInfiniteQuery({
+    94→    94→        queryKey: ['userJournals', user?.userData?.[0].id],
+    95→    95→        queryFn: ({queryKey, pageParam}) => getUserJournals(pageParam, 5, queryKey[1], session?.access_token),
+    96→    96→        getNextPageParam: (lastPage) =>{
+    97→    97→            if(lastPage.hasMore){
+    98→    98→                const lastJournal = lastPage?.data[lastPage?.data.length - 1];
+    99→    99→                return new Date(lastJournal.created_at).toISOString();
+   100→   100→            } else {
+   101→   101→                return undefined;
+   102→   102→            }
+   103→   103→        },
+   104→   104→        enabled: !!user?.userData?.[0].id,
+   105→   105→        refetchOnWindowFocus: false,
+   106→   106→        staleTime: 1000 * 60 * 5,
+   107→   107→    })
+   108→   108→
+   109→   109→    
+   110→   110→    const clickContent = handleCLickContent(navigate);
+   111→   111→    const mutateViews = useAddViewsMutation(session);
+   112→   112→    const viewContent = (e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType = null, userReaction = null, reactionCount = 0) => {
+   113→   113→        const formadata = new FormData();
+   114→   114→
+   115→   115→        formadata.append('journalId', journalId);
+   116→   116→        mutateViews.mutate(formadata);
+   117→   117→        clickContent(e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType, userReaction, reactionCount)
+   118→   118→    }
+   119→   119→
+   120→   120→    const mutatePrivacy = useUpdateJournalPrivacyMutation(session);
+   121→   121→    const handleEditJournalPrivacy = (e, privacy, journalId) =>{
+   122→   122→        e.stopPropagation();
+   123→   123→        const onlyme = privacy === 'public' ? 'private' : 'public'
+   124→   124→        const formdata = new FormData();
+   125→   125→
+   126→   126→        formdata.append('journalId', journalId);
+   127→   127→        formdata.append('privacy', onlyme);
+   128→   128→        mutatePrivacy.mutate(formdata);    
+   129→   129→    }
+   130→   130→
+   131→   131→    const handleClickSettings = (e, journalId) =>{
+   132→   132→        e.stopPropagation();
+   133→   133→        setShowSettings(showSettings === journalId ? null : journalId)
+   134→   134→    }
+   135→   135→
+   136→   136→    const handleClickDeleteJournal = (e, journalId) =>{
+   137→   137→        e.stopPropagation();
+   138→   138→        setShowConfirmationBttn(showConfirmationBttn === journalId ? null : journalId)
+   139→   139→        setShowSettings(null)
+   140→   140→    }
+   141→   141→
+   142→   142→    const handleConfirmDeleteJournal = async(e, journalId, token, image_url) =>{
+   143→   143→        e.stopPropagation();
+   144→   144→
+   145→   145→        const imageUrlArray = [image_url];
+   146→   146→        const queryKey = ['userJournals', user?.userData?.[0].id];
+   147→   147→        let previousUserJournals = null;
+   148→   148→        // console.log({
+   149→   149→        //     journalId: journalId,
+   150→   150→        //     image_url: imageUrlArray,
+   151→   151→        //     token: token
+   152→   152→        // })
+   153→   153→
+   154→   154→        try {
+   155→   155→            setIsDeletingJournal(true);
+   156→   156→            previousUserJournals = queryClient.getQueryData(queryKey);
+   157→   157→
+   158→   158→            queryClient.setQueryData(queryKey, (old) => {
+   159→   159→                if (!old || !Array.isArray(old.pages)) return old;
+   160→   160→
+   161→   161→                return {
+   162→   162→                    ...old,
+   163→   163→                    pages: old.pages.map((page) => ({
+   164→   164→                        ...page,
+   165→   165→                        data: Array.isArray(page?.data)
+   166→   166→                            ? page.data.filter((journal) => journal?.id !== journalId)
+   167→   167→                            : page?.data
+   168→   168→                    }))
+   169→   169→                };
+   170→   170→            });
+   171→   171→
+   172→   172→            const deleteJournalPromise = deleteJournal(journalId, token,)
+   173→   173→            const deleteImageJournalPromise = image_url ? deleteJournalImage(token, imageUrlArray) : Promise.resolve(null);
+   174→   174→
+   175→   175→            const [deletePostJournal, deletePostJournalImage] = await Promise.allSettled([
+   176→   176→                deleteJournalPromise,
+   177→   177→                deleteImageJournalPromise,
+   178→   178→            ])
+   179→   179→            if(deletePostJournal || deletePostJournalImage){
+   180→   180→                // console.log({deletePostJournal: deletePostJournal, deletePostJournalImage: deletePostJournalImage})
+   181→   181→            }
+   182→   182→
+   183→   183→            if(deletePostJournal.status !== 'fulfilled'){
+   184→   184→                queryClient.setQueryData(queryKey, previousUserJournals);
+   185→   185→                throw deletePostJournal.reason || new Error('failed to delete journal');
+   186→   186→            }
+   187→   187→
+   188→   188→            setJournalIsDeleted(true)
+   189→   189→            // Only refetch the user's own journal list immediately.
+   190→   190→            // Mark other feeds as stale — they'll refetch on next visit.
+   191→   191→            queryClient.invalidateQueries({ queryKey: queryKey });
+   192→   192→            queryClient.invalidateQueries({ queryKey: ['journals'], refetchType: 'none' });
+   193→   193→            queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'], refetchType: 'none' });
+   194→   194→
+   195→   195→            setTimeout(() =>{
+   196→   196→                setIsDeletingJournal(false)
+   197→   197→                setJournalIsDeleted(false)
+   198→   198→                setShowConfirmationBttn(null)
+   199→   199→            }, 1500)
+   200→   200→
+   201→   201→        } catch (error) {
+   202→   202→            if(previousUserJournals){
+   203→   203→                queryClient.setQueryData(queryKey, previousUserJournals);
+   204→   204→            }
+   205→   205→            console.error("Error deleting journal:", error);
+   206→   206→            setIsDeletingJournal(false);
+   207→   207→        }
+   208→   208→    }
+   209→   209→
+   210→   210→    const handleClickEdit = async (e, journalContent, journalId, journalTitle) =>{
+   211→   211→        e.stopPropagation();
+   212→   212→        setShowSettings(null);
+   213→   213→        let content = journalContent;
+   214→   214→        if (!content) {
+   215→   215→            try {
+   216→   216→                const result = await getJournalContent(journalId);
+   217→   217→                content = result?.journal?.content;
+   218→   218→            } catch (err) {
+   219→   219→                console.error('failed to fetch journal for edit:', err);
+   220→   220→                return;
+   221→   221→            }
+   222→   222→        }
+   223→   223→        const data = {
+   224→   224→            content,
+   225→   225→            id: journalId,
+   226→   226→            title: journalTitle
+   227→   227→        }
+   228→   228→        setJournalData(data);
+   229→   229→        setShowEditor(showEditor === journalId ? null : journalId);
+   230→   230→    }
+   231→   231→
+   232→   232→    const handleClickCloseEditor = () => {
+   233→   233→        setShowEditor(null)
+   234→   234→    }
+   235→   235→
+   236→   236→    const handleClickEditRepostCaption = (e, journalId, currentCaption) => {
+   237→   237→        e.stopPropagation();
+   238→   238→        setShowSettings(null);
+   239→   239→        setCaptionData({id: journalId});
+   240→   240→        setCaptionText(currentCaption || '');
+   241→   241→        setShowCaptionEditor(journalId);
+   242→   242→    }
+   243→   243→
+   244→   244→    const handleSaveRepostCaption = async() => {
+   245→   245→        if(!captionData?.id || isSavingCaption) return;
+   246→   246→        try {
+   247→   247→            setIsSavingCaption(true);
+   248→   248→            await updateRepostCaption(session?.access_token, {
+   249→   249→                journalId: captionData.id,
+   250→   250→                caption: captionText
+   251→   251→            });
+   252→   252→            // Only refetch user's journals immediately; mark others stale.
+   253→   253→            queryClient.invalidateQueries({queryKey: ['userJournals']});
+   254→   254→            queryClient.invalidateQueries({queryKey: ['journals'], refetchType: 'none'});
+   255→   255→            queryClient.invalidateQueries({queryKey: ['visitedProfileJournals'], refetchType: 'none'});
+   256→   256→            setShowCaptionEditor(null);
+   257→   257→            setCaptionData(null);
+   258→   258→            setCaptionText('');
+   259→   259→        } catch (error) {
+   260→   260→            console.error('failed to update repost caption:', error);
+   261→   261→        } finally {
+   262→   262→            setIsSavingCaption(false);
+   263→   263→        }
+   264→   264→    }
+   265→   265→
+   266→   266→    const handleCloseCaptionEditor = () => {
+   267→   267→        setShowCaptionEditor(null);
+   268→   268→        setCaptionData(null);
+   269→   269→        setCaptionText('');
+   270→   270→    }
+   271→   271→
+   272→   272→    useEffect(() =>{
+   273→   273→        // console.log(data)
+   274→   274→    }, [data])
+   275→   275→
+   276→   276→    useEffect(() =>{
+   277→   277→        const handleClickOutsideSettings = (e) => {
+   278→   278→            e.stopPropagation();
+   279→   279→            if(showSettings !== null && !e.target.closest('.user-post-settings')){
+   280→   280→                setShowSettings(null)
+   281→   281→            }
+   282→   282→        }
+   283→   283→        
+   284→   284→        document.addEventListener('click', handleClickOutsideSettings);
+   285→   285→
+   286→   286→        return () => {
+   287→   287→            document.removeEventListener('click', handleClickOutsideSettings)
+   288→   288→        }
+   289→   289→    }, [showSettings])
+   290→   290→
+   291→   291→
+   292→   292→    const isLoadingMore = isFetchingNextPage || !hasNextPage
+   293→   293→    useEffect(() =>{
+   294→   294→        if(inView && !isLoadingMore){
+   295→   295→            fetchNextPage();
+   296→   296→        }
+   297→   297→    }, [fetchNextPage, isLoadingMore, inView])
+   298→   298→
+   299→   299→    const handleToggleView = useCallback(() => {
+   300→   300→        setViewMode((prev) => (prev === 'list' ? 'grid' : 'list'));
+   301→   301→    }, []);
+   302→   302→
+   303→   303→
+   304→   304→    const journals = data?.pages.flatMap((page) => page.data) || [];
+   305→   305→    if(isLoading){
+   306→   306→        return(
+   307→   307→            <>
+   308→   308→            <div className='profile-postcards-loading-container'>
+   309→   309→                <MoonLoader loading={isLoading} color="var(--loader-color)" size={20} speedMultiplier={0.5}/>
+   310→   310→            </div>
+   311→   311→            </>
+   312→   312→        )
+   313→   313→    }
+   314→   314→    if(data && journals?.length === 0){
+   315→   315→        return(
+   316→   316→            <div className='profile-postcards-loading-container'>
+   317→   317→                No post available!
+   318→   318→            </div>
+   319→   319→        )
+   320→   320→    }
+   321→   321→    return(
+   322→   322→        <>
+   323→   323→        <div className='profile-postcards-parent-container'>
+   324→   324→            <div className="postcards-header-row">
+   325→   325→                <h2 className="postcards-heading">
+   326→   326→                    Posts <span className="postcards-count">({journals.length})</span>
+   327→   327→                </h2>
+   328→   328→                <div className="postcards-header-actions">
+   329→   329→                    <button
+   330→   330→                        className={`postcards-view-toggle-btn ${viewMode === 'grid' ? 'is-active' : ''}`}
+   331→   331→                        onClick={handleToggleView}
+   332→   332→                        title={viewMode === 'grid' ? 'Switch to list' : 'Switch to grid'}
+   333→   333→                    >
+   334→   334→                        {viewMode === 'grid' ? (
+   335→   335→                            <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M120-520v-320h320v320H120Zm0 400v-320h320v320H120Zm400-400v-320h320v320H520Zm0 400v-320h320v320H520Z"/></svg>
+   336→   336→                        ) : (
+   337→   337→                            <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M120-200v-560h720v560H120Z"/></svg>
+   338→   338→                        )}
+   339→   339→                    </button>
+   340→   340→                </div>
+   341→   341→            </div>
+   342→   342→
+   343→   343→            {viewMode === 'grid' ? (
+   344→   344→                <div className="postcards-grid-view">
+   345→   345→                    {journals.map((journal) => {
+   346→   346→                        const previewText = journal?.preview_text || '';
+   347→   347→                        const thumbnail = journal?.thumbnail_url || null;
+   348→   348→                        return (
+   349→   349→                            <motion.div
+   350→   350→                                key={journal.id}
+   351→   351→                                className="postcards-grid-item"
+   352→   352→                                initial={{ opacity: 0, scale: 0.95 }}
+   353→   353→                                animate={{ opacity: 1, scale: 1 }}
+   354→   354→                                transition={{ duration: 0.25, ease: 'easeOut' }}
+   355→   355→                                onClick={(e) => viewContent(e, null, '', journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0].count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+   356→   356→                            >
+   357→   357→                                {showConfirmationBttn === journal.id && (
+   358→   358→                                    <AnimatePresence>
+   359→   359→                                    <div className="confirmation-delete-bg">
+   360→   360→                                        {journalIsDeleted && (
+   361→   361→                                            <motion.div
+   362→   362→                                                className='journal-is-deleted-message-container'
+   363→   363→                                                initial={{opacity: 0, scale: 0}}
+   364→   364→                                                animate={{opacity: 1, scale: 1, transition:{type: 'tween', duration: 0.1}}}
+   365→   365→                                                exit={{y: -900, opacity: 0, transition:{type:'tween', duration: 0.5, ease: 'easeOut'}}}
+   366→   366→                                            >
+   367→   367→                                                Journal deleted successfuly!
+   368→   368→                                                <svg xmlns="http://www.w3.org/2000/svg" height="44px" viewBox="0 -960 960 960" width="44px" fill="#00d61dff"><path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z"/></svg>
+   369→   369→                                            </motion.div>
+   370→   370→                                        )}
+   371→   371→
+   372→   372→                                        {isDeletingJournal && (
+   373→   373→                                            <div className='delete-journal-loader-container'>
+   374→   374→                                                <FadeLoader loading={isDeletingJournal} speedMultiplier={2}/>
+   375→   375→                                                <p style={{margin: '0', padding: '0', fontWeight: 760}}>Deleting the journal...</p>
+   376→   376→                                            </div>
+   377→   377→                                        )}
+   378→   378→
+   379→   379→                                        <motion.div
+   380→   380→                                            className="confirmation-delete-container"
+   381→   381→                                            initial={{opacity:0 ,scale:0}}
+   382→   382→                                            animate={{opacity:1, scale:1, transition: {type: "tween", duration: 0.1}}}
+   383→   383→                                            exit={{opacity:0, scale:0, transition: {type: "tween", duration: 0.1}}}
+   384→   384→                                        >
+   385→   385→                                            <div className="confirmation-delete-heading">
+   386→   386→                                                Do you want to delete the journal?
+   387→   387→                                            </div>
+   388→   388→                                            <div className="confirm-buttons-container">
+   389→   389→                                                <div onClick={(e) => handleConfirmDeleteJournal(e, journal.id, session?.access_token, thumbnail)} className="confirm-buttons-yes">Yes</div>
+   390→   390→                                                <div onClick={() => setShowConfirmationBttn(null)} className="confirm-buttons-cancel">Cancel</div>
+   391→   391→                                            </div>
+   392→   392→                                        </motion.div>
+   393→   393→                                    </div>
+   394→   394→                                    </AnimatePresence>
+   395→   395→                                )}
+   396→   396→
+   397→   397→                                {thumbnail ? (
+   398→   398→                                    <div className="postcards-grid-img-wrap">
+   399→   399→                                        <img className="postcards-grid-thumb" src={thumbnail} alt={journal?.title ? `${journal.title} cover image` : "Post cover image"} loading="lazy" onError={handleImageFallback} />
+   400→   400→                                    </div>
+   401→   401→                                ) : null}
+   402→   402→                                <div className="postcards-grid-body">
+   403→   403→                                    <h3 className="postcards-grid-title">{journal.title.length > 32 ? `${journal.title.substring(0, 32)}...` : journal.title}</h3>
+   404→   404→                                    {previewText && (
+   405→   405→                                        <p className="postcards-grid-snippet">{previewText.length > 50 ? `${previewText.substring(0, 50)}...` : previewText}</p>
+   406→   406→                                    )}
+   407→   407→                                    <div className="postcards-grid-body-footer">
+   408→   408→                                        <div className="user-post-privacy">
+   409→   409→                                            {journal.privacy === 'public' && (
+   410→   410→                                                <svg xmlns="http://www.w3.org/2000/svg" width="14px" height="14px" viewBox="0 0 16 16" fill="none"><path fill="currentColor" fillRule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM6.128 1.774A6.508 6.508 0 001.576 7H4.07a11.095 11.095 0 012.06-5.226zm3.744 0A11.096 11.096 0 0111.932 7h2.492a6.508 6.508 0 00-4.552-5.226zM10.42 7C10.165 5.124 9.333 3.335 8 1.836 6.667 3.335 5.835 5.124 5.58 7h4.84zM5.527 8.5h4.946C10.31 10.557 9.451 12.533 8 14.164 6.55 12.533 5.691 10.557 5.527 8.5zm-1.505 0H1.52a6.505 6.505 0 004.61 5.726C4.896 12.525 4.163 10.555 4.021 8.5zm5.85 5.726c1.231-1.701 1.964-3.671 2.106-5.726h2.503a6.505 6.505 0 01-4.61 5.726z" clipRule="evenodd"/></svg>
+   411→   411→                                            )}
+   412→   412→                                            {journal.privacy === 'private' && (
+   413→   413→                                                <svg xmlns="http://www.w3.org/2000/svg" width="14px" height="14px" viewBox="0 0 24 24" fill="none">
+   414→   414→                                                    <path d="M7 10.0288C7.47142 10 8.05259 10 8.8 10H15.2C15.9474 10 16.5286 10 17 10.0288M7 10.0288C6.41168 10.0647 5.99429 10.1455 5.63803 10.327C5.07354 10.6146 4.6146 11.0735 4.32698 11.638C4 12.2798 4 13.1198 4 14.8V16.2C4 17.8802 4 18.7202 4.32698 19.362C4.6146 19.9265 5.07354 20.3854 5.63803 20.673C6.27976 21 7.11984 21 8.8 21H15.2C16.8802 21 17.7202 21 18.362 20.673C18.9265 20.3854 19.3854 19.9265 19.673 19.362C20 18.7202 20 17.8802 20 16.2V14.8C20 13.1198 20 12.2798 19.673 11.638C19.3854 11.0735 18.9265 10.6146 18.362 10.327C18.0057 10.1455 17.5883 10.0647 17 10.0288M7 10.0288V8C7 5.23858 9.23858 3 12 3C14.7614 3 17 5.23858 17 8V10.0288" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+   415→   415→                                                </svg>
+   416→   416→                                            )}
+   417→   417→                                        </div>
+   418→   418→                                        <div className="user-post-settings">
+   419→   419→                                            <svg onClick={(e) => handleClickSettings(e, journal.id)} xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="currentColor"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>
+   420→   420→                                        </div>
+   421→   421→                                    </div>
+   422→   422→                                </div>
+   423→   423→
+   424→   424→                                {showSettings === journal.id && (
+   425→   425→                                    <AnimatePresence>
+   426→   426→                                        <motion.div
+   427→   427→                                            initial={{opacity:0, scale:0, x: "-50%", y: "-50%"}}
+   428→   428→                                            animate={{opacity:1, scale:1, x: "-50%", y: "-50%", transition: {type: "tween", duration: 0.1}}}
+   429→   429→                                            exit={{opacity:0, scale:0, x: "-50%", y: "-50%", transition: {type: "tween", duration: 0.1}}}
+   430→   430→                                            className='post-settings-container'
+   431→   431→                                        >
+   432→   432→                                            {settingsList.map((setting, index) => (
+   433→   433→                                                <div className='setting-buttons' key={index}>
+   434→   434→                                                    {setting.actionDelete && (
+   435→   435→                                                        <div className={setting.className} onClick={(e) => setting.actionDelete(e, journal.id)}>
+   436→   436→                                                            {setting.icon}
+   437→   437→                                                            {setting.label}
+   438→   438→                                                        </div>
+   439→   439→                                                    )}
+   440→   440→                                                    {setting.actionEdit && !journal?.is_repost && (
+   441→   441→                                                        <div className={setting.className} onClick={(e) => setting.actionEdit(e, journal.content, journal.id, journal.title)}>
+   442→   442→                                                            {setting.icon}
+   443→   443→                                                            {setting.label}
+   444→   444→                                                        </div>
+   445→   445→                                                    )}
+   446→   446→                                                    {setting.actionEdit && journal?.is_repost && (
+   447→   447→                                                        <div className={setting.className} onClick={(e) => handleClickEditRepostCaption(e, journal.id, journal.repost_caption)}>
+   448→   448→                                                            {setting.icon}
+   449→   449→                                                            Edit caption
+   450→   450→                                                        </div>
+   451→   451→                                                    )}
+   452→   452→                                                    {journal.privacy === 'public' && setting.actionOnlyMe && (
+   453→   453→                                                        <div onClick={(e) => setting.actionOnlyMe(e, journal.privacy, journal.id)} className={setting.className}>
+   454→   454→                                                            {setting.icon}
+   455→   455→                                                            {setting.label}
+   456→   456→                                                        </div>
+   457→   457→                                                    )}
+   458→   458→                                                    {journal.privacy === 'private' && setting.actionPublic && (
+   459→   459→                                                        <div onClick={(e) => {setting.actionPublic(e, journal.privacy, journal.id)}} className={setting.className}>
+   460→   460→                                                            {setting.icon}
+   461→   461→                                                            {setting.label}
+   462→   462→                                                        </div>
+   463→   463→                                                    )}
+   464→   464→                                                </div>
+   465→   465→                                            ))}
+   466→   466→                                        </motion.div>
+   467→   467→                                    </AnimatePresence>
+   468→   468→                                )}
+   469→   469→                            </motion.div>
+   470→   470→                        );
+   471→   471→                    })}
+   472→   472→                </div>
+   473→   473→            ) : (
+   474→   474→            <div className="postcards-list-view">
+   475→   475→            {journals.map((journal, index) => {
+   476→   476→                const previewText = journal?.preview_text || '';
+   477→   477→                const thumbnail = journal?.thumbnail_url || null;
+   478→   478→                return (
+   479→   479→                    <motion.div
+   480→   480→                        key={journal.id}
+   481→   481→                        className='profile-postcards-child-container'
+   482→   482→                        initial={{opacity: 0, y: 12}}
+   483→   483→                        animate={{opacity: 1, y: 0}}
+   484→   484→                        transition={{duration: 0.3, ease: 'easeOut'}}
+   485→   485→                    >
+   486→   486→
+   487→   487→                        <div className="profile-postcards">
+   488→   488→
+   489→   489→                            {showConfirmationBttn === journal.id && (
+   490→   490→                                <AnimatePresence>
+   491→   491→                                <div className="confirmation-delete-bg">
+   492→   492→
+   493→   493→                                    {journalIsDeleted && (
+   494→   494→                                            <motion.div
+   495→   495→                                            className='journal-is-deleted-message-container'
+   496→   496→                                            initial={{opacity: 0, scale: 0}}
+   497→   497→                                            animate={{opacity: 1, scale: 1, transition:{type: 'tween', duration: 0.1}}}
+   498→   498→                                            exit={{y: -900, opacity: 0, transition:{type:'tween', duration: 0.5, ease: 'easeOut'}}}
+   499→   499→                                            >
+   500→   500→                                                Journal deleted successfuly!
+   501→   501→                                                <svg xmlns="http://www.w3.org/2000/svg" height="44px" viewBox="0 -960 960 960" width="44px" fill="#00d61dff"><path d="M268-240 42-466l57-56 170 170 56 56-57 56Zm226 0L268-466l56-57 170 170 368-368 56 57-424 424Zm0-226-57-56 198-198 57 56-198 198Z"/></svg>
+   502→   502→                                            </motion.div>
+   503→   503→                                    )}
+   504→   504→
+   505→   505→                                    {isDeletingJournal && (
+   506→   506→                                        <div className='delete-journal-loader-container'>
+   507→   507→                                            <FadeLoader loading={isDeletingJournal} speedMultiplier={2}/>
+   508→   508→                                            <p style={{margin: '0', padding: '0', fontWeight: 760}}>Deleting the journal...</p>
+   509→   509→                                        </div>
+   510→   510→                                    )}
+   511→   511→
+   512→   512→                                        <motion.div
+   513→   513→                                        className="confirmation-delete-container"
+   514→   514→                                        initial={{opacity:0 ,scale:0}}
+   515→   515→                                        animate={{opacity:1, scale:1, transition: {type: "tween", duration: 0.1}}}
+   516→   516→                                        exit={{opacity:0, scale:0, transition: {type: "tween", duration: 0.1}}}
+   517→   517→                                        >
+   518→   518→                                            <div className="confirmation-delete-heading">
+   519→   519→                                                Do you want to delete the journal?
+   520→   520→                                            </div>
+   521→   521→                                            <div className="confirm-buttons-container">
+   522→   522→                                                <div onClick={(e) => handleConfirmDeleteJournal(e, journal.id, session?.access_token, thumbnail)} className="confirm-buttons-yes">Yes</div>
+   523→   523→                                                <div onClick={() => setShowConfirmationBttn(null)} className="confirm-buttons-cancel">Cancel</div>
+   524→   524→                                            </div>
+   525→   525→                                        </motion.div>
+   526→   526→
+   527→   527→                                </div>
+   528→   528→                                </AnimatePresence>
+   529→   529→                            )}
+   530→   530→
+   531→   531→                            {thumbnail && (
+   532→   532→                                <img
+   533→   533→                                    className="card-image-banner"
+   534→   534→                                    src={thumbnail}
+   535→   535→                                    alt={journal?.title ? `${journal.title} cover image` : "Post cover image"}
+   536→   536→                                    loading="lazy"
+   537→   537→                                    onError={handleImageFallback}
+   538→   538→                                    onClick={(e) => viewContent(e, null, '', journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0].count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+   539→   539→                                />
+   540→   540→                            )}
+   541→   541→
+   542→   542→                            <div className='user-profile-card-content'>
+   543→   543→                                <div onClick={(e) => viewContent(
+   544→   544→                                    e,
+   545→   545→                                    null,
+   546→   546→                                    '',
+   547→   547→                                    journal.title,
+   548→   548→                                    journal.users.id,
+   549→   549→                                    journal.users.name,
+   550→   550→                                    journal.users.image_url,
+   551→   551→                                    journal.created_at,
+   552→   552→                                    journal.id,
+   553→   553→                                    journal.has_liked,
+   554→   554→                                    journal.comment_count?.[0].count,
+   555→   555→                                    journal.has_bookmarked,
+   556→   556→                                    journal.like_count?.[0].count,
+   557→   557→                                    journal.bookmark_count?.[0].count,
+   558→   558→                                    journal.users.badge,
+   559→   559→                                    journal?.post_type,
+   560→   560→                                    journal?.user_reaction,
+   561→   561→                                    journal?.reaction_count?.[0]?.count || 0
+   562→   562→                                )}
+   563→   563→                                    className="content-container">
+   564→   564→
+   565→   565→                                    <div className='feed-text-content-container'>
+   566→   566→                                        <div className='feed-title-content'>
+   567→   567→                                            <h2 className="feed-title-profile-page">{journal.title.length > 55 ? `${journal.title.substring(0, 55)}...` : journal.title}</h2>
+   568→   568→                                        </div>
+   569→   569→                                        <p className="feed-text-content-profile-page">{previewText}</p>
+   570→   570→                                    </div>
+   571→   571→                                </div>
+   572→   572→
+   573→   573→                                <div className="card-icons-container">
+   574→   574→                                    <div className='user-info-child-container'>
+   575→   575→                                        <div className={`user-avatar-container ${user?.userData?.[0]?.badge === 'legend' ? 'avatar-ring-legend' : user?.userData?.[0]?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+   576→   576→                                            <img src={user?.userData?.[0].image_url || '/assets/profile.jpg'} alt="user-profile" loading='lazy' className="user-info-avatar" />
+   577→   577→                                        </div>
+   578→   578→                                        <div className="user-name-container">
+   579→   579→                                            <p className="user-newsfeed-name-profile-page">{user?.userData?.[0].name}</p>
+   580→   580→                                            <VerifiedBadge badge={user?.userData?.[0]?.badge} size={14} />
+   581→   581→                                        </div>
+   582→   582→                                        <div className="name-info-separator">•</div>
+   583→   583→                                        <p className="user-post-date">{new Date(journal.created_at).toLocaleDateString('en-US', {
+   584→   584→                                            month: 'long',
+   585→   585→                                            day: 'numeric',
+   586→   586→                                            year: 'numeric'
+   587→   587→                                        })}
+   588→   588→                                        </p>
+   589→   589→                                        <div className="name-info-separator">•</div>
+   590→   590→                                        <div className="user-post-privacy">
+   591→   591→                                            {journal.privacy === 'public' &&(
+   592→   592→                                                <svg xmlns="http://www.w3.org/2000/svg" width="14px" height="14px" viewBox="0 0 16 16" fill="none"><path fill="currentColor" fillRule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zM6.128 1.774A6.508 6.508 0 001.576 7H4.07a11.095 11.095 0 012.06-5.226zm3.744 0A11.096 11.096 0 0111.932 7h2.492a6.508 6.508 0 00-4.552-5.226zM10.42 7C10.165 5.124 9.333 3.335 8 1.836 6.667 3.335 5.835 5.124 5.58 7h4.84zM5.527 8.5h4.946C10.31 10.557 9.451 12.533 8 14.164 6.55 12.533 5.691 10.557 5.527 8.5zm-1.505 0H1.52a6.505 6.505 0 004.61 5.726C4.896 12.525 4.163 10.555 4.021 8.5zm5.85 5.726c1.231-1.701 1.964-3.671 2.106-5.726h2.503a6.505 6.505 0 01-4.61 5.726z" clipRule="evenodd"/></svg>
+   593→   593→                                            )}
+   594→   594→                                            {journal.privacy === 'private' &&(
+   595→   595→                                                <svg xmlns="http://www.w3.org/2000/svg" width="14px" height="14px" viewBox="0 0 24 24" fill="none">
+   596→   596→                                                    <path d="M7 10.0288C7.47142 10 8.05259 10 8.8 10H15.2C15.9474 10 16.5286 10 17 10.0288M7 10.0288C6.41168 10.0647 5.99429 10.1455 5.63803 10.327C5.07354 10.6146 4.6146 11.0735 4.32698 11.638C4 12.2798 4 13.1198 4 14.8V16.2C4 17.8802 4 18.7202 4.32698 19.362C4.6146 19.9265 5.07354 20.3854 5.63803 20.673C6.27976 21 7.11984 21 8.8 21H15.2C16.8802 21 17.7202 21 18.362 20.673C18.9265 20.3854 19.3854 19.9265 19.673 19.362C20 18.7202 20 17.8802 20 16.2V14.8C20 13.1198 20 12.2798 19.673 11.638C19.3854 11.0735 18.9265 10.6146 18.362 10.327C18.0057 10.1455 17.5883 10.0647 17 10.0288M7 10.0288V8C7 5.23858 9.23858 3 12 3C14.7614 3 17 5.23858 17 8V10.0288" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+   597→   597→                                                </svg>
+   598→   598→                                            )}
+   599→   599→                                        </div>
+   600→   600→
+   601→   601→                                        <div className="user-post-settings">
+   602→   602→                                        <svg onClick={(e) => handleClickSettings(e, journal.id)}  xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="M240-400q-33 0-56.5-23.5T160-480q0-33 23.5-56.5T240-560q33 0 56.5 23.5T320-480q0 33-23.5 56.5T240-400Zm240 0q-33 0-56.5-23.5T400-480q0-33 23.5-56.5T480-560q33 0 56.5 23.5T560-480q0 33-23.5 56.5T480-400Zm240 0q-33 0-56.5-23.5T640-480q0-33 23.5-56.5T720-560q33 0 56.5 23.5T800-480q0 33-23.5 56.5T720-400Z"/></svg>
+   603→   603→                                    </div>
+   604→   604→                                </div>
+   605→   605→
+   606→   606→                            </div>
+   607→   607→
+   608→   608→                            {showSettings === journal.id && (
+   609→   609→                                <AnimatePresence>
+   610→   610→                                    <motion.div
+   611→   611→                                    initial={{opacity:0 ,scale:0}}
+   612→   612→                                    animate={{opacity:1, scale:1, transition: {type: "tween", duration: 0.1}}}
+   613→   613→                                    exit={{opacity:0, scale:0, transition: {type: "tween", duration: 0.1}}}
+   614→   614→                                    className='post-settings-container'
+   615→   615→                                    >
+   616→   616→                                        {settingsList.map((setting, index) => (
+   617→   617→                                            <div className='setting-buttons' key={index}>
+   618→   618→                                                {setting.actionDelete && (
+   619→   619→                                                    <div className={setting.className} onClick={(e) => setting.actionDelete(e, journal.id)}>
+   620→   620→                                                        {setting.icon}
+   621→   621→                                                        {setting.label}
+   622→   622→                                                    </div>
+   623→   623→                                                )}
+   624→   624→
+   625→   625→                                                {setting.actionEdit && !journal?.is_repost &&(
+   626→   626→                                                    <div className={setting.className} onClick={(e) => setting.actionEdit(e, journal.content, journal.id, journal.title)}>
+   627→   627→                                                        {setting.icon}
+   628→   628→                                                        {setting.label}
+   629→   629→                                                    </div>
+   630→   630→                                                )}
+   631→   631→                                                {setting.actionEdit && journal?.is_repost && (
+   632→   632→                                                    <div className={setting.className} onClick={(e) => handleClickEditRepostCaption(e, journal.id, journal.repost_caption)}>
+   633→   633→                                                        {setting.icon}
+   634→   634→                                                        Edit caption
+   635→   635→                                                    </div>
+   636→   636→                                                )}
+   637→   637→                                                {journal.privacy === 'public' && setting.actionOnlyMe &&(
+   638→   638→                                                    <div onClick={(e) => setting.actionOnlyMe(e, journal.privacy, journal.id)} className={setting.className}>
+   639→   639→                                                        {setting.icon}
+   640→   640→                                                        {setting.label}
+   641→   641→                                                    </div>
+   642→   642→                                                )}
+   643→   643→
+   644→   644→                                                {journal.privacy === 'private' && setting.actionPublic &&(
+   645→   645→                                                    <div onClick={(e) => {setting.actionPublic(e, journal.privacy, journal.id)}} className={setting.className}>
+   646→   646→                                                        {setting.icon}
+   647→   647→                                                        {setting.label}
+   648→   648→                                                    </div>
+   649→   649→                                                )}
+   650→   650→                                            </div>
+   651→   651→                                                ))}
+   652→   652→                                </motion.div>
+   653→   653→                            </AnimatePresence>
+   654→   654→                            )}
+   655→   655→
+   656→   656→                        </div>
+   657→   657→                    </div>
+   658→   658→
+   659→   659→            </motion.div>
+   660→   660→            )
+   661→   661→
+   662→   662→        })}
+   663→   663→
+   664→   664→            </div>
+   665→   665→            )}
+   666→   666→
+   667→   667→            <div ref={ref} className='in-view-container'>
+   668→   668→                {isFetchingNextPage && (
+   669→   669→                    <MoonLoader loading={isFetchingNextPage} color="var(--loader-color)" size={20}/>
+   670→   670→                )}
+   671→   671→            </div>
+   672→   672→        </div>
+   673→   673→
+   674→   674→        {showEditor !== null && createPortal(
+   675→   675→            <AnimatePresence>
+   676→   676→                <EditJournal journalData={journalData ?? {}} onClose={handleClickCloseEditor} />
+   677→   677→            </AnimatePresence>,
+   678→   678→            document.querySelector('.profile-parent-container') || document.body
+   679→   679→        )}
+   680→   680→
+   681→   681→        {showCaptionEditor !== null && createPortal(
+   682→   682→            <AnimatePresence>
+   683→   683→                <motion.div
+   684→   684→                    className="repost-overlay"
+   685→   685→                    initial={{opacity: 0}}
+   686→   686→                    animate={{opacity: 1}}
+   687→   687→                    exit={{opacity: 0}}
+   688→   688→                    transition={{duration: 0.2}}
+   689→   689→                    onClick={handleCloseCaptionEditor}
+   690→   690→                >
+   691→   691→                    <motion.div
+   692→   692→                        className="repost-modal"
+   693→   693→                        initial={{opacity: 0, scale: 0.92, y: 20}}
+   694→   694→                        animate={{opacity: 1, scale: 1, y: 0}}
+   695→   695→                        exit={{opacity: 0, scale: 0.92, y: 20}}
+   696→   696→                        transition={{type: 'spring', stiffness: 400, damping: 30}}
+   697→   697→                        onClick={(e) => e.stopPropagation()}
+   698→   698→                    >
+   699→   699→                        <div className="repost-modal-header">
+   700→   700→                            <h3 className="repost-modal-title">Edit caption</h3>
+   701→   701→                            <button className="repost-modal-close" onClick={handleCloseCaptionEditor}>
+   702→   702→                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+   703→   703→                                    <path d="M18.3 5.71a1 1 0 0 0-1.42 0L12 10.59 7.12 5.71a1 1 0 1 0-1.42 1.42L10.59 12l-4.88 4.88a1 1 0 1 0 1.42 1.42L12 13.41l4.88 4.88a1 1 0 0 0 1.42-1.42L13.41 12l4.88-4.88a1 1 0 0 0 0-1.41Z"/>
+   704→   704→                                </svg>
+   705→   705→                            </button>
+   706→   706→                        </div>
+   707→   707→
+   708→   708→                        <div className="repost-caption-container">
+   709→   709→                            <textarea
+   710→   710→                                className="repost-caption-input"
+   711→   711→                                value={captionText}
+   712→   712→                                onChange={(e) => {
+   713→   713→                                    if(e.target.value.length <= 280){
+   714→   714→                                        setCaptionText(e.target.value);
+   715→   715→                                    }
+   716→   716→                                }}
+   717→   717→                                maxLength={280}
+   718→   718→                                rows={4}
+   719→   719→                                placeholder="Add your thoughts..."
+   720→   720→                            />
+   721→   721→                            <span className={`repost-char-count ${captionText.length >= 280 ? 'at-limit' : ''}`}>
+   722→   722→                                {captionText.length}/280
+   723→   723→                            </span>
+   724→   724→                        </div>
+   725→   725→
+   726→   726→                        <div className="repost-modal-actions">
+   727→   727→                            <button className="repost-cancel-btn" onClick={handleCloseCaptionEditor}>Cancel</button>
+   728→   728→                            <button
+   729→   729→                                className="repost-submit-btn caption-editor-save-btn"
+   730→   730→                                onClick={handleSaveRepostCaption}
+   731→   731→                                disabled={isSavingCaption}
+   732→   732→                            >
+   733→   733→                                {isSavingCaption ? 'Saving...' : 'Save'}
+   734→   734→                            </button>
+   735→   735→                        </div>
+   736→   736→                    </motion.div>
+   737→   737→                </motion.div>
+   738→   738→            </AnimatePresence>,
+   739→   739→            document.body
+   740→   740→        )}
+   741→   741→        </>
+   742→   742→    )
+   743→   743→}
+   744→   744→
+   745→   745→export default ProfilePostCards;
+   746→   746→

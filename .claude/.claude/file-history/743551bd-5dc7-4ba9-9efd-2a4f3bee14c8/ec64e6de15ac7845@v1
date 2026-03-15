@@ -1,0 +1,579 @@
+import React, {useMemo, useState} from 'react';
+import {
+  FlatList,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useQuery, useMutation} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PostCard} from '../../components/PostCard/PostCard';
+import {PostCardSkeleton} from '../../components/SkeletonLoader';
+import {CommentModal} from '../../components/Comments';
+import {RepostModal} from '../../components/RepostModal';
+import {SearchInput} from '../../components/SearchInput';
+import {Chip} from '../../components/Chip';
+import {Avatar} from '../../components/Avatar';
+import {EmptyState} from '../../components/EmptyState';
+import {SearchIcon, FireIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {
+  mobileApi,
+  type JournalItem,
+} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {queryClient} from '../../lib/queryClient';
+import {useBookmarkMutation} from '../../hooks/useSocialMutations';
+import {
+  extractPlainText,
+  extractBannerImage,
+  resolveCount,
+  calculateReadingTime,
+} from '../../lib/utils/journalHelpers';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Explore'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+type Tab = 'all' | 'users' | 'posts';
+
+const getHotScore = (journal: JournalItem): number => {
+  if (typeof journal.hot_score === 'number') return journal.hot_score;
+  const likes = resolveCount(journal.like_count, journal.likes_count);
+  const comments = resolveCount(journal.comment_count, journal.comments_count);
+  const bookmarks = resolveCount(journal.bookmark_count);
+  return likes + comments * 2 + bookmarks * 3;
+};
+
+export function ExploreScreen({navigation}: Props) {
+  const {user, session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const [query, setQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('all');
+  const [commentModal, setCommentModal] = useState<{
+    postId: string;
+    receiverId?: string;
+    commentCount: number;
+  } | null>(null);
+  const [repostModal, setRepostModal] = useState<{
+    journalId: string;
+    title?: string;
+    authorName?: string;
+    authorAvatar?: string;
+  } | null>(null);
+  const normalizedQuery = useMemo(() => query.trim(), [query]);
+  const isSearching = normalizedQuery.length >= 2;
+
+  // --- Data fetching ---
+
+  const hottestQuery = useQuery({
+    queryKey: ['explore-hottest-monthly', user?.id],
+    queryFn: () => mobileApi.getHottestMonthly(5, user?.id),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const usersQuery = useQuery({
+    queryKey: ['search-users', normalizedQuery],
+    enabled: isSearching && activeTab !== 'posts',
+    queryFn: () => mobileApi.searchUsers(normalizedQuery, 10),
+  });
+
+  const journalsQuery = useQuery({
+    queryKey: ['search-journals', normalizedQuery],
+    enabled: isSearching && activeTab !== 'users',
+    queryFn: () => mobileApi.searchJournals(normalizedQuery, 10),
+  });
+
+  const users = usersQuery.data?.data ?? [];
+  const journals = journalsQuery.data?.data ?? [];
+  const hottestPosts = hottestQuery.data?.data ?? [];
+  const heroPost = hottestPosts[0] ?? null;
+  const runnerPosts = hottestPosts.slice(1);
+
+  // --- Interaction handlers ---
+
+  const reactionMutation = useMutation({
+    mutationFn: async ({
+      journalId,
+      receiverId,
+      reactionType,
+    }: {
+      journalId: string;
+      receiverId: string;
+      reactionType: string;
+    }) => {
+      if (!token) throw new Error('Please log in to react.');
+      return socialApi.toggleReaction(token, {journalId, receiverId, reactionType});
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({queryKey: ['explore-hottest-monthly']});
+      queryClient.invalidateQueries({queryKey: ['search-journals']});
+    },
+  });
+
+  const bookmarkMutation = useBookmarkMutation(token, ['explore-hottest-monthly', user?.id]);
+
+  const handleReact = (journalId: string, receiverId: string, reactionType: string) => {
+    if (!token) return;
+    reactionMutation.mutate({journalId, receiverId, reactionType});
+  };
+
+  const handleBookmark = (journalId: string) => {
+    bookmarkMutation.mutate(journalId);
+  };
+
+  const handleComment = (journalId: string, receiverId?: string, commentCount?: number) => {
+    setCommentModal({postId: journalId, receiverId, commentCount: commentCount ?? 0});
+  };
+
+  const handleRepost = (journalId: string, title?: string, authorName?: string, authorAvatar?: string) => {
+    setRepostModal({journalId, title, authorName, authorAvatar});
+  };
+
+  const handleAuthorPress = (item: JournalItem) => {
+    const authorId = item.users?.id ?? item.user_id;
+    if (!authorId) return;
+    if (authorId === user?.id) {
+      navigation.navigate('Main' as any, {screen: 'Profile'});
+    } else {
+      navigation.navigate('VisitProfile', {
+        userId: authorId,
+        username: item.users?.username ?? undefined,
+      });
+    }
+  };
+
+  // --- Render helpers ---
+
+  const renderPostCard = (item: JournalItem) => {
+    const preview = extractPlainText(item.content).slice(0, 180);
+    const likeCount = resolveCount(item.like_count, item.likes_count);
+    const commentCount = resolveCount(item.comment_count, item.comments_count);
+    const bookmarkCount = resolveCount(item.bookmark_count);
+    const bannerImage = extractBannerImage(item.content, (item as any).images);
+    const receiverId = item.user_id ?? item.users?.id ?? '';
+    const readingTime = calculateReadingTime(extractPlainText(item.content));
+    const isRepost = !!item.is_repost;
+    const repostSource = isRepost ? item.repost_source : null;
+    const repostSourcePreview = repostSource?.content
+      ? extractPlainText(repostSource.content).slice(0, 180)
+      : '';
+
+    return (
+      <PostCard
+        title={item.title || 'Untitled Post'}
+        bodyPreview={preview || 'No preview text available.'}
+        authorName={item.users?.name || 'Unknown author'}
+        authorAvatar={item.users?.image_url}
+        authorBadge={item.users?.badge as 'legend' | 'og' | undefined}
+        bannerImage={bannerImage}
+        postType={item.post_type ?? undefined}
+        readingTime={readingTime}
+        likeCount={likeCount}
+        commentCount={commentCount}
+        bookmarkCount={bookmarkCount}
+        userReaction={item.user_reaction}
+        isBookmarked={!!item.has_bookmarked}
+        onReact={type => handleReact(item.id, receiverId, type)}
+        onComment={() => handleComment(item.id, receiverId, commentCount)}
+        onBookmark={() => handleBookmark(item.id)}
+        onRepost={() =>
+          handleRepost(
+            item.id,
+            item.title ?? undefined,
+            item.users?.name ?? undefined,
+            item.users?.image_url ?? undefined,
+          )
+        }
+        onPress={() => navigation.navigate('PostDetail', {journalId: item.id})}
+        onAuthorPress={() => handleAuthorPress(item)}
+        isRepost={isRepost}
+        repostCaption={item.repost_caption}
+        repostSourceTitle={repostSource?.title}
+        repostSourcePreview={repostSourcePreview}
+        repostSourceAuthorName={repostSource?.users?.name}
+        repostSourceAuthorAvatar={repostSource?.users?.image_url}
+        onEmbeddedPress={
+          repostSource
+            ? () => navigation.navigate('PostDetail', {journalId: repostSource.id})
+            : undefined
+        }
+      />
+    );
+  };
+
+  const renderRunnerRow = (item: JournalItem, rank: number) => {
+    const hotScore = getHotScore(item);
+    const bannerImage = extractBannerImage(item.content, (item as any).images);
+
+    return (
+      <Pressable
+        key={item.id}
+        style={[styles.runnerRow, {borderBottomColor: colors.borderCard}]}
+        onPress={() => navigation.navigate('PostDetail', {journalId: item.id})}>
+        <Text
+          style={[
+            styles.runnerRank,
+            {color: rank <= 3 ? '#d97706' : colors.textMuted},
+          ]}>
+          #{rank}
+        </Text>
+        {bannerImage ? (
+          <Image source={{uri: bannerImage}} style={styles.runnerThumb} />
+        ) : (
+          <View
+            style={[styles.runnerThumbPlaceholder, {backgroundColor: colors.bgCard}]}
+          />
+        )}
+        <View style={styles.runnerInfo}>
+          <Text
+            style={[styles.runnerTitle, {color: colors.textPrimary}]}
+            numberOfLines={2}>
+            {item.title || 'Untitled Post'}
+          </Text>
+          <Text style={[styles.runnerAuthor, {color: colors.textMuted}]} numberOfLines={1}>
+            {item.users?.name || 'Unknown'}
+          </Text>
+        </View>
+        <View style={[styles.hotPill, {backgroundColor: 'rgba(217, 119, 6, 0.12)'}]}>
+          <FireIcon size={12} color="#d97706" />
+          <Text style={styles.hotPillText}>{hotScore}</Text>
+        </View>
+      </Pressable>
+    );
+  };
+
+  // --- Default view (hottest posts) ---
+
+  const renderDefaultView = () => (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.defaultContent}>
+      {hottestQuery.isLoading ? (
+        <View style={styles.skeletonList}>
+          <PostCardSkeleton />
+          <PostCardSkeleton />
+          <PostCardSkeleton />
+        </View>
+      ) : hottestPosts.length === 0 ? (
+        <EmptyState
+          icon={<FireIcon size={40} color={colors.textFaint} />}
+          title="No hot posts yet this month"
+          subtitle="Check back soon for trending content"
+        />
+      ) : (
+        <>
+          {/* Hero card */}
+          {heroPost && (
+            <View style={styles.heroSection}>
+              <View>
+                {renderPostCard(heroPost)}
+                <View style={styles.heroBadge}>
+                  <FireIcon size={14} color="#fbbf24" />
+                  <Text style={styles.heroBadgeText}>#1 Hottest</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Runners */}
+          {runnerPosts.length > 0 && (
+            <View style={styles.runnersSection}>
+              <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                Top This Month
+              </Text>
+              {runnerPosts.map((post, i) => renderRunnerRow(post, i + 2))}
+            </View>
+          )}
+        </>
+      )}
+    </ScrollView>
+  );
+
+  // --- Search view ---
+
+  const renderSearchView = () => (
+    <>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScrollView}
+        contentContainerStyle={styles.tabRow}>
+        {(['all', 'users', 'posts'] as Tab[]).map(tab => (
+          <Chip
+            key={tab}
+            label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+            active={activeTab === tab}
+            onPress={() => setActiveTab(tab)}
+          />
+        ))}
+      </ScrollView>
+
+      <FlatList
+        data={[]}
+        renderItem={null}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.results}
+        ListHeaderComponent={
+          <>
+            {/* Users section */}
+            {activeTab !== 'posts' && users.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                  Users
+                </Text>
+                {users.map(u => (
+                  <Pressable
+                    key={u.id}
+                    style={[styles.userRow, {borderBottomColor: colors.borderCard}]}
+                    onPress={() =>
+                      navigation.navigate('VisitProfile', {
+                        userId: u.id,
+                        username: u.username ?? undefined,
+                      })
+                    }>
+                    <Avatar uri={u.image_url} name={u.name ?? undefined} size={40} />
+                    <View style={styles.userInfo}>
+                      <Text style={[styles.userName, {color: colors.textPrimary}]}>
+                        {u.name || 'Unknown'}
+                      </Text>
+                      {u.username && (
+                        <Text style={[styles.userHandle, {color: colors.textMuted}]}>
+                          @{u.username}
+                        </Text>
+                      )}
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {/* Posts section — upgraded to PostCard */}
+            {activeTab !== 'users' && journals.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                  Posts
+                </Text>
+                {journals.map(j => (
+                  <View key={j.id} style={styles.searchPostCard}>
+                    {renderPostCard(j)}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Empty results */}
+            {activeTab !== 'posts' &&
+              users.length === 0 &&
+              activeTab !== 'users' &&
+              journals.length === 0 && (
+                <EmptyState
+                  title="No results"
+                  subtitle={`Nothing found for "${normalizedQuery}"`}
+                />
+              )}
+          </>
+        }
+      />
+    </>
+  );
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.title, {color: colors.textHeading}]}>Explore</Text>
+          <SearchInput
+            placeholder="Search users or posts..."
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            returnKeyType="search"
+          />
+        </View>
+
+        {isSearching ? renderSearchView() : renderDefaultView()}
+      </View>
+
+      {commentModal && (
+        <CommentModal
+          visible
+          postId={commentModal.postId}
+          receiverId={commentModal.receiverId}
+          commentCount={commentModal.commentCount}
+          onClose={() => setCommentModal(null)}
+        />
+      )}
+
+      {repostModal && (
+        <RepostModal
+          visible
+          sourceJournalId={repostModal.journalId}
+          title={repostModal.title}
+          authorName={repostModal.authorName}
+          authorAvatar={repostModal.authorAvatar}
+          onClose={() => setRepostModal(null)}
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    gap: spacing.md,
+  },
+  title: {
+    ...typeScale.h1,
+  },
+  tabScrollView: {
+    flexGrow: 0,
+  },
+  tabRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  results: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxxl,
+  },
+  section: {
+    marginBottom: spacing.xl,
+  },
+  sectionTitle: {
+    ...typeScale.h3,
+    marginBottom: spacing.md,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+  userHandle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  searchPostCard: {
+    marginBottom: spacing.md,
+  },
+
+  // Default view
+  defaultContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxxl,
+  },
+  skeletonList: {
+    gap: spacing.md,
+  },
+
+  // Hero
+  heroSection: {
+    marginBottom: spacing.xl,
+  },
+  heroBadge: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderWidth: 1,
+    borderColor: '#d97706',
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  heroBadgeText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 12,
+    color: '#fbbf24',
+  },
+
+  // Runners
+  runnersSection: {
+    marginBottom: spacing.xl,
+  },
+  runnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  runnerRank: {
+    fontFamily: fonts.ui.bold,
+    fontSize: 16,
+    width: 28,
+    textAlign: 'center',
+  },
+  runnerThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: radii.sm,
+  },
+  runnerThumbPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: radii.sm,
+  },
+  runnerInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  runnerTitle: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 14,
+  },
+  runnerAuthor: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 12,
+  },
+  hotPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+  },
+  hotPillText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 12,
+    color: '#d97706',
+  },
+});

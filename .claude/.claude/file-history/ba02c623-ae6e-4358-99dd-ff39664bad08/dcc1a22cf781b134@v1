@@ -1,0 +1,59 @@
+# Add view tracking to ExplorePage
+
+## Context
+When clicking posts in `ExplorePage.jsx` (hottest posts, runner-up cards, search results, suggestions), views are not tracked. `PostCards.jsx` already tracks views via `useAddViewsMutation` before navigating. This change makes ExplorePage consistent.
+
+## Changes
+
+### `client/src/components/HomePage/explore/ExplorePage.jsx`
+
+1. **Add import** (after line 12):
+   ```js
+   import { useAddViewsMutation } from "../../../utils/useMutation";
+   ```
+
+2. **Create mutateViews instance** (inside `ExplorePage` component, after line 186 near `userId`):
+   ```js
+   const mutateViews = useAddViewsMutation(session);
+   ```
+
+3. **Add view tracking to `handleClickPost`** (line 287-296) — fire mutation before navigating:
+   ```js
+   const handleClickPost = (journalId) => {
+       if(!journalId) return;
+       if(!session){
+           openAuthModal();
+           return;
+       }
+       const formadata = new FormData();
+       formadata.append('journalId', journalId);
+       mutateViews.mutate(formadata);
+       navigate(`/home/post/${journalId}`);
+   };
+   ```
+
+4. **Add view tracking to `handleClickSuggestion`** (line 271-285) — fire mutation before navigating:
+   ```js
+   const handleClickSuggestion = (journal) => {
+       if(!journal?.id) return;
+       if(!session){
+           openAuthModal();
+           return;
+       }
+       setIsSearchFocused(false);
+       if(journal?.title){
+           setSearchInput(journal.title);
+           setDebouncedSearchInput(journal.title);
+       }
+       const formadata = new FormData();
+       formadata.append('journalId', journal.id);
+       mutateViews.mutate(formadata);
+       navigate(`/home/post/${journal.id}`);
+   };
+   ```
+
+## Verification
+- Click a hero card, runner-up card, and search result on the Explore page
+- Click a suggestion from the search dropdown
+- Confirm `addViews` API calls fire in the network tab for each
+- Confirm navigation still works correctly

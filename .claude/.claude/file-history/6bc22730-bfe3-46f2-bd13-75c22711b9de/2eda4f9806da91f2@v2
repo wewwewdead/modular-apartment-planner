@@ -1,0 +1,635 @@
+.editorRoot {
+    --atelier-paper: #f2ece1;
+    --atelier-paper-shadow: #d8cab2;
+    --atelier-ink: #1c2127;
+    --atelier-accent: #ff6b3d;
+    --atelier-accent-soft: rgba(255, 107, 61, 0.2);
+    --atelier-glow: rgba(111, 207, 151, 0.36);
+    --dock-bg: rgba(247, 241, 231, 0.62);
+    --dock-border: rgba(255, 255, 255, 0.58);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    min-height: 0;
+    max-width: 100%;
+    overflow: visible;
+    padding-bottom: 9.3rem;
+}
+
+.viewerRoot {
+    padding-bottom: 1.1rem;
+}
+
+.remixBanner {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    border-radius: 999px;
+    padding: 0.3rem 0.68rem;
+    border: 1px solid rgba(17, 25, 40, 0.2);
+    background: linear-gradient(120deg, rgba(111, 207, 151, 0.15), rgba(254, 202, 87, 0.16));
+    color: #2f3e46;
+    font-size: 0.72rem;
+    letter-spacing: 0.01em;
+}
+
+.stageShell {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    border-radius: 18px;
+    padding: 0 clamp(0.45rem, 0.9vw, 0.85rem);
+    flex-shrink: 0;
+    overflow: hidden;
+    border: 1px solid rgba(62, 52, 41, 0.25);
+    background:
+        radial-gradient(circle at 12% 12%, rgba(255, 243, 219, 0.55), transparent 40%),
+        radial-gradient(circle at 88% 88%, rgba(255, 165, 130, 0.2), transparent 35%),
+        repeating-linear-gradient(145deg, rgba(106, 88, 72, 0.04) 0 2px, transparent 2px 6px),
+        linear-gradient(160deg, #f2ece1 0%, #e7ddcd 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.45),
+        inset 0 -24px 40px rgba(69, 54, 39, 0.12),
+        0 16px 30px rgba(32, 26, 22, 0.16);
+}
+
+.stageShell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(rgba(19, 12, 7, 0.11) 0.55px, transparent 0.7px),
+        radial-gradient(rgba(255, 255, 255, 0.28) 0.8px, transparent 1px);
+    background-size: 5px 5px, 7px 7px;
+    opacity: 0.18;
+    pointer-events: none;
+}
+
+.stageShell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 0 0, rgba(255, 191, 105, 0.2), transparent 38%),
+        radial-gradient(circle at 100% 100%, rgba(111, 207, 151, 0.2), transparent 38%),
+        radial-gradient(circle at 100% 0, rgba(255, 106, 74, 0.14), transparent 35%);
+    mix-blend-mode: screen;
+    animation: ambientPulse 7.5s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.isDark {
+    --atelier-paper: #11161c;
+    --atelier-paper-shadow: #0a0f14;
+    --atelier-ink: #f2efe8;
+    --dock-bg: rgba(28, 35, 44, 0.64);
+    --dock-border: rgba(255, 255, 255, 0.2);
+    background:
+        radial-gradient(circle at 12% 12%, rgba(59, 95, 121, 0.3), transparent 44%),
+        radial-gradient(circle at 88% 88%, rgba(76, 56, 84, 0.35), transparent 38%),
+        repeating-linear-gradient(145deg, rgba(231, 230, 225, 0.05) 0 2px, transparent 2px 6px),
+        linear-gradient(160deg, #141b23 0%, #0d141c 100%);
+    border-color: rgba(198, 209, 220, 0.24);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        inset 0 -24px 42px rgba(0, 0, 0, 0.44),
+        0 16px 30px rgba(0, 0, 0, 0.45);
+}
+
+.isDoodleActive {
+    touch-action: none;
+    overscroll-behavior: contain;
+}
+
+.isDropActive {
+    outline: 2px solid rgba(90, 211, 159, 0.55);
+    outline-offset: -2px;
+}
+
+.stageFrame {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    flex-shrink: 0;
+    border-radius: 12px;
+    overflow: hidden;
+    touch-action: pan-y;
+}
+
+.stage {
+    border-radius: 12px;
+    touch-action: none;
+}
+
+.stageEditor {
+    touch-action: pan-y;
+}
+
+.isDoodleActive .stageEditor {
+    touch-action: none;
+}
+
+.isDoodleActive .stageFrame {
+    touch-action: none;
+}
+
+.stageHud {
+    position: absolute;
+    right: 0.8rem;
+    bottom: 0.7rem;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.48rem;
+}
+
+.zoomBadge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 52px;
+    border-radius: 999px;
+    border: 1px solid rgba(24, 28, 34, 0.18);
+    padding: 0.21rem 0.52rem;
+    background: rgba(255, 255, 255, 0.65);
+    color: #1f2933;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+.gestureHint {
+    border-radius: 999px;
+    border: 1px solid rgba(24, 28, 34, 0.14);
+    padding: 0.22rem 0.58rem;
+    background: rgba(255, 255, 255, 0.66);
+    color: #334155;
+    font-size: 0.66rem;
+    white-space: nowrap;
+}
+
+.loaderWrapper {
+    min-height: 3px;
+}
+
+.editorFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+}
+
+.wordCount {
+    color: color-mix(in srgb, var(--atelier-ink) 72%, transparent);
+    font-size: 0.76rem;
+}
+
+.shareButton {
+    border: 1px solid rgba(18, 24, 31, 0.18);
+    border-radius: 12px;
+    background: linear-gradient(120deg, #ff8a4d, #ff6b3d);
+    color: #fff;
+    padding: 0.45rem 0.82rem;
+    font-size: 0.82rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: transform 140ms ease, box-shadow 160ms ease;
+}
+
+.shareButton:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(255, 107, 61, 0.24);
+}
+
+.shareButtonDisabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+.toolbarDock {
+    position: fixed;
+    left: 50%;
+    bottom: max(0.88rem, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(980px, calc(100vw - 1.5rem));
+    z-index: 25;
+    pointer-events: none;
+}
+
+.toolbarDockInCv {
+    position: sticky;
+    left: 0;
+    right: 0;
+    bottom: max(0.6rem, env(safe-area-inset-bottom));
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    z-index: 40;
+}
+
+.toolbarDockInCv .toolbarOrb {
+    position: absolute;
+    right: max(0.4rem, env(safe-area-inset-right));
+    bottom: max(0.4rem, env(safe-area-inset-bottom));
+}
+
+.toolbarDockMinimized {
+    width: min(460px, calc(100vw - 1.2rem));
+}
+
+.toolbarPanel {
+    pointer-events: auto;
+    border-radius: 22px;
+    border: 1px solid var(--dock-border);
+    background: var(--dock-bg);
+    backdrop-filter: blur(15px) saturate(125%);
+    box-shadow:
+        0 14px 34px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    padding: 0.58rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.doodleMiniBar {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 999px;
+    border: 1px solid var(--dock-border);
+    background: var(--dock-bg);
+    backdrop-filter: blur(15px) saturate(125%);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+    padding: 0.42rem 0.5rem;
+}
+
+.doodleMiniLabel {
+    font-size: 0.72rem;
+    color: color-mix(in srgb, var(--atelier-ink) 75%, transparent);
+    padding: 0 0.2rem;
+}
+
+.doodleMiniColor {
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(20, 24, 29, 0.25);
+}
+
+.doodleMiniSize {
+    font-size: 0.7rem;
+    color: color-mix(in srgb, var(--atelier-ink) 65%, transparent);
+    min-width: 42px;
+}
+
+.toolbarRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.toolbarColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.toolButton,
+.secondaryButton {
+    border-radius: 12px;
+    border: 1px solid rgba(20, 24, 29, 0.18);
+    background: rgba(255, 255, 255, 0.58);
+    color: #18212a;
+    padding: 0.38rem 0.66rem;
+    font-size: 0.77rem;
+    cursor: pointer;
+    transition: border-color 150ms ease, box-shadow 170ms ease, background-color 140ms ease;
+}
+
+.secondaryButton {
+    border-radius: 10px;
+    padding: 0.34rem 0.58rem;
+}
+
+.toolButtonActive {
+    border-color: #5ad39f;
+    box-shadow: 0 0 0 1px rgba(90, 211, 159, 0.36), 0 0 16px var(--atelier-glow);
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.snippetComposer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.snippetInput {
+    flex: 1;
+    min-width: 200px;
+    border: 1px solid rgba(20, 24, 29, 0.2);
+    border-radius: 12px;
+    padding: 0.5rem 0.64rem;
+    background: rgba(255, 255, 255, 0.8);
+    color: #18212a;
+}
+
+.snippetInput:focus {
+    outline: none;
+    border-color: #5ad39f;
+    box-shadow: 0 0 0 2px rgba(90, 211, 159, 0.26);
+}
+
+.snippetActions {
+    display: inline-flex;
+    gap: 0.38rem;
+}
+
+.paletteWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.34rem;
+}
+
+.paletteGroup {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.paletteLabel {
+    min-width: 56px;
+    font-size: 0.68rem;
+    color: color-mix(in srgb, var(--atelier-ink) 72%, transparent);
+}
+
+.colorSwatches {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.32rem;
+}
+
+.colorSwatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(20, 24, 29, 0.2);
+    cursor: pointer;
+}
+
+.colorSwatchActive {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 4px rgba(90, 211, 159, 0.58);
+}
+
+.customColorLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    font-size: 0.68rem;
+    color: color-mix(in srgb, var(--atelier-ink) 70%, transparent);
+}
+
+.colorInput {
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(20, 24, 29, 0.2);
+    border-radius: 8px;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+}
+
+.sizeRange {
+    width: 120px;
+}
+
+.toolHint {
+    font-size: 0.68rem;
+    color: color-mix(in srgb, var(--atelier-ink) 70%, transparent);
+}
+
+.selectionPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.46rem;
+}
+
+.styleCarousel {
+    display: flex;
+    gap: 0.42rem;
+    overflow-x: auto;
+    padding-bottom: 0.2rem;
+    scroll-snap-type: x proximity;
+}
+
+.fontChip {
+    min-width: 132px;
+    border-radius: 12px;
+    border: 1px solid rgba(20, 24, 29, 0.2);
+    background: rgba(255, 255, 255, 0.65);
+    text-align: left;
+    padding: 0.38rem 0.5rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.24rem;
+    scroll-snap-align: start;
+}
+
+.fontChipActive {
+    border-color: #5ad39f;
+    box-shadow: 0 0 0 1px rgba(90, 211, 159, 0.36), 0 6px 16px rgba(90, 211, 159, 0.2);
+}
+
+.fontChipLabel {
+    font-size: 0.65rem;
+    color: color-mix(in srgb, var(--atelier-ink) 72%, transparent);
+}
+
+.fontChipPreview {
+    font-size: 0.94rem;
+    color: #0f141b;
+}
+
+.aspectToggle {
+    display: inline-flex;
+    gap: 0.34rem;
+}
+
+.mobileDock {
+    width: calc(100vw - 1rem);
+}
+
+.toolbarOrb {
+    pointer-events: auto;
+    position: fixed;
+    right: max(0.8rem, env(safe-area-inset-right));
+    bottom: 4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    background: radial-gradient(circle at 24% 24%, rgba(255, 198, 161, 0.95), rgba(255, 107, 61, 0.9));
+    color: #fff;
+    font-weight: 650;
+    font-size: 0.74rem;
+    padding: 0.54rem 0.9rem;
+    box-shadow: 0 12px 28px rgba(255, 107, 61, 0.35);
+    cursor: pointer;
+    z-index: 122;
+}
+
+.toolbarOrbOpen {
+    background: radial-gradient(circle at 24% 24%, rgba(111, 207, 151, 0.95), rgba(49, 176, 127, 0.92));
+}
+
+@media (min-width: 821px) {
+    .toolbarDock {
+        position: relative;
+        left: 0;
+        right: 0;
+        bottom: auto;
+        transform: none;
+        width: 100%;
+        max-width: 100%;
+        z-index: 18;
+        display: flex;
+        justify-content: center;
+    }
+
+    .toolbarDockMinimized {
+        width: 100%;
+    }
+}
+
+.ambientLight {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 18px;
+    background: radial-gradient(
+        320px circle at var(--cursor-x, 50%) var(--cursor-y, 50%),
+        rgba(255, 223, 186, 0.18),
+        transparent 70%
+    );
+    mix-blend-mode: overlay;
+    opacity: var(--cursor-opacity, 0);
+    transition: opacity 0.4s ease;
+}
+
+.isDark .ambientLight {
+    background: radial-gradient(
+        320px circle at var(--cursor-x, 50%) var(--cursor-y, 50%),
+        rgba(140, 180, 255, 0.14),
+        transparent 70%
+    );
+    mix-blend-mode: soft-light;
+}
+
+.minimapContainer {
+    position: absolute;
+    left: 0.7rem;
+    bottom: 0.7rem;
+    z-index: 2;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    background: rgba(247, 241, 231, 0.55);
+    backdrop-filter: blur(10px) saturate(120%);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    cursor: crosshair;
+    overflow: hidden;
+}
+
+.minimapDark {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(20, 27, 35, 0.55);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+}
+
+.minimapViewport {
+    position: absolute;
+    border: 1.5px solid #5ad39f;
+    background: rgba(90, 211, 159, 0.12);
+    border-radius: 2px;
+    cursor: grab;
+    box-sizing: border-box;
+}
+
+.minimapViewport:active {
+    cursor: grabbing;
+}
+
+@keyframes ambientPulse {
+    0% {
+        opacity: 0.5;
+    }
+    50% {
+        opacity: 0.84;
+    }
+    100% {
+        opacity: 0.5;
+    }
+}
+
+@media (max-width: 820px) {
+    .editorRoot {
+        padding-bottom: 7.6rem;
+    }
+
+    .toolbarDock {
+        left: 0.5rem;
+        right: 0.5rem;
+        width: auto;
+        transform: none;
+        bottom: max(0.6rem, env(safe-area-inset-bottom));
+        z-index: 1212;
+    }
+
+    .toolbarDockInCv {
+        left: 0;
+        right: 0;
+        width: 100%;
+        bottom: max(0.45rem, env(safe-area-inset-bottom));
+        z-index: 121;
+    }
+
+    .viewerRoot {
+        padding-bottom: 0.9rem;
+    }
+
+    .toolbarPanel {
+        border-radius: 18px;
+        max-height: min(64vh, 520px);
+        overflow: auto;
+    }
+
+    .doodleMiniBar {
+        width: fit-content;
+        max-width: calc(100vw - 1.4rem);
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .sizeRange {
+        width: 104px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stageShell::after {
+        animation: none;
+    }
+
+    .toolButton,
+    .secondaryButton,
+    .shareButton {
+        transition: none;
+    }
+}

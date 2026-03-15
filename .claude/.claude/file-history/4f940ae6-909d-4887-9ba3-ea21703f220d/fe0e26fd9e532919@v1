@@ -1,0 +1,273 @@
+# Following Feed Tab
+
+## Context
+The main feed (`/home`) shows all public posts in reverse chronological order regardless of who the user follows. Users want a way to see posts specifically from people they follow. This adds a "Following" tab to the existing Writings/Opinions header tabs that shows a personalized feed filtered to followed users only.
+
+**Key constraint**: Minimize Supabase egress — use cursor-based pagination (already established), keep queries lean, and avoid unnecessary round-trips.
+
+## Approach
+Reuse the existing PostCards component by adding a new route (`/home/following`) that renders the same `<PostCards/>`. PostCards detects the path and swaps the data source — zero UI code duplication.
+
+Backend uses a two-step query: first fetch the user's following IDs (tiny query, just UUIDs), then fetch journals filtered to those users using the existing `JOURNAL_WITH_COUNTS_SELECT` pattern. This adds only 1 extra lightweight query compared to the main feed.
+
+---
+
+## Files to Modify
+
+### 1. `server/services/getService.js` — New `getFollowingFeedService`
+
+Add a new exported function after `getJournalsService` (~line 815):
+
+```js
+export const getFollowingFeedService = async(limit, userId, before) => {
+    if (!userId) {
+        throw { status: 401, error: 'authentication required' };
+    }
+    if (isNaN(limit) || limit > 20 || limit < 1) {
+        throw { status: 400, error: 'limit should be integer, not below 1 and higher than 20' };
+    }
+
+    const parsedLimit = parseInt(limit);
+
+    // Step 1: Get IDs of users this person follows (lightweight — just UUIDs)
+    const { data: followingRows, error: followError } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId);
+
+    if (followError) {
+        console.error('supabase error fetching following list:', followError.message);
+        throw { status: 500, error: 'supabase error fetching following list' };
+    }
+
+    const followingIds = followingRows.map(r => r.following_id);
+
+    // If user follows nobody, return empty immediately (zero egress)
+    if (followingIds.length === 0) {
+        return { data: [], hasMore: false };
+    }
+
+    // Step 2: Fetch journals from followed users (reuse existing SELECT pattern)
+    let query = supabase
+        .from('journals')
+        .select(JOURNAL_WITH_COUNTS_SELECT)
+        .eq('privacy', 'public')
+        .in('user_id', followingIds)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(parsedLimit + 1);
+
+    if (before) {
+        query = query.lt('created_at', before);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('supabase error fetching following feed:', error.message);
+        throw { status: 500, error: 'supabase error fetching following feed' };
+    }
+
+    if (data.length === 0) {
+        return { data: [], hasMore: false };
+    }
+
+    // Step 3: Personalization (same pattern as getJournalsService)
+    const journalIds = data.map(j => j.id);
+    const [userLikes, userBookmarks, userReactions] = await Promise.all([
+        supabase.from('likes').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+        supabase.from('bookmarks').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+        supabase.from('reactions').select('journal_id, reaction_type').in('journal_id', journalIds).eq('user_id', userId)
+    ]);
+
+    const userHasLikedSet = new Set(userLikes.data?.map(j => j.journal_id) || []);
+    const userHasBookmarkedSet = new Set(userBookmarks.data?.map(j => j.journal_id) || []);
+    const userReactionMap = new Map((userReactions.data || []).map(r => [r.journal_id, r.reaction_type]));
+
+    await attachRepostSources(data);
+
+    const formattedData = data.map(journal => ({
+        ...journal,
+        has_liked: userHasLikedSet.has(journal.id),
+        has_bookmarked: userHasBookmarkedSet.has(journal.id),
+        user_reaction: userReactionMap.get(journal.id) || null
+    }));
+
+    const hasMore = data.length > parsedLimit;
+    const slicedData = hasMore ? formattedData.slice(0, parsedLimit) : formattedData;
+
+    return { data: slicedData, hasMore };
+}
+```
+
+**Egress analysis**: Following IDs query returns only UUID column (~36 bytes each). For a user following 100 people, that's ~3.6KB. Journals query is identical to the main feed but filtered — same 5-post pages. Personalization is the same 3 parallel queries already used. Total: 5 queries per page load (same as main feed + 1 tiny query).
+
+### 2. `server/controller/getController.js` — New controller
+
+Add export + import:
+
+```js
+export const getFollowingFeedController = async(req, res) => {
+    const { limit = 5, before } = req.query;
+    const userId = req.userId;
+
+    try {
+        const journalData = await getFollowingFeedService(limit, userId, before);
+        return res.status(200).json(journalData);
+    } catch (error) {
+        console.error(error);
+        const status = error?.status || 500;
+        return res.status(status).json({ error: error?.error || 'failed to fetch following feed' });
+    }
+}
+```
+
+Update the import at the top of the file to include `getFollowingFeedService`.
+
+### 3. `server/routes/routes.js` — New route
+
+Add **before** the existing `/journals` route (line 265) to avoid path conflict:
+
+```js
+router.get('/journals/following', requireAuth, getFollowingFeedController);
+```
+
+Uses `requireAuth` (not `optionalAuth`) since this endpoint only makes sense for logged-in users. Import `getFollowingFeedController` in the import statement at line 12.
+
+### 4. `client/API/Api.js` — New API function
+
+Add after `getJournals`:
+
+```js
+export const getFollowingFeed = async(token, cursor = null, limit = 5) => {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let url = cursor
+        ? `${BASE_URL}/journals/following?limit=${limit}&before=${cursor}`
+        : `${BASE_URL}/journals/following?limit=${limit}`;
+
+    const response = await apiRequest(url, {
+        method: 'GET',
+        headers: headers
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch following feed');
+    }
+
+    return await response.json();
+}
+```
+
+Follows the same pattern as `getNotifications` — passes token via Bearer header.
+
+### 5. `client/src/App.jsx` — New route
+
+Add under the `/home` route children (after line 123):
+
+```jsx
+<Route path='following' element={<PostCards/>}/>
+```
+
+This renders the same PostCards component at `/home/following`.
+
+### 6. `client/src/components/HomePage/postCards/PostCards.jsx` — Tab + conditional query
+
+**a) Import the new API function (line 7):**
+```js
+import { getJournals, getFollowingFeed, searchJournals, searchUsers } from "../../../../API/Api";
+```
+
+**b) Add "Following" to `header_links` (line 79):**
+```js
+const header_links = [
+    {label: 'Writings', path: '/home'},
+    {label: 'Following', path: '/home/following'},
+    {label: 'Opinions', path: '/home/opinions'},
+]
+```
+
+**c) Detect following mode and add a second query (after line 209):**
+```js
+const isFollowingFeed = location.pathname === '/home/following';
+```
+
+**d) Add a separate `useInfiniteQuery` for the following feed (after the existing journals query ~line 240):**
+```js
+const {
+    data: followingData,
+    fetchNextPage: fetchNextFollowingPage,
+    hasNextPage: hasNextFollowingPage,
+    isFetchingNextPage: isFetchingNextFollowingPage,
+    isLoading: isFollowingLoading,
+} = useInfiniteQuery({
+    queryKey: ['journals-following', session?.access_token],
+    queryFn: ({ pageParam = null }) => getFollowingFeed(session?.access_token, pageParam, 5),
+    getNextPageParam: (lastPage) => {
+        if (lastPage?.hasMore) {
+            const lastJournal = lastPage?.data[lastPage?.data?.length - 1];
+            return new Date(lastJournal.created_at).toISOString();
+        }
+        return undefined;
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 1000 * 60 * 5,
+    enabled: isFollowingFeed && !!session?.access_token,
+})
+```
+
+Key: `enabled: isFollowingFeed && !!session?.access_token` — query only runs when user is on the Following tab AND authenticated. Zero wasted requests.
+
+**e) Unify the active data source — add computed variables (after both queries):**
+```js
+const activeFeedData = isFollowingFeed ? followingData : data;
+const activeFetchNextPage = isFollowingFeed ? fetchNextFollowingPage : fetchNextPage;
+const activeHasNextPage = isFollowingFeed ? hasNextFollowingPage : hasNextPage;
+const activeIsFetchingNextPage = isFollowingFeed ? isFetchingNextFollowingPage : isFetchingNextPage;
+const activeIsLoading = isFollowingFeed ? isFollowingLoading : isFeedLoading;
+```
+
+**f) Replace references throughout PostCards:**
+- Replace `data` → `activeFeedData` in the `journals` flatMap
+- Replace `fetchNextPage` → `activeFetchNextPage` in the inView effect
+- Replace `hasNextPage` → `activeHasNextPage` in the inView effect
+- Replace `isFetchingNextPage` → `activeIsFetchingNextPage` in the inView effect and loader
+- Replace `isFeedLoading` → `activeIsLoading` in the loading spinner
+
+**g) Add empty state for Following tab when user follows nobody:**
+In the render section, before the main post list, add a conditional:
+```jsx
+{isFollowingFeed && !activeIsLoading && journals.length === 0 && !isSearchMode && (
+    <div className="following-empty-state" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-secondary)' }}>
+        <p>Your Following feed is empty</p>
+        <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>Follow writers to see their posts here</p>
+    </div>
+)}
+```
+
+---
+
+## Egress & Resource Summary
+
+| Query | Data transferred | When |
+|-------|-----------------|------|
+| Following IDs | ~36 bytes × follows count | Once per page load |
+| Journals (5 per page) | Same as main feed | On scroll |
+| Likes/Bookmarks/Reactions personalization | Same as main feed | On scroll |
+| Repost sources | Same as main feed | Only if reposts exist |
+
+- **No new tables or migrations needed**
+- **React Query `enabled` flag** prevents the following query from running when user is on the Writings tab
+- **`staleTime: 5 min`** prevents refetching on tab switches within 5 minutes
+- **Cursor pagination** ensures only 5 posts fetched at a time
+
+## Verification
+1. Start dev server
+2. Log in as a user who follows other users
+3. Click the "Following" tab → see only posts from followed users
+4. Scroll down → infinite scroll loads more
+5. Switch back to "Writings" → global feed loads (no re-fetch if within staleTime)
+6. Test with a user who follows nobody → "Your Following feed is empty" message
+7. Test while logged out → Following tab shouldn't be visible or should redirect (the query won't fire due to `enabled` check, but the empty state handles it)
+8. Verify like/bookmark/reaction interactions work the same as the main feed

@@ -1,0 +1,132 @@
+export function createSketchSelectHandler({ dispatch, editorDispatch, getLayer, activeLayerId, viewport }) {
+  function hitTestShapes(modelPos, layers) {
+    // Iterate layers in reverse (top-most first) for correct z-order hit testing
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i];
+      if (!layer.visible || layer.locked) continue;
+
+      // Iterate shapes in reverse (top-most first)
+      for (let j = layer.shapes.length - 1; j >= 0; j--) {
+        const shape = layer.shapes[j];
+        if (shapeContainsPoint(shape, modelPos)) {
+          return { id: shape.id, type: 'shape', layerId: layer.id };
+        }
+      }
+    }
+    return null;
+  }
+
+  function shapeContainsPoint(shape, point) {
+    const tolerance = 6 / viewport.zoom;
+
+    switch (shape.type) {
+      case 'rect': {
+        return (
+          point.x >= shape.x - tolerance &&
+          point.x <= shape.x + shape.width + tolerance &&
+          point.y >= shape.y - tolerance &&
+          point.y <= shape.y + shape.height + tolerance
+        );
+      }
+      case 'ellipse': {
+        const cx = shape.x + shape.width / 2;
+        const cy = shape.y + shape.height / 2;
+        const rx = Math.abs(shape.width) / 2 + tolerance;
+        const ry = Math.abs(shape.height) / 2 + tolerance;
+        if (rx === 0 || ry === 0) return false;
+        const dx = point.x - cx;
+        const dy = point.y - cy;
+        return (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1;
+      }
+      case 'line': {
+        if (shape.points.length < 2) return false;
+        const p1 = shape.points[0];
+        const p2 = shape.points[1];
+        return distToSegment(point, p1, p2) <= tolerance;
+      }
+      case 'path': {
+        if (shape.points.length < 2) return false;
+        for (let i = 0; i < shape.points.length - 1; i++) {
+          if (distToSegment(point, shape.points[i], shape.points[i + 1]) <= tolerance) {
+            return true;
+          }
+        }
+        return false;
+      }
+      default:
+        return false;
+    }
+  }
+
+  function distToSegment(p, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.sqrt((p.x - a.x) ** 2 + (p.y - a.y) ** 2);
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projX = a.x + t * dx;
+    const projY = a.y + t * dy;
+    return Math.sqrt((p.x - projX) ** 2 + (p.y - projY) ** 2);
+  }
+
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      // Get all layers from the project via the provider
+      // We do a simple hit test by checking all visible layers
+      const layer = getLayer(activeLayerId);
+      const allLayers = layer ? [layer] : [];
+
+      // For a full implementation, we'd get all layers from project.
+      // For the scaffold, just test the active layer shapes.
+      if (layer && layer.visible && !layer.locked) {
+        for (let i = layer.shapes.length - 1; i >= 0; i--) {
+          const shape = layer.shapes[i];
+          if (shapeContainsPoint(shape, modelPos)) {
+            editorDispatch({ type: 'SELECT_OBJECT', id: shape.id, objectType: 'shape' });
+            editorDispatch({
+              type: 'UPDATE_TOOL_STATE',
+              payload: {
+                dragging: false,
+                startPos: modelPos,
+              },
+            });
+            return;
+          }
+        }
+      }
+
+      // Clicked on empty space - deselect
+      editorDispatch({ type: 'DESELECT' });
+    },
+
+    onMouseMove(modelPos, e, toolState, selectedId) {
+      // Drag to move selected shape (stub for future implementation)
+    },
+
+    onMouseUp(modelPos, e, toolState) {
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { dragging: false, startPos: null },
+      });
+    },
+
+    onKeyDown(e, toolState, selectedId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        // Find which layer the shape belongs to and delete it
+        const layer = getLayer(activeLayerId);
+        if (layer && layer.shapes.some((s) => s.id === selectedId)) {
+          dispatch({ type: 'SHAPE_DELETE', layerId: layer.id, shapeId: selectedId });
+          editorDispatch({ type: 'DESELECT' });
+        }
+      }
+    },
+
+    getCursor(toolState) {
+      if (toolState?.dragging) return 'grabbing';
+      return 'default';
+    },
+  };
+}

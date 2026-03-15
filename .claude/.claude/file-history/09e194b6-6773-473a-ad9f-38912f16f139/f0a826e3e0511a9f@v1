@@ -1,0 +1,469 @@
+import React, {useMemo, useState} from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {Avatar} from '../../components/Avatar';
+import {ActionBar} from '../../components/PostCard/ActionBar';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {SkeletonLoader} from '../../components/SkeletonLoader';
+import {LexicalRenderer} from '../../lib/content/LexicalRenderer';
+import {RelatedPosts} from '../../components/Discovery/RelatedPosts';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {queryClient} from '../../lib/queryClient';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'PostDetail'>;
+
+const toCount = (value: unknown): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
+const resolveCount = (
+  aggregate: Array<{count?: number}> | undefined,
+  fallback?: number,
+): number => {
+  return toCount(aggregate?.[0]?.count) ?? toCount(fallback) ?? 0;
+};
+
+const formatRelativeDate = (value: string | undefined): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'});
+};
+
+const extractBannerImage = (content: string | null | undefined): string | null => {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content);
+    const findImage = (node: any): string | null => {
+      if (node.type === 'image' && node.src) return node.src;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = findImage(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findImage(parsed.root ?? parsed);
+  } catch {
+    return null;
+  }
+};
+
+export function PostDetailScreen({route}: Props) {
+  const {user, session} = useAuth();
+  const {colors} = useTheme();
+  const {journalId} = route.params;
+  const token = session?.access_token ?? '';
+  const [commentInput, setCommentInput] = useState('');
+  const [repostCaption, setRepostCaption] = useState('');
+  const [showRepost, setShowRepost] = useState(false);
+
+  const detailQuery = useQuery({
+    queryKey: ['journal', journalId, user?.id],
+    queryFn: () => mobileApi.getJournalById(journalId, user?.id),
+  });
+
+  const commentsQuery = useQuery({
+    queryKey: ['journal-comments', journalId],
+    queryFn: () => socialApi.getComments(journalId, null, 20),
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      const journal = detailQuery.data?.journal;
+      const receiverId = journal?.user_id ?? journal?.users?.id;
+      if (!token) throw new Error('Please log in to like this post.');
+      if (!journal?.id || !receiverId) throw new Error('Missing journal data.');
+      const metadata = session?.user.user_metadata as {name?: string; avatar_url?: string} | undefined;
+      return socialApi.likeJournal(token, {
+        journalId: journal.id,
+        receiverId,
+        sendername: metadata?.name,
+        senderImageUrl: metadata?.avatar_url,
+        senderEmail: session?.user.email,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['journal', journalId]});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: e => Alert.alert('Like failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error('Please log in to bookmark.');
+      return socialApi.toggleBookmark(token, {journalId});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['journal', journalId]});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: e => Alert.alert('Bookmark failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const addCommentMutation = useMutation({
+    mutationFn: async () => {
+      const body = commentInput.trim();
+      const receiverId = detailQuery.data?.journal?.user_id ?? detailQuery.data?.journal?.users?.id;
+      if (!token) throw new Error('Please log in to comment.');
+      if (!body) throw new Error('Comment cannot be empty.');
+      if (!receiverId) throw new Error('Missing journal owner.');
+      return socialApi.addComment(token, {comments: body, postId: journalId, receiverId});
+    },
+    onSuccess: () => {
+      setCommentInput('');
+      queryClient.invalidateQueries({queryKey: ['journal-comments', journalId]});
+      queryClient.invalidateQueries({queryKey: ['journal', journalId]});
+    },
+    onError: e => Alert.alert('Comment failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const repostMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error('Please log in to repost.');
+      return socialApi.createRepost(token, {
+        sourceJournalId: journalId,
+        caption: repostCaption.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      setRepostCaption('');
+      setShowRepost(false);
+      Alert.alert('Reposted', 'Post was reposted to your feed.');
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: e => Alert.alert('Repost failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const journal = detailQuery.data?.journal;
+  const likeCount = resolveCount(journal?.like_count, journal?.likes_count);
+  const commentCount = resolveCount(journal?.comment_count, journal?.comments_count);
+  const bookmarkCount = resolveCount(journal?.bookmark_count);
+  const comments = commentsQuery.data?.comments ?? [];
+  const bannerImage = useMemo(() => extractBannerImage(journal?.content), [journal?.content]);
+
+  if (detailQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.loadingContainer}>
+          <SkeletonLoader height={200} borderRadius={0} />
+          <View style={styles.contentPadding}>
+            <SkeletonLoader width="70%" height={24} />
+            <SkeletonLoader width="40%" height={16} style={{marginTop: 12}} />
+            <SkeletonLoader width="100%" height={16} style={{marginTop: 20}} />
+            <SkeletonLoader width="100%" height={16} style={{marginTop: 8}} />
+            <SkeletonLoader width="60%" height={16} style={{marginTop: 8}} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (detailQuery.isError) {
+    return (
+      <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]}>
+        <View style={styles.contentPadding}>
+          <Text style={[styles.errorText, {color: colors.danger}]}>
+            Unable to load this post.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={[styles.scroll, {backgroundColor: colors.bgPrimary}]}
+      showsVerticalScrollIndicator={false}>
+      {/* Banner image */}
+      {bannerImage && (
+        <Image source={{uri: bannerImage}} style={styles.banner} resizeMode="cover" />
+      )}
+
+      <View style={styles.contentPadding}>
+        {/* Title */}
+        <Text style={[styles.title, {color: colors.textHeading}]}>
+          {journal?.title || 'Untitled Post'}
+        </Text>
+
+        {/* Author section */}
+        <View style={styles.authorRow}>
+          <Avatar
+            uri={journal?.users?.avatar_url}
+            name={journal?.users?.name}
+            size={36}
+          />
+          <View style={styles.authorInfo}>
+            <Text style={[styles.authorName, {color: colors.textPrimary}]}>
+              {journal?.users?.name || 'Unknown author'}
+            </Text>
+            <Text style={[styles.dateText, {color: colors.textMuted}]}>
+              {formatRelativeDate(journal?.created_at)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Action bar */}
+        <ActionBar
+          likeCount={likeCount}
+          commentCount={commentCount}
+          bookmarkCount={bookmarkCount}
+          isLiked={journal?.has_liked}
+          isBookmarked={journal?.has_bookmarked}
+          onLike={() => likeMutation.mutate()}
+          onComment={() => {/* scroll to comments */}}
+          onBookmark={() => bookmarkMutation.mutate()}
+          onRepost={() => setShowRepost(!showRepost)}
+        />
+
+        {/* Repost section */}
+        {showRepost && (
+          <View style={[styles.repostSection, {backgroundColor: colors.bgSecondary, borderColor: colors.borderLight}]}>
+            <TextInput
+              value={repostCaption}
+              onChangeText={setRepostCaption}
+              placeholder="Add an optional caption"
+              placeholderTextColor={colors.textFaint}
+              style={[styles.commentInput, {backgroundColor: colors.bgElevated, borderColor: colors.borderCard, color: colors.textPrimary}]}
+              maxLength={280}
+              multiline
+            />
+            <PrimaryButton
+              label={repostMutation.isPending ? 'Reposting...' : 'Repost to feed'}
+              onPress={() => repostMutation.mutate()}
+              disabled={repostMutation.isPending}
+            />
+          </View>
+        )}
+
+        {/* Divider */}
+        <View style={[styles.divider, {backgroundColor: colors.borderLight}]} />
+
+        {/* Content body */}
+        <LexicalRenderer content={journal?.content} />
+
+        {/* Related posts */}
+        <RelatedPosts journalId={journalId} />
+
+        {/* Divider */}
+        <View style={[styles.divider, {backgroundColor: colors.borderLight}]} />
+
+        {/* Comments section */}
+        <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+          Comments ({commentCount})
+        </Text>
+
+        {commentsQuery.isLoading ? (
+          <View style={styles.commentLoading}>
+            <ActivityIndicator color={colors.loaderColor} />
+          </View>
+        ) : comments.length === 0 ? (
+          <Text style={[styles.noComments, {color: colors.textMuted}]}>
+            No comments yet. Be the first!
+          </Text>
+        ) : (
+          comments.map(comment => (
+            <View
+              key={comment.id}
+              style={[styles.commentCard, {borderTopColor: colors.borderCard}]}>
+              <View style={styles.commentHeader}>
+                <Avatar
+                  uri={(comment.users as any)?.avatar_url}
+                  name={comment.users?.name}
+                  size={28}
+                />
+                <View style={styles.commentMeta}>
+                  <Text style={[styles.commentAuthor, {color: colors.textPrimary}]}>
+                    {comment.users?.name || 'User'}
+                  </Text>
+                  <Text style={[styles.commentTime, {color: colors.textFaint}]}>
+                    {formatRelativeDate(comment.created_at)}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.commentBody, {color: colors.textSecondary}]}>
+                {comment.comment || ''}
+              </Text>
+            </View>
+          ))
+        )}
+
+        {/* Comment input */}
+        {token ? (
+          <View style={styles.commentInputRow}>
+            <TextInput
+              value={commentInput}
+              onChangeText={setCommentInput}
+              placeholder="Write a comment..."
+              placeholderTextColor={colors.textFaint}
+              style={[
+                styles.commentInput,
+                {
+                  backgroundColor: colors.bgSecondary,
+                  borderColor: colors.borderCard,
+                  color: colors.textPrimary,
+                },
+              ]}
+              maxLength={200}
+              multiline
+            />
+            <PrimaryButton
+              label={addCommentMutation.isPending ? 'Posting...' : 'Post'}
+              onPress={() => addCommentMutation.mutate()}
+              disabled={commentInput.trim().length === 0 || addCommentMutation.isPending}
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.bottomSpacer} />
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+  },
+  contentPadding: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+  },
+  banner: {
+    width: '100%',
+    height: 220,
+  },
+  title: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 26,
+    lineHeight: 34,
+    marginBottom: spacing.lg,
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  authorInfo: {
+    flex: 1,
+  },
+  authorName: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+  dateText: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    marginVertical: spacing.xl,
+  },
+  sectionTitle: {
+    ...typeScale.h3,
+    marginBottom: spacing.md,
+  },
+  errorText: {
+    fontFamily: fonts.ui.medium,
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: spacing.xxxl,
+  },
+  repostSection: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  noComments: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+  },
+  commentCard: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  commentMeta: {
+    flex: 1,
+  },
+  commentAuthor: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 13,
+  },
+  commentTime: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 11,
+  },
+  commentBody: {
+    ...typeScale.bodySmall,
+    paddingLeft: 36,
+  },
+  commentLoading: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  commentInputRow: {
+    gap: spacing.md,
+    marginTop: spacing.lg,
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    textAlignVertical: 'top',
+    minHeight: 60,
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  bottomSpacer: {
+    height: spacing.xxxxl,
+  },
+});

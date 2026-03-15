@@ -1,0 +1,406 @@
+import { useState } from 'react';
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { createAssembly } from '../domain/assemblyModels';
+import { createSheet } from '@/domain/sheetModels';
+import { generateAssemblySheet, generatePartDetailSheet } from '../sheets/sketchSheetTemplates';
+import styles from './SketchSidebar.module.css';
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <path d="M3 5h10M6 5V3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M4.5 5l.5 8a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5l.5-8" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function AssemblyIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="5" y="5" width="6" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function CloneIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <rect x="1" y="3" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="5" y="1" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ expanded }) {
+  return (
+    <svg viewBox="0 0 16 16" className={`${styles.layerActionIcon} ${styles.expandToggle}`} style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+      <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const PART_TYPE_COLORS = {
+  panel: '#B8860B',
+  leg: '#6B8E23',
+  frame: '#4682B4',
+  cutout: '#CD5C5C',
+  hole: '#9370DB',
+  dimension: '#708090',
+};
+
+function TypeBadge({ type }) {
+  const color = PART_TYPE_COLORS[type] || '#666';
+  return (
+    <span
+      className={styles.categoryBadge}
+      style={{ color, background: `${color}22`, borderColor: `${color}44` }}
+    >
+      {type}
+    </span>
+  );
+}
+
+function PartItem({ part, isSelected, depth, onSelect, onDelete, onClone }) {
+  return (
+    <div
+      className={`${styles.layerItem} ${isSelected ? styles.layerItemActive : ''}`}
+      style={depth > 0 ? { paddingLeft: `${8 + depth * 16}px` } : undefined}
+      onClick={() => onSelect(part.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(part.id);
+        }
+      }}
+    >
+      <div className={styles.layerInfo}>
+        <TypeBadge type={part.type} />
+        <span className={styles.layerName}>{part.name}</span>
+      </div>
+      <div className={styles.layerActions}>
+        {part.type !== 'dimension' && (
+          <button
+            className={styles.layerActionBtn}
+            onClick={(e) => { e.stopPropagation(); onClone(part.id); }}
+            aria-label="Duplicate Part"
+            title="Duplicate Part"
+          >
+            <CloneIcon />
+          </button>
+        )}
+        <button
+          className={styles.layerActionBtn}
+          onClick={(e) => { e.stopPropagation(); onDelete(part.id); }}
+          aria-label="Delete Part"
+          title="Delete Part"
+        >
+          <TrashIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SheetIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <rect x="2" y="1" width="12" height="14" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="5" y1="5" x2="11" y2="5" stroke="currentColor" strokeWidth="1" />
+      <line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" strokeWidth="1" />
+      <line x1="5" y1="11" x2="9" y2="11" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function GenerateIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className={styles.layerActionIcon}>
+      <path d="M8 2v12M2 8h12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export default function SketchSidebar() {
+  const { project, dispatch, getPartsForAssembly } = useSketch();
+  const { activeAssemblyId, selectedId, workspaceMode, activeSheetId, dispatch: editorDispatch } = useSketchEditor();
+
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  const assemblies = project.assemblies || [];
+  const allParts = project.parts.filter((p) => p.type !== 'dimension');
+
+  // Build part tree: group by assembly, then nest children under parents
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleAddAssembly = () => {
+    const asm = createAssembly(`Assembly ${assemblies.length + 1}`);
+    dispatch({ type: 'ASSEMBLY_ADD', assembly: asm });
+    editorDispatch({ type: 'SET_ACTIVE_ASSEMBLY', assemblyId: asm.id });
+  };
+
+  const handleSelectAssembly = (assemblyId) => {
+    if (workspaceMode === 'sheet') {
+      editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+    }
+    editorDispatch({
+      type: 'SET_ACTIVE_ASSEMBLY',
+      assemblyId: activeAssemblyId === assemblyId ? null : assemblyId,
+    });
+  };
+
+  const handleDeleteAssembly = (e, assemblyId) => {
+    e.stopPropagation();
+    dispatch({ type: 'ASSEMBLY_DELETE', assemblyId });
+    if (activeAssemblyId === assemblyId) {
+      editorDispatch({ type: 'SET_ACTIVE_ASSEMBLY', assemblyId: null });
+    }
+  };
+
+  const handleCloneAssembly = (e, assemblyId) => {
+    e.stopPropagation();
+    dispatch({ type: 'ASSEMBLY_CLONE', assemblyId });
+  };
+
+  const handleSelectPart = (partId) => {
+    if (workspaceMode === 'sheet') {
+      editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+    }
+    editorDispatch({ type: 'SELECT_OBJECT', id: partId, objectType: 'part' });
+  };
+
+  const handleDeletePart = (partId) => {
+    dispatch({ type: 'PART_DELETE', partId });
+    if (selectedId === partId) {
+      editorDispatch({ type: 'DESELECT' });
+    }
+  };
+
+  const handleClonePart = (partId) => {
+    dispatch({ type: 'PART_CLONE', partId });
+  };
+
+  // Build tree for a given set of parts
+  function renderPartTree(parts, depth = 0) {
+    const topLevel = parts.filter((p) => !p.parentId || !parts.some((pp) => pp.id === p.parentId));
+    return topLevel.map((part) => {
+      const children = parts.filter((p) => p.parentId === part.id);
+      return (
+        <div key={part.id}>
+          <PartItem
+            part={part}
+            isSelected={part.id === selectedId}
+            depth={depth}
+            onSelect={handleSelectPart}
+            onDelete={handleDeletePart}
+            onClone={handleClonePart}
+          />
+          {children.length > 0 && children.map((child) => (
+            <PartItem
+              key={child.id}
+              part={child}
+              isSelected={child.id === selectedId}
+              depth={depth + 1}
+              onSelect={handleSelectPart}
+              onDelete={handleDeletePart}
+              onClone={handleClonePart}
+            />
+          ))}
+        </div>
+      );
+    });
+  }
+
+  // Unassigned parts: no assemblyId
+  const unassignedParts = allParts.filter((p) => !p.assemblyId);
+  const sheets = project.sheets || [];
+
+  const handleAddSheet = () => {
+    const sheet = createSheet(`Sheet ${sheets.length + 1}`, {
+      number: `S${String(sheets.length + 1).padStart(2, '0')}`,
+      drawingName: `Sheet ${sheets.length + 1}`,
+    });
+    dispatch({ type: 'SKETCH_SHEET_ADD', sheet });
+    editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: sheet.id });
+    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' });
+  };
+
+  const handleSelectSheet = (sheetId) => {
+    editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId });
+    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' });
+  };
+
+  const handleDeleteSheet = (e, sheetId) => {
+    e.stopPropagation();
+    dispatch({ type: 'SKETCH_SHEET_DELETE', sheetId });
+    if (activeSheetId === sheetId) {
+      editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+      editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: null });
+    }
+  };
+
+  const handleGenerateAssemblySheet = (e, assemblyId) => {
+    e.stopPropagation();
+    const sheet = generateAssemblySheet(project, assemblyId);
+    dispatch({ type: 'SKETCH_SHEET_ADD', sheet });
+    editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: sheet.id });
+    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' });
+  };
+
+  return (
+    <div className={styles.sidebar}>
+      {/* Assemblies panel */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderRow}>
+          <span className={styles.sectionTitle}>Assemblies</span>
+          <span className={styles.count}>{assemblies.length}</span>
+          <button className={styles.addBtn} onClick={handleAddAssembly} aria-label="Add Assembly" title="Add Assembly">+</button>
+        </div>
+
+        <div className={styles.layerList}>
+          {assemblies.map((asm) => {
+            const isActive = asm.id === activeAssemblyId;
+            const isExpanded = expandedIds.has(asm.id);
+            const asmParts = allParts.filter((p) => p.assemblyId === asm.id);
+            const partCount = asmParts.length;
+
+            return (
+              <div key={asm.id}>
+                <div
+                  className={`${styles.layerItem} ${isActive ? styles.layerItemActive : ''}`}
+                  onClick={() => handleSelectAssembly(asm.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelectAssembly(asm.id);
+                    }
+                  }}
+                >
+                  <div className={styles.layerInfo}>
+                    <button
+                      className={styles.expandBtn}
+                      onClick={(e) => { e.stopPropagation(); toggleExpand(asm.id); }}
+                      aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      <ChevronIcon expanded={isExpanded} />
+                    </button>
+                    <AssemblyIcon />
+                    <span className={styles.layerName}>{asm.name}</span>
+                    {partCount > 0 && <span className={styles.shapeCount}>{partCount}</span>}
+                  </div>
+                  <div className={styles.layerActions}>
+                    <button
+                      className={styles.layerActionBtn}
+                      onClick={(e) => handleGenerateAssemblySheet(e, asm.id)}
+                      aria-label="Generate Assembly Sheet"
+                      title="Generate Assembly Sheet"
+                    >
+                      <SheetIcon />
+                    </button>
+                    <button
+                      className={styles.layerActionBtn}
+                      onClick={(e) => handleCloneAssembly(e, asm.id)}
+                      aria-label="Duplicate Assembly"
+                      title="Duplicate Assembly"
+                    >
+                      <CloneIcon />
+                    </button>
+                    <button
+                      className={styles.layerActionBtn}
+                      onClick={(e) => handleDeleteAssembly(e, asm.id)}
+                      aria-label="Delete Assembly"
+                      title="Delete Assembly"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded: show nested parts */}
+                {isExpanded && asmParts.length > 0 && (
+                  <div className={styles.indent}>
+                    {renderPartTree(asmParts, 1)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Unassigned Parts */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderRow}>
+          <span className={styles.sectionTitle}>
+            Unassigned Parts
+          </span>
+          <span className={styles.count}>{unassignedParts.length}</span>
+        </div>
+
+        <div className={styles.layerList}>
+          {renderPartTree(unassignedParts, 0)}
+        </div>
+      </div>
+
+      {/* Sheets */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeaderRow}>
+          <span className={styles.sectionTitle}>Sheets</span>
+          <span className={styles.count}>{sheets.length}</span>
+          <button className={styles.addBtn} onClick={handleAddSheet} aria-label="Add Sheet" title="Add Sheet">+</button>
+        </div>
+
+        <div className={styles.layerList}>
+          {sheets.map((sheet) => {
+            const isActive = workspaceMode === 'sheet' && activeSheetId === sheet.id;
+            return (
+              <div
+                key={sheet.id}
+                className={`${styles.layerItem} ${isActive ? styles.layerItemActive : ''}`}
+                onClick={() => handleSelectSheet(sheet.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectSheet(sheet.id);
+                  }
+                }}
+              >
+                <div className={styles.layerInfo}>
+                  <SheetIcon />
+                  <span className={styles.layerName}>{sheet.title || sheet.drawingName || 'Sheet'}</span>
+                  {(sheet.viewports || []).length > 0 && (
+                    <span className={styles.shapeCount}>{sheet.viewports.length}v</span>
+                  )}
+                </div>
+                <div className={styles.layerActions}>
+                  <button
+                    className={styles.layerActionBtn}
+                    onClick={(e) => handleDeleteSheet(e, sheet.id)}
+                    aria-label="Delete Sheet"
+                    title="Delete Sheet"
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

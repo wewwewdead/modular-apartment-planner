@@ -1,0 +1,62 @@
+# Fix Sheet Viewport Move/Resize/Rotate Bugs
+
+## Context
+
+Sheet viewports cannot be moved, resized, or rotated via drag interaction. The root cause is that `fitViewportToSheet()` in `src/sheets/layout.js` passes viewport data through `snapRectToGrid()`, which returns a new object with **only** `{x, y, width, height}` — stripping `id`, `lockAutoLayout`, `rotation`, and all other properties. This causes:
+
+1. **`id` is lost** — the `SHEET_VIEWPORT_UPDATE` reducer compares `viewport.id === action.viewport.id`, which becomes `realId === undefined` — always false. The state update silently does nothing.
+2. **`lockAutoLayout` is lost** — even if the ID matched, auto-layout would immediately override manual positioning.
+
+The same bug also affects viewport property edits from the PropertiesPanel (which uses the same `fitViewportToSheet` path).
+
+A secondary issue: resize/rotation handle hit-test areas use `6 / viewport.zoom` sheet units, which at the default sheet zoom (2x) gives 3 units — smaller than the 4-unit visual handles rendered in SheetRenderer. This makes handles harder to click.
+
+## Changes
+
+### 1. Fix `fitViewportToSheet` — `src/sheets/layout.js` (line 440-446)
+
+Preserve all viewport properties by spreading the original viewport first, then overriding with snapped rect values:
+
+```javascript
+// FROM:
+return snapRectToGrid({
+    ...viewport,
+    width,
+    height,
+    x: clamp(viewport.x, zones.contentArea.x, maxX),
+    y: clamp(viewport.y, minY, Math.max(minY, maxY)),
+  });
+
+// TO:
+return {
+    ...viewport,
+    ...snapRectToGrid({
+      x: clamp(viewport.x, zones.contentArea.x, maxX),
+      y: clamp(viewport.y, minY, Math.max(minY, maxY)),
+      width,
+      height,
+    }),
+  };
+```
+
+### 2. Add shared handle constant — `src/sheets/standards.js`
+
+Add `viewportHandleSize: 4` to `SHEET_TOKENS`.
+
+### 3. Use shared constant in SheetRenderer — `src/renderers/SheetRenderer.jsx`
+
+Replace local `const HANDLE_SIZE = 4` with `SHEET_TOKENS.viewportHandleSize`.
+
+### 4. Fix handle hit-test tolerance — `src/renderers/SheetCanvas.jsx`
+
+On lines 111 and 134, change `6 / viewport.zoom` to `Math.max(SHEET_TOKENS.viewportHandleSize, 6 / viewport.zoom)` so the clickable area is never smaller than the visible handle.
+
+## Verification
+
+1. Run `npm run dev` and open the app
+2. Switch to sheet workspace, add a viewport
+3. Click viewport — should show teal selection border + handles
+4. Drag viewport body — should move
+5. Drag corner/edge handles — should resize
+6. Drag rotation handle (circle above) — should rotate
+7. Edit viewport properties in PropertiesPanel (x, y, width, height, scale) — values should persist

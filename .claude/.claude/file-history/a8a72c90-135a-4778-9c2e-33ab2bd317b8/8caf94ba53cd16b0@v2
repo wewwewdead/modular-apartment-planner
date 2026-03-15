@@ -1,0 +1,315 @@
+import React from 'react';
+import {
+  Image,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {Palette} from '../../theme/tokens';
+
+// Lexical format flags
+const FORMAT_BOLD = 1;
+const FORMAT_ITALIC = 2;
+const FORMAT_UNDERLINE = 8;
+const FORMAT_STRIKETHROUGH = 4;
+
+interface LexicalNode {
+  type?: string;
+  tag?: string;
+  text?: string;
+  format?: number;
+  children?: LexicalNode[];
+  src?: string;
+  altText?: string;
+  width?: number;
+  height?: number;
+  url?: string;
+  direction?: string | null;
+}
+
+interface LexicalRendererProps {
+  content: string | object | null | undefined;
+  maxImages?: number;
+}
+
+function parseContent(raw: string | object | null | undefined): LexicalNode | null {
+  if (!raw) return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return parsed?.root ?? parsed;
+  } catch {
+    return null;
+  }
+}
+
+function TextSpan({node, colors}: {node: LexicalNode; colors: Palette}) {
+  if (node.type === 'linebreak') {
+    return <Text>{'\n'}</Text>;
+  }
+
+  if (node.type !== 'text' || !node.text) return null;
+
+  const fmt = node.format ?? 0;
+  const style: any = {
+    color: colors.textPrimary,
+    fontFamily: fonts.serif.regular,
+    fontSize: 16,
+    lineHeight: 26,
+  };
+
+  if (fmt & FORMAT_BOLD) {
+    style.fontFamily = fonts.serif.bold;
+    style.fontWeight = '700';
+  }
+  if (fmt & FORMAT_ITALIC) {
+    style.fontFamily = fonts.serif.italic;
+    style.fontStyle = 'italic';
+  }
+  if (fmt & FORMAT_UNDERLINE) {
+    style.textDecorationLine = 'underline';
+  }
+  if (fmt & FORMAT_STRIKETHROUGH) {
+    style.textDecorationLine = style.textDecorationLine
+      ? 'underline line-through'
+      : 'line-through';
+  }
+
+  return <Text style={style}>{node.text}</Text>;
+}
+
+function RenderNode({node, colors}: {node: LexicalNode; colors: Palette}) {
+  if (!node || !node.type) return null;
+
+  switch (node.type) {
+    case 'paragraph': {
+      if (!node.children || node.children.length === 0) {
+        return <View style={styles.paragraphGap} />;
+      }
+      return (
+        <Text style={[styles.paragraph, {color: colors.textPrimary}]}>
+          {node.children.map((child, i) => (
+            <RenderInline key={i} node={child} colors={colors} />
+          ))}
+        </Text>
+      );
+    }
+
+    case 'heading': {
+      const headingStyle =
+        node.tag === 'h1'
+          ? styles.h1
+          : node.tag === 'h2'
+            ? styles.h2
+            : styles.h3;
+      return (
+        <Text style={[headingStyle, {color: colors.textHeading}]}>
+          {node.children?.map((child, i) => (
+            <RenderInline key={i} node={child} colors={colors} />
+          ))}
+        </Text>
+      );
+    }
+
+    case 'quote': {
+      return (
+        <View
+          style={[
+            styles.blockquote,
+            {borderLeftColor: colors.accentAmber},
+          ]}>
+          <Text style={[styles.quoteText, {color: colors.textSecondary}]}>
+            {node.children?.map((child, i) => (
+              <RenderInline key={i} node={child} colors={colors} />
+            ))}
+          </Text>
+        </View>
+      );
+    }
+
+    case 'image': {
+      if (!node.src) return null;
+      return (
+        <View style={styles.imageWrapper}>
+          <Image
+            source={{uri: node.src}}
+            style={styles.image}
+            resizeMode="contain"
+            accessibilityLabel={node.altText}
+          />
+        </View>
+      );
+    }
+
+    case 'link': {
+      return (
+        <Pressable
+          onPress={() => node.url && Linking.openURL(node.url)}>
+          <Text style={[styles.link, {color: colors.accentAmber}]}>
+            {node.children?.map((child, i) => (
+              <RenderInline key={i} node={child} colors={colors} />
+            ))}
+          </Text>
+        </Pressable>
+      );
+    }
+
+    case 'list': {
+      return (
+        <View style={styles.list}>
+          {node.children?.map((child, i) => (
+            <RenderNode key={i} node={child} colors={colors} />
+          ))}
+        </View>
+      );
+    }
+
+    case 'listitem': {
+      return (
+        <View style={styles.listItem}>
+          <Text style={[styles.listBullet, {color: colors.textMuted}]}>
+            {'\u2022'}
+          </Text>
+          <Text style={[styles.paragraph, {color: colors.textPrimary, flex: 1}]}>
+            {node.children?.map((child, i) => (
+              <RenderInline key={i} node={child} colors={colors} />
+            ))}
+          </Text>
+        </View>
+      );
+    }
+
+    default: {
+      // Recurse into unknown container nodes
+      if (node.children) {
+        return (
+          <View>
+            {node.children.map((child, i) => (
+              <RenderNode key={i} node={child} colors={colors} />
+            ))}
+          </View>
+        );
+      }
+      return null;
+    }
+  }
+}
+
+function RenderInline({node, colors}: {node: LexicalNode; colors: Palette}) {
+  if (!node) return null;
+  if (node.type === 'text' || node.type === 'linebreak') {
+    return <TextSpan node={node} colors={colors} />;
+  }
+  if (node.type === 'link') {
+    return (
+      <Text
+        style={{color: colors.accentAmber, textDecorationLine: 'underline'}}
+        onPress={() => node.url && Linking.openURL(node.url)}>
+        {node.children?.map((child, i) => (
+          <RenderInline key={i} node={child} colors={colors} />
+        ))}
+      </Text>
+    );
+  }
+  // Fallback: render children as inline
+  if (node.children) {
+    return (
+      <>
+        {node.children.map((child, i) => (
+          <RenderInline key={i} node={child} colors={colors} />
+        ))}
+      </>
+    );
+  }
+  return null;
+}
+
+export function LexicalRenderer({content}: LexicalRendererProps) {
+  const {colors} = useTheme();
+  const root = parseContent(content);
+
+  if (!root || !root.children || root.children.length === 0) {
+    return (
+      <Text style={[styles.paragraph, {color: colors.textMuted}]}>
+        No content available.
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {root.children.map((node, i) => (
+        <RenderNode key={i} node={node} colors={colors} />
+      ))}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    gap: spacing.xs,
+  },
+  paragraph: {
+    ...typeScale.body,
+  },
+  paragraphGap: {
+    height: spacing.md,
+  },
+  h1: {
+    ...typeScale.h1,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  h2: {
+    ...typeScale.h2,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xs,
+  },
+  h3: {
+    ...typeScale.h3,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  blockquote: {
+    borderLeftWidth: 3,
+    paddingLeft: spacing.lg,
+    paddingVertical: spacing.sm,
+    marginVertical: spacing.sm,
+  },
+  quoteText: {
+    fontFamily: fonts.serif.italic,
+    fontSize: 16,
+    lineHeight: 26,
+    fontStyle: 'italic',
+  },
+  imageWrapper: {
+    marginVertical: spacing.md,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: 240,
+    borderRadius: radii.lg,
+  },
+  link: {
+    textDecorationLine: 'underline',
+  },
+  list: {
+    marginVertical: spacing.sm,
+    gap: spacing.xs,
+  },
+  listItem: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingLeft: spacing.sm,
+  },
+  listBullet: {
+    fontSize: 16,
+    lineHeight: 26,
+  },
+});

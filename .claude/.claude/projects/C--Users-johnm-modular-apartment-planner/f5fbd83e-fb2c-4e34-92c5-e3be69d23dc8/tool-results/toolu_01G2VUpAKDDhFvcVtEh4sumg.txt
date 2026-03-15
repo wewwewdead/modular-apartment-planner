@@ -1,0 +1,1589 @@
+     1→import { useEffect, useRef, useState } from 'react';
+     2→import { useProject } from '@/app/ProjectProvider';
+     3→import { useEditor } from '@/app/EditorProvider';
+     4→import { getAnnotationDisplayLabel } from '@/annotations/format';
+     5→import { getBeamDisplayLabel } from '@/domain/beamLabels';
+     6→import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
+     7→import { getSlabDisplayLabel } from '@/domain/slabLabels';
+     8→import { getStairDisplayLabel } from '@/domain/stairLabels';
+     9→import { createSheetRevision, createSheetViewport } from '@/domain/sheetModels';
+    10→import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
+    11→import { wallLength } from '@/geometry/wallGeometry';
+    12→import { getColumnAutoLabel, getColumnListLabel } from '@/domain/columnLabels';
+    13→import { duplicateColumn } from '@/domain/columnModels';
+    14→import { beamLength } from '@/geometry/beamGeometry';
+    15→import { slabArea } from '@/geometry/slabGeometry';
+    16→import { stairRun, stairTotalRise } from '@/geometry/stairGeometry';
+    17→import { computeLandingElevation } from '@/geometry/landingGeometry';
+    18→import { getLandingDisplayLabel } from '@/domain/landingLabels';
+    19→import { sectionCutLength } from '@/geometry/sectionCutGeometry';
+    20→import { getManualAnnotationFigure } from '@/annotations/scene';
+    21→import {
+    22→  buildSheetScene,
+    23→  fitViewportToSheet,
+    24→  getDefaultViewportRect,
+    25→  materializeSheetViewportFrames,
+    26→} from '@/sheets/layout';
+    27→import { listPaperPresets } from '@/sheets/paper';
+    28→import { getViewportSourceLabel, resolveSheetViewportSource } from '@/sheets/sources';
+    29→import { FIXTURE_TYPES } from '@/editor/tools';
+    30→import InputField from './InputField';
+    31→import styles from './PropertiesPanel.module.css';
+    32→
+    33→function useUnits() {
+    34→  const [unit, setUnit] = useState('mm');
+    35→  const isMm = unit === 'mm';
+    36→  return {
+    37→    unit,
+    38→    setUnit,
+    39→    suffix: isMm ? 'mm' : 'm',
+    40→    toDisplay: (mm) => isMm ? +mm.toFixed(1) : +(mm / 1000).toFixed(4),
+    41→    fromDisplay: (v) => isMm ? v : v * 1000,
+    42→    step: (mmStep) => isMm ? mmStep : mmStep / 1000,
+    43→  };
+    44→}
+    45→
+    46→function SheetExportMenu({ sheet, editorDispatch }) {
+    47→  const [open, setOpen] = useState(false);
+    48→  const rootRef = useRef(null);
+    49→  const pngOptions = [
+    50→    { label: 'PNG 150 DPI', dpi: 150 },
+    51→    { label: 'PNG 300 DPI', dpi: 300 },
+    52→    { label: 'PNG 600 DPI', dpi: 600 },
+    53→  ];
+    54→
+    55→  useEffect(() => {
+    56→    if (!open) return undefined;
+    57→
+    58→    const handleMouseDown = (event) => {
+    59→      if (rootRef.current && !rootRef.current.contains(event.target)) {
+    60→        setOpen(false);
+    61→      }
+    62→    };
+    63→
+    64→    document.addEventListener('mousedown', handleMouseDown);
+    65→    return () => document.removeEventListener('mousedown', handleMouseDown);
+    66→  }, [open]);
+    67→
+    68→  const handleExport = async (kind, options = {}) => {
+    69→    if (!sheet) return;
+    70→    try {
+    71→      if (kind === 'pdf') {
+    72→        await exportActiveSheetAsPdf(
+    73→          sheet.title || sheet.drawingName || 'sheet',
+    74→          sheet.paperSize
+    75→        );
+    76→        editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Exported sheet as PDF.' });
+    77→      } else {
+    78→        await exportActiveSheetAsPng(
+    79→          sheet.title || sheet.drawingName || 'sheet',
+    80→          options
+    81→        );
+    82→        const dpiLabel = options.dpi ? ` (${options.dpi} DPI)` : '';
+    83→        editorDispatch({ type: 'SET_STATUS_MESSAGE', message: `Exported sheet as PNG${dpiLabel}.` });
+    84→      }
+    85→    } catch (error) {
+    86→      editorDispatch({
+    87→        type: 'SET_STATUS_MESSAGE',
+    88→        message: error.message || `${kind.toUpperCase()} export failed.`,
+    89→      });
+    90→    } finally {
+    91→      setOpen(false);
+    92→    }
+    93→  };
+    94→
+    95→  return (
+    96→    <div className={styles.exportMenu} ref={rootRef}>
+    97→      <button
+    98→        className={styles.exportMenuTrigger}
+    99→        type="button"
+   100→        onClick={() => setOpen((value) => !value)}
+   101→      >
+   102→        Export sheet
+   103→        <span className={styles.exportMenuChevron}>{open ? '▴' : '▾'}</span>
+   104→      </button>
+   105→      {open && (
+   106→        <div className={styles.exportMenuList}>
+   107→          <button
+   108→            className={styles.exportMenuItem}
+   109→            type="button"
+   110→            onClick={() => handleExport('pdf')}
+   111→          >
+   112→            PDF
+   113→          </button>
+   114→          {pngOptions.map((option) => (
+   115→            <button
+   116→              key={option.dpi}
+   117→              className={styles.exportMenuItem}
+   118→              type="button"
+   119→              onClick={() => handleExport('png', { dpi: option.dpi })}
+   120→            >
+   121→              {option.label}
+   122→            </button>
+   123→          ))}
+   124→        </div>
+   125→      )}
+   126→    </div>
+   127→  );
+   128→}
+   129→
+   130→function WallProperties({ wall, dispatch, floorId, u }) {
+   131→  const len = wallLength(wall);
+   132→
+   133→  const updateWall = (updates) => {
+   134→    dispatch({ type: 'WALL_UPDATE', floorId, wall: { id: wall.id, ...updates } });
+   135→  };
+   136→
+   137→  return (
+   138→    <div>
+   139→      <div className={styles.title}>Wall</div>
+   140→      <div className={styles.subtitle}>Start Point</div>
+   141→      <InputField
+   142→        label="X" type="number" suffix={u.suffix}
+   143→        value={u.toDisplay(wall.start.x)}
+   144→        onChange={(v) => updateWall({ start: { ...wall.start, x: u.fromDisplay(v) } })}
+   145→      />
+   146→      <InputField
+   147→        label="Y" type="number" suffix={u.suffix}
+   148→        value={u.toDisplay(wall.start.y)}
+   149→        onChange={(v) => updateWall({ start: { ...wall.start, y: u.fromDisplay(v) } })}
+   150→      />
+   151→      <div className={styles.subtitle}>End Point</div>
+   152→      <InputField
+   153→        label="X" type="number" suffix={u.suffix}
+   154→        value={u.toDisplay(wall.end.x)}
+   155→        onChange={(v) => updateWall({ end: { ...wall.end, x: u.fromDisplay(v) } })}
+   156→      />
+   157→      <InputField
+   158→        label="Y" type="number" suffix={u.suffix}
+   159→        value={u.toDisplay(wall.end.y)}
+   160→        onChange={(v) => updateWall({ end: { ...wall.end, y: u.fromDisplay(v) } })}
+   161→      />
+   162→      <div className={styles.subtitle}>Properties</div>
+   163→      <InputField
+   164→        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+   165→        value={u.toDisplay(wall.thickness)}
+   166→        onChange={(v) => updateWall({ thickness: Math.max(50, u.fromDisplay(v)) })}
+   167→      />
+   168→      <InputField
+   169→        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+   170→        value={u.toDisplay(wall.height)}
+   171→        onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
+   172→      />
+   173→      <InputField
+   174→        label="Length" type="number" suffix={u.suffix}
+   175→        value={u.toDisplay(len)}
+   176→        readOnly
+   177→      />
+   178→    </div>
+   179→  );
+   180→}
+   181→
+   182→function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u }) {
+   183→  const updateDoor = (updates) => {
+   184→    dispatch({ type: 'DOOR_UPDATE', floorId, door: { id: door.id, ...updates } });
+   185→  };
+   186→
+   187→  const doorType = door.type || 'swing';
+   188→
+   189→  return (
+   190→    <div>
+   191→      <div className={styles.title}>Door</div>
+   192→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+   193→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+   194→        <select value={doorType} onChange={(e) => updateDoor({ type: e.target.value })}
+   195→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+   196→                   borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}>
+   197→          <option value="swing">Swing</option>
+   198→          <option value="double">Double</option>
+   199→          <option value="sliding">Sliding</option>
+   200→        </select>
+   201→      </div>
+   202→      <InputField
+   203→        label="Width" type="number" suffix={u.suffix} step={u.step(50)}
+   204→        value={u.toDisplay(door.width)}
+   205→        onChange={(v) => updateDoor({ width: Math.max(400, u.fromDisplay(v)) })}
+   206→      />
+   207→      <InputField
+   208→        label="Height" type="number" suffix={u.suffix} step={u.step(50)}
+   209→        value={u.toDisplay(door.height)}
+   210→        onChange={(v) => updateDoor({ height: Math.max(300, u.fromDisplay(v)) })}
+   211→      />
+   212→      <InputField
+   213→        label="Sill" type="number" suffix={u.suffix} step={u.step(50)}
+   214→        value={u.toDisplay(door.sillHeight)}
+   215→        onChange={(v) => updateDoor({ sillHeight: u.fromDisplay(v) })}
+   216→      />
+   217→      <InputField
+   218→        label="Offset" type="number" suffix={u.suffix}
+   219→        value={u.toDisplay(door.offset)}
+   220→        onChange={(v) => updateDoor({ offset: Math.max(0, u.fromDisplay(v)) })}
+   221→      />
+   222→      {doorType !== 'double' && (
+   223→        <>
+   224→          <InputField
+   225→            label={doorType === 'sliding' ? 'Slide Dir' : 'Swing'}
+   226→            value={door.openDirection}
+   227→            readOnly={false}
+   228→            onChange={() => updateDoor({
+   229→              openDirection: door.openDirection === 'left' ? 'right' : 'left',
+   230→            })}
+   231→          />
+   232→          <button
+   233→            className={styles.actionBtn}
+   234→            onClick={() => updateDoor({
+   235→              openDirection: door.openDirection === 'left' ? 'right' : 'left',
+   236→            })}
+   237→          >
+   238→            {doorType === 'sliding' ? 'Toggle Slide Direction' : 'Toggle Swing Direction'}
+   239→          </button>
+   240→        </>
+   241→      )}
+   242→      {wall && (
+   243→        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
+   244→      )}
+   245→    </div>
+   246→  );
+   247→}
+   248→
+   249→function SlabProperties({ slab, floor, dispatch, floorId, u }) {
+   250→  const updateSlab = (updates) => {
+   251→    dispatch({ type: 'SLAB_UPDATE', floorId, slab: { id: slab.id, ...updates } });
+   252→  };
+   253→  const areaM2 = (slabArea(slab) / 1_000_000).toFixed(2);
+   254→
+   255→  return (
+   256→    <div>
+   257→      <div className={styles.title}>Slab</div>
+   258→      <InputField
+   259→        label="Name"
+   260→        value={slab.name}
+   261→        onChange={(value) => updateSlab({ name: value })}
+   262→      />
+   263→      <InputField
+   264→        label="Type"
+   265→        value={slab.type}
+   266→        onChange={(value) => updateSlab({ type: value })}
+   267→      />
+   268→      <InputField
+   269→        label="Floor"
+   270→        value={floor.name}
+   271→        readOnly
+   272→      />
+   273→      <div className={styles.subtitle}>Properties</div>
+   274→      <InputField
+   275→        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+   276→        value={u.toDisplay(slab.thickness)}
+   277→        onChange={(value) => updateSlab({ thickness: Math.max(50, u.fromDisplay(value)) })}
+   278→      />
+   279→      <InputField
+   280→        label="Elevation" type="number" suffix={u.suffix} step={u.step(10)}
+   281→        value={u.toDisplay(slab.elevation)}
+   282→        onChange={(value) => updateSlab({ elevation: u.fromDisplay(value) })}
+   283→      />
+   284→      <InputField
+   285→        label="Area"
+   286→        suffix="m²"
+   287→        value={areaM2}
+   288→        readOnly
+   289→      />
+   290→      <InputField
+   291→        label="Label"
+   292→        value={getSlabDisplayLabel(slab)}
+   293→        readOnly
+   294→      />
+   295→    </div>
+   296→  );
+   297→}
+   298→
+   299→function BeamProperties({ beam, floor, dispatch, floorId, u }) {
+   300→  const updateBeam = (updates) => {
+   301→    dispatch({ type: 'BEAM_UPDATE', floorId, beam: { id: beam.id, ...updates } });
+   302→  };
+   303→
+   304→  const startColumn = (floor.columns || []).find((column) => column.id === beam.startRef?.id);
+   305→  const endColumn = (floor.columns || []).find((column) => column.id === beam.endRef?.id);
+   306→  const len = beamLength(beam, floor.columns || []);
+   307→
+   308→  return (
+   309→    <div>
+   310→      <div className={styles.title}>Beam</div>
+   311→      <InputField label="Label" value={getBeamDisplayLabel(beam, floor.columns || [])} readOnly />
+   312→      <InputField
+   313→        label="Start"
+   314→        value={startColumn ? getColumnListLabel(startColumn, floor.columns || []) : beam.startRef?.id || '\u2014'}
+   315→        readOnly
+   316→      />
+   317→      <InputField
+   318→        label="End"
+   319→        value={endColumn ? getColumnListLabel(endColumn, floor.columns || []) : beam.endRef?.id || '\u2014'}
+   320→        readOnly
+   321→      />
+   322→      <div className={styles.subtitle}>Properties</div>
+   323→      <InputField
+   324→        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+   325→        value={u.toDisplay(beam.width)}
+   326→        onChange={(v) => updateBeam({ width: Math.max(50, u.fromDisplay(v)) })}
+   327→      />
+   328→      <InputField
+   329→        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+   330→        value={u.toDisplay(beam.depth)}
+   331→        onChange={(v) => updateBeam({ depth: Math.max(50, u.fromDisplay(v)) })}
+   332→      />
+   333→      <InputField
+   334→        label="Floor Level" type="number" suffix={u.suffix} step={u.step(100)}
+   335→        value={u.toDisplay(beam.floorLevel)}
+   336→        onChange={(v) => updateBeam({ floorLevel: u.fromDisplay(v) })}
+   337→      />
+   338→      <InputField
+   339→        label="Span" type="number" suffix={u.suffix}
+   340→        value={u.toDisplay(len)}
+   341→        readOnly
+   342→      />
+   343→    </div>
+   344→  );
+   345→}
+   346→
+   347→function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
+   348→  const updateAnnotation = (updates) => {
+   349→    dispatch({ type: 'ANNOTATION_UPDATE', floorId, annotation: { id: annotation.id, ...updates } });
+   350→  };
+   351→
+   352→  const figure = getManualAnnotationFigure(floor, annotation.id);
+   353→  const measuredValue = figure?.measurement || 0;
+   354→
+   355→  return (
+   356→    <div>
+   357→      <div className={styles.title}>Dimension</div>
+   358→      <InputField label="Label" value={getAnnotationDisplayLabel(annotation)} readOnly />
+   359→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+   360→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Mode</label>
+   361→        <select
+   362→          value={annotation.mode}
+   363→          onChange={(e) => updateAnnotation({ mode: e.target.value })}
+   364→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+   365→        >
+   366→          <option value="aligned">Aligned</option>
+   367→          <option value="horizontal">Horizontal</option>
+   368→          <option value="vertical">Vertical</option>
+   369→        </select>
+   370→      </div>
+   371→      <div className={styles.subtitle}>Start Point</div>
+   372→      <InputField
+   373→        label="X" type="number" suffix={u.suffix}
+   374→        value={u.toDisplay(annotation.startPoint.x)}
+   375→        onChange={(value) => updateAnnotation({ startPoint: { ...annotation.startPoint, x: u.fromDisplay(value) } })}
+   376→      />
+   377→      <InputField
+   378→        label="Y" type="number" suffix={u.suffix}
+   379→        value={u.toDisplay(annotation.startPoint.y)}
+   380→        onChange={(value) => updateAnnotation({ startPoint: { ...annotation.startPoint, y: u.fromDisplay(value) } })}
+   381→      />
+   382→      <div className={styles.subtitle}>End Point</div>
+   383→      <InputField
+   384→        label="X" type="number" suffix={u.suffix}
+   385→        value={u.toDisplay(annotation.endPoint.x)}
+   386→        onChange={(value) => updateAnnotation({ endPoint: { ...annotation.endPoint, x: u.fromDisplay(value) } })}
+   387→      />
+   388→      <InputField
+   389→        label="Y" type="number" suffix={u.suffix}
+   390→        value={u.toDisplay(annotation.endPoint.y)}
+   391→        onChange={(value) => updateAnnotation({ endPoint: { ...annotation.endPoint, y: u.fromDisplay(value) } })}
+   392→      />
+   393→      <div className={styles.subtitle}>Properties</div>
+   394→      <InputField
+   395→        label="Offset" type="number" suffix={u.suffix} step={u.step(10)}
+   396→        value={u.toDisplay(annotation.offset)}
+   397→        onChange={(value) => updateAnnotation({ offset: u.fromDisplay(value) })}
+   398→      />
+   399→      <InputField
+   400→        label="Text"
+   401→        value={annotation.textOverride}
+   402→        onChange={(value) => updateAnnotation({ textOverride: value })}
+   403→      />
+   404→      <InputField
+   405→        label="Measured" type="number" suffix={u.suffix}
+   406→        value={u.toDisplay(measuredValue)}
+   407→        readOnly
+   408→      />
+   409→    </div>
+   410→  );
+   411→}
+   412→
+   413→function StairProperties({ stair, project, dispatch, floorId, u }) {
+   414→  const updateStair = (updates) => {
+   415→    dispatch({ type: 'STAIR_UPDATE', floorId, stair: { id: stair.id, ...updates } });
+   416→  };
+   417→
+   418→  const floorOptions = getOrderedFloors(project);
+   419→  const totalRise = stairTotalRise(stair);
+   420→  const totalRun = stairRun(stair);
+   421→  const directionAngle = stair.direction?.angle ?? 0;
+   422→
+   423→  return (
+   424→    <div>
+   425→      <div className={styles.title}>Stair</div>
+   426→      <InputField label="Label" value={getStairDisplayLabel(stair)} readOnly />
+   427→      <div className={styles.subtitle}>Start Point</div>
+   428→      <InputField
+   429→        label="X" type="number" suffix={u.suffix}
+   430→        value={u.toDisplay(stair.startPoint.x)}
+   431→        onChange={(v) => updateStair({ startPoint: { ...stair.startPoint, x: u.fromDisplay(v) } })}
+   432→      />
+   433→      <InputField
+   434→        label="Y" type="number" suffix={u.suffix}
+   435→        value={u.toDisplay(stair.startPoint.y)}
+   436→        onChange={(v) => updateStair({ startPoint: { ...stair.startPoint, y: u.fromDisplay(v) } })}
+   437→      />
+   438→      <div className={styles.subtitle}>Geometry</div>
+   439→      <InputField
+   440→        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+   441→        value={u.toDisplay(stair.width)}
+   442→        onChange={(v) => updateStair({ width: Math.max(300, u.fromDisplay(v)) })}
+   443→      />
+   444→      <InputField
+   445→        label="Risers" type="number" step={1}
+   446→        value={stair.numberOfRisers}
+   447→        onChange={(v) => updateStair({ numberOfRisers: Math.max(1, Math.round(v)) })}
+   448→      />
+   449→      <InputField
+   450→        label="Riser H" type="number" suffix={u.suffix} step={u.step(5)}
+   451→        value={u.toDisplay(stair.riserHeight)}
+   452→        onChange={(v) => updateStair({ riserHeight: Math.max(50, u.fromDisplay(v)) })}
+   453→      />
+   454→      <InputField
+   455→        label="Tread D" type="number" suffix={u.suffix} step={u.step(5)}
+   456→        value={u.toDisplay(stair.treadDepth)}
+   457→        onChange={(v) => updateStair({ treadDepth: Math.max(50, u.fromDisplay(v)) })}
+   458→      />
+   459→      <InputField
+   460→        label="Direction" type="number" suffix="deg" step={1}
+   461→        value={+directionAngle.toFixed(1)}
+   462→        onChange={(v) => updateStair({ direction: { angle: v } })}
+   463→      />
+   464→      <div className={styles.subtitle}>Floor Relation</div>
+   465→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+   466→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>From</label>
+   467→        <select
+   468→          value={stair.floorRelation?.fromFloorId || floorId}
+   469→          onChange={(e) => updateStair({
+   470→            floorRelation: {
+   471→              ...(stair.floorRelation || {}),
+   472→              fromFloorId: e.target.value,
+   473→            },
+   474→          })}
+   475→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+   476→        >
+   477→          {floorOptions.map((floor) => (
+   478→            <option key={floor.id} value={floor.id}>{floor.name}</option>
+   479→          ))}
+   480→        </select>
+   481→      </div>
+   482→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+   483→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>To</label>
+   484→        <select
+   485→          value={stair.floorRelation?.toFloorId || floorId}
+   486→          onChange={(e) => updateStair({
+   487→            floorRelation: {
+   488→              ...(stair.floorRelation || {}),
+   489→              toFloorId: e.target.value,
+   490→            },
+   491→          })}
+   492→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+   493→        >
+   494→          {floorOptions.map((floor) => (
+   495→            <option key={floor.id} value={floor.id}>{floor.name}</option>
+   496→          ))}
+   497→        </select>
+   498→      </div>
+   499→      <div className={styles.subtitle}>Derived</div>
+   500→      <InputField label="Total Rise" type="number" suffix={u.suffix} value={u.toDisplay(totalRise)} readOnly />
+   501→      <InputField label="Stair Run" type="number" suffix={u.suffix} value={u.toDisplay(totalRun)} readOnly />
+   502→    </div>
+   503→  );
+   504→}
+   505→
+   506→function LandingProperties({ landing, floor, dispatch, floorId, u }) {
+   507→  const updateLanding = (updates) => {
+   508→    dispatch({ type: 'LANDING_UPDATE', floorId, landing: { id: landing.id, ...updates } });
+   509→  };
+   510→
+   511→  const stairs = floor?.stairs || [];
+   512→  const autoElevation = computeLandingElevation(landing, stairs, 0);
+   513→  const connectedStairs = stairs.filter(s =>
+   514→    s.startLandingAttachment?.landingId === landing.id ||
+   515→    s.endLandingAttachment?.landingId === landing.id
+   516→  );
+   517→
+   518→  return (
+   519→    <div>
+   520→      <div className={styles.title}>Landing</div>
+   521→      <InputField label="Label" value={getLandingDisplayLabel(landing)} readOnly />
+   522→      <div className={styles.subtitle}>Position</div>
+   523→      <InputField
+   524→        label="X" type="number" suffix={u.suffix}
+   525→        value={u.toDisplay(landing.position.x)}
+   526→        onChange={(v) => updateLanding({ position: { ...landing.position, x: u.fromDisplay(v) } })}
+   527→      />
+   528→      <InputField
+   529→        label="Y" type="number" suffix={u.suffix}
+   530→        value={u.toDisplay(landing.position.y)}
+   531→        onChange={(v) => updateLanding({ position: { ...landing.position, y: u.fromDisplay(v) } })}
+   532→      />
+   533→      <div className={styles.subtitle}>Geometry</div>
+   534→      <InputField
+   535→        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+   536→        value={u.toDisplay(landing.width)}
+   537→        onChange={(v) => updateLanding({ width: Math.max(200, u.fromDisplay(v)) })}
+   538→      />
+   539→      <InputField
+   540→        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+   541→        value={u.toDisplay(landing.depth)}
+   542→        onChange={(v) => updateLanding({ depth: Math.max(200, u.fromDisplay(v)) })}
+   543→      />
+   544→      <InputField
+   545→        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+   546→        value={u.toDisplay(landing.thickness)}
+   547→        onChange={(v) => updateLanding({ thickness: Math.max(50, u.fromDisplay(v)) })}
+   548→      />
+   549→      <InputField
+   550→        label="Rotation" type="number" suffix="deg" step={1}
+   551→        value={+(landing.rotation || 0).toFixed(1)}
+   552→        onChange={(v) => updateLanding({ rotation: v })}
+   553→      />
+   554→      <div className={styles.subtitle}>Elevation</div>
+   555→      <InputField
+   556→        label="Elevation" type="number" suffix={u.suffix}
+   557→        value={u.toDisplay(landing.elevation || autoElevation)}
+   558→        onChange={(v) => updateLanding({ elevation: u.fromDisplay(v) })}
+   559→      />
+   560→      <InputField label="Auto Elev" type="number" suffix={u.suffix} value={u.toDisplay(autoElevation)} readOnly />
+   561→      {connectedStairs.length > 0 && (
+   562→        <>
+   563→          <div className={styles.subtitle}>Connected Stairs</div>
+   564→          {connectedStairs.map(s => (
+   565→            <InputField key={s.id} label="Stair" value={s.id.split('_').pop()} readOnly />
+   566→          ))}
+   567→        </>
+   568→      )}
+   569→    </div>
+   570→  );
+   571→}
+   572→
+   573→function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u }) {
+   574→  const updateSectionCut = (updates) => {
+   575→    dispatch({ type: 'SECTION_UPDATE', floorId, sectionCut: { id: sectionCut.id, ...updates } });
+   576→  };
+   577→  const len = sectionCutLength(sectionCut);
+   578→
+   579→  return (
+   580→    <div>
+   581→      <div className={styles.title}>Section Cut</div>
+   582→      <InputField
+   583→        label="Label"
+   584→        value={sectionCut.label}
+   585→        onChange={(value) => updateSectionCut({ label: value })}
+   586→      />
+   587→      <div className={styles.subtitle}>Start Point</div>
+   588→      <InputField
+   589→        label="X" type="number" suffix={u.suffix}
+   590→        value={u.toDisplay(sectionCut.startPoint.x)}
+   591→        onChange={(value) => updateSectionCut({
+   592→          startPoint: { ...sectionCut.startPoint, x: u.fromDisplay(value) },
+   593→        })}
+   594→      />
+   595→      <InputField
+   596→        label="Y" type="number" suffix={u.suffix}
+   597→        value={u.toDisplay(sectionCut.startPoint.y)}
+   598→        onChange={(value) => updateSectionCut({
+   599→          startPoint: { ...sectionCut.startPoint, y: u.fromDisplay(value) },
+   600→        })}
+   601→      />
+   602→      <div className={styles.subtitle}>End Point</div>
+   603→      <InputField
+   604→        label="X" type="number" suffix={u.suffix}
+   605→        value={u.toDisplay(sectionCut.endPoint.x)}
+   606→        onChange={(value) => updateSectionCut({
+   607→          endPoint: { ...sectionCut.endPoint, x: u.fromDisplay(value) },
+   608→        })}
+   609→      />
+   610→      <InputField
+   611→        label="Y" type="number" suffix={u.suffix}
+   612→        value={u.toDisplay(sectionCut.endPoint.y)}
+   613→        onChange={(value) => updateSectionCut({
+   614→          endPoint: { ...sectionCut.endPoint, y: u.fromDisplay(value) },
+   615→        })}
+   616→      />
+   617→      <div className={styles.subtitle}>Properties</div>
+   618→      <InputField
+   619→        label="Depth" type="number" suffix={u.suffix} step={u.step(100)}
+   620→        value={u.toDisplay(sectionCut.depth)}
+   621→        onChange={(value) => updateSectionCut({ depth: Math.max(100, u.fromDisplay(value)) })}
+   622→      />
+   623→      <InputField
+   624→        label="Length" type="number" suffix={u.suffix}
+   625→        value={u.toDisplay(len)}
+   626→        readOnly
+   627→      />
+   628→      <button
+   629→        className={styles.actionBtn}
+   630→        onClick={() => updateSectionCut({ direction: sectionCut.direction === -1 ? 1 : -1 })}
+   631→      >
+   632→        Flip section direction
+   633→      </button>
+   634→      <button
+   635→        className={styles.actionBtn}
+   636→        onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'section_view', sectionCutId: sectionCut.id })}
+   637→      >
+   638→        Open section view
+   639→      </button>
+   640→    </div>
+   641→  );
+   642→}
+   643→
+   644→function WindowProperties({ window: win, wall, dispatch, floorId, u }) {
+   645→  const updateWindow = (updates) => {
+   646→    dispatch({ type: 'WINDOW_UPDATE', floorId, window: { id: win.id, ...updates } });
+   647→  };
+   648→
+   649→  const winType = win.type || 'standard';
+   650→
+   651→  return (
+   652→    <div>
+   653→      <div className={styles.title}>Window</div>
+   654→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+   655→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
+   656→        <select value={winType} onChange={(e) => updateWindow({ type: e.target.value })}
+   657→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
+   658→                   borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}>
+   659→          <option value="standard">Standard</option>
+   660→          <option value="casement">Casement</option>
+   661→          <option value="awning">Awning</option>
+   662→          <option value="fixed">Fixed</option>
+   663→          <option value="jalousie">Jalousie</option>
+   664→        </select>
+   665→      </div>
+   666→      <InputField
+   667→        label="Width" type="number" suffix={u.suffix} step={u.step(50)}
+   668→        value={u.toDisplay(win.width)}
+   669→        onChange={(v) => updateWindow({ width: Math.max(300, u.fromDisplay(v)) })}
+   670→      />
+   671→      <InputField
+   672→        label="Height" type="number" suffix={u.suffix} step={u.step(50)}
+   673→        value={u.toDisplay(win.height)}
+   674→        onChange={(v) => updateWindow({ height: Math.max(300, u.fromDisplay(v)) })}
+   675→      />
+   676→      <InputField
+   677→        label="Sill Height" type="number" suffix={u.suffix} step={u.step(50)}
+   678→        value={u.toDisplay(win.sillHeight)}
+   679→        onChange={(v) => updateWindow({ sillHeight: u.fromDisplay(v) })}
+   680→      />
+   681→      <InputField
+   682→        label="Wall Offset" type="number" suffix={u.suffix}
+   683→        value={u.toDisplay(win.offset)}
+   684→        onChange={(v) => updateWindow({ offset: Math.max(0, u.fromDisplay(v)) })}
+   685→      />
+   686→      {(winType === 'casement' || winType === 'awning') && (
+   687→        <button
+   688→          className={styles.actionBtn}
+   689→          onClick={() => updateWindow({
+   690→            openDirection: win.openDirection === 'left' ? 'right' : 'left',
+   691→          })}
+   692→        >
+   693→          Toggle Open Side
+   694→        </button>
+   695→      )}
+   696→      {wall && (
+   697→        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
+   698→      )}
+   699→    </div>
+   700→  );
+   701→}
+   702→
+   703→function RoomProperties({ room, dispatch, floorId }) {
+   704→  const areaM2 = room.area ? (room.area / 1_000_000).toFixed(2) : '\u2014';
+   705→  const updateRoom = (updates) => {
+   706→    dispatch({ type: 'ROOM_UPDATE', floorId, room: { id: room.id, ...updates } });
+   707→  };
+   708→  return (
+   709→    <div>
+   710→      <div className={styles.title}>Room</div>
+   711→      <InputField label="Name" value={room.name} onChange={(v) => updateRoom({ name: v })} />
+   712→      <InputField label="Area" suffix="m\u00B2" value={areaM2} readOnly />
+   713→      <div className={styles.colorField}>
+   714→        <label className={styles.colorLabel}>Color</label>
+   715→        <div className={styles.colorControls}>
+   716→          <input
+   717→            className={styles.colorPicker}
+   718→            type="color"
+   719→            value={room.color}
+   720→            onChange={(e) => updateRoom({ color: e.target.value })}
+   721→            aria-label="Room color"
+   722→          />
+   723→          <input
+   724→            className={styles.colorHexInput}
+   725→            type="text"
+   726→            value={room.color}
+   727→            onChange={(e) => {
+   728→              const hex = e.target.value;
+   729→              if (/^#[0-9a-fA-F]{6}$/.test(hex)) updateRoom({ color: hex });
+   730→            }}
+   731→            onBlur={(e) => {
+   732→              let hex = e.target.value.trim();
+   733→              if (!hex.startsWith('#')) hex = '#' + hex;
+   734→              if (/^#[0-9a-fA-F]{6}$/.test(hex)) updateRoom({ color: hex });
+   735→            }}
+   736→          />
+   737→        </div>
+   738→      </div>
+   739→    </div>
+   740→  );
+   741→}
+   742→
+   743→function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u }) {
+   744→  const updateColumn = (updates) => {
+   745→    dispatch({ type: 'COLUMN_UPDATE', floorId, column: { id: column.id, ...updates } });
+   746→  };
+   747→  const autoLabel = getColumnAutoLabel(column, floor?.columns || []);
+   748→
+   749→  return (
+   750→    <div>
+   751→      <div className={styles.title}>Column</div>
+   752→      <InputField
+   753→        label="Name" value={column.name}
+   754→        onChange={(v) => updateColumn({ name: v, showLabel: v ? true : column.showLabel })}
+   755→      />
+   756→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+   757→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+   758→          Label
+   759→        </label>
+   760→        <input
+   761→          type="checkbox"
+   762→          checked={Boolean(column.showLabel)}
+   763→          onChange={(e) => updateColumn({ showLabel: e.target.checked })}
+   764→        />
+   765→        <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+   766→          {column.name?.trim() || autoLabel || 'Hidden'}
+   767→        </span>
+   768→      </div>
+   769→      <div className={styles.subtitle}>Position</div>
+   770→      <InputField
+   771→        label="X" type="number" suffix={u.suffix}
+   772→        value={u.toDisplay(column.x)}
+   773→        onChange={(v) => updateColumn({ x: u.fromDisplay(v) })}
+   774→      />
+   775→      <InputField
+   776→        label="Y" type="number" suffix={u.suffix}
+   777→        value={u.toDisplay(column.y)}
+   778→        onChange={(v) => updateColumn({ y: u.fromDisplay(v) })}
+   779→      />
+   780→      <div className={styles.subtitle}>Dimensions</div>
+   781→      <InputField
+   782→        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+   783→        value={u.toDisplay(column.width)}
+   784→        onChange={(v) => updateColumn({ width: Math.max(50, u.fromDisplay(v)) })}
+   785→      />
+   786→      <InputField
+   787→        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+   788→        value={u.toDisplay(column.depth)}
+   789→        onChange={(v) => updateColumn({ depth: Math.max(50, u.fromDisplay(v)) })}
+   790→      />
+   791→      <InputField
+   792→        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+   793→        value={u.toDisplay(column.height)}
+   794→        onChange={(v) => updateColumn({ height: Math.max(100, u.fromDisplay(v)) })}
+   795→      />
+   796→      <button
+   797→        className={styles.actionBtn}
+   798→        onClick={() => {
+   799→          const cloned = duplicateColumn(column);
+   800→          dispatch({ type: 'COLUMN_DUPLICATE', floorId, column: cloned });
+   801→          editorDispatch({ type: 'SELECT_OBJECT', id: cloned.id, objectType: 'column' });
+   802→        }}
+   803→      >
+   804→        Duplicate column
+   805→      </button>
+   806→    </div>
+   807→  );
+   808→}
+   809→
+   810→function FixtureProperties({ fixture, dispatch, floorId, u }) {
+   811→  const updateFixture = (updates) => {
+   812→    dispatch({ type: 'FIXTURE_UPDATE', floorId, fixture: { id: fixture.id, ...updates } });
+   813→  };
+   814→
+   815→  const fixtureTypeLabels = {
+   816→    kitchenTop: 'Kitchen Top',
+   817→    toilet: 'Toilet',
+   818→    lavatory: 'Lavatory',
+   819→    table: 'Table',
+   820→    tv: 'TV',
+   821→    sofa: 'Sofa',
+   822→  };
+   823→
+   824→  return (
+   825→    <div>
+   826→      <div className={styles.title}>Fixture</div>
+   827→      <InputField
+   828→        label="Name" value={fixture.name}
+   829→        onChange={(v) => updateFixture({ name: v })}
+   830→      />
+   831→      <InputField
+   832→        label="Type"
+   833→        value={fixtureTypeLabels[fixture.fixtureType] || fixture.fixtureType}
+   834→        readOnly
+   835→      />
+   836→      <div className={styles.subtitle}>Position</div>
+   837→      <InputField
+   838→        label="X" type="number" suffix={u.suffix}
+   839→        value={u.toDisplay(fixture.x)}
+   840→        onChange={(v) => updateFixture({ x: u.fromDisplay(v) })}
+   841→      />
+   842→      <InputField
+   843→        label="Y" type="number" suffix={u.suffix}
+   844→        value={u.toDisplay(fixture.y)}
+   845→        onChange={(v) => updateFixture({ y: u.fromDisplay(v) })}
+   846→      />
+   847→      <div className={styles.subtitle}>Dimensions</div>
+   848→      <InputField
+   849→        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+   850→        value={u.toDisplay(fixture.width)}
+   851→        onChange={(v) => updateFixture({ width: Math.max(50, u.fromDisplay(v)) })}
+   852→      />
+   853→      <InputField
+   854→        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+   855→        value={u.toDisplay(fixture.depth)}
+   856→        onChange={(v) => updateFixture({ depth: Math.max(50, u.fromDisplay(v)) })}
+   857→      />
+   858→      <InputField
+   859→        label="Rotation" type="number" suffix="°" step={15}
+   860→        value={fixture.rotation}
+   861→        onChange={(v) => updateFixture({ rotation: ((+v % 360) + 360) % 360 })}
+   862→      />
+   863→    </div>
+   864→  );
+   865→}
+   866→
+   867→function AnnotationSettingsProperties({ floor, dispatch }) {
+   868→  const settings = floor.annotationSettings || {};
+   869→
+   870→  const updateSettings = (nextSettings) => {
+   871→    dispatch({ type: 'ANNOTATION_SETTINGS_UPDATE', floorId: floor.id, settings: nextSettings });
+   872→  };
+   873→
+   874→  const checkbox = (label, key) => (
+   875→    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }} key={key}>
+   876→      <label style={{ flex: '0 0 140px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>{label}</label>
+   877→      <input
+   878→        type="checkbox"
+   879→        checked={Boolean(settings[key])}
+   880→        onChange={(e) => updateSettings({ [key]: e.target.checked })}
+   881→      />
+   882→    </div>
+   883→  );
+   884→
+   885→  return (
+   886→    <div>
+   887→      <div className={styles.title}>Annotations</div>
+   888→      {checkbox('Wall Dimensions', 'showWallDimensions')}
+   889→      {checkbox('Room Dimensions', 'showRoomDimensions')}
+   890→      {checkbox('Overall Dimensions', 'showOverallDimensions')}
+   891→      {checkbox('Object Tags', 'showObjectTags')}
+   892→      {checkbox('Elev. Overall', 'showElevationOverallDimensions')}
+   893→      {checkbox('Elev. Levels', 'showElevationLevelDimensions')}
+   894→      {checkbox('Elev. Openings', 'showElevationOpeningDimensions')}
+   895→      <InputField label="Manual Dims" value={(floor.annotations || []).length} readOnly />
+   896→    </div>
+   897→  );
+   898→}
+   899→
+   900→function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloorId, u }) {
+   901→  const updateSheet = (updates) => {
+   902→    dispatch({ type: 'SHEET_UPDATE', sheet: { id: sheet.id, ...updates } });
+   903→  };
+   904→
+   905→  const updateLayoutTemplate = (nextLayoutTemplate) => {
+   906→    if (nextLayoutTemplate === sheet.layoutTemplate) return;
+   907→
+   908→    if (nextLayoutTemplate === 'manual') {
+   909→      dispatch({
+   910→        type: 'SHEET_UPDATE',
+   911→        sheet: materializeSheetViewportFrames(project, sheet),
+   912→      });
+   913→      return;
+   914→    }
+   915→
+   916→    updateSheet({
+   917→      layoutTemplate: nextLayoutTemplate,
+   918→      viewports: (sheet.viewports || []).map((viewport) => ({
+   919→        ...viewport,
+   920→        lockAutoLayout: false,
+   921→      })),
+   922→    });
+   923→  };
+   924→
+   925→  const updateTitleBlock = (updates) => {
+   926→    updateSheet({
+   927→      titleBlock: {
+   928→        ...(sheet.titleBlock || {}),
+   929→        ...updates,
+   930→      },
+   931→    });
+   932→  };
+   933→
+   934→  const updateRevisions = (nextRevisions) => {
+   935→    updateSheet({ revisions: nextRevisions });
+   936→  };
+   937→
+   938→  const addViewport = () => {
+   939→    try {
+   940→      const sourceFloorId = getDefaultActiveFloorId(project, activeFloorId);
+   941→      const sourceView = 'plan';
+   942→      const viewportBase = createSheetViewport(sourceView, sourceFloorId, {
+   943→        scale: 100,
+   944→        lockAutoLayout: sheet.layoutTemplate !== 'auto',
+   945→      });
+   946→
+   947→      let rect;
+   948→      try {
+   949→        const source = resolveSheetViewportSource(project, viewportBase);
+   950→        rect = getDefaultViewportRect(sheet, source, viewportBase.scale, { role: viewportBase.role });
+   951→      } catch {
+   952→        // Geometry resolution failed — use default dimensions
+   953→        rect = { x: 20, y: 20, width: 160, height: 100 };
+   954→      }
+   955→
+   956→      const viewport = { ...viewportBase, ...rect };
+   957→      dispatch({ type: 'SHEET_VIEWPORT_ADD', sheetId: sheet.id, viewport });
+   958→      editorDispatch({ type: 'SELECT_OBJECT', id: viewport.id, objectType: 'sheetViewport' });
+   959→      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Viewport added.' });
+   960→    } catch (err) {
+   961→      console.error('Failed to add viewport:', err);
+   962→      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Failed to add viewport.' });
+   963→    }
+   964→  };
+   965→
+   966→  const addRevision = () => {
+   967→    updateRevisions([createSheetRevision(), ...(sheet.revisions || [])]);
+   968→  };
+   969→
+   970→  const updateRevision = (revisionId, updates) => {
+   971→    updateRevisions((sheet.revisions || []).map((revision) => (
+   972→      revision.id === revisionId ? { ...revision, ...updates } : revision
+   973→    )));
+   974→  };
+   975→
+   976→  const removeRevision = (revisionId) => {
+   977→    updateRevisions((sheet.revisions || []).filter((revision) => revision.id !== revisionId));
+   978→  };
+   979→
+   980→  const paperPreset = listPaperPresets().find((preset) => preset.key === sheet.paperSize);
+   981→  const titleBlock = sheet.titleBlock || {};
+   982→  const projectTitleValue = titleBlock.projectTitleOverride || sheet.projectNameOverride;
+   983→
+   984→  return (
+   985→    <div>
+   986→      <div className={styles.title}>Sheet</div>
+   987→      <InputField label="Title" value={sheet.title} onChange={(value) => updateSheet({ title: value })} />
+   988→      <InputField label="Number" value={sheet.number || ''} onChange={(value) => updateSheet({ number: value })} />
+   989→      <InputField label="Drawing" value={sheet.drawingName} onChange={(value) => updateSheet({ drawingName: value })} />
+   990→      <InputField label="Issue Date" value={sheet.issueDate || ''} onChange={(value) => updateSheet({ issueDate: value })} />
+   991→      <InputField label="Scale" value={sheet.scaleLabel} onChange={(value) => updateSheet({ scaleLabel: value })} />
+   992→      <InputField
+   993→        label="Project Title"
+   994→        value={projectTitleValue}
+   995→        onChange={(value) => updateSheet({
+   996→          projectNameOverride: value,
+   997→          titleBlock: {
+   998→            ...(sheet.titleBlock || {}),
+   999→            projectTitleOverride: value,
+  1000→          },
+  1001→        })}
+  1002→      />
+  1003→      <InputField
+  1004→        label="Address"
+  1005→        value={titleBlock.projectAddressOverride || ''}
+  1006→        onChange={(value) => updateTitleBlock({ projectAddressOverride: value })}
+  1007→      />
+  1008→      <InputField
+  1009→        label="Drawn By"
+  1010→        value={titleBlock.drawnBy || ''}
+  1011→        onChange={(value) => updateTitleBlock({ drawnBy: value })}
+  1012→      />
+  1013→      <InputField
+  1014→        label="Checked"
+  1015→        value={titleBlock.checkedBy || ''}
+  1016→        onChange={(value) => updateTitleBlock({ checkedBy: value })}
+  1017→      />
+  1018→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1019→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Scale Mode</label>
+  1020→        <select
+  1021→          value={sheet.scaleMode}
+  1022→          onChange={(e) => updateSheet({ scaleMode: e.target.value })}
+  1023→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1024→        >
+  1025→          <option value="custom">Custom</option>
+  1026→          <option value="per_viewport">Per viewport</option>
+  1027→          <option value="as_noted">As noted</option>
+  1028→        </select>
+  1029→      </div>
+  1030→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1031→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Layout</label>
+  1032→        <select
+  1033→          value={sheet.layoutTemplate}
+  1034→          onChange={(e) => updateLayoutTemplate(e.target.value)}
+  1035→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1036→        >
+  1037→          <option value="auto">Hybrid Auto</option>
+  1038→          <option value="manual">Manual Frames</option>
+  1039→        </select>
+  1040→      </div>
+  1041→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1042→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Paper</label>
+  1043→        <select
+  1044→          value={sheet.paperSize}
+  1045→          onChange={(e) => updateSheet({ paperSize: e.target.value })}
+  1046→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1047→        >
+  1048→          {listPaperPresets().map((preset) => (
+  1049→            <option key={preset.key} value={preset.key}>{preset.label}</option>
+  1050→          ))}
+  1051→        </select>
+  1052→      </div>
+  1053→      <InputField label="Viewports" value={(sheet.viewports || []).length} readOnly />
+  1054→      <button
+  1055→        className={styles.actionBtn}
+  1056→        onClick={addViewport}
+  1057→      >
+  1058→        Add viewport
+  1059→      </button>
+  1060→      <InputField label="Width" suffix={u.suffix} value={u.toDisplay(paperPreset?.width || 0)} readOnly />
+  1061→      <InputField label="Height" suffix={u.suffix} value={u.toDisplay(paperPreset?.height || 0)} readOnly />
+  1062→
+  1063→      <div className={styles.subtitle}>Revisions</div>
+  1064→      <button className={styles.actionBtn} onClick={addRevision}>
+  1065→        Add revision
+  1066→      </button>
+  1067→      {(sheet.revisions || []).map((revision) => (
+  1068→        <div key={revision.id} className={styles.revisionCard}>
+  1069→          <InputField
+  1070→            label="Rev"
+  1071→            value={revision.code}
+  1072→            onChange={(value) => updateRevision(revision.id, { code: value })}
+  1073→          />
+  1074→          <InputField
+  1075→            label="Date"
+  1076→            value={revision.date}
+  1077→            onChange={(value) => updateRevision(revision.id, { date: value })}
+  1078→          />
+  1079→          <InputField
+  1080→            label="Note"
+  1081→            value={revision.description}
+  1082→            onChange={(value) => updateRevision(revision.id, { description: value })}
+  1083→          />
+  1084→          <button className={styles.deleteBtn} onClick={() => removeRevision(revision.id)}>
+  1085→            Delete revision
+  1086→          </button>
+  1087→        </div>
+  1088→      ))}
+  1089→    </div>
+  1090→  );
+  1091→}
+  1092→
+  1093→function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
+  1094→  const sheetScene = buildSheetScene(project, sheet);
+  1095→  const sceneViewport = sheetScene?.viewports.find((entry) => entry.id === viewport.id) || null;
+  1096→  const displayedViewport = sceneViewport || viewport;
+  1097→
+  1098→  const updateViewport = (updates) => {
+  1099→    const isManualEdit = ['x', 'y', 'width', 'height', 'rotation'].some((key) => key in updates);
+  1100→    const baseViewport = sceneViewport
+  1101→      ? {
+  1102→          ...viewport,
+  1103→          x: sceneViewport.x,
+  1104→          y: sceneViewport.y,
+  1105→          width: sceneViewport.width,
+  1106→          height: sceneViewport.height,
+  1107→          rotation: sceneViewport.rotation,
+  1108→        }
+  1109→      : viewport;
+  1110→    const nextViewport = fitViewportToSheet({
+  1111→      ...baseViewport,
+  1112→      ...updates,
+  1113→      lockAutoLayout: 'lockAutoLayout' in updates
+  1114→        ? updates.lockAutoLayout
+  1115→        : (isManualEdit ? true : baseViewport.lockAutoLayout),
+  1116→    }, sheet);
+  1117→    dispatch({ type: 'SHEET_VIEWPORT_UPDATE', sheetId: sheet.id, viewport: nextViewport });
+  1118→  };
+  1119→
+  1120→  const floorOptions = getOrderedFloors(project);
+  1121→  const updateSource = (nextSourceView, nextFloorId = viewport.sourceFloorId, nextRefId) => {
+  1122→    const floor = floorOptions.find((entry) => entry.id === nextFloorId) || null;
+  1123→    const refId = nextRefId !== undefined
+  1124→      ? nextRefId
+  1125→      : nextSourceView === 'section' ? (floor?.sectionCuts || [])[0]?.id || null : null;
+  1126→    updateViewport({
+  1127→      sourceView: nextSourceView,
+  1128→      sourceFloorId: nextFloorId,
+  1129→      sourceRefId: refId,
+  1130→      role: nextSourceView === '3d_preview'
+  1131→        ? 'supplemental'
+  1132→        : (viewport.role === 'supplemental' ? 'secondary' : viewport.role),
+  1133→    });
+  1134→  };
+  1135→
+  1136→  const currentFloor = floorOptions.find((entry) => entry.id === viewport.sourceFloorId) || null;
+  1137→  const sectionCutOptions = currentFloor?.sectionCuts || [];
+  1138→
+  1139→  const source = resolveSheetViewportSource(project, viewport);
+  1140→
+  1141→  const toggleLayoutMode = () => {
+  1142→    if (sheet.layoutTemplate !== 'auto') return;
+  1143→    if (viewport.lockAutoLayout) {
+  1144→      updateViewport({ lockAutoLayout: false });
+  1145→      return;
+  1146→    }
+  1147→    updateViewport({
+  1148→      x: displayedViewport.x,
+  1149→      y: displayedViewport.y,
+  1150→      width: displayedViewport.width,
+  1151→      height: displayedViewport.height,
+  1152→      rotation: displayedViewport.rotation || 0,
+  1153→      lockAutoLayout: true,
+  1154→    });
+  1155→  };
+  1156→
+  1157→  return (
+  1158→    <div>
+  1159→      <div className={styles.title}>Sheet Viewport</div>
+  1160→      <InputField label="Title" value={viewport.title} onChange={(value) => updateViewport({ title: value })} />
+  1161→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1162→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Source</label>
+  1163→        <select
+  1164→          value={viewport.sourceView}
+  1165→          onChange={(e) => updateSource(e.target.value)}
+  1166→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1167→        >
+  1168→          <option value="plan">Plan</option>
+  1169→          <option value="3d_preview">3D Preview</option>
+  1170→          <option value="section">Section</option>
+  1171→          <option value="elevation_front">Front Elevation</option>
+  1172→          <option value="elevation_rear">Rear Elevation</option>
+  1173→          <option value="elevation_left">Left Elevation</option>
+  1174→          <option value="elevation_right">Right Elevation</option>
+  1175→        </select>
+  1176→      </div>
+  1177→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1178→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Floor</label>
+  1179→        <select
+  1180→          value={viewport.sourceFloorId || ''}
+  1181→          onChange={(e) => updateSource(viewport.sourceView, e.target.value)}
+  1182→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1183→        >
+  1184→          {floorOptions.map((floor) => (
+  1185→            <option key={floor.id} value={floor.id}>{floor.name}</option>
+  1186→          ))}
+  1187→        </select>
+  1188→      </div>
+  1189→      {viewport.sourceView === 'section' && sectionCutOptions.length > 0 && (
+  1190→        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1191→          <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Section Cut</label>
+  1192→          <select
+  1193→            value={viewport.sourceRefId || ''}
+  1194→            onChange={(e) => updateSource('section', viewport.sourceFloorId, e.target.value || null)}
+  1195→            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1196→          >
+  1197→            {sectionCutOptions.map((sc) => (
+  1198→              <option key={sc.id} value={sc.id}>{sc.label || sc.id}</option>
+  1199→            ))}
+  1200→          </select>
+  1201→        </div>
+  1202→      )}
+  1203→      <InputField label="Source Label" value={source.title || getViewportSourceLabel(viewport.sourceView)} readOnly />
+  1204→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1205→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Role</label>
+  1206→        <select
+  1207→          value={viewport.role}
+  1208→          onChange={(e) => updateViewport({ role: e.target.value })}
+  1209→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1210→        >
+  1211→          <option value="primary">Primary</option>
+  1212→          <option value="secondary">Secondary</option>
+  1213→          <option value="detail">Detail</option>
+  1214→          <option value="supplemental">Supplemental</option>
+  1215→        </select>
+  1216→      </div>
+  1217→      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+  1218→        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Caption</label>
+  1219→        <select
+  1220→          value={viewport.captionPosition}
+  1221→          onChange={(e) => updateViewport({ captionPosition: e.target.value })}
+  1222→          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+  1223→        >
+  1224→          <option value="below">Below</option>
+  1225→          <option value="above">Above</option>
+  1226→        </select>
+  1227→      </div>
+  1228→      <InputField label="Reference" value={viewport.referenceNote || ''} onChange={(value) => updateViewport({ referenceNote: value })} />
+  1229→      <InputField
+  1230→        label="Frame Mode"
+  1231→        value={sheet.layoutTemplate === 'auto' ? (viewport.lockAutoLayout ? 'Manual' : 'Auto') : 'Manual (sheet)'}
+  1232→        readOnly
+  1233→      />
+  1234→      {sheet.layoutTemplate === 'auto' && (
+  1235→        <button className={styles.actionBtn} onClick={toggleLayoutMode}>
+  1236→          {viewport.lockAutoLayout ? 'Use auto layout' : 'Convert to manual frame'}
+  1237→        </button>
+  1238→      )}
+  1239→      <div className={styles.subtitle}>Frame</div>
+  1240→      <InputField label="X" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.x)} onChange={(value) => updateViewport({ x: u.fromDisplay(value) })} />
+  1241→      <InputField label="Y" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.y)} onChange={(value) => updateViewport({ y: u.fromDisplay(value) })} />
+  1242→      <InputField label="Width" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.width)} onChange={(value) => updateViewport({ width: Math.max(20, u.fromDisplay(value)) })} />
+  1243→      <InputField label="Height" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.height)} onChange={(value) => updateViewport({ height: Math.max(20, u.fromDisplay(value)) })} />
+  1244→      <InputField label="Scale 1:" type="number" value={Math.round(viewport.scale)} onChange={(value) => updateViewport({ scale: Math.max(1, Math.round(value)) })} />
+  1245→      <InputField label="Rotation" type="number" suffix="°" step={1} value={displayedViewport.rotation || 0} onChange={(value) => updateViewport({ rotation: ((value % 360) + 360) % 360 })} />
+  1246→    </div>
+  1247→  );
+  1248→}
+  1249→
+  1250→function FloorProperties({ floor, dispatch, onDuplicate, onDelete, canDelete, u }) {
+  1251→  const updateFloor = (updates) => {
+  1252→    dispatch({ type: 'FLOOR_UPDATE', floor: { id: floor.id, ...updates } });
+  1253→  };
+  1254→
+  1255→  return (
+  1256→    <div>
+  1257→      <div className={styles.title}>Floor</div>
+  1258→      <InputField
+  1259→        label="Name"
+  1260→        value={floor.name}
+  1261→        onChange={(value) => updateFloor({ name: value })}
+  1262→      />
+  1263→      <InputField
+  1264→        label="Level Index"
+  1265→        type="number"
+  1266→        step={1}
+  1267→        value={getFloorLevelIndex(floor)}
+  1268→        onChange={(value) => updateFloor({ levelIndex: Math.round(value) })}
+  1269→      />
+  1270→      <InputField
+  1271→        label="Elevation"
+  1272→        type="number"
+  1273→        suffix={u.suffix}
+  1274→        step={u.step(100)}
+  1275→        value={u.toDisplay(getFloorElevation(floor))}
+  1276→        onChange={(value) => updateFloor({ elevation: u.fromDisplay(value) })}
+  1277→      />
+  1278→      <InputField
+  1279→        label="Floor to Floor"
+  1280→        type="number"
+  1281→        suffix={u.suffix}
+  1282→        step={u.step(100)}
+  1283→        value={u.toDisplay(getFloorToFloorHeight(floor))}
+  1284→        onChange={(value) => updateFloor({ floorToFloorHeight: Math.max(100, u.fromDisplay(value)) })}
+  1285→      />
+  1286→      <div className={styles.subtitle}>Contents</div>
+  1287→      <InputField label="Walls" value={floor.walls.length} readOnly />
+  1288→      <InputField label="Rooms" value={floor.rooms.length} readOnly />
+  1289→      <InputField label="Doors" value={floor.doors.length} readOnly />
+  1290→      <InputField label="Windows" value={floor.windows.length} readOnly />
+  1291→      <InputField label="Columns" value={(floor.columns || []).length} readOnly />
+  1292→      <InputField label="Beams" value={(floor.beams || []).length} readOnly />
+  1293→      <InputField label="Stairs" value={(floor.stairs || []).length} readOnly />
+  1294→      <InputField label="Slabs" value={(floor.slabs || []).length} readOnly />
+  1295→      <button
+  1296→        className={styles.actionBtn}
+  1297→        onClick={() => onDuplicate(floor)}
+  1298→      >
+  1299→        Duplicate floor
+  1300→      </button>
+  1301→      <button
+  1302→        className={styles.deleteBtn}
+  1303→        onClick={() => onDelete(floor)}
+  1304→        disabled={!canDelete}
+  1305→      >
+  1306→        Delete floor
+  1307→      </button>
+  1308→    </div>
+  1309→  );
+  1310→}
+  1311→
+  1312→function ProjectSummary({ project, floor, dispatch }) {
+  1313→  return (
+  1314→    <div>
+  1315→      <div className={styles.title}>Project Summary</div>
+  1316→      <InputField
+  1317→        label="Name"
+  1318→        value={project.name}
+  1319→        onChange={(value) => dispatch({ type: 'PROJECT_SET_NAME', name: value })}
+  1320→      />
+  1321→      <InputField
+  1322→        label="Address"
+  1323→        value={project.address || ''}
+  1324→        onChange={(value) => dispatch({ type: 'PROJECT_UPDATE', updates: { address: value } })}
+  1325→      />
+  1326→      <InputField
+  1327→        label="Drawn By"
+  1328→        value={project.documentDefaults?.drawnBy || ''}
+  1329→        onChange={(value) => dispatch({
+  1330→          type: 'PROJECT_UPDATE',
+  1331→          updates: {
+  1332→            documentDefaults: {
+  1333→              ...(project.documentDefaults || {}),
+  1334→              drawnBy: value,
+  1335→            },
+  1336→          },
+  1337→        })}
+  1338→      />
+  1339→      <InputField
+  1340→        label="Checked"
+  1341→        value={project.documentDefaults?.checkedBy || ''}
+  1342→        onChange={(value) => dispatch({
+  1343→          type: 'PROJECT_UPDATE',
+  1344→          updates: {
+  1345→            documentDefaults: {
+  1346→              ...(project.documentDefaults || {}),
+  1347→              checkedBy: value,
+  1348→            },
+  1349→          },
+  1350→        })}
+  1351→      />
+  1352→      <div className={styles.summary}>
+  1353→        <p>Name: {project.name}</p>
+  1354→        <p>Floors: {project.floors.length}</p>
+  1355→        <p>Sheets: {(project.sheets || []).length}</p>
+  1356→        {floor && (
+  1357→          <>
+  1358→            <p>Slabs: {(floor.slabs || []).length}</p>
+  1359→            <p>Walls: {floor.walls.length}</p>
+  1360→            <p>Annotations: {(floor.annotations || []).length}</p>
+  1361→            <p>Beams: {(floor.beams || []).length}</p>
+  1362→            <p>Stairs: {(floor.stairs || []).length}</p>
+  1363→            <p>Section Cuts: {(floor.sectionCuts || []).length}</p>
+  1364→            <p>Doors: {floor.doors.length}</p>
+  1365→            <p>Windows: {floor.windows.length}</p>
+  1366→            <p>Columns: {(floor.columns || []).length}</p>
+  1367→          </>
+  1368→        )}
+  1369→      </div>
+  1370→      {floor && <AnnotationSettingsProperties floor={floor} dispatch={dispatch} />}
+  1371→    </div>
+  1372→  );
+  1373→}
+  1374→
+  1375→export default function PropertiesPanel() {
+  1376→  const { project, dispatch, duplicateFloor } = useProject();
+  1377→  const { selectedId, selectedType, activeFloorId, activeSheetId, workspaceMode, dispatch: editorDispatch } = useEditor();
+  1378→  const orderedFloors = getOrderedFloors(project);
+  1379→  const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
+  1380→  const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
+  1381→  const u = useUnits();
+  1382→
+  1383→  const selectFloor = (floorId) => {
+  1384→    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+  1385→    editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId });
+  1386→    editorDispatch({ type: 'SELECT_OBJECT', id: floorId, objectType: 'floor' });
+  1387→  };
+  1388→
+  1389→  const handleDuplicateFloor = (floorToDuplicate) => {
+  1390→    const duplicatedFloor = duplicateFloor(floorToDuplicate.id);
+  1391→    if (!duplicatedFloor) return;
+  1392→
+  1393→    dispatch({ type: 'FLOOR_DUPLICATE', floor: duplicatedFloor });
+  1394→    selectFloor(duplicatedFloor.id);
+  1395→  };
+  1396→
+  1397→  const handleDeleteFloor = (floorToDelete) => {
+  1398→    if (orderedFloors.length <= 1) return;
+  1399→    const confirmed = window.confirm(`Delete "${floorToDelete.name}"?`);
+  1400→    if (!confirmed) return;
+  1401→
+  1402→    const remainingFloors = orderedFloors.filter((entry) => entry.id !== floorToDelete.id);
+  1403→    const fallbackFloor = remainingFloors[0] || null;
+  1404→
+  1405→    dispatch({
+  1406→      type: 'FLOOR_DELETE',
+  1407→      floorId: floorToDelete.id,
+  1408→      fallbackFloorId: fallbackFloor?.id ?? null,
+  1409→    });
+  1410→
+  1411→    if (fallbackFloor) {
+  1412→      selectFloor(fallbackFloor.id);
+  1413→    } else {
+  1414→      editorDispatch({ type: 'DESELECT' });
+  1415→    }
+  1416→  };
+  1417→
+  1418→  const handleDelete = () => {
+  1419→    if (!selectedId) return;
+  1420→    if (selectedType === 'sheet') {
+  1421→      dispatch({ type: 'SHEET_DELETE', sheetId: selectedId });
+  1422→    } else if (selectedType === 'sheetViewport' && sheet) {
+  1423→      dispatch({ type: 'SHEET_VIEWPORT_DELETE', sheetId: sheet.id, viewportId: selectedId });
+  1424→    } else if (selectedType === 'slab') {
+  1425→      dispatch({ type: 'SLAB_DELETE', floorId: activeFloorId, slabId: selectedId });
+  1426→    } else if (selectedType === 'wall') {
+  1427→      dispatch({ type: 'WALL_DELETE', floorId: activeFloorId, wallId: selectedId });
+  1428→    } else if (selectedType === 'beam') {
+  1429→      dispatch({ type: 'BEAM_DELETE', floorId: activeFloorId, beamId: selectedId });
+  1430→    } else if (selectedType === 'sectionCut') {
+  1431→      dispatch({ type: 'SECTION_DELETE', floorId: activeFloorId, sectionId: selectedId });
+  1432→    } else if (selectedType === 'annotation') {
+  1433→      dispatch({ type: 'ANNOTATION_DELETE', floorId: activeFloorId, annotationId: selectedId });
+  1434→    } else if (selectedType === 'stair') {
+  1435→      dispatch({ type: 'STAIR_DELETE', floorId: activeFloorId, stairId: selectedId });
+  1436→    } else if (selectedType === 'landing') {
+  1437→      dispatch({ type: 'LANDING_DELETE', floorId: activeFloorId, landingId: selectedId });
+  1438→    } else if (selectedType === 'door') {
+  1439→      dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
+  1440→    } else if (selectedType === 'window') {
+  1441→      dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+  1442→    } else if (selectedType === 'column') {
+  1443→      dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
+  1444→    } else if (selectedType === 'fixture') {
+  1445→      dispatch({ type: 'FIXTURE_DELETE', floorId: activeFloorId, fixtureId: selectedId });
+  1446→    } else if (selectedType === 'room') {
+  1447→      dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
+  1448→    } else if (selectedType === 'floor') {
+  1449→      const targetFloor = orderedFloors.find((entry) => entry.id === selectedId) || null;
+  1450→      if (targetFloor) {
+  1451→        handleDeleteFloor(targetFloor);
+  1452→        return;
+  1453→      }
+  1454→    }
+  1455→    editorDispatch({ type: 'DESELECT' });
+  1456→  };
+  1457→
+  1458→  let content = workspaceMode === 'sheet' && sheet
+  1459→    ? <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} u={u} />
+  1460→    : (
+  1461→        <>
+  1462→          {floor && (
+  1463→            <FloorProperties
+  1464→              floor={floor}
+  1465→              dispatch={dispatch}
+  1466→              onDuplicate={handleDuplicateFloor}
+  1467→              onDelete={handleDeleteFloor}
+  1468→              canDelete={orderedFloors.length > 1}
+  1469→              u={u}
+  1470→            />
+  1471→          )}
+  1472→          <ProjectSummary project={project} floor={floor} dispatch={dispatch} />
+  1473→        </>
+  1474→      );
+  1475→
+  1476→  if (selectedId && workspaceMode === 'sheet' && sheet) {
+  1477→    if (selectedType === 'sheet') {
+  1478→      if (sheet.id === selectedId) {
+  1479→        content = <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} u={u} />;
+  1480→      }
+  1481→    } else if (selectedType === 'sheetViewport') {
+  1482→      const viewport = (sheet.viewports || []).find((entry) => entry.id === selectedId);
+  1483→      if (viewport) {
+  1484→        content = <SheetViewportProperties sheet={sheet} viewport={viewport} project={project} dispatch={dispatch} u={u} />;
+  1485→      }
+  1486→    }
+  1487→  } else if (selectedId && floor) {
+  1488→    if (selectedType === 'floor') {
+  1489→      const selectedFloor = orderedFloors.find((entry) => entry.id === selectedId) || floor;
+  1490→      content = (
+  1491→        <FloorProperties
+  1492→          floor={selectedFloor}
+  1493→          dispatch={dispatch}
+  1494→          onDuplicate={handleDuplicateFloor}
+  1495→          onDelete={handleDeleteFloor}
+  1496→          canDelete={orderedFloors.length > 1}
+  1497→          u={u}
+  1498→        />
+  1499→      );
+  1500→    } else if (selectedType === 'slab') {
+  1501→      const slab = (floor.slabs || []).find(s => s.id === selectedId) || null;
+  1502→      if (slab) {
+  1503→        content = <SlabProperties slab={slab} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1504→      }
+  1505→    } else if (selectedType === 'wall') {
+  1506→      const wall = floor.walls.find(w => w.id === selectedId);
+  1507→      if (wall) {
+  1508→        content = <WallProperties wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1509→      }
+  1510→    } else if (selectedType === 'beam') {
+  1511→      const beam = (floor.beams || []).find(b => b.id === selectedId);
+  1512→      if (beam) {
+  1513→        content = <BeamProperties beam={beam} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1514→      }
+  1515→    } else if (selectedType === 'sectionCut') {
+  1516→      const sectionCut = (floor.sectionCuts || []).find(s => s.id === selectedId) || null;
+  1517→      if (sectionCut) {
+  1518→        content = <SectionCutProperties sectionCut={sectionCut} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+  1519→      }
+  1520→    } else if (selectedType === 'annotation') {
+  1521→      const annotation = (floor.annotations || []).find((entry) => entry.id === selectedId);
+  1522→      if (annotation) {
+  1523→        content = <AnnotationProperties annotation={annotation} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1524→      }
+  1525→    } else if (selectedType === 'stair') {
+  1526→      const stair = (floor.stairs || []).find(entry => entry.id === selectedId);
+  1527→      if (stair) {
+  1528→        content = <StairProperties stair={stair} project={project} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1529→      }
+  1530→    } else if (selectedType === 'landing') {
+  1531→      const landing = (floor.landings || []).find(l => l.id === selectedId);
+  1532→      if (landing) {
+  1533→        content = <LandingProperties landing={landing} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1534→      }
+  1535→    } else if (selectedType === 'door') {
+  1536→      const door = floor.doors.find(d => d.id === selectedId);
+  1537→      const wall = door ? floor.walls.find(w => w.id === door.wallId) : null;
+  1538→      if (door) {
+  1539→        content = <DoorProperties door={door} wall={wall} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+  1540→      }
+  1541→    } else if (selectedType === 'window') {
+  1542→      const win = floor.windows.find(w => w.id === selectedId);
+  1543→      const wall = win ? floor.walls.find(w => w.id === win.wallId) : null;
+  1544→      if (win) {
+  1545→        content = <WindowProperties window={win} wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1546→      }
+  1547→    } else if (selectedType === 'column') {
+  1548→      const column = (floor.columns || []).find(c => c.id === selectedId);
+  1549→      if (column) {
+  1550→        content = <ColumnProperties column={column} floor={floor} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+  1551→      }
+  1552→    } else if (selectedType === 'fixture') {
+  1553→      const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+  1554→      if (fixture) {
+  1555→        content = <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+  1556→      }
+  1557→    } else if (selectedType === 'room') {
+  1558→      const room = floor.rooms.find(r => r.id === selectedId);
+  1559→      if (room) {
+  1560→        content = <RoomProperties room={room} dispatch={dispatch} floorId={activeFloorId} />;
+  1561→      }
+  1562→    }
+  1563→  }
+  1564→
+  1565→  return (
+  1566→    <div className={styles.panel}>
+  1567→      <div className={styles.segmentControl}>
+  1568→        <button
+  1569→          className={u.unit === 'mm' ? styles.segmentBtnActive : styles.segmentBtn}
+  1570→          onClick={() => u.setUnit('mm')}
+  1571→        >mm</button>
+  1572→        <button
+  1573→          className={u.unit === 'm' ? styles.segmentBtnActive : styles.segmentBtn}
+  1574→          onClick={() => u.setUnit('m')}
+  1575→        >m</button>
+  1576→      </div>
+  1577→      {workspaceMode === 'sheet' && sheet && (
+  1578→        <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />
+  1579→      )}
+  1580→      {content}
+  1581→      {selectedId && selectedType !== 'floor' && (
+  1582→        <button className={styles.deleteBtn} onClick={handleDelete}>
+  1583→          Delete {selectedType === 'sheetViewport' ? 'viewport' : selectedType}
+  1584→        </button>
+  1585→      )}
+  1586→    </div>
+  1587→  );
+  1588→}
+  1589→

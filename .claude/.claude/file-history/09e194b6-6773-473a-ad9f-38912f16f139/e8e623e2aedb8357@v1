@@ -1,0 +1,41 @@
+# Fix PostCard Avatar & Badge Not Showing
+
+## Context
+
+Avatars and badges are not rendering in PostCard on the Home feed. Two bugs are causing this:
+
+1. **Wrong field name for avatar** — `HomeFeedScreen` accesses `item.users?.avatar_url` but `UserPreview` type defines `image_url`. Other screens (ExploreScreen, NotificationsScreen, ProfileScreen) correctly use `image_url`. The field mismatch means `undefined` is passed as the avatar URI.
+
+2. **Badge prop never passed** — `HomeFeedScreen` does not pass `authorBadge` to `<PostCard>`, so the badge/ring never renders. Additionally, `UserPreview` type lacks a `badge_type` field (it exists in `UserDataResponse` but not `UserPreview`).
+
+The same `avatar_url` typo also exists in `PostDetailScreen`.
+
+---
+
+## Changes
+
+### 1. Fix avatar field name in HomeFeedScreen
+**File:** `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` (line 251)
+- Change `authorAvatar={item.users?.avatar_url}` → `authorAvatar={item.users?.image_url}`
+
+### 2. Fix avatar field name in PostDetailScreen
+**File:** `apps/mobile/src/screens/Home/PostDetailScreen.tsx` (line 222)
+- Change `uri={journal?.users?.avatar_url}` → `uri={journal?.users?.image_url}`
+- Also fix line 301 if it also uses `avatar_url`
+
+### 3. Add `badge_type` to `UserPreview` type
+**File:** `apps/mobile/src/lib/api/mobileApi.ts` (lines 3-8)
+- Add `badge_type?: string | null;` to the `UserPreview` type
+
+### 4. Pass `authorBadge` prop in HomeFeedScreen
+**File:** `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` (~line 251)
+- Add `authorBadge={item.users?.badge_type as 'legend' | 'og' | undefined}` to the `<PostCard>` usage
+
+---
+
+## Verification
+
+- Run the app and check the Home feed — avatars should now display
+- Verify PostDetail screen also shows avatars
+- If `badge_type` is returned by the `/journals` API, badge rings should appear on posts by legend/OG users
+- Check ExploreScreen and NotificationsScreen still work (untouched, already use `image_url`)

@@ -1,0 +1,169 @@
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-210-
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-211-                                <div className="notification-sender-user-metadata">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-212-                                    <div className="notification-sender-user-metadata-child">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx:213:                                        <div className={`notif-sender-profilepic-container ${unreadNotification?.users?.badge === 'legend' ? 'notif-avatar-ring-legend' : unreadNotification?.users?.badge === 'og' ? 'notif-avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-214-                                            <img className="notif-sender-profilepic" loading="lazy" src={unreadNotification?.users?.image_url || '/assets/profile.jpg'} alt="notificataion sender profile picture" />
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-215-                                        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\UnreadNotificationCard.jsx-216-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-78-                    transition={{ duration: 0.35, delay: 0.04 * i, ease: [0.22, 1, 0.36, 1] }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-79-                >
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-80-                    <div className="user-search-avatar-wrap">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:81:                        <div className={`user-avatar-container ${userItem.badge === "legend" ? "avatar-ring-legend" : userItem.badge === "og" ? "avatar-ring-og" : ""}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-82-                            <img
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-83-                                loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-84-                                className="user-info-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-158-                const wholeText = isCanvasPost ? canvasPreview?.wholeText || '' : parsedContent?.wholeText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-159-                const previewText = isCanvasPost ? canvasPreview?.slicedText || '' : parsedContent?.slicedText || '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-160-                const thumbnail = isCanvasPost ? null : parsedContent?.firstImage?.src;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx:161:                const badgeClass = journal.users.badge === 'legend' ? 'avatar-ring-legend' : journal.users.badge === 'og' ? 'avatar-ring-og' : '';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-162-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-163-                return(
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\VisitedProfilePostCards.jsx-164-                    <motion.div
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-272-
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-273-                            <div className="notification-sender-user-metadata">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-274-                                <div className="notification-sender-user-metadata-child">
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx:275:                                    <div className={`notif-sender-profilepic-container ${notification?.users?.badge === 'legend' ? 'notif-avatar-ring-legend' : notification?.users?.badge === 'og' ? 'notif-avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-276-                                        <img loading="lazy" className="notif-sender-profilepic" src={notification?.users?.image_url || '/assets/profile.jpg'} alt="notificataion sender profile picture" />
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-277-                                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\Notifications\notificationsCards.jsx-278-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-85-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-86-            <div className="explore-hero-footer">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-87-                <div className="explore-hero-author">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:88:                    <div className={`user-avatar-container ${journal?.users?.badge === "legend" ? "avatar-ring-legend" : journal?.users?.badge === "og" ? "avatar-ring-og" : ""}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-89-                        <img
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-90-                            loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-91-                            className="user-info-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-145-            <p className="explore-runner-excerpt">{parsedContent?.slicedText}</p>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-146-            <div className="explore-runner-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-147-                <div className="explore-runner-author">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:148:                    <div className={`user-avatar-container ${journal?.users?.badge === "legend" ? "avatar-ring-legend" : journal?.users?.badge === "og" ? "avatar-ring-og" : ""}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-149-                        <img
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-150-                            loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-151-                            className="user-info-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-540-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-541-                                    <div className="card-icons-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-542-                                        <div className="user-info-child-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:543:                                            <div className={`user-avatar-container ${journal?.users?.badge === "legend" ? "avatar-ring-legend" : journal?.users?.badge === "og" ? "avatar-ring-og" : ""}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-544-                                                <img
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-545-                                                    loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-546-                                                    className="user-info-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-579-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-580-                                <div className="card-icons-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-581-                                    <div className='user-info-child-container'>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:582:                                        <div className={`user-avatar-container ${user?.userData?.[0]?.badge === 'legend' ? 'avatar-ring-legend' : user?.userData?.[0]?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-583-                                            <img src={user?.userData?.[0].image_url || '/assets/profile.jpg'} alt="user-profile" loading='lazy' className="user-info-avatar" />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-584-                                        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-585-                                        <div className="user-name-container">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-102-                        <div className="so-card-content">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-103-                            <div className="so-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-104-                                <div className="so-user-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx:105:                                    <div className={`so-avatar-outer ${opinion.users.badge === 'legend' ? 'avatar-ring-legend' : opinion.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-106-                                        <img onClick={(e) => handleClickOpionionsProfile(e, user?.userData[0].id, userId)} className="so-avatar" src={opinion.users.image_url || "../../assets/profile.jpg"} alt={`${opinion?.users?.name || "User"} profile picture`} />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-107-                                    </div>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\visitedProfileOpinions.jsx-108-                                    <div className="so-name-block">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-694-                                    transition={{ duration: 0.3, delay: 0.05 * index, ease: [0.22, 1, 0.36, 1] }}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-695-                                >
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-696-                                    <div className="user-search-avatar-wrap">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:697:                                        <div className={`user-avatar-container ${person.badge === 'legend' ? 'avatar-ring-legend' : person.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-698-                                            <img
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-699-                                                loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-700-                                                className="user-info-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-893-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-894-                        <div className="card-icons-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-895-                            <div className="user-info-child-container">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:896:                                <div onClick={(e) => handleClickUserProfile(e, user?.userData?.[0].id, journal.users.id)} className={`user-avatar-container ${journal.users.badge === 'legend' ? 'avatar-ring-legend' : journal.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-897-                                    <img loading="lazy" className="user-info-avatar" src={journal.users.image_url || '/assets/profile.jpg'} alt={`${journal?.users?.name || "User"} profile picture`} />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-898-                                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-899-                                <div onClick={(e) => handleClickUserProfile(e, user?.userData?.[0].id, journal.users.id)} className="user-name-container">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-197-                                        className="gallery-user-info-child-container"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-198-                                        onClick={(event) => handleClickUserProfile(event, journal?.users?.id)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-199-                                    >
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx:200:                                        <div className={`gallery-user-avatar-container ${journal?.users?.badge === 'legend' ? 'avatar-ring-legend' : journal?.users?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-201-                                            <img
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-202-                                                loading="lazy"
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\gallery\GalleryPage.jsx-203-                                                className="gallery-user-info-avatar"
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-74-                    transition={{ duration: 0.3, ease: "easeOut" }}
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-75-                >
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-76-                    <div className="ov-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx:77:                        <div className={`ov-avatar-container ${user?.userData[0]?.badge === 'legend' ? 'avatar-ring-legend' : user?.userData[0]?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-78-                            <img className="ov-avatar" src={user?.userData[0].image_url || "../../assets/profile.jpg"} alt={`${user?.userData?.[0]?.name || "User"} profile picture`} />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-79-                        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\MyOpinions.jsx-80-                        <span className="ov-username">{user?.userData[0].name}</span>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-123-                                    <div className="so-card-content">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-124-                                        <div className="so-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-125-                                            <div className="so-user-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx:126:                                                <div className={`so-avatar-outer ${opinionsData.users.badge === 'legend' ? 'avatar-ring-legend' : opinionsData.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-127-                                                    <img onClick={(e) => handleClickOpionionsProfile(e, user?.userData[0].id, opinionsData.user_id)} className="so-avatar" src={opinionsData.users.image_url || "../../assets/profile.jpg"} alt={`${opinionsData?.users?.name || "User"} profile picture`} />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-128-                                                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\SidebarOpinions.jsx-129-                                                <div className="so-name-block">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-216-
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-217-                        <div className="bookmark-card-footer">
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-218-                            <div className='user-info-child-container'>
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx:219:                                <div onClick={(e) => handleclickUserProfile(e, user?.userData?.[0].id, journal.journals.user_id)} className={`user-avatar-container ${journal?.journals?.users?.badge === 'legend' ? 'avatar-ring-legend' : journal?.journals?.users?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-220-                                    <img loading='lazy' src={journal?.journals?.users?.image_url || '/assets/profile.jpg'} className="user-info-avatar" alt={`${journal?.journals?.users?.name || "User"} profile picture`} />
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-221-                                </div>
+C:\Users\johnm\iskrib_v3\client\src\components\Bookmarks\Bookmarks.jsx-222-                                <div onClick={(e) => handleclickUserProfile(e, user?.userData?.[0].id, journal.journals.user_id)} className="user-name-container">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-545-                            <div className="cv-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-546-                                <div
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-547-                                    onClick={(e) => handleclickUserProfile(e, user?.userData?.[0]?.id, postData?.userId)}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:548:                                    className={`cv-avatar-wrap ${postData?.badge === 'legend' ? 'cv-avatar-ring-legend' : postData?.badge === 'og' ? 'cv-avatar-ring-og' : ''}`}
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-549-                                >
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-550-                                    <img src={postData?.avatar || '/assets/profile.jpg'} className="cv-avatar" alt="user avatar" />
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-551-                                </div>
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-254-                            <div className="so-card-content">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-255-                                <div className="so-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-256-                                    <div className="so-user-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx:257:                                        <div className={`so-avatar-outer ${opinion.users.badge === 'legend' ? 'avatar-ring-legend' : opinion.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-258-                                            <img onClick={(e) => handleClickOpinionProfile(e, user?.userData[0].id, opinion.user_id)} className="so-avatar" src={opinion.users.image_url || "../../assets/profile.jpg"} alt={`${opinion?.users?.name || "User"} profile picture`} />
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-259-                                        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionssPage.jsx-260-                                        <div className="so-name-block">
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-90-                        <div className="so-card-content">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-91-                            <div className="so-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-92-                                <div className="so-user-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx:93:                                    <div className={`so-avatar-outer ${opinion.users?.badge === 'legend' ? 'avatar-ring-legend' : opinion.users?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-94-                                        <img
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-95-                                            className="so-avatar"
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\OpinionsCardRepy.jsx-96-                                            src={opinion.users?.image_url || '../assets/profile.jpg'}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-79-                        <div className="so-card-content">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-80-                            <div className="so-user-row">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-81-                                <div className="so-user-meta">
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:82:                                    <div className={`so-avatar-outer ${opinion.users.badge === 'legend' ? 'avatar-ring-legend' : opinion.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-83-                                        <img
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-84-                                            className="so-avatar"
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-85-                                            src={opinion.users.image_url || '../assets/profile.jpg'}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-661-    width: auto;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-662-    height: auto;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-663-}
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:664:.so-avatar-outer.avatar-ring-legend .so-avatar,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:665:.so-avatar-outer.avatar-ring-og .so-avatar {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-666-    width: 36px;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-667-    height: 36px;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-668-}
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-1225-        width: auto;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-1226-        height: auto;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-1227-    }
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:1228:    .so-avatar-outer.avatar-ring-legend .so-avatar,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css:1229:    .so-avatar-outer.avatar-ring-og .so-avatar {
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-1230-        width: 30px;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-1231-        height: 30px;
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\sidebarOpinions.css-1232-    }

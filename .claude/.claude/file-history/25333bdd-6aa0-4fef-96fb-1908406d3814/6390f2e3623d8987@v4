@@ -1,0 +1,56 @@
+/* ── Vibe Theme - Temporal post styling ── */
+
+/* ── Badge ── */
+.vibe-badge {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.22rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 550;
+    letter-spacing: 0.015em;
+    line-height: 1;
+    color: var(--vibe-badge-text);
+    background: var(--vibe-badge-bg);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border-radius: 20px;
+    border: 1px solid var(--vibe-border);
+    pointer-events: none;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.vibe-badge-emoji {
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+/* ── Dark mode overrides ── */
+[data-theme="dark"] .vibe-badge {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .cards.vibe-morning { --vibe-badge-text: #b8dfb2; }
+[data-theme="dark"] .cards.vibe-midday { --vibe-badge-text: #f0d87a; }
+[data-theme="dark"] .cards.vibe-golden { --vibe-badge-text: #f0b86a; }
+[data-theme="dark"] .cards.vibe-twilight { --vibe-badge-text: #d4a8e0; }
+[data-theme="dark"] .cards.vibe-moonlight { --vibe-badge-text: #d0daea; }
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+    .vibe-badge {
+        padding: 0.18rem 0.45rem;
+        font-size: 0.62rem;
+        top: 0.45rem;
+        right: 0.45rem;
+    }
+
+    .vibe-badge-emoji {
+        font-size: 0.7rem;
+    }
+}

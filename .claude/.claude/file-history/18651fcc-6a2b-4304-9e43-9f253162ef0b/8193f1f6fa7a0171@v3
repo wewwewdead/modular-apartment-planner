@@ -1,0 +1,53 @@
+import supabase from "./supabase.js";
+
+const VALID_REACTIONS = ['fire', 'heart', 'mind_blown', 'clap', 'laugh', 'sad'];
+
+export const toggleReactionService = async (journalId, receiverId, senderId, reactionType) => {
+    if (!journalId || !senderId) throw { status: 400, error: 'journalId and senderId are required' };
+    if (!VALID_REACTIONS.includes(reactionType)) throw { status: 400, error: 'invalid reaction type' };
+
+    const isOwnContent = senderId === receiverId;
+
+    // Check existing
+    const { data: existing } = await supabase
+        .from('reactions')
+        .select('id, reaction_type')
+        .eq('user_id', senderId)
+        .eq('journal_id', journalId)
+        .maybeSingle();
+
+    // No existing → insert
+    if (!existing) {
+        const [{ error }] = await Promise.all([
+            supabase.from('reactions').insert({ user_id: senderId, journal_id: journalId, reaction_type: reactionType }),
+            isOwnContent ? Promise.resolve({}) : supabase.from('notifications').insert({ sender_id: senderId, receiver_id: receiverId, journal_id: journalId, type: 'reaction', reaction_type: reactionType, read: false }),
+        ]);
+        if (error) throw { status: 500, error: 'failed to add reaction' };
+        return { message: 'reacted', reaction_type: reactionType };
+    }
+
+    // Same emoji → remove
+    if (existing.reaction_type === reactionType) {
+        const [{ error }] = await Promise.all([
+            supabase.from('reactions').delete().eq('id', existing.id),
+            supabase.from('notifications').delete().eq('sender_id', senderId).eq('receiver_id', receiverId).eq('journal_id', journalId).eq('type', 'reaction'),
+        ]);
+        if (error) throw { status: 500, error: 'failed to remove reaction' };
+        return { message: 'unreacted', reaction_type: null };
+    }
+
+    // Different emoji → switch
+    const [{ error }] = await Promise.all([
+        supabase.from('reactions').update({ reaction_type: reactionType }).eq('id', existing.id),
+        isOwnContent ? Promise.resolve({}) : supabase.from('notifications').update({ reaction_type: reactionType }).eq('sender_id', senderId).eq('receiver_id', receiverId).eq('journal_id', journalId).eq('type', 'reaction'),
+    ]);
+    if (error) throw { status: 500, error: 'failed to switch reaction' };
+    return { message: 'switched', reaction_type: reactionType };
+};
+
+export const getPostReactionsService = async (journalId) => {
+    if (!journalId) throw { status: 400, error: 'journalId is required' };
+    const { data, error } = await supabase.rpc('get_post_reactions', { p_journal_id: journalId });
+    if (error) throw { status: 500, error: 'failed to get reactions' };
+    return { reactions: data || [] };
+};

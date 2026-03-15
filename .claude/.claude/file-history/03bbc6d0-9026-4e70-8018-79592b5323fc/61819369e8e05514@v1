@@ -1,0 +1,38 @@
+# Fix: Mention Notifications Not Working
+
+## Context
+When a user @mentions someone in a post, the mentioned user never receives a notification. The mention notification code exists in `uploadJournalContentService` for new posts, but it either fails silently (errors are caught and only logged) or the extraction returns empty. Additionally, the edit flow has two gaps: `updateJournalService` has zero mention handling, and `EditJournal.jsx` doesn't include `<MentionPlugin/>` so users can't even add new mentions while editing.
+
+## Files to Modify
+
+### 1. `server/utils/extractMentions.js`
+Add diagnostic logging to identify exactly where extraction fails:
+- Log when JSON parse fails
+- Log when no `root` is found (with the actual keys present)
+- Log found mention IDs on success
+
+### 2. `server/services/uploadService.js`
+
+**In `uploadJournalContentService` (lines 326-354)** — enhance logging:
+- Log the extracted mention IDs and the author userId
+- Log the count after self-mention filter
+- Log the Supabase insert result (including `error.details` and `error.hint` on failure)
+- Log success confirmation
+
+**In `updateJournalService` (after line 442)** — add mention notification block:
+- Call `extractMentionUserIds(resolvedContent)`
+- Filter out self-mentions, cap at 50
+- Delete existing mention notifications for this journal (`type: 'mention'` + `journal_id`) to avoid duplicates
+- Insert fresh notification rows
+- Wrap in try/catch (non-fatal, same pattern as new post)
+
+### 3. `client/src/components/HomePage/postCards/ProfilePostCards/editJournal.jsx`
+- Import `MentionPlugin` from `'../../Editor/nodes/Plugins/MentionPlugin'`
+- Add `<MentionPlugin/>` inside the editor-shell div (after `<ImagePlugin/>` on line 153)
+
+## Verification
+1. **Create a new post** with an @mention → check server logs for `[mentions]` messages to trace the flow
+2. **Check the `notifications` table** directly: `SELECT * FROM notifications WHERE type = 'mention' ORDER BY created_at DESC LIMIT 5;`
+3. **Log in as the mentioned user** → verify the notification appears with the "@" icon and "Mentioned you in a post" text
+4. **Edit an existing post**, add a new @mention, save → verify the mentioned user gets notified
+5. If server logs show `extractMentionUserIds` returning `[]`, inspect the actual `content` JSON to determine if MentionNode data is present in the serialized tree

@@ -1,0 +1,271 @@
+import { SHEET_COLORS } from '@/sheets/standards';
+
+function CellText({ x, y, label, value, valueFontSize = 3.2, strong = false }) {
+  return (
+    <>
+      <text
+        x={x}
+        y={y}
+        fontSize={1.8}
+        fill={SHEET_COLORS.textMuted}
+        letterSpacing={0.28}
+      >
+        {label}
+      </text>
+      <text
+        x={x}
+        y={y + (strong ? 4.3 : 3.6)}
+        fontSize={valueFontSize}
+        fill={SHEET_COLORS.text}
+        fontWeight={strong ? 600 : 500}
+      >
+        {value}
+      </text>
+    </>
+  );
+}
+
+function MetadataRow({ row }) {
+  return (
+    <g>
+      <rect
+        x={row.x}
+        y={row.y}
+        width={row.width}
+        height={row.height}
+        fill="none"
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <line
+        x1={row.x + row.labelWidth}
+        y1={row.y}
+        x2={row.x + row.labelWidth}
+        y2={row.y + row.height}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.25}
+      />
+      <text
+        x={row.x + 1.5}
+        y={row.y + row.height * 0.62}
+        fontSize={1.8}
+        fill={SHEET_COLORS.textMuted}
+        letterSpacing={0.2}
+      >
+        {row.label}
+      </text>
+      <text
+        x={row.x + row.labelWidth + 1.6}
+        y={row.y + row.height * 0.62}
+        fontSize={2.6}
+        fill={SHEET_COLORS.text}
+        fontWeight={500}
+      >
+        {row.value}
+      </text>
+    </g>
+  );
+}
+
+function RevisionBlock({ revisions }) {
+  const columnX = revisions.x + 10;
+  const rowHeight = (revisions.height - revisions.headerHeight) / 4;
+  const clipId = `clip-rev-${revisions.x}-${revisions.y}`;
+  const rows = [...revisions.rows];
+  while (rows.length < 4) {
+    rows.push({ id: `blank-${rows.length}`, code: '', date: '', description: '' });
+  }
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={revisions.x} y={revisions.y} width={revisions.width} height={revisions.height} />
+        </clipPath>
+      </defs>
+      <rect
+        x={revisions.x}
+        y={revisions.y}
+        width={revisions.width}
+        height={revisions.height}
+        fill="none"
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.35}
+      />
+      <rect
+        x={revisions.x}
+        y={revisions.y}
+        width={revisions.width}
+        height={revisions.headerHeight}
+        fill={SHEET_COLORS.panelFill}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <line
+        x1={columnX}
+        y1={revisions.y}
+        x2={columnX}
+        y2={revisions.y + revisions.height}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.25}
+      />
+      <line
+        x1={columnX + 15}
+        y1={revisions.y}
+        x2={columnX + 15}
+        y2={revisions.y + revisions.height}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.25}
+      />
+      <g clipPath={`url(#${clipId})`}>
+        <text
+          x={revisions.x + 1.6}
+          y={revisions.y + revisions.headerHeight * 0.62}
+          fontSize={1.8}
+          fill={SHEET_COLORS.textMuted}
+          letterSpacing={0.2}
+        >
+          REV
+        </text>
+        <text
+          x={columnX + 1.5}
+          y={revisions.y + revisions.headerHeight * 0.62}
+          fontSize={1.8}
+          fill={SHEET_COLORS.textMuted}
+          letterSpacing={0.2}
+        >
+          DATE
+        </text>
+        <text
+          x={columnX + 16.5}
+          y={revisions.y + revisions.headerHeight * 0.62}
+          fontSize={1.8}
+          fill={SHEET_COLORS.textMuted}
+          letterSpacing={0.2}
+        >
+          DESCRIPTION
+        </text>
+        {rows.map((revision, index) => {
+          const y = revisions.y + revisions.headerHeight + rowHeight * index;
+          return (
+            <g key={revision.id}>
+              <line
+                x1={revisions.x}
+                y1={y}
+                x2={revisions.x + revisions.width}
+                y2={y}
+                stroke={SHEET_COLORS.border}
+                strokeWidth={0.22}
+              />
+              <text x={revisions.x + 1.8} y={y + rowHeight * 0.62} fontSize={2.1} fill={SHEET_COLORS.text}>
+                {revision.code}
+              </text>
+              <text x={columnX + 1.6} y={y + rowHeight * 0.62} fontSize={1.9} fill={SHEET_COLORS.textMuted}>
+                {revision.date}
+              </text>
+              <text x={columnX + 16.5} y={y + rowHeight * 0.62} fontSize={1.9} fill={SHEET_COLORS.text}>
+                {revision.description}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    </g>
+  );
+}
+
+export default function SheetTitleBlock({ titleBlock }) {
+  return (
+    <g className="sheet-title-block">
+      <rect
+        x={titleBlock.frame.x}
+        y={titleBlock.frame.y}
+        width={titleBlock.frame.width}
+        height={titleBlock.frame.height}
+        fill={SHEET_COLORS.paper}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.45}
+      />
+
+      <rect
+        x={titleBlock.projectBand.x}
+        y={titleBlock.projectBand.y}
+        width={titleBlock.projectBand.width}
+        height={titleBlock.projectBand.height}
+        fill={SHEET_COLORS.panelFill}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <CellText
+        x={titleBlock.projectBand.x + 1.8}
+        y={titleBlock.projectBand.y + 2.8}
+        label="PROJECT"
+        value={titleBlock.projectBand.title}
+        valueFontSize={3.5}
+        strong
+      />
+      {titleBlock.projectBand.address ? (
+        <text
+          x={titleBlock.projectBand.x + 1.8}
+          y={titleBlock.projectBand.y + titleBlock.projectBand.height - 2}
+          fontSize={2.1}
+          fill={SHEET_COLORS.textMuted}
+        >
+          {titleBlock.projectBand.address}
+        </text>
+      ) : null}
+
+      <rect
+        x={titleBlock.drawingCell.x}
+        y={titleBlock.drawingCell.y}
+        width={titleBlock.drawingCell.width}
+        height={titleBlock.drawingCell.height}
+        fill="none"
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <CellText
+        x={titleBlock.drawingCell.x + 1.8}
+        y={titleBlock.drawingCell.y + 2.8}
+        label={titleBlock.drawingCell.label}
+        value={titleBlock.drawingCell.value}
+        valueFontSize={4.2}
+        strong
+      />
+
+      <rect
+        x={titleBlock.numberCell.x}
+        y={titleBlock.numberCell.y}
+        width={titleBlock.numberCell.width}
+        height={titleBlock.numberCell.height}
+        fill="none"
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.3}
+      />
+      <text
+        x={titleBlock.numberCell.x + 1.5}
+        y={titleBlock.numberCell.y + 2.8}
+        fontSize={1.8}
+        fill={SHEET_COLORS.textMuted}
+        letterSpacing={0.2}
+      >
+        {titleBlock.numberCell.label}
+      </text>
+      <text
+        x={titleBlock.numberCell.x + 1.6}
+        y={titleBlock.numberCell.y + titleBlock.numberCell.height - 3}
+        fontSize={6.6}
+        fill={SHEET_COLORS.text}
+        fontWeight={700}
+      >
+        {titleBlock.numberCell.value}
+      </text>
+
+      {titleBlock.metaRows.map((row) => (
+        <MetadataRow key={`${row.label}-${row.x}`} row={row} />
+      ))}
+
+      <RevisionBlock revisions={titleBlock.revisions} />
+    </g>
+  );
+}

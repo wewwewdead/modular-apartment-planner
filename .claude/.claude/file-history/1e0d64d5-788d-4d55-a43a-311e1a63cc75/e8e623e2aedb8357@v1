@@ -1,0 +1,92 @@
+# Add Comment Replies to PostDetailScreen
+
+## Context
+
+The `JournalComment` type already has `parent_id` (null = top-level, string = reply) and `reply_count` fields, and the notification system already handles `'reply'` events. However, the mobile UI currently renders comments as a flat list with no way to view or create replies. This plan adds a "Reply" button on each comment and a "Show replies" toggle for comments that have replies.
+
+---
+
+## Changes
+
+### 1. Extend socialApi with reply support
+**File:** `apps/mobile/src/lib/api/socialApi.ts`
+
+- **Modify `addComment` payload type** — add optional `parentId?: string` field. The body is already `JSON.stringify(payload)` so it will pass through automatically.
+- **Add `getReplies` method** — calls `GET /getComments?postId=X&parentId=Y&limit=20` (same endpoint, filtered by parent). Returns `{comments: JournalComment[]; hasMore?: boolean}`.
+
+### 2. Extract `CommentThread` component and add reply UI
+**File:** `apps/mobile/src/screens/Home/PostDetailScreen.tsx`
+
+**New state:**
+- `replyingTo: {id: string; userName: string} | null` — tracks which comment the user is replying to (null = top-level)
+- `expandedReplies: Set<string>` — parent comment IDs whose replies are expanded
+
+**Extract `CommentThread` component** (defined inside the same file, above `PostDetailScreen`):
+- Receives a top-level comment, renders:
+  1. Existing comment card (avatar, name, time, body) — unchanged layout
+  2. **Action row** below the comment body (indented to align with body text):
+     - "Reply" text button (only if logged in) — calls `onReply(commentId, userName)`
+     - "Show N replies" / "Hide replies" text button (only if `reply_count > 0`) — toggles expand
+  3. **Replies section** (when expanded):
+     - Uses `useQuery(['comment-replies', commentId], ..., { enabled: isExpanded })` to lazily fetch replies
+     - Renders replies indented with a left border, using same avatar/name/time/body layout but smaller (24px avatar)
+     - Shows `ActivityIndicator` while loading, error text on failure
+     - Replies do NOT show their own Reply/Show replies buttons (single-level nesting only)
+
+**Modify the comments `.map` block** (lines 300-323):
+- Filter to top-level comments: `.filter(c => !c.parent_id)`
+- Render each through `<CommentThread>` instead of inline JSX
+
+**Modify the comment input section** (lines 327-351):
+- When `replyingTo` is set, show a "Replying to {name}" banner with an `XIcon` dismiss button above the `TextInput`
+- Change placeholder text to "Reply to {name}..." when replying
+- Add a `ScrollView` ref and scroll to the input when "Reply" is tapped
+
+**Modify `addCommentMutation`:**
+- Pass `parentId: replyingTo?.id` in the payload
+- On success, additionally invalidate `['comment-replies', parentId]` if it was a reply
+- Clear `replyingTo` on success
+
+**New styles:**
+- `commentActions` — row for Reply + Show replies buttons, left-padded 36px to align with body
+- `actionText` — 12px medium font for action buttons
+- `repliesContainer` — left margin 36px, left border (hairline, `borderLight`), padding-left
+- `replyCard` — similar to `commentCard` but tighter padding
+- `replyBanner` — row with "Replying to X" text and dismiss button
+
+### 3. Add `ReplyIcon` (optional — text button works fine, but icon adds polish)
+**File:** `apps/mobile/src/components/icons/Icon.tsx`
+- Add `ReplyIcon` using a Lucide-style reply arrow (corner-down-left) SVG path
+
+**File:** `apps/mobile/src/components/icons/index.ts`
+- Export `ReplyIcon`
+
+---
+
+## Key Files
+- `apps/mobile/src/lib/api/socialApi.ts` — API layer
+- `apps/mobile/src/screens/Home/PostDetailScreen.tsx` — main UI changes
+- `apps/mobile/src/components/icons/Icon.tsx` + `index.ts` — optional ReplyIcon
+
+## Existing Code to Reuse
+- `XIcon` from `components/icons` — dismiss button on reply banner
+- `Avatar` component — already used for comments, reuse for replies at size 24
+- `formatRelativeDate` — already defined in PostDetailScreen, reuse for reply timestamps
+- `ActivityIndicator` — already imported, reuse for reply loading state
+- `fonts`, `spacing`, `radii` from theme — consistent styling
+- `colors.accentGold` — for "Show replies" link color (matches app accent style)
+- `colors.textMuted` — for "Reply" button color
+
+---
+
+## Verification
+
+1. **Top-level comment still works** — write and post a comment, verify it appears
+2. **Reply button** — tap "Reply" on a comment → "Replying to {name}" banner appears above input, placeholder changes, screen scrolls to input
+3. **Dismiss reply** — tap X on the reply banner → reverts to normal comment mode
+4. **Submit reply** — type and post a reply → banner dismisses, input clears, if thread was expanded the new reply appears
+5. **Show replies** — on a comment with `reply_count > 0`, tap "Show N replies" → replies load indented below with left border
+6. **Hide replies** — tap "Hide replies" → replies collapse
+7. **Single-level nesting** — replies themselves do NOT show Reply/Show replies buttons
+8. **Auth gating** — logged-out users do not see the "Reply" button
+9. **Error state** — if reply fetch fails, error message shown in the reply area

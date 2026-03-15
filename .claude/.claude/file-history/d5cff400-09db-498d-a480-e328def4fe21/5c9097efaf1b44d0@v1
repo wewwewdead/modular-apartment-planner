@@ -1,0 +1,858 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { addCanvasMargin, addCanvasStamp, deleteCanvasMargin, deleteCanvasStamp, getCanvasMargins, getCanvasStamps } from "../../../../API/Api";
+import { useAuth } from "../../../Context/useAuth";
+import { parseCanvasDoc } from "../../../utils/canvasDoc";
+import "./canvas.css";
+
+const STAMP_ICONS = {
+    heart: "❤️",
+    star: "⭐",
+    question: "❓",
+    fire: "🔥"
+};
+
+const FONT_BRUSHES = {
+    serif: {fontFamily: "Georgia", fontStyle: "normal"},
+    mono: {fontFamily: "Courier New", fontStyle: "normal"},
+    handwritten: {fontFamily: "Comic Sans MS", fontStyle: "normal"},
+    bold: {fontFamily: "Trebuchet MS", fontStyle: "bold"},
+};
+
+const GRID_SIZE = 24;
+const CANVAS_MAX_WIDTH = 640;
+const CANVAS_ROOT_SNIPPET_ID = "canvas-root";
+const STAMP_SIZE = 34;
+const STAMP_FONT_SIZE = 30;
+const PROFILE_SIZE = 13;
+const STICKY_WIDTH = 172;
+const STICKY_HEIGHT = 118;
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const getNameInitial = (name) => {
+    const normalizedName = typeof name === "string" ? name.trim() : "";
+    return normalizedName ? normalizedName.slice(0, 1).toUpperCase() : "?";
+};
+
+const getStageHeight = (width, aspectRatio) => {
+    if(aspectRatio === "4:5"){
+        return Math.round(width * 1.25);
+    }
+    return width;
+};
+
+const getSnippetMetrics = (snippet, stageWidth) => {
+    const sizeScale = Number.isFinite(snippet.sizeScale) ? snippet.sizeScale : 1;
+    const baseFontSize = snippet.fontStyle === "bold" ? 34 : snippet.fontStyle === "handwritten" ? 32 : 30;
+    const fontSize = clamp(baseFontSize * sizeScale, 18, 92);
+    const estimatedWidth = Math.max(120, Math.min(stageWidth * 0.78, Math.round((snippet.text.length || 1) * fontSize * 0.58)));
+    const charsPerLine = Math.max(8, Math.floor(estimatedWidth / (fontSize * 0.56)));
+    const lineCount = Math.max(1, Math.ceil((snippet.text.length || 1) / charsPerLine));
+    const height = Math.max(68, Math.round(lineCount * fontSize * 1.14 + 18));
+
+    return {width: estimatedWidth, height, fontSize};
+};
+
+const useLoadedImage = (src) => {
+    const [image, setImage] = useState(null);
+
+    useEffect(() => {
+        if(!src){
+            setImage(null);
+            return;
+        }
+
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => setImage(img);
+        img.onerror = () => setImage(null);
+        img.src = src;
+
+        return () => {
+            img.onload = null;
+            img.onerror = null;
+        };
+    }, [src]);
+
+    return image;
+};
+
+const CanvasImageNode = ({canvasImage, stageWidth, stageHeight, onStamp}) => {
+    const loadedImage = useLoadedImage(canvasImage?.src);
+    const objectWidth = clamp((canvasImage?.width || 0.3) * stageWidth, 56, stageWidth * 0.95);
+    const objectHeight = clamp((canvasImage?.height || 0.3) * stageHeight, 56, stageHeight * 0.95);
+    const x = clamp((canvasImage?.x || 0) * stageWidth, 0, Math.max(0, stageWidth - objectWidth));
+    const y = clamp((canvasImage?.y || 0) * stageHeight, 0, Math.max(0, stageHeight - objectHeight));
+
+    return (
+        <KonvaImage
+            x={x}
+            y={y}
+            width={objectWidth}
+            height={objectHeight}
+            image={loadedImage}
+            rotation={canvasImage?.rotation || 0}
+            scaleX={canvasImage?.scaleX === -1 ? -1 : 1}
+            onClick={onStamp}
+            onTap={onStamp}
+        />
+    );
+};
+
+const StampNode = ({stamp, stageWidth, stageHeight, canDelete, onDelete}) => {
+    const avatarImage = useLoadedImage(stamp?.user_image_url);
+    const icon = STAMP_ICONS[stamp?.stamp_type] || "✨";
+    const stampX = clamp((stamp?.x || 0) * stageWidth, 0, Math.max(0, stageWidth - STAMP_SIZE));
+    const stampY = clamp((stamp?.y || 0) * stageHeight, 0, Math.max(0, stageHeight - (STAMP_SIZE + PROFILE_SIZE + 10)));
+    const avatarCenterX = stampX + (STAMP_SIZE / 2);
+    const avatarCenterY = stampY + STAMP_SIZE + (PROFILE_SIZE / 2) + 6;
+    const fillScaleX = avatarImage?.width ? PROFILE_SIZE / avatarImage.width : 1;
+    const fillScaleY = avatarImage?.height ? PROFILE_SIZE / avatarImage.height : 1;
+
+    const handleDelete = () => {
+        if(canDelete){
+            onDelete();
+        }
+    };
+
+    return (
+        <Group onClick={handleDelete} onTap={handleDelete}>
+            <Circle
+                x={stampX + (STAMP_SIZE / 2)}
+                y={stampY + (STAMP_SIZE / 2)}
+                radius={(STAMP_SIZE / 2) + 1.8}
+                fill="rgba(255,255,255,0.78)"
+                shadowColor="rgba(0,0,0,0.22)"
+                shadowBlur={5}
+                shadowOffsetY={2}
+                listening={false}
+            />
+            <Text
+                x={stampX}
+                y={stampY}
+                width={STAMP_SIZE}
+                height={STAMP_SIZE}
+                text={icon}
+                fontSize={STAMP_FONT_SIZE}
+                align="center"
+                verticalAlign="middle"
+                listening={false}
+            />
+            <Circle
+                x={avatarCenterX}
+                y={avatarCenterY}
+                radius={(PROFILE_SIZE / 2) + 1.2}
+                fill="rgba(0,0,0,0.22)"
+                listening={false}
+            />
+            <Circle
+                x={avatarCenterX}
+                y={avatarCenterY}
+                radius={PROFILE_SIZE / 2}
+                fill={avatarImage ? "#ffffff" : "#c9d0dc"}
+                fillPatternImage={avatarImage || undefined}
+                fillPatternScaleX={fillScaleX}
+                fillPatternScaleY={fillScaleY}
+                fillPatternOffsetX={avatarImage?.width ? avatarImage.width / 2 : 0}
+                fillPatternOffsetY={avatarImage?.height ? avatarImage.height / 2 : 0}
+                stroke="rgba(255,255,255,0.95)"
+                strokeWidth={0.7}
+                listening={false}
+            />
+            {!avatarImage && (
+                <Text
+                    x={avatarCenterX - (PROFILE_SIZE / 2)}
+                    y={avatarCenterY - (PROFILE_SIZE / 2)}
+                    width={PROFILE_SIZE}
+                    height={PROFILE_SIZE}
+                    text={getNameInitial(stamp?.user_name)}
+                    fontSize={8}
+                    fontStyle="bold"
+                    fill="#1f2c3f"
+                    align="center"
+                    verticalAlign="middle"
+                    listening={false}
+                />
+            )}
+        </Group>
+    );
+};
+
+const CanvasViewer = ({journalId, canvasDoc, authorId}) => {
+    const {session, user, openAuthModal} = useAuth();
+    const queryClient = useQueryClient();
+    const shellRef = useRef(null);
+    const stageRef = useRef(null);
+
+    const [shellWidth, setShellWidth] = useState(CANVAS_MAX_WIDTH);
+    const [activeStampType, setActiveStampType] = useState("heart");
+    const [activeTool, setActiveTool] = useState("stamp");
+    const [draggingStampType, setDraggingStampType] = useState("");
+    const [isDropActive, setIsDropActive] = useState(false);
+    const [doodleColor, setDoodleColor] = useState("#5f92ff");
+    const [doodleSize, setDoodleSize] = useState(2.8);
+    const [isDrawing, setIsDrawing] = useState(false);
+    const [currentDoodlePoints, setCurrentDoodlePoints] = useState([]);
+    const [stickyText, setStickyText] = useState("");
+    const [stickyColor, setStickyColor] = useState("#fff4a8");
+
+    const parsedCanvasDoc = useMemo(() => parseCanvasDoc(canvasDoc), [canvasDoc]);
+    const sortedObjects = useMemo(() => {
+        const textObjects = (parsedCanvasDoc.snippets || []).map((snippet) => ({kind: "snippet", payload: snippet}));
+        const imageObjects = (parsedCanvasDoc.images || []).map((image) => ({kind: "image", payload: image}));
+        return [...textObjects, ...imageObjects].sort((a, b) => (a.payload?.zIndex || 0) - (b.payload?.zIndex || 0));
+    }, [parsedCanvasDoc.images, parsedCanvasDoc.snippets]);
+
+    useEffect(() => {
+        const updateShellWidth = () => {
+            const nextWidth = shellRef.current?.clientWidth || CANVAS_MAX_WIDTH;
+            setShellWidth(nextWidth);
+        };
+
+        updateShellWidth();
+        window.addEventListener("resize", updateShellWidth);
+
+        let resizeObserver = null;
+        if(typeof ResizeObserver !== "undefined" && shellRef.current){
+            resizeObserver = new ResizeObserver(updateShellWidth);
+            resizeObserver.observe(shellRef.current);
+        }
+
+        return () => {
+            window.removeEventListener("resize", updateShellWidth);
+            if(resizeObserver){
+                resizeObserver.disconnect();
+            }
+        };
+    }, []);
+
+    const stageWidth = useMemo(() => Math.max(280, Math.min(CANVAS_MAX_WIDTH, shellWidth - 24)), [shellWidth]);
+    const stageHeight = getStageHeight(stageWidth, parsedCanvasDoc?.meta?.aspectRatio);
+
+    const {data: stampData} = useQuery({
+        queryKey: ["canvasStamps", journalId],
+        queryFn: () => getCanvasStamps(journalId, session?.access_token),
+        enabled: !!journalId,
+        refetchOnWindowFocus: false
+    });
+
+    const {data: marginData} = useQuery({
+        queryKey: ["canvasMargins", journalId],
+        queryFn: () => getCanvasMargins(journalId, session?.access_token),
+        enabled: !!journalId,
+        refetchOnWindowFocus: false
+    });
+
+    const addStampMutation = useMutation({
+        mutationFn: (payload) => addCanvasStamp(session?.access_token, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: ["canvasStamps", journalId]});
+        },
+        onError: (error) => {
+            console.error("Failed to add stamp:", error);
+        }
+    });
+
+    const deleteStampMutation = useMutation({
+        mutationFn: (stampId) => deleteCanvasStamp(session?.access_token, stampId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: ["canvasStamps", journalId]});
+        },
+        onError: (error) => {
+            console.error("Failed to delete stamp:", error);
+        }
+    });
+
+    const addMarginMutation = useMutation({
+        mutationFn: (payload) => addCanvasMargin(session?.access_token, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: ["canvasMargins", journalId]});
+        },
+        onError: (error) => {
+            console.error("Failed to add canvas margin item:", error);
+        }
+    });
+
+    const deleteMarginMutation = useMutation({
+        mutationFn: (marginId) => deleteCanvasMargin(session?.access_token, marginId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: ["canvasMargins", journalId]});
+        },
+        onError: (error) => {
+            console.error("Failed to delete canvas margin item:", error);
+        }
+    });
+
+    const addStampAt = ({stampType, x, y, targetId = CANVAS_ROOT_SNIPPET_ID}) => {
+        if(!session){
+            if(openAuthModal){
+                openAuthModal();
+            }
+            return;
+        }
+
+        const normalizedStampType = STAMP_ICONS[stampType] ? stampType : activeStampType;
+        if(!STAMP_ICONS[normalizedStampType]){
+            return;
+        }
+
+        const normalizedX = clamp(x, 0, 1);
+        const normalizedY = clamp(y, 0, 1);
+
+        addStampMutation.mutate({
+            journalId: journalId,
+            snippetId: targetId || CANVAS_ROOT_SNIPPET_ID,
+            stampType: normalizedStampType,
+            x: normalizedX,
+            y: normalizedY
+        });
+    };
+
+    const addMarginItem = ({itemType, payload}) => {
+        if(!session){
+            if(openAuthModal){
+                openAuthModal();
+            }
+            return;
+        }
+
+        addMarginMutation.mutate({
+            journalId: journalId,
+            itemType: itemType,
+            payload: payload
+        });
+    };
+
+    const handleAddStampOnObject = (targetId, evt) => {
+        if(activeTool !== "stamp"){
+            return;
+        }
+        if(!session){
+            if(openAuthModal){
+                openAuthModal();
+            }
+            return;
+        }
+
+        const stage = evt.target.getStage();
+        const pointer = stage?.getPointerPosition();
+        if(!pointer){
+            return;
+        }
+
+        addStampAt({
+            stampType: activeStampType,
+            targetId: targetId,
+            x: pointer.x / stageWidth,
+            y: pointer.y / stageHeight
+        });
+    };
+
+    const handlePlaceStampOnCanvas = (evt) => {
+        if(activeTool !== "stamp"){
+            return;
+        }
+        const stage = evt.target.getStage();
+        if(!stage || evt.target !== stage){
+            return;
+        }
+
+        const pointer = stage.getPointerPosition();
+        if(!pointer){
+            return;
+        }
+
+        addStampAt({
+            stampType: activeStampType,
+            x: pointer.x / stageWidth,
+            y: pointer.y / stageHeight
+        });
+    };
+
+    const getNormalizedPointer = (stage) => {
+        const pointer = stage?.getPointerPosition();
+        if(!pointer){
+            return null;
+        }
+
+        return {
+            x: clamp(pointer.x / stageWidth, 0, 1),
+            y: clamp(pointer.y / stageHeight, 0, 1)
+        };
+    };
+
+    const handleCanvasPointerDown = (evt) => {
+        if(activeTool !== "doodle"){
+            return;
+        }
+
+        if(!session){
+            if(openAuthModal){
+                openAuthModal();
+            }
+            return;
+        }
+
+        const stage = evt.target.getStage();
+        const pointer = getNormalizedPointer(stage);
+        if(!pointer){
+            return;
+        }
+
+        setIsDrawing(true);
+        setCurrentDoodlePoints([pointer.x, pointer.y]);
+    };
+
+    const handleCanvasPointerMove = (evt) => {
+        if(activeTool !== "doodle" || !isDrawing){
+            return;
+        }
+
+        const stage = evt.target.getStage();
+        const pointer = getNormalizedPointer(stage);
+        if(!pointer){
+            return;
+        }
+
+        setCurrentDoodlePoints((prev) => [...prev, pointer.x, pointer.y]);
+    };
+
+    const handleCanvasPointerUp = () => {
+        if(activeTool !== "doodle"){
+            return;
+        }
+
+        if(isDrawing && currentDoodlePoints.length >= 4){
+            addMarginItem({
+                itemType: "doodle",
+                payload: {
+                    points: currentDoodlePoints,
+                    color: doodleColor,
+                    size: doodleSize
+                }
+            });
+        }
+
+        setIsDrawing(false);
+        setCurrentDoodlePoints([]);
+    };
+
+    const handlePlaceStickyOnCanvas = (evt) => {
+        if(activeTool !== "sticky"){
+            return;
+        }
+
+        if(!session){
+            if(openAuthModal){
+                openAuthModal();
+            }
+            return;
+        }
+
+        const stage = evt.target.getStage();
+        if(!stage || evt.target !== stage){
+            return;
+        }
+
+        const pointer = getNormalizedPointer(stage);
+        if(!pointer){
+            return;
+        }
+
+        addMarginItem({
+            itemType: "sticky",
+            payload: {
+                text: stickyText.trim() || "Sticky note",
+                x: pointer.x,
+                y: pointer.y,
+                color: stickyColor
+            }
+        });
+        setStickyText("");
+    };
+
+    const handleStageClick = (evt) => {
+        if(activeTool === "stamp"){
+            handlePlaceStampOnCanvas(evt);
+            return;
+        }
+
+        if(activeTool === "sticky"){
+            handlePlaceStickyOnCanvas(evt);
+        }
+    };
+
+    const handleStampDragStart = (stampType) => (event) => {
+        if(activeTool !== "stamp"){
+            event.preventDefault();
+            return;
+        }
+        if(!session){
+            if(openAuthModal){
+                openAuthModal();
+            }
+            event.preventDefault();
+            return;
+        }
+
+        setDraggingStampType(stampType);
+        if(event.dataTransfer){
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData("application/x-iskrib-stamp", stampType);
+            event.dataTransfer.setData("text/plain", stampType);
+        }
+    };
+
+    const handleStampDragEnd = () => {
+        setDraggingStampType("");
+        setIsDropActive(false);
+    };
+
+    const handleStageDragOver = (event) => {
+        if(activeTool !== "stamp"){
+            return;
+        }
+        const transferredStamp = event.dataTransfer?.getData("application/x-iskrib-stamp");
+        if(!draggingStampType && !STAMP_ICONS[transferredStamp]){
+            return;
+        }
+        event.preventDefault();
+        if(event.dataTransfer){
+            event.dataTransfer.dropEffect = "copy";
+        }
+        if(!isDropActive){
+            setIsDropActive(true);
+        }
+    };
+
+    const handleStageDragLeave = () => {
+        if(isDropActive){
+            setIsDropActive(false);
+        }
+    };
+
+    const handleStageDrop = (event) => {
+        if(activeTool !== "stamp"){
+            return;
+        }
+        event.preventDefault();
+
+        const droppedStampType = event.dataTransfer?.getData("application/x-iskrib-stamp") || draggingStampType;
+        const stageContainer = stageRef.current?.container();
+        if(!stageContainer || !STAMP_ICONS[droppedStampType]){
+            setDraggingStampType("");
+            setIsDropActive(false);
+            return;
+        }
+
+        const stageRect = stageContainer.getBoundingClientRect();
+        const localX = event.clientX - stageRect.left;
+        const localY = event.clientY - stageRect.top;
+
+        const normalizedX = localX / stageRect.width;
+        const normalizedY = localY / stageRect.height;
+        addStampAt({
+            stampType: droppedStampType,
+            x: normalizedX,
+            y: normalizedY
+        });
+
+        setDraggingStampType("");
+        setIsDropActive(false);
+    };
+
+    const stamps = stampData?.stamps || [];
+    const marginItems = marginData?.items || [];
+    const doodleItems = marginItems.filter((item) => item?.item_type === "doodle");
+    const stickyItems = marginItems.filter((item) => item?.item_type === "sticky");
+    const currentUserId = user?.userData?.[0]?.id;
+
+    return (
+        <div className="canvas-viewer-root">
+            <div className="canvas-stamp-toolbar">
+                <span className="canvas-stamp-label">Community Margin</span>
+                <button
+                    type="button"
+                    className={`canvas-tool-btn ${activeTool === "stamp" ? "is-active" : ""}`}
+                    onClick={() => setActiveTool("stamp")}
+                >
+                    Stamps
+                </button>
+                <button
+                    type="button"
+                    className={`canvas-tool-btn ${activeTool === "doodle" ? "is-active" : ""}`}
+                    onClick={() => setActiveTool("doodle")}
+                >
+                    Doodle
+                </button>
+                <button
+                    type="button"
+                    className={`canvas-tool-btn ${activeTool === "sticky" ? "is-active" : ""}`}
+                    onClick={() => setActiveTool("sticky")}
+                >
+                    Sticky
+                </button>
+
+                {activeTool === "stamp" && Object.entries(STAMP_ICONS).map(([stampType, icon]) => (
+                    <button
+                        key={stampType}
+                        type="button"
+                        className={`canvas-stamp-btn ${activeStampType === stampType ? "is-active" : ""}`}
+                        onClick={() => setActiveStampType(stampType)}
+                        draggable={Boolean(session)}
+                        onDragStart={handleStampDragStart(stampType)}
+                        onDragEnd={handleStampDragEnd}
+                        title={session ? "Drag onto the canvas to place this stamp" : "Sign in to place stamps"}
+                    >
+                        {icon}
+                    </button>
+                ))}
+
+                {activeTool === "doodle" && (
+                    <div className="canvas-tool-controls">
+                        <input
+                            type="color"
+                            value={doodleColor}
+                            onChange={(event) => setDoodleColor(event.target.value)}
+                            className="canvas-color-input"
+                            title="Doodle color"
+                        />
+                        <input
+                            type="range"
+                            min={1}
+                            max={10}
+                            step={0.2}
+                            value={doodleSize}
+                            onChange={(event) => setDoodleSize(Number(event.target.value))}
+                            className="canvas-size-range"
+                        />
+                        <span className="canvas-tool-hint">Press and drag on canvas</span>
+                    </div>
+                )}
+
+                {activeTool === "sticky" && (
+                    <div className="canvas-tool-controls">
+                        <input
+                            value={stickyText}
+                            onChange={(event) => setStickyText(event.target.value)}
+                            className="canvas-sticky-input"
+                            maxLength={280}
+                            placeholder="Sticky text..."
+                        />
+                        <input
+                            type="color"
+                            value={stickyColor}
+                            onChange={(event) => setStickyColor(event.target.value)}
+                            className="canvas-color-input"
+                            title="Sticky color"
+                        />
+                        <span className="canvas-tool-hint">Tap canvas to place note</span>
+                    </div>
+                )}
+            </div>
+
+            <div
+                ref={shellRef}
+                className={`canvas-stage-shell ${parsedCanvasDoc?.meta?.theme === "dark" ? "is-dark" : ""} ${isDropActive ? "is-drop-active" : ""}`}
+                onDragOver={handleStageDragOver}
+                onDragLeave={handleStageDragLeave}
+                onDrop={handleStageDrop}
+            >
+                <Stage
+                    ref={stageRef}
+                    width={stageWidth}
+                    height={stageHeight}
+                    onClick={handleStageClick}
+                    onTap={handleStageClick}
+                    onMouseDown={handleCanvasPointerDown}
+                    onTouchStart={handleCanvasPointerDown}
+                    onMouseMove={handleCanvasPointerMove}
+                    onTouchMove={handleCanvasPointerMove}
+                    onMouseUp={handleCanvasPointerUp}
+                    onTouchEnd={handleCanvasPointerUp}
+                    onMouseLeave={handleCanvasPointerUp}
+                >
+                    {parsedCanvasDoc?.meta?.gridEnabled && (
+                        <Layer listening={false}>
+                            {Array.from({length: Math.floor(stageWidth / GRID_SIZE) + 1}).map((_, index) => (
+                                <Line
+                                    key={`viewer-grid-v-${index}`}
+                                    points={[index * GRID_SIZE, 0, index * GRID_SIZE, stageHeight]}
+                                    stroke={parsedCanvasDoc?.meta?.theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}
+                                    strokeWidth={1}
+                                />
+                            ))}
+                            {Array.from({length: Math.floor(stageHeight / GRID_SIZE) + 1}).map((_, index) => (
+                                <Line
+                                    key={`viewer-grid-h-${index}`}
+                                    points={[0, index * GRID_SIZE, stageWidth, index * GRID_SIZE]}
+                                    stroke={parsedCanvasDoc?.meta?.theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}
+                                    strokeWidth={1}
+                                />
+                            ))}
+                        </Layer>
+                    )}
+
+                    <Layer>
+                        {sortedObjects.map((object) => {
+                            if(object.kind === "snippet"){
+                                const snippet = object.payload;
+                                const metrics = getSnippetMetrics(snippet, stageWidth);
+                                const brush = FONT_BRUSHES[snippet.fontStyle] || FONT_BRUSHES.serif;
+                                const snippetX = clamp(snippet.x * stageWidth, 0, Math.max(0, stageWidth - metrics.width));
+                                const snippetY = clamp(snippet.y * stageHeight, 0, Math.max(0, stageHeight - metrics.height));
+
+                                return (
+                                    <Text
+                                        key={snippet.id}
+                                        x={snippetX}
+                                        y={snippetY}
+                                        width={metrics.width}
+                                        height={metrics.height}
+                                        text={snippet.text}
+                                        fontFamily={brush.fontFamily}
+                                        fontStyle={brush.fontStyle}
+                                        fontSize={metrics.fontSize}
+                                        fill={parsedCanvasDoc?.meta?.theme === "dark" ? "#f8f8f8" : "#151515"}
+                                        align="center"
+                                        verticalAlign="middle"
+                                        padding={8}
+                                        wrap="word"
+                                        rotation={snippet.rotation || 0}
+                                        scaleX={snippet.scaleX === -1 ? -1 : 1}
+                                        onClick={(event) => handleAddStampOnObject(snippet.id, event)}
+                                        onTap={(event) => handleAddStampOnObject(snippet.id, event)}
+                                    />
+                                );
+                            }
+
+                            const image = object.payload;
+                            return (
+                                <CanvasImageNode
+                                    key={image.id}
+                                    canvasImage={image}
+                                    stageWidth={stageWidth}
+                                    stageHeight={stageHeight}
+                                    onStamp={(event) => handleAddStampOnObject(image.id, event)}
+                                />
+                            );
+                        })}
+                    </Layer>
+
+                    <Layer>
+                        {stamps.map((stamp) => {
+                            const canDelete = currentUserId && (stamp.user_id === currentUserId || authorId === currentUserId);
+                            return (
+                                <StampNode
+                                    key={stamp.id}
+                                    stamp={stamp}
+                                    stageWidth={stageWidth}
+                                    stageHeight={stageHeight}
+                                    canDelete={canDelete}
+                                    onDelete={() => deleteStampMutation.mutate(stamp.id)}
+                                />
+                            );
+                        })}
+                    </Layer>
+
+                    <Layer>
+                        {doodleItems.map((item) => {
+                            const canDelete = currentUserId && (item.user_id === currentUserId || authorId === currentUserId);
+                            const points = Array.isArray(item?.payload?.points)
+                                ? item.payload.points
+                                    .map((point) => Number(point))
+                                    .filter((point) => !Number.isNaN(point))
+                                : [];
+                            const stagePoints = points.map((point, index) => (
+                                index % 2 === 0 ? point * stageWidth : point * stageHeight
+                            ));
+                            return (
+                                <Line
+                                    key={item.id}
+                                    points={stagePoints}
+                                    stroke={item?.payload?.color || "#5f92ff"}
+                                    strokeWidth={Number(item?.payload?.size) || 2.8}
+                                    lineCap="round"
+                                    lineJoin="round"
+                                    tension={0.1}
+                                    onClick={() => {
+                                        if(canDelete){
+                                            deleteMarginMutation.mutate(item.id);
+                                        }
+                                    }}
+                                    onTap={() => {
+                                        if(canDelete){
+                                            deleteMarginMutation.mutate(item.id);
+                                        }
+                                    }}
+                                />
+                            );
+                        })}
+
+                        {isDrawing && currentDoodlePoints.length >= 2 && (
+                            <Line
+                                points={currentDoodlePoints.map((point, index) => (
+                                    index % 2 === 0 ? point * stageWidth : point * stageHeight
+                                ))}
+                                stroke={doodleColor}
+                                strokeWidth={doodleSize}
+                                lineCap="round"
+                                lineJoin="round"
+                                tension={0.1}
+                            />
+                        )}
+                    </Layer>
+
+                    <Layer>
+                        {stickyItems.map((item) => {
+                            const canDelete = currentUserId && (item.user_id === currentUserId || authorId === currentUserId);
+                            const stickyX = clamp((Number(item?.payload?.x) || 0) * stageWidth, 0, Math.max(0, stageWidth - STICKY_WIDTH));
+                            const stickyY = clamp((Number(item?.payload?.y) || 0) * stageHeight, 0, Math.max(0, stageHeight - STICKY_HEIGHT));
+                            return (
+                                <Group
+                                    key={item.id}
+                                    x={stickyX}
+                                    y={stickyY}
+                                    onClick={() => {
+                                        if(canDelete){
+                                            deleteMarginMutation.mutate(item.id);
+                                        }
+                                    }}
+                                    onTap={() => {
+                                        if(canDelete){
+                                            deleteMarginMutation.mutate(item.id);
+                                        }
+                                    }}
+                                >
+                                    <Rect
+                                        width={STICKY_WIDTH}
+                                        height={STICKY_HEIGHT}
+                                        cornerRadius={8}
+                                        fill={item?.payload?.color || "#fff4a8"}
+                                        shadowColor="rgba(0,0,0,0.18)"
+                                        shadowBlur={8}
+                                        shadowOffsetY={3}
+                                    />
+                                    <Text
+                                        x={10}
+                                        y={10}
+                                        width={STICKY_WIDTH - 20}
+                                        height={STICKY_HEIGHT - 20}
+                                        text={item?.payload?.text || ""}
+                                        fontSize={15}
+                                        lineHeight={1.25}
+                                        fill="#1b1c1e"
+                                        wrap="word"
+                                    />
+                                </Group>
+                            );
+                        })}
+                    </Layer>
+                </Stage>
+            </div>
+        </div>
+    );
+};
+
+export default CanvasViewer;

@@ -1,0 +1,141 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Stage } from 'react-konva';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../Context/useAuth';
+import { getUniversePosts } from '../../../API/Api';
+import useUniverseCamera from './hooks/useUniverseCamera';
+import DeepSpaceLayer from './layers/DeepSpaceLayer';
+import MidGalaxyLayer from './layers/MidGalaxyLayer';
+import InteractiveLayer from './layers/InteractiveLayer';
+import { extractSnippet } from './utils/starUtils';
+import styles from './Universe.module.css';
+
+const Universe = () => {
+    const navigate = useNavigate();
+    const { user } = useAuth();
+    const userId = user?.userData?.[0]?.id || null;
+
+    const debounceRef = useRef(null);
+    const [posts, setPosts] = useState(new Map());
+    const [selectedPost, setSelectedPost] = useState(null);
+    const [pulsingId, setPulsingId] = useState(null);
+    // null = still loading, true/false = resolved
+    const [hasOwnPosts, setHasOwnPosts] = useState(userId ? null : false);
+
+    const {
+        stageRef,
+        stageSize,
+        camera,
+        zoom,
+        isDragging,
+        centerWorld,
+        getLayerProps,
+        getViewportBounds,
+        stageEvents,
+    } = useUniverseCamera(userId, hasOwnPosts);
+
+    // Debounced fetch on camera/zoom change
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+
+        debounceRef.current = setTimeout(async () => {
+            const bounds = getViewportBounds();
+            try {
+                const result = await getUniversePosts(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, 200);
+                if (result?.data) {
+                    setPosts(prev => {
+                        const next = new Map(prev);
+                        for (const post of result.data) {
+                            next.set(post.id, post);
+                        }
+                        return next;
+                    });
+                    // Check if any returned posts belong to this user
+                    if (userId && hasOwnPosts === null) {
+                        const ownsAny = result.data.some(p => p.users?.id === userId);
+                        setHasOwnPosts(ownsAny);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch universe posts:', err);
+            }
+        }, 400);
+
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [camera, zoom, getViewportBounds, userId, hasOwnPosts]);
+
+    const handleStarClick = useCallback((post) => {
+        setSelectedPost(post);
+        setPulsingId(post.id);
+        setTimeout(() => setPulsingId(null), 400);
+    }, []);
+
+    const handleReadPost = useCallback(() => {
+        if (!selectedPost) return;
+        navigate(`/home/post/${selectedPost.id}`);
+    }, [selectedPost, navigate]);
+
+    const postArray = useMemo(() => Array.from(posts.values()), [posts]);
+    const showTitles = zoom > 0.5;
+
+    return (
+        <div className={`${styles.universeContainer} ${isDragging ? styles.grabbing : ''}`}>
+            <button className={styles.backButton} onClick={() => navigate('/home')}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Back
+            </button>
+
+            <div className={styles.coordsLabel}>
+                {centerWorld.x}, {centerWorld.y}
+            </div>
+
+            <Stage
+                ref={stageRef}
+                width={stageSize.width}
+                height={stageSize.height}
+                {...stageEvents}
+            >
+                <DeepSpaceLayer layerProps={getLayerProps(0.1)} />
+                <MidGalaxyLayer layerProps={getLayerProps(0.4)} />
+                <InteractiveLayer
+                    layerProps={getLayerProps(1.0)}
+                    posts={postArray}
+                    showTitles={showTitles}
+                    pulsingId={pulsingId}
+                    onStarClick={handleStarClick}
+                />
+            </Stage>
+
+            {selectedPost && (
+                <div className={styles.previewPanel}>
+                    <div className={styles.previewAuthor}>
+                        <img
+                            className={styles.previewAvatar}
+                            src={selectedPost.users?.image_url || '/assets/profile.jpg'}
+                            alt=""
+                        />
+                        <span className={styles.previewAuthorName}>
+                            {selectedPost.users?.name || 'Anonymous'}
+                        </span>
+                    </div>
+                    <div className={styles.previewTitle}>{selectedPost.title}</div>
+                    <div className={styles.previewSnippet}>{extractSnippet(selectedPost)}</div>
+                    <div className={styles.previewLikes}>
+                        {Array.isArray(selectedPost.likes) && selectedPost.likes[0]?.count
+                            ? `${selectedPost.likes[0].count} like${selectedPost.likes[0].count !== 1 ? 's' : ''}`
+                            : '0 likes'}
+                    </div>
+                    <button className={styles.previewReadBtn} onClick={handleReadPost}>
+                        Read
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Universe;

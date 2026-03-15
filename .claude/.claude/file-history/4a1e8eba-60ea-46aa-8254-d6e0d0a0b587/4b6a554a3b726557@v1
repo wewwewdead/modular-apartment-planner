@@ -1,0 +1,156 @@
+import { materializeTemplateDefinition } from './templateHelpers';
+
+const cabinetTemplate = {
+  type: 'cabinet',
+  label: 'Cabinet',
+  description: 'Box with sides, shelves, optional doors and back',
+  parameters: [
+    { key: 'width', label: 'Width', type: 'number', default: 600, min: 200, max: 3000, step: 10, suffix: 'mm' },
+    { key: 'depth', label: 'Depth', type: 'number', default: 400, min: 150, max: 1500, step: 10, suffix: 'mm' },
+    { key: 'height', label: 'Height', type: 'number', default: 800, min: 200, max: 3000, step: 10, suffix: 'mm' },
+    { key: 'panelThickness', label: 'Panel Thickness', type: 'number', default: 18, min: 6, max: 50, step: 1, suffix: 'mm' },
+    { key: 'shelfCount', label: 'Shelves', type: 'integer', default: 2, min: 0, max: 10, step: 1, suffix: '' },
+    { key: 'hasDoors', label: 'Doors', type: 'boolean', default: false },
+    { key: 'hasBack', label: 'Back Panel', type: 'boolean', default: true },
+  ],
+  buildDefinition(params) {
+    const { width, depth, height, panelThickness, shelfCount, hasDoors, hasBack } = params;
+    const innerWidth = width - 2 * panelThickness;
+    const innerHeight = height - 2 * panelThickness;
+    const caseParts = [
+      {
+        type: 'panel',
+        role: 'left_side',
+        name: 'Left Side',
+        props: {
+          width: panelThickness,
+          depth,
+          thickness: innerHeight,
+          material: 'plywood',
+          position: { x: 0, y: 0, z: panelThickness },
+        },
+      },
+      {
+        type: 'panel',
+        role: 'right_side',
+        name: 'Right Side',
+        props: {
+          width: panelThickness,
+          depth,
+          thickness: innerHeight,
+          material: 'plywood',
+          position: { x: width - panelThickness, y: 0, z: panelThickness },
+        },
+      },
+      {
+        type: 'panel',
+        role: 'bottom',
+        name: 'Bottom',
+        props: {
+          width: innerWidth,
+          depth,
+          thickness: panelThickness,
+          material: 'plywood',
+          position: { x: panelThickness, y: 0, z: 0 },
+        },
+      },
+      {
+        type: 'panel',
+        role: 'top',
+        name: 'Top',
+        props: {
+          width: innerWidth,
+          depth,
+          thickness: panelThickness,
+          material: 'plywood',
+          position: { x: panelThickness, y: 0, z: height - panelThickness },
+        },
+      },
+    ];
+
+    const shelfParts = [];
+    if (shelfCount > 0) {
+      const spacing = innerHeight / (shelfCount + 1);
+      for (let i = 1; i <= shelfCount; i += 1) {
+        const z = panelThickness + spacing * i - panelThickness / 2;
+        shelfParts.push({
+          type: 'panel',
+          role: `shelf_${i}`,
+          name: `Shelf ${i}`,
+          props: {
+            width: innerWidth,
+            depth,
+            thickness: panelThickness,
+            material: 'plywood',
+            position: { x: panelThickness, y: 0, z },
+          },
+        });
+      }
+    }
+
+    const doorParts = [];
+    if (hasDoors) {
+      const doorWidth = innerWidth / 2;
+      doorParts.push({
+        type: 'panel',
+        role: 'left_door',
+        name: 'Left Door',
+        props: {
+          width: doorWidth,
+          depth: panelThickness,
+          thickness: innerHeight,
+          material: 'plywood',
+          position: { x: panelThickness, y: 0, z: panelThickness },
+          fill: 'rgba(184, 134, 11, 0.1)',
+        },
+      });
+      doorParts.push({
+        type: 'panel',
+        role: 'right_door',
+        name: 'Right Door',
+        props: {
+          width: doorWidth,
+          depth: panelThickness,
+          thickness: innerHeight,
+          material: 'plywood',
+          position: { x: panelThickness + doorWidth, y: 0, z: panelThickness },
+          fill: 'rgba(184, 134, 11, 0.1)',
+        },
+      });
+    }
+
+    const backParts = hasBack ? [
+      {
+        type: 'panel',
+        role: 'back',
+        name: 'Back',
+        props: {
+          width,
+          depth: panelThickness,
+          thickness: height,
+          material: 'plywood',
+          position: { x: 0, y: depth - panelThickness, z: 0 },
+          fill: 'rgba(120, 120, 120, 0.06)',
+        },
+      },
+    ] : [];
+
+    return {
+      name: `Cabinet ${width}×${depth}×${height}`,
+      summary: 'Casework cabinet with configurable shelves and enclosure options',
+      description: 'Side panels, horizontal case parts, optional shelves, doors, and back panel.',
+      dimensions: { width, depth, height },
+      assemblies: [
+        { key: 'case', name: 'Case', sortIndex: 0, parts: caseParts },
+        { key: 'shelves', name: 'Shelves', sortIndex: 1, parts: shelfParts },
+        { key: 'front', name: 'Front', sortIndex: 2, parts: doorParts },
+        { key: 'back', name: 'Back', sortIndex: 3, parts: backParts },
+      ],
+    };
+  },
+  generate(params) {
+    return materializeTemplateDefinition(this.buildDefinition(params));
+  },
+};
+
+export default cabinetTemplate;

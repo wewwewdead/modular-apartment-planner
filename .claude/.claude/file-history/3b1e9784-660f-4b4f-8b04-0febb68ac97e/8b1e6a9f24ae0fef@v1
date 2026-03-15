@@ -1,0 +1,235 @@
+import React from 'react';
+import {FlatList, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {PostCard} from './PostCard/PostCard';
+import {Chip} from './Chip';
+import {Avatar} from './Avatar';
+import {EmptyState} from './EmptyState';
+import {useTheme} from '../theme/ThemeProvider';
+import {fonts} from '../theme/typography';
+import {typeScale} from '../theme/typography';
+import {spacing} from '../theme/spacing';
+import type {SearchTab} from '../hooks/useSearch';
+import type {JournalItem, UserPreview} from '../lib/api/mobileApi';
+import {
+  extractPlainText,
+  extractBannerImage,
+  resolveCount,
+  calculateReadingTime,
+} from '../lib/utils/journalHelpers';
+
+interface SearchResultsViewProps {
+  activeTab: SearchTab;
+  onTabChange: (tab: SearchTab) => void;
+  users: UserPreview[];
+  journals: JournalItem[];
+  normalizedQuery: string;
+  onUserPress: (id: string, username?: string) => void;
+  onPostPress: (id: string) => void;
+  onAuthorPress: (item: JournalItem) => void;
+  onReact: (journalId: string, receiverId: string, reactionType: string) => void;
+  onComment: (journalId: string, receiverId?: string, commentCount?: number) => void;
+  onBookmark: (journalId: string) => void;
+  onRepost: (journalId: string, title?: string, authorName?: string, authorAvatar?: string) => void;
+  onEmbeddedPress: (journalId: string) => void;
+}
+
+export function SearchResultsView({
+  activeTab,
+  onTabChange,
+  users,
+  journals,
+  normalizedQuery,
+  onUserPress,
+  onPostPress,
+  onAuthorPress,
+  onReact,
+  onComment,
+  onBookmark,
+  onRepost,
+  onEmbeddedPress,
+}: SearchResultsViewProps) {
+  const {colors} = useTheme();
+
+  const renderPostCard = (item: JournalItem) => {
+    const preview = extractPlainText(item.content).slice(0, 180);
+    const likeCount = resolveCount(item.like_count, item.likes_count);
+    const commentCount = resolveCount(item.comment_count, item.comments_count);
+    const bookmarkCount = resolveCount(item.bookmark_count);
+    const bannerImage = extractBannerImage(item.content, (item as any).images);
+    const receiverId = item.user_id ?? item.users?.id ?? '';
+    const readingTime = calculateReadingTime(extractPlainText(item.content));
+    const isRepost = !!item.is_repost;
+    const repostSource = isRepost ? item.repost_source : null;
+    const repostSourcePreview = repostSource?.content
+      ? extractPlainText(repostSource.content).slice(0, 180)
+      : '';
+
+    return (
+      <PostCard
+        title={item.title || 'Untitled Post'}
+        bodyPreview={preview || 'No preview text available.'}
+        authorName={item.users?.name || 'Unknown author'}
+        authorAvatar={item.users?.image_url}
+        authorBadge={item.users?.badge as 'legend' | 'og' | undefined}
+        bannerImage={bannerImage}
+        postType={item.post_type ?? undefined}
+        readingTime={readingTime}
+        likeCount={likeCount}
+        commentCount={commentCount}
+        bookmarkCount={bookmarkCount}
+        userReaction={item.user_reaction}
+        isBookmarked={!!item.has_bookmarked}
+        onReact={type => onReact(item.id, receiverId, type)}
+        onComment={() => onComment(item.id, receiverId, commentCount)}
+        onBookmark={() => onBookmark(item.id)}
+        onRepost={() =>
+          onRepost(
+            item.id,
+            item.title ?? undefined,
+            item.users?.name ?? undefined,
+            item.users?.image_url ?? undefined,
+          )
+        }
+        onPress={() => onPostPress(item.id)}
+        onAuthorPress={() => onAuthorPress(item)}
+        isRepost={isRepost}
+        repostCaption={item.repost_caption}
+        repostSourceTitle={repostSource?.title}
+        repostSourcePreview={repostSourcePreview}
+        repostSourceAuthorName={repostSource?.users?.name}
+        repostSourceAuthorAvatar={repostSource?.users?.image_url}
+        onEmbeddedPress={
+          repostSource
+            ? () => onEmbeddedPress(repostSource.id)
+            : undefined
+        }
+      />
+    );
+  };
+
+  return (
+    <>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScrollView}
+        contentContainerStyle={styles.tabRow}>
+        {(['all', 'users', 'posts'] as SearchTab[]).map(tab => (
+          <Chip
+            key={tab}
+            label={tab.charAt(0).toUpperCase() + tab.slice(1)}
+            active={activeTab === tab}
+            onPress={() => onTabChange(tab)}
+          />
+        ))}
+      </ScrollView>
+
+      <FlatList
+        data={[]}
+        renderItem={null}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.results}
+        ListHeaderComponent={
+          <>
+            {/* Users section */}
+            {activeTab !== 'posts' && users.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                  Users
+                </Text>
+                {users.map(u => (
+                  <Pressable
+                    key={u.id}
+                    style={[styles.userRow, {borderBottomColor: colors.borderCard}]}
+                    onPress={() => onUserPress(u.id, u.username ?? undefined)}>
+                    <Avatar uri={u.image_url} name={u.name ?? undefined} size={40} />
+                    <View style={styles.userInfo}>
+                      <Text style={[styles.userName, {color: colors.textPrimary}]}>
+                        {u.name || 'Unknown'}
+                      </Text>
+                      {u.username && (
+                        <Text style={[styles.userHandle, {color: colors.textMuted}]}>
+                          @{u.username}
+                        </Text>
+                      )}
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {/* Posts section */}
+            {activeTab !== 'users' && journals.length > 0 && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, {color: colors.textHeading}]}>
+                  Posts
+                </Text>
+                {journals.map(j => (
+                  <View key={j.id} style={styles.searchPostCard}>
+                    {renderPostCard(j)}
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Empty results */}
+            {activeTab !== 'posts' &&
+              users.length === 0 &&
+              activeTab !== 'users' &&
+              journals.length === 0 && (
+                <EmptyState
+                  title="No results"
+                  subtitle={`Nothing found for "${normalizedQuery}"`}
+                />
+              )}
+          </>
+        }
+      />
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  tabScrollView: {
+    flexGrow: 0,
+  },
+  tabRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  results: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxxl,
+  },
+  section: {
+    marginBottom: spacing.xl,
+  },
+  sectionTitle: {
+    ...typeScale.h3,
+    marginBottom: spacing.md,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 15,
+  },
+  userHandle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  searchPostCard: {
+    marginBottom: spacing.md,
+  },
+});

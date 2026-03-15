@@ -1,0 +1,94 @@
+# Onboarding Flow Design Overhaul
+
+## Context
+
+The signup/login pages have a polished editorial design (warm cream, gold accents, Playfair Display typography, morphing blobs). But the **profile setup modal** uses a cold dark navy (`rgb(4,20,29)`) with no CSS variables, and the **welcome message** is a plain white card with a generic party popper SVG. These three consecutive screens feel like three different apps. This plan harmonizes them into one cohesive editorial flow.
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `client/src/components/HomePage/home.css` | Restyle profile editor: replace hardcoded colors with CSS variables, match auth page design |
+| `client/src/components/HomePage/Home.jsx` | Update title/copy, add placeholders, color-coded username feedback |
+| `client/src/components/WelcomeMessage/welcomemessage.css` | Full rewrite: CSS variables, dark mode, remove duplicate @media blocks |
+| `client/src/components/WelcomeMessage/WelcomeMessage.jsx` | Replace party popper with pen icon, add "Begin writing" CTA, update copy |
+
+## Change 1: Profile Setup Modal (home.css + Home.jsx)
+
+### CSS — Replace hardcoded navy with warm editorial theme
+
+- `.profile-editor`: `rgb(4,20,29)` -> `var(--bg-card)` + `var(--border-card)` + `var(--shadow-modal)`. Change from `width:50%; height:90%` to `max-width:440px; height:auto` (matches auth-form-card pattern)
+- `.profile-editor-bg`: `rgba(141,141,141,0.2)` -> `var(--bg-backdrop-heavy)`, increase blur to 8px
+- `.edit-profile-title-container`: Add `font-family: "Playfair Display"`, use `var(--text-heading)`
+- `.save-bttn` / `.save-bttn-disabled`: Match `.primary-button` from signup (dark bg, hover lift, disabled opacity)
+- `.edit-profile-name-input` / `.edit-profile-bio-input`: Match `.auth-input` from signup — `var(--bg-primary)`, `var(--border-card)`, gold focus ring (`box-shadow: 0 0 0 3px rgba(212,168,83,0.12)`)
+- `.input-title`: Match label style from signup — uppercase, `var(--text-muted)`, `0.7rem`
+- `.input-title-container`: Change to `justify-content: space-between` (label left, counter right)
+- `.name-input-container` / `.bio-input-container`: Remove border wrapper, use gap layout
+- `.profile-edit-container`: Remove hardcoded navy background
+- Add `@keyframes slideUp` (same as signup.css) for the card entrance
+- Remove hardcoded `color: rgb(255,255,255) !important` from mobile @media blocks
+- Add username status classes: `.username-status-available` (green), `.username-status-taken` (red), `.username-status-checking` (muted)
+- Add dark mode overrides for elevated inputs
+
+### JSX — Welcoming copy + username feedback
+
+- Title: "Edit profile" -> "Welcome to Iskrib"
+- Add subtitle: `<p className="setup-subtitle">Set up your writing identity.</p>`
+- Add `placeholder="Your name"` on name input
+- Add `placeholder="A few words about you..."` on bio textarea
+- Username status: apply color classes + prepend checkmark/X unicode chars
+- Save button: show "Saving..." text during upload, disable during upload
+
+## Change 2: Welcome Message (welcomemessage.css + WelcomeMessage.jsx)
+
+### CSS — Full rewrite
+
+- `.welcome-message-container`: `position: fixed`, `var(--bg-backdrop-heavy)`, blur 6px
+- `.welcome-message-child-container`: `var(--bg-card)`, `var(--border-card)`, `var(--shadow-modal)`, `max-width: 400px`, `border-radius: 16px`
+- Remove the 54px square close icon -> small 32px circular close button top-right (`.welcome-close-btn`)
+- Add `.welcome-heading`: Playfair Display, `var(--text-heading)`
+- `.welcome-message`: Lora serif, italic, `var(--text-body)`
+- `.iskrib-word`: Playfair Display, `var(--accent-amber)`, bold
+- Add `.welcome-cta`: Full-width button matching `.primary-button` (dark bg, hover lift)
+- Add `.welcome-icon`: `var(--accent-amber)` for the pen icon
+- Dark mode: gold CTA button, stronger shadow
+- **Remove duplicate @media blocks** (lines 56-77 and 79-100 were identical)
+- Single responsive block at 480px
+
+### JSX — Editorial design
+
+- Replace 80px party popper SVG (100+ lines) with 48px Material pen/edit icon (single path, `currentColor`)
+- Add heading: `<h2 className="welcome-heading">You're all set</h2>`
+- Update message: "Your thoughts now have a home on **Iskrib**. The blank page awaits."
+- Add CTA: `<button className="welcome-cta">Begin writing</button>` (calls `onClose`)
+- Add small X close button top-right (aria-labeled)
+- Confetti colors: brand palette `['#D4A853', '#C4943E', '#E0BA6A', '#FAF9F6', '#8A9E7A']` instead of rainbow
+- Softer animation: `scale: 0.95, y: 12` initial instead of `scale: 0` (gentle reveal vs popping from nothing)
+
+## Visual Consistency After Changes
+
+| Screen | Background | Card | Typography | Accent |
+|--------|-----------|------|------------|--------|
+| Signup | `--bg-primary` | `--bg-card` + `--shadow-card-sm` | Playfair + Lora + Outfit | Gold focus rings |
+| Profile Setup | `--bg-backdrop-heavy` | `--bg-card` + `--shadow-modal` | Playfair + Lora + Outfit | Gold focus rings |
+| Welcome | `--bg-backdrop-heavy` | `--bg-card` + `--shadow-modal` | Playfair + Lora + Outfit | Gold icon + confetti |
+
+All three screens now share the same warm editorial card pattern.
+
+## Implementation Order
+
+1. `home.css` — Profile editor CSS overhaul (highest impact)
+2. `Home.jsx` — Title, placeholders, username feedback
+3. `welcomemessage.css` — Full rewrite
+4. `WelcomeMessage.jsx` — SVG, CTA, copy
+
+## Verification
+
+1. Start the dev server (`npm run dev` in client/)
+2. Create a new account via `/signUp`
+3. Verify the profile setup modal matches the editorial design (warm bg, gold focus rings, Playfair title)
+4. Verify username field shows green "Available" / red "Taken" with icons
+5. After saving, verify welcome message has pen icon, gold confetti, "Begin writing" CTA
+6. Toggle dark mode and verify all three screens adapt properly
+7. Test at mobile width (< 480px) — modal should be ~92% width

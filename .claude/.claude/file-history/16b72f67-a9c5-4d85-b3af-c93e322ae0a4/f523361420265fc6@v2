@@ -1,0 +1,249 @@
+import { useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { getRelatedPosts } from "../../../API/Api";
+import { useAuth } from "../../Context/useAuth";
+import { useBookMarkMutation } from "../../utils/useMutation";
+import formatPostDate from "../../../helpers/formatDateString";
+import VerifiedBadge from "../Badge/VerifiedBadge";
+import RepostModal from "../RepostModal/RepostModal";
+import './RelatedPosts.css';
+
+function extractExcerpt(content, maxLen = 120) {
+    if (!content) return '';
+    try {
+        const root = typeof content === 'string' ? JSON.parse(content) : content;
+        const texts = [];
+        const walk = (node) => {
+            if (node.text) texts.push(node.text);
+            if (node.children) node.children.forEach(walk);
+        };
+        walk(root.root || root);
+        const full = texts.join(' ').replace(/\s+/g, ' ').trim();
+        if (full.length <= maxLen) return full;
+        return full.slice(0, maxLen).replace(/\s+\S*$/, '') + '…';
+    } catch {
+        return '';
+    }
+}
+
+const CONFIDENCE_LABELS = {
+    high:   "Posts you might like",
+    medium: "You might also explore",
+    low:    "More from the community",
+};
+
+function RelatedPostCard({ post, index, onAddTake, onRepost, onSave, currentUserId }) {
+    const navigate = useNavigate();
+
+    const handleClick = () => {
+        navigate(`/home/post/${post.id}`);
+    };
+
+    const title = post.title || 'Untitled';
+    const excerpt = extractExcerpt(post.content);
+
+    // Map similarity to accent opacity (higher = brighter accent line)
+    const accentOpacity = Math.min(1, Math.max(0.3, (post.semantic_similarity - 0.25) / 0.5));
+
+    return (
+        <motion.div
+            className="rp-card"
+            onClick={handleClick}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+                duration: 0.35,
+                delay: index * 0.06,
+                ease: [0.25, 0.46, 0.45, 0.94],
+            }}
+        >
+            <div
+                className="rp-card-accent"
+                style={{ opacity: accentOpacity }}
+            />
+            <div className="rp-card-content">
+                <h4 className="rp-card-title">{title}</h4>
+                {excerpt && <p className="rp-card-excerpt">{excerpt}</p>}
+                <div className="rp-card-meta">
+                    <div className="rp-card-author">
+                        {post.user_image_url ? (
+                            <img
+                                src={post.user_image_url}
+                                alt=""
+                                className="rp-card-avatar"
+                            />
+                        ) : (
+                            <div className="rp-card-avatar rp-card-avatar-placeholder" />
+                        )}
+                        <span className="rp-card-name">
+                            {post.user_name || 'Anonymous'}
+                        </span>
+                        {post.user_badge && (
+                            <VerifiedBadge badge={post.user_badge} size={12} />
+                        )}
+                    </div>
+                    <span className="rp-card-date">
+                        {formatPostDate(post.created_at)}
+                    </span>
+                </div>
+                <div className="rp-card-actions">
+                    <button className="rp-action-btn" onClick={(e) => { e.stopPropagation(); onAddTake(post); }}>
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11.5 1.5l3 3-9 9H2.5v-3z" />
+                            <path d="M9.5 3.5l3 3" />
+                        </svg>
+                        <span className="rp-action-label">Your take</span>
+                    </button>
+                    {post.user_id !== currentUserId && (
+                        <button className="rp-action-btn" onClick={(e) => { e.stopPropagation(); onRepost(post); }}>
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2l2.5 2.5L12 7" />
+                                <path d="M1.5 8V6.5a2 2 0 012-2h11" />
+                                <path d="M4 14l-2.5-2.5L4 9" />
+                                <path d="M14.5 8v1.5a2 2 0 01-2 2h-11" />
+                            </svg>
+                            <span className="rp-action-label">Repost</span>
+                        </button>
+                    )}
+                    <button className="rp-action-btn" onClick={(e) => { e.stopPropagation(); onSave(post); }}>
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 2.5h10a.5.5 0 01.5.5v11.5L8 11.5 2.5 14.5V3a.5.5 0 01.5-.5z" />
+                        </svg>
+                        <span className="rp-action-label">Save</span>
+                    </button>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
+
+function RelatedPostsSkeleton() {
+    return (
+        <div className="rp-skeleton-container">
+            {[0, 1, 2].map((i) => (
+                <div key={i} className="rp-skeleton-card">
+                    <div className="rp-skeleton-accent" />
+                    <div className="rp-skeleton-content">
+                        <div className="rp-skeleton-title" />
+                        <div className="rp-skeleton-excerpt" />
+                        <div className="rp-skeleton-meta">
+                            <div className="rp-skeleton-avatar" />
+                            <div className="rp-skeleton-name" />
+                        </div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+export default function RelatedPosts({ journalId }) {
+    const navigate = useNavigate();
+    const { session, user, openAuthModal } = useAuth();
+    const userId = user?.userData?.[0]?.id;
+    const mutationBookmark = useBookMarkMutation(session, userId);
+    const [repostJournal, setRepostJournal] = useState(null);
+    const [toast, setToast] = useState('');
+    const toastRef = useRef();
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['relatedPosts', journalId],
+        queryFn: () => getRelatedPosts(journalId),
+        enabled: !!journalId,
+        staleTime: 10 * 60 * 1000,
+        retry: false,
+    });
+
+    const showToast = (msg) => {
+        setToast(msg);
+        clearTimeout(toastRef.current);
+        toastRef.current = setTimeout(() => setToast(''), 2500);
+    };
+
+    const handleAddTake = (post) => {
+        if (!session) return openAuthModal();
+        navigate('/home', {
+            state: {
+                openEditor: true,
+                editorMode: 'text',
+                initialTitle: `Re: ${post.title || 'Untitled'}`,
+            }
+        });
+    };
+
+    const handleRepost = (post) => {
+        if (!session) return openAuthModal();
+        setRepostJournal({
+            id: post.id,
+            title: post.title,
+            users: { id: post.user_id, name: post.user_name, image_url: post.user_image_url, badge: post.user_badge }
+        });
+    };
+
+    const handleSave = async (post) => {
+        if (!session) return openAuthModal();
+        const res = await mutationBookmark.mutateAsync({ journalId: post.id });
+        showToast(res?.message === 'success' ? 'Saved to bookmarks' : 'Removed from bookmarks');
+    };
+
+    if (isLoading) {
+        return (
+            <section className="rp-section">
+                <RelatedPostsSkeleton />
+            </section>
+        );
+    }
+
+    // Don't render anything if no confidence or no posts
+    if (!data || data.confidence === 'none' || !data.posts?.length) {
+        return null;
+    }
+
+    const label = CONFIDENCE_LABELS[data.confidence];
+    if (!label) return null;
+
+    return (
+        <section className="rp-section">
+            <h3 className="rp-heading">{label}</h3>
+            <div className="rp-grid">
+                {data.posts.map((post, index) => (
+                    <RelatedPostCard
+                        key={post.id}
+                        post={post}
+                        index={index}
+                        onAddTake={handleAddTake}
+                        onRepost={handleRepost}
+                        onSave={handleSave}
+                        currentUserId={userId}
+                    />
+                ))}
+            </div>
+
+            {repostJournal && (
+                <RepostModal
+                    journal={repostJournal}
+                    onClose={(result) => {
+                        setRepostJournal(null);
+                        if (result === 'success') showToast('Post was reposted');
+                    }}
+                />
+            )}
+
+            <AnimatePresence>
+                {toast && (
+                    <motion.div
+                        className="rp-toast"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        {toast}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </section>
+    );
+}

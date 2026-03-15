@@ -1,0 +1,156 @@
+# Align Sketch Persistence with Floor Planner Persistence
+
+## Context
+
+The sketch module currently has its own separate persistence system (`sketchStorage.js`, `sketchSerialize.js`, `sketchDeserialize.js`, `sketchLocalStorageBackend.js`) that saves to localStorage under `sketch-planner-*` keys. It works, but it's isolated — there's no JSON file export/import, no load modal, no Ctrl+S file save, and no project browser from the homepage.
+
+The floor planner has a richer persistence pipeline: JSON file export/import via File System Access API, a pluggable backend, autosave hook, load modal with browser drafts + file import, Ctrl+S file save, and `beforeunload` unsaved-changes warning.
+
+**Goal:** Make the sketch module save/load the same way as the floor planner — JSON file export/import, load modal, Ctrl+S, autosave to localStorage, project list.
+
+---
+
+## What Already Exists and Can Be Reused
+
+| Floor planner file | What it does | Reusable for sketch? |
+|---|---|---|
+| `src/persistence/backendInterface.js` | Backend contract (`save/load/list/delete`) | Yes, as-is |
+| `src/persistence/localStorageBackend.js` | localStorage impl with index | No — uses `apartment-planner-*` keys; sketch has its own (which is fine) |
+| `src/persistence/fileTransfer.js` | File System Access API export/import | **Partially** — the file picker and blob download logic is reusable, but it imports `serializeProject`/`deserializeProject` (floor planner specific) |
+| `src/persistence/useAutosave.js` | 5-second debounce autosave hook | No — imports `saveProject` from `./storage` (floor planner specific) |
+| `src/persistence/errors.js` | Custom error classes | Yes, can import directly |
+| `src/persistence/storage.js` | Public API (`saveProject/loadProject/listProjects/deleteProject`) | No — floor planner specific |
+
+**Key insight:** The sketch module already has the localStorage backend and serialize/deserialize. What's missing is:
+1. **File export/import** (JSON file save/open via File System Access API)
+2. **Load modal UI** (list browser drafts + open file)
+3. **Ctrl+S file save** in the workspace
+4. **`beforeunload` warning** for unsaved changes
+5. **useAutosave hook** that calls sketch save (currently inline in SketchWorkspace)
+
+---
+
+## Implementation Plan
+
+### Step 1: Create `sketchFileTransfer.js`
+
+**New file:** `src/modules/sketch/persistence/sketchFileTransfer.js`
+
+Mirror `src/persistence/fileTransfer.js` but use sketch serialize/deserialize:
+
+- `importSketchProjectFile(file)` — parse JSON, call `sketchDeserialize(json)`, return `{ project, savedAt }`
+- `openSketchProjectFile()` — use `showOpenFilePicker` with `.json` filter, call `importSketchProjectFile`, return `{ project, savedAt, fileHandle }`
+- `exportSketchProjectFile(project, options)` — call `sketchSerialize(project)`, use `showSaveFilePicker` or fallback to blob download, return `{ savedAt, fileHandle }`
+- `isFilePickerAbortError(error)` — same check
+
+File type description: `'Sketch Planner Project'` instead of `'Apartment Planner Project'`.
+
+### Step 2: Create `useSketchAutosave.js`
+
+**New file:** `src/modules/sketch/persistence/useSketchAutosave.js`
+
+Same pattern as `src/persistence/useAutosave.js` but imports `saveSketchProject` from `./sketchStorage`:
+
+```js
+import { useEffect } from 'react';
+import { saveSketchProject } from './sketchStorage';
+
+const AUTOSAVE_DELAY = 5000;
+
+export function useSketchAutosave(project, isDirty, dispatch) {
+  useEffect(() => {
+    if (!isDirty) return;
+    const timer = setTimeout(async () => {
+      try {
+        await saveSketchProject(project);
+        dispatch({ type: 'MARK_SAVED' });
+      } catch {
+        // silent
+      }
+    }, AUTOSAVE_DELAY);
+    return () => clearTimeout(timer);
+  }, [project, isDirty, dispatch]);
+}
+```
+
+### Step 3: Update `SketchWorkspace.jsx` — add full save/load flow
+
+**File:** `src/modules/sketch/SketchWorkspace.jsx`
+
+Modify `SketchInner` to match the `FloorplanInner` pattern:
+
+- Replace inline autosave `useEffect` with `useSketchAutosave(project, isDirty, dispatch)`
+- Add state: `showLoadModal`, `savedProjects`, `projectFileHandle`, `importInputRef`
+- Add `beforeunload` warning `useEffect`
+- Add handlers:
+  - `handleNew()` — confirm if dirty, dispatch `SKETCH_NEW`
+  - `handleSave()` — call `exportSketchProjectFile(project, { fileHandle })`, then `saveSketchProject(project)`, dispatch `MARK_SAVED`
+  - `handleLoadClick()` — call `listSketchProjects()`, show load modal
+  - `handleLoad(id)` — call `loadSketchProject(id)`, dispatch `SKETCH_LOAD`
+  - `handleOpenProjectFile()` — call `openSketchProjectFile()`, dispatch `SKETCH_LOAD`
+  - `handleImportFile(e)` — call `importSketchProjectFile(file)`, dispatch `SKETCH_LOAD`
+  - `handleDelete(id, name)` — confirm, call `deleteSketchProject(id)`
+- Add Ctrl+S keyboard handler `useEffect`
+- Add hidden file `<input>` for import fallback
+- Pass `handleNew`, `handleSave`, `handleLoadClick` to toolbar (or render project actions in toolbar)
+- Render load modal when `showLoadModal` is true
+
+### Step 4: Add load modal UI to sketch workspace
+
+Either reuse the floor planner's `Modal` component (`src/ui/Modal.jsx`) or create a simple inline modal in the workspace. Render:
+
+- "Open Project File" button → `handleOpenProjectFile()`
+- "Import File" fallback → triggers hidden `<input>`
+- List of browser drafts from `savedProjects` → each with Load and Delete buttons
+- Close button
+
+### Step 5: Add project action buttons to `SketchToolbar.jsx`
+
+**File:** `src/modules/sketch/ui/SketchToolbar.jsx`
+
+Add New / Save / Load buttons to the toolbar (visible in model mode, and optionally in sheet mode too). These call handlers passed down from `SketchInner` via context or props.
+
+**Approach:** Since toolbar uses `useSketch()` and `useSketchEditor()` directly (not props from parent), the simplest approach is to pass the save/load/new handlers via the SketchEditorProvider context, or alternatively lift them into a new lightweight context. However, the cleanest approach (matching the floor planner pattern) is to pass them as props through the workspace layout.
+
+**Simpler alternative:** Add project actions (New, Save, Open) directly in the `SketchInner` render — either in the toolbar area or as an overlay. The floor planner does this via `EditorShell` which renders the toolbar with save/load buttons. We can add the buttons directly to `SketchToolbar` by passing handlers as props from `SketchInner`, flowing through the layout `div`s.
+
+The cleanest way: Create a `SketchProjectContext` that provides `{ handleNew, handleSave, handleLoadClick }` and wrap it around the inner content. Then `SketchToolbar` can `useSketchProject()` to access these handlers.
+
+---
+
+## Files Summary
+
+### New files (2)
+| File | Purpose |
+|---|---|
+| `src/modules/sketch/persistence/sketchFileTransfer.js` | JSON file export/import via File System Access API |
+| `src/modules/sketch/persistence/useSketchAutosave.js` | Autosave hook for sketch projects |
+
+### Modified files (3)
+| File | Change |
+|---|---|
+| `src/modules/sketch/SketchWorkspace.jsx` | Add full save/load flow (load modal, Ctrl+S, beforeunload, file import/export) |
+| `src/modules/sketch/ui/SketchToolbar.jsx` | Add New / Save / Open buttons |
+| `src/modules/sketch/ui/SketchSidebar.jsx` | _(optional)_ Add project name display |
+
+### Reused without changes
+- `src/persistence/backendInterface.js` — backend contract
+- `src/persistence/errors.js` — error classes (can import if needed for richer error handling in deserialize)
+- `src/ui/Modal.jsx` — modal component for load dialog
+- Existing sketch persistence: `sketchStorage.js`, `sketchSerialize.js`, `sketchDeserialize.js`, `sketchLocalStorageBackend.js` — all stay as-is
+
+---
+
+## Verification
+
+1. Navigate to `/sketch`, create parts
+2. Ctrl+S → file picker opens, saves `.json` file
+3. Close and reopen `/sketch` → starts fresh (blank project)
+4. Click "Open" in toolbar → load modal appears
+5. "Open Project File" → file picker opens, select saved `.json` → project loads
+6. Browser drafts section shows autosaved projects → click one to load
+7. Delete a browser draft → removed from list
+8. Make changes, try to close tab → beforeunload warning appears
+9. Autosave fires after 5 seconds of inactivity when dirty
+10. "New" button → confirms if dirty, creates blank project
+11. Load a project, modify, Ctrl+S again → saves to same file handle (no picker)

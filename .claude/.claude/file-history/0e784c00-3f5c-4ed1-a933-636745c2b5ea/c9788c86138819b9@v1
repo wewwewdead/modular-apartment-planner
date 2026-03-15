@@ -1,0 +1,74 @@
+# Add Infinite Scroll Pagination to Profile Stories (5 per fetch)
+
+## Context
+The profile stories sections (`ProfileStoriesSection` and `VisitedProfileStoriesSection`) currently load ALL stories at once via a plain `useQuery`. The user wants paginated infinite scroll (5 stories per fetch), matching how `ProfilePostCards` already works for posts.
+
+The backend `getUserStoriesService` has **no pagination support** — it needs `limit`/`before` cursor params added across all layers (service → controller → client API → hook → components).
+
+## Changes
+
+### 1. Backend Service — add pagination to `getUserStoriesService`
+**File:** `server/services/storyService.js` (~line 359)
+
+- Add `limit` and `before` params to signature
+- Parse limit: `Math.min(Math.max(parseInt(limit) || 5, 1), 20)`
+- Add `.limit(parsedLimit + 1)` to detect hasMore
+- Conditionally add `.lt('created_at', before)` when cursor provided
+- Return `{ data: sliced, hasMore }` instead of plain array
+
+*(Pattern copied from `getStoriesService` at line 97 in the same file)*
+
+### 2. Backend Controller — extract query params
+**File:** `server/controller/storyController.js` (~line 85)
+
+- Extract `{ limit, before }` from `req.query`
+- Pass to `getUserStoriesService(targetUserId, limit, before)`
+
+No route changes needed — Express auto-populates `req.query`.
+
+### 3. Client API — add pagination params
+**File:** `client/API/StoryApi.js` (~line 119)
+
+- Change signature to `getUserStories(userId, token, limit = 5, before = null)`
+- Build `URLSearchParams` with `limit` and optional `before`
+- Append to fetch URL: `${BASE_URL}/stories/user/${userId}?${params}`
+
+*(Pattern copied from `getStories` at line 22 in the same file)*
+
+### 4. Client Hook — convert to `useInfiniteQuery`
+**File:** `client/src/components/Stories/hooks/useStoryData.js`
+
+- Add `useInfiniteQuery` to the import from `@tanstack/react-query`
+- Replace `useUserStories` implementation:
+  - `useInfiniteQuery` with `queryFn: ({ pageParam }) => getUserStories(userId, token, 5, pageParam)`
+  - `initialPageParam: undefined` (required by React Query v5)
+  - `getNextPageParam`: if `lastPage.hasMore`, return last item's `created_at` ISO string; else `undefined`
+
+### 5. Components — consume infinite query + add sentinel
+**Files:**
+- `client/src/components/ProfilePage/components/ProfileStoriesSection.jsx`
+- `client/src/components/VisitProfile/components/VisitedProfileStoriesSection.jsx`
+
+Both get the same changes:
+- Import `useEffect` from React and `useInView` from `react-intersection-observer`
+- Destructure `{ data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading }` from hook
+- Flatten pages: `data?.pages?.flatMap(page => page.data) || []`
+- Add `useInView({ threshold: 0.2 })` + `useEffect` to trigger `fetchNextPage` when sentinel is visible
+- Add sentinel div with `MoonLoader` after the stories list
+
+*(Pattern copied from `ProfilePostCards.jsx` lines 29-31, 90-109, 281-286, 671)*
+
+## Files to Modify
+1. `server/services/storyService.js` — `getUserStoriesService` pagination
+2. `server/controller/storyController.js` — extract `limit`/`before` from query
+3. `client/API/StoryApi.js` — `getUserStories` pagination params
+4. `client/src/components/Stories/hooks/useStoryData.js` — `useInfiniteQuery` conversion
+5. `client/src/components/ProfilePage/components/ProfileStoriesSection.jsx` — infinite scroll UI
+6. `client/src/components/VisitProfile/components/VisitedProfileStoriesSection.jsx` — infinite scroll UI
+
+## Verification
+1. Profile → Stories tab → only 5 stories load initially
+2. Scroll down → next 5 stories auto-load via sentinel
+3. When all stories loaded, no more fetch attempts
+4. Works on visited profiles (`/u/:username/stories` and `/visitProfile/stories`)
+5. Empty state still shows correctly for users with 0 stories

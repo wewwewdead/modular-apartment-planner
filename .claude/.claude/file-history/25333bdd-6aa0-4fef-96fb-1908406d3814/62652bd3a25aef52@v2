@@ -1,0 +1,87 @@
+const VIBE_CONFIG = {
+    morning: {
+        name: 'Morning Dew',
+        emoji: '\u{1F331}',
+        badgeText: 'Morning Dew',
+        className: 'vibe-morning',
+        style: {
+            '--vibe-gradient': 'linear-gradient(90deg, #a8d5a2, #f5f0e1)',
+            '--vibe-border': '#9cc196',
+            '--vibe-badge-bg': 'rgba(168, 213, 162, 0.25)',
+            '--vibe-badge-text': '#4a7c44',
+            '--vibe-glow': 'rgba(168, 213, 162, 0.18)',
+        },
+    },
+    midday: {
+        name: 'High Sun',
+        emoji: '\u{2600}\u{FE0F}',
+        badgeText: 'High Sun',
+        className: 'vibe-midday',
+        style: {
+            '--vibe-gradient': 'linear-gradient(90deg, #f7d76e, #f0a845)',
+            '--vibe-border': '#dbb950',
+            '--vibe-badge-bg': 'rgba(247, 215, 110, 0.25)',
+            '--vibe-badge-text': '#8a6d1b',
+            '--vibe-glow': 'rgba(247, 215, 110, 0.18)',
+        },
+    },
+    golden: {
+        name: 'Golden Hour',
+        emoji: '\u{1F305}',
+        badgeText: 'Golden Hour',
+        className: 'vibe-golden',
+        style: {
+            '--vibe-gradient': 'linear-gradient(90deg, #e8a44a, #c46a3b)',
+            '--vibe-border': '#d49545',
+            '--vibe-badge-bg': 'rgba(232, 164, 74, 0.25)',
+            '--vibe-badge-text': '#8b5722',
+            '--vibe-glow': 'rgba(232, 164, 74, 0.18)',
+        },
+    },
+    twilight: {
+        name: 'Twilight',
+        emoji: '\u{1F306}',
+        badgeText: 'Twilight',
+        className: 'vibe-twilight',
+        style: {
+            '--vibe-gradient': 'linear-gradient(90deg, #b07cc6, #e88fa5)',
+            '--vibe-border': '#b89cc4',
+            '--vibe-badge-bg': 'rgba(176, 124, 198, 0.25)',
+            '--vibe-badge-text': '#6e3d82',
+            '--vibe-glow': 'rgba(176, 124, 198, 0.18)',
+        },
+    },
+    moonlight: {
+        name: 'Written in the Moonlight',
+        emoji: '\u{1F319}',
+        badgeText: 'Moonlight',
+        className: 'vibe-moonlight',
+        style: {
+            '--vibe-gradient': 'linear-gradient(90deg, #2c3e6b, #6b7fa3)',
+            '--vibe-border': '#6b7fa3',
+            '--vibe-badge-bg': 'rgba(107, 127, 163, 0.25)',
+            '--vibe-badge-text': '#c9d4e3',
+            '--vibe-glow': 'rgba(107, 127, 163, 0.18)',
+        },
+    },
+};
+
+function getVibeKey(hour) {
+    if (hour >= 5 && hour <= 10) return 'morning';
+    if (hour >= 11 && hour <= 15) return 'midday';
+    if (hour >= 16 && hour <= 19) return 'golden';
+    if (hour >= 20 && hour <= 22) return 'twilight';
+    return 'moonlight';
+}
+
+export function getVibeForTimestamp(created_at) {
+    if (!created_at) return null;
+    const hour = new Date(created_at).getHours();
+    const key = getVibeKey(hour);
+    const config = VIBE_CONFIG[key];
+    return { key, ...config };
+}
+
+export default function useVibeTheme(created_at) {
+    return getVibeForTimestamp(created_at);
+}

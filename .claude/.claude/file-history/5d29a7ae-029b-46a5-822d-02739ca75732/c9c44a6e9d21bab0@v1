@@ -1,0 +1,52 @@
+import axios from "axios";
+
+function normalizeBaseUrl(baseUrl) {
+  return String(baseUrl || "").replace(/\/+$/, "");
+}
+
+function toIpv4Localhost(baseUrl) {
+  const normalized = normalizeBaseUrl(baseUrl);
+  return normalized.replace("://localhost", "://127.0.0.1");
+}
+
+function isIpv6Refused(error) {
+  const message = String(error?.message || "");
+  const code = String(error?.code || "");
+  return (
+    code === "ECONNREFUSED" ||
+    message.includes("ECONNREFUSED ::1") ||
+    message.includes("::1:11434")
+  );
+}
+
+export async function postOllamaChat({
+  baseUrl,
+  model,
+  messages,
+  timeoutMs,
+  logger,
+  stream = false,
+}) {
+  const primaryBase = normalizeBaseUrl(baseUrl);
+  const primaryUrl = `${primaryBase}/api/chat`;
+  const payload = {
+    model,
+    stream,
+    messages,
+  };
+
+  try {
+    return await axios.post(primaryUrl, payload, { timeout: timeoutMs });
+  } catch (error) {
+    const fallbackBase = toIpv4Localhost(primaryBase);
+    if (fallbackBase !== primaryBase && isIpv6Refused(error)) {
+      const fallbackUrl = `${fallbackBase}/api/chat`;
+      logger?.warn?.(
+        `Ollama localhost IPv6 connection failed. Retrying with IPv4 endpoint ${fallbackBase}.`,
+      );
+      return axios.post(fallbackUrl, payload, { timeout: timeoutMs });
+    }
+    throw error;
+  }
+}
+

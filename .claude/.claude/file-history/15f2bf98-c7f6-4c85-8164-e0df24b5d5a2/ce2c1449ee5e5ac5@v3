@@ -1,0 +1,247 @@
+import React, { useRef, useEffect, useCallback } from 'react';
+import { Layer, Shape } from 'react-konva';
+import { LABEL_Z_MAX } from '../hooks/useRocketMode';
+
+const TWO_PI = Math.PI * 2;
+const SPEED_LINE_COUNT = 30;
+
+const RocketLayer = React.memo(({ rocketMode }) => {
+    const {
+        layerRef, starsRef, sortedIndicesRef, velocity, targetIndexRef,
+        stageSizeRef, project, getSpeedRatio,
+        dockingStateRef, dockingTargetIdxRef, dockingProgressRef, dockingStarScaleRef,
+    } = rocketMode;
+
+    const shapeRef = useRef(null);
+    const timeRef = useRef(0);
+
+    // Attach the Konva Layer ref so the hook can call batchDraw
+    const layerCallbackRef = useCallback((node) => {
+        layerRef.current = node;
+    }, [layerRef]);
+
+    // Keep time ticking for pulsing effects
+    useEffect(() => {
+        const update = () => {
+            timeRef.current = performance.now();
+        };
+        const id = setInterval(update, 16);
+        return () => clearInterval(id);
+    }, []);
+
+    return (
+        <Layer ref={layerCallbackRef} listening={false}>
+            <Shape
+                ref={shapeRef}
+                sceneFunc={(ctx) => {
+                    const size = stageSizeRef.current;
+                    const cx = size.width / 2;
+                    const cy = size.height / 2;
+                    const stars = starsRef.current;
+                    const sorted = sortedIndicesRef.current;
+                    const speedRatio = getSpeedRatio();
+                    const time = timeRef.current || performance.now();
+                    const targetIdx = targetIndexRef.current;
+                    const bufferX = size.width / 2 + 200;
+                    const bufferY = size.height / 2 + 200;
+                    const focalLength = size.width * 0.6;
+
+                    // Read docking state
+                    const dockState = dockingStateRef.current;
+                    const dockTargetIdx = dockingTargetIdxRef.current;
+                    const dockProgress = dockingProgressRef.current;
+                    const dockStarScale = dockingStarScaleRef.current;
+                    const dockingActive = dockState !== 'none';
+
+                    // ── 1. Speed lines — converging streaks toward center ─
+                    if (speedRatio > 0.4) {
+                        const lineAlpha = (speedRatio - 0.4) / 0.6;
+                        ctx.strokeStyle = `rgba(180,210,255,${lineAlpha * 0.3})`;
+                        ctx.lineWidth = 1;
+
+                        for (let i = 0; i < SPEED_LINE_COUNT; i++) {
+                            const angle = (i / SPEED_LINE_COUNT) * TWO_PI;
+                            const outerR = 200 + speedRatio * 300 + Math.sin(time * 0.002 + i) * 20;
+                            const innerR = 40 + speedRatio * 60;
+                            ctx.beginPath();
+                            ctx.moveTo(
+                                cx + Math.cos(angle) * outerR,
+                                cy + Math.sin(angle) * outerR
+                            );
+                            ctx.lineTo(
+                                cx + Math.cos(angle) * innerR,
+                                cy + Math.sin(angle) * innerR
+                            );
+                            ctx.stroke();
+                        }
+                    }
+
+                    // ── 2. Stars (painter's algorithm, far first) ────────
+                    for (let si = 0; si < sorted.length; si++) {
+                        const idx = sorted[si];
+                        const star = stars[idx];
+                        const projected = project(star, cx, cy);
+
+                        // Null guard — star is behind camera
+                        if (!projected) continue;
+
+                        const { projX, projY, scale } = projected;
+
+                        // Viewport cull
+                        if (projX < cx - bufferX || projX > cx + bufferX ||
+                            projY < cy - bufferY || projY > cy + bufferY) continue;
+
+                        const baseRadius = star.radius * scale * 0.08;
+                        if (baseRadius < 0.3) continue;
+
+                        const stretchX = 1 + speedRatio * 2.5;
+                        const opacity = Math.max(0.1, 1 - speedRatio * 0.6);
+                        let drawR = Math.min(baseRadius, 60);
+                        const { r, g, b } = star.colorRgb;
+
+                        // ── Docking star scale-up ─────────────────────
+                        if (dockingActive && idx === dockTargetIdx) {
+                            drawR = Math.min(drawR * dockStarScale, 300);
+                        }
+
+                        ctx.save();
+                        ctx.translate(projX, projY);
+                        ctx.scale(stretchX, 1);
+
+                        // Outer glow
+                        const glowR = drawR * 2.5;
+                        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
+                        grad.addColorStop(0, `rgba(${r},${g},${b},${opacity * 0.5})`);
+                        grad.addColorStop(0.4, `rgba(${r},${g},${b},${opacity * 0.15})`);
+                        grad.addColorStop(1, 'rgba(0,0,0,0)');
+                        ctx.beginPath();
+                        ctx.arc(0, 0, glowR, 0, TWO_PI);
+                        ctx.fillStyle = grad;
+                        ctx.fill();
+
+                        // Core (white-hot center)
+                        const coreR = drawR * 0.4;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, Math.max(coreR, 0.5), 0, TWO_PI);
+                        ctx.fillStyle = `rgba(255,255,255,${opacity * 0.9})`;
+                        ctx.fill();
+
+                        ctx.restore();
+
+                        // ── Dynamic label (when close) ───────────────────
+                        const viewZ = star.viewZ;
+                        if (viewZ > 0 && viewZ < LABEL_Z_MAX) {
+                            const labelOpacity = (1 - viewZ / LABEL_Z_MAX) * (1 - speedRatio * 0.8);
+                            if (labelOpacity > 0.05) {
+                                const rawFontSize = focalLength * star.radius / viewZ * 0.015;
+                                const fontSize = Math.max(10, Math.min(18, rawFontSize));
+                                const labelY = projY + drawR * stretchX * 1.8 + fontSize;
+
+                                // Title
+                                ctx.font = `bold ${fontSize}px sans-serif`;
+                                ctx.fillStyle = `rgba(255,255,255,${labelOpacity * 0.9})`;
+                                ctx.textAlign = 'center';
+                                ctx.fillText(star.title, projX, labelY);
+
+                                // Author (smaller, blue-tinted)
+                                const authorSize = Math.max(9, fontSize * 0.75);
+                                ctx.font = `${authorSize}px sans-serif`;
+                                ctx.fillStyle = `rgba(140,180,255,${labelOpacity * 0.7})`;
+                                ctx.fillText(star.authorName, projX, labelY + authorSize + 2);
+                            }
+                        }
+
+                        // ── 3. Targeting bracket (enhanced) ───────────────
+                        if (idx === targetIdx) {
+                            const pulse = 0.6 + 0.4 * Math.sin(time * 0.004);
+
+                            // Color transition based on distance
+                            let bracketR, bracketG, bracketB;
+                            if (viewZ > 100) {
+                                // Cyan
+                                bracketR = 0; bracketG = 255; bracketB = 255;
+                            } else if (viewZ > 40) {
+                                // Cyan → orange interpolation
+                                const t = (100 - viewZ) / 60;
+                                bracketR = Math.round(0 + t * 255);
+                                bracketG = Math.round(255 - t * 90);
+                                bracketB = Math.round(255 - t * 205);
+                            } else {
+                                // Orange → red interpolation
+                                const t = Math.max(0, (40 - viewZ) / 40);
+                                bracketR = 255;
+                                bracketG = Math.round(165 - t * 165);
+                                bracketB = Math.round(50 - t * 50);
+                            }
+
+                            // Growing bracket based on proximity
+                            const closeFactor = Math.max(0, 1 - viewZ / 200);
+                            const sizeMultiplier = 1 + closeFactor * 2.5;
+                            const bracketSize = Math.max(drawR * stretchX * 4, 18) * sizeMultiplier;
+                            const half = bracketSize / 2;
+                            const arm = bracketSize * 0.35;
+
+                            ctx.strokeStyle = `rgba(${bracketR},${bracketG},${bracketB},${pulse})`;
+                            ctx.lineWidth = 1.5 + closeFactor * 1;
+                            ctx.setLineDash([3, 3]);
+
+                            // Top-left
+                            ctx.beginPath();
+                            ctx.moveTo(projX - half, projY - half + arm);
+                            ctx.lineTo(projX - half, projY - half);
+                            ctx.lineTo(projX - half + arm, projY - half);
+                            ctx.stroke();
+
+                            // Top-right
+                            ctx.beginPath();
+                            ctx.moveTo(projX + half - arm, projY - half);
+                            ctx.lineTo(projX + half, projY - half);
+                            ctx.lineTo(projX + half, projY - half + arm);
+                            ctx.stroke();
+
+                            // Bottom-right
+                            ctx.beginPath();
+                            ctx.moveTo(projX + half, projY + half - arm);
+                            ctx.lineTo(projX + half, projY + half);
+                            ctx.lineTo(projX + half - arm, projY + half);
+                            ctx.stroke();
+
+                            // Bottom-left
+                            ctx.beginPath();
+                            ctx.moveTo(projX - half + arm, projY + half);
+                            ctx.lineTo(projX - half, projY + half);
+                            ctx.lineTo(projX - half, projY + half - arm);
+                            ctx.stroke();
+
+                            ctx.setLineDash([]);
+
+                            // Distance readout (top-right of bracket)
+                            const distanceLY = Math.round(viewZ * 7);
+                            ctx.font = '11px monospace';
+                            ctx.fillStyle = `rgba(${bracketR},${bracketG},${bracketB},${pulse * 0.9})`;
+                            ctx.textAlign = 'left';
+                            ctx.fillText(`${distanceLY} LY`, projX + half + 6, projY - half + 12);
+                        }
+                    }
+
+                    // ── 4. Canvas flash overlay (Phase 3 only: progress > 0.9) ──
+                    if (dockProgress > 0.9) {
+                        const flashAlpha = (dockProgress - 0.9) / 0.1;
+                        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(size.width, size.height) * 0.7);
+                        grad.addColorStop(0, `rgba(255,255,255,${flashAlpha})`);
+                        grad.addColorStop(0.6, `rgba(200,220,255,${flashAlpha * 0.7})`);
+                        grad.addColorStop(1, `rgba(100,150,255,${flashAlpha * 0.3})`);
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(0, 0, size.width, size.height);
+                    }
+                }}
+                perfectDrawEnabled={false}
+                listening={false}
+            />
+        </Layer>
+    );
+});
+
+RocketLayer.displayName = 'RocketLayer';
+
+export default RocketLayer;

@@ -1,0 +1,236 @@
+/**
+ * Barnes-Hut N-body gravity engine.
+ * Pure math — no React or Matter.js dependency.
+ */
+
+// ── Config ────────────────────────────────────────────────────────────
+export const THETA = 0.5;          // Barnes-Hut opening angle
+export const G_BASE = 50;          // Gravitational constant (tuned for 50k×50k world, mass ~1–4)
+export const SOFTENING = 20;       // Prevents singularity at close range
+export const MAX_FORCE = 0.05;     // Per-axis clamp to prevent explosions
+
+// ── Semantic G scaling ────────────────────────────────────────────────
+export function computeSemanticG(baseG, similarity) {
+    if (similarity > 0.8) return baseG * 3.0;
+    if (similarity >= 0.2) return baseG * (1 + similarity);
+    return baseG * -0.3; // light repulsion for unrelated content
+}
+
+// ── QuadTree Node ─────────────────────────────────────────────────────
+class QuadTreeNode {
+    constructor(x, y, w, h) {
+        this.bounds = { x, y, w, h }; // top-left corner + dimensions
+        this.centerOfMass = { x: 0, y: 0 };
+        this.totalMass = 0;
+        this.body = null;       // only set on leaf with a single body
+        this.children = null;   // [NW, NE, SW, SE] when subdivided
+        this.bodyCount = 0;
+    }
+
+    _subdivide() {
+        const { x, y, w, h } = this.bounds;
+        const hw = w / 2;
+        const hh = h / 2;
+        this.children = [
+            new QuadTreeNode(x, y, hw, hh),          // NW
+            new QuadTreeNode(x + hw, y, hw, hh),     // NE
+            new QuadTreeNode(x, y + hh, hw, hh),     // SW
+            new QuadTreeNode(x + hw, y + hh, hw, hh) // SE
+        ];
+    }
+
+    _getQuadrant(bx, by) {
+        const { x, y, w, h } = this.bounds;
+        const midX = x + w / 2;
+        const midY = y + h / 2;
+        if (bx < midX) {
+            return by < midY ? 0 : 2; // NW or SW
+        }
+        return by < midY ? 1 : 3;     // NE or SE
+    }
+
+    insert(body) {
+        // Empty node — just store the body
+        if (this.bodyCount === 0 && !this.children) {
+            this.body = body;
+            this.bodyCount = 1;
+            return;
+        }
+
+        // Leaf with one body — need to subdivide
+        if (this.body && !this.children) {
+            // Don't subdivide below a minimum size to avoid infinite recursion
+            if (this.bounds.w < 1 || this.bounds.h < 1) {
+                this.bodyCount++;
+                return;
+            }
+            this._subdivide();
+            // Re-insert the existing body
+            const existing = this.body;
+            this.body = null;
+            const qi = this._getQuadrant(existing.x, existing.y);
+            this.children[qi].insert(existing);
+        }
+
+        // Internal node — insert into correct child
+        if (!this.children) {
+            this._subdivide();
+        }
+        const qi = this._getQuadrant(body.x, body.y);
+        this.children[qi].insert(body);
+        this.bodyCount++;
+    }
+
+    computeMass() {
+        if (this.bodyCount === 0) return;
+
+        // Leaf node
+        if (this.body) {
+            this.centerOfMass.x = this.body.x;
+            this.centerOfMass.y = this.body.y;
+            this.totalMass = this.body.mass;
+            return;
+        }
+
+        // Internal node — aggregate from children
+        let mx = 0, my = 0, tm = 0;
+        if (this.children) {
+            for (const child of this.children) {
+                if (child.bodyCount === 0) continue;
+                child.computeMass();
+                mx += child.centerOfMass.x * child.totalMass;
+                my += child.centerOfMass.y * child.totalMass;
+                tm += child.totalMass;
+            }
+        }
+        if (tm > 0) {
+            this.centerOfMass.x = mx / tm;
+            this.centerOfMass.y = my / tm;
+            this.totalMass = tm;
+        }
+    }
+}
+
+// ── Build QuadTree ────────────────────────────────────────────────────
+/**
+ * @param {Array<{id, x, y, mass}>} bodies
+ * @returns {QuadTreeNode} root
+ */
+export function buildQuadTree(bodies) {
+    if (!bodies || bodies.length === 0) return null;
+
+    // Compute bounding box with padding
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const b of bodies) {
+        if (b.x < minX) minX = b.x;
+        if (b.y < minY) minY = b.y;
+        if (b.x > maxX) maxX = b.x;
+        if (b.y > maxY) maxY = b.y;
+    }
+
+    const padding = 100;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    // Make it square (quadtree requirement)
+    const size = Math.max(maxX - minX, maxY - minY);
+
+    const root = new QuadTreeNode(minX, minY, size, size);
+
+    for (const b of bodies) {
+        root.insert(b);
+    }
+
+    root.computeMass();
+    return root;
+}
+
+// ── Compute Barnes-Hut Forces ─────────────────────────────────────────
+/**
+ * @param {QuadTreeNode} root
+ * @param {Array<{id, x, y, mass}>} bodies
+ * @param {Object} options - { G, theta, softening, maxForce, pairMap }
+ * @returns {Map<id, {fx, fy}>}
+ */
+export function computeBarnesHutForces(root, bodies, options = {}) {
+    const {
+        G = G_BASE,
+        theta = THETA,
+        softening = SOFTENING,
+        maxForce = MAX_FORCE,
+        pairMap = null,
+    } = options;
+
+    const forces = new Map();
+    if (!root) return forces;
+
+    for (const body of bodies) {
+        let fx = 0, fy = 0;
+
+        const stack = [root];
+        while (stack.length > 0) {
+            const node = stack.pop();
+            if (node.bodyCount === 0) continue;
+
+            // Skip self
+            if (node.body && node.body.id === body.id) continue;
+
+            const dx = node.centerOfMass.x - body.x;
+            const dy = node.centerOfMass.y - body.y;
+            const distSq = dx * dx + dy * dy;
+            const dist = Math.sqrt(distSq);
+
+            // External node (leaf) — direct force
+            if (node.body) {
+                const softenedDistSq = distSq + softening * softening;
+                // Look up semantic similarity for direct interactions
+                let effectiveG = G;
+                if (pairMap) {
+                    const pairs = pairMap.get(body.id);
+                    if (pairs) {
+                        for (const p of pairs) {
+                            if (p.otherPostId === node.body.id) {
+                                effectiveG = computeSemanticG(G, p.similarity);
+                                break;
+                            }
+                        }
+                    }
+                }
+                const F = effectiveG * body.mass * node.totalMass / softenedDistSq;
+                const invDist = dist > 0 ? 1 / dist : 0;
+                fx += F * dx * invDist;
+                fy += F * dy * invDist;
+                continue;
+            }
+
+            // Internal node — check if far enough to approximate
+            const nodeWidth = node.bounds.w;
+            if (dist > 0 && nodeWidth / dist < theta) {
+                // Treat as point mass (use base G for aggregate)
+                const softenedDistSq = distSq + softening * softening;
+                const F = G * body.mass * node.totalMass / softenedDistSq;
+                const invDist = 1 / dist;
+                fx += F * dx * invDist;
+                fy += F * dy * invDist;
+                continue;
+            }
+
+            // Too close — recurse into children
+            if (node.children) {
+                for (const child of node.children) {
+                    if (child.bodyCount > 0) stack.push(child);
+                }
+            }
+        }
+
+        // Clamp force per axis
+        fx = Math.max(-maxForce, Math.min(maxForce, fx));
+        fy = Math.max(-maxForce, Math.min(maxForce, fy));
+
+        forces.set(body.id, { fx, fy });
+    }
+
+    return forces;
+}

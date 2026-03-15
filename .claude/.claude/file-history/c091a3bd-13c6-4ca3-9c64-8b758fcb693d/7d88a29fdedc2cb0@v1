@@ -1,0 +1,169 @@
+.sidebar {
+  background: var(--color-panel-bg);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  transition: background var(--duration-fast);
+}
+
+.sectionHeaderClickable {
+  cursor: pointer;
+}
+
+.sectionHeaderClickable:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.sectionHeaderClickable:hover .sectionTitle {
+  color: var(--color-text-primary);
+}
+
+.sectionTitle {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  transition: color var(--duration-fast);
+}
+
+.chevron {
+  width: 10px;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.projectName {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--color-surface-elevated);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.item:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.itemSelected {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.itemSelected:hover {
+  background: rgba(13, 124, 102, 0.12);
+}
+
+.count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0 6px;
+  border-radius: 10px;
+  line-height: 18px;
+}
+
+.floorRow {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.floorButton {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.floorName {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.floorMeta {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.floorActions {
+  display: flex;
+  gap: 4px;
+}
+
+.floorActionBtn {
+  min-width: 38px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+}
+
+.floorActionBtn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--color-text-primary);
+}
+
+.floorActionBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.floorActionDanger {
+  color: var(--color-danger);
+}

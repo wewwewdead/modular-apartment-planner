@@ -1,0 +1,190 @@
+/* ── Posts / People toggle ── */
+.search-type-toggle{
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0.35rem 0.85rem 0;
+}
+.search-type-btn{
+    padding: 0.35rem 0.85rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02rem;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+.search-type-btn:hover{
+    background: var(--bg-hover);
+}
+.search-type-btn--active{
+    background: var(--accent-dark);
+    color: #fff;
+}
+.search-type-btn--active:hover{
+    background: var(--accent-dark);
+    color: #fff;
+}
+
+/* ── User search result cards ── */
+.user-search-results{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 8px;
+    padding-bottom: 2rem;
+}
+
+.user-search-card{
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 0.85rem;
+    box-sizing: border-box;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+.user-search-card:hover{
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+    border-color: var(--accent-dark);
+}
+
+.user-search-avatar-wrap{
+    flex-shrink: 0;
+}
+.user-search-avatar-wrap .user-avatar-container{
+    width: 42px;
+    height: 42px;
+}
+.user-search-avatar-wrap .user-info-avatar{
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.user-search-info{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.user-search-name-row{
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.user-search-name{
+    margin: 0;
+    padding: 0;
+    font-family: "Lexend Deca", sans-serif;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.user-search-username{
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-ui);
+    font-size: 0.74rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── User suggestions in dropdown ── */
+.search-suggestion-user{
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    padding: 0.45rem 0.7rem;
+    box-sizing: border-box;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+}
+.search-suggestion-user:hover{
+    background: var(--bg-hover);
+}
+.search-suggestion-user-avatar{
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+.search-suggestion-user-info{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+}
+.search-suggestion-user-name{
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.search-suggestion-user-handle{
+    font-family: var(--font-ui);
+    font-size: 0.66rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px){
+    .search-type-toggle{
+        padding: 0.3rem 0.6rem 0;
+    }
+    .search-type-btn{
+        padding: 0.3rem 0.65rem;
+        font-size: 0.66rem;
+    }
+
+    .user-search-results{
+        padding: 0 6px;
+        padding-bottom: 6rem;
+    }
+    .user-search-card{
+        padding: 0.6rem 0.7rem;
+        gap: 0.6rem;
+        border-radius: 10px;
+    }
+    .user-search-avatar-wrap .user-avatar-container,
+    .user-search-avatar-wrap .user-info-avatar{
+        width: 36px;
+        height: 36px;
+    }
+    .user-search-name{
+        font-size: 0.82rem;
+    }
+    .user-search-username{
+        font-size: 0.68rem;
+    }
+}

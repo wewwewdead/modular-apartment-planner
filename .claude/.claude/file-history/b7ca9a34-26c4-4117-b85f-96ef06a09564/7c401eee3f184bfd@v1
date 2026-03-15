@@ -1,0 +1,18 @@
+# Fix `get_for_you_feed` RPC "structure mismatch" Error
+
+## Context
+The For You personalized feed RPC function `get_for_you_feed` fails at runtime with:
+> `structure of query does not match function result type`
+
+**Root cause:** In `server/sql/personalized_feed.sql` line 45, the RETURNS TABLE declares `prompt_id UUID`, but the actual `journals.prompt_id` column is `INTEGER` (defined in `writing_prompts.sql` line 10). The sister function `get_following_feed` in `following_feed.sql` correctly uses `prompt_id INTEGER` (line 33).
+
+## Fix
+
+### `server/sql/personalized_feed.sql`
+- **Line 45**: Change `prompt_id UUID` → `prompt_id INTEGER`
+
+### Deploy
+- Re-run the updated SQL in the Supabase SQL editor to replace the function
+
+## Verification
+- After deploying the updated SQL, the For You feed endpoint should return data instead of the 500 error

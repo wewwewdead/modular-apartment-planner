@@ -1,0 +1,445 @@
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-16-        if (node.text) text += node.text + ' ';
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:17:        if (node.children) node.children.forEach(walk);
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-18-    };
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-19-    if (parsed.root) walk(parsed.root);
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-20-    else walk(parsed);
+--
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-254-    // Update each chapter's number based on position in array
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js:255:    const updates = chapterOrder.map((chapterId, index) =>
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-256-        supabase
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-257-            .from('chapters')
+C:\Users\johnm\iskrib_v3\server\services\chapterService.js-258-            .update({ chapter_number: index + 1 })
+--
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-66-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:67:    const existingTopics = new Set((existing || []).map(r => r.topic));
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-68-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-69-    // Load existing into cache
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:70:    for (const row of (existing || [])) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-71-        topicEmbeddingCache.set(row.topic, row.embedding);
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-72-    }
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-73-
+--
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-79-
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js:80:        for (const topic of missing) {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-81-            try {
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-82-                const embedding = await GenerateEmbeddings(topic, '');
+C:\Users\johnm\iskrib_v3\server\services\interestEmbeddingService.js-83-                if (!embedding) {
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-154-    const slicedEntries = hasMore ? libraryEntries.slice(0, parsedLimit) : libraryEntries;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:155:    const storyIds = slicedEntries.map(e => e.story_id);
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-156-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-157-    // Build added_at map for cursor
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-158-    const addedAtMap = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:159:    slicedEntries.forEach(e => { addedAtMap[e.story_id] = e.added_at; });
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-160-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-161-    // Batch-fetch stories
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-162-    const { data: stories, error: storyError } = await supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-176-    // Batch-fetch author profiles
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:177:    const authorIds = [...new Set(stories.map(s => s.author_id))];
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-178-    const { data: authors } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-179-        .from('users')
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-180-        .select('id, name, image_url, username, badge')
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-183-    const authorMap = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:184:    (authors || []).forEach(a => { authorMap[a.id] = a; });
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-185-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-186-    // Build story map for ordering
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-187-    const storyMap = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:188:    stories.forEach(s => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-189-        const { embedding, ...rest } = s;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-190-        storyMap[s.id] = { ...rest, users: authorMap[s.author_id] || null, in_library: true, added_at: addedAtMap[s.id] };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-191-    });
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-193-    // Return in library order (most recently added first)
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:194:    const ordered = storyIds.map(id => storyMap[id]).filter(Boolean);
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-195-
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-196-    return { data: ordered, hasMore };
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-197-};
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-225-    if (comments && comments.length > 0) {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:226:        const commentIds = comments.map(c => c.id);
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-227-        const { data: replies, error: replyError } = await supabase
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-228-            .from('story_comments')
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-229-            .select(`*, users(id, name, image_url, username, badge)`)
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-235-            const replyMap = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:236:            replies.forEach(r => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-237-                if (!replyMap[r.parent_id]) replyMap[r.parent_id] = [];
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-238-                replyMap[r.parent_id].push(r);
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-239-            });
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:240:            comments.forEach(c => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-241-                c.replies = replyMap[c.id] || [];
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-242-            });
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-243-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-266-    const counts = {};
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js:267:    (data || []).forEach(row => {
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-268-        const idx = row.paragraph_index;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-269-        counts[idx] = (counts[idx] || 0) + 1;
+C:\Users\johnm\iskrib_v3\server\services\storyInteractService.js-270-    });
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-338-            if(filtered.length > 0){
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:339:                const notifRows = filtered.map(receiverId => ({
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-340-                    sender_id: userId,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-341-                    receiver_id: receiverId,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-342-                    type: 'mention',
+--
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-468-        if (filtered.length > 0) {
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js:469:            const notifRows = filtered.map(receiverId => ({
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-470-                sender_id: userId,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-471-                receiver_id: receiverId,
+C:\Users\johnm\iskrib_v3\server\services\uploadService.js-472-                type: 'mention',
+--
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-108-    const data = {
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js:109:        userData: Array.isArray(userData) ? userData.map((user) => decorateProfileUser(user)) : userData,
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-110-        followerCount: followerCount,
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-111-        followingCount: followingCount
+C:\Users\johnm\iskrib_v3\server\services\getUserDataService.js-112-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-71-    const map = {};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:72:    (data || []).forEach(u => { map[u.id] = decorateAuthorSummary(u, 'card'); });
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-73-    return map;
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-74-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-75-
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-99-            if (!Array.isArray(parsedTags)) parsedTags = [];
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:100:            parsedTags = parsedTags.slice(0, 10).map(t => String(t).trim()).filter(Boolean);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-101-        } catch {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-102-            parsedTags = [];
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-103-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-170-    // Batch-fetch author profiles
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:171:    const authorMap = await fetchAuthorProfiles(data.map(s => s.author_id));
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-172-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-173-    // Fetch user interaction flags if logged in
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-174-    let userVotedSet = new Set();
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-177-    if (userId) {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:178:        const storyIds = data.map(s => s.id);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-179-        const [votes, library] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-180-            supabase.from('story_votes').select('story_id').in('story_id', storyIds).eq('user_id', userId),
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-181-            supabase.from('story_library').select('story_id').in('story_id', storyIds).eq('user_id', userId),
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-183-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:184:        if (votes.data) userVotedSet = new Set(votes.data.map(v => v.story_id));
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:185:        if (library.data) userLibrarySet = new Set(library.data.map(l => l.story_id));
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-186-    }
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-187-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:188:    const formatted = data.map(story => ({
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-189-        ...decorateStoryMedia(stripEmbedding(story), 'card'),
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-190-        users: authorMap[story.author_id] || null,
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-191-        has_voted: userVotedSet.has(story.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-310-            if (!Array.isArray(parsedTags)) parsedTags = [];
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:311:            parsedTags = parsedTags.slice(0, 10).map(t => String(t).trim()).filter(Boolean);
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-312-        } catch {
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-313-            parsedTags = [];
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-314-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-413-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:414:    return { data: sliced.map((story) => decorateStoryMedia(stripEmbedding(story), 'card')), hasMore };
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-415-};
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-416-
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-417-export const getUserStoriesService = async (targetUserId, limit, before) => {
+--
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-447-    // Batch-fetch author profiles
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:448:    const authorMap = await fetchAuthorProfiles(data.map(s => s.author_id));
+C:\Users\johnm\iskrib_v3\server\services\storyService.js:449:    const formatted = data.map((story) => ({
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-450-        ...decorateStoryMedia(stripEmbedding(story), 'card'),
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-451-        users: authorMap[story.author_id] || null
+C:\Users\johnm\iskrib_v3\server\services\storyService.js-452-    }));
+--
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-38-    // Build queries in parallel — skip interests without a cached embedding
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:39:    const sectionPromises = capped.map(async (interest) => {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-40-        const embedding = getTopicEmbedding(interest);
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-41-        if (!embedding) {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-42-            return null;
+--
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-62-                interest,
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js:63:                posts: posts.map((row) => {
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-64-                    const thumbnailMedia = createMediaResponsePayload('journal-images', row.thumbnail_url, 'card');
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-65-                    const userAvatarMedia = createMediaResponsePayload('avatars', row.user_image_url, 'card');
+C:\Users\johnm\iskrib_v3\server\services\exploreInterestsService.js-66-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-119-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js:120:    return journals.map((journal) => decorateJournalMedia(journal, usage));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-121-};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-122-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-123-const attachRepostSources = async (journals, { includeContent = false } = {}) => {
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-127-            .filter(j => j.is_repost === true && j.repost_source_journal_id != null)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:128:            .map(j => j.repost_source_journal_id)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-129-    )];
+C:\Users\johnm\iskrib_v3\server\services\getService.js-130-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-131-    if (sourceIds.length === 0) {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:132:        items.forEach(j => { j.repost_source = null; });
+C:\Users\johnm\iskrib_v3\server\services\getService.js-133-        return journals;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-134-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-135-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-146-        console.error('supabase error fetching repost sources:', error.message);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:147:        items.forEach(j => { j.repost_source = null; });
+C:\Users\johnm\iskrib_v3\server\services\getService.js-148-        return journals;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-149-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-150-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:151:    const sourceMap = new Map(sources.map(s => [s.id, s]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js:152:    items.forEach(j => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-153-        j.repost_source = j.repost_source_journal_id
+C:\Users\johnm\iskrib_v3\server\services\getService.js-154-            ? (sourceMap.get(j.repost_source_journal_id) || null)
+C:\Users\johnm\iskrib_v3\server\services\getService.js-155-            : null;
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-184-    if(!userId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:185:        return journals.map((journal) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-186-            ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-187-            has_liked: false,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-188-            has_bookmarked: false,
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-192-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:193:    const journalIds = journals.map((journal) => journal.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-194-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-195-    const [userLikes, userBookmarks, userReactions] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\services\getService.js-196-        supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-221-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:222:    const userHasLikedSet = new Set(userLikesResult?.map((journal) => journal.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:223:    const userHasBookmarkedSet = new Set(userBookmarksResult?.map((journal) => journal.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:224:    const userReactionMap = new Map((userReactionsResult || []).map((r) => [r.journal_id, r.reaction_type]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-225-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:226:    return journals.map((journal) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-227-        ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-228-        has_liked: userHasLikedSet.has(journal.id),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-229-        has_bookmarked: userHasBookmarkedSet.has(journal.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-254-const createInitialMediaCursorState = () => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js:255:    offsets: Object.fromEntries(PROFILE_MEDIA_BUCKETS.map((bucket) => [bucket, 0])),
+C:\Users\johnm\iskrib_v3\server\services\getService.js:256:    exhausted: Object.fromEntries(PROFILE_MEDIA_BUCKETS.map((bucket) => [bucket, false])),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-257-    pending: []
+C:\Users\johnm\iskrib_v3\server\services\getService.js-258-});
+C:\Users\johnm\iskrib_v3\server\services\getService.js-259-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-270-        if(parsed?.offsets && typeof parsed.offsets === 'object'){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:271:            PROFILE_MEDIA_BUCKETS.forEach((bucket) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-272-                const value = Number(parsed.offsets[bucket]);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-273-                initial.offsets[bucket] = Number.isNaN(value) || value < 0 ? 0 : value;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-274-            });
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-277-        if(parsed?.exhausted && typeof parsed.exhausted === 'object'){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:278:            PROFILE_MEDIA_BUCKETS.forEach((bucket) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-279-                initial.exhausted[bucket] = Boolean(parsed.exhausted[bucket]);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-280-            });
+C:\Users\johnm\iskrib_v3\server\services\getService.js-281-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-285-                .filter((item) => PROFILE_MEDIA_BUCKETS.includes(item?.bucket) && typeof item?.path === 'string' && typeof item?.name === 'string')
+C:\Users\johnm\iskrib_v3\server\services\getService.js:286:                .map((item) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-287-                    bucket: item.bucket,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-288-                    path: item.path,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-289-                    name: item.name,
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-351-        .filter((item) => item?.name && hasSupportedMediaExtension(item.name) && isPrimaryListableFileName(item.name))
+C:\Users\johnm\iskrib_v3\server\services\getService.js:352:        .map((item) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-353-            const path = `${folderPath}/${item.name}`;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-354-            const createdAt = item.created_at || item.updated_at || null;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-355-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-378-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:379:    const hydrated = await Promise.all(items.map(async(item) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-380-        const url = await resolveMediaUrl(item.bucket, item.path);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-381-        if(!url){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-382-            return null;
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-430-        const chunkResults = await Promise.all(
+C:\Users\johnm\iskrib_v3\server\services\getService.js:431:            activeBuckets.map((bucket) => listMediaChunkForBucket(bucket, userId, offsets[bucket] || 0, parsedLimit))
+C:\Users\johnm\iskrib_v3\server\services\getService.js-432-        );
+C:\Users\johnm\iskrib_v3\server\services\getService.js-433-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:434:        chunkResults.forEach((result) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-435-            offsets[result.bucket] = result.nextOffset;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-436-            exhausted[result.bucket] = result.exhausted;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-437-
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-526-    if(userId){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:527:        const journalIds = data.map((journal) => journal.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-528-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-529-        const [userLikes, userBookmarks, userReactions] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\services\getService.js-530-            supabase
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-557-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:558:        userHasLikedSet = new Set(userLikesResult?.map((j) => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:559:        userHasBookmarkedSet = new Set(userBookmarksResult?.map((j) => j.journal_id)|| []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:560:        userReactionMap = new Map((userReactionsResult || []).map((r) => [r.journal_id, r.reaction_type]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-561-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-562-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-563-    await attachRepostSources(data);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-564-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:565:    const formattedData = data?.map((journal) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-566-        ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-567-        has_liked: userHasLikedSet.has(journal.id),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-568-        has_bookmarked: userHasBookmarkedSet.has(journal.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-609-    // Reshape RPC rows to match PostgREST format the client expects
+C:\Users\johnm\iskrib_v3\server\services\getService.js:610:    const data = rpcData.map(row => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-611-        id: row.id,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-612-        user_id: row.user_id,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-613-        title: row.title,
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-631-    // Step 2: Personalization (same pattern as getJournalsService — operates on small result set)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:632:    const journalIds = data.map(j => j.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-633-    const [userLikes, userBookmarks, userReactions] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\services\getService.js-634-        supabase.from('likes').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-635-        supabase.from('bookmarks').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-638-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:639:    const userHasLikedSet = new Set(userLikes.data?.map(j => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:640:    const userHasBookmarkedSet = new Set(userBookmarks.data?.map(j => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:641:    const userReactionMap = new Map((userReactions.data || []).map(r => [r.journal_id, r.reaction_type]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-642-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-643-    await attachRepostSources(data);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-644-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:645:    const formattedData = data.map(journal => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-646-        ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-647-        has_liked: userHasLikedSet.has(journal.id),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-648-        has_bookmarked: userHasBookmarkedSet.has(journal.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-685-    // Reshape RPC rows to match PostgREST format the client expects
+C:\Users\johnm\iskrib_v3\server\services\getService.js:686:    const data = rpcData.map(row => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-687-        id: row.id,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-688-        user_id: row.user_id,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-689-        title: row.title,
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-707-    // Personalization (same pattern as getFollowingFeedService)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:708:    const journalIds = data.map(j => j.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-709-    const [userLikes, userBookmarks, userReactions] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\services\getService.js-710-        supabase.from('likes').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-711-        supabase.from('bookmarks').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-714-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:715:    const userHasLikedSet = new Set(userLikes.data?.map(j => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:716:    const userHasBookmarkedSet = new Set(userBookmarks.data?.map(j => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:717:    const userReactionMap = new Map((userReactions.data || []).map(r => [r.journal_id, r.reaction_type]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-718-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-719-    await attachRepostSources(data);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-720-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:721:    const formattedData = data.map(journal => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-722-        ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-723-        has_liked: userHasLikedSet.has(journal.id),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-724-        has_bookmarked: userHasBookmarkedSet.has(journal.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-755-    // Reshape RPC rows to match the format the client expects
+C:\Users\johnm\iskrib_v3\server\services\getService.js:756:    const journals = (rpcData || []).map((row) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-757-        id: row.id,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-758-        user_id: row.user_id,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-759-        title: row.title,
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-920-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:921:    const journalIds = journals?.map((journal) => journal.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-922-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-923-    if(journalIds.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-924-        const data = {data: [], hasMore: false};
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-965-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:966:    const userLikesSet = new Set(userLikes?.map((j) => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:967:    const userBookmarksSet = new Set(userBookmarks?.map((j) => j.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:968:    const userReactionMap = new Map((userReactions || []).map((r) => [r.journal_id, r.reaction_type]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-969-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:970:    const formattedData = journals?.map((journal) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-971-        ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-972-        has_liked: userLikesSet.has(journal.id),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-973-        has_bookmarked: userBookmarksSet.has(journal.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1018-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1019:    const journalIds = journals?.map((journal) => journal.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1020-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1021-    if(journalIds.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1022-        return {data: [], hasMore: false}
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1063-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1064:    const userLikesSet = new Set(userLikesResult?.map((x) => x.journal_id) || [])
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1065:    const userBookmarksSet = new Set(userBookmarksResult?.map((y) => y.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1066:    const userReactionMap = new Map((userReactionsResult || []).map((r) => [r.journal_id, r.reaction_type]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1067-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1068:    const formattedData = journals?.map((j) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1069-        ...j,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1070-        has_liked: userLikesSet.has(j.id),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1071-        has_bookmarked: userBookmarksSet.has(j.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1231-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1232:    const journalIds = bookMarksData?.map((bookmark) => bookmark.journals.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1233-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1234-    if(journalIds.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1235-        return {data: [], hasMore: false}
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1266-    
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1267:    const userHasLikedSet = new Set(hasLikedResult.map((journal) => journal.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1268:    const userHasBookmarkedSet = new Set(hasBookMarkedResult.map((bookmark) => bookmark.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1269-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1270-    const hasMore = bookMarksData.length > paresedLimit;
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1271-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1272-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1273:    const formattedData = bookMarksData.map((b) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1274-        ...b,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1275-        journals: decorateJournalMedia(b.journals, 'card', false),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1276-        has_liked: userHasLikedSet.has(b.journals.id),
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1321-    const userMap = new Map();
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1322:    (nameResult.data || []).forEach((user) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1323-        userMap.set(user.id, user);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1324-    });
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1325:    (usernameResult.data || []).forEach((user) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1326-        if(!userMap.has(user.id)){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1327-            userMap.set(user.id, user);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1328-        }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1334-    return {
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1335:        data: (hasMore ? users.slice(0, parsedLimit) : users).map((user) => decorateUserSummaryMedia(user, 'card')),
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1336-        hasMore: hasMore
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1337-    };
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1338-}
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1361-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1362:    const followingIds = (followRows || []).map(r => r.following_id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1363-    if(followingIds.length === 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1364-        return {data: []};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1365-    }
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1383-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1384:        return {data: (data || []).map((user) => decorateUserSummaryMedia(user, 'card'))};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1385-    }
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1386-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1387-    const escapedQuery = normalizedQuery.replace(/[%_]/g, (match) => `\\${match}`);
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1409-    const userMap = new Map();
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1410:    (nameResult.data || []).forEach((user) => userMap.set(user.id, user));
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1411:    (usernameResult.data || []).forEach((user) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1412-        if(!userMap.has(user.id)) userMap.set(user.id, user);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1413-    });
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1414-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1415:    return {data: [...userMap.values()].slice(0, parsedLimit).map((user) => decorateUserSummaryMedia(user, 'card'))};
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1416-}
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1417-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1418-export const searchJournalsService = async(query, limit, userId) => {
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1447-            } else if(Array.isArray(matches) && matches.length > 0){
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1448:                const matchIds = matches.map((row) => row.id);
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1449:                const similarityMap = new Map(matches.map((row) => [row.id, row.similarity]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1450-
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1451-                const {data: journals, error: errorJournals} = await supabase
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1452-                    .from('journals')
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1461-
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1462:                const journalById = new Map((journals || []).map((journal) => [journal.id, journal]));
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1463-                const orderedSemantic = matchIds
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1464:                    .map((id) => journalById.get(id))
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1465-                    .filter(Boolean)
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1466:                    .map((journal) => ({
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1467-                        ...journal,
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1468-                        similarity: similarityMap.get(journal.id) || null
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1469-                    }));
+--
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1513-    const keywordMap = new Map();
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1514:    (titleResult.data || []).forEach((journal) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1515-        keywordMap.set(journal.id, journal);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1516-    });
+C:\Users\johnm\iskrib_v3\server\services\getService.js:1517:    (contentResult.data || []).forEach((journal) => {
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1518-        if(!keywordMap.has(journal.id)){
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1519-            keywordMap.set(journal.id, journal);
+C:\Users\johnm\iskrib_v3\server\services\getService.js-1520-        }

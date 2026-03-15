@@ -1,0 +1,125 @@
+import React from 'react';
+import {Alert, FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {EmptyState} from '../../components/EmptyState';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {queryClient} from '../../lib/queryClient';
+import {fonts} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Drafts'>;
+
+export function DraftsScreen({navigation}: Props) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+
+  const draftsQuery = useQuery({
+    queryKey: ['drafts'],
+    enabled: Boolean(token),
+    queryFn: () => mobileApi.getDrafts(token),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: (journalId: string) => mobileApi.publishDraft(token, journalId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['drafts']});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+      Alert.alert('Published', 'Draft published successfully.');
+    },
+    onError: e => Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (journalId: string) => mobileApi.deleteJournal(token, journalId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['drafts']});
+    },
+    onError: e => Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+  });
+
+  const drafts = draftsQuery.data?.data ?? [];
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <FlatList
+        data={drafts}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          draftsQuery.isLoading ? null : (
+            <EmptyState title="No drafts" subtitle="Your saved drafts will appear here." />
+          )
+        }
+        renderItem={({item}) => (
+          <View style={[styles.card, {backgroundColor: colors.bgCard, borderColor: colors.borderCard}]}>
+            <Pressable
+              style={styles.cardContent}
+              onPress={() => navigation.navigate('JournalEditor', {mode: 'edit', journalId: item.id})}>
+              <Text style={[styles.title, {color: colors.textPrimary}]} numberOfLines={1}>
+                {item.title || 'Untitled Draft'}
+              </Text>
+              <Text style={[styles.date, {color: colors.textMuted}]}>
+                {item.created_at ? new Date(item.created_at).toLocaleDateString() : ''}
+              </Text>
+            </Pressable>
+            <View style={styles.actions}>
+              <Pressable
+                onPress={() => publishMutation.mutate(item.id)}
+                style={[styles.actionBtn, {backgroundColor: colors.accentAmber}]}>
+                <Text style={styles.actionBtnText}>Publish</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  Alert.alert('Delete Draft', 'Are you sure?', [
+                    {text: 'Cancel', style: 'cancel'},
+                    {text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate(item.id)},
+                  ]);
+                }}>
+                <Text style={[styles.deleteText, {color: colors.danger}]}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {flex: 1},
+  list: {padding: spacing.lg, paddingBottom: 100},
+  card: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  cardContent: {gap: 4},
+  title: {fontFamily: fonts.ui.semiBold, fontSize: 16},
+  date: {fontFamily: fonts.ui.regular, fontSize: 12},
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.xs,
+  },
+  actionBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.md,
+  },
+  actionBtnText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 13,
+    color: '#1A1612',
+  },
+  deleteText: {fontFamily: fonts.ui.medium, fontSize: 13},
+  separator: {height: spacing.md},
+});

@@ -1,0 +1,360 @@
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useAuth } from "../../Context/useAuth";
+import { useInView } from "react-intersection-observer";
+import { MoonLoader } from "react-spinners";
+import { getNotifications } from "../../../API/Api";
+import { useEffect, useRef, useState } from "react";
+import FormatNotificationType from "../../../helpers/formatNoficationType";
+import ParseContent from "../HomePage/postCards/parseData";
+import formatPostDate from "../../../helpers/formatDateString";
+import { handleCLickContent, handleClickOpinion } from "../../../helpers/handleClicks";
+import { useNavigate } from "react-router-dom";
+import { useReadNotificationMutation, useUserDeleteNotificationMutation, useRespondConstellationMutation } from "../../utils/useMutation";
+import { AnimatePresence, motion} from "framer-motion";
+import VerifiedBadge from "../Badge/VerifiedBadge";
+import { handleImageFallback } from "../../utils/handleImageFallback";
+
+const NotificationCards = () =>{
+    const {user, session} = useAuth();
+    const {ref, inView} = useInView({
+        threshold: 0.2
+    })
+    const navigate = useNavigate();
+
+    const scrollToTop = useRef();
+    const modalRef = useRef();
+    const [settingsId, setSettingsId] = useState(null);
+
+    const iconArray = [
+        {
+            type: 'like', 
+            icon: 
+            <svg className="svg-like" xmlns="http://www.w3.org/2000/svg" width="30px" height="30px" viewBox="0 0 24 24" fill="none">
+                <g id="style=fill">
+                <g id="like">
+                <path id="Subtract" fillRule="evenodd" clipRule="evenodd" d="M15.9977 5.63891C16.2695 4.34931 15.433 3.00969 14.2102 2.59462C13.6171 2.37633 12.9892 2.4252 12.4662 2.60499C11.9449 2.78419 11.4461 3.12142 11.1369 3.58441L11.136 3.58573L7.49506 9.00272C8.05104 9.29585 8.43005 9.87954 8.43005 10.5518V21.3018H6.91003V21.3018H16.6801C18.2938 21.3018 19.2028 20.2977 19.8943 19.202C20.6524 18.0009 21.1453 16.7211 21.5116 15.5812C21.6808 15.0546 21.8252 14.5503 21.9547 14.0984L21.9863 13.9881C22.126 13.5007 22.2457 13.0904 22.366 12.7549C22.698 11.8292 22.5933 10.9072 22.067 10.2072C21.5476 9.5166 20.7005 9.15175 19.76 9.15175H15.76C15.6702 9.15175 15.6017 9.11544 15.5599 9.06803C15.5238 9.02716 15.4831 8.95058 15.502 8.81171L15.9977 5.63891Z" fill={'rgb(255, 116, 116)'}/>
+                <path id="rec" d="M2.18005 10.6199C2.18005 10.03 2.62777 9.55176 3.18005 9.55176H6.68005C7.23234 9.55176 7.68005 10.03 7.68005 10.6199V21.3018H3.18005C2.62777 21.3018 2.18005 20.8235 2.18005 20.2336V10.6199Z" fill={'rgb(255, 116, 116)'}/>
+                </g>
+                </g>
+            </svg>,
+        },
+        {
+            type: 'comment',
+            icon:
+            <svg className="svg-comment" xmlns="http://www.w3.org/2000/svg" width="30px" height="30px" viewBox="0 0 24 24" fill="#5e5e5eff">
+                <g id="style=fill">
+                <g id="comment">
+                <path id="Subtract" fillRule="evenodd" clipRule="evenodd" d="M11.9862 0.763672C6.07454 0.763672 1.23621 5.36133 1.23621 11.1034C1.23621 13.5057 2.10188 15.7237 3.55066 17.4735C5.46882 19.8566 8.48271 21.3843 11.8522 21.4238L11.8878 21.4367C11.9902 21.4735 12.1385 21.5265 12.3236 21.5916C12.6936 21.7216 13.2115 21.9001 13.8035 22.0941C14.9799 22.4797 16.4767 22.9358 17.6892 23.1894C18.303 23.3178 18.9306 23.1718 19.4096 22.8608C19.8872 22.5507 20.3019 22.0126 20.3019 21.3173C20.3019 20.9046 20.1354 20.4987 19.9732 20.1857C19.8007 19.8529 19.5794 19.5251 19.371 19.2448C19.2691 19.1076 19.1676 18.9782 19.0724 18.8609C21.3193 16.9815 22.7362 14.2061 22.7362 11.1034C22.7362 7.55126 20.8865 4.4319 18.073 2.58609C16.3321 1.4227 14.2426 0.763672 11.9862 0.763672ZM18.3637 6.03728C18.1546 5.67972 17.6953 5.55937 17.3377 5.76847C16.9801 5.97757 16.8598 6.43694 17.0689 6.7945C17.8131 8.0671 18.2362 9.53599 18.2362 11.1034C18.2362 12.6662 17.8138 14.1316 17.0693 15.4016C16.8598 15.7589 16.9797 16.2184 17.337 16.4279C17.6943 16.6374 18.1538 16.5175 18.3633 16.1602C19.2385 14.6673 19.7362 12.941 19.7362 11.1034C19.7362 9.26158 19.238 7.53236 18.3637 6.03728Z" fill="rgb(47, 154, 255)"/>
+                </g>
+                </g>
+            </svg>
+        },
+        {
+            type: 'reply',
+            icon:
+                <svg xmlns="http://www.w3.org/2000/svg" fill="var(--accent-amber)" width="30px" height="30px" viewBox="0 0 32 32" version="1.1">
+                    <title>reply-all</title>
+                    <path d="M0 16q0-1.056 0.896-1.664l12-8q0.448-0.288 0.992-0.32t1.056 0.224q0.64 0.352 0.928 1.056l-8.096 5.376q-0.832 0.576-1.312 1.472t-0.448 1.856 0.448 1.888 1.312 1.44l8.096 5.376q-0.288 0.736-0.928 1.088-0.48 0.256-1.056 0.224t-0.992-0.352l-12-8q-0.896-0.544-0.896-1.664zM8 16q0-1.088 0.896-1.664l12-8q0.448-0.288 0.992-0.32t1.056 0.224q0.48 0.256 0.768 0.736t0.288 1.024v4q3.328 0 5.664 2.336t2.336 5.664q0 2.080-1.12 4-1.056-1.824-2.88-2.912t-4-1.088v4q0 0.544-0.288 1.024t-0.768 0.736-1.056 0.224-0.992-0.32l-12-8q-0.896-0.576-0.896-1.664z"/>
+                </svg>,
+        },
+        {
+            type: 'opinion_reply',
+            icon:
+                <svg xmlns="http://www.w3.org/2000/svg" fill="var(--accent-amber)" width="30px" height="30px" viewBox="0 0 32 32" version="1.1">
+                    <title>reply-all</title>
+                    <path d="M0 16q0-1.056 0.896-1.664l12-8q0.448-0.288 0.992-0.32t1.056 0.224q0.64 0.352 0.928 1.056l-8.096 5.376q-0.832 0.576-1.312 1.472t-0.448 1.856 0.448 1.888 1.312 1.44l8.096 5.376q-0.288 0.736-0.928 1.088-0.48 0.256-1.056 0.224t-0.992-0.352l-12-8q-0.896-0.544-0.896-1.664zM8 16q0-1.088 0.896-1.664l12-8q0.448-0.288 0.992-0.32t1.056 0.224q0.48 0.256 0.768 0.736t0.288 1.024v4q3.328 0 5.664 2.336t2.336 5.664q0 2.080-1.12 4-1.056-1.824-2.88-2.912t-4-1.088v4q0 0.544-0.288 1.024t-0.768 0.736-1.056 0.224-0.992-0.32l-12-8q-0.896-0.576-0.896-1.664z"/>
+                </svg>,
+        },
+        {
+            type: 'constellation_request',
+            icon:
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="30px" height="30px" fill="#5f92ff">
+                    <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                </svg>,
+        },
+        {
+            type: 'constellation_accepted',
+            icon:
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="30px" height="30px" fill="#5fffb0">
+                    <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                </svg>,
+        }
+    ]
+
+    const handleClickNotif = handleCLickContent(navigate);
+    const handleClickOpinionNotif = handleClickOpinion(navigate);
+    const mutationReadNotif = useReadNotificationMutation(session);
+
+    const handleReadNotif = async(e, notification) => {
+        e.stopPropagation();
+        const source = notification?.source || 'journal';
+        mutationReadNotif.mutate({notifId: notification.id, source})
+
+        if(source === 'opinion'){
+            handleClickOpinionNotif(e, notification?.opinions?.id, notification?.opinions?.user_id)
+        } else {
+            const parsedContent = ParseContent(notification?.journals?.content);
+            handleClickNotif(
+                e,
+                notification?.journals?.content,
+                parsedContent.wholeText,
+                notification?.journals?.title,
+                notification?.journals?.users.id,
+                notification?.journals?.users?.name,
+                notification?.journals?.users?.image_url,
+                notification?.journals?.created_at,
+                notification?.journal_id,
+                notification?.hasLiked,
+                notification?.journals?.comments[0].count,
+                notification?.hasBookMarked,
+                notification?.journals?.likes[0].count,
+                notification?.journals?.bookmarks[0].count,
+                notification?.journals?.users?.badge,
+            )
+        }
+    }
+
+    const {data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage} = useInfiniteQuery({
+        queryKey: ['getNotifications', session?.access_token],
+        queryFn: ({pageParam = null, queryKey}) => getNotifications(queryKey[1], pageParam, 5),
+        getNextPageParam: (lastpage) =>{
+            if(lastpage?.hasMore){
+                const lastNotification = lastpage?.data[lastpage?.data.length - 1];
+                return new Date(lastNotification.created_at).toISOString();
+
+            }
+            return undefined;
+        },
+        enabled: !!session?.access_token,
+        refetchOnWindowFocus: false
+    })
+
+    useEffect(() =>{
+        if(scrollToTop.current && !isLoading){
+            scrollToTop.current.scrollIntoView({behavior: 'smooth'});
+        }
+    }, [isLoading])
+
+    useEffect(() =>{
+        if(hasNextPage && !isFetchingNextPage && inView){
+            // console.log(hasNextPage)
+            fetchNextPage();
+        }
+    }, [hasNextPage, isFetchingNextPage, inView, fetchNextPage])
+
+    const notifications = data?.pages?.flatMap((page) => page?.data) || [];
+
+    useEffect(() =>{
+        const handleClickOutside = (e) =>{
+            if(modalRef.current && !modalRef.current.contains(e.target)){
+                setSettingsId(null);
+                // console.log('close')
+            }
+        }
+
+        document.addEventListener('click', handleClickOutside);
+        return () =>{
+            document.removeEventListener('click', handleClickOutside)
+        }
+    }, [])
+
+     useEffect(() =>{
+         console.log(data)
+    }, [data])
+
+    const handleClickSettings = (e, notifId) =>{
+        e.stopPropagation();
+        // console.log(notifId)
+        setSettingsId(settingsId === notifId ? null : notifId);
+    }
+
+    const mutationRespondConstellation = useRespondConstellationMutation(session);
+    const mutationDeleteNotif  = useUserDeleteNotificationMutation(session);
+
+    const handleClickDeleteNotification = async(e, notifId, source) =>{
+        e.stopPropagation();
+        try {
+           const message = mutationDeleteNotif.mutateAsync({notifId, source});
+            if(message){
+                // console.log(message)
+            }
+        } catch (error) {
+            console.error('error while deleting notification:', error)
+        }
+    }
+
+    if(notifications.length === 0 && !isLoading){
+        return(
+            <div className='notification-loading-container'>
+                No notifications availabe
+            </div>
+        )
+    }
+
+    if(isLoading){
+        return(
+            <div className="notification-loading-container">
+                <MoonLoader size={25} color="var(--loader-color)" loading={isLoading}/>
+            </div>
+        )
+    }
+
+    return(
+        <>
+        <div ref={scrollToTop}/>
+        <div className="notifications-container">
+            {notifications?.map((notification) => {
+                const isOpinion = notification?.source === 'opinion';
+                const displayType = isOpinion ? 'opinion_reply' : notification?.type;
+                const parsedContent = !isOpinion ? ParseContent(notification?.journals?.content) : null;
+
+                return(
+                <div key={`${notification.source}-${notification.id}`} className={notification?.read ? "notification-cards" : "notification-cards-unread"}>
+
+                    <div className="notification-cards-child-container">
+
+                        <div className="notification-icon-container">
+                            {iconArray.map((icon, index) => (
+                                <div className="notification-icon" key={index}>
+                                    {icon.type === displayType ? icon.icon : null}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="notification-contents-container">
+
+                            <div className="notification-sender-user-metadata">
+                                <div className="notification-sender-user-metadata-child">
+                                    <div className={`notif-sender-profilepic-container ${notification?.users?.badge === 'legend' ? 'notif-avatar-ring-legend' : notification?.users?.badge === 'og' ? 'notif-avatar-ring-og' : ''}`}>
+                                        <img loading="lazy" className="notif-sender-profilepic" src={notification?.users?.image_url || '/assets/profile.jpg'} alt="notificataion sender profile picture" />
+                                    </div>
+
+                                    <div className="notif-sender-name-container">
+                                        <p className="notif-sender-name">{notification?.users?.name}</p>
+                                        <VerifiedBadge badge={notification?.users?.badge} size={14} />
+                                        <p className="notif-type">{FormatNotificationType(displayType)}</p>
+                                    </div>
+
+                                    <div className="notification-date-container">
+                                        <p className="notification-date">{formatPostDate(notification?.created_at)}</p>
+                                    </div>
+                                </div>
+                                <div className="notification-settings">
+                                    {settingsId === notification.id && (
+                                        <AnimatePresence>
+                                        <motion.div
+                                        initial={{opacity: 0, scale: 0}}
+                                        animate={{opacity: 1, scale: 1, transition:{type: 'spring', stiffness: 300, damping: 25, mass: 0.8}}}
+                                        exit={{ opacity: 0, scale: 0,
+                                            transition: {
+                                            duration: 0.2,
+                                            ease: "easeOut"
+                                            }
+                                        }}
+                                        ref={modalRef}
+                                        className="settings-container">
+
+                                            <div onClick={(e) => handleClickDeleteNotification(e, notification?.id, notification?.source)} className="delete-notification">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+                                                    <path d="M10 12V17" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M14 12V17" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M4 7H20" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M6 10V18C6 19.6569 7.34315 21 9 21H15C16.6569 21 18 19.6569 18 18V10" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M9 5C9 3.89543 9.89543 3 11 3H13C14.1046 3 15 3.89543 15 5V7H9V5Z" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                </svg>
+                                                Delete this notification
+                                            </div>
+
+                                        </motion.div>
+                                        </AnimatePresence>
+                                    )}
+
+                                    <svg onClick={(e) => handleClickSettings(e, notification?.id)} xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+                                        <g id="style=fill">
+                                            <g id="menu-meatballs">
+                                                <path id="vector (Stroke)" fillRule="evenodd" clipRule="evenodd" d="M2.75 12C2.75 10.7574 3.75736 9.75 5 9.75C6.24264 9.75 7.25 10.7574 7.25 12C7.25 13.2426 6.24264 14.25 5 14.25C3.75736 14.25 2.75 13.2426 2.75 12Z" fill="#000000"/>
+                                                <path id="vector (Stroke)_2" fillRule="evenodd" clipRule="evenodd" d="M9.75 12C9.75 10.7574 10.7574 9.75 12 9.75C13.2426 9.75 14.25 10.7574 14.25 12C14.25 13.2426 13.2426 14.25 12 14.25C10.7574 14.25 9.75 13.2426 9.75 12Z" fill="#000000"/>
+                                                <path id="vector (Stroke)_3" fillRule="evenodd" clipRule="evenodd" d="M16.75 12C16.75 10.7574 17.7574 9.75 19 9.75C20.2426 9.75 21.25 10.7574 21.25 12C21.25 13.2426 20.2426 14.25 19 14.25C17.7574 14.25 16.75 13.2426 16.75 12Z" fill="#000000"/>
+                                            </g>
+                                        </g>
+                                    </svg>
+                                </div>
+
+                            </div>
+
+                            <div
+                            className="notification-content"
+                            onClick={(e) => {
+                                if (displayType === 'constellation_request' || displayType === 'constellation_accepted') return;
+                                handleReadNotif(e, notification);
+                            }}
+                            >
+                                {displayType === 'constellation_request' ? (
+                                    <div className="notification-content-text">
+                                        <p className="notif-content-sliced-text">wants to create a constellation link with your star</p>
+                                        {notification.constellations?.status === 'accepted' ? (
+                                            <span className="constellation-status-badge constellation-status-accepted">Accepted</span>
+                                        ) : notification.constellations?.status === 'declined' ? (
+                                            <span className="constellation-status-badge constellation-status-declined">Declined</span>
+                                        ) : (
+                                            <div className="constellation-respond-buttons">
+                                                <button
+                                                    className="constellation-accept-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        mutationRespondConstellation.mutate({ constellationId: notification?.constellation_id, accept: true });
+                                                    }}
+                                                >
+                                                    Accept
+                                                </button>
+                                                <button
+                                                    className="constellation-decline-btn"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        mutationRespondConstellation.mutate({ constellationId: notification?.constellation_id, accept: false });
+                                                    }}
+                                                >
+                                                    Decline
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : displayType === 'constellation_accepted' ? (
+                                    <div className="notification-content-text">
+                                        <p className="notif-content-sliced-text">Your constellation link has been accepted!</p>
+                                    </div>
+                                ) : isOpinion ? (
+                                    <div className="notification-content-text">
+                                        <p className="notif-content-sliced-text">{notification?.opinions?.opinion?.length > 100 ? notification?.opinions?.opinion?.substring(0, 100) + '...' : notification?.opinions?.opinion}</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                    <div className="notification-content-text">
+                                        <p className="notif-content-title">{notification?.journals?.title?.length > 40 ? notification?.journals?.title?.substring(0, 39) : notification?.journals?.title}</p>
+                                        <p className="notif-content-sliced-text">{parsedContent?.slicedText}</p>
+                                    </div>
+                                    <div className="notif-content-image-container">
+                                        <img loading="lazy" className="notif-content-image" src={parsedContent?.firstImage?.src || '/assets/no-image.png'} alt={notification?.journals?.title ? `${notification.journals.title} cover image` : "Notification post cover image"} onError={handleImageFallback} />
+                                    </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+                )
+            })}
+            <div className="notification-inview-container" ref={ref}>
+                {isFetchingNextPage && (
+                    <MoonLoader size={20} color="var(--loader-color)"/>
+                )}
+                
+            </div>
+        </div>
+        </>
+    )
+}
+
+export default NotificationCards;

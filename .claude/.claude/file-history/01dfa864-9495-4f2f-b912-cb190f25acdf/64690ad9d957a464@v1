@@ -1,0 +1,109 @@
+# Plan: VisitProfileScreen + Clickable Author Avatars
+
+## Context
+Users can't tap on an author's avatar/name on post cards or the post detail screen to visit that user's profile. The `VisitProfile` route type already exists in navigation types, and ExploreScreen already tries to navigate to it, but the screen doesn't exist yet. We need to:
+1. Create a `VisitProfileScreen` for viewing other users' profiles
+2. Make author avatars/names tappable on PostCard and PostDetailScreen
+3. Route to own Profile tab when tapping your own avatar, or to VisitProfile for others
+
+## Files to Modify/Create
+
+| File | Action |
+|------|--------|
+| `apps/mobile/src/screens/Profile/ProfileHeroSection.tsx` | Make `onEditProfile`/`onSettingsPress` optional; add `actionButton` prop |
+| `apps/mobile/src/screens/Profile/VisitProfileScreen.tsx` | **NEW** — screen for viewing other users' profiles |
+| `apps/mobile/src/navigation/RootNavigator.tsx` | Register VisitProfileScreen |
+| `apps/mobile/src/components/PostCard/PostCard.tsx` | Add `onAuthorPress` prop; wrap author row in inner Pressable |
+| `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` | Pass `onAuthorPress` to PostCard with self-vs-other logic |
+| `apps/mobile/src/screens/Home/PostDetailScreen.tsx` | Wrap author section in Pressable with navigation |
+| `apps/mobile/src/screens/Profile/ProfileWritingsTab.tsx` | Pass `onAuthorPress` to PostCard |
+
+## Implementation
+
+### 1. ProfileHeroSection — support visit mode
+
+Make `onEditProfile` and `onSettingsPress` optional. Add `actionButton?: React.ReactNode` prop.
+
+- Settings gear: only render if `onSettingsPress` is provided
+- Action row: if `onEditProfile` is provided → "Edit Profile" button (current behavior). Otherwise → render `actionButton` if provided. Share button stays in both modes.
+
+Existing `ProfileScreen` usage is unchanged (still passes both callbacks).
+
+### 2. VisitProfileScreen — NEW
+
+Create `apps/mobile/src/screens/Profile/VisitProfileScreen.tsx`. Mirrors `ProfileScreen` structurally, key differences:
+- Gets `userId` from `route.params` (not `useAuth`)
+- Fetches data with `mobileApi.getUserData(userId)` and `mobileApi.getStreak(userId)`
+- Passes a placeholder "Follow" `PrimaryButton` as `actionButton` (no settings gear, no edit)
+- Sets header title dynamically via `navigation.setOptions({title: name})`
+- Same backdrop pattern (gradient/image blur) as ProfileScreen
+- Reuses `ProfileHeroSection`, `ProfileTabBar`, `ProfileWritingsTab`, `ProfileStoriesTab` as-is
+- Self-redirect guard: if `userId === loggedInUser.id`, redirect to Profile tab via `navigation.replace`
+
+### 3. RootNavigator — register screen
+
+Import `VisitProfileScreen` and add to the authenticated stack:
+```tsx
+<RootStack.Screen name="VisitProfile" component={VisitProfileScreen} options={{title: 'Profile'}} />
+```
+
+### 4. PostCard — add `onAuthorPress`
+
+Add optional `onAuthorPress?: () => void` prop. Restructure the author row: keep outer `<View style={styles.authorRow}>` for flex layout, but wrap the avatar + name + badge in an inner `<Pressable style={styles.authorTouchable}>` that calls `onAuthorPress`. Post-type pills and reading-time pills stay outside the inner pressable, still inside the row.
+
+New style:
+```ts
+authorTouchable: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: spacing.sm,
+  flexShrink: 1,
+},
+```
+
+Nested Pressable inside the outer card Pressable works correctly in RN — inner press fires, outer does not.
+
+### 5. HomeFeedScreen — wire `onAuthorPress`
+
+In the `renderItem`, add a handler:
+```ts
+const handleAuthorPress = () => {
+  const authorId = item.users?.id ?? item.user_id;
+  if (!authorId) return;
+  if (authorId === user?.id) {
+    navigation.navigate('Profile');  // Switch to own Profile tab
+  } else {
+    navigation.navigate('VisitProfile', {
+      userId: authorId,
+      username: item.users?.username ?? undefined,
+    });
+  }
+};
+```
+Pass `onAuthorPress={handleAuthorPress}` to `<PostCard>`.
+
+### 6. PostDetailScreen — make author section tappable
+
+Add `navigation` to destructured props (currently only `route` is destructured). Create `handleAuthorPress` with same self-vs-other logic. Change the author `<View style={styles.authorRow}>` to `<Pressable style={styles.authorRow} onPress={handleAuthorPress}>` — preserves layout while adding tap.
+
+Navigate to own profile: `navigation.navigate('Main' as any, {screen: 'Profile'})` (since PostDetailScreen is a root stack screen, not inside the tab navigator).
+
+### 7. ProfileWritingsTab — wire `onAuthorPress`
+
+Same pattern. Uses `useAuth` (already imported) to get logged-in user ID. Adds `onAuthorPress` to each `<PostCard>` with the self-vs-other check.
+
+## Key Decisions
+- **Follow button is a placeholder** — renders visually but is non-functional until follow API is wired
+- **Self-redirect** — VisitProfileScreen redirects to own Profile tab if userId matches logged-in user
+- **No changes to ProfileScreen** — it continues working exactly as before
+- **Nested Pressable** is the standard RN pattern for nested tap targets (inner press doesn't bubble to outer)
+
+## Verification
+1. **Home feed**: Tap an author avatar/name on a PostCard → navigates to VisitProfileScreen
+2. **Home feed (self)**: Tap your own avatar/name → switches to Profile tab
+3. **Post detail**: Tap the author section → navigates to VisitProfileScreen
+4. **Post detail (self)**: Tap your own author section → navigates to Profile tab
+5. **VisitProfile screen**: Shows user's avatar, stats, bio, background, writings/stories tabs
+6. **Explore search**: Tapping a user result → VisitProfileScreen now loads (was broken before)
+7. **Edge case**: VisitProfile with own userId → redirects to Profile tab
+8. **Existing ProfileScreen**: Unchanged behavior — Edit Profile, Settings, all working

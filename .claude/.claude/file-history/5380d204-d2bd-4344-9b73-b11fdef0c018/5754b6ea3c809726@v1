@@ -1,0 +1,404 @@
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, { useMemo, useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+
+import { computeCartTotal, computeDashboardSummary } from '../../domain/models';
+import { formatCurrency } from '../../lib/format';
+import { RootStackParamList } from '../../navigation/types';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+type HomeTab = 'active' | 'completed' | 'insights';
+
+export function HomeScreen({ navigation }: Props) {
+  const appState = useAppStore(state => state.appState);
+  const draftSelections = useAppStore(state => state.draftSelections);
+  const createCart = useAppStore(state => state.createCart);
+  const [tab, setTab] = useState<HomeTab>('active');
+  const [cartName, setCartName] = useState('');
+  const [budget, setBudget] = useState('120');
+
+  const summary = useMemo(() => (appState ? computeDashboardSummary(appState) : null), [appState]);
+
+  if (!appState || !summary) {
+    return null;
+  }
+
+  const selectedItems = Object.entries(draftSelections).map(([itemId, quantity]) => ({
+    itemId,
+    quantity,
+  }));
+
+  const handleCreateCart = async () => {
+    if (!selectedItems.length) {
+      return;
+    }
+
+    const parsedBudget = Number(budget);
+    if (!cartName.trim() || !Number.isFinite(parsedBudget)) {
+      return;
+    }
+
+    await createCart({
+      name: cartName,
+      budget: parsedBudget,
+      selectedItems,
+    });
+
+    setCartName('');
+  };
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>Grock React Native</Text>
+        <Text style={styles.title}>Hi {appState.user.name || 'there'}</Text>
+        <Text style={styles.subtitle}>
+          The new bare React Native shell is wired to Grock&apos;s local vault, carts,
+          onboarding state, and subscription placeholder.
+        </Text>
+      </View>
+
+      <View style={styles.actionRow}>
+        <ActionButton label="Vault" onPress={() => navigation.navigate('Vault')} />
+        <ActionButton label="History" onPress={() => navigation.navigate('History')} />
+        <ActionButton label="Menu" onPress={() => navigation.navigate('Menu')} />
+        <ActionButton label="Paywall" onPress={() => navigation.navigate('Paywall')} />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Quick cart from vault selection</Text>
+        <Text style={styles.cardCopy}>
+          Select items in Vault, then create a planning cart here.
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={cartName}
+          onChangeText={setCartName}
+          placeholder="Weekend groceries"
+          placeholderTextColor={colors.mutedInk}
+        />
+        <TextInput
+          style={styles.input}
+          value={budget}
+          onChangeText={setBudget}
+          placeholder="Budget"
+          placeholderTextColor={colors.mutedInk}
+          keyboardType="decimal-pad"
+        />
+        <Pressable
+          style={[styles.primaryButton, !selectedItems.length && styles.buttonDisabled]}
+          onPress={() => {
+            handleCreateCart().catch(() => undefined);
+          }}
+          disabled={!selectedItems.length}
+        >
+          <Text style={styles.primaryButtonText}>
+            Create cart from {selectedItems.length} selected item{selectedItems.length === 1 ? '' : 's'}
+          </Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.summaryRow}>
+        <SummaryCard label="Active carts" value={String(summary.activeCarts.length)} />
+        <SummaryCard label="Items in vault" value={String(summary.itemCount)} />
+        <SummaryCard label="Completed spend" value={formatCurrency(summary.totalSpent)} />
+      </View>
+
+      <View style={styles.tabRow}>
+        {(['active', 'completed', 'insights'] as HomeTab[]).map(option => (
+          <Pressable
+            key={option}
+            style={[styles.tabButton, tab === option && styles.tabButtonActive]}
+            onPress={() => setTab(option)}
+          >
+            <Text style={[styles.tabButtonText, tab === option && styles.tabButtonTextActive]}>
+              {option.charAt(0).toUpperCase() + option.slice(1)}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {tab === 'active' ? (
+        <View style={styles.section}>
+          {summary.activeCarts.length ? (
+            summary.activeCarts.map(cart => (
+              <Pressable
+                key={cart.id}
+                style={styles.listCard}
+                onPress={() => navigation.navigate('CartDetail', { cartId: cart.id })}
+              >
+                <View>
+                  <Text style={styles.listTitle}>{cart.name}</Text>
+                  <Text style={styles.listMeta}>
+                    {cart.cartItems.length} items • Budget {formatCurrency(cart.budget)}
+                  </Text>
+                </View>
+                <Text style={styles.listValue}>{formatCurrency(computeCartTotal(appState.vault, cart))}</Text>
+              </Pressable>
+            ))
+          ) : (
+            <EmptyState
+              title="No active carts"
+              copy="Select items in Vault, then build your first planning cart from the quick-create card above."
+            />
+          )}
+        </View>
+      ) : null}
+
+      {tab === 'completed' ? (
+        <View style={styles.section}>
+          {summary.completedCarts.length ? (
+            summary.completedCarts.map(cart => (
+              <Pressable
+                key={cart.id}
+                style={styles.listCard}
+                onPress={() => navigation.navigate('CartDetail', { cartId: cart.id })}
+              >
+                <View>
+                  <Text style={styles.listTitle}>{cart.name}</Text>
+                  <Text style={styles.listMeta}>
+                    Completed {cart.completedAt ? new Date(cart.completedAt).toLocaleDateString() : 'recently'}
+                  </Text>
+                </View>
+                <Text style={styles.listValue}>{formatCurrency(computeCartTotal(appState.vault, cart))}</Text>
+              </Pressable>
+            ))
+          ) : (
+            <EmptyState
+              title="No completed trips yet"
+              copy="Move a cart from planning to shopping and finish the trip to start building history."
+            />
+          )}
+        </View>
+      ) : null}
+
+      {tab === 'insights' ? (
+        <View style={styles.section}>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Trip insights</Text>
+            <Text style={styles.cardCopy}>
+              {summary.overBudgetCount} completed cart{summary.overBudgetCount === 1 ? '' : 's'} finished over budget.
+            </Text>
+            <Text style={styles.cardCopy}>
+              Average spend per completed cart:{' '}
+              {summary.completedCarts.length
+                ? formatCurrency(summary.totalSpent / summary.completedCarts.length)
+                : formatCurrency(0)}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </ScrollView>
+  );
+}
+
+function ActionButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.actionButton} onPress={onPress}>
+      <Text style={styles.actionButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryCard}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function EmptyState({ title, copy }: { title: string; copy: string }) {
+  return (
+    <View style={styles.emptyCard}>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyCopy}>{copy}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: 20,
+    gap: 18,
+  },
+  hero: {
+    gap: 8,
+  },
+  eyebrow: {
+    color: colors.brandDeep,
+    fontWeight: '800',
+    fontSize: 14,
+    textTransform: 'uppercase',
+  },
+  title: {
+    color: colors.ink,
+    fontSize: 34,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: colors.mutedInk,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  actionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  actionButtonText: {
+    color: colors.ink,
+    fontWeight: '700',
+  },
+  card: {
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 10,
+  },
+  cardTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  cardCopy: {
+    color: colors.mutedInk,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+  },
+  primaryButton: {
+    borderRadius: 18,
+    backgroundColor: colors.brand,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  primaryButtonText: {
+    color: colors.surface,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  summaryCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 6,
+  },
+  summaryLabel: {
+    color: colors.mutedInk,
+    fontSize: 13,
+  },
+  summaryValue: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  tabButtonActive: {
+    borderColor: colors.brand,
+    backgroundColor: '#ffe4d1',
+  },
+  tabButtonText: {
+    color: colors.mutedInk,
+    fontWeight: '700',
+  },
+  tabButtonTextActive: {
+    color: colors.ink,
+  },
+  section: {
+    gap: 12,
+  },
+  listCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 16,
+  },
+  listTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  listMeta: {
+    color: colors.mutedInk,
+    marginTop: 4,
+  },
+  listValue: {
+    color: colors.brandDeep,
+    fontWeight: '800',
+  },
+  emptyCard: {
+    borderRadius: 20,
+    padding: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 6,
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 16,
+  },
+  emptyCopy: {
+    color: colors.mutedInk,
+    lineHeight: 22,
+  },
+});

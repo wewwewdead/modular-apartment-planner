@@ -1,0 +1,59 @@
+# Mobile Toolbar: Horizontal Scroll
+
+## Context
+The editor toolbar wraps to multiple rows on mobile, taking up too much vertical space. The user wants it to be a single scrollable row instead. A previous attempt used hidden scrollbars which made it non-discoverable — this time we'll keep a visible thin scrollbar so users know they can scroll.
+
+## File to modify
+`client/src/components/HomePage/Editor/editor.css` — mobile media query (line ~1074)
+
+## Change
+Replace the current mobile `.toolbar` override:
+```css
+.toolbar {
+    flex-wrap: wrap;
+    gap: 2px;
+}
+```
+
+With horizontal scroll + visible thin scrollbar:
+```css
+.toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+.toolbar::-webkit-scrollbar {
+    height: 3px;
+}
+.toolbar::-webkit-scrollbar-thumb {
+    background: var(--editor-border);
+    border-radius: 3px;
+}
+.toolbar-wrapper {
+    position: relative;
+}
+.toolbar-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 24px;
+    background: linear-gradient(to right, transparent, var(--editor-bg, var(--bg-elevated)));
+    pointer-events: none;
+    z-index: 6;
+}
+```
+
+Key differences from the old broken version:
+- **Visible thin scrollbar** (`scrollbar-width: thin` + 3px webkit scrollbar) instead of hidden — users can see there's more content
+- **Fade gradient** on right edge as additional visual hint
+- Touch momentum scrolling for iOS
+
+## Verification
+1. Open editor on mobile (or use browser devtools responsive mode at ≤640px)
+2. Toolbar should be a single row with a thin scrollbar visible at bottom
+3. Swiping/scrolling reveals all buttons including alignment and colors on the right
+4. Right edge has subtle fade gradient hinting at more content
+5. Desktop (>640px) remains unchanged — toolbar wraps normally

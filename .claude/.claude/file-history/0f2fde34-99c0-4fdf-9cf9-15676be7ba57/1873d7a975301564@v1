@@ -1,0 +1,82 @@
+# Render Fixtures in 3D Preview
+
+## Context
+Fixtures (kitchenTop, toilet, lavatory, table, tv, sofa) are rendered on the 2D plan canvas but completely absent from the 3D preview. The goal is to make placed fixtures appear as colored 3D boxes in the Three.js preview, following the exact same pipeline pattern used by columns, landings, and other box-shaped elements. Each fixture type gets a distinct material color matching the warm/earthy 2D design language, and fixtures become selectable and inspectable in the 3D view.
+
+---
+
+## Fixture 3D Heights (new constants)
+Fixtures have no `height` in their domain model (only `width`, `depth`). We define per-type 3D heights:
+
+| Type | Height (mm) | Rationale |
+|------|-------------|-----------|
+| kitchenTop | 900 | Standard counter height |
+| toilet | 400 | Standard toilet bowl |
+| lavatory | 850 | Standard vanity height |
+| table | 750 | Standard dining table |
+| tv | 50 | Thin flat panel |
+| sofa | 800 | Sofa back height |
+
+---
+
+## Files to Modify (3 files)
+
+### 1. `src/three/scene/objectBuilders.js`
+**Add** `buildFixtureObjects(floor, floorLevel)` and a height lookup, then include it in `buildFloorPreviewObjects`.
+
+- Add `FIXTURE_3D_HEIGHTS` map at the top of the file
+- Create `buildFixtureObjects(floor, floorLevel)` that maps over `floor.fixtures || []` and calls the existing `createBoxDescriptor()` for each fixture:
+  - `id`: `fixture.id`
+  - `kind`: `'fixture'`
+  - `center`: `{ x: fixture.x, y: fixture.y }`
+  - `size`: `{ x: fixture.width, y: FIXTURE_3D_HEIGHTS[fixture.fixtureType] || 750, z: fixture.depth }`
+  - `baseElevation`: `floorLevel`
+  - `rotation`: `(fixture.rotation || 0) * Math.PI / 180`
+  - `metadata`: `{ sourceId: fixture.id, floorId: floor.id, materialKey: 'fixture_' + fixture.fixtureType }`
+  - Uses `materialKey: 'fixture_' + fixture.fixtureType` so each type gets its own 3D material
+- Add `...buildFixtureObjects(floor, floorLevel)` to the return array in `buildFloorPreviewObjects()` (line ~332)
+
+### 2. `src/three/viewer/materials.js`
+**Add** 6 fixture materials to `createMaterialPalette()`, one per fixture type:
+
+```
+fixture_kitchenTop: color 0xD8C5A4, roughness 0.82, metalness 0.03
+fixture_toilet:     color 0xD4E8F0, roughness 0.85, metalness 0.02
+fixture_lavatory:   color 0xD0E0EC, roughness 0.85, metalness 0.02
+fixture_table:      color 0xD0C4B0, roughness 0.78, metalness 0.03
+fixture_tv:         color 0x333333, roughness 0.3,  metalness 0.15
+fixture_sofa:       color 0xC8B8A8, roughness 0.9,  metalness 0.02
+```
+
+All use `DoubleSide`, matching existing material conventions.
+
+### 3. `src/three/viewer/previewInspection.js`
+**Add** `'fixture'` to `INSPECTABLE_TYPES`, `TYPE_LABELS`, `findObjectInFloor`, `titleForObject`, and `rowsForObject` so fixtures are inspectable in 3D.
+
+- `INSPECTABLE_TYPES`: add `'fixture'`
+- `TYPE_LABELS`: add `fixture: 'Fixture'`
+- `findObjectInFloor` case `'fixture'`: search `floor.fixtures || []`
+- `titleForObject` case `'fixture'`: show `Fixture Type (e.g. "Kitchen Top")` using a type-to-label map
+- `rowsForObject` case `'fixture'`: show Width, Depth rows
+
+---
+
+## What We Reuse (no new abstractions)
+- `createBoxDescriptor()` in objectBuilders.js — fixtures are simple rotated boxes, exactly like columns
+- `createBoxObject()` in buildPreviewObjects.js — already handles any `geometry: 'box'` descriptor
+- `addOutline()` — automatic edge rendering
+- `assignPreviewMetadata()` — selection/picking for free
+- `matchesSelection()` — selection highlighting for free
+- The entire picking pipeline already works for any `kind` with `userData.previewTarget`
+
+No changes needed to `buildPreviewObjects.js`, `createPreviewViewport.js`, or `ThreePreviewPanel.jsx`.
+
+---
+
+## Verification
+1. `npm run dev` — confirm no build errors
+2. Place each of the 6 fixture types on the 2D canvas
+3. Switch to 3D preview — confirm all placed fixtures appear as colored 3D boxes at correct positions, sizes, and rotations
+4. Click a fixture in 3D — confirm it gets selected (green highlight) and the inspection card shows type, width, depth
+5. Rotate a fixture in 2D (R key during placement) — confirm 3D rotation matches
+6. Multi-floor: place fixtures on different floors, toggle floor visibility in 3D panel — confirm fixtures appear/hide correctly

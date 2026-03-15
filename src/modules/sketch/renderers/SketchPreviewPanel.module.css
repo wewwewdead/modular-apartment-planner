@@ -1,0 +1,321 @@
+.panel {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.6), rgba(243, 243, 240, 0.9)),
+    linear-gradient(180deg, #F3F3F0, #EAEAE7);
+  border-left: 1px solid var(--color-border);
+}
+
+.header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--color-divider);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(243, 243, 240, 0.2));
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.modeToggle {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius-sm) + 2px);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.modeButton,
+.modeButtonActive {
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+
+.modeButton:hover {
+  color: var(--color-text-primary);
+}
+
+.modeButtonActive {
+  background: rgba(184, 134, 11, 0.12);
+  color: var(--color-workspace-sketch, #B8860B);
+}
+
+.assemblySelect {
+  height: 30px;
+  flex: 1 1 160px;
+  min-width: 128px;
+  max-width: 220px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.assemblySelect:hover {
+  background: white;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.button {
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+}
+
+.button:hover {
+  background: white;
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.viewportWrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.viewport {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.compassDock {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.walkOverlay {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 12px 14px;
+  border: 1px solid rgba(184, 134, 11, 0.18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 251, 240, 0.95), rgba(250, 245, 230, 0.9));
+  box-shadow: 0 12px 28px rgba(37, 48, 61, 0.12);
+  pointer-events: none;
+}
+
+.walkOverlayTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8B7355;
+}
+
+.walkOverlayBody {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #1A1D23;
+}
+
+.inspectCard {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+  max-width: min(280px, calc(100% - 32px));
+  padding: 12px 14px;
+  border: 1px solid rgba(184, 134, 11, 0.18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(255, 253, 247, 0.96), rgba(252, 248, 238, 0.92));
+  box-shadow: 0 12px 28px rgba(37, 48, 61, 0.14);
+  pointer-events: none;
+}
+
+.inspectEyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5F6470;
+}
+
+.inspectTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1A1D23;
+}
+
+.inspectMeta {
+  font-size: 11px;
+  color: #5F6470;
+}
+
+.inspectGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.inspectRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inspectLabel {
+  font-size: 11px;
+  color: #5F6470;
+}
+
+.inspectValue {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1A1D23;
+}
+
+.emptyState {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(243, 243, 240, 0.08), rgba(243, 243, 240, 0.60));
+  pointer-events: none;
+}
+
+.emptyTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.emptyBody {
+  max-width: 220px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  background: linear-gradient(180deg, rgba(243, 243, 240, 0.2), rgba(243, 243, 240, 0.5));
+}
+
+.footer span:last-child {
+  text-align: right;
+}
+
+@media (max-width: 1200px) {
+  .panel {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 900px) {
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .assemblySelect {
+    max-width: 100%;
+  }
+}

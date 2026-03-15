@@ -1,0 +1,200 @@
+import { createPanel, createLeg, createFrame } from '../../domain/partModels';
+import { snapToGrid } from '../snap';
+import { SKETCH_GRID_MINOR } from '../../domain/defaults';
+import { projectToPlane, planeLocalToWorld, GROUND_PLANE } from '../../domain/drawingPlane';
+
+const partFactories = {
+  panel: createPanel,
+  leg: createLeg,
+  frame: createFrame,
+};
+
+/**
+ * 3D rectangle drawing handler.
+ * Click-drag on the active drawing plane to create a part.
+ */
+export function createDrawRectHandler3d({ dispatch, editorDispatch, project, activeAssemblyId, partType, snapEnabled, drawingPlane }) {
+  const plane = drawingPlane || GROUND_PLANE;
+
+  return {
+    onPointerDown(intersection, e, toolState, viewport) {
+      if (e.button !== 0) return;
+
+      // Get point on drawing plane
+      const planePoint = intersection?.drawingPlanePoint;
+      if (!planePoint) return;
+
+      // Project to plane local coords
+      const local = projectToPlane(planePoint, plane);
+
+      const snapped = snapEnabled
+        ? { u: snapToGrid(local.u, SKETCH_GRID_MINOR), v: snapToGrid(local.v, SKETCH_GRID_MINOR) }
+        : local;
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: {
+          drawing: true,
+          startLocal: snapped,
+          currentLocal: snapped,
+          startWorld: planeLocalToWorld(snapped.u, snapped.v, plane),
+          currentWorld: planeLocalToWorld(snapped.u, snapped.v, plane),
+        },
+      });
+    },
+
+    onPointerMove(intersection, e, toolState, viewport) {
+      if (!toolState.drawing) return;
+
+      const planePoint = intersection?.drawingPlanePoint;
+      if (!planePoint) return;
+
+      const local = projectToPlane(planePoint, plane);
+      const snapped = snapEnabled
+        ? { u: snapToGrid(local.u, SKETCH_GRID_MINOR), v: snapToGrid(local.v, SKETCH_GRID_MINOR) }
+        : local;
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: {
+          currentLocal: snapped,
+          currentWorld: planeLocalToWorld(snapped.u, snapped.v, plane),
+        },
+      });
+    },
+
+    onPointerUp(intersection, e, toolState, viewport) {
+      if (!toolState.drawing || !toolState.startLocal) return;
+
+      const endPoint = intersection?.drawingPlanePoint;
+      if (endPoint) {
+        const local = projectToPlane(endPoint, plane);
+        var endLocal = snapEnabled
+          ? { u: snapToGrid(local.u, SKETCH_GRID_MINOR), v: snapToGrid(local.v, SKETCH_GRID_MINOR) }
+          : local;
+      } else {
+        var endLocal = toolState.currentLocal;
+      }
+
+      const uSize = Math.abs(endLocal.u - toolState.startLocal.u);
+      const vSize = Math.abs(endLocal.v - toolState.startLocal.v);
+
+      const minSize = 10; // mm
+      if (uSize > minSize && vSize > minSize) {
+        const minU = Math.min(toolState.startLocal.u, endLocal.u);
+        const minV = Math.min(toolState.startLocal.v, endLocal.v);
+
+        // Convert plane-local corner to world position
+        const worldPos = planeLocalToWorld(minU, minV, plane);
+
+        // Map plane dimensions to part dimensions based on plane orientation
+        const overrides = computePartOverrides(plane, worldPos, uSize, vSize, partType);
+
+        if (plane.sourcePartId) {
+          const sourcePart = project.parts.find((p) => p.id === plane.sourcePartId);
+          if (sourcePart) {
+            overrides.assemblyId = sourcePart.assemblyId || null;
+            overrides.objectId = sourcePart.objectId || null;
+          }
+        }
+
+        const factory = partFactories[partType];
+        if (factory) {
+          const part = factory(overrides);
+          dispatch({ type: 'PART_ADD', part });
+
+          if (activeAssemblyId) {
+            dispatch({ type: 'ASSEMBLY_ADD_PART', assemblyId: activeAssemblyId, partId: part.id });
+          }
+
+          editorDispatch({
+            type: 'SET_STATUS_MESSAGE',
+            message: `${partType}: ${Math.round(uSize)} x ${Math.round(vSize)} mm`,
+          });
+        }
+      }
+
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: {
+          drawing: false,
+          startLocal: null,
+          currentLocal: null,
+          startWorld: null,
+          currentWorld: null,
+        },
+      });
+    },
+
+    onKeyDown(e) {
+      if (e.key === 'Escape') {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            drawing: false,
+            startLocal: null,
+            currentLocal: null,
+            startWorld: null,
+            currentWorld: null,
+          },
+        });
+      }
+    },
+
+    getCursor() {
+      return 'crosshair';
+    },
+  };
+}
+
+/**
+ * Map plane-local dimensions to part overrides based on plane orientation.
+ */
+function computePartOverrides(plane, worldPos, uSize, vSize, partType) {
+  const { normal } = plane;
+  const position = { x: worldPos.x, y: worldPos.y, z: worldPos.z };
+
+  // Determine which domain axes correspond to u and v
+  const isHorizontal = Math.abs(normal.z) > 0.5; // +z or -z (ground, top, bottom)
+  const isXFacing = Math.abs(normal.x) > 0.5; // +x or -x
+  const isYFacing = Math.abs(normal.y) > 0.5; // +y or -y
+
+  if (isHorizontal) {
+    // Drawing on XY plane (ground/top/bottom)
+    if (partType === 'panel') {
+      return { position, width: uSize, depth: vSize, thickness: 18 };
+    }
+    if (partType === 'leg') {
+      return { position, width: uSize, depth: vSize, height: 720 };
+    }
+    if (partType === 'frame') {
+      return { position, length: uSize, width: vSize, height: 60 };
+    }
+    return { position, width: uSize, depth: vSize };
+  }
+
+  if (isXFacing) {
+    // Drawing on YZ plane (left/right faces)
+    if (partType === 'panel') {
+      return { position, width: 18, depth: uSize, thickness: vSize };
+    }
+    if (partType === 'leg') {
+      return { position, width: 40, depth: uSize, height: vSize };
+    }
+    return { position, width: 18, depth: uSize };
+  }
+
+  if (isYFacing) {
+    // Drawing on XZ plane (front/back faces)
+    if (partType === 'panel') {
+      return { position, width: uSize, depth: 18, thickness: vSize };
+    }
+    if (partType === 'leg') {
+      return { position, width: uSize, depth: 40, height: vSize };
+    }
+    return { position, width: uSize, depth: 18 };
+  }
+
+  // Fallback: treat as ground plane
+  return { position, width: uSize, depth: vSize };
+}

@@ -1,0 +1,348 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  height: var(--toolbar-height);
+  background: var(--color-panel-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 0 var(--space-md);
+  gap: var(--space-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.toolbar::-webkit-scrollbar {
+  height: 3px;
+}
+.toolbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.10);
+  border-radius: 2px;
+}
+.toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.group + .group {
+  border-left: none;
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 0 var(--space-xs);
+  flex-shrink: 0;
+}
+
+/* Icon button base (36x36) */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--color-text-secondary);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-micro) var(--ease-tactile), box-shadow var(--duration-fast);
+  white-space: nowrap;
+  position: relative;
+}
+
+.btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-hover);
+}
+
+.btn:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-pressed);
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
+  transform: none;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.btn:disabled:active {
+  transform: none;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+/* Save with dirty pulsing dot via data attribute */
+.saveBtn {
+  composes: btn;
+}
+
+.saveBtn[data-dirty="true"]::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-active-glow);
+  box-shadow: 0 0 6px rgba(212, 169, 76, 0.40);
+  animation: warmPulse 2s ease-in-out infinite;
+}
+
+@keyframes warmPulse {
+  0%, 100% {
+    box-shadow: 0 0 6px rgba(212, 169, 76, 0.40);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(212, 169, 76, 0.60);
+    opacity: 0.6;
+  }
+}
+
+/* Segmented pill control for view modes */
+.segmentedGroup {
+  display: flex;
+  align-items: center;
+  background: var(--color-segment-bg);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.segmentedBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segmentedBtn:hover {
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.segmentedBtnActive {
+  composes: segmentedBtn;
+  background: var(--color-segment-active-bg);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  box-shadow: var(--color-segment-active-shadow);
+}
+
+/* Group label */
+.groupLabel {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+/* Tool palette - inline row */
+.toolPalette {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.toolPaletteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  color: var(--color-text-secondary);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-micro) var(--ease-tactile), box-shadow var(--duration-fast);
+  position: relative;
+  cursor: pointer;
+}
+
+.toolPaletteBtn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: var(--color-text-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolPaletteBtn:active {
+  transform: scale(0.96);
+  box-shadow: var(--shadow-pressed);
+}
+
+.toolPaletteBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.toolPaletteBtn:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
+  transform: none;
+  box-shadow: none;
+}
+
+.toolPaletteBtnActive {
+  composes: toolPaletteBtn;
+  background: var(--color-active-glow-subtle);
+  color: var(--color-active-glow);
+  border-color: var(--color-active-glow-border);
+  box-shadow: var(--shadow-active-glow);
+}
+
+.toolPaletteBtnActive:hover {
+  background: rgba(212, 169, 76, 0.18);
+}
+
+.toolPaletteBtnActive:active {
+  transform: scale(0.96);
+  box-shadow: var(--shadow-pressed);
+}
+
+.toolPaletteIcon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+/* Fixture palette */
+.fixturePalette {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: var(--space-xs) var(--space-sm);
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.fixturePaletteLabel {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+/* Toggle buttons (sidebar, properties, grid, snap) */
+.toggleBtn {
+  composes: btn;
+  opacity: 0.5;
+}
+
+.toggleBtn.toggleActive {
+  opacity: 1;
+  background: var(--color-active-glow-subtle);
+  color: var(--color-active-glow);
+  border-color: var(--color-active-glow-border);
+  box-shadow: var(--shadow-active-glow);
+}
+
+.toggleBtn.toggleActive:hover {
+  background: rgba(212, 169, 76, 0.18);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1100px) {
+  .toolPalette {
+    gap: 0;
+  }
+  .fixturePalette {
+    gap: 0;
+  }
+  .toolPaletteBtn {
+    width: 30px;
+    height: 30px;
+  }
+  .segmentedBtn,
+  .segmentedBtnActive {
+    padding: 0 7px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    gap: var(--space-xs);
+    padding: 0 var(--space-sm);
+  }
+  .group {
+    padding: 0 var(--space-xs);
+  }
+  .toolPalette {
+    padding: 0 var(--space-xs);
+  }
+  .fixturePalette {
+    padding: 0 var(--space-xs);
+  }
+  .fixturePaletteLabel {
+    display: none;
+  }
+  .groupLabel {
+    display: none;
+  }
+  .segmentedBtn,
+  .segmentedBtnActive {
+    padding: 0 5px;
+    font-size: 10px;
+    height: 26px;
+  }
+}

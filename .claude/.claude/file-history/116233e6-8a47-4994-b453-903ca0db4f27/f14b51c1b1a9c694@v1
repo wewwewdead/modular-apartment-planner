@@ -1,0 +1,64 @@
+# Plan: Inline Note Creation on Freedom Wall Canvas
+
+## Context
+Currently, clicking the canvas with the "note" tool opens a modal overlay to design and type a note. The user wants notes to appear directly on the canvas instead, where they can be dragged to reposition while being designed via an inline panel. Character limit reduced from 800 to 200.
+
+## Files to Modify
+- `client/src/components/HomePage/freedomWall/FreedomWallPage.jsx`
+- `client/src/components/HomePage/freedomWall/freedomWall.css`
+
+## Changes
+
+### 1. Replace `noteModal` state with `draftNote` state
+- Rename `noteModal` → `draftNote` (same shape: x, y, text, fontFamily, fontStyle, fontColor, bgColor, fontSize)
+- Default `text` to `""` instead of `"New note"`
+
+### 2. Render draft note directly on the Konva canvas
+- Add a `NoteNode` in the items Layer (after all sorted items) when `draftNote` is set
+- Pass `isDraft={true}` prop to `NoteNode` for visual distinction (dashed purple border)
+- Make it draggable — `onDragEnd` updates `draftNote.x` and `draftNote.y`
+
+### 3. Add `isDraft` prop to `NoteNode` component
+- When `isDraft` is true: dashed stroke border on the main note body shape
+
+### 4. Replace modal JSX with inline design panel
+- Remove the full-screen modal overlay (`fw-note-modal-overlay`)
+- Add an inline `fw-draft-note-panel` between toolbar and canvas with:
+  - Character count display (X/200)
+  - Textarea (maxLength=200, autoFocus)
+  - Font, style, font color, note color, font size controls
+  - "Place Note" (disabled when empty) and "Cancel" buttons
+- All changes update `draftNote` state → canvas note updates live
+
+### 5. Update handlers
+- `handlePlaceItem`: set `draftNote` instead of `noteModal`, guard against double-drafting
+- New `handleDraftNoteSave`: creates wall item from `draftNote`, clears it
+- `handleStagePointerDown`: skip placing another note if `draftNote` already active
+
+### 6. Auto-cancel draft on tool switch
+- `useEffect` clears `draftNote` when `activeTool` changes away from `"note"`
+
+### 7. Update character limits
+- New draft textarea: `maxLength={200}`
+- Existing note editor textarea: `maxLength={800}` → `maxLength={200}`
+
+### 8. Add CSS for inline draft panel
+- `.fw-draft-note-panel` — card-style, inline (not overlay), matches existing toolbar styling
+- Responsive: controls stack vertically at 480px
+
+### 9. Remove dead modal code
+- Remove all `noteModal`/`setNoteModal` references
+- Remove `handleNoteModalSave`
+- Remove modal overlay JSX
+- Remove modal CSS classes (`.fw-note-modal-*`)
+
+## Verification
+- Click canvas with note tool → note appears on canvas with dashed border, inline panel shows
+- Type text → canvas note updates live
+- Change font/color/style → canvas note reflects changes instantly
+- Drag note on canvas → repositions correctly
+- "Place Note" → saves to backend, draft clears, note persists
+- "Cancel" → draft clears, no note saved
+- Switch to another tool while drafting → draft auto-cancels
+- Click canvas again while draft active → ignored (no duplicate drafts)
+- Character count shows and enforces 200 char limit

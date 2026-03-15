@@ -1,0 +1,82 @@
+Refactor the web app into a multi-workspace product with a homepage and separate Floorplan and Sketch modes.
+
+Requirements:
+- add a public homepage inspired by the structure of lexical.dev:
+  - intro/hero section
+  - short product explanation
+  - Get Started button
+  - Playground button
+  - clear calls to action for:
+    - Try Floorplan
+    - Try Sketch
+- do not copy lexical.dev visually; just use the idea of a clean intro page with strong CTAs
+
+Routing requirements:
+- add routes for:
+  - /
+  - /playground
+  - /floorplan
+  - /sketch
+- homepage should route users cleanly into the correct workspace
+- Get Started can go to a chooser section/page or directly to /floorplan
+- Playground should open a default demo experience
+
+Workspace requirements:
+- Floorplan and Sketch must be separate workspaces
+- Sketch must not be nested inside Floorplan
+- both should share reusable core systems where appropriate
+
+Architecture requirements:
+- create shared/core modules for:
+  - geometry
+  - annotations
+  - svg rendering
+  - three.js preview foundations
+  - sheet/export system
+  - persistence helpers
+  - shared UI primitives
+- create separate domain/workspace modules for:
+  - modules/floorplan
+  - modules/sketch
+
+Floorplan mode:
+- preserve the existing apartment/floor/roof/truss planning system
+- do not break current functionality
+
+Sketch mode:
+- create a separate workspace intended for object design and drafting
+- prepare Sketch mode for building objects like tables, chairs, desks, cabinets, and similar items
+- for now, scaffold Sketch mode as its own editor shell with separate state/model structure
+- do not force Sketch to reuse Floorplan domain models directly
+- use shared geometry/rendering systems where useful
+
+Playground requirements:
+- Playground should load a default demo project/workspace
+- allow users to quickly try the editor without setting up a project
+- support a default demo floorplan first
+- prepare the architecture so Sketch playground can be added too
+
+Homepage/UI requirements:
+- clean modern layout
+- clear hero section
+- strong CTA buttons
+- feature cards or workspace cards for Floorplan and Sketch
+- responsive enough for general viewing, but workspaces remain desktop-first
+- use React + Vite + JavaScript only
+- no TypeScript
+- no Tailwind unless already used intentionally; prefer simple CSS/CSS modules if consistent with the current project
+
+Implementation expectations:
+- preserve existing editor functionality
+- do not entangle homepage logic with editor logic
+- keep routing, layout, and workspaces modular
+- make the codebase easier to grow into a design platform, not just a single floorplanner
+
+Deliverables:
+- homepage
+- routing structure
+- workspace split
+- floorplan route preserved
+- sketch route scaffolded
+- playground route with default demo project
+- clean modular architecture for future growth

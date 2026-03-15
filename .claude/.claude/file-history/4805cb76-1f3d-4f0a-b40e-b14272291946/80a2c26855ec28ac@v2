@@ -1,0 +1,88 @@
+import { useProject } from '@/app/ProjectProvider';
+import { useEditor } from '@/app/EditorProvider';
+import styles from './Sidebar.module.css';
+
+export default function Sidebar() {
+  const { project, dispatch } = useProject();
+  const { activeFloorId, selectedId, dispatch: editorDispatch } = useEditor();
+  const floor = project.floors.find(f => f.id === activeFloorId);
+
+  const selectObject = (id, type) => {
+    editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
+  };
+
+  return (
+    <div className={styles.sidebar}>
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Project</div>
+        <input
+          className={styles.projectName}
+          value={project.name}
+          onChange={(e) => dispatch({ type: 'PROJECT_SET_NAME', name: e.target.value })}
+        />
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Floors</div>
+        {project.floors.map(f => (
+          <div
+            key={f.id}
+            className={`${styles.item} ${f.id === activeFloorId ? styles.itemSelected : ''}`}
+            onClick={() => editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: f.id })}
+          >
+            {f.name}
+          </div>
+        ))}
+      </div>
+
+      {floor && (
+        <>
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              Walls <span className={styles.count}>{floor.walls.length}</span>
+            </div>
+            {floor.walls.map(w => (
+              <div
+                key={w.id}
+                className={`${styles.item} ${selectedId === w.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(w.id, 'wall')}
+              >
+                Wall {w.id.split('_').pop()}
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              Doors <span className={styles.count}>{floor.doors.length}</span>
+            </div>
+            {floor.doors.map(d => (
+              <div
+                key={d.id}
+                className={`${styles.item} ${selectedId === d.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(d.id, 'door')}
+              >
+                Door {d.id.split('_').pop()}
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              Windows <span className={styles.count}>{floor.windows.length}</span>
+            </div>
+            {floor.windows.map(w => (
+              <div
+                key={w.id}
+                className={`${styles.item} ${selectedId === w.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(w.id, 'window')}
+              >
+                Window {w.id.split('_').pop()}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

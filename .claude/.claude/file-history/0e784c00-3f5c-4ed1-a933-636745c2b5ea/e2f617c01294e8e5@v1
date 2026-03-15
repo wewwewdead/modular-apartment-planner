@@ -1,0 +1,72 @@
+import { useQuery } from '@tanstack/react-query';
+import { getMyStories, getMyLibrary, getStoryById, getChapter, getChapterComments, getChapterCommentCounts, getUserStories } from '../../../../API/StoryApi';
+
+export const useMyStories = (token) => {
+    return useQuery({
+        queryKey: ['myStories'],
+        queryFn: () => getMyStories(token),
+        enabled: !!token,
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+    });
+};
+
+export const useMyLibrary = (token) => {
+    return useQuery({
+        queryKey: ['myLibrary'],
+        queryFn: () => getMyLibrary(token),
+        enabled: !!token,
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+    });
+};
+
+export const useStoryDetail = (storyId, token) => {
+    return useQuery({
+        queryKey: ['story', storyId],
+        queryFn: () => getStoryById(storyId, token),
+        enabled: !!storyId,
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+    });
+};
+
+export const useChapter = (storyId, chapterId, token) => {
+    return useQuery({
+        queryKey: ['chapter', storyId, chapterId],
+        queryFn: () => getChapter(storyId, chapterId, token),
+        enabled: !!storyId && !!chapterId,
+        staleTime: 60000,
+        refetchOnWindowFocus: false,
+    });
+};
+
+export const useChapterCommentCounts = (chapterId, token) => {
+    return useQuery({
+        queryKey: ['chapterCommentCounts', chapterId],
+        queryFn: () => getChapterCommentCounts(chapterId, token),
+        enabled: !!chapterId,
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+    });
+};
+
+export const useUserStories = (userId, token) => {
+    return useQuery({
+        queryKey: ['userStories', userId],
+        queryFn: () => getUserStories(userId, token),
+        enabled: !!userId,
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+    });
+};
+
+export const useChapterComments = (chapterId, paragraphIndex, token) => {
+    return useQuery({
+        queryKey: ['chapterComments', chapterId, paragraphIndex],
+        queryFn: () => getChapterComments(chapterId, paragraphIndex, token),
+        enabled: !!chapterId && paragraphIndex !== null && paragraphIndex !== undefined,
+        staleTime: 30000,
+        refetchOnWindowFocus: false,
+    });
+};

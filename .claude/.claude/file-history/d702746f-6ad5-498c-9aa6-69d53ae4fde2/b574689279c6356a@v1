@@ -1,0 +1,188 @@
+import { DOOR_HEIGHT, DOOR_SILL_HEIGHT, SLAB_ELEVATION, SLAB_THICKNESS, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, STAIR_WIDTH, WALL_HEIGHT, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT } from '@/domain/defaults';
+import { createFloor } from '@/domain/models';
+import { createAnnotationSettings } from '@/domain/models';
+import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, sortFloors } from '@/domain/floorModels';
+
+export function deserializeProject(json) {
+  if (!json || !json.version || !json.data) {
+    throw new Error('Invalid project data');
+  }
+  if (json.version !== 1) {
+    throw new Error(`Unsupported project version: ${json.version}`);
+  }
+
+  const project = json.data;
+
+  // Basic validation
+  if (!project.id || !project.name || !Array.isArray(project.floors)) {
+    throw new Error('Invalid project structure');
+  }
+
+  if (!Array.isArray(project.sheets)) {
+    project.sheets = [];
+  }
+
+  if (project.floors.length === 0) {
+    project.floors = [createFloor('Ground Floor', 0)];
+  }
+
+  for (const floor of project.floors) {
+    if (!floor.id || !Array.isArray(floor.walls)) {
+      throw new Error('Invalid floor structure');
+    }
+  }
+
+  // Backfill missing room fields for old saves
+  project.floors.forEach((floor, index) => {
+    if (!floor.name) floor.name = index === 0 ? 'Ground Floor' : `Floor ${index}`;
+    if (floor.levelIndex === undefined) {
+      floor.levelIndex = floor.level ?? index;
+    }
+    if (floor.floorToFloorHeight === undefined) {
+      floor.floorToFloorHeight = WALL_HEIGHT;
+    }
+    if (floor.elevation === undefined) {
+      floor.elevation = floor.level ?? (floor.levelIndex * floor.floorToFloorHeight);
+    }
+    delete floor.level;
+
+    if (!floor.rooms) floor.rooms = [];
+    for (const room of floor.rooms) {
+      if (!room.points) room.points = [];
+      if (room.area === undefined) room.area = 0;
+    }
+  }
+
+  // Backfill door/window type fields for old saves
+  for (const floor of project.floors) {
+    if (!floor.doors) floor.doors = [];
+    for (const door of floor.doors) {
+      if (!door.type) door.type = 'swing';
+      if (door.height === undefined) door.height = DOOR_HEIGHT;
+      if (door.sillHeight === undefined) door.sillHeight = DOOR_SILL_HEIGHT;
+    }
+    if (!floor.windows) floor.windows = [];
+    for (const win of floor.windows) {
+      if (!win.type) win.type = 'standard';
+      if (!win.openDirection) win.openDirection = 'left';
+      if (win.height === undefined) win.height = WINDOW_HEIGHT;
+      if (win.sillHeight === undefined) win.sillHeight = WINDOW_SILL_HEIGHT;
+    }
+    if (!floor.columns) floor.columns = [];
+    if (!floor.beams) floor.beams = [];
+    if (!floor.stairs) floor.stairs = [];
+    if (!floor.annotations) floor.annotations = [];
+    floor.annotationSettings = createAnnotationSettings(floor.annotationSettings || {});
+    // Migrate single slab → slabs array
+    if (floor.slab !== undefined) {
+      floor.slabs = floor.slab ? [floor.slab] : [];
+      delete floor.slab;
+    }
+    if (!Array.isArray(floor.slabs)) floor.slabs = [];
+    // Migrate single sectionCut → sectionCuts array
+    if (floor.sectionCut !== undefined) {
+      floor.sectionCuts = floor.sectionCut ? [floor.sectionCut] : [];
+      delete floor.sectionCut;
+    }
+    if (!Array.isArray(floor.sectionCuts)) floor.sectionCuts = [];
+    for (const wall of floor.walls) {
+      if (wall.height === undefined) wall.height = WALL_HEIGHT;
+      if (wall.startAttachment === undefined) wall.startAttachment = null;
+      if (wall.endAttachment === undefined) wall.endAttachment = null;
+    }
+    for (const column of floor.columns) {
+      if (column.showLabel === undefined) {
+        column.showLabel = Boolean(column.name);
+      }
+    }
+    for (const beam of floor.beams) {
+      if (beam.floorLevel === undefined) beam.floorLevel = getFloorElevation(floor, index);
+    }
+    for (const stair of floor.stairs) {
+      if (!stair.startPoint) stair.startPoint = { x: 0, y: 0 };
+      if (stair.width === undefined) stair.width = STAIR_WIDTH;
+      if (stair.numberOfRisers === undefined) stair.numberOfRisers = STAIR_RISERS;
+      if (stair.riserHeight === undefined) stair.riserHeight = STAIR_RISER_HEIGHT;
+      if (stair.treadDepth === undefined) stair.treadDepth = STAIR_TREAD_DEPTH;
+      if (stair.direction === undefined) {
+        stair.direction = { angle: 0 };
+      } else if (typeof stair.direction === 'number') {
+        stair.direction = { angle: stair.direction };
+      } else if (stair.direction.angle === undefined) {
+        stair.direction.angle = 0;
+      }
+      if (stair.floorRelation === undefined) {
+        stair.floorRelation = { fromFloorId: floor.id, toFloorId: floor.id };
+      } else {
+        if (stair.floorRelation.fromFloorId === undefined) stair.floorRelation.fromFloorId = floor.id;
+        if (stair.floorRelation.toFloorId === undefined) stair.floorRelation.toFloorId = floor.id;
+      }
+    }
+    for (const annotation of floor.annotations) {
+      if (!annotation.id) {
+        annotation.id = `anno_${floor.id}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+      if (!annotation.type) annotation.type = 'dimension';
+      if (!annotation.mode) annotation.mode = 'aligned';
+      if (!annotation.startPoint) annotation.startPoint = { x: 0, y: 0 };
+      if (!annotation.endPoint) annotation.endPoint = { x: 0, y: 0 };
+      if (annotation.offset === undefined) annotation.offset = 300;
+      if (annotation.textOverride === undefined) annotation.textOverride = '';
+    }
+    for (const slab of floor.slabs) {
+      if (!slab.floorId) slab.floorId = floor.id;
+      if (!slab.boundaryPoints) slab.boundaryPoints = [];
+      if (slab.thickness === undefined) slab.thickness = SLAB_THICKNESS;
+      if (slab.elevation === undefined) slab.elevation = SLAB_ELEVATION;
+      if (slab.name === undefined) slab.name = '';
+      if (slab.type === undefined) slab.type = '';
+    }
+    for (const sc of floor.sectionCuts) {
+      if (!sc.id) {
+        sc.id = `section_${floor.id}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+      if (!sc.startPoint) sc.startPoint = { x: 0, y: 0 };
+      if (!sc.endPoint) sc.endPoint = { x: 1000, y: 0 };
+      if (sc.depth === undefined) sc.depth = 2000;
+      if (sc.label === undefined) sc.label = 'Section A-A';
+      if (sc.direction === undefined) sc.direction = 1;
+    }
+  });
+
+  project.floors = sortFloors(project.floors).map((floor, index) => ({
+    ...floor,
+    levelIndex: getFloorLevelIndex(floor, index),
+    elevation: getFloorElevation(floor, index),
+    floorToFloorHeight: getFloorToFloorHeight(floor),
+  }));
+
+  for (const sheet of project.sheets) {
+    if (!sheet.id) {
+      sheet.id = `sheet_${Math.random().toString(36).slice(2, 8)}`;
+    }
+    if (sheet.title === undefined) sheet.title = '';
+    if (sheet.paperSize === undefined) sheet.paperSize = 'A3_LANDSCAPE';
+    if (sheet.scaleLabel === undefined) sheet.scaleLabel = '1:100';
+    if (sheet.drawingName === undefined) sheet.drawingName = sheet.title || 'Drawing';
+    if (sheet.projectNameOverride === undefined) sheet.projectNameOverride = '';
+    if (!Array.isArray(sheet.viewports)) sheet.viewports = [];
+
+    for (const viewport of sheet.viewports) {
+      if (!viewport.id) {
+        viewport.id = `viewport_${sheet.id}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+      if (viewport.sourceView === undefined) viewport.sourceView = 'plan';
+      if (viewport.sourceFloorId === undefined) viewport.sourceFloorId = getDefaultActiveFloorId(project);
+      if (viewport.sourceRefId === undefined) viewport.sourceRefId = null;
+      if (viewport.x === undefined) viewport.x = 20;
+      if (viewport.y === undefined) viewport.y = 20;
+      if (viewport.width === undefined) viewport.width = 160;
+      if (viewport.height === undefined) viewport.height = 100;
+      if (viewport.scale === undefined) viewport.scale = 100;
+      if (viewport.title === undefined) viewport.title = '';
+      if (viewport.rotation === undefined) viewport.rotation = 0;
+    }
+  }
+
+  return { project, savedAt: json.savedAt };
+}

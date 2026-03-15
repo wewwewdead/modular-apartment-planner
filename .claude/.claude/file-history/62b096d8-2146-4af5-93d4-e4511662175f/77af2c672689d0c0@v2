@@ -1,0 +1,100 @@
+import { useEditor } from '@/app/EditorProvider';
+import { useProject } from '@/app/ProjectProvider';
+import { TOOLS } from '@/editor/tools';
+import { detectRooms } from '@/geometry/roomDetection';
+import { createRoom } from '@/domain/models';
+import styles from './Toolbar.module.css';
+
+export default function Toolbar({ onNew, onSave, onLoad }) {
+  const { activeTool, showGrid, snapEnabled, activeFloorId, dispatch: editorDispatch } = useEditor();
+  const { project, isDirty, dispatch } = useProject();
+
+  const setTool = (tool) => editorDispatch({ type: 'SET_TOOL', tool });
+
+  const handleDetectRooms = () => {
+    const floor = project.floors.find(f => f.id === activeFloorId);
+    console.log('detectRooms debug:', { activeFloorId, floor: !!floor, wallCount: floor?.walls?.length });
+    if (!floor || floor.walls.length < 3) return;
+    const detected = detectRooms(floor.walls);
+    console.log('detectRooms result:', detected.length, 'rooms found', detected);
+    const rooms = detected.map((d, i) => createRoom(`Room ${i + 1}`, d.points));
+    dispatch({ type: 'ROOMS_SET', floorId: activeFloorId, rooms });
+  };
+
+  return (
+    <div className={styles.toolbar}>
+      <div className={styles.group}>
+        <button className={styles.btn} onClick={onNew}>New</button>
+        <button className={styles.btn} onClick={onSave}>
+          {isDirty && <span className={styles.dirtyIndicator} />}
+          Save
+        </button>
+        <button className={styles.btn} onClick={onLoad}>Load</button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.SELECT ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.SELECT)}
+          title="Select (V)"
+        >
+          Select
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.WALL ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.WALL)}
+          title="Draw Wall (W)"
+        >
+          Wall
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.DOOR ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.DOOR)}
+          title="Place Door (D)"
+        >
+          Door
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.WINDOW ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.WINDOW)}
+          title="Place Window (N)"
+        >
+          Window
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.COLUMN ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.COLUMN)}
+          title="Place Column (C)"
+        >
+          Column
+        </button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
+          onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
+          title="Toggle Grid"
+        >
+          Grid
+        </button>
+        <button
+          className={`${styles.toggleBtn} ${snapEnabled ? styles.toggleActive : ''}`}
+          onClick={() => editorDispatch({ type: 'TOGGLE_SNAP' })}
+          title="Toggle Snap"
+        >
+          Snap
+        </button>
+        <button
+          className={styles.btn}
+          onClick={handleDetectRooms}
+          title="Detect Rooms"
+        >
+          Detect Rooms
+        </button>
+      </div>
+
+      <div className={styles.spacer} />
+    </div>
+  );
+}

@@ -1,0 +1,75 @@
+import React, {useMemo} from 'react';
+import {FlatList, StyleSheet, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {OpinionCard} from '../../components/OpinionCard';
+import {EmptyState} from '../../components/EmptyState';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {opinionsApi} from '../../lib/api/opinionsApi';
+import {spacing} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+interface ProfileOpinionsTabProps {
+  userId: string;
+  headerComponent?: React.ReactElement;
+  isOwnProfile?: boolean;
+}
+
+export function ProfileOpinionsTab({userId, headerComponent, isOwnProfile}: ProfileOpinionsTabProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const {user, session} = useAuth();
+  const token = session?.access_token ?? '';
+
+  const query = useInfiniteQuery({
+    queryKey: ['profileOpinions', userId],
+    queryFn: ({pageParam}) =>
+      isOwnProfile
+        ? opinionsApi.getMyOpinions(token, pageParam ?? null)
+        : opinionsApi.getUserOpinions(userId, pageParam ?? null),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+  });
+
+  const opinions = useMemo(
+    () => query.data?.pages.flatMap(p => p.data ?? []) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <FlatList
+      data={opinions}
+      keyExtractor={item => item.id}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.list}
+      ListHeaderComponent={headerComponent}
+      onEndReachedThreshold={0.3}
+      onEndReached={() => {
+        if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+      }}
+      ListEmptyComponent={
+        query.isLoading ? null : (
+          <EmptyState title="No opinions yet" />
+        )
+      }
+      renderItem={({item}) => (
+        <OpinionCard
+          opinion={item}
+          onPress={() => navigation.navigate('OpinionDetail', {opinionId: item.id})}
+          onAuthorPress={() => {
+            const authorId = item.users?.id ?? item.user_id;
+            if (authorId && authorId !== user?.id) {
+              navigation.navigate('VisitProfile', {userId: authorId, username: item.users?.username});
+            }
+          }}
+        />
+      )}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {paddingHorizontal: spacing.lg, paddingBottom: 100},
+  separator: {height: spacing.md},
+});

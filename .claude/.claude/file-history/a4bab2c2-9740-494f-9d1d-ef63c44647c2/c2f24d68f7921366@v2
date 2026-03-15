@@ -1,0 +1,82 @@
+import React, {useState} from 'react';
+import {Alert, StyleSheet, Text, TextInput, View} from 'react-native';
+import {useMutation} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {Screen} from '../../components/Screen';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {opinionsApi} from '../../lib/api/opinionsApi';
+import {queryClient} from '../../lib/queryClient';
+import {fonts} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'OpinionEditor'>;
+
+const MAX_CHARS = 280;
+
+export function OpinionEditorScreen({navigation}: Props) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const [text, setText] = useState('');
+  const token = session?.access_token ?? '';
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!token) throw new Error('Please log in.');
+      return opinionsApi.addOpinion(token, text.trim());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['opinions']});
+      queryClient.invalidateQueries({queryKey: ['opinions-feed']});
+      Alert.alert('Posted', 'Your opinion has been shared.');
+      navigation.goBack();
+    },
+    onError: e => Alert.alert('Error', e instanceof Error ? e.message : 'Failed'),
+  });
+
+  return (
+    <Screen>
+      <Text style={[styles.title, {color: colors.textHeading}]}>Share Your Opinion</Text>
+      <TextInput
+        value={text}
+        onChangeText={txt => txt.length <= MAX_CHARS && setText(txt)}
+        placeholder="What's on your mind?"
+        placeholderTextColor={colors.textFaint}
+        style={[styles.input, {backgroundColor: colors.bgElevated, borderColor: colors.borderLight, color: colors.textPrimary}]}
+        maxLength={MAX_CHARS}
+        multiline
+        autoFocus
+      />
+      <Text style={[styles.charCount, {color: text.length > MAX_CHARS - 20 ? colors.danger : colors.textMuted}]}>
+        {text.length}/{MAX_CHARS}
+      </Text>
+      <PrimaryButton
+        label="Post Opinion"
+        onPress={() => mutation.mutate()}
+        loading={mutation.isPending}
+        disabled={text.trim().length === 0}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {fontSize: 24, fontWeight: '800'},
+  input: {
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    minHeight: 140,
+    textAlignVertical: 'top',
+    fontFamily: fonts.ui.regular,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  charCount: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 12,
+    textAlign: 'right',
+  },
+});

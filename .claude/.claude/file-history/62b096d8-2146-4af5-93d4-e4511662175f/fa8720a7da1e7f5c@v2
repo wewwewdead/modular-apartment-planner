@@ -1,0 +1,207 @@
+import { distance } from '@/geometry/point';
+import { distanceToSegment } from '@/geometry/line';
+import { doorOutlineOnWall, windowOutlineOnWall, wallLength, wallOutline, projectPointOnWall } from '@/geometry/wallGeometry';
+import { pointInPolygon } from '@/geometry/polygon';
+import { columnOutline } from '@/geometry/columnGeometry';
+
+function hitTest(modelPos, floor, hitRadius) {
+  // Hit test doors first (smaller targets, higher priority)
+  for (const door of floor.doors) {
+    const wall = floor.walls.find(w => w.id === door.wallId);
+    if (!wall) continue;
+    const info = doorOutlineOnWall(wall, door);
+    const poly = [info.p1, info.p2, info.p3, info.p4];
+    if (pointInPolygon(modelPos, poly)) {
+      return { id: door.id, type: 'door' };
+    }
+  }
+
+  // Hit test windows
+  for (const win of floor.windows) {
+    const wall = floor.walls.find(w => w.id === win.wallId);
+    if (!wall) continue;
+    const info = windowOutlineOnWall(wall, win);
+    const poly = [info.p1, info.p2, info.p3, info.p4];
+    if (pointInPolygon(modelPos, poly)) {
+      return { id: win.id, type: 'window' };
+    }
+  }
+
+  // Hit test walls
+  for (const wall of floor.walls) {
+    const outline = wallOutline(wall);
+    if (pointInPolygon(modelPos, outline)) {
+      return { id: wall.id, type: 'wall' };
+    }
+  }
+
+  // Hit test columns
+  for (const column of (floor.columns || [])) {
+    const outline = columnOutline(column);
+    if (pointInPolygon(modelPos, outline)) {
+      return { id: column.id, type: 'column' };
+    }
+  }
+
+  // Hit test rooms (lowest priority)
+  for (const room of floor.rooms) {
+    if (room.points?.length >= 3 && pointInPolygon(modelPos, room.points)) {
+      return { id: room.id, type: 'room' };
+    }
+  }
+
+  return null;
+}
+
+export function createSelectHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport }) {
+  return {
+    onMouseDown(modelPos, e, toolState) {
+      if (e.button !== 0) return;
+
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+      const hitRadius = 10 / viewport.zoom;
+
+      // Check if clicking a handle
+      const target = e.target;
+      if (target.dataset.handle) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: true,
+            dragType: 'handle',
+            handle: target.dataset.handle,
+            startPos: modelPos,
+          },
+        });
+        return;
+      }
+
+      const hit = hitTest(modelPos, floor, hitRadius);
+      if (hit) {
+        editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: true,
+            dragType: 'move',
+            startPos: modelPos,
+            originalPos: modelPos,
+          },
+        });
+      } else {
+        editorDispatch({ type: 'DESELECT' });
+      }
+    },
+
+    onMouseMove(modelPos, e, toolState, selectedId, selectedType) {
+      if (!toolState.dragging || !selectedId) return;
+
+      const floor = getFloor(activeFloorId);
+      if (!floor) return;
+      const dx = modelPos.x - toolState.startPos.x;
+      const dy = modelPos.y - toolState.startPos.y;
+
+      if (selectedType === 'wall') {
+        const wall = floor.walls.find(w => w.id === selectedId);
+        if (!wall) return;
+
+        if (toolState.dragType === 'handle') {
+          const handle = toolState.handle;
+          dispatch({
+            type: 'WALL_UPDATE',
+            floorId: activeFloorId,
+            wall: {
+              id: wall.id,
+              [handle]: { x: modelPos.x, y: modelPos.y },
+            },
+          });
+        } else {
+          dispatch({
+            type: 'WALL_UPDATE',
+            floorId: activeFloorId,
+            wall: {
+              id: wall.id,
+              start: { x: wall.start.x + dx, y: wall.start.y + dy },
+              end: { x: wall.end.x + dx, y: wall.end.y + dy },
+            },
+          });
+        }
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'column') {
+        const col = (floor.columns || []).find(c => c.id === selectedId);
+        if (!col) return;
+        dispatch({
+          type: 'COLUMN_UPDATE',
+          floorId: activeFloorId,
+          column: { id: col.id, x: col.x + dx, y: col.y + dy },
+        });
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      } else if (selectedType === 'door' || selectedType === 'window') {
+        // Slide along parent wall
+        const items = selectedType === 'door' ? floor.doors : floor.windows;
+        const item = items.find(i => i.id === selectedId);
+        if (!item) return;
+
+        const wall = floor.walls.find(w => w.id === item.wallId);
+        if (!wall) return;
+
+        const newOffset = projectPointOnWall(wall, modelPos);
+        const halfWidth = item.width / 2;
+        const maxOffset = wallLength(wall) - halfWidth;
+        const clampedOffset = Math.max(halfWidth, Math.min(maxOffset, newOffset));
+
+        const updateType = selectedType === 'door' ? 'DOOR_UPDATE' : 'WINDOW_UPDATE';
+        dispatch({
+          type: updateType,
+          floorId: activeFloorId,
+          [selectedType]: { id: item.id, offset: clampedOffset },
+        });
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
+      }
+    },
+
+    onMouseUp(modelPos, e, toolState) {
+      if (toolState.dragging) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { dragging: false, dragType: null, handle: null },
+        });
+      }
+    },
+
+    onKeyDown(e, toolState, selectedId, selectedType) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        const floor = getFloor(activeFloorId);
+        if (!floor) return;
+        if (selectedType === 'wall') {
+          dispatch({ type: 'WALL_DELETE', floorId: activeFloorId, wallId: selectedId });
+        } else if (selectedType === 'door') {
+          dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
+        } else if (selectedType === 'window') {
+          dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+        } else if (selectedType === 'column') {
+          dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
+        } else if (selectedType === 'room') {
+          dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
+        }
+        editorDispatch({ type: 'DESELECT' });
+      }
+    },
+
+    getCursor(toolState) {
+      if (toolState.dragging) return 'grabbing';
+      return 'default';
+    },
+  };
+}

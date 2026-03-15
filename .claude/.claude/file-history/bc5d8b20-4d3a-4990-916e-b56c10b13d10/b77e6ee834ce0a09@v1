@@ -1,0 +1,48 @@
+.panel {
+  background: var(--color-panel-bg);
+  border-left: 1px solid var(--color-border);
+  overflow-y: auto;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+}
+
+.subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.deleteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 var(--space-lg);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+  background: var(--color-danger);
+  margin-top: var(--space-md);
+}
+
+.deleteBtn:hover {
+  background: var(--color-danger-hover);
+}
+
+.summary {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}

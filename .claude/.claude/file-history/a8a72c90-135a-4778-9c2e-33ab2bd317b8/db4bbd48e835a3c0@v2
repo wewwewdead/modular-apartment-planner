@@ -1,0 +1,102 @@
+import React, {useCallback, useEffect} from 'react';
+import {StyleSheet, Text, Pressable} from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  runOnJS,
+} from 'react-native-reanimated';
+import {useTheme} from '../theme/ThemeProvider';
+import {fonts} from '../theme/typography';
+import {spacing, radii, shadows} from '../theme/spacing';
+import {XIcon} from './icons';
+
+interface ToastProps {
+  message: string;
+  type?: 'success' | 'error' | 'info';
+  visible: boolean;
+  duration?: number;
+  onDismiss: () => void;
+}
+
+export function Toast({
+  message,
+  type = 'info',
+  visible,
+  duration = 3000,
+  onDismiss,
+}: ToastProps) {
+  const {colors} = useTheme();
+  const translateY = useSharedValue(100);
+
+  useEffect(() => {
+    if (visible) {
+      translateY.value = withTiming(0, {duration: 250});
+      translateY.value = withDelay(
+        duration,
+        withTiming(100, {duration: 250}, finished => {
+          if (finished) {
+            runOnJS(onDismiss)();
+          }
+        }),
+      );
+    } else {
+      translateY.value = withTiming(100, {duration: 200});
+    }
+  }, [visible, duration, onDismiss, translateY]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{translateY: translateY.value}],
+  }));
+
+  const bgColor =
+    type === 'success'
+      ? colors.success
+      : type === 'error'
+        ? colors.danger
+        : colors.bgElevated;
+
+  const textColor =
+    type === 'info' ? colors.textPrimary : '#FFFFFF';
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.toast,
+        {backgroundColor: bgColor, borderColor: colors.borderLight},
+        shadows(colors).elevated,
+        animatedStyle,
+      ]}>
+      <Text style={[styles.message, {color: textColor}]} numberOfLines={2}>
+        {message}
+      </Text>
+      <Pressable onPress={onDismiss} hitSlop={8}>
+        <XIcon size={16} color={textColor} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  toast: {
+    position: 'absolute',
+    bottom: spacing.xxxl,
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  message: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: fonts.ui.medium,
+  },
+});

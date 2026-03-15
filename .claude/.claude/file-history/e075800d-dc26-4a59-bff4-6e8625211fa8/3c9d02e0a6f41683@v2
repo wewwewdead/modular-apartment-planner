@@ -1,0 +1,86 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { computeStarForces, applyForces } from '../utils/cosmicPhysics';
+
+const COOLING_RATE = 0.95;
+const DAMPING = 0.85;
+const STAR_PULL_STRENGTH = 120;
+const MAX_DISPLACEMENT = 80;
+
+/**
+ * Client-side Gravity B simulation hook.
+ * Animates stars pulling toward similar galaxy centroids.
+ *
+ * @param {Array} posts - array of post objects with display_x, display_y
+ * @param {Array} starPulls - [{post_id, galaxy_user_id, similarity}]
+ * @param {Map} galaxyPositions - Map<userId, {x, y}>
+ * @returns {{ positions: Map<postId, {x, y}>, isSettled: boolean }}
+ */
+export default function useCosmicGravity(posts, starPulls, galaxyPositions) {
+    const [positions, setPositions] = useState(new Map());
+    const [isSettled, setIsSettled] = useState(true);
+    const tempRef = useRef(1.0);
+    const rafRef = useRef(null);
+    const positionsRef = useRef(new Map());
+
+    // Initialize or reset positions when posts change
+    useEffect(() => {
+        if (!posts || posts.length === 0 || !starPulls || starPulls.length === 0) {
+            setIsSettled(true);
+            return;
+        }
+
+        const initial = new Map();
+        for (const post of posts) {
+            const x = post.display_x ?? post.universe_x;
+            const y = post.display_y ?? post.universe_y;
+            if (x == null || y == null) continue;
+            initial.set(post.id, { x, y, baseX: x, baseY: y });
+        }
+
+        positionsRef.current = initial;
+        tempRef.current = 1.0;
+        setIsSettled(false);
+        setPositions(new Map(initial));
+    }, [posts, starPulls]);
+
+    // Animation loop
+    useEffect(() => {
+        if (isSettled || !starPulls || starPulls.length === 0 || !galaxyPositions || galaxyPositions.size === 0) {
+            return;
+        }
+
+        let active = true;
+
+        const tick = () => {
+            if (!active) return;
+
+            const currentPositions = positionsRef.current;
+            const forces = computeStarForces(starPulls, galaxyPositions, currentPositions, STAR_PULL_STRENGTH);
+            const { positions: newPositions, maxDisplacement } = applyForces(
+                currentPositions, forces, tempRef.current, DAMPING, MAX_DISPLACEMENT
+            );
+
+            positionsRef.current = newPositions;
+            tempRef.current *= COOLING_RATE;
+
+            // Check convergence
+            if (maxDisplacement < 0.5 || tempRef.current < 0.01) {
+                setPositions(new Map(newPositions));
+                setIsSettled(true);
+                return;
+            }
+
+            setPositions(new Map(newPositions));
+            rafRef.current = requestAnimationFrame(tick);
+        };
+
+        rafRef.current = requestAnimationFrame(tick);
+
+        return () => {
+            active = false;
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        };
+    }, [isSettled, starPulls, galaxyPositions]);
+
+    return { positions, isSettled };
+}

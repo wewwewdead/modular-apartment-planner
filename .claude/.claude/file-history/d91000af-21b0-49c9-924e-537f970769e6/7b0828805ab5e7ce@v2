@@ -1,0 +1,43 @@
+import { useMemo } from 'react';
+import { SketchProvider, useSketch } from './app/SketchProvider';
+import { SketchEditorProvider } from './app/SketchEditorProvider';
+import SketchToolbar from './ui/SketchToolbar';
+import SketchSidebar from './ui/SketchSidebar';
+import SketchCanvas from './renderers/SketchCanvas';
+import styles from './SketchWorkspace.module.css';
+
+function SketchInner() {
+  const { project } = useSketch();
+  const initialLayerId = useMemo(
+    () => project.layers[0]?.id || null,
+    // Only compute once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  return (
+    <SketchEditorProvider initialActiveLayerId={initialLayerId}>
+      <div className={styles.layout}>
+        <div className={styles.toolbar}>
+          <SketchToolbar />
+        </div>
+        <div className={styles.sidebar}>
+          <SketchSidebar />
+        </div>
+        <div className={styles.canvas}>
+          <SketchCanvas />
+        </div>
+      </div>
+    </SketchEditorProvider>
+  );
+}
+
+export default function SketchWorkspace({ initialProject }) {
+  return (
+    <div className="editorRoot">
+      <SketchProvider initialProject={initialProject}>
+        <SketchInner />
+      </SketchProvider>
+    </div>
+  );
+}

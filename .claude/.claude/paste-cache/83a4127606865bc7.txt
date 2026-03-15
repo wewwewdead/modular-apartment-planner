@@ -1,0 +1,18 @@
+Act as a Senior Full-Stack Engineer and AI Architect. I am building "Gilas," a Filipino-themed agentic automation tool for teachers. 
+
+GOAL: Build a Node.js backend that uses WhatsApp as a UI (via Baileys) to control a local LLM (Ollama) which will eventually automate web-based grading portals using Puppeteer.
+
+PROJECT ARCHITECTURE:
+1. GATEWAY: Use @whiskeysockets/baileys for WhatsApp connection. Implement multi-file auth in an 'auth_info' folder.
+2. BRAIN: Use the 'ollama' JS library to connect to a local Llama 3.2 3B model.
+3. PERSONALITY: The agent must respond in "Taglish" (Tagalog-English mix) as a helpful, polite assistant named Gilas.
+4. AUTOMATION SCAFFOLD: Create a 'services/automation.js' file using Puppeteer that currently just has a placeholder 'syncGrades' function.
+
+STEP-BY-STEP TASK FOR YOU (CLAUDE):
+Step 1: Initialize a Node.js project. Install dependencies: @whiskeysockets/baileys, pino, qrcode-terminal, ollama, puppeteer, and dotenv.
+Step 2: Create a 'config.js' to handle environment variables and a System Prompt for the LLM that defines the Gilas persona (polite, uses 'po/opo', focused on helping teachers).
+Step 3: Build the main 'index.js' to handle the WhatsApp connection, QR code generation in terminal, and the message listener.
+Step 4: Implement a 'Brain' module that passes incoming WhatsApp messages to Ollama and returns the AI's response back to the sender.
+Step 5: Ensure the bot uses 'sendPresenceUpdate' to show "typing..." on WhatsApp while Ollama is thinking.
+
+Let's start with Step 1 and 2. Set up the file structure and the package.json first.

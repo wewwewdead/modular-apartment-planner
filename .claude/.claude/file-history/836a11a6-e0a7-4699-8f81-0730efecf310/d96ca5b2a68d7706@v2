@@ -1,0 +1,137 @@
+import * as THREE from 'three';
+
+function planPointToWorld(point, elevation = 0) {
+  return new THREE.Vector3(point.x, elevation, point.y);
+}
+
+function planAngleToWorldRotation(angle = 0) {
+  return -angle;
+}
+
+function createShape(outline) {
+  const shape = new THREE.Shape();
+  outline.forEach((point, index) => {
+    if (index === 0) {
+      // Flip plan Y here so the rotated extrusion preserves the blueprint's handedness.
+      shape.moveTo(point.x, -point.y);
+      return;
+    }
+    shape.lineTo(point.x, -point.y);
+  });
+  shape.closePath();
+  return shape;
+}
+
+function addOutline(object3d, materialPalette) {
+  if (!object3d.geometry) return;
+  const edges = new THREE.EdgesGeometry(object3d.geometry, 20);
+  const outline = new THREE.LineSegments(edges, materialPalette.outline);
+  object3d.add(outline);
+}
+
+function createPrismObject(descriptor, materialPalette) {
+  const geometry = new THREE.ExtrudeGeometry(createShape(descriptor.outline), {
+    depth: descriptor.height,
+    bevelEnabled: false,
+    curveSegments: 1,
+    steps: 1,
+  });
+
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate(0, descriptor.baseElevation, 0);
+
+  const mesh = new THREE.Mesh(geometry, materialPalette[descriptor.materialKey]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh, materialPalette);
+  return mesh;
+}
+
+function createBoxObject(descriptor, materialPalette) {
+  const geometry = new THREE.BoxGeometry(
+    Math.max(descriptor.size.x, 1),
+    Math.max(descriptor.size.y, 1),
+    Math.max(descriptor.size.z, 1)
+  );
+  const mesh = new THREE.Mesh(geometry, materialPalette[descriptor.materialKey]);
+  const center = planPointToWorld(
+    descriptor.center,
+    descriptor.baseElevation + descriptor.size.y / 2
+  );
+  mesh.position.copy(center);
+  mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh, materialPalette);
+  return mesh;
+}
+
+function createStairObject(descriptor, materialPalette) {
+  const group = new THREE.Group();
+  const risers = Math.max(1, descriptor.numberOfRisers || 1);
+
+  for (let index = 0; index < risers; index += 1) {
+    const geometry = new THREE.BoxGeometry(
+      Math.max(descriptor.treadDepth, 1),
+      Math.max(descriptor.riserHeight, 1),
+      Math.max(descriptor.width, 1)
+    );
+    const step = new THREE.Mesh(geometry, materialPalette[descriptor.materialKey]);
+    step.position.set(
+      descriptor.treadDepth * (index + 0.5),
+      descriptor.riserHeight * (index + 0.5),
+      0
+    );
+    step.castShadow = true;
+    step.receiveShadow = true;
+    addOutline(step, materialPalette);
+    group.add(step);
+  }
+
+  group.position.copy(planPointToWorld(descriptor.startPoint, descriptor.baseElevation));
+  group.rotation.y = planAngleToWorldRotation(descriptor.angle * Math.PI / 180);
+  return group;
+}
+
+function createObjectForDescriptor(descriptor, materialPalette) {
+  if (descriptor.geometry === 'prism') {
+    return createPrismObject(descriptor, materialPalette);
+  }
+
+  if (descriptor.geometry === 'stair') {
+    return createStairObject(descriptor, materialPalette);
+  }
+
+  return createBoxObject(descriptor, materialPalette);
+}
+
+export function buildPreviewObjectRoot(sceneDescriptor, materialPalette) {
+  const root = new THREE.Group();
+  root.name = 'preview-root';
+
+  for (const floor of sceneDescriptor.floors) {
+    const floorGroup = new THREE.Group();
+    floorGroup.name = `floor-${floor.floorId}`;
+    floorGroup.visible = floor.visible;
+    floorGroup.userData = {
+      floorId: floor.floorId,
+      floorName: floor.name,
+      level: floor.level,
+    };
+
+    for (const descriptor of floor.objects) {
+      const object = createObjectForDescriptor(descriptor, materialPalette);
+      object.name = descriptor.id;
+      object.userData = {
+        id: descriptor.id,
+        kind: descriptor.kind,
+        metadata: descriptor.metadata,
+      };
+      floorGroup.add(object);
+    }
+
+    root.add(floorGroup);
+  }
+
+  return root;
+}

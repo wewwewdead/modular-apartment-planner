@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Downloads Nunito and Source Sans 3 font files from Google Fonts.
+# Usage: bash scripts/download-fonts.sh
+
+set -euo pipefail
+
+FONT_DIR="android/app/src/main/assets/fonts"
+mkdir -p "$FONT_DIR"
+
+# Nunito weights (600, 700, 800) - from Google Fonts CSS API
+NUNITO_600="https://fonts.gstatic.com/s/nunito/v32/XRXI3I6Li01BKofiOc5wtlZ2di8HDGUmRTM.ttf"
+NUNITO_700="https://fonts.gstatic.com/s/nunito/v32/XRXI3I6Li01BKofiOc5wtlZ2di8HDFwmRTM.ttf"
+NUNITO_800="https://fonts.gstatic.com/s/nunito/v32/XRXI3I6Li01BKofiOc5wtlZ2di8HDDsmRTM.ttf"
+
+# Source Sans 3 weights (400, 600, 700) - from Google Fonts CSS API
+SS3_400="https://fonts.gstatic.com/s/sourcesans3/v19/nwpBtKy2OAdR1K-IwhWudF-R9QMylBJAV3Bo8Ky461EN.ttf"
+SS3_600="https://fonts.gstatic.com/s/sourcesans3/v19/nwpBtKy2OAdR1K-IwhWudF-R9QMylBJAV3Bo8Kxm7FEN.ttf"
+SS3_700="https://fonts.gstatic.com/s/sourcesans3/v19/nwpBtKy2OAdR1K-IwhWudF-R9QMylBJAV3Bo8Kxf7FEN.ttf"
+
+download() {
+  local file="$1" url="$2"
+  local dest="$FONT_DIR/$file"
+  if [ -f "$dest" ]; then
+    echo "Skipping $file (already exists)"
+  else
+    echo "Downloading $file..."
+    curl -fSL --retry 3 -o "$dest" "$url"
+  fi
+}
+
+download "Nunito-SemiBold.ttf"   "$NUNITO_600"
+download "Nunito-Bold.ttf"       "$NUNITO_700"
+download "Nunito-ExtraBold.ttf"  "$NUNITO_800"
+download "SourceSans3-Regular.ttf"   "$SS3_400"
+download "SourceSans3-SemiBold.ttf"  "$SS3_600"
+download "SourceSans3-Bold.ttf"      "$SS3_700"
+
+echo "Done. Fonts saved to $FONT_DIR/"

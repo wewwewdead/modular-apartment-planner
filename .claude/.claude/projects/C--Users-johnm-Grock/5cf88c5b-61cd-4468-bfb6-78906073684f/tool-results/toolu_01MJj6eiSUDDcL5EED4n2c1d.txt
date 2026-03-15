@@ -1,0 +1,181 @@
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:54:            let isPro = (notification.userInfo?["isPro"] as? Bool) ?? subscriptionManager.isPro
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:55:            refreshStoreSelectionRequirement(isPro: isPro)
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:75:            refreshStoreSelectionRequirement(isPro: subscriptionManager.isPro)
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:84:    private func refreshStoreSelectionRequirement(isPro: Bool? = nil) {
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:85:        let resolvedIsPro = isPro ?? subscriptionManager.isPro
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:86:        showFreeStoreSelectionSheet = vaultService.isFreeStoreSelectionRequired(isPro: resolvedIsPro)
+C:\Users\johnm\Grock\Grock\App\GrockApp.swift:92:            refreshStoreSelectionRequirement(isPro: subscriptionManager.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService.swift:82:        let isPro = (notification.userInfo?["isPro"] as? Bool) ?? UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Service\VaultService.swift:83:        reconcilePlanEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService.swift:84:        reconcileCartPlanningEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService.swift:85:        reconcileCartBackgroundEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService.swift:86:        reconcileStoreEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\Views\ModeToggleView.swift:285:                isPro: subscriptionManager.isPro,
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\Views\ModeToggleView.swift:320:    let isPro: Bool
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\Views\ModeToggleView.swift:334:            if isPro {
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\Views\ModeToggleView.swift:460:            guard UserDefaults.standard.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\Views\ModeToggleView.swift:649:        guard UserDefaults.standard.isPro else { return nil }
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\Views\ModeToggleView.swift:671:        guard UserDefaults.standard.isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:41:            let isPro = UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:42:            reconcilePlanEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:43:            reconcileCartPlanningEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:44:            reconcileCartBackgroundEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:45:            reconcileStoreEntitlementState(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:68:        return shouldSuppressCategory(named: categoryName, isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:72:    func reconcilePlanEntitlementState(isPro: Bool) {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:78:            let shouldSuppressCategory = shouldSuppressCategory(named: category.name, isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:102:            let shouldSuppressItem = shouldSuppressCategory(named: categoryName, isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:128:    func reconcileStoreEntitlementState(isPro: Bool) {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:132:            userInfo: ["isPro": isPro]
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:136:    private func shouldSuppressCategory(named categoryName: String, isPro: Bool) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:137:        guard !isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:294:        guard UserDefaults.standard.isPro else { return nil }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:327:        guard UserDefaults.standard.isPro else { return nil }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:373:        guard UserDefaults.standard.isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:489:        guard UserDefaults.standard.isPro || !targetCategory.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:523:            guard UserDefaults.standard.isPro || !existingCategory.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:528:            guard UserDefaults.standard.isPro || isSystemCategory(named: trimmedCategory) else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:568:        guard UserDefaults.standard.isPro || !item.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:588:        guard UserDefaults.standard.isPro || !targetCategory.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:623:        guard UserDefaults.standard.isPro || !item.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:643:        guard UserDefaults.standard.isPro || existingTargetCategory != nil || isSystemCategory(named: trimmedCategory) else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:648:        guard UserDefaults.standard.isPro || !targetCategory.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:762:        guard bypassPlanSuppression || UserDefaults.standard.isPro || !item.isPlanSuppressed else {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:833:        if let categoryName, UserDefaults.standard.isPro == false, shouldSuppressCategory(named: categoryName, isPro: false) {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1076:    private func validPersistedFreeEditableStoreKeys(isPro: Bool = UserDefaults.standard.isPro) -> [String] {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1078:        guard !isPro else { return orderedKeys }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1084:    private func freeEditableStoreKeysForCurrentData(isPro: Bool = UserDefaults.standard.isPro) -> [String] {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1086:        guard !isPro else { return orderedKeys }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1092:        let validPersistedKeys = validPersistedFreeEditableStoreKeys(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1131:    private func unlockedStoreKeys(isPro: Bool = UserDefaults.standard.isPro) -> Set<String> {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1132:        Set(freeEditableStoreKeysForCurrentData(isPro: isPro))
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1136:        UserDefaults.standard.isPro ? nil : Self.freeStoreLimit
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1143:    func isFreeStoreSelectionRequired(isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1144:        guard !isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1149:        return validPersistedFreeEditableStoreKeys(isPro: isPro).count < Self.freeStoreLimit
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1152:    func preselectedStoresForFreeSelection(isPro: Bool = UserDefaults.standard.isPro) -> [String] {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1157:        let selectedKeys = Array(validPersistedFreeEditableStoreKeys(isPro: isPro).prefix(requiredCount))
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1164:    func applyFreeStoreSelection(_ selectedStoreNames: [String], isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1165:        guard !isPro else { return true }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1171:            reconcileStoreEntitlementState(isPro: false)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1188:        reconcileStoreEntitlementState(isPro: false)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1192:    func unlockedStoreNamesForCurrentPlan(isPro: Bool = UserDefaults.standard.isPro) -> [String] {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1194:        guard !isPro else { return orderedStores }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1196:        let unlockedKeys = unlockedStoreKeys(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1200:    func isStoreLimitReached(isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1201:        guard !isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1205:    func isStoreLockedByPlan(named storeName: String, isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1208:        guard !isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1209:        return !unlockedStoreKeys(isPro: isPro).contains(normalized)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1220:    func canUseStoreName(_ storeName: String, isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1224:        guard !isPro else { return true }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1228:            return unlockedStoreKeys(isPro: isPro).contains(normalized)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1321:        if !UserDefaults.standard.isPro {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Domain.swift:1322:            guard !isStoreLockedByPlan(named: trimmedOldName, isPro: false) else { return }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:19:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:51:        UserDefaults.standard.isPro ? nil : Self.freePlanningEditableCartLimit
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:54:    func primaryEditableCartIdForCurrentPlan(isPro: Bool = UserDefaults.standard.isPro) -> String? {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:55:        resolvedPrimaryEditableCartIdForCurrentPlan(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:58:    func canEditPlanning(for cart: Cart, isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:59:        !isCartPlanningLockedByPlan(cart, isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:62:    func isCartPlanningLockedByPlan(_ cart: Cart, isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:64:        return isNonPrimaryActiveCartOnFree(cart, isPro: isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:68:    func reconcileCartPlanningEntitlementState(isPro: Bool) {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:69:        let resolvedPrimaryCartId: String? = isPro ? nil : resolvedPrimaryEditableCartIdForCurrentPlan(isPro: false)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:80:                "isPro": isPro,
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:91:    private func resolvedPrimaryEditableCartIdForCurrentPlan(isPro: Bool = UserDefaults.standard.isPro) -> String? {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:95:        if isPro || planningCarts.count <= Self.freePlanningEditableCartLimit {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:129:    private func isNonPrimaryActiveCartOnFree(_ cart: Cart, isPro: Bool = UserDefaults.standard.isPro) -> Bool {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:130:        guard !isPro else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:136:        guard let primaryCartId = resolvedPrimaryEditableCartIdForCurrentPlan(isPro: false) else { return false }
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:150:    func reconcileCartBackgroundEntitlementState(isPro: Bool) {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:162:            if isPro {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:201:        if !isPro {
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:220:            reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:229:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:249:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:260:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:292:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:319:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:400:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Service\VaultService+Carts.swift:925:        reconcileCartPlanningEntitlementState(isPro: UserDefaults.standard.isPro)
+C:\Users\johnm\Grock\Grock\Components\Item\CategoryCircularButton.swift:273:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Components\Item\CategoryCircularButton.swift:345:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Service\SubscriptionManager.swift:24:    private(set) var isPro: Bool = false
+C:\Users\johnm\Grock\Grock\Service\SubscriptionManager.swift:38:        self.isPro = UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Service\SubscriptionManager.swift:236:        let previousIsPro = self.isPro
+C:\Users\johnm\Grock\Grock\Service\SubscriptionManager.swift:242:        self.isPro = proIsActive
+C:\Users\johnm\Grock\Grock\Service\SubscriptionManager.swift:243:        UserDefaults.standard.isPro = proIsActive
+C:\Users\johnm\Grock\Grock\Service\SubscriptionManager.swift:256:                    "isPro": proIsActive,
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\ViewModel\CartViewModel.swift:151:        let isPro = SubscriptionManager.shared.isPro || UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\ViewModel\CartViewModel.swift:152:        return isPro ? nil : freeActiveCartLimit
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\ViewModel\CartViewModel.swift:156:        isPro: Bool = SubscriptionManager.shared.isPro || UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\ViewModel\CartViewModel.swift:158:        guard !isPro else { return true }
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\ViewModel\CartViewModel.swift:163:        isPro: Bool = SubscriptionManager.shared.isPro || UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Core\Detail Cart\ViewModel\CartViewModel.swift:165:        !canCreateAnotherActiveCart(isPro: isPro)
+C:\Users\johnm\Grock\Grock\Extensions\UserDefaults+Subscription.swift:5:        static let isPro = "isPro"
+C:\Users\johnm\Grock\Grock\Extensions\UserDefaults+Subscription.swift:10:    var isPro: Bool {
+C:\Users\johnm\Grock\Grock\Extensions\UserDefaults+Subscription.swift:11:        get { bool(forKey: SubscriptionKeys.isPro) }
+C:\Users\johnm\Grock\Grock\Extensions\UserDefaults+Subscription.swift:12:        set { set(newValue, forKey: SubscriptionKeys.isPro) }
+C:\Users\johnm\Grock\Grock\Core\EditItem\UnitButton.swift:47:    private var isProUser: Bool {
+C:\Users\johnm\Grock\Grock\Core\EditItem\UnitButton.swift:48:        UserDefaults.standard.isPro
+C:\Users\johnm\Grock\Grock\Core\EditItem\UnitButton.swift:52:        isProUser || bypassPlanLocks
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallView.swift:300:            if viewModel.isProUser {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallView.swift:470:                        isProcessingAction: viewModel.isProcessingAction || purchaseTapGate,
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallView.swift:624:        if viewModel.isProUser {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallView.swift:629:        let isProAfterRefresh = await viewModel.refreshEntitlementForPaywallGate()
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallView.swift:630:        if isProAfterRefresh {
+C:\Users\johnm\Grock\Grock\Core\Vault\Views\CategoriesManager\CategoriesManagerSheet.swift:637:            guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Vault\Views\CategoriesManager\CategoriesManagerSheet.swift:1020:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Vault\Views\CategoriesManager\CategoriesManagerSheet.swift:1057:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Vault\Views\CategoriesManager\CategoriesManagerSheet.swift:1085:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Vault\Views\CategoriesManager\CategoriesManagerSheet.swift:1137:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Vault\Views\CategoriesManager\CategoriesManagerSheet.swift:1183:        guard subscriptionManager.isPro else {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallFeatureCarouselSectionView.swift:16:    @State private var isProgrammaticTabChange = false
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallFeatureCarouselSectionView.swift:115:            isProgrammaticTabChange = true
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallFeatureCarouselSectionView.swift:132:            isProgrammaticTabChange = true
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallFeatureCarouselSectionView.swift:143:        let shouldNotifyManualInteraction = !isProgrammaticTabChange
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallFeatureCarouselSectionView.swift:144:        isProgrammaticTabChange = false
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallFeatureCarouselSectionView.swift:179:        isProgrammaticTabChange = true
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallStickyBottomPanelView.swift:9:    let isProcessingAction: Bool
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallStickyBottomPanelView.swift:146:                    if isProcessingAction {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallStickyBottomPanelView.swift:177:                    .disabled(isProcessingAction)
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\Views\GrockPaywallStickyBottomPanelView.swift:200:            isProcessingAction: false,
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:11:    var isProcessingAction = false
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:75:        !isProcessingAction && selectedPackage != nil
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:83:        if isProcessingAction {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:208:    var isProUser: Bool {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:209:        subscriptionManager.isPro
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:226:        return subscriptionManager.isPro
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:234:        if isProcessingAction {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:243:        isProcessingAction = true
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:244:        defer { isProcessingAction = false }
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:250:            if subscriptionManager.isPro {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:269:        if isProcessingAction {
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:273:        isProcessingAction = true
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:274:        defer { isProcessingAction = false }
+C:\Users\johnm\Grock\Grock\Core\Subscriptions\ViewModels\GrockPaywallViewModel.swift:280:            if subscriptionManager.isPro {
+C:\Users\johnm\Grock\Grock\Core\Menu\ManageSubscriptionSheet.swift:27:        guard subscriptionManager.isPro else { return "Free" }
+C:\Users\johnm\Grock\Grock\Core\Menu\ManageSubscriptionSheet.swift:39:        if subscriptionManager.isPro {
+C:\Users\johnm\Grock\Grock\Core\Menu\ManageSubscriptionSheet.swift:46:        guard subscriptionManager.isPro else { return nil }
+C:\Users\johnm\Grock\Grock\Core\Menu\ManageSubscriptionSheet.swift:63:        guard subscriptionManager.isPro else { return "No renewal required" }
+C:\Users\johnm\Grock\Grock\Core\Menu\ManageSubscriptionSheet.swift:77:        guard subscriptionManager.isPro else { return nil }
+C:\Users\johnm\Grock\Grock\Core\Menu\ManageSubscriptionSheet.swift:200:                    .foregroundStyle(subscriptionManager.isPro ? Color.white.opacity(0.72) : Color.white.opacity(0.86))
+C:\Users\johnm\Grock\Grock\Core\Menu\MenuView.swift:339:        let isPro = subscriptionManager.isPro
+C:\Users\johnm\Grock\Grock\Core\Menu\MenuView.swift:340:        let title = isPro ? "Grock Pro Active" : "Unlock Grock Pro"
+C:\Users\johnm\Grock\Grock\Core\Menu\MenuView.swift:341:        let subtitle = isPro
+C:\Users\johnm\Grock\Grock\Core\Menu\MenuView.swift:347:            if isPro {
+C:\Users\johnm\Grock\Grock\Core\Menu\TrashView.swift:318:        guard !UserDefaults.standard.isPro else { return nil }
+C:\Users\johnm\Grock\Grock\Core\Menu\StoreManagerView.swift:192:        if UserDefaults.standard.isPro {
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:38:                            isPro: subscriptionManager.isPro,
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:52:                            isPro: subscriptionManager.isPro,
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:66:                            isPro: subscriptionManager.isPro,
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:128:    let isPro: Bool
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:136:        isPro: Bool,
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:143:        self.isPro = isPro
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:155:                    if !isPro {
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:171:                    .blur(radius: isPro ? 0 : 8)
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:172:                    .disabled(!isPro)
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:173:                    .opacity(isPro ? 1 : 0.6)
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:174:                    .allowsHitTesting(isPro)
+C:\Users\johnm\Grock\Grock\Core\Home\Views\InsightsView.swift:176:                if !isPro {

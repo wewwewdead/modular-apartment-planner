@@ -1,0 +1,165 @@
+# Barnes-Hut N-Body Universe Simulation
+
+## Context
+
+The current Universe feature uses simple spring-based forces (anchor springs + semantic pulls) applied per-body. Stars don't gravitationally attract each other — they just bob around their galaxy home. This makes the simulation feel like "bubbles floating on a screen" rather than a living universe.
+
+The goal is to replace the current force model with true N-body Newtonian gravity optimized via Barnes-Hut quadtree, where every star exerts gravitational pull on every other star. Semantic similarity from embeddings acts as "dark matter," modulating the gravitational constant G between related content. Stars enter orbits rather than sitting statically.
+
+---
+
+## Plan
+
+### Step 1: Create Barnes-Hut Quadtree Engine
+**New file:** `client/src/components/Universe/physics/barnesHut.js`
+
+Pure math module (no React). Implements:
+
+- **`class QuadTreeNode`** — Recursive spatial partition node
+  - Properties: `bounds {x, y, w, h}`, `centerOfMass {x, y}`, `totalMass`, `body` (leaf), `children[4]` (NW/NE/SW/SE), `bodyCount`
+  - Insert: subdivide when a leaf already contains a body
+  - Aggregate: after all inserts, compute center of mass bottom-up
+
+- **`buildQuadTree(bodies)`** — Takes array of `{id, x, y, mass}`, returns root node
+  - Auto-computes bounding box from body positions (with padding)
+  - Inserts all bodies, then computes aggregates
+
+- **`computeBarnesHutForces(root, bodies, options)`** — The force calculator
+  - For each body, traverses the tree:
+    - If node is external (single body) and not self → compute direct force
+    - If node is internal and `nodeWidth / distance < theta` → treat as point mass
+    - Otherwise → recurse into children
+  - **Options:** `{ G, theta, softening, semanticScale }`
+  - **Force formula:** `F = G * m1 * m2 / (r² + softening²)`
+  - Returns `Map<id, {fx, fy}>`
+
+- **`computeSemanticG(baseG, similarity)`** — Scales G based on content similarity
+  - `similarity > 0.8` → `G * 3.0` (strong attraction)
+  - `similarity 0.2–0.8` → `G * (1 + similarity)` (moderate boost)
+  - `similarity < 0.2` → `G * -0.3` (light repulsion, pushes unrelated apart)
+  - Used only for direct (close) interactions, not aggregate nodes
+
+- **Config constants:**
+  - `THETA = 0.5` (Barnes-Hut opening angle)
+  - `G_BASE = 50` (tuned for 50k×50k world with star masses ~1–4)
+  - `SOFTENING = 20` (prevents singularity; keeps force finite at close range)
+  - `MAX_FORCE = 0.05` (per-axis clamp to prevent explosions)
+
+### Step 2: Add Orbital Velocity Initialization
+**Modify:** `client/src/components/Universe/physics/matterEngine.js`
+
+- **New export: `computeOrbitalVelocity(starPos, galaxyCenterPos, galaxyMass)`**
+  - `r = distance(star, galaxyCenter)`
+  - `v = sqrt(G_BASE * galaxyMass / max(r, SOFTENING))`
+  - Direction: perpendicular to radial vector (cross product in 2D)
+  - Slight random perturbation (±10%) to prevent perfect circles
+  - Returns `{vx, vy}`
+
+- **New export: `getGalaxyMass(postCount)`** — virtual mass for the galaxy center
+  - `mass = 50 + postCount * 10` (scales with how many posts a user has)
+  - Galaxy centers act as invisible massive bodies in the quadtree
+
+### Step 3: Integrate N-Body into Star Physics Loop
+**Modify:** `client/src/components/Universe/hooks/useStarPhysics.js`
+
+Changes to the RAF tick loop (lines 259–291):
+
+1. **Build body array** from active Matter.js bodies:
+   ```
+   bodyArray = [{id, x: body.position.x, y: body.position.y, mass: body.mass}, ...]
+   ```
+   Include galaxy centers as virtual massive bodies (not in Matter.js world, just in quadtree)
+
+2. **Build quadtree** from bodyArray via `buildQuadTree()`
+
+3. **Compute N-body forces** via `computeBarnesHutForces()`
+   - For close interactions: look up pairwise similarity from `pairMap` (already built by `buildSemanticMaps`) to scale G
+   - For aggregate nodes: use base G
+
+4. **Apply forces** via `Body.applyForce()` for each star body
+   - N-body force replaces both `computeAnchorForce` and `computeSemanticPullForce`
+   - Galaxy centers in the quadtree naturally pull their stars (replaces anchor spring)
+   - Semantic G-scaling replaces the semantic pull force
+
+5. **Keep constellation constraints** — they serve a different purpose (minimum distance between related posts), complementary to gravity
+
+6. **Apply orbital velocity** when creating new bodies (in the body lifecycle effect):
+   - After `createStarBody()`, call `computeOrbitalVelocity()`
+   - Set initial velocity via `Body.setVelocity(body, {x: vx, y: vy})`
+
+**Updated force pipeline per frame:**
+```
+Old: anchorSpring + semanticPull → Engine.update
+New: buildQuadTree → computeBarnesHutForces (with semantic G) → Body.applyForce → Engine.update
+```
+
+### Step 4: Add Viewport Culling to Rendering
+**Modify:** `client/src/components/Universe/layers/InteractiveLayer.jsx`
+
+- Accept `camera`, `zoom`, `stageSize` as new props (passed from Universe.jsx)
+- Compute visible bounds in world space with 500px buffer:
+  ```
+  bufferWorld = 500 / zoom
+  minX = camera.x - halfW - bufferWorld
+  maxX = camera.x + halfW + bufferWorld
+  ...
+  ```
+- Filter star rendering: only render `<StarGroup>` for stars within bounds
+- Galaxy labels and bridges still render (they're cheap and informational)
+
+**Modify:** `client/src/components/Universe/Universe.jsx`
+- Pass `camera`, `zoom`, `stageSize` props to `<InteractiveLayer>`
+
+### Step 5: Tune Physics Config
+**Modify:** `client/src/components/Universe/physics/matterEngine.js`
+
+Update `PHYSICS_CONFIG`:
+- `maxActiveBodies`: 300 → 600 (quadtree makes more bodies viable)
+- `frictionAir`: 0.02 → 0.015 (slightly less drag for orbital feel)
+- `sleepThreshold`: 60 → 120 (let orbiting stars stay awake longer)
+- Add new fields: `nBodyG: 50`, `nBodyTheta: 0.5`, `nBodySoftening: 20`, `nBodyMaxForce: 0.05`
+
+### Step 6: Clean Up Old Force Code
+**Modify:** `client/src/components/Universe/physics/semanticForces.js`
+- Keep `buildSemanticMaps()` (still needed for pairMap similarity lookups)
+- Remove or deprecate `computeAnchorForce()` and `computeSemanticPullForce()` — replaced by N-body
+- Remove their imports from `useStarPhysics.js`
+
+---
+
+## Files Changed (Summary)
+
+| File | Action |
+|------|--------|
+| `physics/barnesHut.js` | **NEW** — Quadtree + N-body force engine |
+| `physics/matterEngine.js` | **MODIFY** — Add orbital velocity, galaxy mass, update config |
+| `physics/semanticForces.js` | **MODIFY** — Remove old force functions |
+| `hooks/useStarPhysics.js` | **MODIFY** — Replace force loop with Barnes-Hut pipeline |
+| `layers/InteractiveLayer.jsx` | **MODIFY** — Add viewport culling |
+| `Universe.jsx` | **MODIFY** — Pass camera/zoom/stageSize to InteractiveLayer |
+
+---
+
+## Key Design Decisions
+
+1. **Galaxy centers as virtual massive bodies in the quadtree** — Instead of anchor springs, galaxies are heavy point masses that naturally attract their stars via gravity. This gives emergent orbital behavior without artificial springs.
+
+2. **Semantic G-scaling only for direct interactions** — When the quadtree says two bodies are close enough for direct computation (below theta), we look up their similarity and scale G. For distant aggregate nodes, we use base G. This is physically consistent — you can't meaningfully aggregate "similarity" across a cluster.
+
+3. **Keep constellation constraints** — They enforce minimum/maximum distances between semantically linked posts, which gravity alone can't do (gravity only attracts/repels, it doesn't maintain specific distances). The constraints complement N-body forces.
+
+4. **No Web Worker initially** — Barnes-Hut for 600 bodies is ~600 × log(600) ≈ 3,800 force calculations per frame. This is fast enough for the main thread at 60fps. We can add a Worker later if we scale beyond 1,000+ active bodies.
+
+5. **Viewport culling is render-only** — Physics runs for all active bodies regardless of viewport. Only the React/Konva rendering is culled. This prevents stars from "freezing" when you look away.
+
+---
+
+## Verification
+
+1. **Visual:** Stars should visibly orbit their galaxy centers instead of floating statically
+2. **Performance:** Open browser DevTools → Performance tab, verify 60fps maintained with 300+ stars
+3. **Semantic gravity:** Create two posts about the same topic in different galaxies → they should drift toward each other more than unrelated posts
+4. **Repulsion:** Unrelated posts (similarity < 0.2) should maintain separation
+5. **Drag:** Dragging a star should still work smoothly; released star should continue with momentum and settle into a new orbit
+6. **Viewport culling:** Pan far away → verify DOM node count drops (React DevTools)
+7. **Galaxy collapse prevention:** Stars should orbit, not collapse into galaxy center (softening + orbital velocity)

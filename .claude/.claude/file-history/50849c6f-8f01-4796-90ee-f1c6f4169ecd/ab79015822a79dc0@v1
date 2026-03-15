@@ -1,0 +1,92 @@
+# Plan: #1 Hottest Post Notifications
+
+## Context
+The Explore page shows the hottest posts of the month ranked by hot score. Currently there's no mechanism to notify the author when their post reaches #1, or when they lose the #1 spot. This feature adds both notifications: one when a post becomes #1, and one when it gets replaced.
+
+## Overview
+- New DB table `hottest_tracker` to remember the current #1 per month
+- Tracker check runs inside `getMonthlyHottestJournalsService` (throttled to once per 5 minutes, fire-and-forget)
+- Two new notification types: `hottest_post` and `hottest_post_replaced`
+- Client-side updates: icon entries + type labels in both notification card components
+
+---
+
+## Step 1: Create `hottest_tracker` table
+
+**New file:** `server/sql/hottest_tracker.sql`
+
+```sql
+CREATE TABLE hottest_tracker (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    month_key TEXT NOT NULL UNIQUE,
+    journal_id BIGINT NOT NULL,
+    user_id UUID NOT NULL,
+    hot_score INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+Run in Supabase SQL editor. `month_key` is `YYYY-MM` format (e.g., `2026-02`), unique per month so only one row per month exists.
+
+---
+
+## Step 2: Add tracker logic to backend service
+
+**File:** `server/services/getService.js` (lines 773-832)
+
+Add after the sort (line 821), before the return (line 823):
+- Fire-and-forget call to a new `updateHottestTrackerIfChanged(monthKey, topPost)` function
+- Only runs if `scored.length > 0`
+
+New helper function (module-level, near `scoreJournalHotness` at line 834):
+- **In-memory throttle**: `_lastHottestCheckTime` variable, skip if checked within last 5 minutes
+- **SELECT** current tracker row for this month
+- **Compare** `journal_id` — if same, do nothing
+- **If changed**:
+  1. Send `hottest_post_replaced` notification to the **old** #1 holder (using `existing.user_id` and `existing.journal_id`)
+  2. **UPSERT** the new #1 into `hottest_tracker` (conflict on `month_key`)
+  3. Send `hottest_post` notification to the **new** #1 holder
+- `sender_id = receiver_id` (system-generated notification, no external sender)
+
+---
+
+## Step 3: Add notification type labels
+
+**File:** `client/helpers/formatNoficationType.js` (line 12)
+
+Add two entries:
+- `hottest_post: 'Your post is #1 Hottest!'`
+- `hottest_post_replaced: 'Your post is no longer #1 Hottest'`
+
+---
+
+## Step 4: Add notification icons to both card components
+
+**File 1:** `client/src/components/Notifications/notificationsCards.jsx` (line 28, `iconArray`)
+**File 2:** `client/src/components/Notifications/UnreadNotificationCard.jsx` (line 45, `iconArray`)
+
+Add two icon entries to each:
+- `hottest_post` — flame SVG in orange (`#ff6b35`)
+- `hottest_post_replaced` — flame SVG in gray (`#888`)
+
+Both types have `journal_id` set, so click handling and content rendering (post title, image preview) already work via the existing default branch — no changes needed there.
+
+---
+
+## Files to modify
+| # | File | Change |
+|---|------|--------|
+| 1 | `server/sql/hottest_tracker.sql` | **NEW** — create table |
+| 2 | `server/services/getService.js` | Add `updateHottestTrackerIfChanged` + call it in `getMonthlyHottestJournalsService` |
+| 3 | `client/helpers/formatNoficationType.js` | Add `hottest_post` and `hottest_post_replaced` entries |
+| 4 | `client/src/components/Notifications/notificationsCards.jsx` | Add 2 icon entries to `iconArray` |
+| 5 | `client/src/components/Notifications/UnreadNotificationCard.jsx` | Add 2 icon entries to `iconArray` |
+
+## Verification
+1. Run the SQL migration in Supabase
+2. Start the server, visit the Explore page to trigger `getMonthlyHottestJournals`
+3. Check `hottest_tracker` table — should have one row for current month with the #1 journal
+4. Check `notifications` table — the #1 author should have a `hottest_post` notification
+5. Manually change a post's view count to make a different post #1, wait 5 minutes, revisit Explore
+6. Verify old #1 author gets `hottest_post_replaced` notification and new #1 gets `hottest_post`
+7. Check notification UI — both types should render with flame icons and link to the post

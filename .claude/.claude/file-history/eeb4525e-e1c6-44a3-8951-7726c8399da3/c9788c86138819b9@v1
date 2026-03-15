@@ -1,0 +1,87 @@
+# Add "My Library" Page
+
+## Context
+Users can add stories to their library from StoryDetail (bookmark button), but there's no page to view saved stories. Need a new route at `/home/stories/library` that lists all stories the user has saved, with a back button to return to StoryBrowser.
+
+## Approach
+
+### 1. Backend — add `getMyLibraryService` + controller + route
+
+**File: `server/services/storyInteractService.js`**
+- Add `getMyLibraryService(userId)` that:
+  - Queries `story_library` where `user_id = userId`, ordered by `added_at DESC`
+  - Gets the `story_id` list
+  - Batch-fetches stories from `stories` table with those IDs (select `*`)
+  - Batch-fetches author profiles via existing `fetchAuthorProfiles` pattern (but this is in storyService.js — so just inline a similar users select)
+  - Strips embeddings, attaches `users` author object + `in_library: true`
+  - Returns the array
+
+**File: `server/controller/storyInteractController.js`**
+- Add `getMyLibraryController` — calls `getMyLibraryService(req.userId)`, returns JSON
+
+**File: `server/routes/storyRoutes.js`**
+- Import `getMyLibraryController`
+- Add route: `storyRouter.get('/stories/library', requireAuth, getMyLibraryController);`
+- Place it BEFORE `/stories/:storyId` so it doesn't get caught by the param route
+
+### 2. Client API — add `getMyLibrary` fetch function
+
+**File: `client/API/StoryApi.js`**
+- Add `getMyLibrary(token)` — `GET /stories/library` with Bearer token, same pattern as `getMyStories`
+
+### 3. Client hook — add `useMyLibrary`
+
+**File: `client/src/components/Stories/hooks/useStoryData.js`**
+- Import `getMyLibrary` from StoryApi
+- Add `useMyLibrary(token)` hook — queryKey `['myLibrary']`, same pattern as `useMyStories`
+
+### 4. Invalidate library query on toggle
+
+**File: `client/src/components/Stories/hooks/useStoryMutations.js`**
+- In `useToggleLibrary`, add `queryClient.invalidateQueries({ queryKey: ['myLibrary'] })` in `onSettled` so the library page stays in sync when toggling from StoryDetail
+
+### 5. Create StoryLibrary component
+
+**File (new): `client/src/components/Stories/StoryLibrary/StoryLibrary.jsx`**
+- Follow StoryDashboard pattern (header + list of cards)
+- Header: back button (same as StoryDetail) + "My Library" title
+- Back button: `navigate(-1)`
+- Each card: cover thumbnail, title, author name+avatar, status badge, vote/read counts (same card layout as StoryDashboard but without edit/delete actions)
+- Card click: `navigate(/home/stories/${story.id})`
+- Empty state: "Your library is empty." + "Browse Stories" button → `/home/stories`
+- Remove button on each card to toggle library (with confirmation or just instant toggle)
+
+**File (new): `client/src/components/Stories/StoryLibrary/StoryLibrary.css`**
+- Reuse StoryDashboard styles almost identically (`.story-library` root with `width:100%; max-width:700px; box-sizing:border-box`)
+- Card style: same glass morphism horizontal card as StoryDashboard
+- Replace delete/edit action buttons with a single remove (bookmark) button
+
+### 6. Register route + lazy import
+
+**File: `client/src/App.jsx`**
+- Add lazy import: `const StoryLibrary = lazy(() => import('./components/Stories/StoryLibrary/StoryLibrary.jsx'));`
+- Add route: `<Route path='stories/library' element={<StoryLibrary/>}/>` — place BEFORE `stories/:storyId`
+
+### 7. Add navigation link to library
+
+**File: `client/src/components/Stories/StoryBrowser/StoryBrowser.jsx`**
+- Add a "My Library" button in the header actions (next to "My Stories" and "+ Write") that navigates to `/home/stories/library`
+
+## Files to Modify
+1. `server/services/storyInteractService.js` — add `getMyLibraryService`
+2. `server/controller/storyInteractController.js` — add `getMyLibraryController`
+3. `server/routes/storyRoutes.js` — add `GET /stories/library` route
+4. `client/API/StoryApi.js` — add `getMyLibrary` function
+5. `client/src/components/Stories/hooks/useStoryData.js` — add `useMyLibrary` hook
+6. `client/src/components/Stories/hooks/useStoryMutations.js` — invalidate `myLibrary` on toggle
+7. `client/src/components/Stories/StoryLibrary/StoryLibrary.jsx` — **new** component
+8. `client/src/components/Stories/StoryLibrary/StoryLibrary.css` — **new** styles
+9. `client/src/App.jsx` — lazy import + route
+10. `client/src/components/Stories/StoryBrowser/StoryBrowser.jsx` — add "My Library" nav button
+
+## Verification
+1. Add a story to library from StoryDetail → go to `/home/stories/library` → story appears
+2. Click remove button on a card → story disappears from library list
+3. Empty state shows when library is empty with "Browse Stories" link
+4. Back button returns to previous page
+5. "My Library" button visible in StoryBrowser header (only when logged in)

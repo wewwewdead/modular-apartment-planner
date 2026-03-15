@@ -1,0 +1,199 @@
+import React from 'react';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
+import {NavigationContainer, DarkTheme} from '@react-navigation/native';
+import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {useAuth} from '../features/auth/AuthProvider';
+import {colors} from '../theme/colors';
+import {LoginScreen} from '../screens/Auth/LoginScreen';
+import {SignUpScreen} from '../screens/Auth/SignUpScreen';
+import {HomeFeedScreen} from '../screens/Home/HomeFeedScreen';
+import {ExploreScreen} from '../screens/Home/ExploreScreen';
+import {NotificationsScreen} from '../screens/Notifications/NotificationsScreen';
+import {ProfileScreen} from '../screens/Profile/ProfileScreen';
+import {PostDetailScreen} from '../screens/Home/PostDetailScreen';
+import {JournalEditorScreen} from '../screens/Editor/JournalEditorScreen';
+import {CanvasScreen} from '../screens/Advanced/CanvasScreen';
+import {FreedomWallScreen} from '../screens/Advanced/FreedomWallScreen';
+import {UniverseScreen} from '../screens/Advanced/UniverseScreen';
+import {StoryBrowserScreen} from '../screens/Stories/StoryBrowserScreen';
+import {StoryDetailScreen} from '../screens/Stories/StoryDetailScreen';
+import {StoryEditorScreen} from '../screens/Stories/StoryEditorScreen';
+import {StoryDashboardScreen} from '../screens/Stories/StoryDashboardScreen';
+import {StoryLibraryScreen} from '../screens/Stories/StoryLibraryScreen';
+import {StoryChapterManagerScreen} from '../screens/Stories/StoryChapterManagerScreen';
+import {StoryChapterEditorScreen} from '../screens/Stories/StoryChapterEditorScreen';
+import {StoryChapterReaderScreen} from '../screens/Stories/StoryChapterReaderScreen';
+import type {
+  AuthStackParamList,
+  MainTabParamList,
+  RootStackParamList,
+} from './types';
+
+const RootStack = createNativeStackNavigator<RootStackParamList>();
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const MainTabs = createBottomTabNavigator<MainTabParamList>();
+
+const navTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: colors.background,
+    card: colors.surface,
+    border: colors.border,
+    text: colors.text,
+    primary: colors.accent,
+  },
+};
+
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator
+      screenOptions={{
+        headerStyle: {backgroundColor: colors.surface},
+        headerTintColor: colors.text,
+      }}>
+      <AuthStack.Screen
+        name="Login"
+        component={LoginScreen}
+        options={{title: 'Login'}}
+      />
+      <AuthStack.Screen
+        name="SignUp"
+        component={SignUpScreen}
+        options={{title: 'Sign Up'}}
+      />
+    </AuthStack.Navigator>
+  );
+}
+
+function MainTabNavigator() {
+  return (
+    <MainTabs.Navigator
+      screenOptions={{
+        headerStyle: {backgroundColor: colors.surface},
+        headerTintColor: colors.text,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
+      }}>
+      <MainTabs.Screen name="Home" component={HomeFeedScreen} />
+      <MainTabs.Screen name="Explore" component={ExploreScreen} />
+      <MainTabs.Screen name="Stories" component={StoryBrowserScreen} />
+      <MainTabs.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+      />
+      <MainTabs.Screen name="Profile" component={ProfileScreen} />
+    </MainTabs.Navigator>
+  );
+}
+
+export function RootNavigator() {
+  const {loading, session} = useAuth();
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color={colors.accent} />
+        <Text style={styles.loadingText}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer theme={navTheme}>
+      <RootStack.Navigator
+        screenOptions={{
+          headerStyle: {backgroundColor: colors.surface},
+          headerTintColor: colors.text,
+          contentStyle: {backgroundColor: colors.background},
+        }}>
+        {!session ? (
+          <RootStack.Screen
+            name="Auth"
+            component={AuthNavigator}
+            options={{headerShown: false}}
+          />
+        ) : (
+          <>
+            <RootStack.Screen
+              name="Main"
+              component={MainTabNavigator}
+              options={{headerShown: false}}
+            />
+            <RootStack.Screen
+              name="PostDetail"
+              component={PostDetailScreen}
+              options={{title: 'Post'}}
+            />
+            <RootStack.Screen
+              name="JournalEditor"
+              component={JournalEditorScreen}
+              options={{title: 'Journal Editor'}}
+            />
+            <RootStack.Screen
+              name="StoryDetail"
+              component={StoryDetailScreen}
+              options={{title: 'Story'}}
+            />
+            <RootStack.Screen
+              name="StoryEditor"
+              component={StoryEditorScreen}
+              options={{title: 'Story Editor'}}
+            />
+            <RootStack.Screen
+              name="StoryDashboard"
+              component={StoryDashboardScreen}
+              options={{title: 'My Stories'}}
+            />
+            <RootStack.Screen
+              name="StoryLibrary"
+              component={StoryLibraryScreen}
+              options={{title: 'Story Library'}}
+            />
+            <RootStack.Screen
+              name="StoryChapterManager"
+              component={StoryChapterManagerScreen}
+              options={{title: 'Chapter Manager'}}
+            />
+            <RootStack.Screen
+              name="StoryChapterEditor"
+              component={StoryChapterEditorScreen}
+              options={{title: 'Chapter Editor'}}
+            />
+            <RootStack.Screen
+              name="StoryChapterReader"
+              component={StoryChapterReaderScreen}
+              options={{title: 'Chapter'}}
+            />
+            <RootStack.Screen name="Canvas" component={CanvasScreen} />
+            <RootStack.Screen
+              name="FreedomWall"
+              component={FreedomWallScreen}
+              options={{title: 'Freedom Wall'}}
+            />
+            <RootStack.Screen name="Universe" component={UniverseScreen} />
+          </>
+        )}
+      </RootStack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    gap: 8,
+  },
+  loadingText: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+});

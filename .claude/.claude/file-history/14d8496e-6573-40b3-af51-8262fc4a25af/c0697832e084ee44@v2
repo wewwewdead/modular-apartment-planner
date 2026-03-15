@@ -1,0 +1,184 @@
+import React, { useState } from 'react';
+import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { Chip } from '../../../components/Chip';
+import { Category } from '../../../domain/models';
+import { colors } from '../../../theme/colors';
+import { elevation } from '../../../theme/elevation';
+import { spacing } from '../../../theme/spacing';
+import { typography } from '../../../theme/typography';
+
+interface AddItemSheetProps {
+  categories: Category[];
+  onSubmit: (categoryId: string, name: string, store: string, price: number, unit: string, description: string) => void;
+  onClose: () => void;
+}
+
+export function AddItemSheet({ categories, onSubmit, onClose }: AddItemSheetProps) {
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [name, setName] = useState('');
+  const [store, setStore] = useState('');
+  const [price, setPrice] = useState('4.99');
+  const [unit, setUnit] = useState('each');
+  const [description, setDescription] = useState('');
+
+  const handleSubmit = () => {
+    const parsedPrice = Number(price);
+    if (!selectedCategoryId || !name.trim() || !store.trim() || !Number.isFinite(parsedPrice)) return;
+    onSubmit(selectedCategoryId, name, store, parsedPrice, unit, description);
+    setName('');
+    setPrice('4.99');
+    setUnit('each');
+    setDescription('');
+  };
+
+  return (
+    <Animated.View
+      entering={FadeInDown.springify().damping(20)}
+      exiting={FadeOutDown.duration(200)}
+      style={styles.sheet}
+    >
+      <View style={styles.header}>
+        <Text style={styles.title}>Add item</Text>
+        <AnimatedPressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
+          <Text style={styles.closeText}>Cancel</Text>
+        </AnimatedPressable>
+      </View>
+
+      <FlatList
+        horizontal
+        data={categories}
+        keyExtractor={c => c.uid}
+        renderItem={({ item }) => (
+          <Chip
+            label={`${item.emoji ?? ''} ${item.name}`}
+            selected={selectedCategoryId === item.uid}
+            onPress={() => setSelectedCategoryId(item.uid)}
+            accessibilityLabel={`Category: ${item.name}`}
+          />
+        )}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipRow}
+      />
+
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="Item name"
+        placeholderTextColor={colors.mutedInk}
+        accessibilityLabel="Item name"
+      />
+      <TextInput
+        style={styles.input}
+        value={store}
+        onChangeText={setStore}
+        placeholder="Store"
+        placeholderTextColor={colors.mutedInk}
+        accessibilityLabel="Store name"
+      />
+      <View style={styles.row}>
+        <TextInput
+          style={[styles.input, styles.flex]}
+          value={price}
+          onChangeText={setPrice}
+          placeholder="Price"
+          placeholderTextColor={colors.mutedInk}
+          keyboardType="decimal-pad"
+          accessibilityLabel="Price"
+        />
+        <TextInput
+          style={[styles.input, styles.flex]}
+          value={unit}
+          onChangeText={setUnit}
+          placeholder="Unit"
+          placeholderTextColor={colors.mutedInk}
+          accessibilityLabel="Unit"
+        />
+      </View>
+      <TextInput
+        style={[styles.input, styles.descriptionInput]}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Description (optional)"
+        placeholderTextColor={colors.mutedInk}
+        accessibilityLabel="Item description"
+        multiline
+        numberOfLines={2}
+        textAlignVertical="top"
+      />
+
+      <AnimatedPressable
+        style={styles.submitButton}
+        onPress={handleSubmit}
+        accessibilityRole="button"
+        accessibilityLabel="Add item to vault"
+      >
+        <Text style={styles.submitText}>Add to vault</Text>
+      </AnimatedPressable>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.surfaceElevated,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: spacing.xl,
+    gap: spacing.md,
+    ...elevation.level4,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  title: {
+    ...typography.title,
+    color: colors.ink,
+  },
+  closeText: {
+    color: colors.brand,
+    fontFamily: 'SourceSans3-Bold',
+  },
+  chipRow: {
+    gap: spacing.sm,
+  },
+  input: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.canvas,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: colors.ink,
+    fontFamily: 'SourceSans3-Regular',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  flex: {
+    flex: 1,
+  },
+  descriptionInput: {
+    minHeight: 60,
+  },
+  submitButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.brand,
+    paddingVertical: 14,
+  },
+  submitText: {
+    ...typography.button,
+    color: colors.surface,
+  },
+});

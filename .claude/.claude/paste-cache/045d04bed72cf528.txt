@@ -1,0 +1,25 @@
+Act as a Senior Software Architect. We are building "Gilas," a professional English-language AI automation agent for teachers.
+
+TECH STACK: Node.js, @whiskeysockets/baileys, Ollama (Llama 3.2 3B), Puppeteer, and 'xlsx'.
+
+ARCHITECTURAL REQUIREMENTS:
+1. PERSONA: Professional, efficient, and English-only. Tone: Executive Assistant.
+2. MODULAR SERVICES:
+   - 'services/fileProcessor.js': Extracts data from CSV/XLSX.
+   - 'services/automationEngine.js': Contains 'runGrading' (Puppeteer) and 'summarizeTwitter' (Puppeteer).
+   - 'services/academicService.js': A new module for 'answerAssignment' using Ollama to generate educational explanations.
+3. THE DISPATCHER (The Brain):
+   - In 'index.js', implement an Intent Classifier using Ollama.
+   - It must map user messages to these keys: [ENCODE_DATA, SUMMARIZE_TWITTER, ANSWER_ASSIGNMENT, CHAT].
+   - If a user sends a file + "Encode this," trigger ENCODE_DATA.
+   - If a user says "What's on Twitter?", trigger SUMMARIZE_TWITTER.
+   - If a user asks a question like "Explain photosynthesis," trigger ANSWER_ASSIGNMENT.
+
+STEP-BY-STEP EXECUTION:
+Step 1: Install dependencies and set up a '.env' file for PORTAL_URL and TWITTER_CREDENTIALS.
+Step 2: Build the 'services/fileProcessor.js' to return JSON from WhatsApp document buffers.
+Step 3: Create 'services/automationEngine.js'. Implement a Puppeteer script for Twitter that logs in, scrapes the first 5 tweets, and returns them as a string.
+Step 4: Create 'services/academicService.js' that takes a student's prompt and returns a structured, professional academic response.
+Step 5: Update the WhatsApp listener in 'index.js' to show a "Thinking..." status (sendPresenceUpdate) while the Dispatcher decides which function to run.
+
+Start by setting up the folder structure and the Intent Dispatcher logic.

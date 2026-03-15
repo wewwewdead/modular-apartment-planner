@@ -1,0 +1,36 @@
+# Clean Up Truss Detail Annotation Tags
+
+## Context
+
+The truss detail view's annotation tags (web member labels like `W1 2500 mm`, top chord labels like `TC1 5400 mm`, bearing tags, pitch tag) work correctly but feel cramped. The mask padding is tight, font size is small, and tags sit close to the structural members. The goal is to improve readability by increasing spacing, padding, and font size while keeping the existing single-line format.
+
+## Files to Modify
+
+### 1. `src/geometry/trussGeometry.js` — Adjust spacing constants (lines 21–40)
+
+Increase these constants for more breathing room:
+
+| Constant | Current | New | Reason |
+|----------|---------|-----|--------|
+| `DETAIL_TAG_FONT_SIZE` | 96 | 110 | Larger text for readability |
+| `DETAIL_TAG_LINE_HEIGHT` | 116 | 134 | Scale with font size |
+| `DETAIL_TAG_MASK_PADDING_X` | 44 | 64 | More horizontal whitespace inside mask |
+| `DETAIL_TAG_MASK_PADDING_Y` | 22 | 36 | More vertical whitespace inside mask |
+| `DETAIL_WEB_TAG_OFFSET` | 260 | 320 | Push web tags further from members |
+| `DETAIL_WEB_TAG_TANGENT_SHIFT` | 72 | 96 | More stagger between alternating web tags |
+| `DETAIL_TOP_CHORD_TAG_OFFSET` | 320 | 400 | Push top chord tags further from members |
+| `DETAIL_TAG_OUTSET` | 220 | 280 | Push bearing tags further from eaves |
+
+### 2. `src/renderers/BlueprintAnnotationLayer.jsx` — Leader line anchor dots
+
+Add a small circle at the member-end of leader lines (the `start` point) for truss tags, to give a clean visual anchor point connecting the leader to the member. This is a small SVG `<circle>` rendered inside `TagFigure` when `tag.leaderLine` is present.
+
+## Verification
+
+1. Open a project with a truss system that has multiple web members and top chord runs
+2. Switch to the truss detail view
+3. Verify tags have noticeably more padding/whitespace around text
+4. Verify tags are pushed further from structural members (less visual clutter)
+5. Verify leader lines have small dots at their anchor points on the member
+6. Verify tags don't overlap or extend wildly outside the viewport bounds
+7. Check sheet export with a truss detail viewport — verify tags render cleanly on the sheet

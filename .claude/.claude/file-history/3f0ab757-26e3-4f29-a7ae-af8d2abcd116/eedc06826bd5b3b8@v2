@@ -1,0 +1,50 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { AnimatedPressable } from '../../../components/AnimatedPressable';
+import { CartStatus } from '../../../domain/models';
+import { colors } from '../../../theme/colors';
+
+interface CartStatusButtonProps {
+  status: CartStatus;
+  onPress: () => void;
+}
+
+const config: Record<CartStatus, { label: string; bg: string; disabled: boolean }> = {
+  planning: { label: 'Start Shopping', bg: colors.brand, disabled: false },
+  shopping: { label: 'Finish Trip', bg: colors.success, disabled: false },
+  completed: { label: 'Completed', bg: colors.mutedInk, disabled: true },
+};
+
+export function CartStatusButton({ status, onPress }: CartStatusButtonProps) {
+  const { label, bg, disabled } = config[status];
+
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      disabled={disabled}
+      style={[styles.button, { backgroundColor: bg }, disabled && styles.disabled]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+    >
+      <Text style={styles.text}>{label}</Text>
+    </AnimatedPressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  button: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 20,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  text: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 16,
+  },
+});

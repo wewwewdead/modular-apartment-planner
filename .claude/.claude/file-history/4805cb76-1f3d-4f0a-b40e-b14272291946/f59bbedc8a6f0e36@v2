@@ -1,0 +1,190 @@
+import { useProject } from '@/app/ProjectProvider';
+import { useEditor } from '@/app/EditorProvider';
+import { wallLength } from '@/geometry/wallGeometry';
+import InputField from './InputField';
+import styles from './PropertiesPanel.module.css';
+
+function WallProperties({ wall, dispatch, floorId }) {
+  const len = wallLength(wall);
+
+  const updateWall = (updates) => {
+    dispatch({ type: 'WALL_UPDATE', floorId, wall: { id: wall.id, ...updates } });
+  };
+
+  return (
+    <div>
+      <div className={styles.title}>Wall</div>
+      <div className={styles.subtitle}>Start Point</div>
+      <InputField
+        label="X" type="number" suffix="mm"
+        value={Math.round(wall.start.x)}
+        onChange={(v) => updateWall({ start: { ...wall.start, x: v } })}
+      />
+      <InputField
+        label="Y" type="number" suffix="mm"
+        value={Math.round(wall.start.y)}
+        onChange={(v) => updateWall({ start: { ...wall.start, y: v } })}
+      />
+      <div className={styles.subtitle}>End Point</div>
+      <InputField
+        label="X" type="number" suffix="mm"
+        value={Math.round(wall.end.x)}
+        onChange={(v) => updateWall({ end: { ...wall.end, x: v } })}
+      />
+      <InputField
+        label="Y" type="number" suffix="mm"
+        value={Math.round(wall.end.y)}
+        onChange={(v) => updateWall({ end: { ...wall.end, y: v } })}
+      />
+      <div className={styles.subtitle}>Properties</div>
+      <InputField
+        label="Thickness" type="number" suffix="mm" step={10}
+        value={wall.thickness}
+        onChange={(v) => updateWall({ thickness: Math.max(50, v) })}
+      />
+      <InputField
+        label="Length" type="number" suffix="mm"
+        value={Math.round(len)}
+        readOnly
+      />
+    </div>
+  );
+}
+
+function DoorProperties({ door, wall, dispatch, floorId, editorDispatch }) {
+  const updateDoor = (updates) => {
+    dispatch({ type: 'DOOR_UPDATE', floorId, door: { id: door.id, ...updates } });
+  };
+
+  return (
+    <div>
+      <div className={styles.title}>Door</div>
+      <InputField
+        label="Width" type="number" suffix="mm" step={50}
+        value={door.width}
+        onChange={(v) => updateDoor({ width: Math.max(400, v) })}
+      />
+      <InputField
+        label="Offset" type="number" suffix="mm"
+        value={Math.round(door.offset)}
+        onChange={(v) => updateDoor({ offset: Math.max(0, v) })}
+      />
+      <InputField
+        label="Swing"
+        value={door.openDirection}
+        readOnly={false}
+        onChange={() => updateDoor({
+          openDirection: door.openDirection === 'left' ? 'right' : 'left',
+        })}
+      />
+      <button
+        className={styles.deleteBtn}
+        style={{ marginBottom: '8px', background: 'var(--color-accent)' }}
+        onClick={() => updateDoor({
+          openDirection: door.openDirection === 'left' ? 'right' : 'left',
+        })}
+      >
+        Toggle Swing Direction
+      </button>
+      {wall && (
+        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
+      )}
+    </div>
+  );
+}
+
+function WindowProperties({ window: win, wall, dispatch, floorId }) {
+  const updateWindow = (updates) => {
+    dispatch({ type: 'WINDOW_UPDATE', floorId, window: { id: win.id, ...updates } });
+  };
+
+  return (
+    <div>
+      <div className={styles.title}>Window</div>
+      <InputField
+        label="Width" type="number" suffix="mm" step={50}
+        value={win.width}
+        onChange={(v) => updateWindow({ width: Math.max(300, v) })}
+      />
+      <InputField
+        label="Offset" type="number" suffix="mm"
+        value={Math.round(win.offset)}
+        onChange={(v) => updateWindow({ offset: Math.max(0, v) })}
+      />
+      {wall && (
+        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
+      )}
+    </div>
+  );
+}
+
+function ProjectSummary({ project, floor }) {
+  return (
+    <div>
+      <div className={styles.title}>Project Summary</div>
+      <div className={styles.summary}>
+        <p>Name: {project.name}</p>
+        <p>Floors: {project.floors.length}</p>
+        {floor && (
+          <>
+            <p>Walls: {floor.walls.length}</p>
+            <p>Doors: {floor.doors.length}</p>
+            <p>Windows: {floor.windows.length}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function PropertiesPanel() {
+  const { project, dispatch } = useProject();
+  const { selectedId, selectedType, activeFloorId, dispatch: editorDispatch } = useEditor();
+  const floor = project.floors.find(f => f.id === activeFloorId);
+
+  const handleDelete = () => {
+    if (!selectedId) return;
+    if (selectedType === 'wall') {
+      dispatch({ type: 'WALL_DELETE', floorId: activeFloorId, wallId: selectedId });
+    } else if (selectedType === 'door') {
+      dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
+    } else if (selectedType === 'window') {
+      dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+    }
+    editorDispatch({ type: 'DESELECT' });
+  };
+
+  let content = <ProjectSummary project={project} floor={floor} />;
+
+  if (selectedId && floor) {
+    if (selectedType === 'wall') {
+      const wall = floor.walls.find(w => w.id === selectedId);
+      if (wall) {
+        content = <WallProperties wall={wall} dispatch={dispatch} floorId={activeFloorId} />;
+      }
+    } else if (selectedType === 'door') {
+      const door = floor.doors.find(d => d.id === selectedId);
+      const wall = door ? floor.walls.find(w => w.id === door.wallId) : null;
+      if (door) {
+        content = <DoorProperties door={door} wall={wall} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} />;
+      }
+    } else if (selectedType === 'window') {
+      const win = floor.windows.find(w => w.id === selectedId);
+      const wall = win ? floor.walls.find(w => w.id === win.wallId) : null;
+      if (win) {
+        content = <WindowProperties window={win} wall={wall} dispatch={dispatch} floorId={activeFloorId} />;
+      }
+    }
+  }
+
+  return (
+    <div className={styles.panel}>
+      {content}
+      {selectedId && (
+        <button className={styles.deleteBtn} onClick={handleDelete}>
+          Delete {selectedType}
+        </button>
+      )}
+    </div>
+  );
+}

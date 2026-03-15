@@ -1,0 +1,79 @@
+# Make Comment Replies Recursive
+
+## Context
+
+The current `CommentThread` component only supports single-level nesting — replies are rendered as flat cards without Reply or Show replies buttons. The user wants fully recursive threading: replies can have replies, which can have replies, and so on.
+
+---
+
+## File
+
+`apps/mobile/src/screens/Home/PostDetailScreen.tsx` — the only file that needs changes (API layer and icons are already complete).
+
+## Changes
+
+### 1. Add `depth` prop to `CommentThreadProps`
+
+Add `depth: number` to the props type. This drives avatar sizing, indentation scaling, and is incremented on each recursive call.
+
+### 2. Make `CommentThread` render replies recursively
+
+**Current** (lines 166-188): replies are rendered as flat `<View style={styles.replyCard}>` elements with no action buttons.
+
+**New**: replace the flat reply map with recursive `<CommentThread>` calls:
+
+```tsx
+replies.map(reply => (
+  <CommentThread
+    key={reply.id}
+    comment={reply}
+    postId={postId}
+    isLoggedIn={isLoggedIn}
+    isExpanded={expandedReplies.has(reply.id)}
+    onReply={onReply}
+    onToggleReplies={onToggleReplies}
+    expandedReplies={expandedReplies}
+    colors={colors}
+    depth={depth + 1}
+  />
+))
+```
+
+Each reply now gets its own Reply button, Show replies toggle, and expandable sub-replies.
+
+### 3. Pass `expandedReplies` through props
+
+Currently `CommentThread` receives `isExpanded` (a boolean for itself). For recursion, it also needs the full `expandedReplies` Set to pass down to child threads. Add `expandedReplies: Set<string>` to `CommentThreadProps` and use it both for self (`expandedReplies.has(comment.id)`) and to pass to children.
+
+Remove the separate `isExpanded` prop — derive it inside the component from `expandedReplies.has(comment.id)`.
+
+### 4. Scale avatar size and indentation by depth
+
+- **Avatar size**: `depth === 0 ? 28 : 24` (keep it simple — 24px for all nested levels)
+- **Body/actions paddingLeft**: `depth === 0 ? 36 : 32` (aligns with avatar + gap)
+- **Replies container marginLeft**: `depth === 0 ? 36 : 24` (reduce indentation at deeper levels to avoid running out of horizontal space)
+
+Apply via inline styles based on `depth`.
+
+### 5. Update call site in `PostDetailScreen`
+
+Pass new props to top-level `<CommentThread>`:
+- `depth={0}`
+- `expandedReplies={expandedReplies}`
+
+Remove the now-redundant `isExpanded` prop.
+
+### 6. Clean up unused styles
+
+Remove `replyCard` and `replyBody` styles — they're no longer used since all levels render through the same `CommentThread` component.
+
+---
+
+## Verification
+
+1. **Top-level reply** — tap Reply on a comment, submit → reply appears under that comment
+2. **Reply to a reply** — expand a reply thread, tap Reply on a nested reply, submit → it appears nested under that reply
+3. **Show/Hide at any depth** — "Show N replies" works at every nesting level, collapses/expands independently
+4. **Indentation** — each nesting level is visually indented with a left border; deeper levels use smaller indent (24px) to avoid running out of space
+5. **Auth gating** — Reply button only shows when logged in, at all depths
+6. **Loading/error states** — expanding replies at any depth shows spinner while loading, error text on failure

@@ -1,0 +1,202 @@
+/* ── Canvas Preview Thumbnail ── */
+.canvas-preview {
+    position: relative;
+    width: 100%;
+    max-height: 220px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-card);
+    pointer-events: none;
+    user-select: none;
+    border-radius: 12px 12px 0 0;
+}
+
+.canvas-preview.is-1-1 {
+    aspect-ratio: 1 / 1;
+}
+
+.canvas-preview.is-4-5 {
+    aspect-ratio: 4 / 5;
+}
+
+.canvas-preview.is-light {
+    background-color: #FAFAFA;
+}
+
+.canvas-preview.is-dark {
+    background-color: #1A1A1A;
+}
+
+/* Grid dot pattern overlay */
+.canvas-preview-dots {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.35;
+    background-image: radial-gradient(circle, currentColor 0.6px, transparent 0.6px);
+    background-size: 16px 16px;
+}
+
+.canvas-preview.is-light .canvas-preview-dots {
+    color: #c0c0c0;
+}
+
+.canvas-preview.is-dark .canvas-preview-dots {
+    color: #444;
+}
+
+.canvas-preview-stage {
+    position: relative;
+    z-index: 1;
+}
+
+.canvas-preview-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    opacity: 0.45;
+}
+
+.canvas-preview.is-light .canvas-preview-loading {
+    color: #5f5f5f;
+}
+
+.canvas-preview.is-dark .canvas-preview-loading {
+    color: #b0b0b0;
+}
+
+/* Empty state */
+.canvas-preview-empty {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    opacity: 0.3;
+}
+
+.canvas-preview.is-light .canvas-preview-empty {
+    color: #555;
+}
+
+.canvas-preview.is-dark .canvas-preview-empty {
+    color: #aaa;
+}
+
+/* Canvas preview mid-card — no top border-radius in feed cards */
+.cards.is-canvas-card > .canvas-preview {
+    border-radius: 0;
+}
+
+/* ── Canvas Card Accent ── */
+.cards.is-canvas-card {
+    background-color: #F9F8F4;
+    border-color: color-mix(in srgb, var(--accent-sage) 30%, var(--border-card));
+}
+
+[data-theme="dark"] .cards.is-canvas-card {
+    background-color: rgb(26, 26, 23);
+}
+
+/* Top accent bar */
+.cards.is-canvas-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 12px 12px 0 0;
+    background: linear-gradient(90deg, var(--accent-sage), color-mix(in srgb, var(--accent-sage) 60%, var(--accent-amber)));
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    z-index: 0;
+}
+
+.cards.is-canvas-card:hover::before {
+    opacity: 1;
+}
+
+/* Canvas type badge */
+.canvas-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0.15em 0.55em;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-sage);
+    background: color-mix(in srgb, var(--accent-sage) 12%, var(--bg-secondary));
+    border: 1px solid color-mix(in srgb, var(--accent-sage) 25%, transparent);
+    border-radius: 999px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.canvas-type-badge svg {
+    width: 11px;
+    height: 11px;
+}
+
+.cards.is-canvas-card:hover .canvas-type-badge {
+    background: color-mix(in srgb, var(--accent-sage) 20%, var(--bg-secondary));
+    border-color: color-mix(in srgb, var(--accent-sage) 40%, transparent);
+}
+
+/* Grid view canvas accent */
+.postcards-grid-item.is-canvas-card {
+    border-color: color-mix(in srgb, var(--accent-sage) 30%, var(--border-card));
+}
+
+.postcards-grid-item.is-canvas-card:hover {
+    box-shadow: 0 0 12px 0 color-mix(in srgb, var(--accent-sage) 15%, transparent);
+}
+
+/* Grid view: canvas preview inside grid img wrap */
+.postcards-grid-img-wrap .canvas-preview {
+    max-height: 140px;
+    border-radius: 10px 10px 0 0;
+    border-bottom: none;
+}
+
+/* Profile list view canvas preview mid-card */
+.profile-postcards.is-canvas-card > .canvas-preview {
+    border-radius: 0;
+}
+
+/* Profile list view canvas accent */
+.profile-postcards.is-canvas-card {
+    border-color: color-mix(in srgb, var(--accent-sage) 30%, var(--border-card));
+}
+
+.profile-postcards.is-canvas-card:hover {
+    box-shadow: 0 0 12px 0 color-mix(in srgb, var(--accent-sage) 15%, transparent);
+}
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+    .canvas-preview {
+        max-height: 160px;
+        border-radius: 10px 10px 0 0;
+    }
+
+    .canvas-type-badge {
+        font-size: 0.55rem;
+        padding: 0.12em 0.45em;
+    }
+
+    .canvas-type-badge svg {
+        width: 9px;
+        height: 9px;
+    }
+}

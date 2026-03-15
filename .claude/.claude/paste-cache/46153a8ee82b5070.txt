@@ -1,0 +1,70 @@
+Lexical.dev.mjs:7935  Uncaught TypeError: Cannot read properties of null (reading 'root')
+    at parseEditorState (Lexical.dev.mjs:7935:50)
+    at LexicalEditor.parseEditorState (Lexical.dev.mjs:10054:12)
+    at initializeEditor (LexicalComposer.dev.mjs:109:44)
+    at LexicalComposer.dev.mjs:71:5
+    at mountMemo (react-dom-client.development.js:8777:23)
+    at Object.useMemo (react-dom-client.development.js:26216:18)
+    at exports.useMemo (react.development.js:1251:34)
+    at LexicalComposer (LexicalComposer.dev.mjs:53:27)
+    at Object.react_stack_bottom_frame (react-dom-client.development.js:25904:20)
+    at renderWithHooks (react-dom-client.development.js:7662:22)
+parseEditorState @ Lexical.dev.mjs:7935
+parseEditorState @ Lexical.dev.mjs:10054
+initializeEditor @ LexicalComposer.dev.mjs:109
+(anonymous) @ LexicalComposer.dev.mjs:71
+mountMemo @ react-dom-client.development.js:8777
+useMemo @ react-dom-client.development.js:26216
+exports.useMemo @ react.development.js:1251
+LexicalComposer @ LexicalComposer.dev.mjs:53
+react_stack_bottom_frame @ react-dom-client.development.js:25904
+renderWithHooks @ react-dom-client.development.js:7662
+updateFunctionComponent @ react-dom-client.development.js:10166
+beginWork @ react-dom-client.development.js:11778
+runWithFiberInDEV @ react-dom-client.development.js:871
+performUnitOfWork @ react-dom-client.development.js:17641
+workLoopSync @ react-dom-client.development.js:17469
+renderRootSync @ react-dom-client.development.js:17450
+performWorkOnRoot @ react-dom-client.development.js:16583
+performSyncWorkOnRoot @ react-dom-client.development.js:18972
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:18814
+processRootScheduleInMicrotask @ react-dom-client.development.js:18853
+(anonymous) @ react-dom-client.development.js:18991
+<LexicalComposer>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:335
+EditJournal @ editJournal.jsx:119
+react_stack_bottom_frame @ react-dom-client.development.js:25904
+renderWithHooksAgain @ react-dom-client.development.js:7762
+renderWithHooks @ react-dom-client.development.js:7674
+updateFunctionComponent @ react-dom-client.development.js:10166
+beginWork @ react-dom-client.development.js:11778
+runWithFiberInDEV @ react-dom-client.development.js:871
+performUnitOfWork @ react-dom-client.development.js:17641
+workLoopSync @ react-dom-client.development.js:17469
+renderRootSync @ react-dom-client.development.js:17450
+performWorkOnRoot @ react-dom-client.development.js:16583
+performSyncWorkOnRoot @ react-dom-client.development.js:18972
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:18814
+processRootScheduleInMicrotask @ react-dom-client.development.js:18853
+(anonymous) @ react-dom-client.development.js:18991
+<EditJournal>
+exports.jsxDEV @ react-jsx-dev-runtime.development.js:335
+ProfilePostCards @ ProfilePostCards.jsx:628
+react_stack_bottom_frame @ react-dom-client.development.js:25904
+renderWithHooksAgain @ react-dom-client.development.js:7762
+renderWithHooks @ react-dom-client.development.js:7674
+updateFunctionComponent @ react-dom-client.development.js:10166
+beginWork @ react-dom-client.development.js:11778
+runWithFiberInDEV @ react-dom-client.development.js:871
+performUnitOfWork @ react-dom-client.development.js:17641
+workLoopSync @ react-dom-client.development.js:17469
+renderRootSync @ react-dom-client.development.js:17450
+performWorkOnRoot @ react-dom-client.development.js:16583
+performSyncWorkOnRoot @ react-dom-client.development.js:18972
+flushSyncWorkAcrossRoots_impl @ react-dom-client.development.js:18814
+processRootScheduleInMicrotask @ react-dom-client.development.js:18853
+(anonymous) @ react-dom-client.development.js:18991
+editJournal.jsx:119  An error occurred in the <LexicalComposer> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.

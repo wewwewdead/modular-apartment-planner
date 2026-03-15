@@ -1,0 +1,132 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion } from 'framer-motion';
+
+const CommentBadge = ({ count, onClick, hasComments }) => {
+    return (
+        <motion.button
+            className={`pcl-badge ${hasComments ? 'pcl-badge-active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); onClick(); }}
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+            {hasComments ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+            ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+            )}
+            {hasComments && <span className="pcl-badge-count">{count}</span>}
+        </motion.button>
+    );
+};
+
+const ParagraphCommentLayer = ({ containerRef, commentCounts, onParagraphClick }) => {
+    const [paragraphs, setParagraphs] = useState([]);
+    const [hoveredIndex, setHoveredIndex] = useState(null);
+    const listenersRef = useRef([]);
+
+    const scanParagraphs = useCallback(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        listenersRef.current.forEach(({ el, enter, leave }) => {
+            el.removeEventListener('mouseenter', enter);
+            el.removeEventListener('mouseleave', leave);
+        });
+        listenersRef.current = [];
+
+        const elements = container.querySelectorAll('.editor-paragraph');
+        const result = [];
+        let realIndex = 0;
+
+        elements.forEach((el) => {
+            const text = el.textContent.trim();
+            if (!text) return;
+
+            const idx = realIndex;
+            el.setAttribute('data-paragraph-index', idx);
+            const fingerprint = text.substring(0, 100);
+
+            result.push({
+                index: idx,
+                top: el.offsetTop,
+                height: el.offsetHeight,
+                text,
+                fingerprint,
+            });
+
+            const enter = () => setHoveredIndex(idx);
+            const leave = () => setHoveredIndex((prev) => prev === idx ? null : prev);
+            el.addEventListener('mouseenter', enter);
+            el.addEventListener('mouseleave', leave);
+            listenersRef.current.push({ el, enter, leave });
+
+            realIndex++;
+        });
+
+        setParagraphs(result);
+    }, [containerRef]);
+
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const timer = setTimeout(scanParagraphs, 300);
+
+        const observer = new MutationObserver(() => {
+            scanParagraphs();
+        });
+
+        observer.observe(container, { childList: true, subtree: true, characterData: true });
+        window.addEventListener('resize', scanParagraphs);
+
+        return () => {
+            clearTimeout(timer);
+            observer.disconnect();
+            window.removeEventListener('resize', scanParagraphs);
+            listenersRef.current.forEach(({ el, enter, leave }) => {
+                el.removeEventListener('mouseenter', enter);
+                el.removeEventListener('mouseleave', leave);
+            });
+            listenersRef.current = [];
+        };
+    }, [containerRef, scanParagraphs]);
+
+    const counts = commentCounts || {};
+
+    return (
+        <div className="pcl-layer">
+            {paragraphs.map((p) => {
+                const count = counts[p.index] || 0;
+                const hasComments = count > 0;
+                const isHovered = hoveredIndex === p.index;
+
+                if (!isHovered && !hasComments) return null;
+
+                return (
+                    <div
+                        key={p.index}
+                        className="pcl-badge-anchor"
+                        style={{ top: p.top }}
+                    >
+                        <CommentBadge
+                            count={count}
+                            hasComments={hasComments}
+                            onClick={() => onParagraphClick({
+                                paragraphIndex: p.index,
+                                fingerprint: p.fingerprint,
+                                text: p.text,
+                            })}
+                        />
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+export default ParagraphCommentLayer;

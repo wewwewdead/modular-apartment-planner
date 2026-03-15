@@ -1,0 +1,43 @@
+# Plan: Remove Freedom Wall from Mobile App
+
+## Context
+The Freedom Wall feature has been fully removed from the web app (services, API helpers, etc.). The mobile app still has the screen, navigation routes, API methods, and a quick-action chip referencing it. All of these need to be cleaned up.
+
+## Files to Modify
+
+### 1. Delete screen file
+**`apps/mobile/src/screens/Advanced/FreedomWallScreen.tsx`** — delete entirely
+
+### 2. `apps/mobile/src/navigation/types.ts` (line 28)
+Remove:
+```ts
+FreedomWall: undefined;
+```
+
+### 3. `apps/mobile/src/navigation/RootNavigator.tsx`
+- **Line 28:** Remove import `import {FreedomWallScreen} from '../screens/Advanced/FreedomWallScreen';`
+- **Lines 301-305:** Remove screen registration:
+  ```tsx
+  <RootStack.Screen
+    name="FreedomWall"
+    component={FreedomWallScreen}
+    options={{title: 'Freedom Wall'}}
+  />
+  ```
+
+### 4. `apps/mobile/src/screens/Home/HomeFeedScreen.tsx`
+- **Line 53:** Remove quick-action chip `{key: 'freedom_wall', label: 'Freedom Wall'},`
+- **Lines 170-171:** Remove navigation handler branch:
+  ```ts
+  } else if (key === 'freedom_wall') {
+    navigation.navigate('FreedomWall');
+  ```
+
+### 5. `apps/mobile/src/lib/api/mobileApi.ts`
+- **Lines 62-74:** Remove types `FreedomWeek` and `FreedomItem`
+- **Lines 220-266:** Remove three API methods: `getFreedomWallWeeks`, `getCurrentFreedomWallWeek`, `getFreedomWallItems`
+
+## Verification
+1. TypeScript compiles with no new errors (`npx tsc --noEmit --project apps/mobile/tsconfig.json`)
+2. No remaining references to "freedom" in the mobile src (`grep -ri freedom apps/mobile/src`)
+3. App builds and HomeFeedScreen quick actions show: All, Journals, Canvas, Universe (no Freedom Wall)

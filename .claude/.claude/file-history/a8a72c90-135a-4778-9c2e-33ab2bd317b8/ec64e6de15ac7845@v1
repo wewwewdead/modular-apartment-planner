@@ -1,0 +1,121 @@
+import React, {useMemo, useState} from 'react';
+import {StyleSheet, Text, TextInput, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {Screen} from '../../components/Screen';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {colors} from '../../theme/colors';
+import type {MainTabParamList} from '../../navigation/types';
+
+type Props = BottomTabScreenProps<MainTabParamList, 'Explore'>;
+
+export function ExploreScreen(_: Props) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = useMemo(() => query.trim(), [query]);
+
+  const usersQuery = useQuery({
+    queryKey: ['search-users', normalizedQuery],
+    enabled: normalizedQuery.length >= 2,
+    queryFn: () => mobileApi.searchUsers(normalizedQuery, 10),
+  });
+
+  const journalsQuery = useQuery({
+    queryKey: ['search-journals', normalizedQuery],
+    enabled: normalizedQuery.length >= 2,
+    queryFn: () => mobileApi.searchJournals(normalizedQuery, 10),
+  });
+
+  return (
+    <Screen>
+      <Text style={styles.title}>Explore</Text>
+      <TextInput
+        placeholder="Search users or journals"
+        placeholderTextColor={colors.textMuted}
+        value={query}
+        onChangeText={setQuery}
+        style={styles.input}
+        autoCapitalize="none"
+      />
+      <PrimaryButton
+        label="Search"
+        onPress={() => usersQuery.refetch()}
+        kind="secondary"
+      />
+
+      {normalizedQuery.length < 2 ? (
+        <Text style={styles.hint}>Type at least 2 characters.</Text>
+      ) : (
+        <View style={styles.results}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Users</Text>
+            {usersQuery.data?.data?.length ? (
+              usersQuery.data.data.map(user => (
+                <Text key={user.id} style={styles.item}>
+                  {`- ${user.name || user.username || user.id}`}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.hint}>No users found.</Text>
+            )}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Journals</Text>
+            {journalsQuery.data?.data?.length ? (
+              journalsQuery.data.data.map(journal => (
+                <Text key={journal.id} style={styles.item}>
+                  {`- ${journal.title || 'Untitled Post'}`}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.hint}>No journals found.</Text>
+            )}
+          </View>
+        </View>
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+  hint: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  results: {
+    gap: 10,
+  },
+  card: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: 12,
+    gap: 8,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  item: {
+    color: colors.text,
+    fontSize: 14,
+  },
+});

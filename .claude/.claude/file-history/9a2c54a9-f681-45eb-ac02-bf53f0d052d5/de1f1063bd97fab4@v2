@@ -1,0 +1,213 @@
+.story-dashboard {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px 16px;
+}
+
+.story-dashboard-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+
+.story-dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.story-dashboard-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.story-dashboard-new-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent-dark);
+    color: var(--bg-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.story-dashboard-new-btn:hover {
+    opacity: 0.85;
+}
+
+.story-dashboard-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.story-dashboard-empty p {
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+}
+
+.story-dashboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.story-dashboard-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--bg-glass-border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.story-dashboard-card:hover {
+    background: var(--bg-hover);
+    box-shadow: var(--shadow-card);
+}
+
+.story-dashboard-card-cover {
+    width: 60px;
+    height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+}
+
+.story-dashboard-card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.story-dashboard-card-cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+}
+
+.story-dashboard-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.story-dashboard-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 6px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.story-dashboard-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.story-meta-dot {
+    color: var(--text-muted);
+}
+
+.story-status-badge {
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.story-status-ongoing {
+    background: rgba(76, 175, 80, 0.12);
+    color: #4caf50;
+}
+
+.story-status-completed {
+    background: rgba(33, 150, 243, 0.12);
+    color: #2196f3;
+}
+
+.story-status-hiatus {
+    background: rgba(255, 152, 0, 0.12);
+    color: #ff9800;
+}
+
+.story-dashboard-card-stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.story-dashboard-card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.story-action-btn {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.story-action-btn:hover {
+    background: var(--bg-hover);
+}
+
+.story-action-btn-danger {
+    color: var(--text-muted);
+}
+
+.story-action-btn-danger:hover {
+    background: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+}
+
+@media (max-width: 480px) {
+    .story-dashboard {
+        padding: 16px 12px;
+    }
+
+    .story-dashboard-card {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .story-dashboard-card-cover {
+        width: 48px;
+        height: 64px;
+    }
+
+    .story-dashboard-card-actions {
+        flex-direction: row;
+    }
+}

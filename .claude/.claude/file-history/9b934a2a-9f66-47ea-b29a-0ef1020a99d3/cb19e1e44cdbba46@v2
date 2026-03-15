@@ -1,0 +1,93 @@
+const slugifyTitle = (value = "") => {
+    return String(value)
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+}
+
+export const handleCLickContent = (navigate) => {
+    return (
+        e,
+        jsonbContent,
+        wholeText,
+        title,
+        userId,
+        name,
+        avatar,
+        created_at,
+        journalId,
+        isLiked,
+        commentsCount,
+        isBookmarked,
+        likesCount,
+        bookmarksCount,
+        badge,
+        postType = null,
+        canvasDoc = null
+    ) => {
+    e.stopPropagation()
+
+    const encodedJournalId = journalId ? encodeURIComponent(journalId) : '';
+    const postSlug = slugifyTitle(title);
+    const nextPath = journalId
+        ? `/home/post/${encodedJournalId}${postSlug ? `/${postSlug}` : ''}`
+        : '/home/contentViewer';
+
+    navigate(nextPath, {
+        state: {
+            content: jsonbContent,
+            wholeText: wholeText,
+            title: title,
+            userId: userId,
+            name: name,
+            avatar: avatar,
+            created_at: created_at,
+            journalId: journalId,
+            isLiked: isLiked, 
+            commentsCount: commentsCount,
+            isBookmarked: isBookmarked,
+            likesCount: likesCount,
+            bookmarksCount: bookmarksCount,
+            badge: badge,
+            postType: postType,
+            canvasDoc: canvasDoc
+        }
+    })
+    }
+    
+}
+
+export const handleClickOpinion = (navigate) => {
+    return (e, opinionId, userId) => {
+        e.stopPropagation();
+        navigate('/home/opinionsViewer', {
+            state: {
+                opinionId: opinionId,
+                userId: userId
+            }
+        })
+    }
+}
+
+export const handleClickProfile = (navigate) => {
+    return(e, loggedInUserId, clickedUserId, clickedUsername) =>{
+        if(loggedInUserId === clickedUserId){
+            navigate('/profile');
+        } else if(clickedUsername){
+            navigate(`/@${clickedUsername}`, {
+                state: {
+                    userId: clickedUserId
+                }
+            })
+        } else {
+            navigate(`/visitProfile?userId=${clickedUserId}`, {
+                state: {
+                    userId: clickedUserId
+                }
+            })
+        }
+    }
+}

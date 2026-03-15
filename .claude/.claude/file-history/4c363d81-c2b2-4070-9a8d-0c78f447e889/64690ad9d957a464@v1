@@ -1,0 +1,59 @@
+# Plan: Build Canvas Gallery Screen
+
+## Context
+The mobile Canvas screen (`CanvasScreen.tsx`) is currently a placeholder — it fetches gallery data but only shows a `FeatureTodoCard` and a post count. The web app has a full gallery with visual post cards, sort tabs, and infinite scroll. We need to replace the placeholder with a real gallery that shows canvas posts with banner images, text previews, author info, and engagement metrics.
+
+## Approach
+Rewrite `CanvasScreen.tsx` to use the same patterns as `HomeFeedScreen.tsx`: `useInfiniteQuery` for paginated data, `FlatList` for rendering, `Chip` for sort filters, and `PostCard` for displaying each canvas post. This reuses existing components and keeps the UI consistent.
+
+## Files to Modify
+
+### 1. `apps/mobile/src/screens/Advanced/CanvasScreen.tsx` — full rewrite
+Replace the placeholder with a gallery screen:
+
+- **Sort state**: `useState<'hottest' | 'newest'>('hottest')`
+- **Data fetching**: Switch from `useQuery` to `useInfiniteQuery` calling `mobileApi.getCanvasGallery(userId, PAGE_SIZE, sort, cursor)` with `getNextPageParam` using `getNextCursor`
+- **Layout**:
+  - Header: "Canvas" title (styled like HomeFeed brand text)
+  - Sort chips: "Hottest" (default active) and "Newest" using `Chip` component in a horizontal `ScrollView`
+  - `FlatList` with `PostCard` for each item, pull-to-refresh, infinite scroll via `onEndReached`
+  - `PostCardSkeleton` for loading, `EmptyState` when no results
+- **PostCard mapping** (same pattern as HomeFeedScreen lines 246-313):
+  - `title` → `item.title`
+  - `bodyPreview` → `extractPlainText(item.content).slice(0, 180)`
+  - `bannerImage` → `extractBannerImage(item.content, item.images)`
+  - `authorName/authorAvatar/authorBadge` → from `item.users`
+  - `postType` → `'canvas'`
+  - `likeCount/commentCount/bookmarkCount` → via `resolveCount`
+  - `userReaction`, `isBookmarked` → from item
+  - `onPress` → `navigation.navigate('PostDetail', {journalId: item.id})`
+  - `onAuthorPress` → navigate to `VisitProfile` or `Profile` tab
+  - `onReact/onComment/onBookmark/onRepost` → same mutation pattern as HomeFeedScreen
+- **Remove**: `FeatureTodoCard` import and the stats card
+
+### Key reusable pieces (no new components needed)
+| What | From |
+|------|------|
+| `PostCard` | `components/PostCard/PostCard.tsx` |
+| `PostCardSkeleton` | `components/SkeletonLoader.tsx` |
+| `Chip` | `components/Chip.tsx` |
+| `EmptyState` | `components/EmptyState.tsx` |
+| `extractPlainText`, `extractBannerImage`, `resolveCount`, `getNextCursor` | `lib/utils/journalHelpers.ts` |
+| `useBookmarkMutation` | `hooks/useSocialMutations.ts` |
+| `mobileApi.getCanvasGallery` | `lib/api/mobileApi.ts` (already exists) |
+| `socialApi.toggleReaction` | `lib/api/socialApi.ts` |
+
+### 2. `apps/mobile/src/lib/api/mobileApi.ts` — minor fix
+The `getCanvasGallery` method signature has `cursor` as the 4th param but the screen currently doesn't use pagination. Verify the cursor param is passed through correctly for infinite scroll. (It already is — `cursor` maps to query param `cursor`.)
+
+**No changes needed** — the API method already supports all required params.
+
+## Verification
+1. TypeScript compiles: `npx tsc --noEmit --project apps/mobile/tsconfig.json` (no new errors)
+2. Canvas screen shows sort chips (Hottest active by default, Newest)
+3. Gallery loads canvas posts with banner images, titles, author info, engagement metrics
+4. Pull-to-refresh works
+5. Infinite scroll loads more posts when scrolling to bottom
+6. Tapping a post navigates to PostDetail
+7. Reactions, comments, bookmarks, reposts work on canvas posts
+8. Tapping author navigates to their profile

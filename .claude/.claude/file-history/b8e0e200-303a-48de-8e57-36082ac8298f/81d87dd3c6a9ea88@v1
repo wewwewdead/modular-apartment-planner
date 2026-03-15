@@ -1,0 +1,312 @@
+import React from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {Avatar} from '../../components/Avatar';
+import {EmptyState} from '../../components/EmptyState';
+import {BellIcon, HeartIcon, CommentIcon, RepostIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+import {mobileApi, type NotificationItem} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {queryClient} from '../../lib/queryClient';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Notifications'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+const formatRelativeDate = (value?: string): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return date.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+};
+
+const formatTitle = (item: NotificationItem): string => {
+  if (item.message) return item.message;
+  const name = item.users?.name || 'Someone';
+  switch (item.type) {
+    case 'like': return `${name} liked your post`;
+    case 'comment': return `${name} commented on your post`;
+    case 'repost': return `${name} reposted your post`;
+    case 'reply': return `${name} replied`;
+    case 'match': return `${name} matched with you`;
+    default: return 'Notification';
+  }
+};
+
+const formatContext = (item: NotificationItem): string => {
+  const title = item.journals?.title?.trim();
+  if (title) return title;
+  const opinion = item.opinions?.opinion?.trim();
+  if (opinion) return opinion.length > 100 ? `${opinion.slice(0, 97)}...` : opinion;
+  return '';
+};
+
+const getSource = (item: NotificationItem): 'journal' | 'opinion' => {
+  return item.source === 'opinion' || item.opinion_id ? 'opinion' : 'journal';
+};
+
+function NotifIcon({type, color}: {type?: string; color: string}) {
+  switch (type) {
+    case 'like': return <HeartIcon size={14} color={color} filled />;
+    case 'comment': return <CommentIcon size={14} color={color} />;
+    case 'repost': return <RepostIcon size={14} color={color} />;
+    default: return <BellIcon size={14} color={color} />;
+  }
+}
+
+export function NotificationsScreen({navigation}: Props) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const userId = session?.user.id ?? '';
+
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications', userId],
+    enabled: Boolean(token),
+    queryFn: () => mobileApi.getNotifications(token, null, 30),
+  });
+
+  const unreadCountQuery = useQuery({
+    queryKey: ['notification-count', userId],
+    enabled: Boolean(token && userId),
+    queryFn: () => socialApi.getNotificationsCount(token, userId),
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (args: {notifId: string; source: 'journal' | 'opinion'}) =>
+      socialApi.markNotificationRead(token, args.notifId, args.source),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['notifications', userId]});
+      queryClient.invalidateQueries({queryKey: ['notification-count', userId]});
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (args: {notifId: string; source: 'journal' | 'opinion'}) =>
+      socialApi.deleteNotification(token, args.notifId, args.source),
+    onSuccess: () => {
+      queryClient.invalidateQueries({queryKey: ['notifications', userId]});
+      queryClient.invalidateQueries({queryKey: ['notification-count', userId]});
+    },
+  });
+
+  const items = notificationsQuery.data?.data ?? [];
+  const unreadCount = unreadCountQuery.data?.count ?? 0;
+
+  const handlePress = (item: NotificationItem) => {
+    if (!item.read) {
+      markReadMutation.mutate({notifId: item.id, source: getSource(item)});
+    }
+    if (item.journal_id) {
+      navigation.navigate('PostDetail', {journalId: item.journal_id});
+    }
+  };
+
+  const renderItem = ({item}: {item: NotificationItem}) => {
+    const subtitle = formatContext(item);
+    const isUnread = !item.read;
+
+    return (
+      <Pressable
+        onPress={() => handlePress(item)}
+        style={[
+          styles.card,
+          {
+            backgroundColor: isUnread ? colors.bgSelection : colors.bgCard,
+            borderColor: colors.borderCard,
+          },
+        ]}>
+        <View style={styles.avatarWrap}>
+          <Avatar
+            uri={item.users?.image_url}
+            name={item.users?.name ?? undefined}
+            size={40}
+          />
+          <View
+            style={[
+              styles.iconBadge,
+              {backgroundColor: colors.bgElevated, borderColor: colors.borderLight},
+            ]}>
+            <NotifIcon type={item.type} color={colors.accentAmber} />
+          </View>
+        </View>
+
+        <View style={styles.textSection}>
+          <Text
+            style={[
+              styles.cardTitle,
+              {color: colors.textPrimary},
+              isUnread && styles.unreadTitle,
+            ]}
+            numberOfLines={2}>
+            {formatTitle(item)}
+          </Text>
+          {!!subtitle && (
+            <Text
+              style={[styles.cardSubtitle, {color: colors.textMuted}]}
+              numberOfLines={1}>
+              {subtitle}
+            </Text>
+          )}
+          <Text style={[styles.timestamp, {color: colors.textFaint}]}>
+            {formatRelativeDate(item.created_at)}
+          </Text>
+        </View>
+
+        {isUnread && (
+          <View style={[styles.unreadDot, {backgroundColor: colors.accentAmber}]} />
+        )}
+      </Pressable>
+    );
+  };
+
+  return (
+    <SafeAreaView style={[styles.safe, {backgroundColor: colors.bgPrimary}]} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={[styles.title, {color: colors.textHeading}]}>
+          Notifications
+        </Text>
+        {unreadCount > 0 && (
+          <View style={[styles.countBadge, {backgroundColor: colors.accentAmber}]}>
+            <Text style={styles.countText}>{unreadCount}</Text>
+          </View>
+        )}
+      </View>
+
+      {!token ? (
+        <EmptyState title="Sign in" subtitle="Log in to see your notifications" />
+      ) : notificationsQuery.isLoading ? (
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.loaderColor} />
+        </View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          onRefresh={() => notificationsQuery.refetch()}
+          refreshing={false}
+          ListEmptyComponent={
+            <EmptyState
+              icon={<BellIcon size={36} color={colors.textFaint} />}
+              title="All caught up"
+              subtitle="No notifications yet"
+            />
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  title: {
+    ...typeScale.h1,
+  },
+  countBadge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  countText: {
+    color: '#1A1612',
+    fontFamily: fonts.ui.bold,
+    fontSize: 12,
+  },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxxl,
+    gap: spacing.sm,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  avatarWrap: {
+    position: 'relative',
+  },
+  iconBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textSection: {
+    flex: 1,
+    gap: 2,
+  },
+  cardTitle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  unreadTitle: {
+    fontFamily: fonts.ui.semiBold,
+  },
+  cardSubtitle: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+  },
+  timestamp: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+});

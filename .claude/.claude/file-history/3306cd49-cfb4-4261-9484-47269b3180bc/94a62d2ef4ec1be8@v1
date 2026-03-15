@@ -1,0 +1,483 @@
+import { createContext, useContext, useReducer, useCallback } from 'react';
+import { createSketchProject } from '../domain/sketchModels';
+import { sanitizePartDimensions, sanitizePartPosition } from '../domain/validation';
+import { resolveConstraints } from '../domain/constraintResolver';
+import { updateBoundDimensionEndpoints } from '../domain/dimensionBinding';
+import { generateId } from '@/domain/ids';
+
+const SketchContext = createContext(null);
+const HISTORY_LIMIT = 80;
+
+function snapshotSketch(sketchProject) {
+  return JSON.stringify(sketchProject);
+}
+
+function applyUpdate(state, nextProject, recordHistory = true) {
+  const nextSnapshot = snapshotSketch(nextProject);
+  const history = recordHistory
+    ? [...state.history, state.project].slice(-HISTORY_LIMIT)
+    : state.history;
+
+  return {
+    ...state,
+    history,
+    future: recordHistory ? [] : state.future,
+    project: nextProject,
+    isDirty: nextSnapshot !== state.savedSnapshot,
+  };
+}
+
+function mergePart(existing, updates) {
+  const merged = { ...existing, ...updates };
+  // Deep-merge position and rotation
+  if (updates.position) {
+    merged.position = { ...existing.position, ...updates.position };
+  }
+  if (updates.rotation) {
+    merged.rotation = { ...existing.rotation, ...updates.rotation };
+  }
+  return merged;
+}
+
+function sanitizePart(part) {
+  if (part.type === 'dimension') return part;
+  return sanitizePartPosition(sanitizePartDimensions(part));
+}
+
+function applyConstraints(project) {
+  const constraints = project.constraints || [];
+  if (constraints.length === 0) return project;
+
+  const resolved = resolveConstraints(constraints, project.parts);
+  if (resolved.size === 0) return project;
+
+  return {
+    ...project,
+    parts: project.parts.map((p) => {
+      const newPos = resolved.get(p.id);
+      return newPos ? { ...p, position: newPos } : p;
+    }),
+  };
+}
+
+function updateBoundDimensions(project, updatedPartId) {
+  const updatedPart = project.parts.find((p) => p.id === updatedPartId);
+  if (!updatedPart) return project;
+
+  let changed = false;
+  const newParts = project.parts.map((p) => {
+    if (p.type === 'dimension' && p.boundPartId === updatedPartId) {
+      changed = true;
+      return updateBoundDimensionEndpoints(p, updatedPart);
+    }
+    return p;
+  });
+
+  return changed ? { ...project, parts: newParts } : project;
+}
+
+function clonePart(part, idMap) {
+  const newId = generateId('part');
+  idMap.set(part.id, newId);
+  return {
+    ...part,
+    id: newId,
+    name: `${part.name} (copy)`,
+    position: {
+      ...part.position,
+      x: part.position.x + 50,
+      y: part.position.y + 50,
+    },
+  };
+}
+
+function sketchReducer(state, action) {
+  switch (action.type) {
+    case 'SKETCH_NEW': {
+      const newProject = action.project || createSketchProject();
+      return {
+        project: newProject,
+        isDirty: false,
+        savedSnapshot: snapshotSketch(newProject),
+        history: [],
+        future: [],
+      };
+    }
+
+    case 'SKETCH_LOAD': {
+      const loaded = action.project;
+      return {
+        project: loaded,
+        isDirty: false,
+        savedSnapshot: snapshotSketch(loaded),
+        history: [],
+        future: [],
+      };
+    }
+
+    case 'PART_ADD': {
+      const part = sanitizePart(action.part);
+      let nextProject = {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        parts: [...state.project.parts, part],
+      };
+      nextProject = applyConstraints(nextProject);
+      return applyUpdate(state, nextProject);
+    }
+
+    case 'PART_UPDATE': {
+      let nextProject = {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        parts: state.project.parts.map((p) => {
+          if (p.id !== action.part.id) return p;
+          const merged = mergePart(p, action.part);
+          return merged.type === 'dimension' ? merged : sanitizePart(merged);
+        }),
+      };
+      nextProject = applyConstraints(nextProject);
+      nextProject = updateBoundDimensions(nextProject, action.part.id);
+      return applyUpdate(state, nextProject);
+    }
+
+    case 'PART_DELETE': {
+      const partId = action.partId;
+      // Also remove child parts (cutouts/holes with this parentId)
+      const childIds = new Set(
+        state.project.parts.filter((p) => p.parentId === partId).map((p) => p.id)
+      );
+      const idsToRemove = new Set([partId, ...childIds]);
+
+      // Also remove constraints referencing deleted parts
+      const constraints = (state.project.constraints || []).filter(
+        (c) => !idsToRemove.has(c.sourcePartId) && !idsToRemove.has(c.targetPartId)
+      );
+
+      // Also remove dimensions bound to deleted parts
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        parts: state.project.parts
+          .filter((p) => !idsToRemove.has(p.id))
+          .map((p) => {
+            if (p.type === 'dimension' && p.boundPartId && idsToRemove.has(p.boundPartId)) {
+              return { ...p, boundPartId: null, boundProperty: null, boundAxis: null };
+            }
+            return p;
+          }),
+        assemblies: state.project.assemblies.map((asm) => ({
+          ...asm,
+          partIds: asm.partIds.filter((id) => !idsToRemove.has(id)),
+        })),
+        constraints,
+      });
+    }
+
+    case 'PART_CLONE': {
+      const partId = action.partId;
+      const part = state.project.parts.find((p) => p.id === partId);
+      if (!part) return state;
+
+      const idMap = new Map();
+      const cloned = clonePart(part, idMap);
+
+      // Clone children (cutouts/holes with matching parentId)
+      const children = state.project.parts.filter((p) => p.parentId === partId);
+      const clonedChildren = children.map((child) => {
+        const clonedChild = clonePart(child, idMap);
+        clonedChild.parentId = cloned.id;
+        return clonedChild;
+      });
+
+      const newParts = [cloned, ...clonedChildren];
+
+      // Add to same assembly if applicable
+      let assemblies = state.project.assemblies;
+      if (part.assemblyId) {
+        assemblies = assemblies.map((asm) => {
+          if (asm.id === part.assemblyId) {
+            return {
+              ...asm,
+              partIds: [...asm.partIds, ...newParts.map((p) => p.id)],
+            };
+          }
+          return asm;
+        });
+        // Set assemblyId on clones
+        for (const np of newParts) {
+          np.assemblyId = part.assemblyId;
+        }
+      }
+
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        parts: [...state.project.parts, ...newParts],
+        assemblies,
+      });
+    }
+
+    case 'ASSEMBLY_ADD':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        assemblies: [...state.project.assemblies, action.assembly],
+      });
+
+    case 'ASSEMBLY_UPDATE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        assemblies: state.project.assemblies.map((asm) =>
+          asm.id === action.assembly.id ? { ...asm, ...action.assembly } : asm
+        ),
+      });
+
+    case 'ASSEMBLY_DELETE': {
+      const asmId = action.assemblyId;
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        assemblies: state.project.assemblies.filter((asm) => asm.id !== asmId),
+        parts: state.project.parts.map((p) =>
+          p.assemblyId === asmId ? { ...p, assemblyId: null } : p
+        ),
+      });
+    }
+
+    case 'ASSEMBLY_ADD_PART': {
+      const { assemblyId, partId } = action;
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        assemblies: state.project.assemblies.map((asm) =>
+          asm.id === assemblyId && !asm.partIds.includes(partId)
+            ? { ...asm, partIds: [...asm.partIds, partId] }
+            : asm
+        ),
+        parts: state.project.parts.map((p) =>
+          p.id === partId ? { ...p, assemblyId } : p
+        ),
+      });
+    }
+
+    case 'ASSEMBLY_REMOVE_PART': {
+      const { assemblyId, partId } = action;
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        assemblies: state.project.assemblies.map((asm) =>
+          asm.id === assemblyId
+            ? { ...asm, partIds: asm.partIds.filter((id) => id !== partId) }
+            : asm
+        ),
+        parts: state.project.parts.map((p) =>
+          p.id === partId && p.assemblyId === assemblyId ? { ...p, assemblyId: null } : p
+        ),
+      });
+    }
+
+    case 'ASSEMBLY_CLONE': {
+      const asmId = action.assemblyId;
+      const asm = state.project.assemblies.find((a) => a.id === asmId);
+      if (!asm) return state;
+
+      const idMap = new Map();
+      const newAsmId = generateId('asm');
+      const newAsm = {
+        ...asm,
+        id: newAsmId,
+        name: `${asm.name} (copy)`,
+        partIds: [],
+      };
+
+      // Clone all parts in this assembly
+      const asmParts = state.project.parts.filter((p) => p.assemblyId === asmId);
+      const clonedParts = [];
+
+      for (const part of asmParts) {
+        const cloned = clonePart(part, idMap);
+        cloned.assemblyId = newAsmId;
+        clonedParts.push(cloned);
+      }
+
+      // Fix parentId references
+      for (const cp of clonedParts) {
+        if (cp.parentId && idMap.has(cp.parentId)) {
+          cp.parentId = idMap.get(cp.parentId);
+        }
+      }
+
+      newAsm.partIds = clonedParts.map((p) => p.id);
+
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        parts: [...state.project.parts, ...clonedParts],
+        assemblies: [...state.project.assemblies, newAsm],
+      });
+    }
+
+    case 'CONSTRAINT_ADD': {
+      const constraints = [...(state.project.constraints || []), action.constraint];
+      let nextProject = {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        constraints,
+      };
+      nextProject = applyConstraints(nextProject);
+      return applyUpdate(state, nextProject);
+    }
+
+    case 'CONSTRAINT_UPDATE': {
+      const constraints = (state.project.constraints || []).map((c) =>
+        c.id === action.constraint.id ? { ...c, ...action.constraint } : c
+      );
+      let nextProject = {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        constraints,
+      };
+      nextProject = applyConstraints(nextProject);
+      return applyUpdate(state, nextProject);
+    }
+
+    case 'CONSTRAINT_DELETE': {
+      const constraints = (state.project.constraints || []).filter(
+        (c) => c.id !== action.constraintId
+      );
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        constraints,
+      });
+    }
+
+    case 'ANNOTATION_ADD':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        annotations: [...(state.project.annotations || []), action.annotation],
+      });
+
+    case 'ANNOTATION_UPDATE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        annotations: (state.project.annotations || []).map((a) =>
+          a.id === action.annotation.id ? { ...a, ...action.annotation } : a
+        ),
+      });
+
+    case 'ANNOTATION_DELETE':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        annotations: (state.project.annotations || []).filter((a) => a.id !== action.annotationId),
+      });
+
+    case 'PROJECT_UPDATE_META':
+      return applyUpdate(state, {
+        ...state.project,
+        updatedAt: new Date().toISOString(),
+        ...action.meta,
+      });
+
+    case 'UNDO': {
+      if (state.history.length === 0) return state;
+      const previous = state.history[state.history.length - 1];
+      return {
+        ...state,
+        project: previous,
+        history: state.history.slice(0, -1),
+        future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
+        isDirty: snapshotSketch(previous) !== state.savedSnapshot,
+      };
+    }
+
+    case 'REDO': {
+      if (state.future.length === 0) return state;
+      const next = state.future[0];
+      return {
+        ...state,
+        project: next,
+        history: [...state.history, state.project].slice(-HISTORY_LIMIT),
+        future: state.future.slice(1),
+        isDirty: snapshotSketch(next) !== state.savedSnapshot,
+      };
+    }
+
+    case 'MARK_SAVED':
+      return {
+        ...state,
+        isDirty: false,
+        savedSnapshot: snapshotSketch(state.project),
+      };
+
+    default:
+      return state;
+  }
+}
+
+function createInitialState(project) {
+  return {
+    project,
+    isDirty: false,
+    savedSnapshot: snapshotSketch(project),
+    history: [],
+    future: [],
+  };
+}
+
+export function SketchProvider({ children, initialProject }) {
+  const [state, dispatch] = useReducer(
+    sketchReducer,
+    initialProject || createSketchProject(),
+    createInitialState
+  );
+
+  return (
+    <SketchContext.Provider value={{ state, dispatch }}>
+      {children}
+    </SketchContext.Provider>
+  );
+}
+
+export function useSketch() {
+  const ctx = useContext(SketchContext);
+  if (!ctx) throw new Error('useSketch must be used within SketchProvider');
+  const { state, dispatch } = ctx;
+
+  const getPart = useCallback(
+    (partId) => state.project.parts.find((p) => p.id === partId) || null,
+    [state.project.parts]
+  );
+
+  const getAssembly = useCallback(
+    (assemblyId) => state.project.assemblies.find((a) => a.id === assemblyId) || null,
+    [state.project.assemblies]
+  );
+
+  const getPartsForAssembly = useCallback(
+    (assemblyId) => state.project.parts.filter((p) => p.assemblyId === assemblyId),
+    [state.project.parts]
+  );
+
+  const getChildParts = useCallback(
+    (parentId) => state.project.parts.filter((p) => p.parentId === parentId),
+    [state.project.parts]
+  );
+
+  return {
+    project: state.project,
+    isDirty: state.isDirty,
+    canUndo: state.history.length > 0,
+    canRedo: state.future.length > 0,
+    dispatch,
+    getPart,
+    getAssembly,
+    getPartsForAssembly,
+    getChildParts,
+  };
+}

@@ -1,0 +1,41 @@
+import React from 'react';
+import { StyleSheet, Text } from 'react-native';
+
+import { FloatingActionBar } from '../../../components/FloatingActionBar';
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+
+interface CartSummaryBarProps {
+  fulfilledCount: number;
+  totalCount: number;
+  runningTotal: number;
+}
+
+export function CartSummaryBar({ fulfilledCount, totalCount, runningTotal }: CartSummaryBarProps) {
+  return (
+    <FloatingActionBar>
+      <Text
+        style={styles.progress}
+        accessibilityLabel={`${fulfilledCount} of ${totalCount} items done`}
+        accessibilityLiveRegion="polite"
+      >
+        {fulfilledCount}/{totalCount} done
+      </Text>
+      <Text style={styles.total}>{formatCurrency(runningTotal)}</Text>
+    </FloatingActionBar>
+  );
+}
+
+const styles = StyleSheet.create({
+  progress: {
+    ...typography.label,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  total: {
+    ...typography.label,
+    color: colors.brandDeep,
+    fontSize: 18,
+  },
+});

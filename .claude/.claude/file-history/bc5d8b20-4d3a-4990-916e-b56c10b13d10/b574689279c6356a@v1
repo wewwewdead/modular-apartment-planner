@@ -1,0 +1,32 @@
+export function deserializeProject(json) {
+  if (!json || !json.version || !json.data) {
+    throw new Error('Invalid project data');
+  }
+  if (json.version !== 1) {
+    throw new Error(`Unsupported project version: ${json.version}`);
+  }
+
+  const project = json.data;
+
+  // Basic validation
+  if (!project.id || !project.name || !Array.isArray(project.floors)) {
+    throw new Error('Invalid project structure');
+  }
+
+  for (const floor of project.floors) {
+    if (!floor.id || !Array.isArray(floor.walls)) {
+      throw new Error('Invalid floor structure');
+    }
+  }
+
+  // Backfill missing room fields for old saves
+  for (const floor of project.floors) {
+    if (!floor.rooms) floor.rooms = [];
+    for (const room of floor.rooms) {
+      if (!room.points) room.points = [];
+      if (room.area === undefined) room.area = 0;
+    }
+  }
+
+  return { project, savedAt: json.savedAt };
+}

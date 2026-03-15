@@ -1,0 +1,32 @@
+import { NavigatorScreenParams, CompositeScreenProps } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+
+export type MainTabParamList = {
+  Home: undefined;
+  Vault: undefined;
+  Cart: undefined;
+  Menu: undefined;
+};
+
+export type RootStackParamList = {
+  MainTabs: NavigatorScreenParams<MainTabParamList>;
+  CartDetail: { cartId: string };
+  Paywall: undefined;
+  History: undefined;
+};
+
+export type RootStackScreenProps<T extends keyof RootStackParamList> =
+  NativeStackScreenProps<RootStackParamList, T>;
+
+export type MainTabScreenProps<T extends keyof MainTabParamList> =
+  CompositeScreenProps<
+    BottomTabScreenProps<MainTabParamList, T>,
+    NativeStackScreenProps<RootStackParamList>
+  >;
+
+declare global {
+  namespace ReactNavigation {
+    interface RootParamList extends RootStackParamList {}
+  }
+}

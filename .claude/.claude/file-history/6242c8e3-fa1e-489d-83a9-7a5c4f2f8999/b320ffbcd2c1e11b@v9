@@ -1,0 +1,230 @@
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys'
+import P from 'pino'
+import qrcode from 'qrcode-terminal'
+import { Ollama } from 'ollama'
+import { config, SYSTEM_PROMPT, CLASSIFIER_PROMPT } from './config.js'
+import { parseDocument } from './services/fileProcessor.js'
+import { runGrading } from './services/automationEngine.js'
+import { answerAssignment } from './services/academicService.js'
+
+const ollama = new Ollama({ host: config.ollama.host })
+
+const VALID_INTENTS = ['ENCODE_DATA', 'QUERY_DATA', 'ANSWER_ASSIGNMENT', 'CHAT']
+
+// Per-chat conversation history
+const chatHistories = new Map()
+
+// Per-chat parsed data storage
+const chatDataStore = new Map()
+
+
+async function classifyIntent(text, hasDocument) {
+  try {
+    let message = text
+    if (hasDocument) message += ' [FILE ATTACHED]'
+
+    const prompt = CLASSIFIER_PROMPT.replace('{MESSAGE}', message)
+
+    const response = await ollama.chat({
+      model: config.ollama.model,
+      messages: [{ role: 'user', content: prompt }],
+    })
+
+    const intent = response.message.content.trim().toUpperCase()
+
+    if (VALID_INTENTS.includes(intent)) return intent
+    return 'CHAT'
+  } catch {
+    return 'CHAT'
+  }
+}
+
+async function chatWithOllama(remoteJid, userMessage) {
+  if (!chatHistories.has(remoteJid)) {
+    chatHistories.set(remoteJid, [])
+  }
+  const history = chatHistories.get(remoteJid)
+
+  history.push({ role: 'user', content: userMessage })
+
+  const response = await ollama.chat({
+    model: config.ollama.model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history,
+    ],
+  })
+
+  const reply = response.message.content
+
+  history.push({ role: 'assistant', content: reply })
+
+  // Keep history from growing too large (last 50 messages)
+  if (history.length > 50) {
+    chatHistories.set(remoteJid, history.slice(-50))
+  }
+
+  return reply
+}
+
+async function startBot() {
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info')
+
+  const sock = makeWASocket({
+    auth: state,
+    logger: P({ level: 'silent' }),
+  })
+
+  sock.ev.on('creds.update', saveCreds)
+
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+    if (qr) qrcode.generate(qr, { small: true })
+    if (connection === 'open') console.log('Gilas connected to WhatsApp!')
+    if (connection === 'close') {
+      const shouldReconnect =
+        lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
+      if (shouldReconnect) startBot()
+      else console.log('Logged out. Delete auth_info folder and restart to re-link.')
+    }
+  })
+
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return
+
+    for (const msg of messages) {
+
+      // Text from regular or extended messages
+      const text = msg.message?.conversation
+        || msg.message?.extendedTextMessage?.text
+        || ''
+
+      // Document detection
+      const docMsg = msg.message?.documentMessage
+        || msg.message?.documentWithCaptionMessage?.message?.documentMessage
+      const docCaption = docMsg?.caption || ''
+      const hasDocument = !!docMsg
+      const userText = text || docCaption
+
+      // Skip if no text and no document
+      if (!userText && !hasDocument) continue
+
+      const jid = msg.key.remoteJid
+
+      // /help command — show available intents
+      if (userText.toLowerCase().startsWith('/help')) {
+        await sock.sendMessage(jid, {
+          text: `Here's what I can do:\n\n`
+            + `1. ENCODE DATA — Send me a CSV or Excel file and I'll parse and extract the data for you.\n\n`
+            + `2. QUERY DATA — After uploading a file, ask me questions about it (e.g. "Who has the highest score?").\n\n`
+            + `3. ANSWER ASSIGNMENT — Ask any academic or educational question and I'll give you a clear explanation.\n\n`
+            + `4. CHAT — Just talk to me normally for general conversation.\n\n`
+            + `/clear — Reset our conversation history.`,
+        })
+        console.log(`[${jid}] /help`)
+        continue
+      }
+
+      // /clear command — reset conversation history
+      if (userText.toLowerCase().startsWith('/clear')) {
+        chatHistories.delete(jid)
+        chatDataStore.delete(jid)
+        await sock.sendMessage(jid, { text: 'Conversation cleared.' })
+        console.log(`[${jid}] Conversation history cleared`)
+        continue
+      }
+
+      console.log(`[${jid}] > ${userText || '[document]'}`)
+
+      // Show typing indicator
+      await sock.sendPresenceUpdate('composing', jid)
+
+      try {
+        const intent = await classifyIntent(userText, hasDocument)
+        console.log(`[${jid}] intent: ${intent}`)
+
+        let reply
+
+        switch (intent) {
+          case 'ENCODE_DATA': {
+            if (!hasDocument) {
+              reply = 'It looks like you want to process a file, but no document was attached. Please send a spreadsheet or PDF.'
+              break
+            }
+            const buffer = await downloadMediaMessage(msg, 'buffer', {})
+            const result = await parseDocument(buffer, docMsg.mimetype, docMsg.fileName)
+            if (result.success) {
+              if (result.type === 'pdf') {
+                // Store PDF text for follow-up questions
+                chatDataStore.set(jid, { type: 'pdf', text: result.text, fileName: docMsg.fileName })
+                const preview = result.text.length > 500 ? result.text.slice(0, 500) + '...' : result.text
+                reply = `PDF parsed successfully.\n\nPages: ${result.pages}\n\nPreview:\n${preview}\n\nYou can now ask me questions about this document.`
+              } else {
+                // Store spreadsheet data for follow-up questions
+                chatDataStore.set(jid, { type: 'spreadsheet', data: result.data, sheetName: result.sheetName, fileName: docMsg.fileName })
+                const preview = JSON.stringify(result.data.slice(0, 3), null, 2)
+                reply = `File parsed successfully.\n\nSheet: ${result.sheetName}\nRows: ${result.rowCount}\n\nFirst rows (preview):\n${preview}\n\nYou can now ask me questions about this data.`
+              }
+            } else {
+              reply = result.message
+            }
+            break
+          }
+
+          case 'QUERY_DATA': {
+            const stored = chatDataStore.get(jid)
+            if (!stored) {
+              reply = 'No data loaded yet. Please send a spreadsheet or PDF first.'
+              break
+            }
+
+            let systemContent
+            if (stored.type === 'pdf') {
+              // Cap PDF text to ~4000 chars to stay within context
+              const text = stored.text.length > 4000 ? stored.text.slice(0, 4000) + '\n...(truncated)' : stored.text
+              systemContent = `You are a document analyst assistant. The user has uploaded a PDF. Answer their question based on the text below. Use plain text formatting suitable for WhatsApp.\n\nDocument content:\n${text}`
+            } else {
+              // Cap spreadsheet data to 100 rows
+              const subset = stored.data.slice(0, 100)
+              const dataStr = JSON.stringify(subset, null, 2)
+              const overflow = stored.data.length > 100 ? `\n(Showing first 100 of ${stored.data.length} rows)` : ''
+              systemContent = `You are a data analyst assistant. The user has uploaded a spreadsheet. Answer their question based on the data below. Use plain text formatting suitable for WhatsApp. Be precise with numbers and names.\n\nData (${stored.sheetName} — ${stored.data.length} rows):${overflow}\n${dataStr}`
+            }
+
+            const queryResponse = await ollama.chat({
+              model: config.ollama.model,
+              messages: [
+                { role: 'system', content: systemContent },
+                { role: 'user', content: userText },
+              ],
+            })
+            reply = queryResponse.message.content
+            break
+          }
+
+          case 'ANSWER_ASSIGNMENT': {
+            reply = await answerAssignment(ollama, config.ollama.model, userText)
+            break
+          }
+
+          case 'CHAT':
+          default: {
+            reply = await chatWithOllama(jid, userText)
+            break
+          }
+        }
+
+        console.log(`[${jid}] < ${reply}`)
+        await sock.sendPresenceUpdate('paused', jid)
+        await sock.sendMessage(jid, { text: reply })
+      } catch (err) {
+        console.error(`[${jid}] Error:`, err.message)
+        await sock.sendPresenceUpdate('paused', jid)
+        await sock.sendMessage(jid, {
+          text: 'I apologize for the inconvenience. An error occurred while processing your request. Please try again shortly.',
+        })
+      }
+    }
+  })
+}
+
+startBot()

@@ -1,0 +1,47 @@
+import { CURRENT_SCHEMA_VERSION, isSupportedSchemaVersion } from '@/domain/projectVersion';
+import { CorruptedDataError, UnsupportedVersionError } from './errors';
+import { runMigrations } from './migrations/index';
+import { validateAndRepair } from './validate';
+
+// Side-effect import: registers the 14→15 migration
+import './migrations/migration_14_to_15';
+
+export function deserializeProject(json) {
+  if (!json || typeof json !== 'object' || !json.data) {
+    throw new CorruptedDataError('Invalid project data: missing envelope or data field');
+  }
+
+  // Detect schema version: prefer schemaVersion, fall back to version
+  const schemaVersion = Number(json.schemaVersion || json.version);
+
+  if (!schemaVersion || !isSupportedSchemaVersion(schemaVersion)) {
+    throw new UnsupportedVersionError(schemaVersion);
+  }
+
+  let project = json.data;
+
+  // Basic pre-migration check
+  if (!project.id || !project.name || !Array.isArray(project.floors)) {
+    throw new CorruptedDataError('Invalid project structure: missing id, name, or floors');
+  }
+
+  // Validate floor structure before migration
+  for (const floor of project.floors) {
+    if (!floor.id || !Array.isArray(floor.walls)) {
+      throw new CorruptedDataError('Invalid floor structure: missing id or walls array');
+    }
+  }
+
+  // Run migration pipeline if needed
+  if (schemaVersion < CURRENT_SCHEMA_VERSION) {
+    project = runMigrations(project, schemaVersion, CURRENT_SCHEMA_VERSION);
+  }
+
+  // Validate structure and repair broken references
+  project = validateAndRepair(project);
+
+  return {
+    project,
+    savedAt: json.savedAt,
+  };
+}

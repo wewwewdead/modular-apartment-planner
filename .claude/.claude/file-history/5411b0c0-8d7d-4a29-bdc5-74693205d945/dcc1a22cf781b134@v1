@@ -1,0 +1,55 @@
+# Fix: Replies not delivered in single-number mode (LID routing)
+
+## Context
+In single-number mode, the user sends messages from their own WhatsApp account (fromMe=true). The incoming JID is a LID (`99905888624837@lid`). The reply router rewrites the primary target to the phone JID (`639497868448@s.whatsapp.net`), the outbound echo is observed so `verified=true`, and the LID fallback is **never tried**. The message is "sent" from WhatsApp's perspective but doesn't appear in the user's chat.
+
+## Root Cause
+In `reply-router.js` line 49-56, when the incoming JID is a LID:
+```js
+if (incomingIsLid && mePhoneJid) {
+  return {
+    primary: mePhoneJid,          // ← sends to phone JID first
+    fallbacks: unique([primary, meLidJid]...),  // ← LID never gets tried because phone "verifies"
+    ...
+  };
+}
+```
+The phone JID always passes delivery verification (the bot sees its own echo), so the fallback to the LID is never attempted. But the reply needs to go to the **LID** for the user to see it in their chat.
+
+## Fix
+
+### File: `C:\Users\johnm\teacher-gradebot\src\whatsapp\reply-router.js`
+
+**Swap the routing order**: make the original LID the primary target, phone JID the fallback.
+
+Change lines 49-56 from:
+```js
+if (incomingIsLid && mePhoneJid) {
+  return {
+    primary: mePhoneJid,
+    fallbacks: unique([primary, meLidJid].filter((j) => j && j !== mePhoneJid)),
+    strategy,
+    reason: "lid_rewritten_to_phone",
+  };
+}
+```
+
+To:
+```js
+if (incomingIsLid && mePhoneJid) {
+  return {
+    primary,                        // keep the original LID as primary target
+    fallbacks: unique([mePhoneJid, meLidJid].filter((j) => j && j !== primary)),
+    strategy,
+    reason: "lid_primary_phone_fallback",
+  };
+}
+```
+
+This sends the reply to the LID first (where the user's chat lives). If the LID doesn't verify, the phone JID is the fallback.
+
+## Verification
+1. Restart the bot
+2. Send "hello" → should receive the instant reply on WhatsApp
+3. Send a non-rule message → should receive the AI reply on WhatsApp
+4. Check logs: should show `reason=lid_primary_phone_fallback` and `primary=99905888624837@lid`

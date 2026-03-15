@@ -1,0 +1,303 @@
+import { useState } from 'react';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { useSketch } from '../app/SketchProvider';
+import { SKETCH_TOOLS, SKETCH_VIEWS } from '../domain/defaults';
+import { downloadSketchSvg } from '../export/sketchSheetExport';
+import { createSheetViewport } from '@/domain/sheetModels';
+import { exportActiveSheetAsPdf, exportActiveSheetAsPng } from '@/export/sheetExport';
+import styles from './SketchToolbar.module.css';
+
+const toolItems = [
+  { tool: SKETCH_TOOLS.SELECT, label: 'Select', shortcut: 'V', icon: 'cursor' },
+  { tool: SKETCH_TOOLS.PANEL, label: 'Panel', shortcut: 'P', icon: 'panel' },
+  { tool: SKETCH_TOOLS.LEG, label: 'Leg', shortcut: 'G', icon: 'leg' },
+  { tool: SKETCH_TOOLS.FRAME, label: 'Frame', shortcut: 'F', icon: 'frame' },
+  { tool: SKETCH_TOOLS.CUTOUT, label: 'Cutout', shortcut: 'C', icon: 'cutout' },
+  { tool: SKETCH_TOOLS.HOLE, label: 'Hole', shortcut: 'H', icon: 'hole' },
+  { tool: SKETCH_TOOLS.DIMENSION, label: 'Dimension', shortcut: 'M', icon: 'dimension' },
+];
+
+const viewItems = [
+  { view: SKETCH_VIEWS.TOP, label: 'Top' },
+  { view: SKETCH_VIEWS.FRONT, label: 'Front' },
+  { view: SKETCH_VIEWS.SIDE, label: 'Side' },
+];
+
+function ToolIcon({ icon }) {
+  switch (icon) {
+    case 'cursor':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <path d="M4 2l10 7.5-4.5 1L7 15z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+      );
+    case 'panel':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <rect x="2" y="5" width="14" height="8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      );
+    case 'leg':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <rect x="7" y="2" width="4" height="14" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      );
+    case 'frame':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <rect x="2" y="7" width="14" height="4" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      );
+    case 'cutout':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <rect x="3" y="4" width="12" height="10" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <rect x="6" y="6" width="6" height="6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 1.5" />
+        </svg>
+      );
+    case 'hole':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <circle cx="9" cy="9" r="5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2.5 1.5" />
+        </svg>
+      );
+    case 'dimension':
+      return (
+        <svg viewBox="0 0 18 18" className={styles.toolIcon}>
+          <line x1="3" y1="9" x2="15" y2="9" stroke="currentColor" strokeWidth="1.2" />
+          <line x1="3" y1="5" x2="3" y2="13" stroke="currentColor" strokeWidth="1.2" />
+          <line x1="15" y1="5" x2="15" y2="13" stroke="currentColor" strokeWidth="1.2" />
+          <polygon points="3,9 6,7.5 6,10.5" fill="currentColor" />
+          <polygon points="15,9 12,7.5 12,10.5" fill="currentColor" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+const viewportSourceOptions = [
+  { value: 'sketch_assembly_top', label: 'Assembly Top' },
+  { value: 'sketch_assembly_front', label: 'Assembly Front' },
+  { value: 'sketch_assembly_side', label: 'Assembly Side' },
+  { value: 'sketch_part_detail', label: 'Part Detail' },
+  { value: 'sketch_part_list', label: 'Parts List' },
+];
+
+export default function SketchToolbar() {
+  const { activeTool, activeView, showGrid, snapEnabled, workspaceMode, activeSheetId, dispatch: editorDispatch } = useSketchEditor();
+  const { project, canUndo, canRedo, dispatch } = useSketch();
+  const [showAddViewport, setShowAddViewport] = useState(false);
+
+  const isSheetMode = workspaceMode === 'sheet';
+  const sheet = isSheetMode
+    ? (project.sheets || []).find((s) => s.id === activeSheetId)
+    : null;
+
+  const handleUndo = () => {
+    if (!canUndo) return;
+    dispatch({ type: 'UNDO' });
+    editorDispatch({ type: 'DESELECT' });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Undid last change.' });
+  };
+
+  const handleRedo = () => {
+    if (!canRedo) return;
+    dispatch({ type: 'REDO' });
+    editorDispatch({ type: 'DESELECT' });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Redid last change.' });
+  };
+
+  const handleBackToModel = () => {
+    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+  };
+
+  const handleAddViewport = (sourceView) => {
+    if (!sheet) return;
+    const viewport = createSheetViewport(sourceView, null, {
+      scale: 5,
+    });
+    dispatch({ type: 'SKETCH_SHEET_VIEWPORT_ADD', sheetId: sheet.id, viewport });
+    setShowAddViewport(false);
+  };
+
+  const handleExportPdf = async () => {
+    if (!sheet) return;
+    try {
+      await exportActiveSheetAsPdf(sheet.title || 'sketch-sheet', sheet.paperSize);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+    }
+  };
+
+  const handleExportPng = async () => {
+    if (!sheet) return;
+    try {
+      await exportActiveSheetAsPng(sheet.title || 'sketch-sheet');
+    } catch (err) {
+      console.error('PNG export failed:', err);
+    }
+  };
+
+  return (
+    <div className={styles.toolbar}>
+      {/* Undo/Redo group */}
+      <div className={styles.group}>
+        <button className={styles.btn} onClick={handleUndo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl+Z)">
+          <svg viewBox="0 0 18 18" className={styles.icon}>
+            <path d="M6 7l-4 3 4 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 10h10a4 4 0 1 1 0 8H8" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button className={styles.btn} onClick={handleRedo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)">
+          <svg viewBox="0 0 18 18" className={styles.icon}>
+            <path d="M12 7l4 3-4 3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M16 10H6a4 4 0 1 0 0 8h4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div className={styles.divider} />
+
+      {isSheetMode ? (
+        <>
+          {/* Back to Model */}
+          <div className={styles.group}>
+            <button className={styles.btn} onClick={handleBackToModel} aria-label="Back to Model" title="Back to Model">
+              <svg viewBox="0 0 18 18" className={styles.icon}>
+                <path d="M10 4L5 9l5 5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <span className={styles.groupLabel}>Model</span>
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* Add Viewport dropdown */}
+          <div className={styles.group} style={{ position: 'relative' }}>
+            <span className={styles.groupLabel}>Viewport</span>
+            <button
+              className={styles.btn}
+              onClick={() => setShowAddViewport(!showAddViewport)}
+              aria-label="Add Viewport"
+              title="Add Viewport"
+            >
+              <svg viewBox="0 0 18 18" className={styles.icon}>
+                <path d="M9 3v12M3 9h12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </button>
+            {showAddViewport && (
+              <div className={styles.dropdown}>
+                {viewportSourceOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    className={styles.dropdownItem}
+                    onClick={() => handleAddViewport(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.spacer} />
+
+          {/* Export */}
+          <div className={styles.group}>
+            <span className={styles.groupLabel}>Export</span>
+            <button className={styles.btn} onClick={handleExportPdf} disabled={!sheet} aria-label="Export PDF" title="Export PDF">
+              PDF
+            </button>
+            <button className={styles.btn} onClick={handleExportPng} disabled={!sheet} aria-label="Export PNG" title="Export PNG">
+              PNG
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Tool palette */}
+          <div className={styles.toolPalette}>
+            <span className={styles.groupLabel}>Parts</span>
+            {toolItems.map(({ tool, label, shortcut, icon }) => (
+              <button
+                key={tool}
+                className={activeTool === tool ? styles.toolBtnActive : styles.toolBtn}
+                onClick={() => editorDispatch({ type: 'SET_TOOL', tool })}
+                aria-label={label}
+                title={`${label} (${shortcut})`}
+              >
+                <ToolIcon icon={icon} />
+              </button>
+            ))}
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* View switcher */}
+          <div className={styles.group}>
+            <span className={styles.groupLabel}>View</span>
+            {viewItems.map(({ view, label }) => (
+              <button
+                key={view}
+                className={activeView === view ? styles.toolBtnActive : styles.toolBtn}
+                onClick={() => editorDispatch({ type: 'SET_VIEW', view })}
+                aria-label={`${label} view`}
+                title={`${label} view`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* Display toggles */}
+          <div className={styles.group}>
+            <span className={styles.groupLabel}>Display</span>
+            <button
+              className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
+              onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
+              aria-label="Toggle Grid"
+              title="Toggle Grid"
+            >
+              <svg viewBox="0 0 18 18" className={styles.icon}>
+                <path d="M1 6h16M1 12h16M6 1v16M12 1v16" fill="none" stroke="currentColor" strokeWidth="1" />
+              </svg>
+            </button>
+            <button
+              className={`${styles.toggleBtn} ${snapEnabled ? styles.toggleActive : ''}`}
+              onClick={() => editorDispatch({ type: 'TOGGLE_SNAP' })}
+              aria-label="Toggle Snap"
+              title="Toggle Snap"
+            >
+              <svg viewBox="0 0 18 18" className={styles.icon}>
+                <circle cx="9" cy="9" r="2" fill="currentColor" />
+                <path d="M9 2v4M9 12v4M2 9h4M12 9h4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div className={styles.spacer} />
+
+          {/* Export */}
+          <div className={styles.group}>
+            <button
+              className={styles.btn}
+              onClick={() => downloadSketchSvg(project)}
+              disabled={project.parts.length === 0}
+              aria-label="Export SVG"
+              title="Export SVG Sheet"
+            >
+              <svg viewBox="0 0 18 18" className={styles.icon}>
+                <path d="M3 12v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                <path d="M9 2v9M6 8l3 3 3-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

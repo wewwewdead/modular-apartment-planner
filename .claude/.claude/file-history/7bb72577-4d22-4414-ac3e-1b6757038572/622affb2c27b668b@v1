@@ -1,0 +1,157 @@
+# Streak Psychology Improvements
+
+## Context
+The streak system is functionally complete but psychologically flat. After hitting a milestone (7, 14, 30...) there's nothing until the next one — no tension, no "almost there" feeling, no visible progress. The milestone toast component exists but is never shown. Freeze is invisible. Encouragement copy is repetitive. These improvements make streaks feel alive without adding new features.
+
+## Changes (4 improvements, 12 files)
+
+---
+
+### 1. Wire up milestone toasts (the toast exists but was never connected)
+
+**`server/services/uploadService.js`** (~line 395-405)
+- Change `recordPublishForStreak` from fire-and-forget to awaited
+- Return streak result instead of `return true`
+
+```js
+// Before:
+recordPublishForStreak(userId).catch(err => console.error(...));
+return true;
+
+// After:
+let streakResult = null;
+try {
+    const { recordPublishForStreak } = await import('./streakService.js');
+    streakResult = await recordPublishForStreak(userId);
+} catch (streakErr) {
+    console.error('non-fatal: streak record failed:', streakErr?.message || streakErr);
+}
+return { success: true, streakResult };
+```
+
+**`server/controller/uploadController.js`** (~line 80-98)
+- Capture return value from service, include `milestone`, `streak`, and `freezeUsed` in JSON response
+
+```js
+const result = await uploadJournalContentService(...);
+const responsePayload = { message: 'Content saved successfully!' };
+if (result?.streakResult?.milestone) responsePayload.milestone = result.streakResult.milestone;
+if (result?.streakResult?.streakData) {
+    responsePayload.streak = {
+        current_streak: result.streakResult.streakData.current_streak,
+        freeze_available: result.streakResult.streakData.freeze_available,
+    };
+}
+if (result?.streakResult?.freezeUsed) responsePayload.freezeUsed = true;
+return res.status(200).json(responsePayload);
+```
+
+**`server/services/streakService.js`** (~line 105-158)
+- Add `let freezeUsed = false;` alongside existing variables
+- Set `freezeUsed = true` in the `gap === 2 && freezeAvailable` branch
+- Include `freezeUsed` in the return object
+
+**`client/src/components/HomePage/Editor/RichTextEditor.jsx`** (~line 62-68)
+- After `saveData` returned, invalidate streak cache and dispatch milestone/freeze events:
+```js
+queryClient.invalidateQueries({ queryKey: ['streak', user?.userData?.[0]?.id] });
+if (saveData?.milestone) {
+    window.dispatchEvent(new CustomEvent('streak-milestone', { detail: { milestone: saveData.milestone } }));
+}
+if (saveData?.freezeUsed) {
+    window.dispatchEvent(new CustomEvent('streak-freeze-used'));
+}
+```
+
+**`client/src/components/HomePage/Canvas/CanvasEditor.jsx`** (~line 1157)
+- Capture `saveJournal` return value (currently discarded), same event dispatching as RichTextEditor
+
+**`client/src/components/HomePage/Home.jsx`**
+- Import `StreakMilestoneToast`
+- Add state: `pendingMilestone`, `showFreezeUsedToast`
+- Add `useEffect` listeners for `streak-milestone` and `streak-freeze-used` window events
+- Mount `<StreakMilestoneToast>` and a freeze-used toast in JSX
+
+Using `CustomEvent` because the editor component unmounts on save (`onCloseOnSave()`), so props/context won't work — the event needs to reach the persistent Home component.
+
+---
+
+### 2. Progress bar toward next milestone
+
+**`client/src/components/Streak/StreakBadge.jsx`**
+- Add `MILESTONES` array and `getNextMilestone()` helper
+- Add `showProgress` prop (default false — existing usages unaffected)
+- When `showProgress && nextMilestone`, render a thin progress bar track + fill
+
+**`client/src/components/Streak/StreakBadge.css`**
+- Add `.streak-progress-hint`, `.streak-progress-bar-track`, `.streak-progress-bar-fill` styles
+- Track: 40px wide, 3px tall, subtle background
+- Fill: `currentColor` (inherits tier color), width set via inline style percentage
+
+**`client/src/components/DashboardBriefing/DashboardBriefing.jsx`** (line 101)
+- Pass `showProgress` to StreakBadge in dashboard header only
+
+---
+
+### 3. Make freeze visible
+
+**`client/src/components/Streak/StreakBadge.jsx`**
+- Add `freezeAvailable` prop (default false)
+- When true, render a small snowflake SVG indicator next to the count
+- Update title text to include "(freeze ready)"
+
+**`client/src/components/Streak/StreakBadge.css`**
+- Add `.streak-freeze-indicator` style (frost blue color `#60a5fa`, small opacity)
+
+**`client/src/components/DashboardBriefing/DashboardBriefing.jsx`**
+- Pass `freezeAvailable={streakData?.freeze_available}` to StreakBadge
+
+**`client/src/components/Streak/StreakMilestoneToast.css`**
+- Add `.streak-freeze-toast` style (glass morphism, frost blue theme, fixed bottom position)
+
+---
+
+### 4. Streak-aware encouragement copy
+
+**`client/src/components/DashboardBriefing/recapCopy.js`**
+- Rewrite `getOverallEncouragement(personal, streakCount, freezeAvailable)` with ~15 branches:
+  - **Milestone proximity** (highest priority): "One more day and you hit 30. Don't stop now." / "Two days from 14..."
+  - **Just hit milestone**: "Triple digits. You are the streak." / "A full month..."
+  - **Freeze awareness**: "X days strong, with a safety net ready."
+  - **General streak tiers**: varies by count range
+  - **Fallback**: post-count based (existing behavior)
+
+**`client/src/components/DashboardBriefing/RecapSection.jsx`**
+- Accept `freezeAvailable` prop, pass to `getOverallEncouragement`
+
+**`client/src/components/DashboardBriefing/DashboardBriefing.jsx`**
+- Pass `freezeAvailable` to `RecapSection`
+
+---
+
+## Files Changed Summary
+
+| File | What changes |
+|------|-------------|
+| `server/services/streakService.js` | Add `freezeUsed` flag to return |
+| `server/services/uploadService.js` | Await streak result, return it |
+| `server/controller/uploadController.js` | Include milestone/streak/freezeUsed in response |
+| `client/src/components/HomePage/Editor/RichTextEditor.jsx` | Invalidate streak cache, dispatch events |
+| `client/src/components/HomePage/Canvas/CanvasEditor.jsx` | Same as above |
+| `client/src/components/HomePage/Home.jsx` | Mount milestone toast + freeze toast, event listeners |
+| `client/src/components/Streak/StreakBadge.jsx` | Progress bar + freeze indicator |
+| `client/src/components/Streak/StreakBadge.css` | Progress bar + freeze styles |
+| `client/src/components/Streak/StreakMilestoneToast.css` | Freeze toast style |
+| `client/src/components/DashboardBriefing/recapCopy.js` | Rewrite encouragement with milestone proximity |
+| `client/src/components/DashboardBriefing/RecapSection.jsx` | Accept freezeAvailable prop |
+| `client/src/components/DashboardBriefing/DashboardBriefing.jsx` | Pass showProgress + freezeAvailable |
+
+No new components. No new DB tables. No new endpoints.
+
+## Verification
+1. Publish a post → milestone toast should appear with confetti if streak hits 7/14/30/50/100
+2. Streak cache should invalidate immediately (badge updates without waiting 5min)
+3. Miss 1 day, publish → freeze-used toast appears ("Streak freeze saved you!")
+4. Dashboard badge shows progress bar toward next milestone
+5. Dashboard badge shows snowflake when freeze is available
+6. Encouragement copy varies based on proximity ("One more day and you hit 30...")

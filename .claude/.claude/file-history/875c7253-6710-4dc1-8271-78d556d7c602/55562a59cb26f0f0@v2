@@ -1,0 +1,50 @@
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import ToastContainer from './ToastContainer';
+
+const ToastContext = createContext(null);
+
+let toastIdCounter = 0;
+
+export const ToastProvider = ({ children }) => {
+    const [toasts, setToasts] = useState([]);
+    const timersRef = useRef({});
+
+    const removeToast = useCallback((id) => {
+        clearTimeout(timersRef.current[id]);
+        delete timersRef.current[id];
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, []);
+
+    const addToast = useCallback((type, message, duration) => {
+        const id = ++toastIdCounter;
+        const autoMs = duration ?? (type === 'error' || type === 'warning' ? 5000 : 3500);
+
+        setToasts((prev) => {
+            const next = [...prev, { id, type, message, duration: autoMs }];
+            return next.length > 3 ? next.slice(-3) : next;
+        });
+
+        timersRef.current[id] = setTimeout(() => removeToast(id), autoMs);
+        return id;
+    }, [removeToast]);
+
+    const toast = {
+        success: (msg, ms) => addToast('success', msg, ms),
+        error: (msg, ms) => addToast('error', msg, ms),
+        warning: (msg, ms) => addToast('warning', msg, ms),
+        info: (msg, ms) => addToast('info', msg, ms),
+    };
+
+    return (
+        <ToastContext.Provider value={{ toast }}>
+            {children}
+            <ToastContainer toasts={toasts} onDismiss={removeToast} />
+        </ToastContext.Provider>
+    );
+};
+
+export const useToast = () => {
+    const ctx = useContext(ToastContext);
+    if (!ctx) throw new Error('useToast must be used within ToastProvider');
+    return ctx;
+};

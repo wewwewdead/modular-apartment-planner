@@ -1,0 +1,236 @@
+C:\Users\johnm\iskrib_v3\client\API\Api.js-384-    const data = await response.json();
+C:\Users\johnm\iskrib_v3\client\API\Api.js-385-    return data;
+C:\Users\johnm\iskrib_v3\client\API\Api.js-386-}
+C:\Users\johnm\iskrib_v3\client\API\Api.js:387:export const getUserJournals = async(cursor = null, limit = 5, userId, token) =>{
+C:\Users\johnm\iskrib_v3\client\API\Api.js-388-    try {
+C:\Users\johnm\iskrib_v3\client\API\Api.js-389-        const headers = {};
+C:\Users\johnm\iskrib_v3\client\API\Api.js-390-        if(token) headers['Authorization'] = `Bearer ${token}`;
+C:\Users\johnm\iskrib_v3\client\API\Api.js:391:        const url = cursor ? `${BASE_URL}/userJournals?limit=${limit}&before=${cursor}&userId=${userId}` : `${BASE_URL}/userJournals?limit=${limit}&userId=${userId}`;
+C:\Users\johnm\iskrib_v3\client\API\Api.js-392-
+C:\Users\johnm\iskrib_v3\client\API\Api.js-393-        const response = await apiRequest(url, {
+C:\Users\johnm\iskrib_v3\client\API\Api.js-394-            method: 'GET',
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-108-        const previousComments = queryClient.getQueryData(['postComments', postId]);
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-109-        const previousJournalCaches = [
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-110-            ...queryClient.getQueriesData({ queryKey: ['journals'] }),
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:111:            ...queryClient.getQueriesData({ queryKey: ['userJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-112-            ...queryClient.getQueriesData({ queryKey: ['visitedProfileJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-113-        ];
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-114-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-131-        });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-132-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-133-        queryClient.setQueriesData({ queryKey: ['journals'] }, (old) => incrementJournalCommentCount(old, postId));
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:134:        queryClient.setQueriesData({ queryKey: ['userJournals'] }, (old) => incrementJournalCommentCount(old, postId));
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-135-        queryClient.setQueriesData({ queryKey: ['visitedProfileJournals'] }, (old) => incrementJournalCommentCount(old, postId));
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-136-
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-137-        const body = {
+--
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-148-            }
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-149-            queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-150-            queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx:151:            queryClient.invalidateQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-152-            queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-153-        } catch (error) {
+C:\Users\johnm\iskrib_v3\client\src\components\comments\comments.jsx-154-            queryClient.setQueryData(['postComments', postId], previousComments);
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-57-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-58-        onMutate: async(data) =>{
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-59-            queryClient.cancelQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:60:            queryClient.cancelQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-61-            queryClient.cancelQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-62-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-63-            const previousData = [
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-64-                ...queryClient.getQueriesData({ queryKey: ['journals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:65:                ...queryClient.getQueriesData({ queryKey: ['userJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-66-                ...queryClient.getQueriesData({ queryKey: ['visitedProfileJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-67-            ];
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-68-
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-81-            };
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-82-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-83-            queryClient.setQueriesData({ queryKey: ['journals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:84:            queryClient.setQueriesData({ queryKey: ['userJournals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-85-            queryClient.setQueriesData({ queryKey: ['visitedProfileJournals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-86-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-87-            return {previousData};
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-93-        },
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-94-        onSettled: () =>{
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-95-            queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:96:            queryClient.invalidateQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-97-            queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-98-        }
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-99-    });
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-157-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-158-        onMutate: async(data) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-159-            queryClient.cancelQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:160:            queryClient.cancelQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-161-            queryClient.cancelQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-162-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-163-            const previousData = [
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-164-                ...queryClient.getQueriesData({ queryKey: ['journals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:165:                ...queryClient.getQueriesData({ queryKey: ['userJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-166-                ...queryClient.getQueriesData({ queryKey: ['visitedProfileJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-167-            ];
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-168-
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-181-            };
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-182-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-183-            queryClient.setQueriesData({ queryKey: ['journals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:184:            queryClient.setQueriesData({ queryKey: ['userJournals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-185-            queryClient.setQueriesData({ queryKey: ['visitedProfileJournals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-186-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-187-        return {previousData};
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-193-    },
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-194-    onSettled: () => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-195-      queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:196:      queryClient.invalidateQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-197-      queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-198-    },
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-199-});
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-342-    return useMutation({
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-343-        mutationFn: (data) => updatePrivacy(session?.access_token, data),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-344-        onMutate: async(data) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:345:            await queryClient.cancelQueries(['userJournals', session?.user?.id])
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:346:            const previousData = queryClient.getQueryData(['userJournals', session?.user?.id])
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-347-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-348-            const journalId = data.get('journalId')
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-349-            const privacy = data.get('privacy');
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-350-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-351-            // console.log(privacy)
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-352-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:353:            queryClient.setQueryData(['userJournals', session?.user?.id], (old) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-354-                if(!old) return old;
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-355-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-356-                return{
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-373-            
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-374-        },
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-375-        onError: (err, data, context) =>{
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:376:            queryClient.setQueryData(['userJournals', session?.user?.id], context.previousData)
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-377-        },
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-378-        onSuccess: (data) => console.log(data),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-379-        retry: 1,
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-460-        mutationFn: (data) => createRepost(session?.access_token, data),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-461-        onSuccess: () => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-462-            queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:463:            queryClient.invalidateQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-464-        }
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-465-    });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-466-}
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-474-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-475-        onMutate: async (data) => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-476-            queryClient.cancelQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:477:            queryClient.cancelQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-478-            queryClient.cancelQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-479-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-480-            const previousData = [
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-481-                ...queryClient.getQueriesData({ queryKey: ['journals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:482:                ...queryClient.getQueriesData({ queryKey: ['userJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-483-                ...queryClient.getQueriesData({ queryKey: ['visitedProfileJournals'] }),
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-484-            ];
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-485-
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-514-            };
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-515-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-516-            queryClient.setQueriesData({ queryKey: ['journals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:517:            queryClient.setQueriesData({ queryKey: ['userJournals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-518-            queryClient.setQueriesData({ queryKey: ['visitedProfileJournals'] }, (old) => updateInfiniteJournalsCache(old, updater));
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-519-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-520-            return { previousData };
+--
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-528-
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-529-        onSettled: () => {
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-530-            queryClient.invalidateQueries({ queryKey: ['journals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js:531:            queryClient.invalidateQueries({ queryKey: ['userJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-532-            queryClient.invalidateQueries({ queryKey: ['visitedProfileJournals'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-533-            queryClient.invalidateQueries({ queryKey: ['postReactions'] });
+C:\Users\johnm\iskrib_v3\client\src\utils\useMutation.js-534-        },
+--
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-1-import { useInfiniteQuery } from "@tanstack/react-query";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-2-import { useAuth } from "../../Context/useAuth";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-3-import ParseContent from "../HomePage/postCards/parseData";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:4:import { getUserJournals } from "../../../API/Api";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-5-import { useEffect, useState } from "react";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-6-import { MoonLoader } from "react-spinners";
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-7-import { useInView } from 'react-intersection-observer';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-43-        isFetchingNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-44-        isLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-45-    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:46:        queryKey: ['userJournals', user?.userData?.[0].id],
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx:47:        queryFn: ({queryKey, pageParam}) => getUserJournals(pageParam, 5, queryKey[1], session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-48-        getNextPageParam: (lastPage) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-49-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\collections\collectionOlderPost.jsx-50-                const lastJournal = lastPage?.data[lastPage?.data.length - 1];
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-64-            if(saveData){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-65-                // console.log(saveData)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-66-                queryClient.invalidateQueries({queryKey: ['journals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx:67:                queryClient.invalidateQueries({queryKey: ['userJournals', user?.userData?.[0].id]})
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-68-                queryClient.invalidateQueries({queryKey: ['streak', user?.userData?.[0]?.id]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-69-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Editor\RichTextEditor.jsx-70-
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-3-import { createPortal } from 'react-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-4-import { useAuth } from '../../../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-5-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:6:import { deleteJournal, deleteJournalImage, getUserJournals, updateRepostCaption } from '../../../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-7-import { useEffect, useCallback } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-8-import { FadeLoader, MoonLoader } from 'react-spinners';
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-9-import ParseContent from '../parseData';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-94-        isFetchingNextPage,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-95-        isLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-96-    } = useInfiniteQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:97:        queryKey: ['userJournals', user?.userData?.[0].id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:98:        queryFn: ({queryKey, pageParam}) => getUserJournals(pageParam, 5, queryKey[1], session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-99-        getNextPageParam: (lastPage) =>{
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-100-            if(lastPage.hasMore){
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-101-                const lastJournal = lastPage?.data[lastPage?.data.length - 1];
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-146-        e.stopPropagation();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-147-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-148-        const imageUrlArray = [image_url];
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:149:        const queryKey = ['userJournals', user?.userData?.[0].id];
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-150-        let previousUserJournals = null;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-151-        // console.log({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-152-        //     journalId: journalId,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-240-                journalId: captionData.id,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-241-                caption: captionText
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-242-            });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx:243:            queryClient.invalidateQueries({queryKey: ['userJournals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-244-            queryClient.invalidateQueries({queryKey: ['journals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-245-            queryClient.invalidateQueries({queryKey: ['visitedProfileJournals']});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\ProfilePostCards.jsx-246-            setShowCaptionEditor(null);
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-66-                // console.log(message)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-67-            }
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-68-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx:69:            queryClient.invalidateQueries(['userJournals', user?.userData?.[0].id])
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-70-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-71-            setIsUpdatingJournal(false)
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\ProfilePostCards\editJournal.jsx-72-            setTitle(null)
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-2-import '../ProfilePage/myprofile.css';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-3-import './visitProfile.css';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-4-import { useAuth } from '../../Context/useAuth';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:5:import { getFollowsData, getUserData, getUserJournals, getUserByUsername } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-6-import { Fragment, useEffect, useRef } from 'react';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-7-import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-8-import Sidebar from '../SideBar/Sidebar';
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1157-            const saveData = await saveJournal(session?.access_token, formdata);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1158-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1159-            queryClient.invalidateQueries({queryKey: ["journals"]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx:1160:            queryClient.invalidateQueries({queryKey: ["userJournals", user?.userData?.[0]?.id]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1161-            queryClient.invalidateQueries({queryKey: ["canvasGallery"]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1162-            queryClient.invalidateQueries({queryKey: ["streak", user?.userData?.[0]?.id]});
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\Canvas\CanvasEditor.jsx-1163-            onCloseOnSave();

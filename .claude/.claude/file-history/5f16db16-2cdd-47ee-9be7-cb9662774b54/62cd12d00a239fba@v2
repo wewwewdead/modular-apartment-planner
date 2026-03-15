@@ -1,0 +1,126 @@
+import './editor.css';
+import { motion } from "framer-motion";
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import EditorInner from './RichTextEditor.jsx';
+import { $getRoot } from 'lexical';
+import { deleteJournalImage } from '../../../../API/Api.js';
+import { useAuth } from '../../../Context/useAuth.js';
+
+class ErrorBoundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return <div>Error: {this.state.error.message}</div>;
+    }
+    return this.props.children;
+  }
+}
+
+const Editor=({onClose, initialTitle = '', promptId = null, promptText = null, draftId = null, draftContent = null}) =>{
+    const {session} = useAuth();
+
+    const [title, setTitle] = useState(initialTitle || '')
+    const [wordCount, setWordCount] = useState(0);
+    const [editor] = useLexicalComposerContext();
+    const currentDraftIdRef = useRef(draftId);
+
+    const [uploadedImagePaths, setUploadedImagePaths] = useState([]);
+
+    const addUploadedImagePath = useCallback((imagePath) =>{
+      setUploadedImagePaths((prev) => [...prev, imagePath]);
+    }, [])
+
+    useEffect(() => {
+        setTitle(initialTitle || '');
+    }, [initialTitle]);
+
+    // Load draft content into Lexical editor on mount
+    useEffect(() => {
+        if (draftContent && editor) {
+            try {
+                const parsedState = editor.parseEditorState(draftContent);
+                editor.setEditorState(parsedState);
+            } catch (err) {
+                console.error('Failed to load draft content:', err);
+            }
+        }
+    }, [draftContent, editor]);
+
+    const handleDraftIdCreated = useCallback((newDraftId) => {
+        currentDraftIdRef.current = newDraftId;
+    }, []);
+
+    const handleCloseEditor = useCallback(async() => {
+      // Only delete uploaded images if there's no saved draft
+      // (drafts own their images)
+      if(uploadedImagePaths.length > 0 && !currentDraftIdRef.current){
+        const message = await deleteJournalImage(session?.access_token, uploadedImagePaths)
+        if(message){
+          // console.log(message.message)
+        }
+      }
+
+        editor.update(() => {
+            const root = $getRoot();
+            root.clear();
+            onClose();
+        })
+    }, [editor, onClose, session?.access_token, uploadedImagePaths])
+
+    const handleCloseEditorOnSave = useCallback(async() => {
+      editor.update(() => {
+            const root = $getRoot();
+            root.clear();
+            onClose();
+      })
+    }, [onClose, editor])
+
+    return(
+        <>
+        <div className='editor-parent-container'>
+
+            <motion.div
+            initial={{scale: 0, opacity: 0.8}}
+            animate={{scale: 1, opacity: 1}}
+            exit={{scale: 0.8, opacity: 0,}}
+            transition={{type: 'spring', stiffness: 260, damping: 25}}
+            className="editor-container"
+            >
+                <div className='editor-close-bttn-container'>
+                    <button
+                        onClick={() => handleCloseEditor()}
+                        className='editor-close-bttn'
+                        aria-label="Close editor"
+                        title="Close"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>
+                    </button>
+                </div>
+
+                <input value={title} onChange={(e) => setTitle(e.target.value)} className='content-title-input' type="text" placeholder='Title' />
+
+                <div className="editor-mode-shell">
+                    <ErrorBoundary>
+                        <EditorInner
+                            addUploadImagesPath={addUploadedImagePath}
+                            onclose={handleCloseEditor}
+                            onCloseOnSave={handleCloseEditorOnSave}
+                            title={title}
+                            setWordCount={setWordCount}
+                            wordCount={wordCount}
+                            promptId={promptId}
+                            draftId={draftId}
+                            onDraftIdCreated={handleDraftIdCreated}
+                        />
+                    </ErrorBoundary>
+                </div>
+            </motion.div>
+        </div>
+        </>
+    )
+}
+export default Editor;

@@ -1,0 +1,64 @@
+# Add Mention Autocomplete to Opinion Reply Inputs
+
+## Context
+
+The opinion reply inputs in `opinionViewer.jsx` and `OpinionsCardRepy.jsx` use `contentEditable` divs. The `useTextareaMention` hook requires `<textarea>` (it reads `selectionStart`), so typing `@` shows no dropdown. The comment reply input in `commentsCards.jsx` works because it uses a `<textarea>`.
+
+## Approach
+
+Convert the `contentEditable` reply divs to `<textarea>` elements and wire up `useTextareaMention` + `MentionDropdown`, matching the pattern already used in `commentsCards.jsx` and `OpinionsEditor.jsx`.
+
+## Files to modify
+
+### 1. `client/src/components/SidebarOpinions/opinionViewer.jsx`
+
+**Changes:**
+- Import `useTextareaMention` and `MentionDropdown`
+- Call `useTextareaMention(replyOpinion, setReplyOpinion, textAreaRef, 280, user?.userData?.[0]?.id)`
+- Replace the `contentEditable` div (lines 126-134) with a `<textarea>`:
+  ```jsx
+  <textarea
+      ref={textAreaRef}
+      maxLength={280}
+      value={replyOpinion}
+      onChange={(e) => { setReplyOpinion(e.target.value); mentionTextareaProps.onChange(e); }}
+      onKeyDown={mentionTextareaProps.onKeyDown}
+      onKeyUp={mentionTextareaProps.onKeyUp}
+      onFocus={() => setIsTyping(true)}
+      className="ov-reply-input"
+      placeholder={`Add a reply to '${opinion.users.name}'`}
+      rows={2}
+  />
+  <MentionDropdown {...mentionDropdownProps} />
+  ```
+
+### 2. `client/src/components/SidebarOpinions/OpinionsCardRepy.jsx`
+
+**Changes:**
+- Import `useTextareaMention` and `MentionDropdown`
+- Call `useTextareaMention(replyOpinion, setReplyOpinion, textAreaRef, 280, user?.userData?.[0]?.id)`
+- Replace the `contentEditable` div (lines 150-158) with a `<textarea>`:
+  ```jsx
+  <textarea
+      ref={textAreaRef}
+      maxLength={280}
+      value={replyOpinion}
+      onChange={(e) => { setReplyOpinion(e.target.value); mentionTextareaProps.onChange(e); }}
+      onKeyDown={mentionTextareaProps.onKeyDown}
+      onKeyUp={mentionTextareaProps.onKeyUp}
+      onFocus={() => setIsTypingId(opinion.id)}
+      className="ov-reply-input"
+      placeholder={`Add a reply to '${opinion.users?.name}'`}
+      rows={2}
+  />
+  <MentionDropdown {...mentionDropdownProps} />
+  ```
+- Remove the `textAreaRef.innerText` usage in `cancelTyping` and `handleSubmitReplyOpinion` — with a controlled `<textarea>`, just `setReplyOpinion('')` is sufficient
+
+## Verification
+
+1. Open an opinion in the viewer → click Reply → type `@lor` → dropdown should appear with matching users
+2. Select a user from dropdown → `@username ` inserted into textarea
+3. Submit the reply → text with `@mention` saved correctly
+4. Open a nested reply (OpinionsCardRepy) → same behavior
+5. Existing MentionText rendering still makes the `@mention` clickable after submission

@@ -1,0 +1,49 @@
+# Use lomboy.json as Playground Demo
+
+## Context
+
+The playground page (`/playground`) currently shows a hardcoded minimal demo — a simple 4-wall rectangle with one door and one window. The user wants to replace this with a real project from `C:\Users\johnm\Downloads\lomboy.json`, which is a full multi-floor apartment design that will be a much more impressive and representative demo.
+
+## Approach
+
+### Step 1: Copy the project file into the codebase
+
+Copy `lomboy.json` to `src/pages/playground-demo.json`. Vite natively supports JSON imports, so this will be bundled statically at build time.
+
+### Step 2: Rewrite `src/pages/PlaygroundPage.jsx`
+
+Replace the hardcoded `buildDemoProject()` function with:
+1. `import demoData from './playground-demo.json'`
+2. Use `deserializeProject` from `@/persistence/deserialize` to properly load and migrate the project (this runs the migration pipeline and `validateAndRepair`)
+3. Pass the deserialized project to `<FloorplanWorkspace>`
+
+```jsx
+import { useMemo } from 'react';
+import FloorplanWorkspace from '@floorplan';
+import { deserializeProject } from '@/persistence/deserialize';
+import demoData from './playground-demo.json';
+
+export default function PlaygroundPage() {
+  const demoProject = useMemo(() => {
+    const { project } = deserializeProject(demoData);
+    return project;
+  }, []);
+
+  return (
+    <FloorplanWorkspace initialProject={demoProject} isPlayground={true} />
+  );
+}
+```
+
+### Key files
+- **Copy**: `C:\Users\johnm\Downloads\lomboy.json` → `src/pages/playground-demo.json`
+- **Modify**: `src/pages/PlaygroundPage.jsx` (rewrite)
+
+### Why use `deserializeProject`
+The JSON file has the standard export envelope (`{ schemaVersion, version, data }`). Using `deserializeProject` ensures migrations run if the schema version ever differs, and `validateAndRepair` fixes any structural issues. This is the same path used by "Open Project File" in the editor.
+
+## Verification
+
+1. Navigate to `/playground` — the lomboy project loads with all its walls, doors, windows, rooms, and floors
+2. Interact with the editor — select objects, pan/zoom, toggle 3D preview
+3. `npm run build` succeeds without errors

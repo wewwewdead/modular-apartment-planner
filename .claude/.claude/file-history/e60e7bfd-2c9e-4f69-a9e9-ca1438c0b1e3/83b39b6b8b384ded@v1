@@ -1,0 +1,157 @@
+# Constellation Enhancements: Star Indicators, Glow Lines, Travel Buttons
+
+## Context
+
+Three enhancements to the constellation system:
+1. Stars in constellations have no visual indicator — users can't tell which stars are linked
+2. Constellation lines look like simple dashed lines, not like ethereal night-sky constellations
+3. You can only "wormhole" to semantically-linked stars, but not to constellation-linked stars
+
+---
+
+## Feature 1: Constellation Ring Indicator on Stars
+
+Add a subtle dashed ring around stars that participate in accepted constellations, colored by their chain color.
+
+### 1.1 Universe.jsx — compute `constellationStarColors` Map
+
+New `useMemo` after `chainColors` (~line 268):
+```js
+const constellationStarColors = useMemo(() => {
+    const map = new Map();
+    for (const c of acceptedConstellations) {
+        const color = chainColors.get(c.id);
+        if (!color) continue;
+        if (!map.has(c.star_id_a)) map.set(c.star_id_a, color);
+        if (!map.has(c.star_id_b)) map.set(c.star_id_b, color);
+    }
+    return map;
+}, [acceptedConstellations, chainColors]);
+```
+
+Pass `constellationStarColors` to `<InteractiveLayer>`.
+
+### 1.2 InteractiveLayer.jsx — thread to StarGroup
+
+- Accept `constellationStarColors` prop
+- In render: `const constellationColor = constellationStarColors?.get(post.id) || null;`
+- Pass `constellationColor` to `<StarGroup>`
+
+### 1.3 StarGroup.jsx — render ring
+
+Accept `constellationColor` prop. Add between outer atmosphere and inner glow:
+```jsx
+{constellationColor && (
+    <Circle
+        radius={r * 2.8}
+        stroke={constellationColor}
+        strokeWidth={1.2}
+        opacity={0.35}
+        dash={[4, 3]}
+        perfectDrawEnabled={false}
+        listening={false}
+    />
+)}
+```
+
+---
+
+## Feature 2: Ethereal Constellation Glow Lines
+
+Replace current Konva `Line` components with a single Canvas2D `Shape` using triple-layer glow rendering.
+
+### 2.1 ConstellationLayer.jsx — full rewrite
+
+Replace the current multi-Line approach with a `Shape` using `sceneFunc`:
+
+**Accepted line draw function (3 layers per line):**
+- Layer 1: Wide underglow — solid, `strokeWidth: 8`, opacity `0.06`, `shadowBlur: 20`, `shadowColor` at `0.3` opacity
+- Layer 2: Medium body — solid, `strokeWidth: 3`, opacity `0.12`, `shadowBlur: 8`
+- Layer 3: Thin animated core — dashed `[14, 10]`, `strokeWidth: 1.2`, opacity `0.45`, animated `lineDashOffset` at `time * 0.04`
+
+**Pending lines:** Simple single-layer, `strokeWidth: 1`, dashed `[5, 10]`, opacity `0.08`
+
+**Animation:** Single `shapeRef` + `animRef.current.time` + `requestAnimationFrame` calling `batchDraw()` (same pattern as WormholeLayer)
+
+**Labels:** Keep as Konva `<Text>` nodes (need `scaleX/scaleY` zoom correction)
+
+---
+
+## Feature 3: Constellation Travel Buttons in Preview Panel
+
+### 3.1 SQL RPC — add star titles
+
+`server/sql/constellations.sql` — add `a_title TEXT, b_title TEXT` to return type:
+```sql
+DROP FUNCTION IF EXISTS get_viewport_constellations(UUID[]);
+-- Add ja.title AS a_title, jb.title AS b_title to SELECT
+```
+Titles come from the already-joined `journals ja/jb` tables — zero extra cost.
+
+### 3.2 Universe.jsx — `getConstellationLinksForPost`
+
+New `useCallback` (similar to `getWormholeForPost`):
+```js
+const getConstellationLinksForPost = useCallback((postId) => {
+    if (!postId || acceptedConstellations.length === 0) return [];
+    const links = [];
+    for (const c of acceptedConstellations) {
+        if (c.star_id_a === postId) {
+            links.push({ constellation: c, targetStarId: c.star_id_b, targetTitle: c.b_title || 'Unnamed Star', label: c.label });
+        } else if (c.star_id_b === postId) {
+            links.push({ constellation: c, targetStarId: c.star_id_a, targetTitle: c.a_title || 'Unnamed Star', label: c.label });
+        }
+    }
+    return links;
+}, [acceptedConstellations]);
+```
+
+### 3.3 Universe.jsx — `handleConstellationTravel`
+
+New `useCallback`:
+- Try `finalStarPositions.get(targetStarId)` first (live computed position)
+- Fall back to constellation's raw `a_universe_x/y` or `b_universe_x/y`
+- `setSelectedPost(null)` then `flyTo(targetPos.x, targetPos.y, zoom)`
+
+### 3.4 Universe.jsx — preview panel buttons
+
+After existing wormhole button, map over `getConstellationLinksForPost(selectedPost.id)`:
+```jsx
+{getConstellationLinksForPost(selectedPost.id).map((link) => (
+    <button key={link.constellation.id} className={styles.constellationBtn}
+        onClick={() => handleConstellationTravel(link.targetStarId, link.constellation)}>
+        {link.label ? `${link.label} → "${link.targetTitle}"` : `Fly to "${link.targetTitle}"`}
+    </button>
+))}
+```
+
+### 3.5 Universe.module.css — `.constellationBtn`
+
+Purple-accented button (`#b05fff`) to distinguish from wormhole buttons (blue `#5f92ff`):
+- `background: rgba(176, 95, 255, 0.12)`, `border: 1px solid rgba(176, 95, 255, 0.35)`
+- Hover: increased opacity
+- `text-overflow: ellipsis` for long titles
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `server/sql/constellations.sql` | Add `a_title`, `b_title` to RPC return (DROP + CREATE) |
+| `client/src/components/Universe/layers/ConstellationLayer.jsx` | Rewrite: Canvas2D Shape with triple-layer glow |
+| `client/src/components/Universe/Universe.jsx` | Add `constellationStarColors` memo, `getConstellationLinksForPost`, `handleConstellationTravel`, travel buttons in preview panel |
+| `client/src/components/Universe/layers/InteractiveLayer.jsx` | Accept + thread `constellationStarColors` to StarGroup |
+| `client/src/components/Universe/components/StarGroup.jsx` | Accept `constellationColor`, render dashed ring |
+| `client/src/components/Universe/Universe.module.css` | Add `.constellationBtn` styles |
+
+---
+
+## Verification
+
+1. **Star indicator**: Stars in accepted constellations show a subtle dashed ring in their chain color; non-constellation stars unchanged
+2. **Glow lines**: Accepted constellation lines render with soft shadowBlur glow + animated dash core; look ethereal not mechanical
+3. **Pending lines**: Still faint and dashed for own pending constellations
+4. **Travel buttons**: Click a constellation star → preview panel shows purple "Fly to [title]" button for each linked star → clicking flies camera there
+5. **Far-away travel**: Constellation travel works even when target star isn't loaded in viewport (uses fallback RPC positions)
+6. **Wormhole buttons**: Still show independently (blue) alongside constellation buttons (purple)

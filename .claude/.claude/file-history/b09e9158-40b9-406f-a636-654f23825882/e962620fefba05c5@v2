@@ -1,0 +1,33 @@
+export type AuthStackParamList = {
+  Login: undefined;
+  SignUp: undefined;
+  ForgotPassword: undefined;
+};
+
+export type MainTabParamList = {
+  Home: undefined;
+  Explore: undefined;
+  Stories: undefined;
+  Notifications: undefined;
+  Profile: undefined;
+};
+
+export type RootStackParamList = {
+  Auth: undefined;
+  Main: undefined;
+  PostDetail: {journalId: string; slug?: string};
+  JournalEditor: {mode: 'create' | 'edit'; journalId?: string};
+  StoryDetail: {storyId: string};
+  StoryEditor: {storyId?: string};
+  StoryDashboard: undefined;
+  StoryLibrary: undefined;
+  StoryChapterManager: {storyId: string};
+  StoryChapterEditor: {storyId: string; chapterId: string};
+  StoryChapterReader: {storyId: string; chapterId: string};
+  VisitProfile: {userId: string; username?: string};
+  EditProfile: undefined;
+  Settings: undefined;
+  FollowList: {userId: string; tab: 'followers' | 'following'};
+  Collections: undefined;
+  CollectionDetail: {collectionId: string; name: string};
+};

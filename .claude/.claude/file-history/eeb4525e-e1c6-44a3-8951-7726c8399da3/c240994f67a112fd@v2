@@ -1,0 +1,208 @@
+.story-library {
+    width: 100%;
+    max-width: 700px;
+    box-sizing: border-box;
+    margin: 0 auto;
+    padding: 20px 16px;
+}
+
+.story-library-loading {
+    display: flex;
+    justify-content: center;
+    padding: 60px 0;
+}
+
+.story-library-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.story-library-back {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.12s ease;
+}
+
+.story-library-back:hover {
+    background: var(--bg-hover);
+}
+
+.story-library-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.story-library-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+}
+
+.story-library-empty p {
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+}
+
+.story-library-browse-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent-dark);
+    color: var(--bg-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.story-library-browse-btn:hover {
+    opacity: 0.85;
+}
+
+.story-library-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.story-library-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--bg-glass-border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.story-library-card:hover {
+    background: var(--bg-hover);
+    box-shadow: var(--shadow-card);
+}
+
+.story-library-card-cover {
+    width: 60px;
+    height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+}
+
+.story-library-card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.story-library-card-cover-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+}
+
+.story-library-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.story-library-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 6px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.story-library-card-author {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.story-library-card-author-avatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.story-library-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.story-library-card-stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.story-library-card-actions {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.story-library-remove-btn {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+    color: var(--text-muted);
+}
+
+.story-library-remove-btn:hover {
+    background: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+}
+
+@media (max-width: 480px) {
+    .story-library {
+        padding: 16px 12px;
+    }
+
+    .story-library-card {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .story-library-card-cover {
+        width: 48px;
+        height: 64px;
+    }
+}

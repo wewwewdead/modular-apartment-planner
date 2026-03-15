@@ -1,0 +1,432 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+    createStarEngine,
+    createStarBody,
+    createConstellationConstraint,
+    getStarMass,
+    PHYSICS_CONFIG,
+    Engine,
+    Body,
+    World,
+    Constraint,
+} from '../physics/matterEngine';
+import { buildSemanticMaps } from '../physics/semanticForces';
+import { buildQuadTree, computeBarnesHutForces } from '../physics/barnesHut';
+import { screenToWorld } from '../utils/coordConversion';
+import { userHomeCoords, getStarRadius } from '../utils/starUtils';
+
+/**
+ * useStarPhysics — owns the Matter.js engine for star-level physics.
+ *
+ * Stars get real velocity, collision, air friction, semantic gravity,
+ * constellation constraints, and interactive drag-and-throw.
+ */
+export default function useStarPhysics({
+    posts,
+    activePostIds,
+    galaxyPositions,
+    starPulls,
+    similarPairs,
+    starPullOffsets,
+    isGalaxySettled,
+    camera,
+    zoom,
+    stageSize,
+    isStarDragging,
+    enabled = true,
+}) {
+    const [starBodyPositions, setStarBodyPositions] = useState(() => new Map());
+
+    // Refs for the physics engine — not in React state
+    const engineRef = useRef(null);
+    const bodiesRef = useRef(new Map());          // postId → Matter.Body
+    const anchorsRef = useRef(new Map());          // postId → {x, y} anchor target
+    const constraintsRef = useRef(new Map());      // "postA|postB" → Matter.Constraint
+    const staticTimesRef = useRef(new Map());      // postId → timestamp when set to static
+    const rafRef = useRef(null);
+    const frameCountRef = useRef(0);
+    const lastCleanupRef = useRef(Date.now());
+
+    // Drag state
+    const dragBodyRef = useRef(null);
+    const dragConstraintRef = useRef(null);
+    const dragPointRef = useRef(null);             // {x,y} fixed world point
+
+    // Keep latest values in refs for the RAF loop (avoids stale closures)
+    const galaxyPositionsRef = useRef(galaxyPositions);
+    const semanticMapsRef = useRef({ starPullMap: new Map(), pairMap: new Map() });
+    const cameraRef = useRef(camera);
+    const zoomRef = useRef(zoom);
+    const stageSizeRef = useRef(stageSize);
+    const postsMapRef = useRef(new Map());
+
+    // Sync refs
+    galaxyPositionsRef.current = galaxyPositions;
+    cameraRef.current = camera;
+    zoomRef.current = zoom;
+    stageSizeRef.current = stageSize;
+
+    // Build a postId → post lookup
+    useEffect(() => {
+        const map = new Map();
+        if (Array.isArray(posts)) {
+            for (const p of posts) {
+                if (p?.id) map.set(p.id, p);
+            }
+        }
+        postsMapRef.current = map;
+    }, [posts]);
+
+    // Pre-process semantic data into O(1) maps
+    useEffect(() => {
+        semanticMapsRef.current = buildSemanticMaps(starPulls, similarPairs);
+    }, [starPulls, similarPairs]);
+
+    // ── Create engine on mount ────────────────────────────────────────
+    useEffect(() => {
+        if (!enabled) return;
+
+        engineRef.current = createStarEngine();
+
+        return () => {
+            if (rafRef.current) {
+                cancelAnimationFrame(rafRef.current);
+                rafRef.current = null;
+            }
+            if (engineRef.current) {
+                World.clear(engineRef.current.world, false);
+                Engine.clear(engineRef.current);
+                engineRef.current = null;
+            }
+            bodiesRef.current.clear();
+            anchorsRef.current.clear();
+            constraintsRef.current.clear();
+            staticTimesRef.current.clear();
+        };
+    }, [enabled]);
+
+    // ── Helper: compute a star's static position (same as getComputedStarPosition) ─
+    const computeStaticPosition = useCallback((post) => {
+        if (!post) return null;
+        const uid = post.users?.id ?? post.user_id;
+        const hashGal = userHomeCoords(uid);
+        const animGal = galaxyPositionsRef.current?.get(uid);
+        const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+        const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+        const pull = starPullOffsets?.get(post.id);
+
+        const baseX = post.universe_x ?? post.display_x;
+        const baseY = post.universe_y ?? post.display_y;
+        if (baseX == null || baseY == null) return null;
+
+        return {
+            x: baseX + galDx + (pull?.dx ?? 0),
+            y: baseY + galDy + (pull?.dy ?? 0),
+        };
+    }, [starPullOffsets]);
+
+    // ── Body lifecycle: create/activate/deactivate based on activePostIds ──
+    useEffect(() => {
+        if (!enabled || !engineRef.current) return;
+        if (!(activePostIds instanceof Set) || activePostIds.size === 0) return;
+
+        const engine = engineRef.current;
+        const bodies = bodiesRef.current;
+        const anchors = anchorsRef.current;
+        const staticTimes = staticTimesRef.current;
+
+        // Activate or create bodies for active posts
+        let created = 0;
+        for (const postId of activePostIds) {
+            if (created >= PHYSICS_CONFIG.maxActiveBodies) break;
+
+            const existing = bodies.get(postId);
+            if (existing) {
+                // Re-awaken if it was static
+                if (existing.isStatic) {
+                    Body.setStatic(existing, false);
+                    staticTimes.delete(postId);
+                }
+                created++;
+                continue;
+            }
+
+            // Create new body
+            const post = postsMapRef.current.get(postId);
+            if (!post) continue;
+
+            const pos = computeStaticPosition(post);
+            if (!pos) continue;
+
+            const likeCount = post.like_count != null
+                ? post.like_count
+                : (Array.isArray(post.likes) && post.likes[0]?.count != null
+                    ? post.likes[0].count : 0);
+            const radius = getStarRadius(likeCount);
+            const mass = getStarMass(likeCount);
+
+            const body = createStarBody(postId, pos.x, pos.y, radius, mass);
+            World.add(engine.world, body);
+            bodies.set(postId, body);
+            anchors.set(postId, { x: pos.x, y: pos.y });
+
+            // Small random initial velocity so stars aren't born frozen
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 0.3 + Math.random() * 0.4; // 0.3–0.7 px/frame
+            Body.setVelocity(body, {
+                x: Math.cos(angle) * speed,
+                y: Math.sin(angle) * speed,
+            });
+
+            created++;
+        }
+
+        // Deactivate bodies that left active set → make static
+        for (const [postId, body] of bodies.entries()) {
+            if (!activePostIds.has(postId) && !body.isStatic) {
+                Body.setStatic(body, true);
+                staticTimes.set(postId, Date.now());
+            }
+        }
+    }, [enabled, activePostIds, computeStaticPosition]);
+
+    // ── Constellation constraints from similarPairs ────────────────────
+    useEffect(() => {
+        if (!enabled || !engineRef.current) return;
+
+        const engine = engineRef.current;
+        const bodies = bodiesRef.current;
+        const constraints = constraintsRef.current;
+        const { pairMap } = semanticMapsRef.current;
+
+        // Remove old constraints
+        for (const [key, constraint] of constraints.entries()) {
+            World.remove(engine.world, constraint);
+            constraints.delete(key);
+        }
+
+        if (pairMap.size === 0) return;
+
+        // Build new constraints where both bodies are active
+        const seen = new Set();
+        for (const [postId, pairs] of pairMap.entries()) {
+            const bodyA = bodies.get(postId);
+            if (!bodyA || bodyA.isStatic) continue;
+
+            for (const { otherPostId, similarity } of pairs) {
+                const pairKey = postId < otherPostId
+                    ? `${postId}|${otherPostId}`
+                    : `${otherPostId}|${postId}`;
+                if (seen.has(pairKey)) continue;
+                seen.add(pairKey);
+
+                const bodyB = bodies.get(otherPostId);
+                if (!bodyB || bodyB.isStatic) continue;
+
+                const constraint = createConstellationConstraint(bodyA, bodyB, similarity);
+                World.add(engine.world, constraint);
+                constraints.set(pairKey, constraint);
+            }
+        }
+    }, [enabled, similarPairs, activePostIds]);
+
+    // ── Update anchor targets when galaxy positions change ──────────────
+    useEffect(() => {
+        if (!enabled) return;
+        const anchors = anchorsRef.current;
+        const bodies = bodiesRef.current;
+
+        for (const [postId] of bodies.entries()) {
+            const post = postsMapRef.current.get(postId);
+            if (!post) continue;
+            const pos = computeStaticPosition(post);
+            if (pos) {
+                anchors.set(postId, pos);
+            }
+        }
+    }, [enabled, galaxyPositions, starPullOffsets, computeStaticPosition]);
+
+    // ── RAF loop: apply forces + step engine + push positions ──────────
+    useEffect(() => {
+        if (!enabled || !engineRef.current) return;
+
+        let active = true;
+
+        const tick = () => {
+            if (!active || !engineRef.current) return;
+
+            const engine = engineRef.current;
+            const bodies = bodiesRef.current;
+            const anchors = anchorsRef.current;
+            const staticTimes = staticTimesRef.current;
+            const { pairMap } = semanticMapsRef.current;
+
+            // ── Build body array for quadtree (stars only, no galaxy centers) ──
+            const bodyArray = [];
+            const draggedId = dragBodyRef.current?.label ?? null;
+
+            for (const [postId, body] of bodies.entries()) {
+                if (body.isStatic || body.isSleeping) continue;
+                bodyArray.push({
+                    id: postId,
+                    x: body.position.x,
+                    y: body.position.y,
+                    mass: body.mass,
+                });
+            }
+
+            // ── Barnes-Hut N-body (star-to-star only) ──
+            const root = buildQuadTree(bodyArray);
+            const forces = computeBarnesHutForces(root, bodyArray, {
+                G: PHYSICS_CONFIG.nBodyG,
+                theta: PHYSICS_CONFIG.nBodyTheta,
+                softening: PHYSICS_CONFIG.nBodySoftening,
+                maxForce: PHYSICS_CONFIG.nBodyMaxForce,
+                pairMap,
+            });
+
+            // ── Apply forces to Matter.js bodies ──
+            for (const [postId, body] of bodies.entries()) {
+                if (body.isStatic || body.isSleeping) continue;
+                if (postId === draggedId) continue; // drag constraint handles it
+
+                // Soft anchor spring — keeps stars near their home position
+                const anchor = anchors.get(postId);
+                if (anchor) {
+                    const dx = anchor.x - body.position.x;
+                    const dy = anchor.y - body.position.y;
+                    Body.applyForce(body, body.position, {
+                        x: dx * PHYSICS_CONFIG.anchorSpringK * body.mass,
+                        y: dy * PHYSICS_CONFIG.anchorSpringK * body.mass,
+                    });
+                }
+
+                // N-body inter-star gravity (semantic attraction/repulsion)
+                const force = forces.get(postId);
+                if (force) {
+                    Body.applyForce(body, body.position, {
+                        x: force.fx,
+                        y: force.fy,
+                    });
+                }
+
+                // Tiny thermal jitter — keeps stars gently drifting, never fully frozen
+                Body.applyForce(body, body.position, {
+                    x: (Math.random() - 0.5) * 0.00003 * body.mass,
+                    y: (Math.random() - 0.5) * 0.00003 * body.mass,
+                });
+            }
+
+            // Step the engine at fixed 60fps timestep
+            Engine.update(engine, 1000 / 60);
+
+            frameCountRef.current++;
+
+            // Push positions to React every N frames
+            if (frameCountRef.current % PHYSICS_CONFIG.renderEvery === 0) {
+                const next = new Map();
+                for (const [postId, body] of bodies.entries()) {
+                    next.set(postId, { x: body.position.x, y: body.position.y });
+                }
+                setStarBodyPositions(next);
+            }
+
+            // Periodic cleanup: remove bodies that have been static for too long
+            const now = Date.now();
+            if (now - lastCleanupRef.current > 10000) {
+                lastCleanupRef.current = now;
+                for (const [postId, timestamp] of staticTimes.entries()) {
+                    if (now - timestamp > PHYSICS_CONFIG.staticTimeout) {
+                        const body = bodies.get(postId);
+                        if (body) {
+                            World.remove(engine.world, body);
+                            bodies.delete(postId);
+                            anchors.delete(postId);
+                        }
+                        staticTimes.delete(postId);
+                    }
+                }
+            }
+
+            rafRef.current = requestAnimationFrame(tick);
+        };
+
+        rafRef.current = requestAnimationFrame(tick);
+
+        return () => {
+            active = false;
+            if (rafRef.current) {
+                cancelAnimationFrame(rafRef.current);
+                rafRef.current = null;
+            }
+        };
+    }, [enabled]);
+
+    // ── Drag handlers ──────────────────────────────────────────────────
+
+    const handleStarPointerDown = useCallback((postId, screenX, screenY) => {
+        if (!engineRef.current) return;
+        const body = bodiesRef.current.get(postId);
+        if (!body) return;
+
+        isStarDragging.current = true;
+
+        // Wake up the body if sleeping
+        if (body.isSleeping) {
+            Body.set(body, 'isSleeping', false);
+        }
+
+        const worldPos = screenToWorld(
+            screenX, screenY,
+            cameraRef.current, zoomRef.current, stageSizeRef.current
+        );
+
+        // Create a temporary fixed-point constraint
+        dragPointRef.current = { x: worldPos.x, y: worldPos.y };
+        dragBodyRef.current = body;
+
+        const constraint = Constraint.create({
+            bodyA: body,
+            pointB: dragPointRef.current,
+            length: 0,
+            stiffness: 0.1,
+            damping: 0.05,
+        });
+
+        World.add(engineRef.current.world, constraint);
+        dragConstraintRef.current = constraint;
+    }, []);
+
+    const handlePointerMove = useCallback((screenX, screenY) => {
+        if (!isStarDragging.current || !dragConstraintRef.current) return;
+
+        const worldPos = screenToWorld(
+            screenX, screenY,
+            cameraRef.current, zoomRef.current, stageSizeRef.current
+        );
+
+        // Update the constraint's fixed world point
+        dragConstraintRef.current.pointB.x = worldPos.x;
+        dragConstraintRef.current.pointB.y = worldPos.y;
+    }, []);
+
+    const handlePointerUp = useCallback(() => {
+        if (!isStarDragging.current) return;
+
+        if (dragConstraintRef.current && engineRef.current) {
+            World.remove(engineRef.current.world, dragConstraintRef.current);
+        }
+
+        dragConstraintRef.current = null;
+        dragBodyRef.current = null;
+        dragPointRef.current = null;
+        isStarDragging.current = false;
+    }, []);
+
+    return {
+        starBodyPositions,
+        handleStarPointerDown,
+        handlePointerMove,
+        handlePointerUp,
+    };
+}

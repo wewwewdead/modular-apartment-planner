@@ -1,0 +1,64 @@
+Refactor Sketch Studio into a 3D-first object modeling workspace inspired by SketchUp-style interaction.
+
+Main goal:
+Users should create objects directly in the 3D view instead of drawing primarily in 2D.
+The 2D orthographic views (front, left/right, top, isometric) should be generated for sheet/export output only, not used as the main modeling workflow.
+
+Requirements:
+
+1. Core modeling direction
+- make Sketch Studio 3D-first
+- use the 3D view as the primary object creation and editing workspace
+- keep 2D views for sheet/export generation only
+
+2. Interaction model
+Add a practical SketchUp-like direct modeling workflow with:
+- orbit, pan, zoom
+- select tool
+- rectangle tool on a drawing plane
+- line tool scaffold if needed
+- face generation
+- push/pull extrusion
+- move tool
+- group/component support
+
+3. Drawing planes
+- support drawing on:
+  - ground plane
+  - selected face
+  - simple vertical construction planes
+- make plane/face targeting clear and usable
+
+4. Precision
+- keep all geometry in real units (millimeters)
+- allow exact numeric input for dimensions, extrusion distances, and movement offsets
+- do not make the system loose or purely visual
+
+5. Domain/architecture
+- keep Sketch separate from Floorplan
+- create or refactor Sketch domain models to support 3D object geometry, assemblies, faces, edges, and grouped objects
+- keep source-of-truth geometry independent from React and independent from sheet rendering
+
+6. 2D sheet generation
+- derive front, left/right, top, and isometric views from the 3D object model
+- keep orthographic projection logic modular
+- do not use 2D drafting views as the primary editing UI
+
+7. 3D preview/editor requirements
+- use Three.js as the modeling viewport foundation
+- support picking/highlighting through raycasting
+- support face selection
+- support extrusion from selected faces
+- keep the code modular and future-ready for components, arrays, cutouts, and better snapping/inference
+
+8. Scope control
+- do not try to build full SketchUp
+- do not build Blender-style mesh modeling
+- do not overengineer advanced booleans yet
+- focus on a clean, robust, push-pull solid modeling workflow for objects like tables, cabinets, desks, and shelves
+
+Implementation expectations:
+- preserve the existing app shell, routing, and workspace split
+- refactor Sketch Studio incrementally
+- prioritize a strong 3D modeling foundation over adding many object templates
+- keep code understandable and modular

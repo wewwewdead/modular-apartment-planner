@@ -1,0 +1,165 @@
+import { signedPolygonArea } from './polygon';
+import { nearestPointOnSegment } from './line';
+import { ENDPOINT_MERGE_TOLERANCE, MIN_ROOM_AREA } from '@/domain/defaults';
+
+/**
+ * Detect rooms from wall topology using planar graph face extraction.
+ * Returns array of { points: [{x,y}], area: number }.
+ */
+export function detectRooms(walls, mergeTolerance = ENDPOINT_MERGE_TOLERANCE) {
+  if (walls.length < 3) return [];
+
+  // Step A: Collect and merge endpoints
+  const rawPoints = [];
+  for (const wall of walls) {
+    rawPoints.push(wall.start, wall.end);
+  }
+
+  // Merge nearby points — O(n²), fine for apartment scale
+  const vertices = []; // [{x, y}]
+  const pointToVertex = new Map(); // index in rawPoints -> index in vertices
+
+  function findOrAddVertex(p) {
+    for (let i = 0; i < vertices.length; i++) {
+      const v = vertices[i];
+      const dx = v.x - p.x;
+      const dy = v.y - p.y;
+      if (dx * dx + dy * dy <= mergeTolerance * mergeTolerance) {
+        return i;
+      }
+    }
+    vertices.push({ x: p.x, y: p.y });
+    return vertices.length - 1;
+  }
+
+  // Build edges from walls
+  const edges = []; // [{from, to}] as vertex indices
+  for (const wall of walls) {
+    const fromIdx = findOrAddVertex(wall.start);
+    const toIdx = findOrAddVertex(wall.end);
+    if (fromIdx === toIdx) continue; // degenerate
+    edges.push({ from: fromIdx, to: toIdx });
+  }
+
+  // Step A2: Split edges at T-junctions
+  let edgesChanged = true;
+  while (edgesChanged) {
+    edgesChanged = false;
+    for (let ei = edges.length - 1; ei >= 0; ei--) {
+      const edge = edges[ei];
+      const a = vertices[edge.from];
+      const b = vertices[edge.to];
+      const splits = []; // {t, vertIdx}
+
+      for (let vi = 0; vi < vertices.length; vi++) {
+        if (vi === edge.from || vi === edge.to) continue;
+        const v = vertices[vi];
+        const { point, t } = nearestPointOnSegment(v, a, b);
+        if (t <= 0 || t >= 1) continue;
+        const dx = point.x - v.x;
+        const dy = point.y - v.y;
+        if (dx * dx + dy * dy <= mergeTolerance * mergeTolerance) {
+          splits.push({ t, vertIdx: vi });
+        }
+      }
+
+      if (splits.length === 0) continue;
+      edgesChanged = true;
+      splits.sort((a, b) => a.t - b.t);
+
+      // Replace edge with N+1 sub-edges
+      const subEdges = [];
+      let prev = edge.from;
+      for (const sp of splits) {
+        subEdges.push({ from: prev, to: sp.vertIdx });
+        prev = sp.vertIdx;
+      }
+      subEdges.push({ from: prev, to: edge.to });
+      edges.splice(ei, 1, ...subEdges);
+    }
+  }
+
+  // Build adjacency list with directed half-edges
+  const adj = new Array(vertices.length).fill(null).map(() => []);
+  const halfEdgeSet = new Set();
+
+  for (const { from, to } of edges) {
+    const keyA = `${from}-${to}`;
+    const keyB = `${to}-${from}`;
+    if (!halfEdgeSet.has(keyA)) {
+      halfEdgeSet.add(keyA);
+      adj[from].push(to);
+    }
+    if (!halfEdgeSet.has(keyB)) {
+      halfEdgeSet.add(keyB);
+      adj[to].push(from);
+    }
+  }
+
+  // Step B: Sort adjacency by angle
+  for (let i = 0; i < vertices.length; i++) {
+    const v = vertices[i];
+    adj[i].sort((a, b) => {
+      const angA = Math.atan2(vertices[a].y - v.y, vertices[a].x - v.x);
+      const angB = Math.atan2(vertices[b].y - v.y, vertices[b].x - v.x);
+      return angA - angB;
+    });
+  }
+
+  // Step C: Build next-half-edge map
+  // For half-edge (u->v), at vertex v find u in v's adj, then next is v -> adj[v][(idx-1+deg) % deg]
+  const nextHE = new Map(); // "u-v" -> "v-w"
+  for (const key of halfEdgeSet) {
+    const [uStr, vStr] = key.split('-');
+    const u = parseInt(uStr);
+    const v = parseInt(vStr);
+    const neighbors = adj[v];
+    const idx = neighbors.indexOf(u);
+    if (idx === -1) continue;
+    const nextIdx = (idx - 1 + neighbors.length) % neighbors.length;
+    const w = neighbors[nextIdx];
+    nextHE.set(key, `${v}-${w}`);
+  }
+
+  // Step D: Trace cycles
+  const visited = new Set();
+  const cycles = [];
+
+  for (const startKey of halfEdgeSet) {
+    if (visited.has(startKey)) continue;
+
+    const cycle = [];
+    let current = startKey;
+    let safe = 0;
+    const maxIter = vertices.length + 1;
+
+    while (!visited.has(current) && safe < maxIter) {
+      visited.add(current);
+      const [uStr] = current.split('-');
+      cycle.push(parseInt(uStr));
+      const next = nextHE.get(current);
+      if (!next) break;
+      current = next;
+      safe++;
+    }
+
+    // Check if we completed a cycle back to start
+    if (current === startKey && cycle.length >= 3) {
+      cycles.push(cycle);
+    }
+  }
+
+  // Step E: Filter and return
+  const rooms = [];
+  for (const cycle of cycles) {
+    const points = cycle.map(i => vertices[i]);
+    const signed = signedPolygonArea(points);
+    // In screen coords (Y-down), CW winding = positive signed area = interior face
+    if (signed <= 0) continue;
+    const area = Math.abs(signed);
+    if (area < MIN_ROOM_AREA) continue;
+    rooms.push({ points, area });
+  }
+
+  return rooms;
+}

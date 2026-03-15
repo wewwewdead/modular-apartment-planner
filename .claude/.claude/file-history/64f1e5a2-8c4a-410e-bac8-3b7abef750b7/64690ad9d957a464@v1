@@ -1,0 +1,93 @@
+# Plan: Redesign Mobile ProfileScreen to Match Web ProfilePage
+
+## Context
+The mobile app's ProfileScreen is a simple stacked layout (header, avatar, name, bio, stats, buttons, sign-out). The web app's ProfilePage has a richer structure: hero section with avatar + stats side-by-side, name row with streak/verified badges, bio, action buttons, and a tabbed content area (Writings, Stories). This plan brings the mobile profile up to feature parity with the web version, adapted for React Native.
+
+## Files to Create
+| File | Purpose |
+|------|---------|
+| `apps/mobile/src/screens/Profile/ProfileHeroSection.tsx` | Hero section: background header, avatar + stats row, name + badges, bio, action buttons |
+| `apps/mobile/src/screens/Profile/ProfileTabBar.tsx` | Horizontal tab switcher (Writings / Stories) |
+| `apps/mobile/src/screens/Profile/ProfileWritingsTab.tsx` | Infinite-scroll FlatList of user's journal posts |
+| `apps/mobile/src/screens/Profile/ProfileStoriesTab.tsx` | Infinite-scroll FlatList of user's stories |
+| `apps/mobile/src/screens/Profile/ProfileStoryCard.tsx` | Rich story card (cover, title, description, status badge, tags, stats) |
+| `apps/mobile/src/lib/utils/journalHelpers.ts` | Shared helpers extracted from HomeFeedScreen (extractPlainText, extractBannerImage, etc.) |
+
+## Files to Modify
+| File | Change |
+|------|--------|
+| `apps/mobile/src/screens/Profile/ProfileScreen.tsx` | Full rewrite as orchestrator — composes hero, tab bar, and tab content |
+| `apps/mobile/src/lib/api/mobileApi.ts` | Add `getStreak(userId)` method + `StreakResponse` type |
+| `apps/mobile/src/components/icons/Icon.tsx` | Add `FireIcon` for streak badge |
+| `apps/mobile/src/components/icons/index.ts` | Export `FireIcon` |
+| `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` | Import helpers from `journalHelpers.ts` instead of defining inline |
+
+## Implementation Steps
+
+### Step 1: Extract shared journal helpers
+Create `apps/mobile/src/lib/utils/journalHelpers.ts` with `extractPlainText`, `extractBannerImage`, `normalizeCount`, `resolveCount`, `getNextCursor` (currently inline in `HomeFeedScreen.tsx:40-101`). Update `HomeFeedScreen.tsx` to import from the new file.
+
+### Step 2: Add streak API + FireIcon
+- Add `StreakResponse` type and `getStreak(userId)` to `mobileApi.ts` — calls `GET /streak/:userId`
+- Add `FireIcon` SVG component to `Icon.tsx`, export from `index.ts`
+
+### Step 3: ProfileHeroSection component
+Layout (top to bottom):
+1. **Background header** (140px, colored, rounded bottom corners) with settings gear icon (top-right)
+2. **Avatar + Stats row** — Avatar (80px) on left, stats column (Posts, Followers, Following) on right. Followers/Following are tappable → `FollowList` screen
+3. **Name row** — Name + @username + badge pill + streak badge (FireIcon + count)
+4. **Bio** — Left-aligned text if bio exists
+5. **Action row** — Edit Profile button (PrimaryButton secondary) + Share icon button (React Native `Share` API)
+
+### Step 4: ProfileTabBar component
+- Two tabs: "Writings" and "Stories"
+- Active tab has amber underline + semibold text; inactive has muted text
+- `activeTab` state controlled by parent ProfileScreen
+
+### Step 5: ProfileWritingsTab component
+- `useInfiniteQuery` with `mobileApi.getUserJournals(userId, cursor, limit)`
+- FlatList rendering `PostCard` items (reusing existing component from HomeFeedScreen)
+- Accepts `headerComponent` prop → rendered as `ListHeaderComponent`
+- Empty state, loading skeleton, infinite scroll pagination
+
+### Step 6: ProfileStoryCard + ProfileStoriesTab
+- **ProfileStoryCard**: GlassCard with cover image, title (2 lines), description (2 lines), status badge pill (ongoing=green, completed=purple, hiatus=orange), tags row, vote/read counts
+- **ProfileStoriesTab**: `useInfiniteQuery` with `storyApi.getUserStories(userId, token, options)`
+- FlatList rendering `ProfileStoryCard` items
+- Accepts `headerComponent` prop, empty state, loading, pagination
+
+### Step 7: Rewrite ProfileScreen
+- State: `activeTab` ('writings' | 'stories')
+- Queries: `useQuery` for user data (existing) + `useQuery` for streak data (new)
+- Conditionally render `ProfileWritingsTab` or `ProfileStoriesTab` based on active tab
+- Both tab components receive hero + tab bar as `headerComponent` (avoids ScrollView-inside-FlatList issue)
+- Handlers: `onShareProfile` (Share API), `onFollowersPress`/`onFollowingPress` (navigate FollowList), `onEditProfile` (navigate EditProfile), `onSettingsPress` (sign-out alert for now)
+- Sign-out button removed from main view — accessible only via settings gear
+
+## Key Architecture Decisions
+- **Conditional FlatList per tab** (not nested ScrollView) — avoids RN VirtualizedList performance warnings
+- **Hero + TabBar as ListHeaderComponent** — scrolls naturally with content
+- **Reusable components** — All sub-components accept a `userId` prop, making them reusable for a future VisitProfileScreen
+- **2 tabs only** (Writings + Stories) — Media, Collections, Opinions tabs deferred to later
+
+## Existing Code Reused
+- `PostCard` component (`src/components/PostCard/PostCard.tsx`) — for writings list
+- `Avatar` component (`src/components/Avatar.tsx`) — with badge ring
+- `GlassCard` component (`src/components/GlassCard.tsx`) — for story cards
+- `PrimaryButton` component (`src/components/PrimaryButton.tsx`) — for edit profile
+- `storyApi.getUserStories()` (`src/lib/api/storyApi.ts:134`) — already exists
+- `mobileApi.getUserJournals()` (`src/lib/api/mobileApi.ts:282`) — already exists
+- `PostCardSkeleton`, `EmptyState` — for loading/empty states
+- `ShareIcon` from icons — already exported
+
+## Verification
+1. Profile loads with hero section showing avatar, stats, name, badges, bio
+2. Tab switching works between Writings and Stories
+3. Writings tab shows paginated journal posts, infinite scroll loads more
+4. Stories tab shows paginated story cards with cover, title, status, tags
+5. Tapping a post navigates to PostDetail
+6. Tapping a story navigates to StoryDetail
+7. Share button opens native share sheet
+8. Followers/Following tapping navigates to FollowList
+9. Settings gear triggers sign-out alert
+10. HomeFeedScreen still works after helper extraction

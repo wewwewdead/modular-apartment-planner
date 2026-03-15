@@ -1,0 +1,80 @@
+import React from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { computeCartTotal } from '../../domain/models';
+import { formatCurrency, formatDate } from '../../lib/format';
+import { useAppStore } from '../../state/useAppStore';
+import { colors } from '../../theme/colors';
+
+export function HistoryScreen() {
+  const appState = useAppStore(state => state.appState);
+
+  if (!appState) {
+    return null;
+  }
+
+  const completed = appState.vault.carts.filter(cart => cart.status === 'completed' && !cart.isDeleted);
+
+  return (
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>History</Text>
+      <Text style={styles.subtitle}>Completed carts and the totals they closed with.</Text>
+
+      {completed.length ? (
+        completed.map(cart => (
+          <View key={cart.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{cart.name}</Text>
+            <Text style={styles.cardCopy}>Completed {formatDate(cart.completedAt)}</Text>
+            <Text style={styles.total}>{formatCurrency(computeCartTotal(appState.vault, cart))}</Text>
+          </View>
+        ))
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>No history yet</Text>
+          <Text style={styles.cardCopy}>Complete a shopping trip to populate this screen.</Text>
+        </View>
+      )}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.canvas,
+  },
+  content: {
+    padding: 20,
+    gap: 14,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  subtitle: {
+    color: colors.mutedInk,
+  },
+  card: {
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 16,
+    gap: 6,
+  },
+  cardTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 17,
+  },
+  cardCopy: {
+    color: colors.mutedInk,
+  },
+  total: {
+    color: colors.brandDeep,
+    fontWeight: '800',
+    fontSize: 18,
+    marginTop: 6,
+  },
+});

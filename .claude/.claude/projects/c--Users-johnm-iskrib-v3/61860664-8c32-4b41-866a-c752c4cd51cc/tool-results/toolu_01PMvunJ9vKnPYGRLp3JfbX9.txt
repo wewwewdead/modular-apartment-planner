@@ -1,0 +1,946 @@
+     1→import React, { useEffect, useState, useRef } from "react";
+     2→import { MoonLoader } from "react-spinners";
+     3→import { motion, AnimatePresence,} from "framer-motion";
+     4→import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+     5→import './postcards.css';
+     6→import '../explore/userSearch.css';
+     7→import { getJournals, getFollowingFeed, getForYouFeed, searchJournals, searchUsers } from "../../../../API/Api";
+     8→import { useInView } from 'react-intersection-observer';
+     9→import CalculateText from "./calculateReadingTime";
+    10→import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
+    11→import VerifiedBadge from "../../Badge/VerifiedBadge";
+    12→
+    13→import { useAuth } from "../../../Context/useAuth";
+    14→import { useAddViewsMutation, useBookMarkMutation, useReactionMutation } from "../../../utils/useMutation";
+    15→import ReactionButton from "../../Reactions/ReactionButton";
+    16→import formatCounts from "../../../../helpers/fomatCounts";
+    17→import debounce from "../../../../helpers/debounce";
+    18→import { handleClickProfile, handleCLickContent } from "../../../../helpers/handleClicks";
+    19→import formatPostDate from "../../../../helpers/formatDateString";
+    20→import { handleImageFallback } from "../../../utils/handleImageFallback";
+    21→import RepostModal from "../../RepostModal/RepostModal";
+    22→import PromptBadge from "../../DailyPrompt/PromptBadge";
+    23→import DashboardBriefing from "../../DashboardBriefing/DashboardBriefing";
+    24→import ShareMenu from "../../ShareMenu/ShareMenu";
+    25→import getShareUrl from "../../../utils/getShareUrl";
+    26→
+    27→
+    28→const PostCards = () => {
+    29→    const {session, user, openAuthModal} = useAuth();
+    30→    const location = useLocation();
+    31→    const outletContext = useOutletContext() || {};
+    32→    const { clickOpenSidebar, handleOpenTextEditor } = outletContext;
+    33→
+    34→    const navigate = useNavigate();
+    35→    const searchShellRef = useRef(null);
+    36→    const timeOutRef = useRef();
+    37→    const {ref, inView} = useInView({
+    38→        threshold: 0,
+    39→        rootMargin: '800px'
+    40→    })
+    41→    const [shareMenuPostId, setShareMenuPostId] = useState(null);
+    42→    const [showHeaders, setShowHeaders] = useState(true);
+    43→
+    44→    const [bookmarkedMessage, setBookmarkedMessage] = useState('');
+    45→    const [showBookmarkedMessage, setShowBookmarkedMessage] = useState(null);
+    46→    const [searchInput, setSearchInput] = useState('');
+    47→    const [debouncedSearchInput, setDebouncedSearchInput] = useState('');
+    48→    const [committedSearchQuery, setCommittedSearchQuery] = useState('');
+    49→    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    50→    const [searchType, setSearchType] = useState('posts');
+    51→    const [repostModalJournal, setRepostModalJournal] = useState(null);
+    52→    const [repostToastMessage, setRepostToastMessage] = useState('');
+    53→
+    54→    const handleClickUserProfileOriginal = handleClickProfile(navigate);
+    55→    const clickContent = handleCLickContent(navigate);
+    56→
+    57→    const mutateViews = useAddViewsMutation(session)
+    58→
+    59→    const handleClickUserProfile = (e, loggedInUserId, clickedUserId, clickedUsername = null) => {
+    60→        e.stopPropagation();
+    61→        if(!session){
+    62→            return openAuthModal();
+    63→        }
+    64→        handleClickUserProfileOriginal(e, loggedInUserId, clickedUserId, clickedUsername);
+    65→    }
+    66→
+    67→    const viewContent = (e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType = null, userReaction = null, reactionCount = 0) =>{
+    68→        e.stopPropagation();
+    69→        if(session){
+    70→            const formadata = new FormData();
+    71→            formadata.append('journalId', journalId);
+    72→            mutateViews.mutate(formadata);
+    73→        }
+    74→        clickContent(e, jsonbContent,wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likesCount, bookmarksCount, badge, postType, userReaction, reactionCount)
+    75→    }
+    76→
+    77→    const header_links = [
+    78→        {label: 'Writings', path: '/home'},
+    79→        {label: 'Opinions', path: '/home/opinions'},
+    80→    ]
+    81→
+    82→    const handleClickHeaderLinks = (path) =>{
+    83→        navigate(path);
+    84→    }
+    85→
+    86→    const cardIcons = [
+    87→        {
+    88→            likeAction: (isLiked) => (
+    89→                <svg className="svg-like" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+    90→                    <g id="style=fill">
+    91→                    <g id="like">
+    92→                    <path id="Subtract" fillRule="evenodd" clipRule="evenodd" d="M15.9977 5.63891C16.2695 4.34931 15.433 3.00969 14.2102 2.59462C13.6171 2.37633 12.9892 2.4252 12.4662 2.60499C11.9449 2.78419 11.4461 3.12142 11.1369 3.58441L11.136 3.58573L7.49506 9.00272C8.05104 9.29585 8.43005 9.87954 8.43005 10.5518V21.3018H6.91003V21.3018H16.6801C18.2938 21.3018 19.2028 20.2977 19.8943 19.202C20.6524 18.0009 21.1453 16.7211 21.5116 15.5812C21.6808 15.0546 21.8252 14.5503 21.9547 14.0984L21.9863 13.9881C22.126 13.5007 22.2457 13.0904 22.366 12.7549C22.698 11.8292 22.5933 10.9072 22.067 10.2072C21.5476 9.5166 20.7005 9.15175 19.76 9.15175H15.76C15.6702 9.15175 15.6017 9.11544 15.5599 9.06803C15.5238 9.02716 15.4831 8.95058 15.502 8.81171L15.9977 5.63891Z" fill={isLiked ? 'rgb(255, 116, 116)' : "var(--icon-default)"}/>
+    93→                    <path id="rec" d="M2.18005 10.6199C2.18005 10.03 2.62777 9.55176 3.18005 9.55176H6.68005C7.23234 9.55176 7.68005 10.03 7.68005 10.6199V21.3018H3.18005C2.62777 21.3018 2.18005 20.8235 2.18005 20.2336V10.6199Z" fill={isLiked ? 'rgb(255, 116, 116)' : "var(--icon-default)"}/>
+    94→                    </g>
+    95→                    </g>
+    96→                </svg>
+    97→            ),
+    98→
+    99→            className: 'like-button'
+   100→        },
+   101→        {
+   102→            label:
+   103→            <svg className="svg-comment" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="var(--icon-default)">
+   104→                <g id="style=fill">
+   105→                <g id="comment">
+   106→                <path id="Subtract" fillRule="evenodd" clipRule="evenodd" d="M11.9862 0.763672C6.07454 0.763672 1.23621 5.36133 1.23621 11.1034C1.23621 13.5057 2.10188 15.7237 3.55066 17.4735C5.46882 19.8566 8.48271 21.3843 11.8522 21.4238L11.8878 21.4367C11.9902 21.4735 12.1385 21.5265 12.3236 21.5916C12.6936 21.7216 13.2115 21.9001 13.8035 22.0941C14.9799 22.4797 16.4767 22.9358 17.6892 23.1894C18.303 23.3178 18.9306 23.1718 19.4096 22.8608C19.8872 22.5507 20.3019 22.0126 20.3019 21.3173C20.3019 20.9046 20.1354 20.4987 19.9732 20.1857C19.8007 19.8529 19.5794 19.5251 19.371 19.2448C19.2691 19.1076 19.1676 18.9782 19.0724 18.8609C21.3193 16.9815 22.7362 14.2061 22.7362 11.1034C22.7362 7.55126 20.8865 4.4319 18.073 2.58609C16.3321 1.4227 14.2426 0.763672 11.9862 0.763672ZM18.3637 6.03728C18.1546 5.67972 17.6953 5.55937 17.3377 5.76847C16.9801 5.97757 16.8598 6.43694 17.0689 6.7945C17.8131 8.0671 18.2362 9.53599 18.2362 11.1034C18.2362 12.6662 17.8138 14.1316 17.0693 15.4016C16.8598 15.7589 16.9797 16.2184 17.337 16.4279C17.6943 16.6374 18.1538 16.5175 18.3633 16.1602C19.2385 14.6673 19.7362 12.941 19.7362 11.1034C19.7362 9.26158 19.238 7.53236 18.3637 6.03728Z" fill="var(--icon-default)"/>
+   107→                </g>
+   108→                </g>
+   109→            </svg>,
+   110→            className: 'comment-button',
+   111→            commentAction: (e, jsonbContent, wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likeCount, bookmarkCount, badge, postType, userReaction, reactionCount) => viewContent(e, jsonbContent, wholeText, title, userId, name, avatar, created_at, journalId, isLiked, commentsCount, isBookmarked, likeCount, bookmarkCount, badge, postType, userReaction, reactionCount),
+   112→            countComments: (count) => <p style={{padding: '0', margin: '0', fontSize: '0.78rem'}}>{formatCounts(count)}</p>
+   113→        },
+   114→        {
+   115→            checkBookrmark: (isBookmarked) => (
+   116→            <svg className="svg-bookmark" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+   117→                <g id="style=fill">
+   118→                    <g id="bookmark">
+   119→                    <path id="Subtract" fillRule="evenodd" clipRule="evenodd" d="M8 1.25C5.37665 1.25 3.25 3.37665 3.25 6V20.4648C3.25 21.7269 4.27311 22.75 5.53518 22.75C5.98634 22.75 6.42739 22.6165 6.80278 22.3662L11.3066 19.3636C11.7265 19.0837 12.2735 19.0837 12.6934 19.3636L17.1972 22.3662C17.5726 22.6165 18.0137 22.75 18.4648 22.75C19.7269 22.75 20.75 21.7269 20.75 20.4648V6C20.75 3.37665 18.6234 1.25 16 1.25H8ZM9 6.75C8.58579 6.75 8.25 7.08579 8.25 7.5C8.25 7.91421 8.58579 8.25 9 8.25H15C15.4142 8.25 15.75 7.91421 15.75 7.5C15.75 7.08579 15.4142 6.75 15 6.75H9Z" fill={isBookmarked ? "rgb(72, 208, 135)" : "var(--icon-default)"}/>
+   120→                    </g>
+   121→                </g>
+   122→            </svg>),
+   123→            className: 'bookmark-button',
+   124→            bookmarkAction: (e, journalId) => {
+   125→                e.preventDefault();
+   126→                e.stopPropagation();
+   127→                debounceClickBookmark(journalId);
+   128→            },
+   129→            countBookmarks: (count) => <p  style={{padding: '0', margin: '0', fontSize: '0.78rem'}}>{formatCounts(count)}</p>
+   130→        },
+   131→        {
+   132→            repostAction: true,
+   133→            repostIcon:
+   134→                <svg className="svg-repost" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="var(--icon-default)">
+   135→                    <path d="M7 7h10l-1.293-1.293a1 1 0 0 1 1.414-1.414l3 3a1 1 0 0 1 0 1.414l-3 3a1 1 0 0 1-1.414-1.414L17 9H7a1 1 0 0 1-1-1V5a1 1 0 0 1 2 0v2zm10 10H7l1.293 1.293a1 1 0 0 1-1.414 1.414l-3-3a1 1 0 0 1 0-1.414l3-3a1 1 0 1 1 1.414 1.414L7 15h10a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0v-2z"/>
+   136→                </svg>,
+   137→            className: 'repost-button',
+   138→        },
+   139→        {
+   140→            iconCount: (count) => <p style={{padding: '0', margin: '0', fontSize: '0.6rem', color: "var(--icon-view-count)"}}>{formatCounts(count)}</p>,
+   141→            iconView:
+   142→            <svg xmlns="http://www.w3.org/2000/svg" fill="var(--icon-view)" width="28px" height="28px" viewBox="-3.5 0 32 32" version="1.1">
+   143→                <title>view</title>
+   144→                <path d="M12.406 13.844c1.188 0 2.156 0.969 2.156 2.156s-0.969 2.125-2.156 2.125-2.125-0.938-2.125-2.125 0.938-2.156 2.125-2.156zM12.406 8.531c7.063 0 12.156 6.625 12.156 6.625 0.344 0.438 0.344 1.219 0 1.656 0 0-5.094 6.625-12.156 6.625s-12.156-6.625-12.156-6.625c-0.344-0.438-0.344-1.219 0-1.656 0 0 5.094-6.625 12.156-6.625zM12.406 21.344c2.938 0 5.344-2.406 5.344-5.344s-2.406-5.344-5.344-5.344-5.344 2.406-5.344 5.344 2.406 5.344 5.344 5.344z"/>
+   145→            </svg>,
+   146→
+   147→        }
+   148→    ]
+   149→
+   150→    const userId = user?.userData?.[0]?.id || null;
+   151→    const isFollowingFeed = location.pathname === '/home/following';
+   152→    const isForYouFeed = location.pathname === '/home/for-you';
+   153→    const userWritingInterests = user?.userData?.[0]?.writing_interests;
+   154→    const hasInterests = Array.isArray(userWritingInterests) && userWritingInterests.length > 0;
+   155→    const isSearchMode = committedSearchQuery.length >= 2;
+   156→    const isPostSearchMode = isSearchMode && searchType === 'posts';
+   157→    const isPeopleSearchMode = isSearchMode && searchType === 'people';
+   158→
+   159→    useEffect(() => {
+   160→        const timer = setTimeout(() => {
+   161→            setDebouncedSearchInput(searchInput.trim());
+   162→        }, 350);
+   163→
+   164→        return () => clearTimeout(timer);
+   165→    }, [searchInput]);
+   166→
+   167→    const {
+   168→        data,
+   169→        fetchNextPage,
+   170→        hasNextPage,
+   171→        isFetchingNextPage,
+   172→        isLoading: isFeedLoading,
+   173→    } = useInfiniteQuery({
+   174→        queryKey: ['journals', userId],
+   175→        queryFn: ({pageParam = null}) => getJournals(pageParam, 5, userId),
+   176→        getNextPageParam: (lastPage) => {
+   177→            if(lastPage?.hasMore) {
+   178→                const lastJournal = lastPage?.data[lastPage?.data?.length - 1]; //get the last array of object using index
+   179→                return new Date(lastJournal.created_at).toISOString();
+   180→            }
+   181→            return undefined;
+   182→        } ,
+   183→        refetchOnWindowFocus: false,
+   184→        staleTime: 1000 * 60 * 5
+   185→    })
+   186→
+   187→    const {
+   188→        data: followingData,
+   189→        fetchNextPage: fetchNextFollowingPage,
+   190→        hasNextPage: hasNextFollowingPage,
+   191→        isFetchingNextPage: isFetchingNextFollowingPage,
+   192→        isLoading: isFollowingLoading,
+   193→    } = useInfiniteQuery({
+   194→        queryKey: ['journals-following', session?.user?.id],
+   195→        queryFn: ({ pageParam = null }) => getFollowingFeed(session?.access_token, pageParam, 5),
+   196→        getNextPageParam: (lastPage) => {
+   197→            if (lastPage?.hasMore) {
+   198→                const lastJournal = lastPage?.data[lastPage?.data?.length - 1];
+   199→                return new Date(lastJournal.created_at).toISOString();
+   200→            }
+   201→            return undefined;
+   202→        },
+   203→        refetchOnWindowFocus: false,
+   204→        staleTime: 1000 * 60 * 5,
+   205→        enabled: isFollowingFeed && !!session?.access_token,
+   206→    })
+   207→
+   208→    const {
+   209→        data: forYouData,
+   210→        fetchNextPage: fetchNextForYouPage,
+   211→        hasNextPage: hasNextForYouPage,
+   212→        isFetchingNextPage: isFetchingNextForYouPage,
+   213→        isLoading: isForYouLoading,
+   214→    } = useInfiniteQuery({
+   215→        queryKey: ['journals-for-you', session?.user?.id],
+   216→        queryFn: ({ pageParam = 0 }) => getForYouFeed(session?.access_token, pageParam, 5),
+   217→        getNextPageParam: (lastPage, allPages) => {
+   218→            if (lastPage?.hasMore) {
+   219→                const totalLoaded = allPages.reduce((sum, page) => sum + (page?.data?.length || 0), 0);
+   220→                return totalLoaded;
+   221→            }
+   222→            return undefined;
+   223→        },
+   224→        refetchOnWindowFocus: false,
+   225→        staleTime: 1000 * 60 * 5,
+   226→        enabled: isForYouFeed && !!session?.access_token,
+   227→    })
+   228→
+   229→    const {
+   230→        data: searchData,
+   231→        isLoading: isSearchLoading,
+   232→        isFetching: isSearchFetching,
+   233→        error: searchError,
+   234→    } = useQuery({
+   235→        queryKey: ['journals-search', userId, committedSearchQuery],
+   236→        queryFn: () => searchJournals(committedSearchQuery, 10, userId),
+   237→        enabled: isPostSearchMode,
+   238→        refetchOnWindowFocus: false,
+   239→        staleTime: 1000 * 60 * 2,
+   240→    });
+   241→
+   242→    const {
+   243→        data: suggestionData,
+   244→        isLoading: isSuggestionsLoading,
+   245→    } = useQuery({
+   246→        queryKey: ['journals-suggestions', userId, debouncedSearchInput],
+   247→        queryFn: () => searchJournals(debouncedSearchInput, 6, userId),
+   248→        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === 'posts',
+   249→        refetchOnWindowFocus: false,
+   250→        staleTime: 1000 * 60 * 2,
+   251→    });
+   252→
+   253→    const {
+   254→        data: userSearchData,
+   255→        isLoading: isUserSearchLoading,
+   256→        isFetching: isUserSearchFetching,
+   257→        error: userSearchError,
+   258→    } = useQuery({
+   259→        queryKey: ['users-search', committedSearchQuery],
+   260→        queryFn: () => searchUsers(committedSearchQuery, 10),
+   261→        enabled: isPeopleSearchMode,
+   262→        refetchOnWindowFocus: false,
+   263→        staleTime: 1000 * 60 * 2,
+   264→    });
+   265→
+   266→    const {
+   267→        data: userSuggestionData,
+   268→        isLoading: isUserSuggestionsLoading,
+   269→    } = useQuery({
+   270→        queryKey: ['users-suggestions', debouncedSearchInput],
+   271→        queryFn: () => searchUsers(debouncedSearchInput, 6),
+   272→        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === 'people',
+   273→        refetchOnWindowFocus: false,
+   274→        staleTime: 1000 * 60 * 2,
+   275→    });
+   276→
+   277→    const mutationReaction = useReactionMutation(session, user?.userData?.[0]?.id);
+   278→
+   279→    const handleReaction = (journalId, receiverId, reactionType) => {
+   280→        if(!session) return openAuthModal();
+   281→        mutationReaction.mutate({ journalId, receiverId, reactionType });
+   282→    }
+   283→
+   284→
+   285→    const mutationBookmark = useBookMarkMutation(session, userId);
+   286→
+   287→    const handleClickBookmark = async (journalId) => {
+   288→        if(!session) return openAuthModal();
+   289→        // console.log(journalId)
+   290→        // mutationBookmark.mutate({journalId});
+   291→        const response = await mutationBookmark.mutateAsync({journalId})
+   292→
+   293→        if(timeOutRef.current){
+   294→            clearTimeout(timeOutRef.current);
+   295→        }
+   296→        if(response.message === 'success'){
+   297→            setBookmarkedMessage('Post was added to your Bookmarks')
+   298→            setShowBookmarkedMessage(journalId);
+   299→            timeOutRef.current = setTimeout(() =>{
+   300→                setShowBookmarkedMessage(null)
+   301→                setBookmarkedMessage('')
+   302→            }, 2500)
+   303→        } else {
+   304→            setBookmarkedMessage('Post was removed from your Bookmarks')
+   305→            setShowBookmarkedMessage(journalId);
+   306→            timeOutRef.current = setTimeout(() =>{
+   307→                setShowBookmarkedMessage(null)
+   308→                setBookmarkedMessage('')
+   309→            }, 2500)
+   310→        }
+   311→        // console.log(response.message);
+   312→    }
+   313→
+   314→    const debounceClickBookmark = debounce(handleClickBookmark, 100);
+   315→
+   316→    const handleSubmitSearch = (rawQuery) => {
+   317→        const normalizedQuery = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+   318→        if(normalizedQuery.length < 2){
+   319→            setCommittedSearchQuery('');
+   320→            return;
+   321→        }
+   322→
+   323→        setCommittedSearchQuery(normalizedQuery);
+   324→        setSearchInput(normalizedQuery);
+   325→        setIsSearchFocused(false);
+   326→    };
+   327→
+   328→    const handleClearSearch = () => {
+   329→        setSearchInput('');
+   330→        setDebouncedSearchInput('');
+   331→        setCommittedSearchQuery('');
+   332→        setIsSearchFocused(false);
+   333→        setSearchType('posts');
+   334→    };
+   335→
+   336→    const handleSearchInputKeyDown = (e) => {
+   337→        if(e.key === 'Enter'){
+   338→            e.preventDefault();
+   339→            handleSubmitSearch(searchInput);
+   340→        }
+   341→
+   342→        if(e.key === 'Escape'){
+   343→            setIsSearchFocused(false);
+   344→        }
+   345→    };
+   346→
+   347→    const handleClickSuggestion = (journal) => {
+   348→        if(!journal?.id){
+   349→            return;
+   350→        }
+   351→        setIsSearchFocused(false);
+   352→        if(journal?.title){
+   353→            setSearchInput(journal.title);
+   354→            setDebouncedSearchInput(journal.title);
+   355→        }
+   356→        navigate(`/home/post/${journal.id}`);
+   357→    };
+   358→
+   359→    const handleClickUserSuggestion = (e, person) => {
+   360→        if(!person?.id){
+   361→            return;
+   362→        }
+   363→        setIsSearchFocused(false);
+   364→        handleClickUserProfile(e, user?.userData?.[0]?.id, person.id, person.username);
+   365→    };
+   366→
+   367→    useEffect(() => {
+   368→        const handleOutsideSearchClick = (e) => {
+   369→            if(searchShellRef.current && !searchShellRef.current.contains(e.target)){
+   370→                setIsSearchFocused(false);
+   371→            }
+   372→        };
+   373→
+   374→        window.addEventListener('mousedown', handleOutsideSearchClick);
+   375→        return () => window.removeEventListener('mousedown', handleOutsideSearchClick);
+   376→    }, []);
+   377→
+   378→    const activeFeedData = isForYouFeed ? forYouData : isFollowingFeed ? followingData : data;
+   379→    const activeFetchNextPage = isForYouFeed ? fetchNextForYouPage : isFollowingFeed ? fetchNextFollowingPage : fetchNextPage;
+   380→    const activeHasNextPage = isForYouFeed ? hasNextForYouPage : isFollowingFeed ? hasNextFollowingPage : hasNextPage;
+   381→    const activeIsFetchingNextPage = isForYouFeed ? isFetchingNextForYouPage : isFollowingFeed ? isFetchingNextFollowingPage : isFetchingNextPage;
+   382→    const activeIsLoading = isForYouFeed ? isForYouLoading : isFollowingFeed ? isFollowingLoading : isFeedLoading;
+   383→
+   384→    useEffect(() =>{
+   385→        if(!isSearchMode && inView && activeHasNextPage && !activeIsFetchingNextPage) {
+   386→            activeFetchNextPage();
+   387→        }
+   388→    }, [inView, activeFetchNextPage, activeHasNextPage, activeIsFetchingNextPage, isSearchMode])
+   389→
+   390→
+   391→    useEffect(() =>{
+   392→        const scroll = (e) =>{
+   393→            setShowHeaders(!showHeaders)
+   394→
+   395→            if(timeOutRef.current){
+   396→                clearTimeout(timeOutRef.current);
+   397→            }
+   398→            timeOutRef.current = setTimeout(() => {
+   399→                setShowHeaders(showHeaders)
+   400→            }, 100);
+   401→        }
+   402→        document.addEventListener('scroll', scroll, true);
+   403→        return() =>{
+   404→            if(timeOutRef.current){
+   405→                clearTimeout(timeOutRef.current);
+   406→            }
+   407→            document.removeEventListener('scroll', scroll, true)
+   408→        }
+   409→    }, [])
+   410→
+   411→    const feedJournals = activeFeedData?.pages?.flatMap((page) => page.data || []) || [];
+   412→    const searchedJournals = searchData?.data || [];
+   413→    const searchedUsers = userSearchData?.data || [];
+   414→    const suggestionItems = searchType === 'people'
+   415→        ? (userSuggestionData?.data || [])
+   416→        : (suggestionData?.data || []);
+   417→    const isSuggestionsPending = searchType === 'people'
+   418→        ? isUserSuggestionsLoading
+   419→        : isSuggestionsLoading;
+   420→    const journals = isSearchMode ? searchedJournals : feedJournals;
+   421→    const isLoading = isPostSearchMode
+   422→        ? isSearchLoading
+   423→        : isPeopleSearchMode
+   424→            ? isUserSearchLoading
+   425→            : activeIsLoading;
+   426→    const activeSearchError = searchType === 'people' ? userSearchError : searchError;
+   427→    const showSuggestions = isSearchFocused && debouncedSearchInput.length >= 2;
+   428→
+   429→    if(isLoading) {
+   430→        return(
+   431→            <>
+   432→            <div className="postcards-parent-loading-container">
+   433→                <MoonLoader loading={isLoading} color="var(--loader-color)" speedMultiplier={1} size={20}/>
+   434→            </div>
+   435→            </>
+   436→        )
+   437→    }
+   438→
+   439→    return(
+   440→        <>
+   441→        <div className="mobile-top-header">
+   442→            <span className="mobile-brand-text">iskrib</span>
+   443→            {clickOpenSidebar && (
+   444→                <button className="mobile-header-profile-btn" onClick={clickOpenSidebar}>
+   445→                    <img src={user?.userData?.[0]?.image_url || '/assets/profile.jpg'} alt="profile" />
+   446→                </button>
+   447→            )}
+   448→        </div>
+   449→
+   450→        <div className="search-shell" ref={searchShellRef}>
+   451→        <div className="search-top-bar">
+   452→            <div className="search-input-wrap">
+   453→                <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+   454→                    <path d="M10 2a8 8 0 1 0 4.906 14.32l4.387 4.387a1 1 0 0 0 1.414-1.414L16.32 14.906A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12a6 6 0 0 1 0-12Z"/>
+   455→                </svg>
+   456→                <input
+   457→                    type="search"
+   458→                    value={searchInput}
+   459→                    onChange={(e) => setSearchInput(e.target.value)}
+   460→                    onFocus={() => setIsSearchFocused(true)}
+   461→                    onKeyDown={handleSearchInputKeyDown}
+   462→                    placeholder={searchType === 'people' ? 'Search people...' : 'Search writings by meaning or title...'}
+   463→                    className="search-input"
+   464→                    aria-label={searchType === 'people' ? 'Search people' : 'Search journals'}
+   465→                />
+   466→            </div>
+   467→            {searchInput ? (
+   468→                <button type="button" className="search-clear-btn" onClick={handleClearSearch}>
+   469→                    Clear
+   470→                </button>
+   471→            ) : null}
+   472→            {handleOpenTextEditor && (
+   473→                <button type="button" className="mobile-write-btn" onClick={() => handleOpenTextEditor()}>
+   474→                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+   475→                        <path fillRule="evenodd" clipRule="evenodd" d="M22.8013 1.74899C22.6665 1.22946 22.1457 0.908925 21.6212 1.02275C8.65054 3.83745 2.58949 13.7685 0.052924 22.7276C-0.0695134 23.16 0.111594 23.621 0.495639 23.8545C0.671767 23.9616 0.870732 24.0087 1.06614 23.9987C1.30094 22.8623 2.3183 22.0061 3.53976 22L3.82845 21.7288C4.23095 21.3506 4.25066 20.7177 3.87248 20.3153C3.65552 20.0843 3.35472 19.9794 3.06169 20.0033L3.10053 19.9025C3.13285 19.8568 3.16175 19.8078 3.18671 19.7556C3.39169 19.327 3.62105 19.0828 3.85127 18.9282C4.08827 18.769 4.38857 18.663 4.7947 18.6054C5.20936 18.5467 5.69118 18.5437 6.27396 18.5637C6.4627 18.5702 6.66791 18.5794 6.8832 18.5891L6.88328 18.5891C7.29482 18.6077 7.74319 18.6279 8.18371 18.6335C9.57215 18.6515 11.1777 18.5382 12.8464 17.8022C14.5236 17.0625 16.1803 15.7318 17.7487 13.451C17.9918 13.0974 17.9823 12.6281 17.7249 12.2846C17.6946 12.2443 17.6617 12.2067 17.6266 12.1721C18.6722 11.5802 19.5909 10.7793 20.3487 9.88147C21.3629 8.6798 22.1246 7.27154 22.5618 5.86914C22.9956 4.47728 23.1309 3.02041 22.8013 1.74899Z" />
+   476→                    </svg>
+   477→                    Write
+   478→                </button>
+   479→            )}
+   480→            {isSearchMode ? (
+   481→                <span className="search-mode-pill">
+   482→                    {(searchType === 'people' ? isUserSearchFetching : isSearchFetching) ? 'Searching...' : 'Matched'}
+   483→                </span>
+   484→            ) : null}
+   485→        </div>
+   486→        {showSuggestions && (
+   487→            <div className="search-suggestions-dropdown">
+   488→                {isSuggestionsPending ? (
+   489→                    <div className="search-suggestion-item search-suggestion-muted">Searching...</div>
+   490→                ) : suggestionItems.length > 0 ? (
+   491→                    searchType === 'people' ? (
+   492→                        suggestionItems.map((item) => (
+   493→                            <button
+   494→                                key={item.id}
+   495→                                type="button"
+   496→                                className="search-suggestion-user"
+   497→                                onClick={(e) => handleClickUserSuggestion(e, item)}
+   498→                            >
+   499→                                <img
+   500→                                    className="search-suggestion-user-avatar"
+   501→                                    src={item.image_url || '/assets/profile.jpg'}
+   502→                                    alt=""
+   503→                                    loading="lazy"
+   504→                                />
+   505→                                <div className="search-suggestion-user-info">
+   506→                                    <span className="search-suggestion-user-name">{item.name || 'Unknown'}</span>
+   507→                                    {item.username && (
+   508→                                        <span className="search-suggestion-user-handle">@{item.username}</span>
+   509→                                    )}
+   510→                                </div>
+   511→                            </button>
+   512→                        ))
+   513→                    ) : (
+   514→                        suggestionItems.map((item) => (
+   515→                            <button
+   516→                                key={item.id}
+   517→                                type="button"
+   518→                                className="search-suggestion-item"
+   519→                                onClick={() => handleClickSuggestion(item)}
+   520→                            >
+   521→                                <span className="search-suggestion-title">{item.title || 'Untitled'}</span>
+   522→                                <span className="search-suggestion-meta">{item?.users?.name || 'Unknown author'}</span>
+   523→                            </button>
+   524→                        ))
+   525→                    )
+   526→                ) : (
+   527→                    <div className="search-suggestion-item search-suggestion-muted">No suggestions</div>
+   528→                )}
+   529→            </div>
+   530→        )}
+   531→
+   532→        {(isSearchFocused || searchInput.length > 0 || isSearchMode) && (
+   533→            <div className="search-type-toggle">
+   534→                <button
+   535→                    type="button"
+   536→                    className={`search-type-btn ${searchType === 'posts' ? 'search-type-btn--active' : ''}`}
+   537→                    onClick={() => setSearchType('posts')}
+   538→                >
+   539→                    Posts
+   540→                </button>
+   541→                <button
+   542→                    type="button"
+   543→                    className={`search-type-btn ${searchType === 'people' ? 'search-type-btn--active' : ''}`}
+   544→                    onClick={() => setSearchType('people')}
+   545→                >
+   546→                    People
+   547→                </button>
+   548→            </div>
+   549→        )}
+   550→        </div>
+   551→
+   552→        <div className="search-nav-row">
+   553→            <button type="button" className={`search-nav-btn search-nav-following${isFollowingFeed ? ' search-nav-active' : ''}`} onClick={() => navigate('/home/following')}>
+   554→                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+   555→                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+   556→                </svg>
+   557→                Following
+   558→            </button>
+   559→            {hasInterests && (
+   560→                <button type="button" className={`search-nav-btn search-nav-for-you${isForYouFeed ? ' search-nav-active' : ''}`} onClick={() => navigate('/home/for-you')}>
+   561→                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+   562→                        <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+   563→                    </svg>
+   564→                    For You
+   565→                </button>
+   566→            )}
+   567→            <button type="button" className="search-nav-btn search-nav-stories" onClick={() => navigate('/home/stories')}>
+   568→                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+   569→                    <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"/>
+   570→                </svg>
+   571→                Stories
+   572→            </button>
+   573→        </div>
+   574→
+   575→        <AnimatePresence>
+   576→            {!isSearchMode && showHeaders && (
+   577→                <motion.div
+   578→                className="newsfeed-header"
+   579→                initial={{opacity: 0}}
+   580→                animate={{opacity: 1, transition: {type: 'spring', stiffness: 300, damping: 25, mass: 0.8}}}
+   581→                exit={{ opacity: 0, y: -20,
+   582→                        transition: {
+   583→                        duration: 0.2,
+   584→                        ease: "easeOut"
+   585→                        }
+   586→                }}
+   587→                >
+   588→
+   589→                    {header_links.map((header_link, index) => (
+   590→                        <div key={index} className="header-links">
+   591→                            <div onClick={() => handleClickHeaderLinks(header_link.path) } className='header-link'>
+   592→                                {header_link.label}
+   593→                                <div className={header_link.path === location.pathname ? "header-underline" : ''}/>
+   594→                            </div>
+   595→                        </div>
+   596→                    ))}
+   597→
+   598→                </motion.div>
+   599→            )}
+   600→            </AnimatePresence>
+   601→
+   602→        <AnimatePresence>
+   603→        <div className="postcards-parent-container">
+   604→            {isPeopleSearchMode ? (
+   605→                <>
+   606→                    {searchedUsers.length === 0 && !isLoading && (
+   607→                        <div className="search-empty-state">
+   608→                            {activeSearchError ? 'Search failed. Please try again.' : 'No matching people found.'}
+   609→                        </div>
+   610→                    )}
+   611→
+   612→                    {searchedUsers.length > 0 && (
+   613→                        <div className="user-search-results">
+   614→                            {searchedUsers.map((person, index) => (
+   615→                                <motion.div
+   616→                                    key={person.id}
+   617→                                    className="user-search-card"
+   618→                                    onClick={(e) => handleClickUserProfile(e, user?.userData?.[0]?.id, person.id, person.username)}
+   619→                                    role="button"
+   620→                                    tabIndex={0}
+   621→                                    onKeyDown={(e) => {
+   622→                                        if(e.key === 'Enter' || e.key === ' '){
+   623→                                            e.preventDefault();
+   624→                                            handleClickUserProfile(e, user?.userData?.[0]?.id, person.id, person.username);
+   625→                                        }
+   626→                                    }}
+   627→                                    initial={{ opacity: 0, y: 10 }}
+   628→                                    animate={{ opacity: 1, y: 0 }}
+   629→                                    transition={{ duration: 0.3, delay: 0.05 * index, ease: [0.22, 1, 0.36, 1] }}
+   630→                                >
+   631→                                    <div className="user-search-avatar-wrap">
+   632→                                        <div className={`user-avatar-container ${person.badge === 'legend' ? 'avatar-ring-legend' : person.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+   633→                                            <img
+   634→                                                loading="lazy"
+   635→                                                className="user-info-avatar"
+   636→                                                src={person.image_url || '/assets/profile.jpg'}
+   637→                                                alt={`${person.name || 'User'} profile picture`}
+   638→                                            />
+   639→                                        </div>
+   640→                                    </div>
+   641→                                    <div className="user-search-info">
+   642→                                        <div className="user-search-name-row">
+   643→                                            <p className="user-search-name">{person.name || 'Unknown'}</p>
+   644→                                            <VerifiedBadge badge={person.badge} size={14} />
+   645→                                        </div>
+   646→                                        {person.username && (
+   647→                                            <p className="user-search-username">@{person.username}</p>
+   648→                                        )}
+   649→                                    </div>
+   650→                                </motion.div>
+   651→                            ))}
+   652→                        </div>
+   653→                    )}
+   654→                </>
+   655→            ) : (
+   656→            <>
+   657→            {!isSearchMode && session && (
+   658→                <DashboardBriefing onWriteResponse={(prompt) => {
+   659→                    if (handleOpenTextEditor) {
+   660→                        handleOpenTextEditor({ promptId: prompt.id, promptText: prompt.prompt_text });
+   661→                    }
+   662→                }} />
+   663→            )}
+   664→
+   665→            {isFollowingFeed && !activeIsLoading && journals.length === 0 && !isSearchMode && (
+   666→                <div className="following-empty-state" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-secondary)' }}>
+   667→                    <p>Your Following feed is empty</p>
+   668→                    <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>Follow writers to see their posts here</p>
+   669→                </div>
+   670→            )}
+   671→
+   672→            {isForYouFeed && !activeIsLoading && journals.length === 0 && !isSearchMode && (
+   673→                <div className="following-empty-state" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-secondary)' }}>
+   674→                    <p>No recommendations yet</p>
+   675→                    <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>We're still learning your taste — check back soon as more posts are published</p>
+   676→                </div>
+   677→            )}
+   678→
+   679→            {journals.length === 0 && !isLoading && !isFollowingFeed && !isForYouFeed && (
+   680→                <div className="search-empty-state">
+   681→                    {activeSearchError ? 'Search failed. Please try again.'
+   682→                     : isSearchMode ? 'No matching posts found.'
+   683→                     : 'No post available...'}
+   684→                </div>
+   685→            )}
+   686→            {journals.map((journal, index) => {
+   687→                const isRepost = journal?.is_repost === true;
+   688→                const previewText = !isRepost ? (journal.preview_text || '') : '';
+   689→                const thumbnail = !isRepost ? (journal.thumbnail_url || null) : null;
+   690→                const isLiked = journal?.has_liked;
+   691→                const isBookmarked = journal?.has_bookmarked;
+   692→
+   693→                // For repost cards: use preview_text from repost source
+   694→                const repostSource = isRepost ? journal?.repost_source : null;
+   695→                const repostSourcePreviewText = repostSource?.preview_text || '';
+   696→
+   697→                return(
+   698→                    <motion.div
+   699→                        className={`cards${isRepost ? ' is-repost-card' : ''}`}
+   700→                        key={journal.id}
+   701→                    >
+   702→
+   703→                        {isRepost && (
+   704→                            <div className="repost-header-badge">
+   705→                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="var(--text-faint)">
+   706→                                    <path d="M7 7h10l-1.293-1.293a1 1 0 0 1 1.414-1.414l3 3a1 1 0 0 1 0 1.414l-3 3a1 1 0 0 1-1.414-1.414L17 9H7a1 1 0 0 1-1-1V5a1 1 0 0 1 2 0v2zm10 10H7l1.293 1.293a1 1 0 0 1-1.414 1.414l-3-3a1 1 0 0 1 0-1.414l3-3a1 1 0 1 1 1.414 1.414L7 15h10a1 1 0 0 1 1 1v3a1 1 0 0 1-2 0v-2z"/>
+   707→                                </svg>
+   708→                                <span onClick={(e) => handleClickUserProfile(e, user?.userData?.[0]?.id, journal.users.id)} className="repost-header-name">{journal.users.name}</span>
+   709→                                <span>reposted</span>
+   710→                            </div>
+   711→                        )}
+   712→
+   713→                        {isRepost ? (
+   714→                            <div
+   715→                                className="card-content"
+   716→                                onClick={(e) => {
+   717→                                    e.stopPropagation();
+   718→                                    if(session){
+   719→                                        const formadata = new FormData();
+   720→                                        formadata.append('journalId', journal.id);
+   721→                                        mutateViews.mutate(formadata);
+   722→                                    }
+   723→                                    const postSlug = journal.title
+   724→                                        ? journal.title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+   725→                                        : '';
+   726→                                    navigate(`/home/post/${encodeURIComponent(journal.id)}${postSlug ? `/${postSlug}` : ''}`, {
+   727→                                        state: {
+   728→                                            isRepost: true,
+   729→                                            repostCaption: journal.repost_caption || '',
+   730→                                            repostSource: repostSource,
+   731→                                            title: journal.title,
+   732→                                            userId: journal.users?.id,
+   733→                                            name: journal.users?.name,
+   734→                                            avatar: journal.users?.image_url,
+   735→                                            created_at: journal.created_at,
+   736→                                            journalId: journal.id,
+   737→                                            isLiked: journal.has_liked,
+   738→                                            commentsCount: journal.comment_count?.[0]?.count || 0,
+   739→                                            isBookmarked: journal.has_bookmarked,
+   740→                                            likesCount: journal.like_count?.[0]?.count || 0,
+   741→                                            bookmarksCount: journal.bookmark_count?.[0]?.count || 0,
+   742→                                            badge: journal.users?.badge,
+   743→                                        }
+   744→                                    });
+   745→                                }}
+   746→                            >
+   747→                                {journal.repost_caption && (
+   748→                                    <p className="repost-caption-text">{journal.repost_caption}</p>
+   749→                                )}
+   750→                                {repostSource ? (
+   751→                                    <div className="repost-embedded-card">
+   752→                                        <div className="repost-embedded-author">
+   753→                                            <div className={`repost-embedded-avatar-wrap ${repostSource.users?.badge === 'legend' ? 'avatar-ring-legend' : repostSource.users?.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+   754→                                                <img className="repost-embedded-avatar" src={repostSource.users?.image_url || '/assets/profile.jpg'} alt="original author" />
+   755→                                            </div>
+   756→                                            <span className="repost-embedded-name">{repostSource.users?.name}</span>
+   757→                                            <VerifiedBadge badge={repostSource.users?.badge} size={12} />
+   758→                                        </div>
+   759→                                        <p className="repost-embedded-title">{repostSource.title?.length > 60 ? repostSource.title.substring(0, 60) + '...' : repostSource.title}</p>
+   760→                                        {repostSourcePreviewText && (
+   761→                                            <p className="repost-embedded-text">{repostSourcePreviewText}</p>
+   762→                                        )}
+   763→                                    </div>
+   764→                                ) : (
+   765→                                    <div className="repost-unavailable">
+   766→                                        This post is no longer available
+   767→                                    </div>
+   768→                                )}
+   769→                            </div>
+   770→                        ) : (
+   771→                            <>
+   772→                                {thumbnail && (
+   773→                                    <img
+   774→                                        className="card-image-banner"
+   775→                                        src={thumbnail}
+   776→                                        alt={journal?.title ? `${journal.title} cover image` : "Post cover image"}
+   777→                                        loading="lazy"
+   778→                                        onError={handleImageFallback}
+   779→                                        onClick={(e) => viewContent(e, null, '', journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)}
+   780→                                    />
+   781→                                )}
+   782→
+   783→                                <div className="card-content">
+   784→                                    <div onClick={(e) => viewContent(e, null, '', journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)} className="content-container">
+   785→                                        <div className="feed-text-content-container">
+   786→                                            <div className="feed-title-content">
+   787→                                                <h2 className="feed-title">{journal.title.length > 55 ? `${journal.title.substring(0, 55)}...` : journal.title}<PromptBadge promptId={journal.prompt_id} /></h2>
+   788→                                            </div>
+   789→                                            <p className="feed-text-content">{previewText}</p>
+   790→                                        </div>
+   791→                                    </div>
+   792→                                </div>
+   793→                            </>
+   794→                        )}
+   795→
+   796→                        <div className="card-icons-container">
+   797→                            <div className="user-info-child-container">
+   798→                                <div onClick={(e) => handleClickUserProfile(e, user?.userData?.[0].id, journal.users.id)} className={`user-avatar-container ${journal.users.badge === 'legend' ? 'avatar-ring-legend' : journal.users.badge === 'og' ? 'avatar-ring-og' : ''}`}>
+   799→                                    <img loading="lazy" className="user-info-avatar" src={journal.users.image_url || '/assets/profile.jpg'} alt={`${journal?.users?.name || "User"} profile picture`} />
+   800→                                </div>
+   801→                                <div onClick={(e) => handleClickUserProfile(e, user?.userData?.[0].id, journal.users.id)} className="user-name-container">
+   802→                                    <p className="user-newsfeed-name">{journal.users.name}</p>
+   803→                                    <VerifiedBadge badge={journal.users.badge} size={14} />
+   804→                                </div>
+   805→                                <div className="name-info-separator">•</div>
+   806→                                <p className="user-post-date">{formatPostDate(journal.created_at)}</p>
+   807→
+   808→                                    {cardIcons && (
+   809→                                        cardIcons.map((icon, index) =>(
+   810→                                            <div key={index} className="icon-container">
+   811→
+   812→                                                {icon.likeAction && (
+   813→                                                    <div id="card-icons" className={icon.className}>
+   814→                                                        <ReactionButton
+   815→                                                            userReaction={journal?.user_reaction}
+   816→                                                            reactionCount={journal?.reaction_count?.[0]?.count || journal?.like_count?.[0]?.count || 0}
+   817→                                                            onReact={(reactionType) => handleReaction(journal.id, journal.users.id, reactionType)}
+   818→                                                            disabled={!session}
+   819→                                                        />
+   820→                                                    </div>
+   821→                                                )}
+   822→
+   823→                                                {icon.commentAction && (
+   824→                                                    <div onClick={(e) => icon.commentAction(e, null, '', journal.title, journal.users.id, journal.users.name, journal.users.image_url, journal.created_at, journal.id, journal.has_liked, journal.comment_count?.[0]?.count, journal.has_bookmarked, journal.like_count?.[0].count, journal.bookmark_count?.[0].count, journal.users.badge, journal?.post_type, journal?.user_reaction, journal?.reaction_count?.[0]?.count || 0)} id="card-icons" className={icon.className}>
+   825→                                                        {icon.label}
+   826→                                                    </div>
+   827→                                                )}
+   828→
+   829→                                            {icon.bookmarkAction && (
+   830→                                                <div onClick={(e) => icon.bookmarkAction(e, journal.id)} id="card-icons" className={icon.className}>
+   831→                                                    {icon.checkBookrmark(isBookmarked)}
+   832→                                                </div>
+   833→                                            )}
+   834→
+   835→                                            {icon.repostAction && journal.users.id !== userId && (
+   836→                                                <div onClick={(e) => {
+   837→                                                    e.preventDefault();
+   838→                                                    e.stopPropagation();
+   839→                                                    if(!session) return openAuthModal();
+   840→                                                    const journalForModal = journal.is_repost && journal.repost_source
+   841→                                                        ? { id: journal.repost_source.id, title: journal.repost_source.title, users: journal.repost_source.users }
+   842→                                                        : journal;
+   843→                                                    setRepostModalJournal(journalForModal);
+   844→                                                }} id="card-icons" className={icon.className}>
+   845→                                                    {icon.repostIcon}
+   846→                                                </div>
+   847→                                            )}
+   848→
+   849→                                            {icon.iconView && (
+   850→                                                <div id="card-icons-view">
+   851→                                                    {icon.iconView}
+   852→                                                </div>
+   853→                                            )}
+   854→
+   855→                                            {/* countLike now handled by ReactionButton */}
+   856→                                            {icon.countComments && icon.countComments(journal.comment_count?.[0]?.count)}
+   857→                                            {icon.countBookmarks && icon.countBookmarks(journal.bookmark_count?.[0].count)}
+   858→                                            {icon.iconCount && icon.iconCount(journal?.views)}
+   859→                                        </div>
+   860→                                    ))
+   861→                                )}
+   862→                            </div>
+   863→
+   864→
+   865→
+   866→                            <div className="reading-time-container">
+   867→                                <p className="reading-time-text">{journal.reading_time ? `${journal.reading_time} ${journal.reading_time > 1 ? 'mins' : 'min'} read` : CalculateText(previewText)}</p>
+   868→                            </div>
+   869→
+   870→                            <div className="user-post-settings">
+   871→                                <svg
+   872→                                    onClick={(e) => {
+   873→                                        e.stopPropagation();
+   874→                                        setShareMenuPostId(shareMenuPostId === journal.id ? null : journal.id);
+   875→                                    }}
+   876→                                    xmlns="http://www.w3.org/2000/svg"
+   877→                                    height="24px"
+   878→                                    viewBox="0 0 24 24"
+   879→                                    width="24px"
+   880→                                    fill="currentColor"
+   881→                                >
+   882→                                    <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+   883→                                </svg>
+   884→                                {shareMenuPostId === journal.id && (
+   885→                                    <ShareMenu
+   886→                                        url={getShareUrl(journal.id)}
+   887→                                        title={journal.title || ''}
+   888→                                        onClose={() => setShareMenuPostId(null)}
+   889→                                    />
+   890→                                )}
+   891→                            </div>
+   892→                        </div>
+   893→                        {showBookmarkedMessage === journal.id && (
+   894→                            <div
+   895→                            className="bookmarked-content-message-container"
+   896→                            >
+   897→                                {bookmarkedMessage}
+   898→
+   899→                            </div>
+   900→                        )}
+   901→                    </motion.div>
+   902→                )
+   903→            })}
+   904→            </>
+   905→            )}
+   906→
+   907→            {!isSearchMode && (
+   908→                <div className="inview" ref={ref}>
+   909→                    <MoonLoader loading={activeIsFetchingNextPage} color="rgba(255, 255, 255, 0.64)" speedMultiplier={1} size={20}/>
+   910→                </div>
+   911→            )}
+   912→        </div>
+   913→       </AnimatePresence>
+   914→
+   915→        {repostModalJournal && (
+   916→            <RepostModal
+   917→                journal={repostModalJournal}
+   918→                onClose={(result) => {
+   919→                    setRepostModalJournal(null);
+   920→                    if(result === 'success'){
+   921→                        setRepostToastMessage('Post was reposted');
+   922→                        setTimeout(() => setRepostToastMessage(''), 2500);
+   923→                    }
+   924→                }}
+   925→            />
+   926→        )}
+   927→
+   928→        <AnimatePresence>
+   929→            {repostToastMessage && (
+   930→                <motion.div
+   931→                    className="repost-toast"
+   932→                    initial={{ opacity: 0, y: 8 }}
+   933→                    animate={{ opacity: 1, y: 0 }}
+   934→                    exit={{ opacity: 0, y: 8 }}
+   935→                    transition={{ duration: 0.2 }}
+   936→                >
+   937→                    {repostToastMessage}
+   938→                </motion.div>
+   939→            )}
+   940→        </AnimatePresence>
+   941→        </>
+   942→    )
+   943→}
+   944→
+   945→export default PostCards;
+   946→

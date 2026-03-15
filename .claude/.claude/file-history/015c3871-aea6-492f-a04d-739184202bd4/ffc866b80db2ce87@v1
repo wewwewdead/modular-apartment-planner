@@ -1,0 +1,119 @@
+# Enhanced Spiral Galaxy Visuals for Universe Canvas
+
+## Context
+Galaxy centers on the Universe canvas are currently just text labels with posts clustered nearby as glowing dots. The user wants each galaxy to display a stylized spiral galaxy visual — with a bright core, spiral arms, and particle scatter — inspired by a reference image showing realistic spiral galaxies with blue/orange arms, glowing cores, and connection lines.
+
+---
+
+## Approach
+
+Add a new `galaxyVisuals.js` utility that generates deterministic spiral galaxy data per user and draws it via canvas API. Render as a single `<Shape sceneFunc>` in `InteractiveLayer.jsx` before labels and stars (so the visual sits behind clickable elements).
+
+Each galaxy gets: outer halo → spiral arm particles → arm glow lines → bright core glow. Parameters (arm count, rotation, tilt, winding) are seeded from `simpleHash(userId)` for consistency across sessions.
+
+---
+
+## Files
+
+### 1. NEW: `client/src/components/Universe/utils/galaxyVisuals.js`
+
+**Exports:**
+- `generateGalaxyData(userId)` — Seeded PRNG (Mulberry32, seed offset `7919`) generates:
+  - `armCount`: 2–4
+  - `rotation`: 0–2π
+  - `axialTilt`: 0.45–0.75 (Y compression for perspective)
+  - `winding`: 2.5–4.0 radians (arm tightness)
+  - `galaxyRadius`: 250–350 world units
+  - `coreSize`: 0.18–0.28 fraction of radius
+  - `particles[]`: Pre-computed array of ~300 arm particles (x, y, radius, r, g, b, alpha)
+  - `armCurves[]`: Pre-computed polyline points for each arm glow line
+
+- `drawGalaxyVisuals(ctx, galaxies)` — Single function that iterates all galaxies and draws each in 4 passes:
+  1. **Outer halo** — Large faint radial gradient (userColor at 0.05 opacity)
+  2. **Arm particles** — Pre-computed dots scattered along Archimedean spirals, colored blue at outer edges → warm orange near core
+  3. **Arm glow lines** — Faint stroked curves along arm centers (opacity ~0.08)
+  4. **Core glow** — Multi-stop radial gradient: white center → warm yellow → userColor → transparent
+
+**Spiral math (Archimedean):**
+```
+r(t) = coreRadius + (galaxyRadius - coreRadius) * (t / winding)
+theta(t) = t + (armIndex / armCount) * 2π + rotation
+x = cx + r * cos(theta)
+y = cy + r * sin(theta) * axialTilt
+```
+Particles scatter perpendicular to arm tangent with spread widening outward.
+
+**Color strategy per galaxy:**
+- User's star color (from `getStarColor`) is the accent
+- Inner arm warmth: lerp user color → `#ffd7a0` (warm)
+- Outer arm coolness: lerp user color → `#4a7fff` (blue)
+- Core: `#fff` → `#fff8dc` → userColor → transparent
+
+**Performance:** All particle positions pre-computed in `generateGalaxyData` (via `useMemo` in InteractiveLayer). The `sceneFunc` is a pure draw loop — no math per frame. ~300 `ctx.arc` calls per galaxy, ~3-9k total for 10-30 galaxies — well within budget (MidGalaxyLayer already draws 800 gradient arcs).
+
+### 2. MODIFY: `client/src/components/Universe/layers/InteractiveLayer.jsx`
+
+- Add imports: `{ Shape }` from `react-konva`, `{ generateGalaxyData, drawGalaxyVisuals }` from `../utils/galaxyVisuals`, `{ getStarColor }` from `../utils/starUtils`
+- Add `useMemo` computing galaxy visual data:
+  ```jsx
+  const galaxyVisuals = useMemo(() =>
+      galaxies?.map(g => ({
+          x: g.x, y: g.y,
+          ...generateGalaxyData(g.userId),
+          color: getStarColor(g.userId),
+      })) || []
+  , [galaxies]);
+  ```
+- Add `<Shape>` as first child in `<Layer>`, before GalaxyLabel mapping:
+  ```jsx
+  <Shape
+      sceneFunc={(ctx) => { drawGalaxyVisuals(ctx, galaxyVisuals); }}
+      perfectDrawEnabled={false}
+      listening={false}
+  />
+  ```
+
+### 3. MODIFY: `client/src/components/Universe/utils/proceduralGeneration.js`
+
+- Export `mulberry32` so `galaxyVisuals.js` can reuse it (currently only used internally)
+
+---
+
+## Rendering Order (InteractiveLayer)
+
+1. `<Shape>` — spiral galaxy visuals (new, behind everything)
+2. `<GalaxyLabel>` components — user name text
+3. `<StarGroup>` components — clickable post stars
+
+---
+
+## Reused Utilities
+
+| Utility | From | Purpose |
+|---------|------|---------|
+| `mulberry32(seed)` | `proceduralGeneration.js` (newly exported) | Seeded PRNG for deterministic galaxy params |
+| `simpleHash(str)` | `starUtils.js` | Hash userId for PRNG seed |
+| `getStarColor(userId)` | `starUtils.js` | Galaxy accent color |
+| `hexToRgba(hex, alpha)` | `starUtils.js` | Color string generation |
+
+---
+
+## Connection Lines
+
+Added inside the same `drawGalaxyVisuals` `sceneFunc`, after all galaxies are drawn:
+- For each pair of galaxies within ~5000 world units, draw a thin quadratic bezier curve
+- Stroke: white at ~0.06 opacity, lineWidth 0.5
+- Curve offset: perpendicular midpoint shift of 10% of the distance for a gentle arc
+- O(n^2) but trivially fast with 10-30 galaxies
+
+---
+
+## Verification
+
+1. Navigate to Universe — spiral galaxy visuals appear at each user's galaxy center
+2. Each galaxy has visible spiral arms, glowing core, and outer halo
+3. Galaxies look varied (different rotation, arm count, tilt) but consistent across page reloads
+4. Stars (posts) render on top of the galaxy visual, labels readable
+5. Galaxy label click and star click still work (Shape has `listening={false}`)
+6. Zoom in/out — galaxy visuals scale naturally with the canvas
+7. Performance smooth with 10-30 galaxies visible

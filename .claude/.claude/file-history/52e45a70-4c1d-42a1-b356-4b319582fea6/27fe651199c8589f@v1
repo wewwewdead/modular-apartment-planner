@@ -1,0 +1,93 @@
+# Redesign EditJournal to match Editor.jsx overlay UI
+
+## Context
+EditJournal currently renders as a small absolute-positioned overlay **inside** each `.postcards-grid-item` card. The user wants it to render as a full-screen overlay modal at the `.profile-parent-container` level, matching the Editor.jsx layout and UI.
+
+## Files to Modify
+
+1. **`client/src/components/HomePage/postCards/ProfilePostCards/editJournal.jsx`** — Restructure JSX + classes to match Editor.jsx
+2. **`client/src/components/HomePage/postCards/ProfilePostCards/profilepostcards.css`** — Replace old edit-journal styles with Editor-matching overlay styles
+3. **`client/src/components/HomePage/postCards/ProfilePostCards/ProfilePostCards.jsx`** — Move EditJournal render out of map loop, use portal to `.profile-parent-container`
+
+## Changes
+
+### 1. ProfilePostCards.jsx — Portal rendering
+
+- Import `createPortal` from `react-dom`
+- Remove the two `<EditJournal>` renders from inside the grid-view map (line 309-311) and list-view map (line 446-448)
+- Add a single EditJournal render **outside** both view loops, using `createPortal` to target `.profile-parent-container`:
+
+```jsx
+{showEditor !== null && createPortal(
+    <AnimatePresence>
+        <EditJournal journalData={journalData ?? {}} onClose={handleClickCloseEditor} />
+    </AnimatePresence>,
+    document.querySelector('.profile-parent-container')
+)}
+```
+
+### 2. editJournal.jsx — Match Editor.jsx structure
+
+Restructure the component to follow the Editor's visual hierarchy. It already imports `editor.css` (line 3), so all Editor classes are available.
+
+**New JSX structure:**
+```
+<div className="editor-parent-container">          ← full overlay backdrop with blur
+  <motion.div className="editor-container">         ← centered modal card (720px, 80% height)
+    <div className="editor-close-bttn-container">   ← right-aligned close button
+      <button className="editor-close-bttn">X</button>
+    </div>
+
+    <input className="content-title-input" />        ← large serif title, bottom-border focus
+
+    <LexicalComposer>
+      <div className="toolbar-wrapper">              ← sticky toolbar
+        <ToolBar />
+      </div>
+      <div className="editor-loader-wrapper">        ← bar loader during save
+        <BarLoader />
+      </div>
+      <div className="editor-shell">                 ← scrollable editor content
+        <RichTextPlugin />
+        <ImagePlugin />
+        <HistoryPlugin />
+        <OnChangePlugin />
+      </div>
+      <div className="editor-footer">               ← footer with save button
+        <span></span>
+        <button className="editor-save-bttn">Save edit</button>
+      </div>
+    </LexicalComposer>
+  </motion.div>
+</div>
+```
+
+Key changes:
+- Wrap everything in `.editor-parent-container` (backdrop + blur overlay)
+- Use `.editor-container` for the centered modal card
+- Replace custom close button with `.editor-close-bttn-container` + `.editor-close-bttn`
+- Replace `.edit-joutnal-title-input` with `.content-title-input` (serif, bottom-border)
+- Add `.editor-footer` with save button styled as `.editor-save-bttn`
+- Remove the "Important Notes" section (unnecessary UI noise)
+- Keep the same save logic and LexicalComposer instance
+
+### 3. profilepostcards.css — Clean up old styles
+
+Remove the old edit-journal-specific CSS (lines ~683-812):
+- `.edit-journal-container` and its rules
+- `.edit-journal-header-container`, `.edit-journal-header`
+- `.first-child-header-container`, `.second-child-header-container`
+- `.save-edit-button`
+- `.edit-journal-close-bttn`
+- `.edit-joutnal-title-input`
+- `.edit-content`
+- `.edit-journal-container .editor-shell` override
+
+All styling now comes from the existing `editor.css` classes.
+
+## Verification
+1. Open profile page, click edit on any post (grid or list view)
+2. EditJournal should appear as full overlay covering the profile page (with backdrop blur), centered modal card matching the Editor's look
+3. Close button, title input, toolbar, editor area, and save button should all match Editor.jsx styling
+4. Editing and saving should still work correctly
+5. Test on mobile viewport sizes

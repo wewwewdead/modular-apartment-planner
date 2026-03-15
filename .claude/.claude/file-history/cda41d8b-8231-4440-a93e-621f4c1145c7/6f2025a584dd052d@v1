@@ -1,0 +1,149 @@
+# Personalized "For You" Feed + Interest-Based Explore
+
+## Context
+
+The onboarding wizard collects `writing_interests` (text[], up to 16 topics) and `writing_goal` (text) on the `users` table, but they're **never used** after storage. The app promises "personalize your experience" but serves the same chronological feed to everyone. This plan connects that data to two new features using the existing pgvector + embedding infrastructure.
+
+---
+
+## Phase 0: Database + Embedding Infrastructure
+
+### 0A. Migration SQL — `server/sql/personalized_feed.sql` (new file)
+
+- Add `interests_embedding vector(384)` column to `users`
+- Create `topic_embeddings` lookup table (16 canonical topics, primary key on `topic`)
+- IVFFlat index on `users.interests_embedding`
+- **RPC `get_for_you_feed(p_user_id, p_limit, p_before)`** — cosine similarity between `users.interests_embedding` and `journals.embeddings`, composite score: 60% semantic + 25% engagement + 15% recency (90-day window), excludes own posts & reposts, minimum 0.30 similarity floor, cursor pagination
+- **RPC `get_interest_posts(p_topic_embedding, p_limit, p_recency_days)`** — finds posts matching a single topic embedding, composite score: 50% semantic + 35% engagement + 15% recency, 30-day default window
+
+### 0B. Interest Embedding Service — `server/services/interestEmbeddingService.js` (new file)
+
+- `generateInterestsEmbedding(interests[])` — joins interests into comma string, runs through existing `GenerateEmbeddings` utility
+- `updateUserInterestsEmbedding(userId, interests[])` — generates + stores on users table
+- `bootstrapTopicEmbeddings()` — called at server start, generates embeddings for any missing topics in `topic_embeddings` table, loads all into in-memory `Map` cache
+- `getTopicEmbedding(topic)` — returns cached embedding for a topic
+
+### 0C. Hook into Onboarding — modify `server/services/uploadService.js`
+
+- In `completeOnboardingService` (line ~113): after the existing Supabase update, fire-and-forget call to `updateUserInterestsEmbedding(userId, writingInterests)`
+- Import `updateUserInterestsEmbedding` from `interestEmbeddingService.js`
+
+### 0D. Bootstrap on Startup — modify `server/server.js`
+
+- Import `bootstrapTopicEmbeddings` and call after `app.listen()` (non-blocking `.catch()`)
+
+### 0E. Backfill Script — `server/scripts/backfillInterestEmbeddings.js` (new file)
+
+- Fetch users with `writing_interests` but null `interests_embedding`, generate + store embeddings
+
+---
+
+## Phase 1: "For You" Feed Tab
+
+### Backend
+
+**`server/services/getService.js`** — add `getForYouFeedService(limit, userId, before)`
+- Pattern mirrors `getFollowingFeedService` (line 528-601): calls RPC, reshapes rows to PostgREST format, attaches personalization (has_liked, has_bookmarked, user_reaction), handles repost sources, cursor pagination
+- Returns `{ data, hasMore }`
+
+**`server/controller/getController.js`** — add `getForYouFeedController`
+- Same pattern as `getFollowingFeedController`
+
+**`server/routes/routes.js`** — add route at line 240 (between `/journals/following` and `/journals`):
+```
+router.get('/journals/for-you', requireAuth, getForYouFeedController);
+```
+
+### Frontend
+
+**`client/API/Api.js`** — add `getForYouFeed(token, cursor, limit)` mirroring `getFollowingFeed`
+
+**`client/src/App.jsx`** — add route at line 115:
+```jsx
+<Route path='for-you' element={<PostCards/>}/>
+```
+
+**`client/src/components/HomePage/postCards/PostCards.jsx`** — main changes:
+1. Import `getForYouFeed`
+2. Add `isForYouFeed = location.pathname === '/home/for-you'` (line ~158)
+3. Add `useInfiniteQuery` for for-you feed (same pattern as following, `enabled: isForYouFeed && !!session`)
+4. Extend active feed switching (lines 368-372) to include for-you data
+5. Add "For You" tab button in `search-nav-row` (line ~542) — **conditionally rendered** only when user has `writing_interests?.length > 0`
+6. Add empty state for no recommendations
+
+**`client/src/components/HomePage/postCards/postcards.css`** — add `.search-nav-for-you` styling with amber accent
+
+---
+
+## Phase 2: Interest-Based Explore Page
+
+### Backend
+
+**`server/services/exploreInterestsService.js`** (new file)
+- `getInterestSectionsService(userId)` — fetches user's `writing_interests`, for each interest (capped at 8) gets its cached topic embedding via `getTopicEmbedding()`, calls `get_interest_posts` RPC in parallel via `Promise.all`, filters sections with < 2 posts
+- Returns `{ sections: [{ interest: "Poetry", posts: [...] }, ...] }`
+
+**`server/controller/exploreController.js`** (new file) — `getInterestSectionsController`
+
+**`server/routes/routes.js`** — add `router.get('/explore/interests', requireAuth, getInterestSectionsController)`
+
+### Frontend
+
+**`client/API/Api.js`** — add `getInterestSections(token)`
+
+**`client/src/components/HomePage/explore/InterestSections.jsx`** (new file)
+- Horizontal scroll card sections, one per interest
+- Each card shows: image thumbnail (if exists), title (50 char cap), excerpt, author + date
+- Uses existing `ParseContent`, `formatPostDate`, `handleImageFallback` utils
+- Click navigates to post (with view tracking)
+
+**`client/src/components/HomePage/explore/interestSections.css`** (new file)
+- Horizontal scroll with `scroll-snap-type`, hidden scrollbar
+- Cards: 220px wide, glass card style, hover lift
+- Mobile: 180px cards
+
+**`client/src/components/HomePage/explore/ExplorePage.jsx`** — integrate:
+1. Import `getInterestSections` + `InterestSections`
+2. Add `useQuery` with `staleTime: 10min`, `enabled: !!session && !isSearchMode`
+3. Render `<InterestSections>` between hero card (line 492) and runners-up section (line 494)
+4. Unauthenticated users see the existing generic Explore unchanged
+
+---
+
+## Edge Cases
+
+- **No interests**: For You tab hidden, explore interest query disabled, RPCs return empty
+- **No post embeddings**: RPCs filter `embeddings IS NOT NULL`, gracefully skip
+- **Embedding generation failure**: Non-blocking fire-and-forget at onboarding, doesn't break signup
+- **Topic cache miss**: Section skipped for that interest, others still render
+- **< 2 results per section**: Section hidden (not worth showing)
+
+---
+
+## New Files (5)
+1. `server/sql/personalized_feed.sql`
+2. `server/services/interestEmbeddingService.js`
+3. `server/services/exploreInterestsService.js`
+4. `server/controller/exploreController.js`
+5. `client/src/components/HomePage/explore/InterestSections.jsx` + CSS
+
+## Modified Files (8)
+1. `server/services/uploadService.js` — hook embedding gen into onboarding
+2. `server/server.js` — bootstrap topic embeddings
+3. `server/services/getService.js` — add `getForYouFeedService`
+4. `server/controller/getController.js` — add `getForYouFeedController`
+5. `server/routes/routes.js` — 2 new routes
+6. `client/API/Api.js` — 2 new API functions
+7. `client/src/App.jsx` — for-you route
+8. `client/src/components/HomePage/postCards/PostCards.jsx` — For You tab + query
+
+## Verification
+
+1. Run `personalized_feed.sql` migration in Supabase SQL editor
+2. Start server — confirm "topic_embeddings: all topics present" in console
+3. Complete onboarding as test user with interests → verify `interests_embedding` is populated on users row
+4. Navigate to `/home/for-you` → should show posts ranked by interest relevance
+5. Navigate to `/home/explore` while logged in → should see "Trending in [Interest]" sections between hero and runners
+6. Test unauthenticated → For You tab hidden, Explore shows generic layout
+7. Test user with no interests → For You tab hidden, no interest sections
+8. Run `backfillInterestEmbeddings.js` for existing users

@@ -1,0 +1,99 @@
+# Fix: Constellation Lines Not Showing + Add Label Input
+
+## Context
+
+Two issues with the Constellations feature:
+1. **Lines never render** — The SQL RPC `get_viewport_constellations` filters `WHERE status = 'accepted'`, so pending constellations are never sent to the client. The ConstellationLayer has code to render pending links but never receives them. Additionally, if one star of a constellation pair hasn't been loaded into the viewport yet, the position lookup fails and the line is skipped.
+2. **No label input** — When linking two stars, the `useConstellationLinkMode` hook immediately submits after clicking the second star with no UI for entering a constellation name. The backend already supports a `label` field.
+
+---
+
+## Fix 1: Lines Not Showing
+
+### 1.1 Update SQL RPC — `server/sql/constellations.sql`
+
+Replace the existing `get_viewport_constellations` function (run in Supabase SQL editor):
+- Change `WHERE c.status = 'accepted'` → `WHERE c.status IN ('accepted', 'pending')`
+- JOIN `journals` for both stars to return `universe_x, universe_y` as fallback positions
+
+This ensures pending constellations are returned to the client, and position data is available even when the other star isn't in the viewport.
+
+### 1.2 Update ConstellationLayer — `client/src/components/Universe/layers/ConstellationLayer.jsx`
+
+- Add fallback position logic: when `computedStarPositions` doesn't have a star, use the constellation's embedded `a_universe_x`/`b_universe_y` from the RPC
+- Skip `declined` status constellations (currently only `pending` is explicitly handled; declined would incorrectly render as accepted)
+
+In `linkData` memo, add: `const isDeclined = link.status === 'declined';`
+
+In the render map, before position lookups:
+```js
+if (link.isDeclined) return null;
+```
+
+For position fallback:
+```js
+const posA = computedStarPositions.get(link.star_id_a)
+    || (link.a_universe_x != null ? { x: link.a_universe_x, y: link.a_universe_y } : null);
+```
+
+### 1.3 Update Universe.jsx — constellation data flow
+
+No changes needed — the constellations state already passes all fields from the RPC result through to ConstellationLayer.
+
+---
+
+## Fix 2: Add Label Input When Linking Stars
+
+### 2.1 Update hook — `client/src/components/Universe/hooks/useConstellationLinkMode.js`
+
+Add new state and flow:
+- Add `secondStar` state — set when user clicks the second star (instead of immediately submitting)
+- Add `submitLink(label)` function — calls `requestConstellation(token, firstStar.id, secondStar.id, label)` and resets state
+- Change `handleStarClickInLinkMode`: when second star is clicked, set `secondStar` and return `{ step: 'enter_label' }` instead of submitting
+- Update `linkModeStatus` to include `'enter_label'` when `secondStar` is set
+- Update `cancelLinkMode` to also clear `secondStar`
+- Export: `secondStar`, `submitLink`
+
+### 2.2 Update Universe.jsx — label input panel
+
+When `linkModeStatus === 'enter_label'`, replace the current indicator bar with a label input panel:
+- Small floating panel (same glass morphism style as other panels)
+- Show selected star names: "Link [firstStar.title] ↔ [secondStar.title]"
+- Text input for constellation name (placeholder: "Name this constellation (optional)")
+- Two buttons: "Create Link" (submit) and "Cancel"
+- On submit: call `submitLink(inputValue)`, refetch constellations via camera state change
+- On cancel: call `cancelLinkMode`
+
+The `handleStarClick` callback already intercepts link mode clicks — when `handleStarClickInLinkMode` returns `{ step: 'enter_label' }`, the star click handler already returns early (no star preview).
+
+### 2.3 Add CSS — `client/src/components/Universe/Universe.module.css`
+
+Add styles for the label input panel:
+- `.labelInputPanel` — positioned center-top (similar to `linkModeIndicator`), glass morphism background, flex column layout, rounded corners
+- `.labelInputField` — transparent background input, white text, bottom border, no outline
+- `.labelInputActions` — flex row for buttons with gap
+- `.labelInputCreate` — accent blue button (match `previewReadBtn` style)
+- `.labelInputCancel` — muted ghost button
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `server/sql/constellations.sql` | Update RPC: include pending, JOIN journals for positions |
+| `client/src/components/Universe/layers/ConstellationLayer.jsx` | Add fallback positions, skip declined |
+| `client/src/components/Universe/hooks/useConstellationLinkMode.js` | Add `secondStar` state, `submitLink(label)` function |
+| `client/src/components/Universe/Universe.jsx` | Add label input panel UI when `linkModeStatus === 'enter_label'` |
+| `client/src/components/Universe/Universe.module.css` | Add label input panel styles |
+
+---
+
+## Verification
+
+1. **Pending lines**: Create a constellation request → dim dashed line appears immediately for the requester (without needing other user to accept)
+2. **Accepted lines**: Accept a request → flowing animated dashed lines appear for both users
+3. **Label input**: Click "Link Stars" → select own star → select other user's star → label input panel appears → type name → click "Create Link" → request sent with label
+4. **Label on line**: Accepted constellation with label shows text at midpoint
+5. **Skip label**: Submit with empty label → works fine, no label shown on line
+6. **Far-away stars**: Constellation between distant galaxies still renders a line (using fallback positions)

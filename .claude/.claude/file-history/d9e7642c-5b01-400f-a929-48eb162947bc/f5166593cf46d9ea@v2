@@ -1,0 +1,147 @@
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import { Layer, Shape, Text } from 'react-konva';
+import { STAR_COLORS } from '../utils/starUtils';
+
+const TWO_PI = Math.PI * 2;
+
+const parseHex = (hex) => ({
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+});
+
+const ConstellationLayer = React.memo(({ layerProps, constellations, computedStarPositions, zoom, chainColors, userId }) => {
+    const animRef = useRef({ time: 0 });
+    const shapeRef = useRef(null);
+    const rafRef = useRef(null);
+
+    const linkData = useMemo(() => {
+        if (!Array.isArray(constellations) || constellations.length === 0) return [];
+        return constellations.map((link, i) => {
+            const colorHex = chainColors?.get(link.id) || STAR_COLORS[i % STAR_COLORS.length];
+            const rgb = parseHex(colorHex);
+            const isPending = link.status === 'pending';
+            const isOwnPending = isPending && (link.user_id_a === userId || link.user_id_b === userId);
+            return { ...link, rgb, colorHex, isPending, isOwnPending };
+        });
+    }, [constellations, chainColors, userId]);
+
+    const animate = useCallback(() => {
+        animRef.current.time = performance.now();
+        if (shapeRef.current) {
+            shapeRef.current.getLayer()?.batchDraw();
+        }
+        rafRef.current = requestAnimationFrame(animate);
+    }, []);
+
+    useEffect(() => {
+        if (linkData.length === 0) return;
+        rafRef.current = requestAnimationFrame(animate);
+        return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        };
+    }, [animate, linkData.length]);
+
+    if (linkData.length === 0) return null;
+
+    return (
+        <Layer {...layerProps} listening={false}>
+            <Shape
+                ref={shapeRef}
+                sceneFunc={(ctx) => {
+                    const time = animRef.current.time;
+
+                    for (const link of linkData) {
+                        const posA = computedStarPositions.get(link.star_id_a);
+                        const posB = computedStarPositions.get(link.star_id_b);
+                        if (!posA || !posB) continue;
+
+                        const { rgb } = link;
+                        const ax = posA.x;
+                        const ay = posA.y;
+                        const bx = posB.x;
+                        const by = posB.y;
+
+                        if (link.isPending) {
+                            // Only show pending links for current user
+                            if (!link.isOwnPending) continue;
+
+                            // Dim dashed line
+                            ctx.save();
+                            ctx.setLineDash([6, 10]);
+                            ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.12)`;
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.moveTo(ax, ay);
+                            ctx.lineTo(bx, by);
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+                            ctx.restore();
+                            continue;
+                        }
+
+                        // Accepted link: outer glow
+                        ctx.save();
+                        ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.08)`;
+                        ctx.lineWidth = 6;
+                        ctx.beginPath();
+                        ctx.moveTo(ax, ay);
+                        ctx.lineTo(bx, by);
+                        ctx.stroke();
+
+                        // Inner line
+                        ctx.strokeStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.35)`;
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(ax, ay);
+                        ctx.lineTo(bx, by);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        // Energy pulse — bright dot traveling along the line
+                        const speed = 0.0003;
+                        const t = ((time * speed) % 1 + 1) % 1;
+                        const px = ax + (bx - ax) * t;
+                        const py = ay + (by - ay) * t;
+
+                        ctx.beginPath();
+                        ctx.arc(px, py, 3, 0, TWO_PI);
+                        ctx.fillStyle = `rgba(${Math.min(rgb.r + 80, 255)},${Math.min(rgb.g + 80, 255)},${Math.min(rgb.b + 80, 255)},0.7)`;
+                        ctx.fill();
+
+                        // Pulse glow
+                        ctx.beginPath();
+                        ctx.arc(px, py, 8, 0, TWO_PI);
+                        const pulseGrad = ctx.createRadialGradient(px, py, 0, px, py, 8);
+                        pulseGrad.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},0.4)`);
+                        pulseGrad.addColorStop(1, 'rgba(0,0,0,0)');
+                        ctx.fillStyle = pulseGrad;
+                        ctx.fill();
+
+                        // Label at midpoint
+                        if (link.label) {
+                            const mx = (ax + bx) / 2;
+                            const my = (ay + by) / 2;
+                            const invZoom = 1 / zoom;
+                            ctx.save();
+                            ctx.translate(mx, my);
+                            ctx.scale(invZoom, invZoom);
+                            ctx.font = '11px sans-serif';
+                            ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.6)`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(link.label, 0, -12);
+                            ctx.restore();
+                        }
+                    }
+                }}
+                perfectDrawEnabled={false}
+                listening={false}
+            />
+        </Layer>
+    );
+});
+
+ConstellationLayer.displayName = 'ConstellationLayer';
+
+export default ConstellationLayer;

@@ -1,0 +1,766 @@
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-49-};
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-50-
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-51-const resolveAuthUser = async (token) => {
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:52:    if (!token) return { user: null, error: null };
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-53-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:54:    if (authError || !authData?.user?.id) {
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:55:        return { user: null, error: authError || new Error("missing user id") };
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-56-    }
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:57:    return { user: authData.user, error: null };
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-58-};
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-59-
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-60-const requireAuth = async (req, res, next) => {
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-61-    const token = extractBearerToken(req.headers?.authorization);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-62-    if (!token) return res.status(401).json({ error: 'not authorized' });
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:63:    const { user, error } = await resolveAuthUser(token);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:64:    if (error || !user?.id) return res.status(401).json({ error: 'not authorized' });
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:65:    req.userId = user.id;
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:66:    req.authUser = user;
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-67-    return next();
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-68-};
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-69-
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-70-const optionalAuth = async (req, _res, next) => {
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-71-    const token = extractBearerToken(req.headers?.authorization);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-72-    if (!token) return next();
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:73:    const { user } = await resolveAuthUser(token);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:74:    if (user?.id) {
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:75:        req.userId = user.id;
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:76:        req.authUser = user;
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-77-    }
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-78-    return next();
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-79-};
+--
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-83-storyRouter.get('/stories', optionalAuth, getStoriesController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-84-storyRouter.get('/stories/my', requireAuth, getMyStoriesController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-85-storyRouter.get('/stories/library', requireAuth, getMyLibraryController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js:86:storyRouter.get('/stories/user/:userId', optionalAuth, getUserStoriesController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-87-storyRouter.get('/stories/:storyId', optionalAuth, getStoryByIdController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-88-storyRouter.patch('/stories/:storyId', requireAuth, upload, updateStoryController);
+C:\Users\johnm\iskrib_v3\server\routes\storyRoutes.js-89-storyRouter.delete('/stories/:storyId', requireAuth, deleteStoryController);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-44-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-45-const resolveAuthUser = async (token) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-46-    if (!token) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:47:        return { user: null, error: null };
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-48-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-49-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-50-    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:51:    if (authError || !authData?.user?.id) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:52:        return { user: null, error: authError || new Error("missing user id") };
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-53-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-54-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:55:    return { user: authData.user, error: null };
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-56-};
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-57-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-58-const requireAuth = async (req, res, next) => {
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-61-        return res.status(401).json({ error: 'not authorized' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-62-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-63-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:64:    const { user, error } = await resolveAuthUser(token);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:65:    if (error || !user?.id) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:66:        console.error('auth middleware error:', error?.message || 'missing user id');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-67-        return res.status(401).json({ error: 'not authorized' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-68-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-69-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:70:    req.userId = user.id;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:71:    req.authUser = user;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-72-    return next();
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-73-};
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-74-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-78-        return next();
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-79-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-80-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:81:    const { user } = await resolveAuthUser(token);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:82:    if (user?.id) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:83:        req.userId = user.id;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:84:        req.authUser = user;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-85-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-86-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-87-    return next();
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-108-        likes(count),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-109-        comments(count),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-110-        bookmarks(count),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:111:        users(id, name, image_url, badge)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-112-    ),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:113:    users!sender_id(id, name, image_url, badge),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-114-    constellations!constellation_id(status, star_id_a, star_id_b)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-115-`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-116-const NOTIFICATION_OPINION_SELECT = `
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-120-    opinion_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-121-    read,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-122-    created_at,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:123:    opinions!opinion_id(id, opinion, user_id, created_at),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:124:    users!sender_id(id, name, image_url, badge)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-125-`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-126-const COLLECTION_SELECT_COLUMNS = `
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-127-    id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:128:    user_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-129-    name,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-130-    description,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-131-    is_public,
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-137-        id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-138-        title,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-139-        created_at,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:140:        user_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-141-        content,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:142:        users(id, image_url, name, badge),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-143-        comments!post_id(count),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-144-        bookmarks!journal_id(count),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-145-        likes!journal_id(count)
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-148-const NOT_COLLECTED_JOURNAL_SELECT = 'id, created_at, title, content';
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-149-const OPINION_LIST_SELECT = `
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-150-    id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:151:    user_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-152-    parent_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-153-    opinion,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-154-    reply_count,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-155-    created_at,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:156:    users(name, id, user_email, image_url, badge)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-157-`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-158-const MY_OPINION_SELECT = `
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-159-    id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:160:    user_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-161-    parent_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-162-    opinion,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-163-    reply_count,
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-165-`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-166-const USER_OPINION_SELECT = `
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-167-    id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:168:    user_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-169-    parent_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-170-    opinion,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-171-    reply_count,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-172-    created_at,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:173:    users(name, image_url, id, badge)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-174-`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-175-const COMMENT_REPLY_SELECT = `
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-176-    id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-177-    post_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-178-    parent_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:179:    user_id,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-180-    comment,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-181-    reply_count,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-182-    created_at,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:183:    users(name, image_url, id, badge)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-184-`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-185-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-186-const parseLimitWithinRange = (value, min, max, fallback = null) => {
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-194-    return parsed;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-195-};
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-196-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:197:export const imageUploader = async(file, userId, bucket) =>{
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-198-    if(!file){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-199-        throw new Error('no file received');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-200-    }
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-210-    .webp({quality: 80})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-211-    .toBuffer();
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-212-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:213:    const folderName = `user_id_${userId}`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-214-    const fileName = `${Date.now()}_${crypto.randomUUID()}.webp`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-215-    const filePath = `${folderName}/${fileName}`;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-216-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-241-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-242-router.get('/getUserData', getUserDataController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-243-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:244:router.get('/check-user', checkUserController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-245-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:246:router.post('/upload-user-data', requireAuth, upload, uploadUserDataController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-247-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:248:router.post('/update-user-data', requireAuth, upload, updateUserDataController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-249-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-250-router.post('/updateFontColor', requireAuth, upload, updateFont);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-251-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-267-router.get('/journals/hottest-monthly', getMonthlyHottestJournalsController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-268-router.get('/journals/canvas/gallery', getCanvasGalleryController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-269-router.get('/journals/search', searchJournalsController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:270:router.get('/users/search', searchUsersController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-271-router.get('/journal/:journalId/related', getRelatedPostsController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-272-router.get('/journal/:journalId', getJournalByIdController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-273-router.get('/universe/posts', getUniversePostsController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-274-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:275:router.get('/userJournals', requireAuth, getUserJournalsController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:276:router.get('/profileMedia', requireAuth, getProfileMediaController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-277-router.get('/visitedProfileMedia', requireAuth, getVisitedProfileMediaController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-278-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-279-router.get('/visitedUserJournals', getVisitedUserJournalsController);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-307-router.post('/addFollows', requireAuth, upload, addFollowController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-308-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-309-router.get('/getFollowsData', async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:310:    const {userId, loggedInUserId} = req.query;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:311:    if(!userId && !loggedInUserId) return res.status(400).json({error: 'userId or loggendUserId is undefined '});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-312-    // console.log(req.query)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-313-    try {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:314:        const followersCountPromise = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-315-        .from('follows')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-316-        .select('*', {count: 'exact', head: true})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:317:        .eq('following_id', userId);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-318-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-319-        const followingCountPromise = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-320-        .from('follows')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-321-        .select('*', {count: 'exact', head: true})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:322:        .eq('follower_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-323-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-324-        const isFollowingPromise = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-325-        .from('follows')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-326-        .select('*', {count: 'exact', head: true})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:327:        .eq('follower_id', loggedInUserId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:328:        .eq('following_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-329-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:330:        const [followersCountResult, followingsCountResult, isFollowingResult] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:331:            followersCountPromise, followingCountPromise, isFollowingPromise,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-332-        ])
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-333-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-334-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:335:        const {count: followersCount, error: errorFollowers } = followersCountResult;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-336-        const {count: followingsCount, error: errorFollowings} = followingsCountResult;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-337-        const {count: isFollowingCount, error: errorIsfollowing} = isFollowingResult;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-338-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-342-        }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-343-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-344-        return res.status(200).json({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:345:            followersCount: followersCount,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-346-            followingsCount: followingsCount,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-347-            isFollowing: isFollowingCount > 0
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-348-        })
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-355-})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-356-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-357-router.get('/getCountNotifications', requireAuth, async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:358:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:359:    if(!userId) return res.status(400).json({error: 'no userid'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-360-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-361-    const [journalCount, opinionCount] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-362-        supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-363-            .from('notifications')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-364-            .select('id', {count: 'exact', head: true})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:365:            .eq('receiver_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-366-            .eq('read', false),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-367-        supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-368-            .from('notification_opinions')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-369-            .select('id', {count: 'exact', head: true})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:370:            .eq('receiver_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-371-            .eq('read', false)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-372-    ]);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-373-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-381-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-382-router.get('/getNotifications', requireAuth, async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-383-    const {before} = req.query;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:384:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-385-    const parsedLimit = parseLimitWithinRange(
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-386-        req.query.limit,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-387-        NOTIFICATION_LIMIT_MIN,
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-399-    let journalQuery = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-400-    .from('notifications')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-401-    .select(NOTIFICATION_JOURNAL_SELECT)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:402:    .eq('receiver_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-403-    .order('created_at', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-404-    .order('id', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-405-    .limit(fetchLimit)
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-407-    let opinionQuery = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-408-    .from('notification_opinions')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-409-    .select(NOTIFICATION_OPINION_SELECT)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:410:    .eq('receiver_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-411-    .order('created_at', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-412-    .order('id', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-413-    .limit(fetchLimit)
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-447-    let hasBookMarkedResult = [];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-448-    if(journalIds.length > 0){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-449-        const [hasLiked, hasBookMarked] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:450:            supabase.from('likes').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:451:            supabase.from('bookmarks').select('journal_id').in('journal_id', journalIds).eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-452-        ]);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-453-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-454-        if(hasLiked.error || hasBookMarked.error){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-458-        hasBookMarkedResult = hasBookMarked.data || [];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-459-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-460-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:461:    const userHasLikedSet = new Set(hasLikedResult.map((likes) => likes.journal_id));
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:462:    const userHasBookmarkedSet = new Set(hasBookMarkedResult.map((bookmarks) => bookmarks.journal_id));
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-463-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-464-    const formatted = merged.map((notif) => ({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-465-        ...notif,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:466:        hasLiked: notif.source === 'journal' ? userHasLikedSet.has(notif.journal_id) : false,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:467:        hasBookMarked: notif.source === 'journal' ? userHasBookmarkedSet.has(notif.journal_id) : false
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-468-    }))
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-469-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-470-    const hasMore = formatted.length > parsedLimit;
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-481-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-482-router.post('/readNotification', requireAuth, async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-483-    const {notifId, source} = req.body;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:484:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-485-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-486-    const tableName = source === 'opinion' ? 'notification_opinions' : 'notifications';
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-487-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-490-    .update({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-491-        read: true
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-492-    })
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:493:    .eq('receiver_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-494-    .eq('id', notifId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-495-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-496-    if(errorReadNotification){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-514-        return res.status(400).json({error: `limit must be between ${NOTIFICATION_LIMIT_MIN} and ${NOTIFICATION_LIMIT_MAX}`});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-515-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-516-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:517:    const receiverId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-518-    const fetchLimit = parsedLimit + 1;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-519-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-520-    let journalQuery = supabase
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-568-    let hasBookMarkedResult = [];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-569-    if(journalIds.length > 0){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-570-        const [hasLiked, hasBookMarked] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:571:            supabase.from('likes').select('journal_id').eq('user_id', receiverId).in('journal_id', journalIds),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:572:            supabase.from('bookmarks').select('journal_id').eq('user_id', receiverId).in('journal_id', journalIds)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-573-        ]);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-574-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-575-        if(hasLiked.error || hasBookMarked.error){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-580-        hasBookMarkedResult = hasBookMarked.data || [];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-581-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-582-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:583:    const userHasLikedSet = new Set(hasLikedResult.map((like) => like.journal_id));
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:584:    const userHasBookmarkedSet = new Set(hasBookMarkedResult.map((bookmark) => bookmark.journal_id));
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-585-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-586-    const formatted = merged.map((notification) =>({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-587-        ...notification,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:588:        hasLiked: notification.source === 'journal' ? userHasLikedSet.has(notification?.journal_id) : false,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:589:        hasBookMarked: notification.source === 'journal' ? userHasBookmarkedSet.has(notification?.journal_id) : false
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-590-    }))
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-591-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-592-    const hasMore = formatted.length > parsedLimit;
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-606-        console.error('no notification id provided')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-607-        return res.status(400).json({error: 'not notifId'})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-608-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:609:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-610-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-611-    const tableName = source === 'opinion' ? 'notification_opinions' : 'notifications';
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-612-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-613-    const {data: deleteNotif, error: errorDeleteNotif} = await  supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-614-    .from(tableName)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-615-    .delete()
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:616:    .eq('receiver_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-617-    .eq('id', notifId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-618-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-619-    if(errorDeleteNotif){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-632-        console.error('not journalId');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-633-        return res.status(400).json({error: 'no journalId!'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-634-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:635:    const viewerId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-636-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-637-    const {data: addViews, error: errorAddViews} = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-638-    .from('journal_views')
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-671-        console.error('no journalId')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-672-        return res.status(400).json({error: 'no journalId'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-673-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:674:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-675-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-676-    const {data: updatePrivacy, error: errorUpdatePrivacy} = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-677-    .from('journals')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-678-    .update({privacy: privacy})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-679-    .eq('id', journalId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:680:    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-681-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-682-    if(errorUpdatePrivacy){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-683-        console.error('updating journal privacy error:', errorUpdatePrivacy);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-698-        console.error('no collections title or description')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-699-        return res.status(400).json({error: 'no collections title or description'})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-700-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:701:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-702-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-703-    try {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-704-        const {data: collections, error: errorCollections} = await supabase
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-706-        .insert({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-707-            name: title,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-708-            description: description,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:709:            user_id: userId
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-710-        })
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-711-        .select()
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-712-        .single()
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-778-})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-779-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-780-router.get('/getCollections', optionalAuth, async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:781:    const {userId: targetUserId, before, limit} = req.query;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-782-    
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-783-    if(!targetUserId){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:784:        console.error('error: no collectionid or userid')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:785:        return res.status(400).json({error: 'no collection id or user id'})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-786-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-787-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-788-    const parsedLimit = parseInt(limit);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-794-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-795-    .from('collections')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-796-    .select(COLLECTION_SELECT_COLUMNS)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:797:    .eq('user_id', targetUserId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-798-    .order('created_at', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-799-    .order('id', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-800-    .limit(parsedLimit + 1)
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-851-        console.error('supabase error while fetching data:', errorJournals.message);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-852-        return res.status(500).json({error: 'supabase error while fetching data'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-853-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:854:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-855-    const journalIds = journals?.map((journal) => journal.journals.id) || [];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-856-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-857-    let hasLikedPromise;
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-862-        .from('likes')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-863-        .select('journal_id')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-864-        .in('journal_id', journalIds)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:865:        .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-866-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-867-        hasBookmarkedPromise = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-868-        .from('bookmarks')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-869-        .select('journal_id')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-870-        .in('journal_id', journalIds)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:871:        .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-872-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-873-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-874-    const [hasLikedResult, hasBookMarkedResult] = await Promise.all([hasLikedPromise, hasBookmarkedPromise]);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-881-        return res.status(500).json({error: 'error fetching data'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-882-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-883-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:884:    const userHasLikedSet = new Set(hasLiked.map((journal) => journal.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:885:    const userHasBookmarkedSet = new Set(hasBookMarked.map((bookmark) => bookmark.journal_id) || []);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-886-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-887-    const formatted  = journals.map((journal) => ({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-888-        ...journal,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:889:        hasLiked: userHasLikedSet?.has(journal?.journals.id),
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:890:        hasBookMarked: userHasBookmarkedSet?.has(journal?.journals.id)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-891-    }))
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-892-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-893-    const hasMore = journals.length > parsedLimit;
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-899-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-900-router.get('/getNotCollectedPost', requireAuth, async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-901-    const {before, limit, collectionId} = req.query;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:902:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-903-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-904-    const parsedLimit = parseInt(limit);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-905-    if(isNaN(parsedLimit) || parsedLimit > 10 || parsedLimit < 1){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-907-        return res.status(400).json({error: 'limit should be between 1 to 10'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-908-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-909-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:910:    if(!userId){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:911:        console.error('no userId!');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:912:        return res.status(400).json({error: 'no userId'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-913-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-914-    if(!collectionId){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-915-        console.error('no collectionId');
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-919-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-920-    .from('journals')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-921-    .select(NOT_COLLECTED_JOURNAL_SELECT)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:922:    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-923-    .order('created_at', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-924-    .limit(parsedLimit + 1)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-925-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-972-        console.error('no collectionId');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-973-        return res.status(400).json({error: 'no collectionId'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-974-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:975:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-976-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-977-    const {data: deleteCollection, error: errorDeleteCollection} = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-978-    .from('collections')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-979-    .delete()
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-980-    .eq('id', collectionId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:981:    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-982-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-983-    if(errorDeleteCollection){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-984-        console.error('supabase error while deleting collections', errorDeleteCollection.message);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-990-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-991-router.post('/updatePrivacyCollection', requireAuth, upload, async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-992-    const {collectionId, isPublic} = req.body;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:993:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-994-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:995:    if(!collectionId || !userId){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:996:        console.error('no collectionId or userId');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:997:        return res.status(400).json({error: 'error no collectionId or userId'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-998-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-999-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1000-    const {data: updatePrivacy, error: errorUpdatePrivacy} = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1001-    .from('collections')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1002-    .update({is_public: isPublic})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1003:    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1004-    .eq('id', collectionId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1005-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1006-    if(errorUpdatePrivacy){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1018-        console.error('no opinion or opinion is over 280 characters');
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1019-        return res.status(400).json({error: 'no opinion or opinion is over 280 characters'})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1020-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1021:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1022-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1023-    const {error} = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1024-    .from('opinions')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1025-    .insert({
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1026:        user_id: userId,
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1027-        opinion: opinion
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1028-    })
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1029-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1034-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1035-    // Non-fatal: record publish for writing streak
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1036-    try {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1037:        recordPublishForStreak(userId).catch(err =>
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1038-            console.error('non-fatal: streak record failed:', err?.message || err)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1039-        );
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1040-    } catch (streakErr) {
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1086-        return res.status(400).json({error:'limit should be number and between 1 - 20'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1087-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1088-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1089:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1090-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1091-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1092-    .from('opinions')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1093-    .select(MY_OPINION_SELECT)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1094-    .order('id', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1095-    .limit(parsedLimit + 1)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1096:    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1097-    .is('parent_id', null)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1098-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1099-    if(before){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1104-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1105-    if(errorOpinionsData){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1106-        console.error('supabase error while fetching opinions data:', errorOpinionsData.message);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1107:        return res.status(500).json({error: 'supabase error while fetching the users opinions'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1108-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1109-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1110-    const hasMore = opinionsData.length > parsedLimit;
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1115-})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1116-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1117-router.get('/getUserOpinions', async(req, res) =>{
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1118:    const {limit, before, userId} = req.query;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1119-    const parsedLimit = parseInt(limit);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1120-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1121-    if(isNaN(parsedLimit) || parsedLimit > 20 || parsedLimit < 1){
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1123-        return res.status(400).json({error: 'limit should be number and not be greater than 20 or less than 1'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1124-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1125-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1126:    if(!userId){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1127:        console.error('no user id!')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1128:        return res.status(400).json({error: 'no user id available!'});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1129-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1130-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1131-    let query = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1132-    .from('opinions')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1133-    .select(USER_OPINION_SELECT)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1134-    .limit(parsedLimit + 1)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1135:    .eq('user_id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1136-    .is('parent_id', null)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1137-    .order('id', {ascending: false})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1138-
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1153-    return res.status(200).json({data: slicedData, hasMore: hasMore});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1154-})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1155-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1156:router.post('/submitReply/:parent_id/:user_id/:post_id/:receiver_id', requireAuth, upload, async(req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1157-    const {parent_id, receiver_id, post_id} = req.params;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1158:    const user_id = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1159-    const {reply} = req.body;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1160:    const isOwner = req.userId === receiver_id
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1161-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1162-    if(!parent_id || !post_id || !receiver_id){
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1163-        console.error('no parent_id || post_id || receiver_id available')
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1170-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1171-    const insertReplyPromise = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1172-    .from('comments')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1173:    .insert({post_id: post_id, user_id: user_id, comment: reply, parent_id: parent_id})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1174-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1175-    const insertNotifPromise = supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1176-    .from('notifications')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1177:    .insert({sender_id: user_id, receiver_id: receiver_id, type: 'reply', journal_id: post_id, read: false})  
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1178-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1179-    const [insertNotif, insertReply] = await Promise.all([
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1180-        isOwner ? Promise.resolve({error: null}) : insertNotifPromise, 
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1233-    return res.status(200).json({data: slicedData, hasMore: hasMore});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1234-})
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1235-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1236:router.get('/viewOpinion/:postId/:userId', getViewOpinionController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1237-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1238:router.post('/addOpinionReply/:parent_id/:user_id/:receiver_id', requireAuth, upload, addOpinionReplyController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1239-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1240-router.get('/getOpinionReply/:parentId', getReplyOpinionsController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1241-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1242-// ── Username endpoints ──
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1243:router.get('/user/:username', async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1244:    const { username } = req.params;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1245-    try {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1246:        const data = await getUserByUsernameService(username);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1247-        return res.status(200).json(data);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1248-    } catch (error) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1249-        const status = error?.status || 500;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1250:        return res.status(status).json({ error: error?.message || 'error fetching user' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1251-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1252-});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1253-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1254:router.get('/check-username/:username', async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1255:    const { username } = req.params;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1256:    if (!username || typeof username !== 'string') {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1257:        return res.status(400).json({ error: 'username is required' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1258-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1259-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1260:    const normalized = username.trim().toLowerCase();
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1261-    const RESERVED_WORDS = ['admin', 'root', 'iskrib', 'iskryb', 'support', 'help', 'api', 'www', 'null', 'undefined'];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1262-    if (RESERVED_WORDS.includes(normalized)) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1263-        return res.status(200).json({ available: false, reason: 'reserved' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1264-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1265-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1266-    const { data: existing, error } = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1267:        .from('users')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1268-        .select('id')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1269:        .ilike('username', normalized)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1270-        .limit(1);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1271-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1272-    if (error) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1273:        console.error('check-username error:', error.message);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1274-        return res.status(500).json({ error: 'database error' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1275-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1276-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1277-    return res.status(200).json({ available: !existing || existing.length === 0 });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1278-});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1279-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1280:router.post('/update-username', requireAuth, async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1281:    const userId = req.userId;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1282:    const { username } = req.body;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1283-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1284:    if (!username || typeof username !== 'string') {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1285:        return res.status(400).json({ error: 'username is required' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1286-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1287-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1288:    const trimmed = username.trim();
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1289-    if (trimmed.length < 3 || trimmed.length > 50) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1290:        return res.status(400).json({ error: 'username must be 3-50 characters' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1291-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1292-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1293-    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1294:        return res.status(400).json({ error: 'username can only contain letters, numbers, and hyphens' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1295-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1296-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1297-    const normalized = trimmed.toLowerCase();
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1298-    const RESERVED_WORDS = ['admin', 'root', 'iskrib', 'iskryb', 'support', 'help', 'api', 'www', 'null', 'undefined'];
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1299-    if (RESERVED_WORDS.includes(normalized)) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1300:        return res.status(400).json({ error: 'this username is reserved' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1301-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1302-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1303-    // Check uniqueness
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1304-    const { data: existing } = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1305:        .from('users')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1306-        .select('id')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1307:        .ilike('username', normalized)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1308:        .neq('id', userId)
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1309-        .limit(1);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1310-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1311-    if (existing && existing.length > 0) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1312:        return res.status(409).json({ error: 'username is already taken' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1313-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1314-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1315-    const { error: updateError } = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1316:        .from('users')
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1317:        .update({ username: trimmed.toLowerCase() })
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1318:        .eq('id', userId);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1319-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1320-    if (updateError) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1321:        console.error('update-username error:', updateError.message);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1322:        return res.status(500).json({ error: 'failed to update username' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1323-    }
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1324-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1325:    return res.status(200).json({ message: 'success', username: trimmed.toLowerCase() });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1326-});
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1327-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1328-router.post('/constellation/request', requireAuth, requestConstellationController);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1335-router.get('/stories', optionalAuth, getStoriesController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1336-router.get('/stories/my', requireAuth, getMyStoriesController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1337-router.get('/stories/library', requireAuth, getMyLibraryController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1338:router.get('/stories/user/:userId', optionalAuth, getUserStoriesController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1339-router.get('/stories/:storyId', optionalAuth, getStoryByIdController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1340-router.patch('/stories/:storyId', requireAuth, upload, updateStoryController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1341-router.delete('/stories/:storyId', requireAuth, deleteStoryController);
+--
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1368-router.get('/recap/weekly', requireAuth, getWeeklyRecapController);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1369-
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1370-// ─── Streaks ───
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1371:router.get('/streak/:userId', async (req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1372-    try {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1373:        const { userId } = req.params;
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1374:        if (!userId) return res.status(400).json({ error: 'userId is required' });
+C:\Users\johnm\iskrib_v3\server\routes\routes.js:1375:        const streakData = await getStreakService(userId);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1376-        return res.status(200).json(streakData);
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1377-    } catch (err) {
+C:\Users\johnm\iskrib_v3\server\routes\routes.js-1378-        console.error('error getting streak:', err);
+--
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-47-    }
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-48-});
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-49-
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:50:// ── GET /api/sitemap-profiles.xml ──
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:51:sitemapRouter.get('/sitemap-profiles.xml', async (_req, res) => {
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-52-    try {
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:53:        const { data: users, error } = await supabase
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:54:            .from('users')
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:55:            .select('id, username')
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:56:            .not('username', 'is', null);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-57-
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-58-        if (error) {
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:59:            console.error('sitemap-profiles query error:', error.message);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-60-            return res.status(500).send('internal error');
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-61-        }
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-62-
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:63:        const urls = (users || []).map((user) => {
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:64:            const loc = escXml(`${SITE_URL}/u/${user.username}`);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-65-            return `  <url>\n    <loc>${loc}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>`;
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-66-        });
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-67-
+--
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-71-        res.set('Cache-Control', `public, max-age=${CACHE_MAX_AGE_SECONDS}`);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-72-        return res.send(xml);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-73-    } catch (err) {
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:74:        console.error('sitemap-profiles error:', err?.message || err);
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-75-        return res.status(500).send('internal error');
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-76-    }
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-77-});
+--
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-87-    <loc>${escXml(`${SITE_URL}/api/sitemap-posts.xml`)}</loc>
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-88-  </sitemap>
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-89-  <sitemap>
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js:90:    <loc>${escXml(`${SITE_URL}/api/sitemap-profiles.xml`)}</loc>
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-91-  </sitemap>
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-92-</sitemapindex>`;
+C:\Users\johnm\iskrib_v3\server\routes\sitemapRoutes.js-93-

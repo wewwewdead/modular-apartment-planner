@@ -1,0 +1,383 @@
+import pRetry from "p-retry";
+import { parseStudentScorePairs, parseYesNo } from "../tools/common.js";
+import { postOllamaChat } from "../tools/ollama-http.js";
+
+const SYSTEM_PROMPT =
+  "You are GradeBot, a reliable and accurate assistant for teachers. Your job is to eliminate all manual grade encoding and calculations so teachers have more time for actual teaching. Always reply in clear English. Never guess numbers. Always create a timestamped backup before any change. Always ask for explicit yes/no confirmation before writing or overwriting any file. Use the Python tools for all calculations, statistics, and reports. Be concise, professional, and proactive. You are powered by Qwen3-VL which excels at reading score sheets from photos.";
+
+function extractClassFileHint(text) {
+  if (!text) return null;
+  const match = text.match(/(?:for|to|in|as)\s+([a-zA-Z0-9._-]+\.(?:xlsx|csv))/i);
+  return match ? match[1] : null;
+}
+
+function parseRuleBasedIntent(text) {
+  if (!text) return { intent: "unknown" };
+  const normalized = text.trim();
+
+  const summarizeMatch = normalized.match(
+    /(?:summarize|summary|analy[sz]e|overview|insights?|stats?).*(?:for|of|on|my)?\s*([a-zA-Z0-9._-]+\.(?:xlsx|csv))/i,
+  );
+  if (summarizeMatch) {
+    return { intent: "calculate_stats", classFile: summarizeMatch[1] };
+  }
+
+  const addMatch = normalized.match(/^add to\s+([^\s:]+)\s*:\s*(.+)$/i);
+  if (addMatch) {
+    return {
+      intent: "add_scores",
+      classFile: addMatch[1],
+      studentScores: parseStudentScorePairs(addMatch[2]),
+    };
+  }
+
+  const statsMatch = normalized.match(
+    /(?:calculate|compute).*(?:full\s+)?(?:stats|statistics|rankings).*(?:for|on)\s+([a-zA-Z0-9._-]+\.(?:xlsx|csv))/i,
+  );
+  if (statsMatch) {
+    return { intent: "calculate_stats", classFile: statsMatch[1] };
+  }
+
+  const reportMatch = normalized.match(
+    /generate.*(?:parent\s+)?(?:pdf\s+)?report.*for\s+([a-zA-Z0-9._-]+\.(?:xlsx|csv))/i,
+  );
+  if (reportMatch) {
+    return { intent: "generate_report", classFile: reportMatch[1] };
+  }
+
+  const curveMatch = normalized.match(
+    /apply\s+(gentle|bell|custom)?\s*curve\s+(?:to|for)\s+([a-zA-Z0-9._-]+\.(?:xlsx|csv))/i,
+  );
+  if (curveMatch) {
+    const modeHint = (curveMatch[1] || "gentle").toLowerCase();
+    const mode =
+      modeHint === "custom"
+        ? "custom_linear"
+        : modeHint === "bell"
+          ? "bell"
+          : "gentle_bell";
+    return { intent: "apply_curve", classFile: curveMatch[2], mode };
+  }
+
+  if (/backup all/i.test(normalized)) {
+    return { intent: "backup_all" };
+  }
+
+  const importMatch = normalized.match(
+    /(?:import|use)\s+(?:as\s+)?([a-zA-Z0-9._-]+\.(?:xlsx|csv))/i,
+  );
+  if (importMatch) {
+    return { intent: "import_document", classFile: importMatch[1] };
+  }
+
+  if (/^(help|menu|what can you do)\b/i.test(normalized)) {
+    return { intent: "help" };
+  }
+
+  return { intent: "unknown" };
+}
+
+function stripThinkTags(text) {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+}
+
+function parseJsonLoose(rawText) {
+  const text = stripThinkTags(String(rawText || "")).trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      try {
+        return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function helpMessage() {
+  return [
+    "I can help with grade encoding, calculations, and reporting.",
+    "Examples:",
+    "- Add to math.xlsx: Alice 94, Bob 87, Charlie 91",
+    "- Calculate full stats and rankings for science.xlsx",
+    "- Generate parent PDF report for english.xlsx",
+    "- Apply gentle curve to class1.xlsx",
+    "- Backup all my files",
+    "You can also send an Excel/CSV file or a photo of a paper score sheet.",
+  ].join("\n");
+}
+
+export class GradeAgent {
+  constructor({ config, logger, tools, gradeService }) {
+    this.config = config;
+    this.logger = logger;
+    this.tools = tools;
+    this.gradeService = gradeService;
+    this.actions = tools.createActionTools(gradeService);
+  }
+
+  async inferIntentWithOllama(userId, text) {
+    const memory = await this.gradeService.readUserMemory(userId);
+    const historySnippet = (memory.history || [])
+      .slice(-6)
+      .map((item) => `${item.role}: ${item.text}`)
+      .join("\n");
+
+    const extractionPrompt = [
+      "Extract teacher intent from the message.",
+      "Return strict JSON with fields:",
+      '{ "intent": "add_scores|calculate_stats|generate_report|apply_curve|backup_all|import_document|help|unknown", "classFile": "optional", "studentScores":[{"student":"Name","score":90}], "mode":"optional" }',
+      "Rules:",
+      "- Do not invent student scores.",
+      "- Keep classFile null if not provided.",
+      "- studentScores must be empty unless clearly provided.",
+      "",
+      "Recent conversation:",
+      historySnippet || "(none)",
+      "",
+      `Current message: ${text}`,
+    ].join("\n");
+
+    const doRequest = async () => {
+      const response = await postOllamaChat({
+        baseUrl: this.config.ollama.baseUrl,
+        model: this.config.ollama.model,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: extractionPrompt },
+        ],
+        timeoutMs: this.config.ollama.requestTimeoutMs,
+        logger: this.logger,
+        stream: false,
+      });
+      return response?.data?.message?.content;
+    };
+
+    const content = await pRetry(doRequest, {
+      retries: Math.max(0, (this.config.ollama.retries || 1) - 1),
+      factor: 2,
+      minTimeout: 600,
+      maxTimeout: 5000,
+      onFailedAttempt: (error) => {
+        this.logger.warn(`Intent extraction retry ${error.attemptNumber}: ${error.message}`);
+      },
+    });
+
+    return parseJsonLoose(content) || { intent: "unknown" };
+  }
+
+  async inferIntent(userId, text) {
+    const ruleBased = parseRuleBasedIntent(text);
+    if (ruleBased.intent !== "unknown") {
+      return ruleBased;
+    }
+    if (!text || text.trim().length < 2) {
+      return { intent: "unknown" };
+    }
+    try {
+      const ollamaIntent = await this.inferIntentWithOllama(userId, text);
+      return {
+        intent: ollamaIntent.intent || "unknown",
+        classFile: ollamaIntent.classFile || null,
+        studentScores: Array.isArray(ollamaIntent.studentScores)
+          ? ollamaIntent.studentScores
+          : [],
+        mode: ollamaIntent.mode || null,
+      };
+    } catch (error) {
+      this.logger.error(`Intent inference failed: ${error.message}`);
+      return { intent: "unknown" };
+    }
+  }
+
+  async handleImageAttachment(input, imageAttachment) {
+    const classFileHint = extractClassFileHint(input.text || "");
+    const visionResult = await this.tools.vision.extractScoresFromImage({
+      imagePath: imageAttachment.path,
+      suggestedClassFile: classFileHint || "class1.xlsx",
+    });
+
+    if (!visionResult.rows.length) {
+      const warningText = visionResult.warnings.length
+        ? `\nWarnings:\n- ${visionResult.warnings.join("\n- ")}`
+        : "";
+      return {
+        replyText: `I could not extract usable scores from that image.${warningText}`,
+      };
+    }
+
+    const prepared = await this.actions.processPhoto.execute(
+      { userId: input.userId },
+      {
+        classFile: visionResult.classFile,
+        rows: visionResult.rows,
+      },
+    );
+
+    const extractedPreview = visionResult.rows
+      .slice(0, 8)
+      .map((row) => `- ${row.student}: ${row.score}`)
+      .join("\n");
+    const warnings = visionResult.warnings.length
+      ? `\nOCR notes:\n- ${visionResult.warnings.join("\n- ")}`
+      : "";
+
+    return {
+      replyText: [
+        "I extracted the following scores from your photo:",
+        extractedPreview,
+        warnings,
+        "",
+        prepared.replyText,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+  }
+
+  async handleDocumentAttachment(input, docAttachment) {
+    await this.gradeService.setLastUploadedDocument(input.userId, {
+      path: docAttachment.path,
+      originalName: docAttachment.originalName || "uploaded.xlsx",
+      mime: docAttachment.mime,
+      receivedAt: new Date().toISOString(),
+    });
+
+    const text = input.text || "";
+    if (/import|use as/i.test(text)) {
+      const classFileHint = extractClassFileHint(text) || docAttachment.originalName;
+      return this.actions.importDocument.execute(
+        { userId: input.userId },
+        {
+          documentPath: docAttachment.path,
+          originalName: docAttachment.originalName,
+          classFile: classFileHint,
+        },
+      );
+    }
+
+    return {
+      replyText: [
+        `I received your file: ${docAttachment.originalName || "uploaded file"}.`,
+        "What would you like me to do next?",
+        "- Import it to managed grades storage",
+        "- Calculate full stats and rankings",
+        "- Generate a parent PDF report",
+        "- Apply a gentle curve",
+        "You can reply with: Import as class1.xlsx",
+      ].join("\n"),
+    };
+  }
+
+  async handleTextIntent(input, intent) {
+    const context = { userId: input.userId };
+    switch (intent.intent) {
+      case "add_scores":
+        return this.actions.addScores.execute(context, {
+          classFile: intent.classFile,
+          studentScores: intent.studentScores || [],
+        });
+      case "calculate_stats":
+        return this.actions.calculateStats.execute(context, {
+          classFile: intent.classFile,
+        });
+      case "generate_report":
+        return this.actions.generateReport.execute(context, {
+          classFile: intent.classFile,
+        });
+      case "apply_curve":
+        return this.actions.applyCurve.execute(context, {
+          classFile: intent.classFile,
+          mode: intent.mode || "gentle_bell",
+        });
+      case "backup_all":
+        return this.actions.backupAll.execute(context, {});
+      case "import_document": {
+        const uploaded = await this.gradeService.getLastUploadedDocument(input.userId);
+        if (!uploaded) {
+          return {
+            replyText:
+              "Please send an Excel or CSV file first, then I can import it for you.",
+          };
+        }
+        return this.actions.importDocument.execute(context, {
+          documentPath: uploaded.path,
+          originalName: uploaded.originalName,
+          classFile: intent.classFile || uploaded.originalName,
+        });
+      }
+      case "help":
+        return { replyText: helpMessage() };
+      default:
+        return {
+          replyText: [
+            "I could not determine the exact action yet.",
+            helpMessage(),
+          ].join("\n\n"),
+        };
+    }
+  }
+
+  async handleIncoming(input) {
+    await this.gradeService.addConversation(
+      input.userId,
+      "user",
+      input.text || `[attachment:${(input.attachments || []).map((a) => a.type).join(",")}]`,
+    );
+
+    const confirmation = parseYesNo(input.text);
+    if (confirmation) {
+      const confirmationResult = await this.gradeService.handleConfirmation(
+        { userId: input.userId },
+        confirmation,
+      );
+      await this.gradeService.addConversation(
+        input.userId,
+        "assistant",
+        confirmationResult.replyText,
+      );
+      return confirmationResult;
+    }
+
+    const attachments = Array.isArray(input.attachments) ? input.attachments : [];
+    if (attachments.length) {
+      const image = attachments.find((a) => a.type === "image");
+      if (image) {
+        const imageResult = await this.handleImageAttachment(input, image);
+        await this.gradeService.addConversation(
+          input.userId,
+          "assistant",
+          imageResult.replyText,
+        );
+        return imageResult;
+      }
+      const document = attachments.find((a) => a.type === "document");
+      if (document) {
+        const documentResult = await this.handleDocumentAttachment(input, document);
+        await this.gradeService.addConversation(
+          input.userId,
+          "assistant",
+          documentResult.replyText,
+        );
+        return documentResult;
+      }
+    }
+
+    const intent = await this.inferIntent(input.userId, input.text || "");
+    const textResult = await this.handleTextIntent(input, intent);
+    await this.gradeService.addConversation(
+      input.userId,
+      "assistant",
+      textResult.replyText,
+    );
+    return textResult;
+  }
+}
+
+export { SYSTEM_PROMPT };

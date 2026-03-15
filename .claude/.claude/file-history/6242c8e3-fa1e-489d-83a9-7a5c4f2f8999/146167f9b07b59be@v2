@@ -1,0 +1,17 @@
+const ACADEMIC_SYSTEM_PROMPT = 'You are an academic tutor. Provide clear, structured, educational explanations. Use plain text formatting suitable for WhatsApp.'
+
+export async function answerAssignment(ollamaClient, model, prompt) {
+  try {
+    const response = await ollamaClient.chat({
+      model,
+      messages: [
+        { role: 'system', content: ACADEMIC_SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+    })
+
+    return response.message.content
+  } catch (err) {
+    return `Sorry, I was unable to process your question. Please try again shortly. (${err.message})`
+  }
+}

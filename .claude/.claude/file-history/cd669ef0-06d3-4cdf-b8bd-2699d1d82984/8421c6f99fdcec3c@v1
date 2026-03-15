@@ -1,0 +1,332 @@
+# Sketch V1: Object-Design Workspace
+
+## Context
+
+The Sketch module currently has a generic layers/shapes model (rect, ellipse, line, path). The goal is to transform it into a **constrained object-design workspace** where users assemble furniture (tables, desks, shelves, cabinets, bed frames) from typed parts, view them in orthographic drafting views, preview in 3D, and export to sheets — all while keeping Sketch separate from Floorplan logic and reusing shared infrastructure.
+
+## Architecture Decisions
+
+- **Parts/assemblies replace layers/shapes** — layers don't serve furniture design. Parts are atomic 3D primitives; assemblies group them.
+- **Single viewport with view switching** (top / front / side) — simpler than multi-viewport CAD; view switcher in toolbar.
+- **Coordinate system**: X = left-right, Y = front-back (depth), Z = up-down (height). All millimeters.
+- **3D preview** in a right-side panel (like floorplan's ThreePreviewPanel), read-only orbit.
+- **Persistence** uses the same localStorage backend pattern with a `sketch-planner-` key prefix.
+
+### Orthographic Projection Mapping
+| View  | SVG X      | SVG Y           | SVG W       | SVG H       |
+|-------|------------|-----------------|-------------|-------------|
+| Top   | position.x | position.y      | partWidth   | partDepth   |
+| Front | position.x | -(position.z+h) | partWidth   | partHeight  |
+| Side  | position.y | -(position.z+h) | partDepth   | partHeight  |
+
+### Part Types
+| Type      | Key Properties                                        | Semantics                   |
+|-----------|-------------------------------------------------------|-----------------------------|
+| Panel     | width, depth, thickness, material                     | Flat slab (tabletop, shelf) |
+| Leg       | width, depth, height, profile (square/round/tapered)  | Vertical support            |
+| Frame     | width, height, length, axis (x/y)                     | Rail, stretcher, apron      |
+| Cutout    | parentId, width, height, depth, offsetX, offsetY      | Subtractive rect on panel   |
+| Hole      | parentId, diameter, depth, offsetX, offsetY            | Subtractive circle on panel |
+| Dimension | startPoint{x,y,z}, endPoint{x,y,z}, offset, textOverride | Measurement annotation   |
+
+All parts share: `id, type, name, assemblyId, parentId, position:{x,y,z}, rotation:{x,y,z}, fill, stroke, strokeWidth`
+
+---
+
+## Step 1: Domain Models & Constants
+
+**Create** `src/modules/sketch/domain/partModels.js`
+- Import `generateId` from `@/domain/ids`
+- `createPartBase(type, overrides)` — shared base with id, position, rotation, style
+- `createPanel(overrides)` → defaults: width=600, depth=400, thickness=18, material='plywood'
+- `createLeg(overrides)` → defaults: width=40, depth=40, height=720, profile='square'
+- `createFrame(overrides)` → defaults: width=40, height=60, length=500, axis='x'
+- `createCutout(overrides)` → parentId required, width=100, height=50, depth=18
+- `createHole(overrides)` → parentId required, diameter=35, depth=18
+- `createDimension(overrides)` → startPoint, endPoint, offset=200, textOverride=null
+
+**Create** `src/modules/sketch/domain/partDefaults.js`
+- `PART_DEFAULTS` — default dimension sets keyed by part type string
+- `MATERIAL_OPTIONS`, `LEG_PROFILE_OPTIONS`, `FRAME_AXIS_OPTIONS` — select dropdown values
+
+**Create** `src/modules/sketch/domain/assemblyModels.js`
+- `createAssembly(name, overrides)` → id (generateId('asm')), name, description, category, partIds[]
+- `addPartToAssembly(assembly, partId)` → new assembly with partId appended
+- `removePartFromAssembly(assembly, partId)` → new assembly with partId filtered
+
+**Create** `src/modules/sketch/domain/viewProjection.js`
+- `VIEWS = { TOP:'top', FRONT:'front', SIDE:'side' }`
+- `projectPartToView(part, view)` → `{ svgX, svgY, svgWidth, svgHeight }` — core projection
+- `viewToModelPosition(svgX, svgY, view, existingPosition)` → `{ x, y, z }` — inverse for placement
+- `viewToModelExtents(svgW, svgH, view, partType)` → dimension fields for the given view
+- `getPartExtents(part)` → `{ width, depth, height }` normalized across all part types
+- `getViewLabel(view)` → 'Top (X–Y)', 'Front (X–Z)', 'Side (Y–Z)'
+
+**Modify** `src/modules/sketch/domain/defaults.js`
+- Replace SKETCH_TOOLS: remove RECTANGLE/ELLIPSE/LINE/PEN, add PANEL/LEG/FRAME/CUTOUT/HOLE/DIMENSION
+- Add `SKETCH_VIEWS = { TOP:'top', FRONT:'front', SIDE:'side' }`
+
+**Modify** `src/modules/sketch/domain/sketchModels.js`
+- `createSketchProject(name)` returns `{ id, name, description, category, canvasWidth, canvasHeight, parts:[], assemblies:[], annotations:[], sheets:[], createdAt, updatedAt }`
+- Remove `createLayer`, `createShape`, `createSketchObject` (moved to partModels/assemblyModels)
+- Keep `createAnnotation`
+
+---
+
+## Step 2: SketchProvider — Parts/Assemblies State
+
+**Modify** `src/modules/sketch/app/SketchProvider.jsx`
+
+Remove actions: LAYER_ADD/UPDATE/DELETE/REORDER, SHAPE_ADD/UPDATE/DELETE, OBJECT_ADD/UPDATE/DELETE
+
+Add actions:
+- `PART_ADD` — `{ part }` → append to project.parts
+- `PART_UPDATE` — `{ part: { id, ...changes } }` → merge into matching part (supports nested position/rotation)
+- `PART_DELETE` — `{ partId }` → remove from parts, also remove from assembly.partIds, also delete child parts (cutouts/holes with parentId)
+- `ASSEMBLY_ADD` — `{ assembly }` → append to project.assemblies
+- `ASSEMBLY_UPDATE` — `{ assembly: { id, ...changes } }` → merge
+- `ASSEMBLY_DELETE` — `{ assemblyId }` → remove assembly, clear assemblyId on orphaned parts
+- `ASSEMBLY_ADD_PART` — `{ assemblyId, partId }` → add partId to assembly.partIds + set part.assemblyId
+- `ASSEMBLY_REMOVE_PART` — `{ assemblyId, partId }` → remove from partIds + clear part.assemblyId
+
+Update `useSketch()` return:
+```js
+{ project, isDirty, canUndo, canRedo, dispatch,
+  getPart(id), getAssembly(id), getPartsForAssembly(asmId), getChildParts(parentId) }
+```
+
+Remove `getLayer`, `getObject`, `getShapesForObject`. Remove `updateLayer` helper, add `updatePart`/`updateAssembly` helpers.
+
+---
+
+## Step 3: SketchEditorProvider — View State
+
+**Modify** `src/modules/sketch/app/SketchEditorProvider.jsx`
+
+Update initial state:
+- Remove: `activeLayerId`, `activeObjectId`
+- Add: `activeView: 'top'`, `activeAssemblyId: null`
+
+Add actions:
+- `SET_VIEW` — `{ view }` → set activeView
+- `SET_ACTIVE_ASSEMBLY` — `{ assemblyId }` → set activeAssemblyId
+
+Remove: `SET_ACTIVE_LAYER`, `SET_ACTIVE_OBJECT`
+
+Remove `initialActiveLayerId` prop from provider component.
+
+---
+
+## Step 4: Part Renderer & View-Aware Canvas
+
+**Create** `src/modules/sketch/renderers/PartRenderer.jsx`
+- Props: `{ part, view, isSelected, zoom }`
+- Calls `projectPartToView(part, view)` → renders `<rect>` (or `<ellipse>` for holes in top view)
+- Selection highlight: dashed outline offset by 4/zoom
+- Cutout/hole: dashed stroke, lighter fill to indicate subtractive
+- `data-part-id={part.id}` attribute for hit-testing
+
+**Create** `src/modules/sketch/renderers/DimensionRenderer.jsx`
+- Props: `{ dimension, view, zoom }`
+- Projects dimension's startPoint/endPoint to 2D via view
+- Calls `createDimensionFigure` from `@/annotations/dimensions` with 2D projected points
+- Renders extension lines, arrowheads, and text label as SVG
+
+**Modify** `src/modules/sketch/renderers/SketchCanvas.jsx`
+- Replace `ShapeRenderer` import → `PartRenderer` + `DimensionRenderer`
+- Read `activeView` from `useSketchEditor()`
+- Replace `visibleShapes` loop → `project.parts.filter(p => p.type !== 'dimension')` for PartRenderer, dimensions separately
+- Replace rect/line previews → single generic drag-preview rect for any part tool
+- Update status bar: show view label, map cursor coords through projection inverse for XYZ display
+- Remove all `activeLayerId` references
+- Update `useSketchTool()` switch to match new tool names (panel, leg, frame, cutout, hole, dimension)
+
+**Delete** `src/modules/sketch/renderers/ShapeRenderer.jsx` (replaced by PartRenderer)
+
+---
+
+## Step 5: Editor Handlers
+
+**Create** `src/modules/sketch/editor/handlers/partPlaceHandler.js`
+- `createPartPlaceHandler({ dispatch, editorDispatch, activeView, activeAssemblyId, partType })`
+- Generic click-drag handler for panel, leg, frame (and cutout when a panel is selected)
+- onMouseDown: start drawing (record startPos)
+- onMouseMove: update preview (record currentPos)
+- onMouseUp: compute 2D extents → `viewToModelPosition` + `viewToModelExtents` → create part via factory → `PART_ADD` → auto `ASSEMBLY_ADD_PART` if activeAssemblyId
+- For cutout/hole: requires selectedId to be a panel; sets `parentId` on created part; positions relative to parent
+
+**Create** `src/modules/sketch/editor/handlers/dimensionHandler.js`
+- `createDimensionHandler({ dispatch, editorDispatch, activeView })`
+- Two-click: first click sets startPoint, second click creates dimension
+- Projects 2D clicks to 3D via `viewToModelPosition`
+- Creates dimension via `createDimension`, dispatches `PART_ADD`
+
+**Modify** `src/modules/sketch/editor/handlers/selectHandler.js`
+- Replace shape hit-testing → part hit-testing using `projectPartToView`
+- Iterate parts in reverse, test point-in-projected-rect with zoom-aware tolerance
+- Delete dispatches `PART_DELETE` instead of `SHAPE_DELETE`
+- Drag-to-move: delta in SVG space → `viewToModelPosition` delta → `PART_UPDATE` position
+- Remove all layer/shape references
+
+**Modify** `src/modules/sketch/editor/tools.js`
+- New shortcuts: V=select, P=panel, G=leg, F=frame, C=cutout, H=hole, M=dimension
+
+**Delete** `src/modules/sketch/editor/handlers/rectangleHandler.js`, `lineHandler.js` (replaced by partPlaceHandler)
+
+---
+
+## Step 6: Toolbar, Sidebar, Properties Panel
+
+**Modify** `src/modules/sketch/ui/SketchToolbar.jsx`
+- Replace tool buttons: Select, Panel, Leg, Frame, Cutout, Hole, Dimension (with new SVG icons)
+- Add view switcher group: Top / Front / Side buttons (dispatches `SET_VIEW`)
+- Keep undo/redo, grid/snap toggles
+
+**Modify** `src/modules/sketch/ui/SketchSidebar.jsx`
+- Replace Objects + Layers sections → Assemblies + Parts sections
+- Assemblies: list with add/delete, click sets activeAssemblyId, shows part count
+- Parts: list (filtered to active assembly if set), shows type badge + name, click selects, delete button
+- Remove all layer-related code
+
+**Create** `src/modules/sketch/ui/SketchPropertiesPanel.jsx` + `.module.css`
+- Reads selectedId from editor, gets part via `getPart()`
+- Sections: Name (text), Type (badge), Position (X/Y/Z number inputs), Dimensions (type-specific fields), Style (fill/stroke), Assembly (assign/unassign)
+- Uses `InputField` from `@/core/ui` for number inputs
+- Dispatches `PART_UPDATE` on change
+
+**Modify** `src/modules/sketch/ui/SketchEmptyState.jsx`
+- "Start Drawing" → activates panel tool
+- "Try Demo Object" → creates demo table from parts (Step 7)
+
+**Modify** `src/modules/sketch/SketchWorkspace.jsx` + `.module.css`
+- Remove `initialActiveLayerId` prop plumbing
+- Add right panel containing `SketchPropertiesPanel` (top) and 3D preview (bottom, Step 7)
+- Grid: `toolbar toolbar toolbar / sidebar canvas rightpanel`
+
+---
+
+## Step 7: 3D Preview & Demo Object
+
+**Create** `src/modules/sketch/renderers/buildSketchPreview.js`
+- `buildSketchPreviewRoot(parts, selectedId)` → `THREE.Group`
+- `createPanelMesh(part)` → `BoxGeometry(width, thickness, depth)` + MeshStandardMaterial
+- `createLegMesh(part)` → BoxGeometry (square profile) or CylinderGeometry (round profile)
+- `createFrameMesh(part)` → BoxGeometry along axis
+- Coordinate mapping: Three.x = part.x + w/2, Three.y = part.z + h/2, Three.z = part.y + d/2
+- Selection: tint material color for selectedId
+- Edge outlines via `EdgesGeometry` + `LineSegments`
+- Skip dimension/cutout/hole in 3D for V1
+
+**Create** `src/modules/sketch/renderers/SketchPreviewPanel.jsx` + `.module.css`
+- Uses `createPreviewViewport` from `@/three/viewer/createPreviewViewport`
+- Uses `createInspectNavigation` from `@/three/viewer/createInspectNavigation` (orbit only)
+- On parts change: rebuild root via `buildSketchPreviewRoot`, set scene
+- ResizeObserver for responsive sizing
+- Cleanup via `disposeScene` from `@/three/viewer/disposeScene`
+- Header "3D Preview", container div, minimal controls hint footer
+
+**Modify** `src/modules/sketch/domain/demoObject.js`
+- Rewrite `buildDemoTable()` → returns `{ assembly, parts }` using part factories
+- Demo: 1200×600 tabletop panel at z=720, 4 legs at corners z=0
+
+---
+
+## Step 8: Persistence & Sheet/Export
+
+**Create** `src/modules/sketch/persistence/sketchLocalStorageBackend.js`
+- Same pattern as `src/persistence/localStorageBackend.js` with `sketch-planner-` prefix
+
+**Create** `src/modules/sketch/persistence/sketchSerialize.js`
+- `sketchSerialize(project)` → `{ schemaType:'sketch', schemaVersion:1, data:project, savedAt }`
+
+**Create** `src/modules/sketch/persistence/sketchDeserialize.js`
+- `sketchDeserialize(json)` → validates schemaType='sketch', required fields → `{ project, savedAt }`
+
+**Create** `src/modules/sketch/persistence/sketchStorage.js`
+- `saveSketchProject(project)`, `loadSketchProject(id)`, `listSketchProjects()`, `deleteSketchProject(id)`
+- Uses sketch backend + serialize/deserialize
+
+**Wire autosave** in `SketchWorkspace.jsx`
+- Simple useEffect: if isDirty, setTimeout 5s → saveSketchProject → dispatch MARK_SAVED
+
+**Create** `src/modules/sketch/export/sketchSheetExport.js`
+- `exportSketchSvg(project)` → generates SVG string with top/front/side views arranged on A4 sheet
+- Uses `PAPER_PRESETS` from `@/sheets/paper` for page dimensions
+- Uses `projectPartToView` from viewProjection for each view
+- Includes title block text (project name, date)
+- Add "Export SVG" button in toolbar that triggers file download via Blob + URL.createObjectURL
+
+---
+
+## File Summary
+
+### New files (18)
+| File | Purpose |
+|------|---------|
+| `domain/partModels.js` | Part factory functions |
+| `domain/partDefaults.js` | Default dimensions per type |
+| `domain/assemblyModels.js` | Assembly factory + helpers |
+| `domain/viewProjection.js` | 3D↔2D orthographic projection |
+| `editor/handlers/partPlaceHandler.js` | Click-drag part placement |
+| `editor/handlers/dimensionHandler.js` | Two-click dimension placement |
+| `renderers/PartRenderer.jsx` | 2D part rendering per view |
+| `renderers/DimensionRenderer.jsx` | Dimension annotation rendering |
+| `renderers/SketchPreviewPanel.jsx` | Three.js 3D preview panel |
+| `renderers/SketchPreviewPanel.module.css` | Preview panel styles |
+| `renderers/buildSketchPreview.js` | Part → THREE.Mesh conversion |
+| `ui/SketchPropertiesPanel.jsx` | Selected part property editor |
+| `ui/SketchPropertiesPanel.module.css` | Properties panel styles |
+| `persistence/sketchLocalStorageBackend.js` | localStorage with sketch prefix |
+| `persistence/sketchSerialize.js` | Sketch project serialization |
+| `persistence/sketchDeserialize.js` | Sketch project deserialization |
+| `persistence/sketchStorage.js` | Save/load/list/delete API |
+| `export/sketchSheetExport.js` | SVG sheet export |
+
+### Modified files (12)
+| File | Change |
+|------|--------|
+| `domain/defaults.js` | New tool + view constants |
+| `domain/sketchModels.js` | Parts/assemblies project model |
+| `domain/demoObject.js` | Demo table from parts |
+| `app/SketchProvider.jsx` | Part/assembly reducer actions |
+| `app/SketchEditorProvider.jsx` | activeView, remove layer state |
+| `renderers/SketchCanvas.jsx` | View-aware part rendering |
+| `editor/handlers/selectHandler.js` | Part hit-testing + move |
+| `editor/tools.js` | New keyboard shortcuts |
+| `ui/SketchToolbar.jsx` | Part tools + view switcher |
+| `ui/SketchSidebar.jsx` | Assemblies/parts panels |
+| `ui/SketchEmptyState.jsx` | Updated for parts |
+| `SketchWorkspace.jsx` + `.module.css` | Right panel layout |
+
+### Deleted files (3)
+| File | Reason |
+|------|--------|
+| `renderers/ShapeRenderer.jsx` | Replaced by PartRenderer |
+| `editor/handlers/rectangleHandler.js` | Replaced by partPlaceHandler |
+| `editor/handlers/lineHandler.js` | Replaced by partPlaceHandler |
+
+### Shared infrastructure reused (not modified)
+- `src/domain/ids.js` — `generateId()`
+- `src/geometry/point.js` — distance, subtract, normalize, scale
+- `src/geometry/line.js` — distanceToSegment (dimension hit-testing)
+- `src/annotations/dimensions.js` — `createDimensionFigure()` for dimension rendering
+- `src/three/viewer/createPreviewViewport.js` — WebGL viewport setup
+- `src/three/viewer/createInspectNavigation.js` — orbit controls
+- `src/three/viewer/disposeScene.js` — cleanup
+- `src/sheets/paper.js` — paper presets for export
+- `src/core/ui/` — InputField, Modal, Tooltip
+
+---
+
+## Verification
+
+1. `npm run build` passes after each step
+2. Navigate to `/sketch` — empty state overlay appears
+3. Click "Try Demo Object" — desk appears in top view, parts listed in sidebar, 3D preview shows table
+4. Switch views (Top / Front / Side) — parts re-project correctly
+5. Select panel tool → click-drag → panel created with correct 3D position
+6. Select a part → properties panel shows editable fields → change width → canvas and 3D update
+7. Create assembly → assign parts → sidebar shows grouping
+8. Place dimension → two clicks → measurement annotation renders
+9. Refresh page → project auto-loaded from localStorage
+10. Click "Export SVG" → downloads A4 sheet with 3-view layout

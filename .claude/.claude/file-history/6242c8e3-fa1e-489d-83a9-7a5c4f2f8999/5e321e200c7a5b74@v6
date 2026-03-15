@@ -1,0 +1,99 @@
+import puppeteer from 'puppeteer'
+import { getAccount } from './accounts.js'
+
+export async function runGrading({ data } = {}) {
+  return {
+    success: false,
+    message: 'Grade encoding is not yet configured. Please set up portal credentials via /onboard.',
+  }
+}
+
+export async function summarizeTwitter() {
+  const creds = getAccount('twitter')
+
+  if (!creds || !creds.username || !creds.password) {
+    return 'Twitter account is not configured. Send /onboard to set it up.'
+  }
+
+  const { username, email, password } = creds
+
+  let browser
+  try {
+    browser = await puppeteer.launch({ headless: true })
+    const page = await browser.newPage()
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    )
+
+    // Navigate to Twitter login
+    await page.goto('https://x.com/i/flow/login', { waitUntil: 'networkidle2', timeout: 30000 })
+
+    // Step 1: Enter username
+    await page.waitForSelector('input[autocomplete="username"]', { timeout: 15000 })
+    await page.type('input[autocomplete="username"]', username, { delay: 50 })
+
+    // Click the "Next" button
+    const nextButtons = await page.$$('[role="button"]')
+    for (const btn of nextButtons) {
+      const text = await btn.evaluate(el => el.textContent)
+      if (text?.trim() === 'Next') { await btn.click(); break }
+    }
+
+    // Wait for page to transition after clicking Next
+    await new Promise(r => setTimeout(r, 3000))
+    await page.screenshot({ path: 'debug-twitter.png', fullPage: true })
+    console.log('[twitter] Screenshot saved to debug-twitter.png')
+
+    // Step 2: Wait for either password field or verification field
+    const nextStep = await Promise.race([
+      page.waitForSelector('input[type="password"]', { timeout: 15000 }).then(() => 'password'),
+      page.waitForSelector('input[data-testid="ocfEnterTextTextInput"]', { timeout: 15000 }).then(() => 'verify'),
+    ])
+
+    if (nextStep === 'verify') {
+      // Verification step — fill in email/phone/username
+      await page.type('input[data-testid="ocfEnterTextTextInput"]', email || username, { delay: 50 })
+
+      const verifyButtons = await page.$$('[role="button"]')
+      for (const btn of verifyButtons) {
+        const text = await btn.evaluate(el => el.textContent)
+        if (text?.trim() === 'Next') { await btn.click(); break }
+      }
+
+      await page.waitForSelector('input[type="password"]', { timeout: 15000 })
+    }
+
+    // Step 3: Enter password
+    await page.type('input[type="password"]', password, { delay: 50 })
+
+    // Click "Log in" button
+    const loginButtons = await page.$$('[role="button"]')
+    for (const btn of loginButtons) {
+      const text = await btn.evaluate(el => el.textContent)
+      if (text?.trim() === 'Log in') { await btn.click(); break }
+    }
+
+    // Wait for home timeline
+    await page.waitForSelector('article[data-testid="tweet"]', { timeout: 30000 })
+
+    // Scrape first 5 tweets
+    const tweets = await page.$$eval(
+      'article[data-testid="tweet"]',
+      (els) => els.slice(0, 5).map((el) => {
+        const text = el.querySelector('[data-testid="tweetText"]')?.innerText || ''
+        const author = el.querySelector('[data-testid="User-Name"]')?.innerText?.split('\n')[0] || 'Unknown'
+        return `${author}: ${text}`
+      })
+    )
+
+    if (tweets.length === 0) {
+      return 'Logged in successfully but could not find any tweets on the timeline.'
+    }
+
+    return 'Here are the latest tweets from your timeline:\n\n' + tweets.map((t, i) => `${i + 1}. ${t}`).join('\n\n')
+  } catch (err) {
+    return `Failed to fetch Twitter timeline: ${err.message}`
+  } finally {
+    if (browser) await browser.close()
+  }
+}

@@ -1,0 +1,100 @@
+/* ── Mobile Nav ── Hidden on desktop ── */
+.mobile-navlink-container{
+    display: none;
+}
+.mobile-navlink-icon-container{
+    display: none;
+}
+
+/* ── Mobile breakpoint ── */
+@media (max-width: 480px){
+
+    /* ── Floating bar ── */
+    .mobile-navlink-container{
+        position: fixed;
+        bottom: 0.6rem;
+        left: 0;
+        right: 0;
+        margin: 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: calc(100% - 1.5rem);
+        max-width: 420px;
+        height: 56px;
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-card);
+        border-radius: 16px;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        z-index: 120;
+    }
+
+    /* ── Icon row ── */
+    .mobile-navlink-icon-container{
+        display: flex;
+        justify-content: space-evenly;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        padding: 0 0.75rem;
+        box-sizing: border-box;
+    }
+
+    /* ── Each nav item ── */
+    .mobile-navlink-item{
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 2px;
+        padding: 0.2rem 0.35rem;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .mobile-navlink-item:active{
+        background-color: var(--bg-pill, rgba(212, 168, 83, 0.08));
+    }
+
+    /* ── Active dot indicator ── */
+    .mobile-navlink-active-dot{
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background-color: #D4A853;
+    }
+
+    /* ── Icon base styles ── */
+    .mobile-navlink-icons{
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .mobile-navlink-icons svg{
+        transition: transform 0.2s ease;
+    }
+    .mobile-navlink-item:active .mobile-navlink-icons svg{
+        transform: scale(0.9);
+    }
+
+    /* ── Nav label ── */
+    .mobile-navlink-label{
+        font-family: var(--font-ui, sans-serif);
+        font-size: 0.5rem;
+        font-weight: 600;
+        letter-spacing: 0.01rem;
+        color: var(--text-faint, #999);
+        margin: 0;
+        padding: 0;
+        transition: color 0.2s ease;
+        white-space: nowrap;
+    }
+    .mobile-navlink-label-active{
+        color: #D4A853;
+    }
+}

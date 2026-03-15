@@ -1,0 +1,1384 @@
+     1→import express from "express";
+     2→import supabase from "../services/supabase.js";
+     3→import multer from "multer";
+     4→import sharp from 'sharp';
+     5→import { getUserByUsernameService } from "../services/getUserDataService.js";
+     6→import { verfifyTurnstileController } from "../controller/turnstileController.js";
+     7→import { getUserDataController } from "../controller/getUserDataController.js";
+     8→import { checkUserController } from "../controller/checkUserController.js";
+     9→import { addReplyOpinionController, updateJournalController, updateRepostCaptionController, updateUserDataController, uploadJournalContentController, uploadJournalImageController, uploadProfileBgController, uploadUserDataController } from "../controller/uploadController.js";
+    10→import { updateFont } from "../controller/updateFontColorController.js";
+    11→import { deleteJournalContent, deleteJournalImageController, deleteProfileMediaImageController } from "../controller/deleteController.js";
+    12→import { getBookmarksController, getCanvasGalleryController, getCommentsController, getFollowingFeedController, getJournalByIdController, getJournalsController, getMonthlyHottestJournalsController, getProfileMediaController, getReplyOpinionsController, getUniversePostsController, getUserJournalsController, getViewOpinionController, getVisitedProfileMediaController, getVisitedUserJournalsController, searchJournalsController, searchUsersController } from "../controller/getController.js";
+    13→import { addBoorkmarkController, addCommentController, addFollowController, addOpinionReplyController, likeController, repostController } from "../controller/interactController.js";
+    14→import { createCanvasRemixController } from "../controller/canvasController.js";
+    15→import { clearMyFreedomWallDoodlesController, createFreedomWallItemController, deleteFreedomWallItemController, getCurrentFreedomWallWeekController, getFreedomWallItemsController, getFreedomWallStickersController, getFreedomWallWeeksController, reportFreedomWallItemController, updateFreedomWallItemController } from "../controller/freedomWallController.js";
+    16→import { requestConstellationController, respondConstellationController, getViewportConstellationsController, deleteConstellationController } from "../controller/constellationController.js";
+    17→import { createStoryController, getStoriesController, getStoryByIdController, updateStoryController, deleteStoryController, getMyStoriesController, getUserStoriesController } from "../controller/storyController.js";
+    18→import { createChapterController, getChapterController, updateChapterController, deleteChapterController, reorderChaptersController } from "../controller/chapterController.js";
+    19→import { toggleVoteController, toggleLibraryController, getMyLibraryController, getCommentsController as getStoryCommentsController, getCommentCountsController, addCommentController as addStoryCommentController, saveProgressController, getProgressController } from "../controller/storyInteractController.js";
+    20→import { getRelatedPostsController } from "../controller/discoveryController.js";
+    21→import { getStreakService, recordPublishForStreak } from "../services/streakService.js";
+    22→import { getTodaysPromptController, getPromptResponsesController } from "../controller/promptController.js";
+    23→import { toggleReactionController, getPostReactionsController } from "../controller/reactionController.js";
+    24→import { getWeeklyRecapController } from "../controller/recapController.js";
+    25→
+    26→const router = express.Router();
+    27→
+    28→const upload = multer({
+    29→    storage: multer.memoryStorage(),
+    30→    limits: {fileSize: 10 * 1024 * 1024},
+    31→}).single('image');
+    32→
+    33→const extractBearerToken = (authHeader = "") => {
+    34→    const trimmed = typeof authHeader === "string" ? authHeader.trim() : "";
+    35→    if (!trimmed) return "";
+    36→
+    37→    const bearerMatch = trimmed.match(/^Bearer\s+(.+)$/i);
+    38→    if (bearerMatch?.[1]) {
+    39→        return bearerMatch[1].trim();
+    40→    }
+    41→
+    42→    return trimmed;
+    43→};
+    44→
+    45→const resolveAuthUser = async (token) => {
+    46→    if (!token) {
+    47→        return { user: null, error: null };
+    48→    }
+    49→
+    50→    const { data: authData, error: authError } = await supabase.auth.getUser(token);
+    51→    if (authError || !authData?.user?.id) {
+    52→        return { user: null, error: authError || new Error("missing user id") };
+    53→    }
+    54→
+    55→    return { user: authData.user, error: null };
+    56→};
+    57→
+    58→const requireAuth = async (req, res, next) => {
+    59→    const token = extractBearerToken(req.headers?.authorization);
+    60→    if (!token) {
+    61→        return res.status(401).json({ error: 'not authorized' });
+    62→    }
+    63→
+    64→    const { user, error } = await resolveAuthUser(token);
+    65→    if (error || !user?.id) {
+    66→        console.error('auth middleware error:', error?.message || 'missing user id');
+    67→        return res.status(401).json({ error: 'not authorized' });
+    68→    }
+    69→
+    70→    req.userId = user.id;
+    71→    req.authUser = user;
+    72→    return next();
+    73→};
+    74→
+    75→const optionalAuth = async (req, _res, next) => {
+    76→    const token = extractBearerToken(req.headers?.authorization);
+    77→    if (!token) {
+    78→        return next();
+    79→    }
+    80→
+    81→    const { user } = await resolveAuthUser(token);
+    82→    if (user?.id) {
+    83→        req.userId = user.id;
+    84→        req.authUser = user;
+    85→    }
+    86→
+    87→    return next();
+    88→};
+    89→
+    90→const NOTIFICATION_LIMIT_MIN = 1;
+    91→const NOTIFICATION_LIMIT_MAX = 20;
+    92→const NOTIFICATION_DEFAULT_LIMIT = 5;
+    93→const NOTIFICATION_JOURNAL_SELECT = `
+    94→    id,
+    95→    sender_id,
+    96→    receiver_id,
+    97→    journal_id,
+    98→    repost_journal_id,
+    99→    type,
+   100→    reaction_type,
+   101→    read,
+   102→    created_at,
+   103→    constellation_id,
+   104→    journals!journal_id(
+   105→        title,
+   106→        content,
+   107→        created_at,
+   108→        likes(count),
+   109→        comments(count),
+   110→        bookmarks(count),
+   111→        users(id, name, image_url, badge)
+   112→    ),
+   113→    users!sender_id(id, name, image_url, badge),
+   114→    constellations!constellation_id(status, star_id_a, star_id_b)
+   115→`;
+   116→const NOTIFICATION_OPINION_SELECT = `
+   117→    id,
+   118→    sender_id,
+   119→    receiver_id,
+   120→    opinion_id,
+   121→    read,
+   122→    created_at,
+   123→    opinions!opinion_id(id, opinion, user_id, created_at),
+   124→    users!sender_id(id, name, image_url, badge)
+   125→`;
+   126→const COLLECTION_SELECT_COLUMNS = `
+   127→    id,
+   128→    user_id,
+   129→    name,
+   130→    description,
+   131→    is_public,
+   132→    created_at
+   133→`;
+   134→const COLLECTION_JOURNALS_SELECT = `
+   135→    id,
+   136→    journals(
+   137→        id,
+   138→        title,
+   139→        created_at,
+   140→        user_id,
+   141→        content,
+   142→        users(id, image_url, name, badge),
+   143→        comments!post_id(count),
+   144→        bookmarks!journal_id(count),
+   145→        likes!journal_id(count)
+   146→    )
+   147→`;
+   148→const NOT_COLLECTED_JOURNAL_SELECT = 'id, created_at, title, content';
+   149→const OPINION_LIST_SELECT = `
+   150→    id,
+   151→    user_id,
+   152→    parent_id,
+   153→    opinion,
+   154→    reply_count,
+   155→    created_at,
+   156→    users(name, id, user_email, image_url, badge)
+   157→`;
+   158→const MY_OPINION_SELECT = `
+   159→    id,
+   160→    user_id,
+   161→    parent_id,
+   162→    opinion,
+   163→    reply_count,
+   164→    created_at
+   165→`;
+   166→const USER_OPINION_SELECT = `
+   167→    id,
+   168→    user_id,
+   169→    parent_id,
+   170→    opinion,
+   171→    reply_count,
+   172→    created_at,
+   173→    users(name, image_url, id, badge)
+   174→`;
+   175→const COMMENT_REPLY_SELECT = `
+   176→    id,
+   177→    post_id,
+   178→    parent_id,
+   179→    user_id,
+   180→    comment,
+   181→    reply_count,
+   182→    created_at,
+   183→    users(name, image_url, id, badge)
+   184→`;
+   185→
+   186→const parseLimitWithinRange = (value, min, max, fallback = null) => {
+   187→    const parsed = Number.parseInt(value, 10);
+   188→    if (Number.isNaN(parsed)) {
+   189→        return fallback;
+   190→    }
+   191→    if (parsed < min || parsed > max) {
+   192→        return null;
+   193→    }
+   194→    return parsed;
+   195→};
+   196→
+   197→export const imageUploader = async(file, userId, bucket) =>{
+   198→    if(!file){
+   199→        throw new Error('no file received');
+   200→    }
+   201→
+   202→    const sourceBuffer = Buffer.isBuffer(file) ? file : file?.buffer;
+   203→    if(!sourceBuffer){
+   204→        throw new Error('invalid file payload');
+   205→    }
+   206→
+   207→    let img_buffer = null
+   208→    let img_url = null
+   209→    img_buffer = await sharp(sourceBuffer)
+   210→    .webp({quality: 80})
+   211→    .toBuffer();
+   212→
+   213→    const folderName = `user_id_${userId}`;
+   214→    const fileName = `${Date.now()}_${crypto.randomUUID()}.webp`;
+   215→    const filePath = `${folderName}/${fileName}`;
+   216→
+   217→    const {data: uploadImage, error: errorUploadImage} = await supabase.storage
+   218→    .from(bucket)
+   219→    .upload(filePath, img_buffer, {
+   220→        contentType: 'image/webp',
+   221→        cacheControl: '31536000',
+   222→        upsert: true
+   223→    })
+   224→    if(errorUploadImage){
+   225→        console.error('supabase error while uploading image to supabase bucket', errorUploadImage)
+   226→        throw new Error('error uploading image into supabase bucket');
+   227→    }
+   228→    const {data: data_url} = supabase.storage
+   229→    .from(bucket)
+   230→    .getPublicUrl(filePath)
+   231→    
+   232→    if(data_url){
+   233→        img_url = data_url.publicUrl;
+   234→        return img_url;
+   235→    } else {
+   236→        throw new Error('Error uploading the image');
+   237→    }
+   238→}
+   239→
+   240→router.post('/verify-turnstile', verfifyTurnstileController);
+   241→
+   242→router.get('/getUserData', getUserDataController);
+   243→
+   244→router.get('/check-user', checkUserController);
+   245→
+   246→router.post('/upload-user-data', requireAuth, upload, uploadUserDataController);
+   247→
+   248→router.post('/update-user-data', requireAuth, upload, updateUserDataController);
+   249→
+   250→router.post('/updateFontColor', requireAuth, upload, updateFont);
+   251→
+   252→router.post('/uploadBackground', requireAuth, upload, uploadProfileBgController);
+   253→
+   254→router.post('/save-journal-image', requireAuth, upload, uploadJournalImageController);
+   255→
+   256→router.post('/delete-journal-images', requireAuth, upload, deleteJournalImageController);
+   257→router.delete('/media/image', requireAuth, deleteProfileMediaImageController);
+   258→
+   259→router.post('/save-journal', requireAuth, upload, uploadJournalContentController);
+   260→
+   261→router.post('/update-journal', requireAuth, upload, updateJournalController);
+   262→
+   263→router.post('/update-repost-caption', requireAuth, updateRepostCaptionController);
+   264→
+   265→router.get('/journals/following', requireAuth, getFollowingFeedController);
+   266→router.get('/journals', getJournalsController);
+   267→router.get('/journals/hottest-monthly', getMonthlyHottestJournalsController);
+   268→router.get('/journals/canvas/gallery', getCanvasGalleryController);
+   269→router.get('/journals/search', searchJournalsController);
+   270→router.get('/users/search', searchUsersController);
+   271→router.get('/journal/:journalId/related', getRelatedPostsController);
+   272→router.get('/journal/:journalId', getJournalByIdController);
+   273→router.get('/universe/posts', getUniversePostsController);
+   274→
+   275→router.get('/userJournals', requireAuth, getUserJournalsController);
+   276→router.get('/profileMedia', requireAuth, getProfileMediaController);
+   277→router.get('/visitedProfileMedia', requireAuth, getVisitedProfileMediaController);
+   278→
+   279→router.get('/visitedUserJournals', getVisitedUserJournalsController);
+   280→
+   281→router.delete('/deleteJournal/:journalId', requireAuth, deleteJournalContent);
+   282→
+   283→router.post('/like', requireAuth, likeController);
+   284→
+   285→router.post('/repost', requireAuth, repostController);
+   286→
+   287→router.post('/addComment', requireAuth, upload, addCommentController);
+   288→
+   289→router.get('/getComments', getCommentsController);
+   290→
+   291→router.post('/canvas/remix', requireAuth, createCanvasRemixController);
+   292→
+   293→router.get('/freedom-wall/current', optionalAuth, getCurrentFreedomWallWeekController);
+   294→router.get('/freedom-wall/weeks', optionalAuth, getFreedomWallWeeksController);
+   295→router.get('/freedom-wall/stickers', optionalAuth, getFreedomWallStickersController);
+   296→router.get('/freedom-wall/:weekId/items', optionalAuth, getFreedomWallItemsController);
+   297→router.post('/freedom-wall/items', requireAuth, createFreedomWallItemController);
+   298→router.patch('/freedom-wall/items/:itemId', requireAuth, updateFreedomWallItemController);
+   299→router.delete('/freedom-wall/items/:itemId', requireAuth, deleteFreedomWallItemController);
+   300→router.post('/freedom-wall/items/:itemId/report', requireAuth, reportFreedomWallItemController);
+   301→router.delete('/freedom-wall/:weekId/my-doodles', requireAuth, clearMyFreedomWallDoodlesController);
+   302→
+   303→router.post('/addBoorkmark', requireAuth, upload, addBoorkmarkController);
+   304→
+   305→router.get('/getBookmarks', requireAuth, getBookmarksController)
+   306→
+   307→router.post('/addFollows', requireAuth, upload, addFollowController);
+   308→
+   309→router.get('/getFollowsData', async(req, res) => {
+   310→    const {userId, loggedInUserId} = req.query;
+   311→    if(!userId && !loggedInUserId) return res.status(400).json({error: 'userId or loggendUserId is undefined '});
+   312→    // console.log(req.query)
+   313→    try {
+   314→        const followersCountPromise = supabase
+   315→        .from('follows')
+   316→        .select('*', {count: 'exact', head: true})
+   317→        .eq('following_id', userId);
+   318→
+   319→        const followingCountPromise = supabase
+   320→        .from('follows')
+   321→        .select('*', {count: 'exact', head: true})
+   322→        .eq('follower_id', userId)
+   323→
+   324→        const isFollowingPromise = supabase
+   325→        .from('follows')
+   326→        .select('*', {count: 'exact', head: true})
+   327→        .eq('follower_id', loggedInUserId)
+   328→        .eq('following_id', userId)
+   329→
+   330→        const [followersCountResult, followingsCountResult, isFollowingResult] = await Promise.all([
+   331→            followersCountPromise, followingCountPromise, isFollowingPromise,
+   332→        ])
+   333→
+   334→
+   335→        const {count: followersCount, error: errorFollowers } = followersCountResult;
+   336→        const {count: followingsCount, error: errorFollowings} = followingsCountResult;
+   337→        const {count: isFollowingCount, error: errorIsfollowing} = isFollowingResult;
+   338→
+   339→        if(errorFollowers || errorFollowings || errorIsfollowing){
+   340→            console.error('supabase error while fetching data:', errorFollowers.message, errorFollowings.message, errorIsfollowing.message)
+   341→            return res.status(500).json({error: 'failed to fetch data'})
+   342→        }
+   343→
+   344→        return res.status(200).json({
+   345→            followersCount: followersCount,
+   346→            followingsCount: followingsCount,
+   347→            isFollowing: isFollowingCount > 0
+   348→        })
+   349→
+   350→    } catch (error) {
+   351→        console.error('Error in Promise.all:', error);
+   352→        res.status(500).json({ error: 'An unexpected error occurred' });
+   353→    }
+   354→
+   355→})
+   356→
+   357→router.get('/getCountNotifications', requireAuth, async(req, res) =>{
+   358→    const userId = req.userId;
+   359→    if(!userId) return res.status(400).json({error: 'no userid'});
+   360→
+   361→    const [journalCount, opinionCount] = await Promise.all([
+   362→        supabase
+   363→            .from('notifications')
+   364→            .select('id', {count: 'exact', head: true})
+   365→            .eq('receiver_id', userId)
+   366→            .eq('read', false),
+   367→        supabase
+   368→            .from('notification_opinions')
+   369→            .select('id', {count: 'exact', head: true})
+   370→            .eq('receiver_id', userId)
+   371→            .eq('read', false)
+   372→    ]);
+   373→
+   374→    if(journalCount.error || opinionCount.error){
+   375→        console.error('error fetching count in notifications table', journalCount.error || opinionCount.error);
+   376→        return res.status(500).json({error: 'error fecthing count in notifications table'});
+   377→    }
+   378→
+   379→    return res.status(200).json({count: (journalCount.count || 0) + (opinionCount.count || 0)});
+   380→}) 
+   381→
+   382→router.get('/getNotifications', requireAuth, async(req, res) =>{
+   383→    const {before} = req.query;
+   384→    const userId = req.userId;
+   385→    const parsedLimit = parseLimitWithinRange(
+   386→        req.query.limit,
+   387→        NOTIFICATION_LIMIT_MIN,
+   388→        NOTIFICATION_LIMIT_MAX,
+   389→        NOTIFICATION_DEFAULT_LIMIT
+   390→    );
+   391→
+   392→    if(parsedLimit == null){
+   393→        return res.status(400).json({error: `limit must be between ${NOTIFICATION_LIMIT_MIN} and ${NOTIFICATION_LIMIT_MAX}`});
+   394→    }
+   395→
+   396→    // Fetch a generous amount from both tables, then merge and paginate
+   397→    const fetchLimit = parsedLimit + 1;
+   398→
+   399→    let journalQuery = supabase
+   400→    .from('notifications')
+   401→    .select(NOTIFICATION_JOURNAL_SELECT)
+   402→    .eq('receiver_id', userId)
+   403→    .order('created_at', {ascending: false})
+   404→    .order('id', {ascending: false})
+   405→    .limit(fetchLimit)
+   406→
+   407→    let opinionQuery = supabase
+   408→    .from('notification_opinions')
+   409→    .select(NOTIFICATION_OPINION_SELECT)
+   410→    .eq('receiver_id', userId)
+   411→    .order('created_at', {ascending: false})
+   412→    .order('id', {ascending: false})
+   413→    .limit(fetchLimit)
+   414→
+   415→    if(before){
+   416→        journalQuery = journalQuery.lt('created_at', before);
+   417→        opinionQuery = opinionQuery.lt('created_at', before);
+   418→    }
+   419→
+   420→    const [journalResult, opinionResult] = await Promise.all([journalQuery, opinionQuery]);
+   421→
+   422→    if(journalResult.error){
+   423→        console.error('error while fetching data from notification table:', journalResult.error);
+   424→        return res.status(500).json({error: 'error fetching data from notification table'});
+   425→    }
+   426→    if(opinionResult.error){
+   427→        console.error('error while fetching data from notification_opinions table:', opinionResult.error);
+   428→        return res.status(500).json({error: 'error fetching data from notification_opinions table'});
+   429→    }
+   430→
+   431→    const journalNotifs = (journalResult.data || []).map(n => ({...n, source: 'journal'}));
+   432→    const opinionNotifs = (opinionResult.data || []).map(n => ({...n, source: 'opinion'}));
+   433→
+   434→    // Merge and sort by created_at descending
+   435→    const merged = [...journalNotifs, ...opinionNotifs]
+   436→        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+   437→
+   438→    // Likes/bookmarks lookup only for journal notifications
+   439→    const journalIds = [...new Set(
+   440→        merged
+   441→            .filter((n) => n.source === 'journal')
+   442→            .map((n) => n.journal_id)
+   443→            .filter(Boolean)
+   444→    )];
+   445→
+   446→    let hasLikedResult = [];
+   447→    let hasBookMarkedResult = [];
+   448→    if(journalIds.length > 0){
+   449→        const [hasLiked, hasBookMarked] = await Promise.all([
+   450→            supabase.from('likes').select('journal_id').in('journal_id', journalIds).eq('user_id', userId),
+   451→            supabase.from('bookmarks').select('journal_id').in('journal_id', journalIds).eq('user_id', userId)
+   452→        ]);
+   453→
+   454→        if(hasLiked.error || hasBookMarked.error){
+   455→            console.error('supabase error while fetching data:', hasLiked.error || hasBookMarked.error);
+   456→        }
+   457→        hasLikedResult = hasLiked.data || [];
+   458→        hasBookMarkedResult = hasBookMarked.data || [];
+   459→    }
+   460→
+   461→    const userHasLikedSet = new Set(hasLikedResult.map((likes) => likes.journal_id));
+   462→    const userHasBookmarkedSet = new Set(hasBookMarkedResult.map((bookmarks) => bookmarks.journal_id));
+   463→
+   464→    const formatted = merged.map((notif) => ({
+   465→        ...notif,
+   466→        hasLiked: notif.source === 'journal' ? userHasLikedSet.has(notif.journal_id) : false,
+   467→        hasBookMarked: notif.source === 'journal' ? userHasBookmarkedSet.has(notif.journal_id) : false
+   468→    }))
+   469→
+   470→    const hasMore = formatted.length > parsedLimit;
+   471→    const slicedData = hasMore ? formatted.slice(0, parsedLimit) : formatted;
+   472→
+   473→    return res.status(200).json(
+   474→        {
+   475→            hasMore: hasMore,
+   476→            data: slicedData,
+   477→        }
+   478→    )
+   479→
+   480→})
+   481→
+   482→router.post('/readNotification', requireAuth, async(req, res) => {
+   483→    const {notifId, source} = req.body;
+   484→    const userId = req.userId;
+   485→
+   486→    const tableName = source === 'opinion' ? 'notification_opinions' : 'notifications';
+   487→
+   488→    const {data : readNotification, error: errorReadNotification} = await supabase
+   489→    .from(tableName)
+   490→    .update({
+   491→        read: true
+   492→    })
+   493→    .eq('receiver_id', userId)
+   494→    .eq('id', notifId)
+   495→
+   496→    if(errorReadNotification){
+   497→        console.error('error updating the notification read: boolean', errorReadNotification)
+   498→        return res.status(500).json({error: 'error updating the notification read: boolean'})
+   499→    }
+   500→
+   501→    return res.status(200).json({message: 'notification was read!'})
+   502→})
+   503→router.get('/getUnreadNotification', requireAuth, async(req, res) => {
+   504→    const {before} = req.query;
+   505→
+   506→    const parsedLimit = parseLimitWithinRange(
+   507→        req.query.limit,
+   508→        NOTIFICATION_LIMIT_MIN,
+   509→        NOTIFICATION_LIMIT_MAX,
+   510→        NOTIFICATION_DEFAULT_LIMIT
+   511→    );
+   512→
+   513→    if(parsedLimit == null){
+   514→        return res.status(400).json({error: `limit must be between ${NOTIFICATION_LIMIT_MIN} and ${NOTIFICATION_LIMIT_MAX}`});
+   515→    }
+   516→
+   517→    const receiverId = req.userId;
+   518→    const fetchLimit = parsedLimit + 1;
+   519→
+   520→    let journalQuery = supabase
+   521→    .from('notifications')
+   522→    .select(NOTIFICATION_JOURNAL_SELECT)
+   523→    .eq('receiver_id', receiverId)
+   524→    .eq('read', false)
+   525→    .order('created_at', {ascending: false})
+   526→    .order('id', {ascending: false})
+   527→    .limit(fetchLimit)
+   528→
+   529→    let opinionQuery = supabase
+   530→    .from('notification_opinions')
+   531→    .select(NOTIFICATION_OPINION_SELECT)
+   532→    .eq('receiver_id', receiverId)
+   533→    .eq('read', false)
+   534→    .order('created_at', {ascending: false})
+   535→    .order('id', {ascending: false})
+   536→    .limit(fetchLimit)
+   537→
+   538→    if(before){
+   539→        journalQuery = journalQuery.lt('created_at', before);
+   540→        opinionQuery = opinionQuery.lt('created_at', before);
+   541→    }
+   542→
+   543→    const [journalResult, opinionResult] = await Promise.all([journalQuery, opinionQuery]);
+   544→
+   545→    if(journalResult.error){
+   546→        console.error('supabase error:', journalResult.error.message);
+   547→        return res.status(500).json({error: 'supabase error while getting unread notification'})
+   548→    }
+   549→    if(opinionResult.error){
+   550→        console.error('supabase error:', opinionResult.error.message);
+   551→        return res.status(500).json({error: 'supabase error while getting unread opinion notification'})
+   552→    }
+   553→
+   554→    const journalNotifs = (journalResult.data || []).map(n => ({...n, source: 'journal'}));
+   555→    const opinionNotifs = (opinionResult.data || []).map(n => ({...n, source: 'opinion'}));
+   556→
+   557→    const merged = [...journalNotifs, ...opinionNotifs]
+   558→        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+   559→
+   560→    const journalIds = [...new Set(
+   561→        merged
+   562→            .filter((n) => n.source === 'journal')
+   563→            .map((n) => n.journal_id)
+   564→            .filter(Boolean)
+   565→    )];
+   566→
+   567→    let hasLikedResult = [];
+   568→    let hasBookMarkedResult = [];
+   569→    if(journalIds.length > 0){
+   570→        const [hasLiked, hasBookMarked] = await Promise.all([
+   571→            supabase.from('likes').select('journal_id').eq('user_id', receiverId).in('journal_id', journalIds),
+   572→            supabase.from('bookmarks').select('journal_id').eq('user_id', receiverId).in('journal_id', journalIds)
+   573→        ]);
+   574→
+   575→        if(hasLiked.error || hasBookMarked.error){
+   576→            console.error('error', hasLiked.error || hasBookMarked.error)
+   577→            return res.status(500).json({error: 'supabase error on likes or bookmarks table'})
+   578→        }
+   579→        hasLikedResult = hasLiked.data || [];
+   580→        hasBookMarkedResult = hasBookMarked.data || [];
+   581→    }
+   582→
+   583→    const userHasLikedSet = new Set(hasLikedResult.map((like) => like.journal_id));
+   584→    const userHasBookmarkedSet = new Set(hasBookMarkedResult.map((bookmark) => bookmark.journal_id));
+   585→
+   586→    const formatted = merged.map((notification) =>({
+   587→        ...notification,
+   588→        hasLiked: notification.source === 'journal' ? userHasLikedSet.has(notification?.journal_id) : false,
+   589→        hasBookMarked: notification.source === 'journal' ? userHasBookmarkedSet.has(notification?.journal_id) : false
+   590→    }))
+   591→
+   592→    const hasMore = formatted.length > parsedLimit;
+   593→    const slicedData = hasMore ? formatted.slice(0, parsedLimit) : formatted;
+   594→
+   595→    return res.status(200).json({
+   596→        data: slicedData,
+   597→        hasMore: hasMore
+   598→    })
+   599→})
+   600→
+   601→router.delete('/deleteNotification/:notifId', requireAuth, async(req, res) =>{
+   602→    const {notifId} = req.params;
+   603→    const {source} = req.query;
+   604→
+   605→    if(!notifId){
+   606→        console.error('no notification id provided')
+   607→        return res.status(400).json({error: 'not notifId'})
+   608→    }
+   609→    const userId = req.userId;
+   610→
+   611→    const tableName = source === 'opinion' ? 'notification_opinions' : 'notifications';
+   612→
+   613→    const {data: deleteNotif, error: errorDeleteNotif} = await  supabase
+   614→    .from(tableName)
+   615→    .delete()
+   616→    .eq('receiver_id', userId)
+   617→    .eq('id', notifId)
+   618→
+   619→    if(errorDeleteNotif){
+   620→        console.error('supabase error while deleting notification:', errorDeleteNotif.message);
+   621→        return res.status(500).json({error: 'supabase error while deleting notification'})
+   622→    }
+   623→
+   624→    return res.status(200).json({message: 'success'});
+   625→})
+   626→
+   627→
+   628→router.post('/addViews', requireAuth, upload, async(req, res) => {
+   629→    const {journalId} = req.body;
+   630→
+   631→    if(!journalId) {
+   632→        console.error('not journalId');
+   633→        return res.status(400).json({error: 'no journalId!'});
+   634→    }
+   635→    const viewerId = req.userId;
+   636→
+   637→    const {data: addViews, error: errorAddViews} = await supabase
+   638→    .from('journal_views')
+   639→    .insert({
+   640→        viewer_id: viewerId,
+   641→        journal_id: journalId
+   642→    })
+   643→
+   644→    if(errorAddViews){
+   645→        const isDuplicateView =
+   646→            errorAddViews?.code === '23505' ||
+   647→            (errorAddViews?.message || '').includes('unique_journal_views');
+   648→
+   649→        if(isDuplicateView){
+   650→            return res.status(200).json({message: 'success!', counted: false});
+   651→        }
+   652→
+   653→        console.error('error:', errorAddViews.message);
+   654→        return res.status(500).json({error: 'error adding views'});
+   655→    }
+   656→
+   657→    const {error: incrementError} = await supabase.rpc('increment_journal_view', {j_post_id: journalId});
+   658→    if(incrementError){
+   659→        console.error('error incrementing journal view:', incrementError.message);
+   660→        return res.status(500).json({error: 'error incrementing views'});
+   661→    }
+   662→
+   663→    return res.status(200).json({message: 'success!', counted: true});
+   664→
+   665→})
+   666→
+   667→router.post('/updatePrivacy', requireAuth, upload, async(req, res) => {
+   668→    const {journalId, privacy} = req.body;
+   669→    // console.log(privacy)
+   670→    if(!journalId){
+   671→        console.error('no journalId')
+   672→        return res.status(400).json({error: 'no journalId'});
+   673→    }
+   674→    const userId = req.userId;
+   675→
+   676→    const {data: updatePrivacy, error: errorUpdatePrivacy} = await supabase
+   677→    .from('journals')
+   678→    .update({privacy: privacy})
+   679→    .eq('id', journalId)
+   680→    .eq('user_id', userId)
+   681→
+   682→    if(errorUpdatePrivacy){
+   683→        console.error('updating journal privacy error:', errorUpdatePrivacy);
+   684→        return res.status(500).json({error: 'error updating journal privacy'});
+   685→    }
+   686→
+   687→    return res.status(200).json({message: 'success'});
+   688→})
+   689→
+   690→router.post('/addCollections', requireAuth, upload, async(req, res) => {
+   691→    let {journalIds, title, description} = req.body;
+   692→
+   693→    if(typeof journalIds === 'string'){
+   694→        journalIds = journalIds.split(',').map(id => id.trim()).filter(id => id !== '');
+   695→    }
+   696→
+   697→    if(!title || !description){
+   698→        console.error('no collections title or description')
+   699→        return res.status(400).json({error: 'no collections title or description'})
+   700→    }
+   701→    const userId = req.userId;
+   702→
+   703→    try {
+   704→        const {data: collections, error: errorCollections} = await supabase
+   705→        .from('collections')
+   706→        .insert({
+   707→            name: title,
+   708→            description: description,
+   709→            user_id: userId
+   710→        })
+   711→        .select()
+   712→        .single()
+   713→
+   714→        if(errorCollections){
+   715→            console.error('error inserting data to database', errorCollections.message)
+   716→            return res.status(500).json({error: 'error inserting data to database'})
+   717→        }
+   718→
+   719→        if(Array.isArray(journalIds) && journalIds.length > 0){
+   720→            const collectionJournals = journalIds.map(journalId => ({
+   721→                collection_id: collections.id,
+   722→                journal_id: journalId,
+   723→            }))
+   724→
+   725→            const {data: linkedJournals, error: errorLinkedJournals} = await supabase
+   726→            .from('collection_journal')
+   727→            .insert(collectionJournals)
+   728→
+   729→            if(errorLinkedJournals){
+   730→                console.error('error inserting linked journals', errorLinkedJournals.message);
+   731→                return res.status(500).json({error: 'error inserting linkedjournals'})
+   732→            }
+   733→        }
+   734→
+   735→        return res.status(200).json({message: 'success'})
+   736→    } catch (error) {
+   737→        console.error('Unexpected error:', error);
+   738→        return res.status(500).json({
+   739→            error: 'Internal server error',
+   740→            details: error.message
+   741→        });
+   742→    }
+   743→})
+   744→
+   745→router.post('/updateCollection', requireAuth, upload, async(req, res) =>{
+   746→    let {journalIds, collectionId} = req.body;
+   747→
+   748→    if(!collectionId){
+   749→        console.error('no collection id')
+   750→        return res.status(400).json({error: 'no collection id'})
+   751→    }
+   752→
+   753→    if(typeof journalIds === 'string'){
+   754→        journalIds = journalIds.split(',').map((id) => id.trim()).filter((id) => id !== '');
+   755→    }
+   756→
+   757→    if(Array.isArray(journalIds) && journalIds.length > 0){
+   758→        const ids = journalIds.map((journalId) => ({
+   759→            journal_id: journalId,
+   760→            collection_id: collectionId
+   761→        }))
+   762→        
+   763→        console.log(ids);
+   764→
+   765→        const {error: errorUpdatingCollection} = await supabase
+   766→            .from('collection_journal')
+   767→            .insert(ids)
+   768→
+   769→        
+   770→        if(errorUpdatingCollection){
+   771→            console.error('error updating collections', errorUpdatingCollection.message)
+   772→            return res.status(500).json({eror: 'error updating collections'})
+   773→        }
+   774→    }
+   775→
+   776→    return res.status(200).json({message: 'success'})
+   777→
+   778→})
+   779→
+   780→router.get('/getCollections', optionalAuth, async(req, res) => {
+   781→    const {userId: targetUserId, before, limit} = req.query;
+   782→    
+   783→    if(!targetUserId){
+   784→        console.error('error: no collectionid or userid')
+   785→        return res.status(400).json({error: 'no collection id or user id'})
+   786→    }
+   787→
+   788→    const parsedLimit = parseInt(limit);
+   789→    if(isNaN(parsedLimit) || parsedLimit > 10 || parsedLimit < 1){
+   790→        console.error('limit should be between 1 to 10')
+   791→        return res.status(400).json({error: 'limit should only between 1 - 10'})
+   792→    }
+   793→
+   794→    let query = supabase
+   795→    .from('collections')
+   796→    .select(COLLECTION_SELECT_COLUMNS)
+   797→    .eq('user_id', targetUserId)
+   798→    .order('created_at', {ascending: false})
+   799→    .order('id', {ascending: false})
+   800→    .limit(parsedLimit + 1)
+   801→
+   802→    if(before){
+   803→        query = query.lt('created_at', before);
+   804→    }
+   805→
+   806→    const {data: getCollections, error: errorGetCollections} = await query;
+   807→
+   808→    if(errorGetCollections){
+   809→        console.error('error getting collections:', errorGetCollections.message);
+   810→        return res.status(500).json({error: 'error getting collections'})
+   811→    }
+   812→
+   813→    if(!getCollections || getCollections.length === 0){
+   814→        return res.status(200).json({data: [], hasMore: false})
+   815→    }
+   816→
+   817→    const hasMore = getCollections.length > parsedLimit;
+   818→    const slicedData = hasMore ?  getCollections.slice(0, parsedLimit) : getCollections;
+   819→
+   820→    return res.status(200).json({data: slicedData, hasMore: hasMore})
+   821→})
+   822→
+   823→router.get('/getCollectionJournals', requireAuth, async(req, res) =>{
+   824→    const {collectionId, before, limit} = req.query;
+   825→
+   826→    if(!collectionId) {
+   827→        console.error('no collectionId')
+   828→        return res.status(400).json({error: 'no collection ID'});
+   829→    }
+   830→    const parsedLimit = parseInt(limit);
+   831→
+   832→    if(isNaN(parsedLimit) || parsedLimit > 10 || parsedLimit < 1){
+   833→        console.error('limit should only between 1-10');
+   834→        return res.status(400).json({error: 'Limit should only between 1-10'})
+   835→    }
+   836→
+   837→    let query = supabase
+   838→    .from('collection_journal')
+   839→    .select(COLLECTION_JOURNALS_SELECT)
+   840→    .eq('collection_id', collectionId)
+   841→    .limit(parsedLimit + 1)
+   842→    .order('id', {ascending: false})
+   843→
+   844→    if(before){
+   845→        query = query.lt('id', before);
+   846→    }
+   847→
+   848→    const {data: journals, error: errorJournals} = await query;
+   849→
+   850→    if(errorJournals){
+   851→        console.error('supabase error while fetching data:', errorJournals.message);
+   852→        return res.status(500).json({error: 'supabase error while fetching data'});
+   853→    }
+   854→    const userId = req.userId;
+   855→    const journalIds = journals?.map((journal) => journal.journals.id) || [];
+   856→
+   857→    let hasLikedPromise;
+   858→    let hasBookmarkedPromise;
+   859→
+   860→    if(journalIds){
+   861→        hasLikedPromise = supabase
+   862→        .from('likes')
+   863→        .select('journal_id')
+   864→        .in('journal_id', journalIds)
+   865→        .eq('user_id', userId)
+   866→
+   867→        hasBookmarkedPromise = supabase
+   868→        .from('bookmarks')
+   869→        .select('journal_id')
+   870→        .in('journal_id', journalIds)
+   871→        .eq('user_id', userId)
+   872→    }
+   873→
+   874→    const [hasLikedResult, hasBookMarkedResult] = await Promise.all([hasLikedPromise, hasBookmarkedPromise]);
+   875→
+   876→    const {data: hasLiked, error: errorHasLiked} = hasLikedResult;
+   877→    const {data: hasBookMarked, error: errorHasbookmarked} = hasBookMarkedResult;
+   878→
+   879→    if(errorHasLiked || errorHasbookmarked){
+   880→        console.error('error fetching data',  errorHasLiked || errorHasbookmarked);
+   881→        return res.status(500).json({error: 'error fetching data'});
+   882→    }
+   883→
+   884→    const userHasLikedSet = new Set(hasLiked.map((journal) => journal.journal_id) || []);
+   885→    const userHasBookmarkedSet = new Set(hasBookMarked.map((bookmark) => bookmark.journal_id) || []);
+   886→
+   887→    const formatted  = journals.map((journal) => ({
+   888→        ...journal,
+   889→        hasLiked: userHasLikedSet?.has(journal?.journals.id),
+   890→        hasBookMarked: userHasBookmarkedSet?.has(journal?.journals.id)
+   891→    }))
+   892→
+   893→    const hasMore = journals.length > parsedLimit;
+   894→    const slicedData = hasMore ? formatted.slice(0, parsedLimit) : formatted;
+   895→
+   896→    return res.status(200).json({data: slicedData, hasMore: hasMore})
+   897→
+   898→})
+   899→
+   900→router.get('/getNotCollectedPost', requireAuth, async(req, res) => {
+   901→    const {before, limit, collectionId} = req.query;
+   902→    const userId = req.userId;
+   903→
+   904→    const parsedLimit = parseInt(limit);
+   905→    if(isNaN(parsedLimit) || parsedLimit > 10 || parsedLimit < 1){
+   906→        console.error('limit should be between 1 to 10');
+   907→        return res.status(400).json({error: 'limit should be between 1 to 10'});
+   908→    }
+   909→
+   910→    if(!userId){
+   911→        console.error('no userId!');
+   912→        return res.status(400).json({error: 'no userId'});
+   913→    }
+   914→    if(!collectionId){
+   915→        console.error('no collectionId');
+   916→        return res.status(400).json({error: 'no collectionId'})
+   917→    }
+   918→
+   919→    let query = supabase
+   920→    .from('journals')
+   921→    .select(NOT_COLLECTED_JOURNAL_SELECT)
+   922→    .eq('user_id', userId)
+   923→    .order('created_at', {ascending: false})
+   924→    .limit(parsedLimit + 1)
+   925→
+   926→    if(before){
+   927→        query = query.lt('created_at', before);
+   928→    }
+   929→
+   930→    const {data: journals, error: errorJournals} = await query;
+   931→    
+   932→
+   933→    if(errorJournals){
+   934→        console.error('error:', errorJournals.message);
+   935→        return res.status(500).json({error: 'error fetching journals or collectionJournals Ids'})
+   936→    }
+   937→    
+   938→    const journalIds = journals.map((journal) => journal.id) || [];
+   939→
+   940→    let collectedJournals;
+   941→    if(journalIds){
+   942→        collectedJournals = supabase
+   943→        .from('collection_journal')
+   944→        .select('journal_id')
+   945→        .in('journal_id', journalIds)
+   946→        .eq('collection_id', collectionId)
+   947→    }
+   948→
+   949→    const {data: collectedJournalIds, error: errorCollectedJournalIds} = await collectedJournals;
+   950→
+   951→    if(errorCollectedJournalIds){
+   952→        console.error('error:', errorCollectedJournalIds.message);
+   953→        return res.status(500).json({error: 'error fetching collected journals'})
+   954→    }
+   955→
+   956→    const journalIdSet = new Set(collectedJournalIds.map((j) => j.journal_id)  || []);
+   957→
+   958→    const formatted = journals.map((journal) => ({
+   959→        ...journal,
+   960→        hasCollected: journalIdSet.has(journal.id)
+   961→    }))
+   962→
+   963→    const hasMore = journals.length > parsedLimit;
+   964→    const slicedData = hasMore ? formatted.slice(0, parsedLimit) : formatted;
+   965→
+   966→    return res.status(200).json({data: slicedData, hasMore: hasMore});
+   967→})
+   968→
+   969→router.delete('/deleteCollection/:collectionId', requireAuth, async(req, res) =>{
+   970→    const {collectionId} = req.params;
+   971→    if(!collectionId){
+   972→        console.error('no collectionId');
+   973→        return res.status(400).json({error: 'no collectionId'});
+   974→    }
+   975→    const userId = req.userId;
+   976→
+   977→    const {data: deleteCollection, error: errorDeleteCollection} = await supabase
+   978→    .from('collections')
+   979→    .delete()
+   980→    .eq('id', collectionId)
+   981→    .eq('user_id', userId)
+   982→
+   983→    if(errorDeleteCollection){
+   984→        console.error('supabase error while deleting collections', errorDeleteCollection.message);
+   985→        return res.status(500).json({error: 'error deleting colletion'});
+   986→    }
+   987→
+   988→    return res.status(200).json({message: 'delete successful'});
+   989→})
+   990→
+   991→router.post('/updatePrivacyCollection', requireAuth, upload, async(req, res) => {
+   992→    const {collectionId, isPublic} = req.body;
+   993→    const userId = req.userId;
+   994→
+   995→    if(!collectionId || !userId){
+   996→        console.error('no collectionId or userId');
+   997→        return res.status(400).json({error: 'error no collectionId or userId'});
+   998→    }
+   999→
+  1000→    const {data: updatePrivacy, error: errorUpdatePrivacy} = await supabase
+  1001→    .from('collections')
+  1002→    .update({is_public: isPublic})
+  1003→    .eq('user_id', userId)
+  1004→    .eq('id', collectionId)
+  1005→
+  1006→    if(errorUpdatePrivacy){
+  1007→        console.error('error updating privacy:', errorUpdatePrivacy.message);
+  1008→        return res.status(500).json({error: 'error updating privacy'})
+  1009→    }
+  1010→
+  1011→    return res.status(200).json({message: 'success'})
+  1012→
+  1013→})
+  1014→
+  1015→router.post('/addOpinion', requireAuth, upload, async(req, res) =>{
+  1016→    const {opinion} = req.body;
+  1017→    if(!opinion || opinion.length > 280){
+  1018→        console.error('no opinion or opinion is over 280 characters');
+  1019→        return res.status(400).json({error: 'no opinion or opinion is over 280 characters'})
+  1020→    }
+  1021→    const userId = req.userId;
+  1022→
+  1023→    const {error} = await supabase
+  1024→    .from('opinions')
+  1025→    .insert({
+  1026→        user_id: userId,
+  1027→        opinion: opinion
+  1028→    })
+  1029→
+  1030→    if(error){
+  1031→        console.err('supabase error:', error.message);
+  1032→        return res.status(500).json({error: 'supabase error'})
+  1033→    }
+  1034→
+  1035→    // Non-fatal: record publish for writing streak
+  1036→    try {
+  1037→        recordPublishForStreak(userId).catch(err =>
+  1038→            console.error('non-fatal: streak record failed:', err?.message || err)
+  1039→        );
+  1040→    } catch (streakErr) {
+  1041→        console.error('non-fatal: streak record failed:', streakErr?.message || streakErr);
+  1042→    }
+  1043→
+  1044→    return res.status(200).json({message: 'success'});
+  1045→})
+  1046→
+  1047→router.get('/getOpinions', async(req, res) => {
+  1048→    const {before, limit} = req.query;
+  1049→
+  1050→    const paresedLimit = parseInt(limit);
+  1051→    if(isNaN(paresedLimit) || paresedLimit > 20 || paresedLimit < 1) {
+  1052→        console.log('limit should be number or and it should not be between 1 - 20');
+  1053→        return res.status(400).json({error: 'limit should be number and it should be between 1 - 20'});
+  1054→    }
+  1055→
+  1056→    let query = supabase
+  1057→    .from('opinions')
+  1058→    .select(OPINION_LIST_SELECT)
+  1059→    .is('parent_id', null)
+  1060→    .order('id', {ascending: false})
+  1061→    .limit(paresedLimit + 1)
+  1062→
+  1063→    if(before) {
+  1064→        query = query.lt('id', before);
+  1065→    }
+  1066→    
+  1067→    const {data: opinions, error: errorOpinions} = await query;
+  1068→
+  1069→    if(errorOpinions){
+  1070→        console.log('supabase error:', errorOpinions.message);
+  1071→        return res.status(500).json({error: 'supabase error on fetching opinions from database'});
+  1072→    }
+  1073→
+  1074→    const hasMore = opinions?.length > paresedLimit;
+  1075→    const slicedData =  hasMore ? opinions.splice(0, paresedLimit) : opinions;
+  1076→
+  1077→    return res.status(200).json({data: slicedData, hasMore: hasMore});
+  1078→})
+  1079→
+  1080→router.get('/getMyOpinions', requireAuth, async(req, res) =>{
+  1081→    const {limit, before} = req.query;
+  1082→    const parsedLimit = parseInt(limit);
+  1083→
+  1084→    if(isNaN(parsedLimit) || parsedLimit > 20 || parsedLimit < 1){
+  1085→        console.error('limit should be number and between 1 - 20');
+  1086→        return res.status(400).json({error:'limit should be number and between 1 - 20'});
+  1087→    }
+  1088→
+  1089→    const userId = req.userId;
+  1090→
+  1091→    let query = supabase
+  1092→    .from('opinions')
+  1093→    .select(MY_OPINION_SELECT)
+  1094→    .order('id', {ascending: false})
+  1095→    .limit(parsedLimit + 1)
+  1096→    .eq('user_id', userId)
+  1097→    .is('parent_id', null)
+  1098→
+  1099→    if(before){
+  1100→        query = query.lt('id', before) //limit or lt mieans it will start to fetch from the value of before 
+  1101→    }
+  1102→
+  1103→    const {data: opinionsData, error: errorOpinionsData} = await query;
+  1104→
+  1105→    if(errorOpinionsData){
+  1106→        console.error('supabase error while fetching opinions data:', errorOpinionsData.message);
+  1107→        return res.status(500).json({error: 'supabase error while fetching the users opinions'});
+  1108→    }
+  1109→
+  1110→    const hasMore = opinionsData.length > parsedLimit;
+  1111→    const slicedData = hasMore ? opinionsData.splice(0, parsedLimit) : opinionsData;
+  1112→
+  1113→    return res.status(200).json({data: slicedData, hasMore: hasMore});
+  1114→    
+  1115→})
+  1116→
+  1117→router.get('/getUserOpinions', async(req, res) =>{
+  1118→    const {limit, before, userId} = req.query;
+  1119→    const parsedLimit = parseInt(limit);
+  1120→
+  1121→    if(isNaN(parsedLimit) || parsedLimit > 20 || parsedLimit < 1){
+  1122→        console.error('limit should be number and not be greater than 20 or less than 1')
+  1123→        return res.status(400).json({error: 'limit should be number and not be greater than 20 or less than 1'});
+  1124→    }
+  1125→
+  1126→    if(!userId){
+  1127→        console.error('no user id!')
+  1128→        return res.status(400).json({error: 'no user id available!'});
+  1129→    }
+  1130→
+  1131→    let query = supabase
+  1132→    .from('opinions')
+  1133→    .select(USER_OPINION_SELECT)
+  1134→    .limit(parsedLimit + 1)
+  1135→    .eq('user_id', userId)
+  1136→    .is('parent_id', null)
+  1137→    .order('id', {ascending: false})
+  1138→
+  1139→    if(before){
+  1140→        query = query.lt('id', before);
+  1141→    }
+  1142→
+  1143→    const {data: opinionsData, error: errorOpinionsData} = await query;
+  1144→
+  1145→    if(errorOpinionsData){
+  1146→        console.error('supabase error while fetching opinions:', errorOpinionsData.message);
+  1147→        return res.status(500).json({error: 'supabase error while fetching opinions'});
+  1148→    }
+  1149→
+  1150→    const hasMore = opinionsData.length > parsedLimit;
+  1151→    const slicedData = hasMore ? opinionsData.splice(0, parsedLimit) : opinionsData;
+  1152→
+  1153→    return res.status(200).json({data: slicedData, hasMore: hasMore});
+  1154→})
+  1155→
+  1156→router.post('/submitReply/:parent_id/:user_id/:post_id/:receiver_id', requireAuth, upload, async(req, res) => {
+  1157→    const {parent_id, receiver_id, post_id} = req.params;
+  1158→    const user_id = req.userId;
+  1159→    const {reply} = req.body;
+  1160→    const isOwner = req.userId === receiver_id
+  1161→
+  1162→    if(!parent_id || !post_id || !receiver_id){
+  1163→        console.error('no parent_id || post_id || receiver_id available')
+  1164→        return res.status(400).json({error: 'parent_id || post_id || receiver_id is missing'});
+  1165→    }
+  1166→    if(!reply || reply.length > 201 || typeof reply !== 'string'){
+  1167→        console.error('make sure the reply is a string and not over 200 characters');
+  1168→        return res.status(400).json({error: 'reply is not a string or maybe undefined'});
+  1169→    }
+  1170→
+  1171→    const insertReplyPromise = supabase
+  1172→    .from('comments')
+  1173→    .insert({post_id: post_id, user_id: user_id, comment: reply, parent_id: parent_id})
+  1174→
+  1175→    const insertNotifPromise = supabase
+  1176→    .from('notifications')
+  1177→    .insert({sender_id: user_id, receiver_id: receiver_id, type: 'reply', journal_id: post_id, read: false})  
+  1178→
+  1179→    const [insertNotif, insertReply] = await Promise.all([
+  1180→        isOwner ? Promise.resolve({error: null}) : insertNotifPromise, 
+  1181→        insertReplyPromise
+  1182→    ])
+  1183→
+  1184→
+  1185→    const {data: uploadReply, error: errorUploadReply} = insertReply;
+  1186→    const {data: notif, error: errorNotif} = insertNotif;
+  1187→
+  1188→    if(errorUploadReply || errorNotif){
+  1189→        console.error('supabase error:', errorUploadReply.message || errorNotif.message);
+  1190→        return res.status(500).json({error: 'supabase error'});
+  1191→    }
+  1192→
+  1193→    return res.status(200).json({message: 'success'});
+  1194→})
+  1195→
+  1196→router.get('/getPostReplies/:parent_id', async(req, res) => {
+  1197→    const {parent_id} = req.params;
+  1198→    const {limit, before} = req.query;
+  1199→    
+  1200→    if(!parent_id){
+  1201→        console.error('parent_id is undefined');
+  1202→        return res.status(400).json({error: 'parent_id is undefined'});
+  1203→    }
+  1204→
+  1205→    const parsedLimit = parseInt(limit);
+  1206→
+  1207→    if(isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 20){
+  1208→        console.error('limit should be intiger or it should be between 1 to 20');
+  1209→        return res.status(400).json({error: 'limit should be intiger or it should be between 1 to 20'});
+  1210→    }
+  1211→
+  1212→    let query = supabase
+  1213→    .from('comments')
+  1214→    .select(COMMENT_REPLY_SELECT)
+  1215→    .eq('parent_id', parent_id)
+  1216→    .order('id', {ascending: false})
+  1217→    .limit(parsedLimit + 1)
+  1218→
+  1219→    if(before){
+  1220→        query = query.lt('id', before);
+  1221→    }
+  1222→
+  1223→    const {data: getPostReplies, error: getPostRepliesError} = await query;
+  1224→
+  1225→    if(getPostRepliesError){
+  1226→        console.error('supabase error while fetchind replies:', getPostRepliesError.message);
+  1227→        return res.status(500).json({error: 'supabase error while getting post replies'});
+  1228→    }
+  1229→
+  1230→    const hasMore = getPostReplies.length > parsedLimit;
+  1231→    const slicedData = hasMore ? getPostReplies.splice(0, parsedLimit) : getPostReplies;
+  1232→
+  1233→    return res.status(200).json({data: slicedData, hasMore: hasMore});
+  1234→})
+  1235→
+  1236→router.get('/viewOpinion/:postId/:userId', getViewOpinionController);
+  1237→
+  1238→router.post('/addOpinionReply/:parent_id/:user_id/:receiver_id', requireAuth, upload, addOpinionReplyController);
+  1239→
+  1240→router.get('/getOpinionReply/:parentId', getReplyOpinionsController);
+  1241→
+  1242→// ── Username endpoints ──
+  1243→router.get('/user/:username', async (req, res) => {
+  1244→    const { username } = req.params;
+  1245→    try {
+  1246→        const data = await getUserByUsernameService(username);
+  1247→        return res.status(200).json(data);
+  1248→    } catch (error) {
+  1249→        const status = error?.status || 500;
+  1250→        return res.status(status).json({ error: error?.message || 'error fetching user' });
+  1251→    }
+  1252→});
+  1253→
+  1254→router.get('/check-username/:username', async (req, res) => {
+  1255→    const { username } = req.params;
+  1256→    if (!username || typeof username !== 'string') {
+  1257→        return res.status(400).json({ error: 'username is required' });
+  1258→    }
+  1259→
+  1260→    const normalized = username.trim().toLowerCase();
+  1261→    const RESERVED_WORDS = ['admin', 'root', 'iskrib', 'iskryb', 'support', 'help', 'api', 'www', 'null', 'undefined'];
+  1262→    if (RESERVED_WORDS.includes(normalized)) {
+  1263→        return res.status(200).json({ available: false, reason: 'reserved' });
+  1264→    }
+  1265→
+  1266→    const { data: existing, error } = await supabase
+  1267→        .from('users')
+  1268→        .select('id')
+  1269→        .ilike('username', normalized)
+  1270→        .limit(1);
+  1271→
+  1272→    if (error) {
+  1273→        console.error('check-username error:', error.message);
+  1274→        return res.status(500).json({ error: 'database error' });
+  1275→    }
+  1276→
+  1277→    return res.status(200).json({ available: !existing || existing.length === 0 });
+  1278→});
+  1279→
+  1280→router.post('/update-username', requireAuth, async (req, res) => {
+  1281→    const userId = req.userId;
+  1282→    const { username } = req.body;
+  1283→
+  1284→    if (!username || typeof username !== 'string') {
+  1285→        return res.status(400).json({ error: 'username is required' });
+  1286→    }
+  1287→
+  1288→    const trimmed = username.trim();
+  1289→    if (trimmed.length < 3 || trimmed.length > 50) {
+  1290→        return res.status(400).json({ error: 'username must be 3-50 characters' });
+  1291→    }
+  1292→
+  1293→    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) {
+  1294→        return res.status(400).json({ error: 'username can only contain letters, numbers, and hyphens' });
+  1295→    }
+  1296→
+  1297→    const normalized = trimmed.toLowerCase();
+  1298→    const RESERVED_WORDS = ['admin', 'root', 'iskrib', 'iskryb', 'support', 'help', 'api', 'www', 'null', 'undefined'];
+  1299→    if (RESERVED_WORDS.includes(normalized)) {
+  1300→        return res.status(400).json({ error: 'this username is reserved' });
+  1301→    }
+  1302→
+  1303→    // Check uniqueness
+  1304→    const { data: existing } = await supabase
+  1305→        .from('users')
+  1306→        .select('id')
+  1307→        .ilike('username', normalized)
+  1308→        .neq('id', userId)
+  1309→        .limit(1);
+  1310→
+  1311→    if (existing && existing.length > 0) {
+  1312→        return res.status(409).json({ error: 'username is already taken' });
+  1313→    }
+  1314→
+  1315→    const { error: updateError } = await supabase
+  1316→        .from('users')
+  1317→        .update({ username: trimmed.toLowerCase() })
+  1318→        .eq('id', userId);
+  1319→
+  1320→    if (updateError) {
+  1321→        console.error('update-username error:', updateError.message);
+  1322→        return res.status(500).json({ error: 'failed to update username' });
+  1323→    }
+  1324→
+  1325→    return res.status(200).json({ message: 'success', username: trimmed.toLowerCase() });
+  1326→});
+  1327→
+  1328→router.post('/constellation/request', requireAuth, requestConstellationController);
+  1329→router.post('/constellation/respond', requireAuth, respondConstellationController);
+  1330→router.get('/constellation/viewport', getViewportConstellationsController);
+  1331→router.delete('/constellation/:id', requireAuth, deleteConstellationController);
+  1332→
+  1333→// ── Story routes ──
+  1334→router.post('/stories', requireAuth, upload, createStoryController);
+  1335→router.get('/stories', optionalAuth, getStoriesController);
+  1336→router.get('/stories/my', requireAuth, getMyStoriesController);
+  1337→router.get('/stories/library', requireAuth, getMyLibraryController);
+  1338→router.get('/stories/user/:userId', optionalAuth, getUserStoriesController);
+  1339→router.get('/stories/:storyId', optionalAuth, getStoryByIdController);
+  1340→router.patch('/stories/:storyId', requireAuth, upload, updateStoryController);
+  1341→router.delete('/stories/:storyId', requireAuth, deleteStoryController);
+  1342→
+  1343→// ── Chapter routes ──
+  1344→router.post('/stories/:storyId/chapters', requireAuth, createChapterController);
+  1345→router.get('/stories/:storyId/chapters/:chapterId', optionalAuth, getChapterController);
+  1346→router.patch('/stories/:storyId/chapters/:chapterId', requireAuth, updateChapterController);
+  1347→router.delete('/stories/:storyId/chapters/:chapterId', requireAuth, deleteChapterController);
+  1348→router.post('/stories/:storyId/chapters/reorder', requireAuth, reorderChaptersController);
+  1349→
+  1350→// ── Story interaction routes ──
+  1351→router.post('/stories/:storyId/vote', requireAuth, toggleVoteController);
+  1352→router.post('/stories/:storyId/library', requireAuth, toggleLibraryController);
+  1353→router.get('/chapters/:chapterId/comments', optionalAuth, getStoryCommentsController);
+  1354→router.get('/chapters/:chapterId/comment-counts', optionalAuth, getCommentCountsController);
+  1355→router.post('/chapters/:chapterId/comments', requireAuth, addStoryCommentController);
+  1356→router.post('/stories/:storyId/progress', requireAuth, saveProgressController);
+  1357→router.get('/stories/:storyId/progress', requireAuth, getProgressController);
+  1358→
+  1359→// ─── Reactions ───
+  1360→router.post('/reaction', requireAuth, toggleReactionController);
+  1361→router.get('/reactions/:journalId', getPostReactionsController);
+  1362→
+  1363→// ─── Daily Prompts ───
+  1364→router.get('/prompt/today', getTodaysPromptController);
+  1365→router.get('/prompt/:promptId/responses', getPromptResponsesController);
+  1366→
+  1367→// ─── Weekly Recap ───
+  1368→router.get('/recap/weekly', requireAuth, getWeeklyRecapController);
+  1369→
+  1370→// ─── Streaks ───
+  1371→router.get('/streak/:userId', async (req, res) => {
+  1372→    try {
+  1373→        const { userId } = req.params;
+  1374→        if (!userId) return res.status(400).json({ error: 'userId is required' });
+  1375→        const streakData = await getStreakService(userId);
+  1376→        return res.status(200).json(streakData);
+  1377→    } catch (err) {
+  1378→        console.error('error getting streak:', err);
+  1379→        return res.status(500).json({ error: 'failed to get streak' });
+  1380→    }
+  1381→});
+  1382→
+  1383→export default router;
+  1384→

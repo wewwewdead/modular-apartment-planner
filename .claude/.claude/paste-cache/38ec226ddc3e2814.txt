@@ -1,0 +1,44 @@
+"The Iskrib Universe Page (JS Version)"
+Project Goal: Build an infinite, spatial "Iskrib-Universe" page using React (Vite) and Konva.
+
+Tech Requirements:
+
+React + Konva (use react-konva and konva libraries).
+
+No Tailwind CSS: Use CSS Modules for the UI overlays.
+
+Supabase: Integration for real-time spatial data.
+
+Task Specifications:
+
+Infinite Canvas Logic:
+
+Create a <Stage> that fills the screen.
+
+Implement Pan and Zoom functionality. The user should be able to drag the world and scroll to zoom in/out relative to the mouse cursor.
+
+The "Galaxy" Component:
+
+Create a Galaxy component that takes an array of posts.
+
+Each post is a <Group> containing a <Circle> (the star) and a <Text> (the title).
+
+Interaction: When a user clicks a star, it should "pulse" and show a preview of the writing.
+
+Dynamic Loading (Spatial):
+
+Write a function to fetch posts from Supabase based on the current viewBox (x, y, width, height).
+
+Logic: select * from posts where x > minX and x < maxX...
+
+Visual "Vibe":
+
+The background should be a dark space texture (use CSS for a fixed background and Konva for the moving stars).
+
+Stars should have a shadowBlur to create a glowing neon effect.
+
+Mobile Friendly:
+
+Ensure the stage handles onTouchMove and onTouchEnd for panning and pinch-to-zoom on phones.
+
+Deliverable: A single Universe.jsx file and a Universe.module.css file. Ensure the code is clean, documented, and uses standard React Hooks (useState, useEffect, useRef).

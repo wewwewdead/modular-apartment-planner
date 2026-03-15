@@ -1,0 +1,160 @@
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { computeGalaxyForces, computeStarPullOffsets } from '../utils/cosmicPhysics';
+import { userHomeCoords } from '../utils/starUtils';
+
+const COOLING = 0.96;
+const DAMPING = 0.88;
+const BOUNDARY = 25000;
+
+/**
+ * Client-side gravity simulation hook.
+ *
+ * Gravity A — Galaxy-to-Galaxy:
+ *   Galaxies START at hash positions and ANIMATE toward server-settled
+ *   semantic positions, pulled by edge similarities.
+ *
+ * Gravity B — Star-to-Galaxy:
+ *   Stars follow their parent galaxy's movement AND get static pull
+ *   offsets toward similar galaxy centroids.
+ *
+ * @returns {{
+ *   galaxyPositions: Map<userId, {x,y}>,
+ *   starPullOffsets: Map<postId, {dx,dy}>,
+ *   isSettled: boolean
+ * }}
+ */
+export default function useCosmicGravity({ galaxies, centroidTargets, edges, posts, starPulls }) {
+    const [galaxyPositions, setGalaxyPositions] = useState(new Map());
+    const [isSettled, setIsSettled] = useState(true);
+
+    const galPosRef = useRef(new Map());
+    const tempRef = useRef(1.0);
+    const rafRef = useRef(null);
+    const prevGalaxyIdsRef = useRef('');
+
+    // Determine if there's any data to animate with
+    const hasTargets = centroidTargets && centroidTargets.size > 0;
+    const hasEdges = edges && edges.length > 0;
+    const hasGravityData = hasTargets || hasEdges;
+
+    // Initialize galaxy positions from hash coords when galaxies change
+    useEffect(() => {
+        if (!galaxies || galaxies.length === 0) return;
+
+        // Track galaxy identity to avoid re-initializing on every render
+        const galaxyIds = galaxies.map(g => g.userId).sort().join(',');
+        if (galaxyIds === prevGalaxyIdsRef.current && galPosRef.current.size > 0) return;
+        prevGalaxyIdsRef.current = galaxyIds;
+
+        const initial = new Map();
+        for (const g of galaxies) {
+            // Always start at hash position — the animation flies them to targets
+            const hash = userHomeCoords(g.userId);
+            initial.set(g.userId, { x: hash.x, y: hash.y });
+        }
+
+        galPosRef.current = initial;
+        setGalaxyPositions(new Map(initial));
+
+        if (hasGravityData) {
+            tempRef.current = 1.0;
+            setIsSettled(false);
+        }
+    }, [galaxies, hasGravityData]);
+
+    // Restart animation when new gravity data arrives
+    useEffect(() => {
+        if (hasGravityData && galPosRef.current.size > 0 && isSettled) {
+            tempRef.current = 1.0;
+            setIsSettled(false);
+        }
+    }, [centroidTargets, edges, hasGravityData]);
+
+    // Galaxy animation loop (Gravity A)
+    useEffect(() => {
+        if (isSettled || !hasGravityData) return;
+
+        let active = true;
+
+        const tick = () => {
+            if (!active) return;
+
+            const forces = computeGalaxyForces(
+                galPosRef.current,
+                centroidTargets || new Map(),
+                edges || []
+            );
+
+            const newPos = new Map();
+            let maxDisp = 0;
+
+            for (const [id, pos] of galPosRef.current) {
+                const f = forces.get(id);
+                let nx = pos.x;
+                let ny = pos.y;
+
+                if (f) {
+                    nx += f.fx * tempRef.current * DAMPING;
+                    ny += f.fy * tempRef.current * DAMPING;
+                }
+
+                // Soft boundary
+                nx = Math.max(-BOUNDARY, Math.min(BOUNDARY, nx));
+                ny = Math.max(-BOUNDARY, Math.min(BOUNDARY, ny));
+
+                const dx = nx - pos.x;
+                const dy = ny - pos.y;
+                const disp = Math.sqrt(dx * dx + dy * dy);
+                if (disp > maxDisp) maxDisp = disp;
+
+                newPos.set(id, { x: nx, y: ny });
+            }
+
+            galPosRef.current = newPos;
+            tempRef.current *= COOLING;
+
+            // Convergence check
+            if (maxDisp < 0.3 || tempRef.current < 0.005) {
+                setGalaxyPositions(new Map(newPos));
+                setIsSettled(true);
+                return;
+            }
+
+            setGalaxyPositions(new Map(newPos));
+            rafRef.current = requestAnimationFrame(tick);
+        };
+
+        rafRef.current = requestAnimationFrame(tick);
+
+        return () => {
+            active = false;
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        };
+    }, [isSettled, hasGravityData, centroidTargets, edges]);
+
+    // Compute star pull offsets (Gravity B — static, recalculated when data changes)
+    const starPullOffsets = useMemo(() => {
+        if (!starPulls || starPulls.length === 0 || !posts || posts.length === 0) {
+            return new Map();
+        }
+
+        // Use centroid targets as galaxy positions for pull direction
+        // (these are the final semantic positions galaxies are flying toward)
+        const galaxyTargets = centroidTargets || new Map();
+        if (galaxyTargets.size === 0) return new Map();
+
+        // Build star base positions (hash galaxy center + spiral offset = universe_x/y)
+        const starBases = new Map();
+        for (const post of posts) {
+            const x = post.universe_x ?? post.display_x;
+            const y = post.universe_y ?? post.display_y;
+            if (x != null && y != null) {
+                starBases.set(post.id, { x, y });
+            }
+        }
+
+        return computeStarPullOffsets(starPulls, galaxyTargets, starBases);
+    }, [starPulls, centroidTargets, posts]);
+
+    return { galaxyPositions, starPullOffsets, isSettled };
+}

@@ -1,0 +1,37 @@
+# Remove Collections Feature Remnants
+
+## Context
+The Collections feature was previously removed from the web app, but some remnants remain: a stale image asset, a robots.txt rule, CSS class naming leftovers, mobile app nav type definitions, and **database tables still in Supabase** that need dropping.
+
+## Changes
+
+### 1. Supabase SQL — Drop collection tables
+Provide SQL to inspect and drop collection-related tables. Since there's no migration file in the codebase, we'll use safe `DROP TABLE IF EXISTS` with cascade:
+
+```sql
+-- Check what exists first (run in Supabase SQL editor):
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name ILIKE '%collection%';
+
+-- Drop tables (adjust names based on what the query above returns):
+DROP TABLE IF EXISTS collection_items CASCADE;
+DROP TABLE IF EXISTS collections CASCADE;
+DROP TABLE IF EXISTS user_collections CASCADE;
+```
+
+### 2. Web app cleanup
+- **Delete** `client/public/assets/collection-banner.png`
+- **Edit** `client/public/robots.txt` — remove the `Disallow: /home/collections` line
+- **Rename CSS classes** in `client/src/components/MobileSidebarLink/`:
+  - `mobilesidebarlink.css`: rename `sidebar-mycollection-container` → `sidebar-nav-container`, `sidebar-my-collection-bttn` → `sidebar-nav-bttn`, `sidebar-my-collection-bttn-active` → `sidebar-nav-bttn-active`
+  - `MobileSidebarLink.jsx`: update all 6 class name references to match
+
+### 3. Mobile app cleanup
+- **Edit** `C:\Users\johnm\iskrib_mobile_app\apps\mobile\src\navigation\types.ts` — remove `Collections` and `CollectionDetail` entries from `RootStackParamList`
+
+## Verification
+- Run `vite build` to confirm no broken imports
+- Search codebase for "collection" (case-insensitive) to verify nothing was missed
+- Run the `SELECT` query in Supabase SQL editor before dropping to confirm exact table names

@@ -1,0 +1,219 @@
+# RelatedPosts: Add CTA action buttons to cards
+
+## Context
+
+Related post cards are currently passive — click to navigate and nothing else. The user wants each card to drive action: write a response, quote-repost, or save. All three patterns already exist in the codebase and just need to be wired into the RelatedPosts cards.
+
+## Files to modify
+
+| File | What |
+|---|---|
+| `client/src/components/Discovery/RelatedPosts.jsx` | Add action bar to cards, wire up all three CTAs, manage RepostModal + bookmark mutation + toast |
+| `client/src/components/Discovery/RelatedPosts.css` | Action bar styling, button styles, toast, responsive, updated skeleton |
+
+No backend changes needed — all three actions use existing APIs.
+
+## Changes
+
+### 1. RelatedPosts.jsx — imports & hooks
+
+Add to existing imports:
+- `useState` from react
+- `AnimatePresence` (already imported from framer-motion)
+- `useAuth` from `../../../Context/useAuth`
+- `useBookMarkMutation, useRepostMutation` from `../../../utils/useMutation`
+- `RepostModal` from `../../RepostModal/RepostModal`
+
+In the `RelatedPosts` component, add:
+- `const { session, user, openAuthModal } = useAuth()`
+- `const userId = user?.userData?.[0]?.id`
+- `const mutationBookmark = useBookMarkMutation(session, userId)`
+- `const [repostJournal, setRepostJournal] = useState(null)` — which post's RepostModal is open
+- `const [toast, setToast] = useState('')` — feedback message
+
+### 2. RelatedPosts.jsx — three action handlers
+
+Define in `RelatedPosts` component and pass down to `RelatedPostCard`:
+
+**Add your take** — navigates to `/home` with editor state:
+```js
+const handleAddTake = (post) => {
+    if (!session) return openAuthModal();
+    navigate('/home', {
+        state: {
+            openEditor: true,
+            editorMode: 'text',
+            initialTitle: `Re: ${post.title || 'Untitled'}`,
+        }
+    });
+};
+```
+
+**Repost** — opens RepostModal (same pattern as ContentView line 580-587):
+```js
+const handleRepost = (post) => {
+    if (!session) return openAuthModal();
+    setRepostJournal({
+        id: post.id,
+        title: post.title,
+        users: { id: post.user_id, name: post.user_name, image_url: post.user_image_url, badge: post.user_badge }
+    });
+};
+```
+
+**Save** — toggles bookmark (same pattern as ContentView line 212-247):
+```js
+const handleSave = async (post) => {
+    if (!session) return openAuthModal();
+    const res = await mutationBookmark.mutateAsync({ journalId: post.id });
+    showToast(res?.message === 'success' ? 'Saved to bookmarks' : 'Removed from bookmarks');
+};
+```
+
+Toast helper:
+```js
+const toastRef = useRef();
+const showToast = (msg) => {
+    setToast(msg);
+    clearTimeout(toastRef.current);
+    toastRef.current = setTimeout(() => setToast(''), 2500);
+};
+```
+
+### 3. RelatedPosts.jsx — RelatedPostCard action bar
+
+Pass `onAddTake`, `onRepost`, `onSave`, and `currentUserId` as props.
+
+Below `.rp-card-meta`, add an action bar:
+
+```jsx
+<div className="rp-card-actions">
+    <button className="rp-action-btn" onClick={(e) => { e.stopPropagation(); onAddTake(post); }}>
+        {/* pen/write SVG icon */}
+        <span className="rp-action-label">Your take</span>
+    </button>
+    {post.user_id !== currentUserId && (
+        <button className="rp-action-btn" onClick={(e) => { e.stopPropagation(); onRepost(post); }}>
+            {/* repost SVG icon */}
+            <span className="rp-action-label">Repost</span>
+        </button>
+    )}
+    <button className="rp-action-btn" onClick={(e) => { e.stopPropagation(); onSave(post); }}>
+        {/* bookmark SVG icon */}
+        <span className="rp-action-label">Save</span>
+    </button>
+</div>
+```
+
+Each button uses `e.stopPropagation()` so clicking an action doesn't also navigate to the post.
+
+SVG icons: small inline SVGs (16px), matching the existing icon style from PostCards/ContentView. Pen icon for "Your take", loop-arrows for "Repost", bookmark for "Save".
+
+### 4. RelatedPosts.jsx — RepostModal + toast rendering
+
+At the bottom of the `RelatedPosts` return, after `.rp-grid`:
+
+```jsx
+{repostJournal && (
+    <RepostModal
+        journal={repostJournal}
+        onClose={(result) => {
+            setRepostJournal(null);
+            if (result === 'success') showToast('Post was reposted');
+        }}
+    />
+)}
+
+<AnimatePresence>
+    {toast && (
+        <motion.div className="rp-toast" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.2 }}>
+            {toast}
+        </motion.div>
+    )}
+</AnimatePresence>
+```
+
+### 5. RelatedPosts.css — action bar styles
+
+```css
+.rp-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-light);
+}
+
+.rp-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.5rem;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.rp-action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+.rp-action-btn svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+```
+
+### 6. RelatedPosts.css — toast
+
+```css
+.rp-toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    padding: 0.5rem 1.25rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 1000;
+    white-space: nowrap;
+}
+```
+
+### 7. RelatedPosts.css — responsive (480px)
+
+Hide action labels on small screens, show icons only:
+```css
+@media (max-width: 480px) {
+    .rp-action-label { display: none; }
+    .rp-action-btn { padding: 0.25rem; }
+}
+```
+
+### 8. Skeleton height update
+
+Bump `.rp-skeleton-card` height from `82px` → `106px` to account for the action bar.
+
+## Verification
+
+1. Open a post with related posts
+2. Each card shows: title, excerpt, author/date, then a separator line with 3 action buttons
+3. **Your take** — navigates to `/home` and opens the editor with title pre-filled as `Re: {title}`
+4. **Repost** — opens RepostModal with the correct post data; hidden on own posts
+5. **Save** — toggles bookmark, shows toast confirmation
+6. All three actions require auth (opens auth modal if not logged in)
+7. Clicking an action button does NOT navigate to the post (stopPropagation works)
+8. Toast appears and auto-dismisses after 2.5s
+9. On mobile (480px), action labels hide — only icons remain

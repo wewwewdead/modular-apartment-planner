@@ -1,0 +1,73 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import { Item } from '../../../domain/models';
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { typography } from '../../../theme/typography';
+import { SelectionBadge } from './SelectionBadge';
+
+interface VaultItemCardProps {
+  item: Item;
+  quantity: number;
+  onToggle: () => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}
+
+export const VaultItemCard = React.memo(function VaultItemCard({
+  item,
+  quantity,
+  onToggle,
+  onIncrement,
+  onDecrement,
+}: VaultItemCardProps) {
+  const bestOption = item.priceOptions[0];
+  const priceLabel = bestOption
+    ? `${bestOption.store} - ${formatCurrency(bestOption.pricePerUnit.priceValue)}/${bestOption.pricePerUnit.unit}`
+    : 'No price set';
+
+  return (
+    <View
+      style={styles.row}
+      accessibilityLabel={`${item.name}, ${priceLabel}`}
+    >
+      <View style={styles.info}>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.price}>{priceLabel}</Text>
+      </View>
+      <SelectionBadge
+        selected={quantity > 0}
+        quantity={quantity}
+        onToggle={onToggle}
+        onIncrement={onIncrement}
+        onDecrement={onDecrement}
+      />
+    </View>
+  );
+});
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    backgroundColor: colors.surface,
+    gap: 12,
+  },
+  info: {
+    flex: 1,
+    gap: 4,
+  },
+  name: {
+    ...typography.label,
+    color: colors.ink,
+    fontSize: 16,
+  },
+  price: {
+    ...typography.caption,
+    color: colors.mutedInk,
+  },
+});

@@ -1,0 +1,172 @@
+2026-02-27T14:29:45.368Z [DEBUG] detectFileEncoding failed for expected reason: ENOENT
+2026-02-27T14:29:45.369Z [DEBUG] MDM settings load completed in 19ms
+2026-02-27T14:29:45.394Z [DEBUG] [init] configureGlobalMTLS starting
+2026-02-27T14:29:45.394Z [DEBUG] [init] configureGlobalMTLS complete
+2026-02-27T14:29:45.394Z [DEBUG] [init] configureGlobalAgents starting
+2026-02-27T14:29:45.394Z [DEBUG] [init] configureGlobalAgents complete
+2026-02-27T14:29:45.420Z [DEBUG] Using bash path: "C:\Program Files\Git\bin\bash.exe"
+2026-02-27T14:29:45.432Z [DEBUG] Applying permission update: Adding 26 allow rule(s) to destination 'localSettings': ["WebSearch","WebFetch(domain:www.threads.net)","WebFetch(domain:www.threads.com)","Bash(dir:*)","Bash(ls -la \"C:\\\\Users\\\\johnm\\\\iskrib_v3\\\\client\\\\src\\\\components\\\\HomePage\\\\Editor\"\" 2>&1 || echo \"Directory check \")","Bash(npm install -g @anthropic-ai/claude-code@latest)","Bash(grep:*)","WebFetch(domain:x.ai)","Bash(npx vite build)","Bash(npx vite build:*)","Bash(npx:*)","Bash(node scripts/backfillUniverseCoords.js:*)","Bash(node:*)","Bash(xargs:*)","Bash(curl:*)","Bash(python test_rocket_recon.py:*)","Bash(npm ls:*)","Bash(npm install:*)","Bash(ls:*)","WebFetch(domain:github.com)","WebFetch(domain:baileys.wiki)","WebFetch(domain:www.npmjs.com)","Bash(npm uninstall:*)","WebFetch(domain:cdn.jsdelivr.net)","WebFetch(domain:www.jsdelivr.com)","Bash(find:*)"]
+2026-02-27T14:29:45.433Z [DEBUG] [STARTUP] Loading MCP configs...
+2026-02-27T14:29:45.436Z [DEBUG] [ToolSearch:optimistic] mode=tst-auto, ENABLE_TOOL_SEARCH=undefined, result=true
+2026-02-27T14:29:45.437Z [DEBUG] [STARTUP] Running setup()...
+2026-02-27T14:29:45.443Z [DEBUG] Loading skills from: managed=C:\ProgramData\ClaudeCode\.claude\skills, user=C:\Users\johnm\.claude\skills, project=[]
+2026-02-27T14:29:45.444Z [DEBUG] Error log sink initialized
+2026-02-27T14:29:45.454Z [DEBUG] [STARTUP] setup() completed in 17ms
+2026-02-27T14:29:45.455Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-02-27T14:29:45.455Z [DEBUG] Git remote URL: null
+2026-02-27T14:29:45.455Z [DEBUG] No git remote URL found
+2026-02-27T14:29:45.470Z [DEBUG] Loaded 0 unique skills (0 unconditional, 0 conditional, managed: 0, user: 0, project: 0, additional: 0, legacy commands: 0)
+2026-02-27T14:29:45.477Z [DEBUG] [Claude in Chrome] Found chrome profiles: Default
+2026-02-27T14:29:45.488Z [DEBUG] Loaded 3 installed plugins from C:\Users\johnm\.claude\plugins\installed_plugins.json
+2026-02-27T14:29:45.499Z [DEBUG] [Claude in Chrome] Found edge profiles: Default
+2026-02-27T14:29:45.500Z [DEBUG] [Claude in Chrome] Extension not found in any browser
+2026-02-27T14:29:45.509Z [DEBUG] Loading plugin example-skills from source: "./"
+2026-02-27T14:29:45.515Z [DEBUG] Loading plugin frontend-design from source: "./plugins/frontend-design"
+2026-02-27T14:29:45.516Z [DEBUG] Loading plugin feature-dev from source: "./plugins/feature-dev"
+2026-02-27T14:29:45.522Z [DEBUG] Using git SHA for example-skills@anthropic-agent-skills: 69c0b1a06741
+2026-02-27T14:29:45.524Z [DEBUG] Plugin example-skills@anthropic-agent-skills version 69c0b1a06741 already cached at C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741
+2026-02-27T14:29:45.524Z [DEBUG] Resolved local plugin example-skills to versioned cache: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741
+2026-02-27T14:29:45.526Z [DEBUG] Processing 12 skill paths for plugin example-skills
+2026-02-27T14:29:45.526Z [DEBUG] Checking skill path: ./skills/algorithmic-art -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art (exists: true)
+2026-02-27T14:29:45.526Z [DEBUG] Checking skill path: ./skills/brand-guidelines -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines (exists: true)
+2026-02-27T14:29:45.526Z [DEBUG] Checking skill path: ./skills/canvas-design -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design (exists: true)
+2026-02-27T14:29:45.526Z [DEBUG] Checking skill path: ./skills/doc-coauthoring -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/frontend-design -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/internal-comms -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/mcp-builder -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/skill-creator -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/slack-gif-creator -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/theme-factory -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/web-artifacts-builder -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Checking skill path: ./skills/webapp-testing -> C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing (exists: true)
+2026-02-27T14:29:45.527Z [DEBUG] Found 12 valid skill paths for plugin example-skills, setting skillsPaths
+2026-02-27T14:29:45.533Z [DEBUG] Using git SHA for feature-dev@claude-plugins-official: 55b58ec6e564
+2026-02-27T14:29:45.533Z [DEBUG] Using git SHA for frontend-design@claude-plugins-official: 55b58ec6e564
+2026-02-27T14:29:45.533Z [DEBUG] Plugin feature-dev@claude-plugins-official version 55b58ec6e564 already cached at C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\feature-dev\55b58ec6e564
+2026-02-27T14:29:45.533Z [DEBUG] Resolved local plugin feature-dev to versioned cache: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\feature-dev\55b58ec6e564
+2026-02-27T14:29:45.533Z [DEBUG] Plugin frontend-design@claude-plugins-official version 55b58ec6e564 already cached at C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564
+2026-02-27T14:29:45.533Z [DEBUG] Resolved local plugin frontend-design to versioned cache: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564
+2026-02-27T14:29:45.535Z [DEBUG] Found 3 plugins (3 enabled, 0 disabled)
+2026-02-27T14:29:45.535Z [DEBUG] getPluginSkills: Processing 3 enabled plugins
+2026-02-27T14:29:45.535Z [DEBUG] Checking plugin example-skills: skillsPath=exists, skillsPaths=12 paths
+2026-02-27T14:29:45.535Z [DEBUG] Attempting to load skills from plugin example-skills default skillsPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills
+2026-02-27T14:29:45.541Z [DEBUG] Registered 0 hooks from 3 plugins
+2026-02-27T14:29:45.567Z [DEBUG] Loaded 3 agents from plugin feature-dev default directory
+2026-02-27T14:29:45.567Z [DEBUG] Total plugin agents loaded: 3
+2026-02-27T14:29:45.567Z [DEBUG] Loaded 16 skills from plugin example-skills default directory
+2026-02-27T14:29:45.567Z [DEBUG] Attempting to load skills from plugin example-skills skillsPaths: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder, C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-02-27T14:29:45.567Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art for plugin example-skills
+2026-02-27T14:29:45.568Z [DEBUG] Loaded 1 commands from plugin feature-dev default directory
+2026-02-27T14:29:45.568Z [DEBUG] Total plugin commands loaded: 1
+2026-02-27T14:29:45.569Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\algorithmic-art
+2026-02-27T14:29:45.569Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines for plugin example-skills
+2026-02-27T14:29:45.570Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\brand-guidelines
+2026-02-27T14:29:45.570Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design for plugin example-skills
+2026-02-27T14:29:45.570Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\canvas-design
+2026-02-27T14:29:45.570Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring for plugin example-skills
+2026-02-27T14:29:45.570Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\doc-coauthoring
+2026-02-27T14:29:45.570Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design for plugin example-skills
+2026-02-27T14:29:45.570Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\frontend-design
+2026-02-27T14:29:45.570Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms for plugin example-skills
+2026-02-27T14:29:45.570Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\internal-comms
+2026-02-27T14:29:45.570Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder for plugin example-skills
+2026-02-27T14:29:45.571Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\mcp-builder
+2026-02-27T14:29:45.571Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator for plugin example-skills
+2026-02-27T14:29:45.571Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\skill-creator
+2026-02-27T14:29:45.571Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator for plugin example-skills
+2026-02-27T14:29:45.571Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\slack-gif-creator
+2026-02-27T14:29:45.571Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory for plugin example-skills
+2026-02-27T14:29:45.571Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\theme-factory
+2026-02-27T14:29:45.571Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder for plugin example-skills
+2026-02-27T14:29:45.571Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\web-artifacts-builder
+2026-02-27T14:29:45.571Z [DEBUG] Loading from skillPath: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing for plugin example-skills
+2026-02-27T14:29:45.571Z [DEBUG] Loaded 0 skills from plugin example-skills custom path: C:\Users\johnm\.claude\plugins\cache\anthropic-agent-skills\example-skills\69c0b1a06741\skills\webapp-testing
+2026-02-27T14:29:45.571Z [DEBUG] Checking plugin feature-dev: skillsPath=none, skillsPaths=0 paths
+2026-02-27T14:29:45.571Z [DEBUG] Checking plugin frontend-design: skillsPath=exists, skillsPaths=0 paths
+2026-02-27T14:29:45.571Z [DEBUG] Attempting to load skills from plugin frontend-design default skillsPath: C:\Users\johnm\.claude\plugins\cache\claude-plugins-official\frontend-design\55b58ec6e564\skills
+2026-02-27T14:29:45.572Z [DEBUG] Loaded 1 skills from plugin frontend-design default directory
+2026-02-27T14:29:45.572Z [DEBUG] Total plugin skills loaded: 17
+2026-02-27T14:29:45.572Z [DEBUG] getSkills returning: 0 skill dir commands, 17 plugin skills, 3 bundled skills
+2026-02-27T14:29:45.572Z [DEBUG] [STARTUP] Commands and agents loaded in 117ms
+2026-02-27T14:29:45.576Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-02-27T14:29:45.579Z [DEBUG] Grove: Using fresh cached config
+2026-02-27T14:29:45.602Z [DEBUG] Not in a GitHub repository, skipping path mapping update
+2026-02-27T14:29:45.603Z [DEBUG] [Perfetto] initializePerfettoTracing called, env value: undefined
+2026-02-27T14:29:45.603Z [DEBUG] [3P telemetry] isTelemetryEnabled=false (CLAUDE_CODE_ENABLE_TELEMETRY=undefined)
+2026-02-27T14:29:45.613Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-27T14:29:45.629Z [DEBUG] [keybindings] Watching for changes to C:\Users\johnm\.claude\keybindings.json
+2026-02-27T14:29:46.094Z [DEBUG] [STARTUP] showSetupScreens() completed in 518ms
+2026-02-27T14:29:46.096Z [DEBUG] [LSP MANAGER] initializeLspServerManager() called
+2026-02-27T14:29:46.096Z [DEBUG] [LSP MANAGER] Created manager instance, state=pending
+2026-02-27T14:29:46.097Z [DEBUG] [LSP MANAGER] Starting async initialization (generation 1)
+2026-02-27T14:29:46.098Z [DEBUG] [API:request] Creating client, ANTHROPIC_CUSTOM_HEADERS present: false, has Authorization header: false
+2026-02-27T14:29:46.098Z [DEBUG] [API:auth] OAuth token check starting
+2026-02-27T14:29:46.098Z [DEBUG] Passes: Cache stale, returning cached data and refreshing in background
+2026-02-27T14:29:46.100Z [DEBUG] [STARTUP] MCP configs loaded in 667ms
+2026-02-27T14:29:46.106Z [DEBUG] All plugins already exist, skipping migration
+2026-02-27T14:29:46.106Z [DEBUG] [API:auth] OAuth token check complete
+2026-02-27T14:29:46.109Z [DEBUG] Getting matching hook commands for SessionStart with query: startup
+2026-02-27T14:29:46.109Z [DEBUG] Found 0 hook matchers in settings
+2026-02-27T14:29:46.109Z [DEBUG] Matched 0 unique hooks for query "startup" (0 before deduplication)
+2026-02-27T14:29:46.109Z [DEBUG] Initialized versioned plugins system with 3 plugins
+2026-02-27T14:29:46.113Z [DEBUG] [Reconnection] computeInitialTeamContext: No teammate context set (not a teammate)
+2026-02-27T14:29:46.115Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.14896.1772202586114
+2026-02-27T14:29:46.115Z [DEBUG] Preserving file permissions: 100666
+2026-02-27T14:29:46.118Z [DEBUG] Temp file written successfully, size: 11594 bytes
+2026-02-27T14:29:46.118Z [DEBUG] Applied original permissions to temp file
+2026-02-27T14:29:46.118Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.14896.1772202586114 to C:\Users\johnm\.claude.json
+2026-02-27T14:29:46.119Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-27T14:29:46.169Z [DEBUG] [keybindings] KeybindingSetup initialized with 102 bindings, 0 warnings
+2026-02-27T14:29:46.214Z [DEBUG] [REPL:mount] REPL mounted, disabled=false
+2026-02-27T14:29:46.216Z [DEBUG] Official marketplace auto-install skipped: already_attempted
+2026-02-27T14:29:46.216Z [DEBUG] performStartupChecks called
+2026-02-27T14:29:46.217Z [DEBUG] Starting background plugin installations
+2026-02-27T14:29:46.217Z [DEBUG] performBackgroundPluginInstallations called
+2026-02-27T14:29:46.219Z [DEBUG] Loaded 1 CLAUDE.md/rules files:
+  [AutoMem] C:\Users\johnm\.claude\projects\C--Users-johnm-iskrib-v3\memory\MEMORY.md (4766 chars)
+2026-02-27T14:29:46.221Z [DEBUG] Watching for changes in setting files C:\Users\johnm\.claude\settings.json, C:\Users\johnm\iskrib_v3\.claude\settings.json, C:\Users\johnm\iskrib_v3\.claude\settings.local.json...
+2026-02-27T14:29:46.279Z [DEBUG] AutoUpdaterWrapper: Installation type: native
+2026-02-27T14:29:46.281Z [DEBUG] [claudeai-mcp] Checking gate (cached)...
+2026-02-27T14:29:46.281Z [DEBUG] [claudeai-mcp] Gate returned: true
+2026-02-27T14:29:46.281Z [DEBUG] [claudeai-mcp] Fetching from https://api.anthropic.com/v1/mcp_servers?limit=1000
+2026-02-27T14:29:46.282Z [DEBUG] Found 3 enabled plugins
+2026-02-27T14:29:46.283Z [DEBUG] All plugins already exist, skipping migration
+2026-02-27T14:29:46.283Z [DEBUG] Found 3 installed plugins
+2026-02-27T14:29:46.283Z [DEBUG] Found 0 missing plugins (not installed):
+2026-02-27T14:29:46.283Z [DEBUG] Setting installation status: 0 marketplaces, 0 installable plugins, 0 uninstallable plugins
+2026-02-27T14:29:46.285Z [DEBUG] Total LSP servers loaded: 0
+2026-02-27T14:29:46.285Z [DEBUG] [LSP SERVER MANAGER] getAllLspServers returned 0 server(s)
+2026-02-27T14:29:46.285Z [DEBUG] LSP manager initialized with 0 servers
+2026-02-27T14:29:46.285Z [DEBUG] LSP server manager initialized successfully
+2026-02-27T14:29:46.285Z [DEBUG] LSP notification handlers registered successfully for all 0 server(s)
+2026-02-27T14:29:46.285Z [DEBUG] Fetching plugin security messages from https://raw.githubusercontent.com/anthropics/claude-plugins-official/refs/heads/security/security.json
+2026-02-27T14:29:46.329Z [DEBUG] Security messages saved successfully
+2026-02-27T14:29:46.340Z [DEBUG] Loaded plugins - Enabled: 3, Disabled: 0, Commands: 1, Agents: 3, Errors: 0
+2026-02-27T14:29:46.440Z [DEBUG] Org fast mode: enabled
+2026-02-27T14:29:46.574Z [DEBUG] [claudeai-mcp] Fetched 2 servers
+2026-02-27T14:29:46.577Z [DEBUG] MCP server "claude.ai Google Calendar": Initializing claude.ai proxy transport for server mcpsrv_019QxDf8TuFNKX7ypu3yp8hu
+2026-02-27T14:29:46.578Z [DEBUG] MCP server "claude.ai Google Calendar": Using claude.ai proxy at https://mcp-proxy.anthropic.com/v1/mcp/mcpsrv_019QxDf8TuFNKX7ypu3yp8hu
+2026-02-27T14:29:46.578Z [DEBUG] MCP server "claude.ai Google Calendar": claude.ai proxy transport created successfully
+2026-02-27T14:29:46.582Z [DEBUG] MCP server "claude.ai Google Calendar": Starting connection with timeout of 30000ms
+2026-02-27T14:29:46.584Z [DEBUG] MCP server "claude.ai Gmail": Initializing claude.ai proxy transport for server mcpsrv_01UAuwXoVTUT2mp1zk6LiDCV
+2026-02-27T14:29:46.584Z [DEBUG] MCP server "claude.ai Gmail": Using claude.ai proxy at https://mcp-proxy.anthropic.com/v1/mcp/mcpsrv_01UAuwXoVTUT2mp1zk6LiDCV
+2026-02-27T14:29:46.584Z [DEBUG] MCP server "claude.ai Gmail": claude.ai proxy transport created successfully
+2026-02-27T14:29:46.586Z [DEBUG] MCP server "claude.ai Gmail": Starting connection with timeout of 30000ms
+2026-02-27T14:29:46.596Z [DEBUG] Ripgrep first use test: PASSED (mode=builtin, path=C:\Users\johnm\.local\bin\claude.exe)
+2026-02-27T14:29:46.645Z [DEBUG] Checking for native installer update to version 2.1.62
+2026-02-27T14:29:46.646Z [DEBUG] Found 2.1.62 at C:\Users\johnm\.local\bin\claude.exe, skipping install
+2026-02-27T14:29:47.105Z [DEBUG] Writing to temp file: C:\Users\johnm\.claude.json.tmp.14896.1772202587105
+2026-02-27T14:29:47.105Z [DEBUG] Preserving file permissions: 100666
+2026-02-27T14:29:47.108Z [DEBUG] Temp file written successfully, size: 11594 bytes
+2026-02-27T14:29:47.108Z [DEBUG] Applied original permissions to temp file
+2026-02-27T14:29:47.108Z [DEBUG] Renaming C:\Users\johnm\.claude.json.tmp.14896.1772202587105 to C:\Users\johnm\.claude.json
+2026-02-27T14:29:47.109Z [DEBUG] File C:\Users\johnm\.claude.json written atomically
+2026-02-27T14:29:47.109Z [DEBUG] Passes eligibility cached for org 1666b641-f974-4a14-a0dd-fa9a25afee1f: true
+2026-02-27T14:29:47.390Z [DEBUG] MCP server "claude.ai Gmail": claude.ai proxy connection failed after 806ms: Streamable HTTP error: Error POSTing to endpoint: {"type":"error","error":{"type":"authentication_error","message":"MCP server requires authentication but no OAuth token is configured."},"request_id":"req_011CYYjVuD8u2Bi7BjeeoZn8"}
+2026-02-27T14:29:47.391Z [ERROR] MCP server "claude.ai Gmail" Error: Streamable HTTP error: Error POSTing to endpoint: {"type":"error","error":{"type":"authentication_error","message":"MCP server requires authentication but no OAuth token is configured."},"request_id":"req_011CYYjVuD8u2Bi7BjeeoZn8"}
+2026-02-27T14:29:47.391Z [DEBUG] MCP server "claude.ai Gmail": Authentication required for claude.ai proxy server
+2026-02-27T14:30:16.594Z [DEBUG] MCP server "claude.ai Google Calendar": Connection timeout triggered after 30017ms (limit: 30000ms)
+2026-02-27T14:30:16.594Z [DEBUG] MCP server "claude.ai Google Calendar": claude.ai proxy connection failed after 30017ms: MCP server "claude.ai Google Calendar" connection timed out after 30000ms
+2026-02-27T14:30:16.594Z [ERROR] MCP server "claude.ai Google Calendar" TelemetrySafeError: MCP server "claude.ai Google Calendar" connection timed out after 30000ms
+2026-02-27T14:30:16.595Z [DEBUG] MCP server "claude.ai Google Calendar": Connection failed after 30018ms: MCP server "claude.ai Google Calendar" connection timed out after 30000ms
+2026-02-27T14:30:16.595Z [ERROR] MCP server "claude.ai Google Calendar" Connection failed: MCP server "claude.ai Google Calendar" connection timed out after 30000ms

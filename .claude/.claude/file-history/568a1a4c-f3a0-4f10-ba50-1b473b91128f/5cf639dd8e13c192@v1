@@ -1,0 +1,138 @@
+# Analytics Dashboard — Mobile-Friendly Redesign & UI Enhancement
+
+## Context
+The Analytics page works on desktop but has limited mobile responsiveness (only one `@media (max-width: 480px)` breakpoint). The user wants it fully mobile-friendly with an enhanced, aesthetic UI. The current design is functional but plain — we'll elevate it with a warm editorial luxury feel consistent with the app's existing aesthetic (Playfair Display, Lora, Outfit fonts, amber/sage accents, glass morphism).
+
+## Design Direction
+**Aesthetic:** Warm editorial — refined, literary, intimate. Think a beautifully typeset book's data appendix.
+- Subtle warm gradients and soft glows instead of flat cards
+- Slightly translucent card backgrounds with backdrop-blur (glass morphism, matching app convention)
+- Amber and sage remain the accent palette; introduce a soft rose (`#c97b7b`) as a third accent for variety
+- Delicate divider lines, refined spacing, and generous breathing room on mobile
+- Charts get softer styling with rounded edges and gentle gradients
+
+## Files to Modify
+
+### 1. `client/src/components/Analytics/AnalyticsDashboard.css` (full rewrite)
+Major CSS changes:
+
+**Mobile responsiveness (new breakpoints):**
+- `@media (max-width: 768px)` — tablet: stack charts to 1-col, reduce padding
+- `@media (max-width: 480px)` — phone: 2-col summary grid, compact range pills, smaller fonts, full-bleed cards, tighter gaps
+- `@media (max-width: 360px)` — small phone: further compact stat tiles
+
+**UI enhancements:**
+- `.analytics-dashboard`: add `padding: 20px 16px` on mobile (currently 0 horizontal padding)
+- `.analytics-stat-tile`: glass morphism — `background: rgba(var(--bg-card-rgb), 0.7)`, `backdrop-filter: blur(12px)`, subtle warm border glow on hover
+- `.analytics-chart-card`: same glass treatment, rounded corners 16px, soft shadow
+- `.analytics-range-selector`: horizontal scroll on mobile with `overflow-x: auto`, hide scrollbar, snap behavior
+- `.analytics-header`: column layout on mobile with title centered, range selector full-width
+- `.analytics-top-post-row`: touch-friendly min-height 48px, larger tap targets
+- `.analytics-breakdown-bar-fill`: gradient fill (amber to sage) instead of flat amber
+- `.analytics-post-rank`: warm amber circle badge instead of plain text
+- Chart containers: reduce `min-height` to 180px on mobile for better fit
+- Tooltip: glass morphism with subtle border
+
+### 2. `client/src/components/Analytics/AnalyticsDashboard.jsx`
+- No structural changes needed — the component composition is clean
+- Just ensure the `motion.div` wrapper has appropriate mobile animation (reduce `y` offset on mobile for snappier feel)
+
+### 3. `client/src/components/Analytics/ViewsChart.jsx`
+- Reduce chart margin-left on mobile: `left: -25` → `left: -15` for better label fit
+- Reduce tick font size on mobile via Recharts tick props (already 11px, keep as-is)
+
+### 4. `client/src/components/Analytics/ReactionsChart.jsx`
+- Same margin adjustment as ViewsChart
+
+### 5. `client/src/components/Analytics/PublishingFrequency.jsx`
+- Same margin adjustment as ViewsChart
+- Reduce `maxBarSize` to 24 on mobile
+
+### 6. `client/src/components/Analytics/TopPosts.jsx`
+- On mobile, hide the score badge to save space — show only rank + title + stats
+- Add `analytics-post-score-mobile-hide` class with `display: none` at 480px
+
+### 7. `client/src/components/Analytics/AnalyticsSummary.jsx`
+- No changes needed (grid handles responsive via CSS)
+
+### 8. `client/src/components/Analytics/TimeRangeSelector.jsx`
+- No changes needed (CSS handles responsive)
+
+### 9. `client/src/components/Analytics/ReactionBreakdown.jsx`
+- Hide the text label on mobile (keep emoji + bar + count) to save horizontal space
+- Add `analytics-breakdown-label-mobile-hide` class
+
+## Detailed CSS Plan
+
+### New responsive breakpoints to add:
+
+```
+@media (max-width: 768px) {
+  .analytics-charts-grid → 1 column
+  .analytics-dashboard → padding: 16px 12px
+  Chart min-height → 200px
+}
+
+@media (max-width: 480px) {
+  .analytics-dashboard → padding: 12px 8px, gap: 12px
+  .analytics-summary-grid → 2 columns
+  .analytics-stat-tile → smaller padding/fonts
+  .analytics-tile-value → 20px
+  .analytics-range-selector → overflow-x auto, full width
+  .analytics-range-pill → smaller padding
+  .analytics-header → column, align start
+  .analytics-title → 18px
+  .analytics-chart-card → border-radius: 12px, padding: 12px
+  Chart min-height → 180px
+  .analytics-post-score → display: none
+  .analytics-breakdown-label → display: none
+  .analytics-top-post-row → padding 8px, min-height 44px
+  .analytics-post-stats → font-size 10px
+}
+```
+
+### Glass morphism enhancements (all screen sizes):
+
+```css
+.analytics-stat-tile {
+  background: var(--bg-card, rgba(255,255,255,0.85));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+.analytics-chart-card {
+  background: var(--bg-card, rgba(255,255,255,0.85));
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.18);
+}
+
+.analytics-post-rank {
+  background: rgba(245,158,11,0.12);
+  border-radius: 50%;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+}
+```
+
+### Dark mode additions:
+```css
+[data-theme="dark"] .analytics-stat-tile {
+  background: rgba(30,30,30,0.7);
+  border-color: rgba(255,255,255,0.06);
+}
+[data-theme="dark"] .analytics-chart-card {
+  background: rgba(30,30,30,0.7);
+  border-color: rgba(255,255,255,0.06);
+}
+```
+
+## Verification
+1. Open the app on desktop — confirm the glass morphism and refined styling looks good
+2. Resize browser to tablet (~768px) — charts should stack to 1-column
+3. Resize to phone (~480px) — summary grid 2-col, compact range pills, score badges hidden, labels hidden in reaction breakdown
+4. Test on actual mobile device or Chrome DevTools mobile simulation
+5. Toggle dark mode — verify glass cards adapt properly
+6. Verify all charts render correctly at each breakpoint (no overflow/clipping)
+7. Verify touch targets are large enough on mobile (44px+ height on interactive rows)

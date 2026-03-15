@@ -1,0 +1,50 @@
+import React from 'react';
+import {SafeAreaView, ScrollView, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {useTheme} from '../theme/ThemeProvider';
+import {spacing} from '../theme/spacing';
+
+type ScreenProps = {
+  children: React.ReactNode;
+  scroll?: boolean;
+  contentContainerStyle?: StyleProp<ViewStyle>;
+  padded?: boolean;
+};
+
+export function Screen({children, scroll = true, contentContainerStyle, padded = true}: ScreenProps) {
+  const {colors} = useTheme();
+
+  const content = scroll ? (
+    <ScrollView
+      contentContainerStyle={[
+        padded && styles.content,
+        contentContainerStyle,
+      ]}
+      showsVerticalScrollIndicator={false}>
+      {children}
+    </ScrollView>
+  ) : (
+    <View style={[padded && styles.content, contentContainerStyle, styles.flex]}>
+      {children}
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={[styles.safeArea, {backgroundColor: colors.bgPrimary}]}>
+      {content}
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  content: {
+    flexGrow: 1,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  flex: {
+    flex: 1,
+  },
+});

@@ -1,0 +1,68 @@
+# RelatedPosts UI Refinement
+
+## Context
+
+The RelatedPosts component (Phase 1 discovery) is working but has two issues:
+1. The section headers need updating — "Ideas in the same orbit" should become "Posts you might like"
+2. The `.rp-section` renders outside `.cv-article` (which constrains to `max-width: 620px` + `padding: 0 24px`), so it spans the full 750px `.center-bar-holder-container` width — overflowing visually
+3. The card design needs to feel more polished and integrated with iskrib's warm, editorial aesthetic
+
+## Changes
+
+### Files to modify
+
+| File | What changes |
+|---|---|
+| `client/src/components/Discovery/RelatedPosts.jsx` | Update confidence labels, refine card markup |
+| `client/src/components/Discovery/RelatedPosts.css` | Width constraint fix, enhanced card styling |
+
+### 1. Update microcopy in `RelatedPosts.jsx`
+
+```
+high   → "Posts you might like"
+medium → "You might also explore"
+low    → "More from the community"
+```
+
+### 2. Fix width constraint in `RelatedPosts.css`
+
+Add to `.rp-section`:
+```css
+max-width: 620px;
+width: 100%;
+padding: 0 24px;
+box-sizing: border-box;
+```
+
+This mirrors `.cv-article` so the section aligns with the post body above it. Responsive breakpoints at 768px and 480px will match the article's responsive padding.
+
+### 3. Enhanced card design
+
+Refine the cards to match iskrib's warm editorial style (following patterns from `explore.css` runner cards and `contentviewer.css`):
+
+- **Cards**: Use `var(--bg-card)` background instead of `var(--bg-secondary)`, subtle hover lift (`translateY(-1px)`) matching explore runner cards, `border-radius: 12px`
+- **Accent line**: Increase width slightly to 3.5px, use a warm gradient from `var(--accent-purple)` rather than flat color
+- **Title**: Allow 2-line wrap with `-webkit-line-clamp: 2` instead of single-line truncation — titles deserve breathing room
+- **Author section**: Slightly larger avatar (22px), more visible name
+- **Hover state**: `translateY(-1px)` + subtle amber border glow `rgba(212, 168, 83, 0.2)` matching explore cards
+- **Skeleton**: Match the updated card heights
+- **Section heading**: Use the explore page's uppercase label pattern (small, uppercase, `--text-faint`, with a trailing line `::after`) for a cleaner look
+
+### 4. Responsive alignment
+
+Add matching breakpoints:
+```css
+@media (max-width: 768px) {
+    .rp-section { max-width: 100%; padding: 0 24px; }
+}
+@media (max-width: 480px) {
+    .rp-section { padding: 0 16px; }
+}
+```
+
+## Verification
+
+1. Open a post with related posts — section should align with the article body above (same width, same padding)
+2. Cards should show warm hover effect with subtle lift
+3. Header reads "Posts you might like" for high-confidence results
+4. Check at mobile widths (480px, 768px) — cards don't overflow

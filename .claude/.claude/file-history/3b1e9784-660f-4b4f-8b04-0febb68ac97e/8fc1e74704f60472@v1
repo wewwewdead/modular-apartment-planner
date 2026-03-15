@@ -1,0 +1,82 @@
+# Trim `attachRepostSources` to Remove Full `content` from Feed Responses
+
+## Context
+Feed endpoints (public, following, for-you, profile) already exclude `content` from the main journal query via `JOURNAL_METADATA_WITH_COUNTS_SELECT`. However, `attachRepostSources` re-introduces full Lexical `content` JSON (~2-50 KB per repost) for every repost source — even on feeds that only display a short preview. This adds unnecessary Supabase egress. Only the detail view (ContentView) actually renders full repost source content.
+
+## Changes
+
+### 1. Backend — `server/services/getService.js`
+
+**Add `includeContent` option to `attachRepostSources`** (line 82):
+```js
+const attachRepostSources = async (journals, { includeContent = false } = {}) => {
+```
+
+**Conditionally select `content`** (line 95-98):
+```js
+const cols = includeContent
+    ? 'id, title, content, preview_text, thumbnail_url, post_type, created_at, users(id, name, image_url, badge)'
+    : 'id, title, preview_text, thumbnail_url, post_type, created_at, users(id, name, image_url, badge)';
+
+const { data: sources, error } = await supabase
+    .from('journals')
+    .select(cols)
+    .in('id', sourceIds);
+```
+
+**Update only the detail-view call site** (line 762):
+```js
+await attachRepostSources(journal, { includeContent: true });
+```
+
+The other 5 call sites (lines 511, 590, 665, 872, 968) stay unchanged — they default to `includeContent: false`.
+
+### 2. Web Frontend — `client/src/components/HomePage/postCards/PostCards.jsx`
+
+**Remove dead `content` fallback** (line 696):
+```js
+// Before:
+const repostSourcePreviewText = repostSource?.preview_text || (repostSource ? (ParseContent(repostSource.content)?.slicedText || '') : '');
+
+// After:
+const repostSourcePreviewText = repostSource?.preview_text || '';
+```
+
+No changes needed in `ContentView.jsx` — it always re-fetches via `getJournalByIdService` (which passes `includeContent: true`).
+
+### 3. Mobile App — 4 feed screens + 1 detail screen
+
+Replace `extractPlainText(repostSource.content)` with `repostSource?.preview_text` in:
+
+| File | Line |
+|------|------|
+| `apps/mobile/src/screens/Home/HomeFeedScreen.tsx` | 303 |
+| `apps/mobile/src/screens/Home/ExploreScreen.tsx` | 149 |
+| `apps/mobile/src/screens/Profile/ProfileWritingsTab.tsx` | 184 |
+| `apps/mobile/src/components/SearchResultsView.tsx` | 63 |
+
+Each changes from:
+```ts
+const repostSourcePreview = repostSource?.content
+  ? extractPlainText(repostSource.content).slice(0, 180)
+  : '';
+```
+to:
+```ts
+const repostSourcePreview = repostSource?.preview_text || '';
+```
+
+**PostDetailScreen.tsx** (line 164) — keep `content` fallback since detail endpoint provides it:
+```ts
+const repostSourcePreview = repostSource?.preview_text
+  || (repostSource?.content ? extractPlainText(repostSource.content).slice(0, 200) : '');
+```
+
+## Prerequisites
+- Backfill script must have been run (`node --env-file=server/.env server/scripts/backfillPreviews.js`) so all posts have `preview_text`.
+
+## Verification
+1. Start the dev server, load the home feed — repost cards should show preview text correctly with no blank previews
+2. Click a repost card — ContentView should render the full repost source content in the Lexical editor
+3. Check Network tab: feed API responses should no longer include `content` inside `repost_source` objects
+4. Check the detail API response (`GET /journal/:id`) — `repost_source` should still include `content`

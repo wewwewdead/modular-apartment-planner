@@ -1,0 +1,213 @@
+import React from 'react';
+import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {Screen} from '../../components/Screen';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {mobileApi, type NotificationItem} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {queryClient} from '../../lib/queryClient';
+import {colors} from '../../theme/colors';
+import type {MainTabParamList} from '../../navigation/types';
+
+type Props = BottomTabScreenProps<MainTabParamList, 'Notifications'>;
+
+const formatTimestamp = (value?: string): string => {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+};
+
+const formatTitle = (item: NotificationItem): string => {
+  if (item.message) {
+    return item.message;
+  }
+
+  const senderName = item.users?.name || 'Someone';
+  switch (item.type) {
+    case 'like':
+      return `${senderName} liked your post`;
+    case 'comment':
+      return `${senderName} commented on your post`;
+    case 'repost':
+      return `${senderName} reposted your post`;
+    case 'reply':
+      return `${senderName} replied`;
+    case 'match':
+      return `${senderName} matched with you`;
+    default:
+      return 'Notification';
+  }
+};
+
+const formatContext = (item: NotificationItem): string => {
+  const journalTitle = item.journals?.title?.trim();
+  if (journalTitle) {
+    return journalTitle;
+  }
+  const opinionText = item.opinions?.opinion?.trim();
+  if (opinionText) {
+    return opinionText.length > 120 ? `${opinionText.slice(0, 117)}...` : opinionText;
+  }
+  return '';
+};
+
+const getSource = (item: NotificationItem): 'journal' | 'opinion' => {
+  if (item.source === 'opinion' || item.opinion_id) {
+    return 'opinion';
+  }
+  return 'journal';
+};
+
+export function NotificationsScreen(_: Props) {
+  const {session} = useAuth();
+  const token = session?.access_token ?? '';
+  const userId = session?.user.id ?? '';
+
+  const notificationsQuery = useQuery({
+    queryKey: ['notifications', userId],
+    enabled: Boolean(token),
+    queryFn: () => mobileApi.getNotifications(token, null, 20),
+  });
+
+  const unreadCountQuery = useQuery({
+    queryKey: ['notification-count', userId],
+    enabled: Boolean(token && userId),
+    queryFn: () => socialApi.getNotificationsCount(token, userId),
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (args: {notifId: string; source: 'journal' | 'opinion'}) =>
+      socialApi.markNotificationRead(token, args.notifId, args.source),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['notifications', userId]}),
+        queryClient.invalidateQueries({queryKey: ['notification-count', userId]}),
+      ]);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (args: {notifId: string; source: 'journal' | 'opinion'}) =>
+      socialApi.deleteNotification(token, args.notifId, args.source),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['notifications', userId]}),
+        queryClient.invalidateQueries({queryKey: ['notification-count', userId]}),
+      ]);
+    },
+  });
+
+  return (
+    <Screen>
+      <Text style={styles.title}>
+        {`Notifications (${unreadCountQuery.data?.count ?? 0})`}
+      </Text>
+
+      {!session?.access_token ? (
+        <Text style={styles.textMuted}>Log in to load notifications.</Text>
+      ) : notificationsQuery.isLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.textMuted}>Loading notifications...</Text>
+        </View>
+      ) : notificationsQuery.isError ? (
+        <Text style={styles.error}>Could not load notifications.</Text>
+      ) : notificationsQuery.data?.data?.length ? (
+        notificationsQuery.data.data.map(item => {
+          const source = getSource(item);
+          const subtitle = formatContext(item);
+          return (
+          <View key={item.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{formatTitle(item)}</Text>
+            {!!subtitle && (
+              <Text style={styles.cardBody}>{subtitle}</Text>
+            )}
+            <Text style={styles.textMuted}>{formatTimestamp(item.created_at)}</Text>
+            <View style={styles.actionsRow}>
+              {!item.read && (
+                <Pressable
+                  disabled={markReadMutation.isPending}
+                  onPress={() => markReadMutation.mutate({notifId: item.id, source})}
+                  style={({pressed}) => [styles.pill, pressed && styles.pillPressed]}>
+                  <Text style={styles.pillText}>Mark read</Text>
+                </Pressable>
+              )}
+              <Pressable
+                disabled={deleteMutation.isPending}
+                onPress={() => deleteMutation.mutate({notifId: item.id, source})}
+                style={({pressed}) => [styles.pill, pressed && styles.pillPressed]}>
+                <Text style={styles.pillText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+          );
+        })
+      ) : (
+        <Text style={styles.textMuted}>No notifications yet.</Text>
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  card: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+    backgroundColor: colors.surface,
+  },
+  cardTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cardBody: {
+    color: colors.text,
+    fontSize: 14,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  pill: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.surfaceAlt,
+  },
+  pillPressed: {
+    opacity: 0.85,
+  },
+  pillText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  textMuted: {
+    color: colors.textMuted,
+  },
+  error: {
+    color: colors.danger,
+  },
+});

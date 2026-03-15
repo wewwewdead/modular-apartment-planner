@@ -1,0 +1,109 @@
+import React, {useMemo, useState} from 'react';
+import {Dimensions, FlatList, Image, Modal, Pressable, StyleSheet, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {EmptyState} from '../../components/EmptyState';
+import {XIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {spacing} from '../../theme/spacing';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const NUM_COLUMNS = 3;
+const GAP = 2;
+const TILE_SIZE = (SCREEN_WIDTH - spacing.lg * 2 - GAP * (NUM_COLUMNS - 1)) / NUM_COLUMNS;
+
+interface ProfileMediaTabProps {
+  userId: string;
+  headerComponent?: React.ReactElement;
+  isOwnProfile?: boolean;
+}
+
+export function ProfileMediaTab({userId, headerComponent, isOwnProfile}: ProfileMediaTabProps) {
+  const {session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const [fullscreenUri, setFullscreenUri] = useState<string | null>(null);
+
+  const query = useInfiniteQuery({
+    queryKey: ['profileMedia', userId],
+    enabled: Boolean(token),
+    queryFn: ({pageParam}) =>
+      isOwnProfile
+        ? mobileApi.getProfileMedia(token, pageParam ?? null)
+        : mobileApi.getVisitedProfileMedia(token, userId, pageParam ?? null),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => lastPage.nextCursor ?? undefined,
+  });
+
+  const media = useMemo(
+    () => query.data?.pages.flatMap(p => p.media ?? []) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <>
+      <FlatList
+        data={media}
+        keyExtractor={item => item.id}
+        numColumns={NUM_COLUMNS}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.list}
+        columnWrapperStyle={styles.row}
+        ListHeaderComponent={headerComponent}
+        onEndReachedThreshold={0.3}
+        onEndReached={() => {
+          if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
+        }}
+        ListEmptyComponent={
+          query.isLoading ? null : (
+            <EmptyState title="No media yet" subtitle="Images from posts will appear here." />
+          )
+        }
+        renderItem={({item}) => (
+          <Pressable onPress={() => setFullscreenUri(item.url)}>
+            <Image source={{uri: item.url}} style={styles.tile} />
+          </Pressable>
+        )}
+      />
+
+      <Modal visible={!!fullscreenUri} transparent animationType="fade">
+        <View style={styles.modalBg}>
+          <Pressable style={styles.closeBtn} onPress={() => setFullscreenUri(null)}>
+            <XIcon size={24} color="#FFFFFF" />
+          </Pressable>
+          {fullscreenUri && (
+            <Image source={{uri: fullscreenUri}} style={styles.fullImage} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {paddingHorizontal: spacing.lg, paddingBottom: 100},
+  row: {gap: GAP, marginBottom: GAP},
+  tile: {
+    width: TILE_SIZE,
+    height: TILE_SIZE,
+    borderRadius: 4,
+  },
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  fullImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+  },
+});

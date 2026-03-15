@@ -1,0 +1,76 @@
+import React from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {useQuery} from '@tanstack/react-query';
+import {mobileApi} from '../lib/api/mobileApi';
+import {useTheme} from '../theme/ThemeProvider';
+import {fonts} from '../theme/typography';
+import {spacing, radii} from '../theme/spacing';
+import {PenIcon} from './icons';
+
+interface DailyPromptCardProps {
+  onWrite: (promptId: string, promptText: string) => void;
+}
+
+export function DailyPromptCard({onWrite}: DailyPromptCardProps) {
+  const {colors} = useTheme();
+
+  const promptQuery = useQuery({
+    queryKey: ['prompt-today'],
+    queryFn: () => mobileApi.getTodaysPrompt(),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const prompt = promptQuery.data;
+  if (!prompt?.id || !prompt?.prompt_text) return null;
+
+  return (
+    <View style={[styles.card, {backgroundColor: colors.bgCard, borderColor: colors.borderCard}]}>
+      <Text style={[styles.label, {color: colors.accentAmber}]}>Daily Prompt</Text>
+      <Text style={[styles.promptText, {color: colors.textPrimary}]}>
+        {prompt.prompt_text}
+      </Text>
+      <Pressable
+        style={[styles.writeBtn, {backgroundColor: colors.accentAmber}]}
+        onPress={() => onWrite(prompt.id!, prompt.prompt_text!)}>
+        <PenIcon size={14} color="#1A1612" />
+        <Text style={styles.writeBtnText}>Write a Response</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  label: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  promptText: {
+    fontFamily: fonts.serif.regular,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  writeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    marginTop: spacing.xs,
+  },
+  writeBtnText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 13,
+    color: '#1A1612',
+  },
+});

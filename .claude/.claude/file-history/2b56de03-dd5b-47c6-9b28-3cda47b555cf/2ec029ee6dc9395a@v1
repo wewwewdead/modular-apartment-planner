@@ -1,0 +1,226 @@
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+from loguru import logger
+
+from src.agent.state import InboundMessage
+from src.config import AppSettings
+from src.db.models import DatabaseManager
+from src.whatsapp.handlers import WhatsAppMessageHandler
+
+try:
+    from neonize.client import NewClient
+    from neonize.events import ConnectedEv, MessageEv, PairStatusEv
+except Exception:  # pragma: no cover - handled at runtime
+    NewClient = None
+    ConnectedEv = object
+    MessageEv = object
+    PairStatusEv = object
+
+
+class WhatsAppClient:
+    def __init__(self, settings: AppSettings, db: DatabaseManager):
+        if NewClient is None:
+            raise RuntimeError(
+                "neonize is not available. Install dependencies with `pip install -r requirements.txt`."
+            )
+
+        self.settings = settings
+        self.db = db
+        self.handler = WhatsAppMessageHandler(settings=settings, db=db)
+        self._stopping = False
+        self._connected = False
+
+        self.settings.whatsapp.session_store.parent.mkdir(parents=True, exist_ok=True)
+        self.settings.whatsapp.media_dir.mkdir(parents=True, exist_ok=True)
+
+        self.client = NewClient(str(self.settings.whatsapp.session_store))
+        self._register_events()
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
+    def _register_events(self) -> None:
+        @self.client.event(ConnectedEv)
+        def on_connected(client: Any, event: Any) -> None:  # noqa: ANN401
+            self._connected = True
+            logger.info("WhatsApp connected")
+
+        @self.client.event(PairStatusEv)
+        def on_pair_status(client: Any, event: Any) -> None:  # noqa: ANN401
+            logger.info("WhatsApp pair status event: {}", event)
+
+        @self.client.event(MessageEv)
+        def on_message(client: Any, event: Any) -> None:  # noqa: ANN401
+            try:
+                inbound = self._parse_inbound_event(event)
+                if inbound is None:
+                    return
+
+                replies = self.handler.handle(inbound)
+                for message in replies:
+                    self._reply_to_event(event, message)
+            except Exception:
+                logger.exception("Unhandled message processing exception")
+                self._reply_to_event(
+                    event,
+                    "I hit an internal error. Please resend your message in a moment.",
+                )
+
+    def _parse_inbound_event(self, event: Any) -> InboundMessage | None:
+        whatsapp_id = self._extract_whatsapp_id(event)
+        message_id = self._extract_message_id(event)
+        if not whatsapp_id or not message_id:
+            logger.warning("Skipping event due to missing whatsapp_id or message_id")
+            return None
+
+        text = self._extract_text(event)
+        image_path = self._save_image_if_present(event)
+        display_name = self._extract_display_name(event)
+
+        return InboundMessage(
+            whatsapp_id=whatsapp_id,
+            display_name=display_name,
+            message_id=message_id,
+            text=text,
+            image_path=str(image_path) if image_path else None,
+        )
+
+    def _extract_whatsapp_id(self, event: Any) -> str | None:
+        info = getattr(event, "info", None)
+        sender = getattr(info, "sender", None)
+        user = getattr(sender, "user", None)
+        server = getattr(sender, "server", "s.whatsapp.net")
+        if user:
+            return f"{user}@{server}"
+
+        chat = getattr(info, "chat", None)
+        chat_user = getattr(chat, "user", None)
+        chat_server = getattr(chat, "server", "s.whatsapp.net")
+        if chat_user:
+            return f"{chat_user}@{chat_server}"
+        return None
+
+    @staticmethod
+    def _extract_message_id(event: Any) -> str | None:
+        info = getattr(event, "info", None)
+        return getattr(info, "id", None)
+
+    @staticmethod
+    def _extract_display_name(event: Any) -> str | None:
+        info = getattr(event, "info", None)
+        push_name = getattr(info, "push_name", None)
+        if push_name:
+            return str(push_name)
+
+        sender = getattr(info, "sender", None)
+        return getattr(sender, "user", None)
+
+    def _extract_text(self, event: Any) -> str | None:
+        message = getattr(event, "message", None)
+        if message is None:
+            return None
+
+        conversation = getattr(message, "conversation", None)
+        if conversation:
+            return str(conversation)
+
+        extended = getattr(message, "extendedTextMessage", None)
+        if extended and getattr(extended, "text", None):
+            return str(extended.text)
+
+        image_message = getattr(message, "imageMessage", None)
+        if image_message and getattr(image_message, "caption", None):
+            return str(image_message.caption)
+
+        return None
+
+    def _save_image_if_present(self, event: Any) -> Path | None:
+        message = getattr(event, "message", None)
+        if message is None:
+            return None
+
+        image_message = getattr(message, "imageMessage", None)
+        if image_message is None:
+            return None
+
+        if not hasattr(self.client, "download_any"):
+            logger.warning("Current neonize client has no download_any method")
+            return None
+
+        raw_bytes = self.client.download_any(image_message)
+        if not raw_bytes:
+            logger.warning("Image download returned no bytes")
+            return None
+
+        resolved_bytes: bytes | None = None
+        if isinstance(raw_bytes, (bytes, bytearray)):
+            resolved_bytes = bytes(raw_bytes)
+        elif hasattr(raw_bytes, "read"):
+            resolved_bytes = raw_bytes.read()
+        elif isinstance(raw_bytes, str):
+            maybe_path = Path(raw_bytes)
+            if maybe_path.exists():
+                resolved_bytes = maybe_path.read_bytes()
+
+        if not resolved_bytes:
+            logger.warning("Image payload from neonize had unsupported format")
+            return None
+
+        message_id = self._extract_message_id(event) or f"msg_{int(time.time())}"
+        image_path = self.settings.whatsapp.media_dir / f"{message_id}.jpg"
+        image_path.write_bytes(resolved_bytes)
+        return image_path
+
+    def _reply_to_event(self, event: Any, text: str) -> None:
+        info = getattr(event, "info", None)
+        chat = getattr(info, "chat", None)
+
+        if hasattr(self.client, "reply_message") and chat is not None:
+            self.client.reply_message(chat, event, text)
+            return
+
+        if hasattr(self.client, "send_message") and chat is not None:
+            self.client.send_message(chat, text)
+            return
+
+        logger.error("Unable to send message: no compatible send API found")
+
+    def run_forever(self) -> None:
+        attempts = 0
+        max_attempts = self.settings.whatsapp.reconnect_max_attempts
+
+        while not self._stopping:
+            try:
+                logger.info("Starting WhatsApp client loop")
+                self.client.run()
+                if self._stopping:
+                    break
+                attempts += 1
+            except KeyboardInterrupt:
+                logger.info("WhatsApp client interrupted")
+                break
+            except Exception:
+                self._connected = False
+                attempts += 1
+                logger.exception("WhatsApp loop failed, reconnecting")
+
+            if max_attempts > 0 and attempts >= max_attempts:
+                logger.error("Reached max reconnect attempts ({})", max_attempts)
+                break
+
+            time.sleep(self.settings.whatsapp.reconnect_backoff_seconds)
+
+    def stop(self) -> None:
+        self._stopping = True
+        self._connected = False
+
+        if hasattr(self.client, "disconnect"):
+            try:
+                self.client.disconnect()
+            except Exception:
+                logger.exception("Failed to disconnect WhatsApp client")

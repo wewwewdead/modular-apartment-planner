@@ -1,0 +1,41 @@
+import { ReduceMotion, WithSpringConfig } from 'react-native-reanimated';
+
+const base = { reduceMotion: ReduceMotion.System } as const;
+
+export const motion = {
+  snappy: {
+    ...base,
+    damping: 20,
+    stiffness: 300,
+    mass: 0.8,
+  } satisfies WithSpringConfig,
+  gentle: {
+    ...base,
+    damping: 20,
+    stiffness: 120,
+    mass: 1,
+  } satisfies WithSpringConfig,
+  bouncy: {
+    ...base,
+    damping: 12,
+    stiffness: 180,
+    mass: 0.8,
+  } satisfies WithSpringConfig,
+  quick: {
+    ...base,
+    damping: 26,
+    stiffness: 400,
+    mass: 0.6,
+  } satisfies WithSpringConfig,
+  entrance: {
+    ...base,
+    damping: 18,
+    stiffness: 160,
+    mass: 0.9,
+  } satisfies WithSpringConfig,
+} as const;
+
+/** Returns an entrance delay in ms for staggered list items, capped at 300ms. */
+export function stagger(index: number, baseDelay = 50): number {
+  return Math.min(index * baseDelay, 300);
+}

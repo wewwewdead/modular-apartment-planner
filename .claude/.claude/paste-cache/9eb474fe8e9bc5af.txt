@@ -1,0 +1,33 @@
+<div
+                                className="card-content"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if(session){
+                                        const formadata = new FormData();
+                                        formadata.append('journalId', journal.id);
+                                        mutateViews.mutate(formadata);
+                                    }
+                                    const postSlug = journal.title
+                                        ? journal.title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+                                        : '';
+                                    navigate(`/home/post/${encodeURIComponent(journal.id)}${postSlug ? `/${postSlug}` : ''}`, {
+                                        state: {
+                                            isRepost: true,
+                                            repostCaption: journal.repost_caption || '',
+                                            repostSource: repostSource,
+                                            title: journal.title,
+                                            userId: journal.users?.id,
+                                            name: journal.users?.name,
+                                            avatar: journal.users?.image_url,
+                                            created_at: journal.created_at,
+                                            journalId: journal.id,
+                                            isLiked: journal.has_liked,
+                                            commentsCount: journal.comment_count?.[0]?.count || 0,
+                                            isBookmarked: journal.has_bookmarked,
+                                            likesCount: journal.like_count?.[0]?.count || 0,
+                                            bookmarksCount: journal.bookmark_count?.[0]?.count || 0,
+                                            badge: journal.users?.badge,
+                                        }
+                                    });
+                                }}
+                            >

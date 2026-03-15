@@ -1,0 +1,49 @@
+# Make @Mentions Clickable in Comments & Opinions
+
+## Context
+
+When users type `@username` via the mention autocomplete in comments, replies, and opinions, the text is stored as plain text (e.g. `"great post @loren-the-great!"`). Currently it renders as static text in a `<p>` tag with no interactivity. Users expect `@mentions` to be clickable links that navigate to the mentioned user's profile.
+
+## Approach
+
+Create a shared `MentionText` component that parses plain text for `@username` patterns, rendering them as clickable styled spans. Clicking navigates to `/u/{username}` (or `/profile` if it's the current user's own username).
+
+## Files to create
+
+### 1. `client/src/components/mentions/MentionText.jsx` (new)
+- Accepts `text` prop (the raw comment/opinion string)
+- Regex-splits text on `@([\w-]+)` pattern
+- For each `@username` match, render a `<span className="mention-link">` that on click:
+  - If `username === currentUser.username` → `navigate('/profile')`
+  - Else → `navigate('/u/{username}')`
+- Uses `useAuth()` for current user's username, `useNavigate()` for routing
+- Non-mention text segments render as plain text
+- Stops event propagation on click (parent containers have their own click handlers)
+
+### 2. `client/src/components/mentions/MentionText.css` (new)
+- `.mention-link` — styled as clickable: color accent, cursor pointer, font-weight 500, hover underline
+
+## Files to modify
+
+Replace raw `{text}` with `<MentionText text={text} />` in these 7 locations:
+
+| # | File | Line | Current | Change to |
+|---|------|------|---------|-----------|
+| 1 | `comments/commentsCards.jsx` | 188 | `{comments?.comment}` | `<MentionText text={comments?.comment} />` |
+| 2 | `SidebarOpinions/SidebarOpinions.jsx` | 141 | `{opinionsData.opinion}` | `<MentionText text={opinionsData.opinion} />` |
+| 3 | `SidebarOpinions/visitedProfileOpinions.jsx` | 122 | `{opinion.opinion}` | `<MentionText text={opinion.opinion} />` |
+| 4 | `SidebarOpinions/OpinionsCardRepy.jsx` | 111 | `{opinion.opinion}` | `<MentionText text={opinion.opinion} />` |
+| 5 | `SidebarOpinions/opinionViewer.jsx` | 100 | `{opinion.opinion}` | `<MentionText text={opinion.opinion} />` |
+| 6 | `SidebarOpinions/MyOpinions.jsx` | 90 | `{opinion.opinion}` | `<MentionText text={opinion.opinion} />` |
+| 7 | `SidebarOpinions/OpinionssPage.jsx` | 276 | `{opinion.opinion}` | `<MentionText text={opinion.opinion} />` |
+
+Each file gets an `import MentionText from '../mentions/MentionText'` (path adjusted per location).
+
+## Verification
+
+1. Post a comment containing `@someuser` via the mention autocomplete
+2. Confirm the `@someuser` text appears styled/colored differently from surrounding text
+3. Click it → should navigate to `/u/someuser`
+4. Type your own `@username` in a comment → click it → should navigate to `/profile`
+5. Check opinions in sidebar, opinion viewer, visited profile opinions, and opinions page all render clickable mentions too
+6. Confirm clicking a mention doesn't also trigger the parent container's click handler (e.g. opening opinion viewer)

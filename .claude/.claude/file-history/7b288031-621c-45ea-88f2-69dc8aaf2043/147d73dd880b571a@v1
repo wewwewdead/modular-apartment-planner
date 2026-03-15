@@ -1,0 +1,40 @@
+# Slide-away mobile top header on scroll
+
+## Context
+The `.mobile-top-header` (brand row + Writings/Opinions tabs) is `position: sticky; top: 0` and always visible on mobile. User wants it to slide up off-screen when scrolling, and slide back down when scrolling stops — matching the existing fade pattern used on the bottom nav.
+
+## Changes
+
+### 1. PostCards.jsx — add scroll-driven class toggle
+
+Reintroduce a scroll listener (was recently removed) that adds/removes a `mobile-top-header-hidden` class on the `.mobile-top-header` div.
+
+- Add `isScrolling` state (boolean, default `false`)
+- Add `useEffect` with scroll listener: sets `isScrolling = true` on scroll, resets to `false` after 500ms idle (same debounce pattern as `MobileNavLink.jsx`)
+- Apply class: `className={`mobile-top-header ${isScrolling ? 'mobile-top-header-hidden' : ''}`}`
+- Re-add `timeOutRef` for the timeout cleanup
+
+**File:** `client/src/components/HomePage/postCards/PostCards.jsx`
+
+### 2. postcards.css — add slide-up transition
+
+Add `transition` and the hidden-state transform to the existing mobile `@media (max-width: 480px)` block:
+
+```css
+.mobile-top-header{
+    /* existing styles... */
+    transition: transform 0.3s ease;
+}
+.mobile-top-header-hidden{
+    transform: translateY(-100%);
+}
+```
+
+**File:** `client/src/components/HomePage/postCards/postcards.css` (lines ~823-833)
+
+## Verification
+1. Open at ≤480px viewport
+2. Scroll down — header slides up off-screen smoothly
+3. Stop scrolling — header slides back down after ~500ms
+4. Brand text, profile button, and Writings/Opinions tabs all present and functional
+5. Bottom nav still fades independently on scroll

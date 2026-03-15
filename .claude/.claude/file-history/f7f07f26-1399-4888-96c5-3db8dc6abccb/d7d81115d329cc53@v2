@@ -1,0 +1,882 @@
+/* ═══════════════════════════════════════════════════
+   Profile Post Cards — Parent Container
+   ═══════════════════════════════════════════════════ */
+.profile-postcards-parent-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    width: 90%;
+    padding: 1.5rem 1.5rem 1.25rem;
+    height: fit-content;
+    margin-bottom: 1rem;
+    margin-top: 1rem;
+    border-radius: 18px;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 0.7px solid var(--bg-glass-border);
+    gap: 20px;
+    box-shadow: 0 1px 4px rgba(80, 60, 40, 0.04);
+}
+/* ═══════════════════════════════════════════════════
+   Postcards Header Row
+   ═══════════════════════════════════════════════════ */
+.postcards-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0 0.15rem;
+    border-bottom: 1px solid var(--border-card);
+    padding-bottom: 0.65rem;
+}
+
+.postcards-heading {
+    margin: 0;
+    font-family: "Playfair Display", Georgia, serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    letter-spacing: -0.015em;
+    line-height: 1;
+}
+
+.postcards-count {
+    font-family: var(--font-ui);
+    font-weight: 500;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.postcards-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.postcards-view-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.postcards-view-toggle-btn:hover {
+    background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+    color: rgba(212, 168, 83, 1);
+    border-color: rgba(212, 168, 83, 0.3);
+    transform: translateY(-1px);
+}
+
+.postcards-view-toggle-btn.is-active {
+    background: rgba(212, 168, 83, 0.1);
+    color: rgba(212, 168, 83, 1);
+    border-color: rgba(212, 168, 83, 0.3);
+    box-shadow: 0 0 0 2px rgba(212, 168, 83, 0.08);
+}
+
+/* ═══════════════════════════════════════════════════
+   Grid View
+   ═══════════════════════════════════════════════════ */
+.postcards-grid-view {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    width: 100%;
+}
+
+.postcards-grid-item {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    cursor: pointer;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-card);
+    border-radius: 12px;
+    box-shadow: var(--shadow-card-sm);
+    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+
+.postcards-grid-item:hover {
+    box-shadow: 0 4px 16px rgba(80, 60, 40, 0.1), 0 1px 4px rgba(80, 60, 40, 0.06);
+    transform: translateY(-2px);
+    border-color: rgba(212, 168, 83, 0.15);
+}
+
+[data-theme="dark"] .postcards-grid-item:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    border-color: rgba(212, 168, 83, 0.12);
+}
+
+.postcards-grid-img-wrap {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    flex-shrink: 0;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    background-color: var(--bg-secondary);
+}
+
+.postcards-grid-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+.postcards-grid-item:hover .postcards-grid-thumb {
+    transform: scale(1.04);
+    opacity: 0.92;
+}
+
+.postcards-grid-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.55rem 0.65rem 0.5rem;
+    flex: 1;
+    min-height: 0;
+}
+
+.postcards-grid-title {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--text-primary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.postcards-grid-snippet {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 0.68rem;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--text-muted);
+    opacity: 0.65;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════
+   Grid Item — Footer & Settings
+   ═══════════════════════════════════════════════════ */
+.postcards-grid-item {
+    position: relative;
+}
+
+.postcards-grid-body-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--border-card);
+}
+
+.postcards-grid-item .user-post-settings svg {
+    width: 18px;
+    height: 18px;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.postcards-grid-item:hover .user-post-settings svg {
+    opacity: 0.85;
+}
+
+.postcards-grid-item .user-post-privacy {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    opacity: 0.6;
+    transition: opacity 0.2s ease;
+}
+
+.postcards-grid-item:hover .user-post-privacy {
+    opacity: 0.85;
+}
+
+.postcards-grid-item .post-settings-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 20;
+}
+
+.postcards-grid-item .confirmation-delete-bg {
+    bottom: 0;
+}
+
+/* ═══════════════════════════════════════════════════
+   List View
+   ═══════════════════════════════════════════════════ */
+.postcards-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+}
+
+.profile-postcards-child-container {
+    display: flex;
+    width: 100%;
+    position: relative;
+}
+.profile-postcards-loading-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 90%;
+    height: 60vh;
+    margin-top: 1rem;
+    border-radius: 18px;
+    padding: 1rem;
+    background-color: var(--bg-glass);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 0.7px solid var(--bg-glass-border);
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-weight: 500;
+    font-size: 0.88rem;
+    opacity: 0.75;
+}
+
+/* ═══════════════════════════════════════════════════
+   Individual Profile Card
+   ═══════════════════════════════════════════════════ */
+.profile-postcards {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    min-height: fit-content;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-card);
+    border-radius: 14px;
+    overflow: visible;
+    cursor: pointer;
+    box-shadow: var(--shadow-card-sm);
+    transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+}
+.profile-postcards:hover {
+    box-shadow: 0 6px 28px rgba(80, 60, 40, 0.09), 0 1px 6px rgba(80, 60, 40, 0.05);
+    border-color: rgba(212, 168, 83, 0.15);
+    transform: translateY(-1px);
+}
+[data-theme="dark"] .profile-postcards:hover {
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.25), 0 1px 6px rgba(0, 0, 0, 0.15);
+    border-color: rgba(212, 168, 83, 0.12);
+}
+.profile-postcards .card-image-banner {
+    width: 100%;
+    max-height: 240px;
+    object-fit: cover;
+    display: block;
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+    transition: opacity 0.2s ease;
+}
+.profile-postcards:hover .card-image-banner {
+    opacity: 0.92;
+}
+
+/* ═══════════════════════════════════════════════════
+   Card Content Area
+   ═══════════════════════════════════════════════════ */
+.user-profile-card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    width: 100%;
+    padding: 1.15rem 1.4rem 0.9rem 1.4rem;
+    box-sizing: border-box;
+}
+.user-profile-card-content .card-icons-container {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 0.5rem 0 0 0;
+    min-height: 22px;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    border-top: 1px solid var(--border-card);
+}
+.user-profile-card-content .content-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    user-select: none;
+    gap: 0.4rem;
+}
+.user-profile-card-content .feed-text-content-container {
+    width: 100%;
+}
+.user-profile-card-content .user-info-email-container {
+    display: none;
+}
+
+/* In-view loader */
+.in-view-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 24px;
+    margin-top: 0.5rem;
+    opacity: 0.7;
+}
+
+/* Avatar rings */
+.user-avatar-container.avatar-ring-legend {
+    border-radius: 50%;
+    border: 2px solid #FFD700;
+    box-shadow:
+        0 0 6px 1px rgba(255, 215, 0, 0.5),
+        0 0 12px 2px rgba(255, 215, 0, 0.35),
+        0 0 20px 4px rgba(255, 215, 0, 0.2);
+    animation: glow-legend 2s ease-in-out infinite alternate;
+}
+.user-avatar-container.avatar-ring-og {
+    border-radius: 50%;
+    border: 2px solid #9B59FF;
+    box-shadow:
+        0 0 6px 1px rgba(155, 89, 255, 0.5),
+        0 0 12px 2px rgba(155, 89, 255, 0.35),
+        0 0 20px 4px rgba(155, 89, 255, 0.2);
+    animation: glow-og 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow-legend {
+    from {
+        box-shadow:
+            0 0 6px 1px rgba(255, 215, 0, 0.5),
+            0 0 12px 2px rgba(255, 215, 0, 0.35),
+            0 0 20px 4px rgba(255, 215, 0, 0.2);
+    }
+    to {
+        box-shadow:
+            0 0 8px 2px rgba(255, 215, 0, 0.6),
+            0 0 16px 4px rgba(255, 215, 0, 0.4),
+            0 0 24px 6px rgba(255, 215, 0, 0.25);
+    }
+}
+
+@keyframes glow-og {
+    from {
+        box-shadow:
+            0 0 6px 1px rgba(155, 89, 255, 0.5),
+            0 0 12px 2px rgba(155, 89, 255, 0.35),
+            0 0 20px 4px rgba(155, 89, 255, 0.2);
+    }
+    to {
+        box-shadow:
+            0 0 8px 2px rgba(155, 89, 255, 0.6),
+            0 0 16px 4px rgba(155, 89, 255, 0.4),
+            0 0 24px 6px rgba(155, 89, 255, 0.25);
+    }
+}
+
+/* Profile-specific text styles */
+.user-newsfeed-name-profile-page {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.005rem;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color 0.15s ease;
+}
+.user-newsfeed-name-profile-page:hover {
+    color: var(--text-primary);
+}
+.feed-title-profile-page {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-serif);
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.02em;
+    color: var(--text-heading);
+    transition: color 0.15s ease;
+}
+.feed-text-content-profile-page {
+    padding: 0;
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 400;
+    line-height: 1.7;
+    font-size: 0.875rem;
+    letter-spacing: 0.008rem;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════
+   Post Settings Dropdown
+   ═══════════════════════════════════════════════════ */
+.post-settings-container {
+    position: absolute;
+    left: 75px;
+    bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: 240px;
+    height: fit-content;
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+    border-radius: 14px;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-dropdown);
+    z-index: 10;
+    overflow: hidden;
+}
+.setting-buttons {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    height: fit-content;
+}
+.delete-button {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    gap: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: rgb(255, 68, 68);
+    padding: 0.6rem 1rem;
+    transition: background-color 0.12s ease;
+}
+.delete-button:hover {
+    background-color: rgba(255, 68, 68, 0.06);
+}
+.delete-button svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.edit-button {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    gap: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0.6rem 1rem;
+    transition: background-color 0.12s ease;
+}
+.edit-button:hover {
+    background-color: var(--bg-hover);
+}
+.edit-button svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.edit-button svg path {
+    stroke: var(--text-primary);
+}
+.only-me-bttn {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    gap: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0.6rem 1rem;
+    transition: background-color 0.12s ease;
+}
+.only-me-bttn:hover {
+    background-color: var(--bg-hover);
+}
+.only-me-bttn svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.only-me-bttn svg g,
+.only-me-bttn svg path {
+    fill: var(--text-primary);
+}
+.public-post-bttn {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    gap: 0.7rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0.6rem 1rem;
+    transition: background-color 0.12s ease;
+}
+.public-post-bttn:hover {
+    background-color: var(--bg-hover);
+}
+.public-post-bttn svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.public-post-bttn svg path {
+    fill: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════
+   Delete Confirmation Overlay
+   ═══════════════════════════════════════════════════ */
+.confirm-delete-container {
+    width: 100%;
+    height: 100vh;
+    position: absolute;
+    background-color: red;
+}
+.confirmation-delete-bg {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    z-index: 1000;
+    bottom: 110px;
+}
+.confirmation-delete-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 1.25rem;
+    border-radius: 16px;
+    width: 380px;
+    height: 110px;
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+    box-shadow: 0 8px 32px rgba(80, 60, 40, 0.15), 0 2px 8px rgba(80, 60, 40, 0.06);
+    border: 1px solid var(--border-light);
+}
+.confirmation-delete-heading {
+    display: flex;
+    width: 100%;
+    height: fit-content;
+    justify-content: center;
+    align-items: center;
+    font-family: var(--font-ui);
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+.confirm-buttons-container {
+    display: flex;
+    width: 100%;
+    height: fit-content;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+}
+.confirm-buttons-yes {
+    height: fit-content;
+    padding: 0.45rem 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: rgb(255, 68, 68);
+    background-color: rgba(255, 68, 68, 0.08);
+    border: 1px solid rgba(255, 68, 68, 0.15);
+    border-radius: 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.12s ease;
+}
+.confirm-buttons-yes:hover {
+    background-color: rgba(255, 68, 68, 0.15);
+}
+.confirm-buttons-cancel {
+    height: fit-content;
+    padding: 0.45rem 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--bg-primary);
+    background-color: var(--text-primary);
+    border-radius: 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.12s ease;
+}
+.confirm-buttons-cancel:hover {
+    opacity: 0.85;
+}
+
+/* Delete success message */
+.journal-is-deleted-message-container {
+    position: absolute;
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+    z-index: 11;
+    width: 420px;
+    height: 140px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-family: "Playfair Display", Georgia, serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    gap: 0.5rem;
+    box-shadow: 0 8px 32px rgba(80, 60, 40, 0.15), 0 2px 8px rgba(80, 60, 40, 0.06);
+    border: 1px solid var(--border-light);
+}
+.delete-journal-loader-container {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 90%;
+    height: 100px;
+    background-color: var(--bg-elevated);
+    color: var(--text-primary);
+    z-index: 10;
+    padding: 1rem;
+    border-radius: 14px;
+    font-family: var(--font-ui);
+    box-shadow: 0 8px 32px rgba(80, 60, 40, 0.15), 0 2px 8px rgba(80, 60, 40, 0.06);
+}
+
+
+/* ═══════════════════════════════════════════════════
+   Mobile Responsive (428px)
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+    .post-settings-container {
+        position: absolute;
+        left: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: flex-start;
+        width: 240px;
+        height: fit-content;
+        background-color: var(--bg-elevated);
+        color: var(--text-primary);
+        border-radius: 14px;
+        border: 1px solid var(--border-light);
+        box-shadow: var(--shadow-dropdown);
+        z-index: 100;
+        overflow: hidden;
+    }
+}
+@media (max-width: 428px) {
+    .profile-postcards-parent-container {
+        width: 95%;
+        padding: 0.6rem;
+        gap: 14px;
+        box-sizing: border-box;
+    }
+    .postcards-header-row {
+        border-bottom: 1px solid var(--border-card);
+        padding-bottom: 0.5rem;
+    }
+    .postcards-grid-view {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    .postcards-heading {
+        font-size: 0.95rem;
+    }
+    .postcards-count {
+        font-size: 0.85rem;
+    }
+    .postcards-view-toggle-btn {
+        width: 30px;
+        height: 30px;
+    }
+    .postcards-view-toggle-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+    .postcards-grid-item {
+        border-radius: 10px;
+    }
+    .postcards-grid-img-wrap {
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
+    }
+    .postcards-grid-title {
+        font-size: 0.72rem;
+    }
+    .postcards-grid-snippet {
+        font-size: 0.62rem;
+        -webkit-line-clamp: 1;
+    }
+    .profile-postcards {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+        min-height: fit-content;
+        border: 1px solid var(--border-card);
+        border-radius: 12px;
+        overflow: visible;
+        cursor: pointer;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .profile-postcards:hover {
+        transform: none;
+    }
+    .profile-postcards .card-image-banner {
+        max-height: 170px;
+        border-top-left-radius: 12px;
+        border-top-right-radius: 12px;
+    }
+    .content-container {
+        gap: 0.25rem;
+    }
+    .feed-title-profile-page {
+        font-size: 0.95rem;
+        line-height: 1.35;
+    }
+    .feed-text-content-profile-page {
+        font-size: 0.8rem;
+        line-height: 1.55;
+    }
+    .card-icons-container {
+        display: flex;
+        flex-wrap: wrap;
+        width: 100%;
+        padding: 0.4rem 0 0rem 0;
+        height: auto;
+        gap: 0.35rem;
+        row-gap: 0.5rem;
+        box-sizing: border-box;
+        align-items: center;
+    }
+    .card-icons-container .user-info-child-container {
+        display: flex;
+        align-items: center;
+        width: fit-content;
+        gap: 0.3rem;
+        overflow: visible;
+        border-bottom: 1px solid var(--border-card);
+        margin-bottom: 0.1rem;
+        padding: 0 0 0 0.8rem;
+    }
+
+    .user-newsfeed-name-profile-page {
+        font-size: 0.7rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 120px;
+    }
+   .card-icons-container .user-post-date {
+        font-size: 0.62rem;
+        white-space: nowrap;
+    }
+    .card-icons-container .user-info-avatar {
+        width: 18px;
+        height: 18px;
+    }
+    .user-post-settings svg {
+        width: 20px;
+        height: 20px;
+    }
+    .user-post-settings {
+        flex-shrink: 0;
+    }
+    .post-settings-container {
+        position: absolute;
+        left: 30px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: flex-start;
+        width: 240px;
+        height: fit-content;
+        background-color: var(--bg-elevated);
+        color: var(--text-primary);
+        border-radius: 14px;
+        border: 1px solid var(--border-light);
+        box-shadow: var(--shadow-dropdown);
+        z-index: 100;
+        overflow: hidden;
+    }
+    .confirmation-delete-container {
+        width: 90%;
+        max-width: 320px;
+    }
+    .journal-is-deleted-message-container {
+        width: 90%;
+        max-width: 350px;
+        height: 120px;
+        font-size: 1.1rem;
+    }
+    .postcards-grid-item .post-settings-container {
+        top: 50%;
+        left: 50%;
+        width: 200px;
+    }
+    .profile-postcards-loading-container {
+        height: 50vh;
+    }
+}
+
+/* ═══════════════════════════════════════════════════
+   Caption Editor — overrides for repost modal classes
+   ═══════════════════════════════════════════════════ */
+.caption-editor-save-btn{
+    background: var(--editor-accent);
+}

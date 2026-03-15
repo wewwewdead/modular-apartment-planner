@@ -1,0 +1,31 @@
+System Context: You are a Senior UI/UX Designer and Lead Frontend Engineer. We are upgrading the "Iskrib Freedom Wall" from a basic drawing board to a high-fidelity Creative Atelier.
+
+The Vision: The UI should feel like a physical, tactile workspace. Think: "A messy desk meets a street art mural." It must be 10x more aesthetic than a standard white canvas.
+
+UI Requirements (No Tailwind - use CSS Modules):
+
+Tactile Background: Instead of a flat color, implement a "Multi-layered Surface." Use a CSS-driven texture (e.g., a grainy concrete or recycled paper texture) with a subtle box-shadow inset to give the wall depth.
+
+Immersive Glassmorphism: The toolbar should be a floating, frosted-glass (glassmorphism) dock at the bottom. It should use backdrop-filter: blur(10px) and have "active" states that glow slightly when a tool is selected.
+
+Mobile-First Gestures: >    - Implement Pinch-to-Zoom and Two-Finger Pan using Konva’s stage events.
+
+On mobile, the toolbar should be a collapsible "Orb" or "Floating Action Button" to save screen space.
+
+Micro-Animations: >    - When a user selects a sticker, it should "lift" (increase shadow and scale) to feel like it’s being picked up.
+
+Add a "Spring" animation (using konva or framer-motion) when objects are dropped.
+
+Creative Tooling UI: >    - Instead of a dropdown for fonts, show a horizontal "Style Carousel" with live previews of the fonts (Typewriter, Brush Script, etc.).
+
+Color pickers should be a "Palette" of curated, aesthetic colors (Pastels, Earth Tones, Neon) rather than a raw hex picker.
+
+The "Active" Wall: Add a CSS "Ambient Light" effect where the corners of the screen have a slight vignette or a "glowing" pulse to make the space feel alive.
+
+Technical Logic (Keep Current Behavior):
+
+Maintain the Supabase real-time sync.
+
+Ensure the Konva Stage handles high-DPI (Retina) displays correctly so doodles look sharp.
+
+Add a "Focus Mode" button that hides all UI chrome so the user can just see the art.

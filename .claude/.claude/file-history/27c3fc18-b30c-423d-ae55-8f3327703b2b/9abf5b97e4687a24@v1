@@ -1,0 +1,297 @@
+import React from 'react';
+import {Pressable, Share, StyleSheet, Text, View} from 'react-native';
+import {Avatar} from '../../components/Avatar';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {FireIcon, SettingsIcon, ShareIcon} from '../../components/icons';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii} from '../../theme/spacing';
+
+interface ProfileHeroProps {
+  profile: {
+    id: string;
+    name?: string;
+    username?: string;
+    bio?: string;
+    image_url?: string;
+    badge_type?: string;
+    profile_layout?: any;
+    followers_count?: number;
+    following_count?: number;
+    posts_count?: number;
+  } | null;
+  streak?: number;
+  email?: string;
+  onEditProfile: () => void;
+  onSettingsPress: () => void;
+  onFollowersPress: () => void;
+  onFollowingPress: () => void;
+}
+
+export function ProfileHeroSection({
+  profile,
+  streak,
+  email,
+  onEditProfile,
+  onSettingsPress,
+  onFollowersPress,
+  onFollowingPress,
+}: ProfileHeroProps) {
+  const {colors} = useTheme();
+  const bgColor = profile?.profile_layout?.backgroundColor ?? colors.accentAmber;
+
+  const onShareProfile = async () => {
+    const username = profile?.username || profile?.name || 'user';
+    try {
+      await Share.share({
+        message: `Check out @${username} on iskrib!\nhttps://iskrib.com/${username}`,
+      });
+    } catch {
+      // User cancelled
+    }
+  };
+
+  return (
+    <View>
+      {/* Background header */}
+      <View style={[styles.headerBg, {backgroundColor: bgColor}]}>
+        <Pressable
+          style={styles.settingsBtn}
+          onPress={onSettingsPress}
+          hitSlop={12}>
+          <SettingsIcon size={22} color="rgba(255,255,255,0.8)" />
+        </Pressable>
+      </View>
+
+      <View style={styles.profileContent}>
+        {/* Avatar + Stats row */}
+        <View style={styles.avatarStatsRow}>
+          <View style={styles.avatarWrap}>
+            <Avatar
+              uri={profile?.image_url}
+              name={profile?.name}
+              size={80}
+              badge={profile?.badge_type as any}
+            />
+          </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, {color: colors.textHeading}]}>
+                {profile?.posts_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>
+                Posts
+              </Text>
+            </View>
+            <Pressable style={styles.statItem} onPress={onFollowersPress}>
+              <Text style={[styles.statNumber, {color: colors.textHeading}]}>
+                {profile?.followers_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>
+                Followers
+              </Text>
+            </Pressable>
+            <Pressable style={styles.statItem} onPress={onFollowingPress}>
+              <Text style={[styles.statNumber, {color: colors.textHeading}]}>
+                {profile?.following_count ?? 0}
+              </Text>
+              <Text style={[styles.statLabel, {color: colors.textMuted}]}>
+                Following
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Name row */}
+        <View style={styles.nameSection}>
+          <Text style={[styles.name, {color: colors.textHeading}]}>
+            {profile?.name || email || 'User'}
+          </Text>
+          {profile?.username ? (
+            <Text style={[styles.username, {color: colors.textMuted}]}>
+              @{profile.username}
+            </Text>
+          ) : null}
+
+          <View style={styles.badgeRow}>
+            {profile?.badge_type ? (
+              <View
+                style={[
+                  styles.badgePill,
+                  {
+                    backgroundColor:
+                      profile.badge_type === 'legend'
+                        ? 'rgba(255,215,0,0.15)'
+                        : 'rgba(155,89,255,0.15)',
+                    borderColor:
+                      profile.badge_type === 'legend'
+                        ? colors.badgeLegendBorder
+                        : colors.badgeOGBorder,
+                  },
+                ]}>
+                <Text
+                  style={[
+                    styles.badgeText,
+                    {
+                      color:
+                        profile.badge_type === 'legend'
+                          ? colors.badgeLegendBorder
+                          : colors.badgeOGBorder,
+                    },
+                  ]}>
+                  {profile.badge_type.toUpperCase()}
+                </Text>
+              </View>
+            ) : null}
+
+            {streak != null && streak > 0 ? (
+              <View style={[styles.streakBadge, {backgroundColor: 'rgba(245,158,11,0.12)'}]}>
+                <FireIcon size={14} color="#F59E0B" />
+                <Text style={styles.streakText}>{streak}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+
+        {/* Bio */}
+        {profile?.bio ? (
+          <Text style={[styles.bio, {color: colors.textSecondary}]}>
+            {profile.bio}
+          </Text>
+        ) : null}
+
+        {/* Action row */}
+        <View style={styles.actionRow}>
+          <View style={styles.editBtn}>
+            <PrimaryButton
+              label="Edit Profile"
+              onPress={onEditProfile}
+              kind="secondary"
+            />
+          </View>
+          <Pressable
+            style={[styles.shareBtn, {borderColor: colors.borderLight}]}
+            onPress={onShareProfile}
+            hitSlop={8}>
+            <ShareIcon size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  headerBg: {
+    height: 140,
+    borderBottomLeftRadius: radii.hero,
+    borderBottomRightRadius: radii.hero,
+  },
+  settingsBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.lg,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileContent: {
+    marginTop: -40,
+    paddingHorizontal: spacing.lg,
+  },
+  avatarStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.lg,
+  },
+  avatarWrap: {
+    // Slight overlap with header
+  },
+  statsRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingBottom: spacing.xs,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontFamily: fonts.heading.semiBold,
+    fontSize: 18,
+  },
+  statLabel: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  nameSection: {
+    marginTop: spacing.md,
+    gap: spacing.xxs,
+  },
+  name: {
+    fontFamily: fonts.heading.bold,
+    fontSize: 20,
+  },
+  username: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  badgePill: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xxs,
+  },
+  badgeText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 10,
+    letterSpacing: 1,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  streakText: {
+    fontFamily: fonts.ui.semiBold,
+    fontSize: 12,
+    color: '#F59E0B',
+  },
+  bio: {
+    fontFamily: fonts.serif.regular,
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: spacing.md,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  editBtn: {
+    flex: 1,
+  },
+  shareBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

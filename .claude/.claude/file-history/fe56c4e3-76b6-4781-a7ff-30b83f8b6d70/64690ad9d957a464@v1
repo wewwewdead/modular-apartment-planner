@@ -1,0 +1,41 @@
+# Plan: Fix Profile Writings Tab showing all users' posts
+
+## Context
+The Profile screen's Writings tab shows posts from ALL users instead of only the logged-in user's posts. Root cause: `mobileApi.getUserJournals` calls `GET /journals` with an `authorId` param, but the server's `/journals` endpoint ignores `authorId` — it's the global public feed endpoint. The server has a separate `GET /userJournals` endpoint (used by the web app) that filters by `user_id`. The fix is to switch to the correct endpoint.
+
+## Root Cause
+- **Mobile** (`mobileApi.ts:294-299`): `getUserJournals` calls `/journals?authorId=<userId>` — wrong endpoint, wrong param name
+- **Server** (`getController.js:4-14`): `/journals` returns ALL public posts; `userId` is only used for personalizing likes/bookmarks, not filtering by author
+- **Server** (`getController.js:16-28`): `/userJournals` is the correct endpoint — it filters `.eq('user_id', userId)`. Requires auth (`requireAuth` middleware). Gets `userId` from `req.userId` (auth) or `req.query.userId`.
+- **Web app** (`Api.js:387`): Already uses `/userJournals` for profile pages
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `apps/mobile/src/lib/api/mobileApi.ts` (line 294) | Change `getUserJournals` to call `/userJournals` with `userId` param and auth token |
+| `apps/mobile/src/screens/Profile/ProfileWritingsTab.tsx` (line 28) | Pass auth token from `useAuth()` to the API call |
+
+## Implementation
+
+### 1. `mobileApi.ts` — Fix `getUserJournals` method
+Change from:
+```ts
+async getUserJournals(userId: string, cursor: string | null, limit = 10)
+```
+To:
+```ts
+async getUserJournals(token: string, userId: string, cursor: string | null, limit = 10)
+```
+- Switch endpoint from `/journals` to `/userJournals`
+- Send `userId` query param (not `authorId`)
+- Attach `Authorization: Bearer <token>` header
+
+### 2. `ProfileWritingsTab.tsx` — Pass token to API call
+- Import `useAuth` and get `session.access_token`
+- Update the `queryFn` call to pass token: `mobileApi.getUserJournals(token, userId, ...)`
+
+## Verification
+1. Open Profile tab — Writings tab should show only the logged-in user's own posts
+2. Scroll down to verify pagination still works
+3. HomeFeedScreen still shows the global feed (it uses `mobileApi.getJournals`, unaffected)

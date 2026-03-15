@@ -20,6 +20,23 @@ export function createGrid(bounds, groundLevel) {
   grid.position.y = groundLevel;
   grid.material.transparent = true;
   grid.material.opacity = 0.45;
+
+  // Colored axis lines on ground plane (SketchUp-style)
+  const axisLength = normalizedSize / 2;
+  const xAxisGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-axisLength, 0.5, 0),
+    new THREE.Vector3(axisLength, 0.5, 0),
+  ]);
+  const xAxisLine = new THREE.Line(xAxisGeom, new THREE.LineBasicMaterial({ color: 0xff4444, linewidth: 2 }));
+  grid.add(xAxisLine);
+
+  const zAxisGeom = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0.5, -axisLength),
+    new THREE.Vector3(0, 0.5, axisLength),
+  ]);
+  const zAxisLine = new THREE.Line(zAxisGeom, new THREE.LineBasicMaterial({ color: 0x44cc44, linewidth: 2 }));
+  grid.add(zAxisLine);
+
   return grid;
 }
 

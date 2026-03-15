@@ -1,0 +1,88 @@
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+
+import { formatCurrency } from '../../../lib/format';
+import { colors } from '../../../theme/colors';
+import { motion } from '../../../theme/motion';
+import { typography } from '../../../theme/typography';
+
+interface BudgetBarProps {
+  spent: number;
+  budget: number;
+}
+
+export function BudgetBar({ spent, budget }: BudgetBarProps) {
+  const ratio = budget > 0 ? spent / budget : 0;
+  const clamped = Math.min(ratio, 1.2);
+  const displayPercent = Math.min(clamped, 1);
+
+  const barColor =
+    ratio > 1.0 ? colors.danger :
+    ratio > 0.9 ? colors.brand :
+    ratio > 0.7 ? colors.warning :
+    colors.success;
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${withSpring(displayPercent * 100, motion.gentle)}%` as any,
+    backgroundColor: barColor,
+  }));
+
+  return (
+    <View
+      style={styles.wrapper}
+      accessibilityLabel={`Budget: ${formatCurrency(spent)} of ${formatCurrency(budget)}`}
+    >
+      <View style={styles.labelRow}>
+        <Text style={styles.spent}>{formatCurrency(spent)}</Text>
+        <Text style={styles.budget}>/ {formatCurrency(budget)}</Text>
+      </View>
+      <View style={styles.track}>
+        <Animated.View style={[styles.fill, fillStyle]} />
+      </View>
+      {ratio > 1 && (
+        <Text style={styles.over}>
+          {formatCurrency(spent - budget)} over budget
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrapper: {
+    gap: 6,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 16,
+    padding: 16,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  spent: {
+    ...typography.numericDisplay,
+    color: colors.ink,
+    fontSize: 20,
+  },
+  budget: {
+    ...typography.caption,
+    color: colors.mutedInk,
+  },
+  track: {
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.line,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: 10,
+    borderRadius: 5,
+  },
+  over: {
+    ...typography.caption,
+    color: colors.danger,
+    fontFamily: 'SourceSans3-Bold',
+  },
+});

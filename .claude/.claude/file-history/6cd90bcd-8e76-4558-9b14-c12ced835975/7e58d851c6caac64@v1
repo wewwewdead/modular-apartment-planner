@@ -1,0 +1,66 @@
+# Feature: Per-Viewport Phase Filtering on Sheets
+
+## Context
+
+The phase system filters objects in the main canvas and 3D preview, but sheet viewports always show all objects regardless of phase. Users need each viewport on a sheet to independently control which phase(s) are visible — e.g., a "Demolition Plan" viewport alongside a "New Construction Plan" viewport on the same sheet.
+
+The plumbing is half-done: `resolveSheetViewportSource` in `src/sheets/sources.js` already accepts a `phaseContext` parameter and filters when provided, but `buildSheetScene` in `src/sheets/layout.js` never passes it.
+
+## Changes (5 files, ~43 lines)
+
+### 1. `src/domain/sheetModels.js` — Add phase props to viewport model
+In `createSheetViewport` (line 43-59), add after `lockAutoLayout`:
+```js
+phaseId: options.phaseId ?? null,
+phaseViewMode: options.phaseViewMode ?? 'all',
+```
+
+### 2. `src/sheets/layout.js` — Thread phase context through pipeline
+At line 349, change:
+```js
+source: resolveSheetViewportSource(project, viewport)
+```
+to:
+```js
+source: resolveSheetViewportSource(project, viewport, {
+  activePhaseId: viewport.phaseId,
+  phaseViewMode: viewport.phaseViewMode || 'all',
+})
+```
+
+### 3. `src/persistence/deserialize.js` — Backfill for old projects
+After line 233 (`lockAutoLayout` backfill), add:
+```js
+if (viewport.phaseId === undefined) viewport.phaseId = null;
+if (viewport.phaseViewMode === undefined) viewport.phaseViewMode = 'all';
+```
+
+### 4. `src/app/ProjectProvider.jsx` — Clean up on phase deletion
+In `PHASE_DELETE` case (line 620-633), add `sheets` cleanup to the object passed to `applyProjectUpdate`:
+```js
+sheets: (state.project.sheets || []).map(sheet => ({
+  ...sheet,
+  viewports: (sheet.viewports || []).map(vp =>
+    vp.phaseId === phaseId
+      ? { ...vp, phaseId: null, phaseViewMode: 'all' }
+      : vp
+  ),
+})),
+```
+
+### 5. `src/ui/PropertiesPanel.jsx` — Add Phase dropdowns in `SheetViewportProperties`
+After the "Reference" InputField (line 542), add two dropdown rows using the same inline-style pattern as Source/Floor/Role:
+
+- **Phase** dropdown: "All Phases" + one option per `project.phases`. On change: set `phaseId`, auto-switch `phaseViewMode` to `'cumulative'` if it was `'all'` (so filtering actually kicks in). Selecting "All Phases" resets both to `null`/`'all'`.
+- **Phase Mode** dropdown (only shown when `phaseId` is set): `All` / `Single` / `Cumulative`. On change: set `phaseViewMode`.
+
+## Verification
+1. Create a sheet with a plan viewport
+2. Create 2+ phases, draw walls on each
+3. Select the viewport on the sheet → PropertiesPanel shows Phase dropdown
+4. Pick Phase 1 → viewport shows only Phase 1 objects (mode auto-set to cumulative)
+5. Switch to "Single" mode → only Phase 1 objects
+6. Pick Phase 2 in cumulative mode → Phase 1 + Phase 2 objects visible
+7. Pick "All Phases" → everything visible again
+8. Delete a phase that a viewport references → viewport reverts to "All Phases"
+9. Load an old project (no phase props on viewports) → defaults work, no errors

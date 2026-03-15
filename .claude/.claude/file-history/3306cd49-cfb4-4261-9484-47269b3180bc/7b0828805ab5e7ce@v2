@@ -1,0 +1,91 @@
+import { lazy, Suspense, useEffect } from 'react';
+import { SketchProvider, useSketch } from './app/SketchProvider';
+import { SketchEditorProvider, useSketchEditor } from './app/SketchEditorProvider';
+import SketchToolbar from './ui/SketchToolbar';
+import SketchSidebar from './ui/SketchSidebar';
+import SketchCanvas from './renderers/SketchCanvas';
+import SketchPropertiesPanel from './ui/SketchPropertiesPanel';
+import { saveSketchProject } from './persistence/sketchStorage';
+import styles from './SketchWorkspace.module.css';
+
+const SketchPreviewPanel = lazy(() => import('./renderers/SketchPreviewPanel'));
+const SketchSheetCanvas = lazy(() => import('./renderers/SketchSheetCanvas'));
+
+function SketchInner() {
+  const { project, isDirty, dispatch } = useSketch();
+  const { maximizedPanel, workspaceMode, activeSheetId, dispatch: editorDispatch } = useSketchEditor();
+
+  // Autosave
+  useEffect(() => {
+    if (!isDirty) return;
+    const timer = setTimeout(() => {
+      saveSketchProject(project);
+      dispatch({ type: 'MARK_SAVED' });
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isDirty, project, dispatch]);
+
+  // If active sheet was deleted, revert to model mode
+  useEffect(() => {
+    if (workspaceMode === 'sheet' && activeSheetId) {
+      const sheetExists = (project.sheets || []).some((s) => s.id === activeSheetId);
+      if (!sheetExists) {
+        editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+        editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: null });
+      }
+    }
+  }, [workspaceMode, activeSheetId, project.sheets, editorDispatch]);
+
+  const isSheetMode = workspaceMode === 'sheet';
+
+  return (
+    <div className={styles.layout}>
+      <div className={styles.toolbar}>
+        <SketchToolbar />
+      </div>
+      <div className={styles.sidebar}>
+        <SketchSidebar />
+      </div>
+      <div className={styles.canvas}>
+        {isSheetMode ? (
+          <Suspense fallback={<div className={styles.previewFallback}>Loading sheet...</div>}>
+            <SketchSheetCanvas />
+          </Suspense>
+        ) : (
+          <div className={`${styles.modelWorkspace} ${maximizedPanel ? styles.workspaceMaximized : ''}`}>
+            {maximizedPanel !== 'preview' && (
+              <div className={styles.primaryCanvas}>
+                <SketchCanvas />
+              </div>
+            )}
+            {maximizedPanel !== 'canvas' && (
+              <div className={styles.preview}>
+                <Suspense fallback={<div className={styles.previewFallback}>Loading 3D preview...</div>}>
+                  <SketchPreviewPanel
+                    isMaximized={maximizedPanel === 'preview'}
+                    onToggleMaximize={() => editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'preview' })}
+                  />
+                </Suspense>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      <div className={styles.rightPanel}>
+        <SketchPropertiesPanel />
+      </div>
+    </div>
+  );
+}
+
+export default function SketchWorkspace({ initialProject }) {
+  return (
+    <div className="editorRoot">
+      <SketchProvider initialProject={initialProject}>
+        <SketchEditorProvider>
+          <SketchInner />
+        </SketchEditorProvider>
+      </SketchProvider>
+    </div>
+  );
+}

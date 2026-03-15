@@ -1,0 +1,342 @@
+import { useCallback, useEffect } from 'react';
+import { useEditor } from '@/app/EditorProvider';
+import { useProject } from '@/app/ProjectProvider';
+import { TOOLS } from '@/editor/tools';
+import { detectRooms } from '@/geometry/roomDetection';
+import { createRoom } from '@/domain/models';
+import { isTypingTarget } from '@/utils/keyboard';
+import styles from './Toolbar.module.css';
+
+function UndoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className={styles.icon}>
+      <path
+        d="M6 4 2.5 7.5 6 11"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3 7.5h5.5A4.5 4.5 0 0 1 13 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className={styles.icon}>
+      <path
+        d="m10 4 3.5 3.5L10 11"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13 7.5H7.5A4.5 4.5 0 0 0 3 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SidebarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className={styles.icon}>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M6 3v10" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+function PropertiesIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className={styles.icon}>
+      <rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M10 3v10" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
+export default function Toolbar({
+  onNew,
+  onSave,
+  onLoad,
+  isSidebarCollapsed,
+  isPropertiesCollapsed,
+  onToggleSidebar,
+  onToggleProperties,
+}) {
+  const { activeTool, showGrid, snapEnabled, activeFloorId, viewMode, dispatch: editorDispatch } = useEditor();
+  const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
+  const isPlanView = viewMode === 'plan';
+
+  const setTool = (tool) => editorDispatch({ type: 'SET_TOOL', tool });
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    dispatch({ type: 'UNDO' });
+    editorDispatch({ type: 'DESELECT' });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Undid last change.' });
+  }, [canUndo, dispatch, editorDispatch]);
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    dispatch({ type: 'REDO' });
+    editorDispatch({ type: 'DESELECT' });
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Redid last change.' });
+  }, [canRedo, dispatch, editorDispatch]);
+
+  const handleDetectRooms = () => {
+    const floor = project.floors.find(f => f.id === activeFloorId);
+    if (!floor || floor.walls.length < 3) {
+      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Draw at least 3 walls first.' });
+      return;
+    }
+
+    const detected = detectRooms(floor.walls, floor.columns || []);
+    const rooms = detected.map((d, i) => createRoom(`Room ${i + 1}`, d.points));
+    dispatch({ type: 'ROOMS_SET', floorId: activeFloorId, rooms });
+    editorDispatch({ type: 'DESELECT' });
+    editorDispatch({
+      type: 'SET_STATUS_MESSAGE',
+      message: rooms.length ? `Detected ${rooms.length} room${rooms.length === 1 ? '' : 's'}.` : 'No enclosed rooms detected.',
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (isTypingTarget(e.target)) return;
+
+      const key = e.key.toLowerCase();
+      const isRedo = (key === 'z' && e.shiftKey) || key === 'y';
+      const isUndo = key === 'z' && !e.shiftKey;
+      if (!isUndo && !isRedo) return;
+
+      e.preventDefault();
+      if (isRedo) {
+        handleRedo();
+        return;
+      }
+      handleUndo();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleRedo, handleUndo]);
+
+  return (
+    <div className={styles.toolbar}>
+      <div className={styles.group}>
+        <button className={styles.btn} onClick={onNew}>New</button>
+        <button
+          className={`${styles.btn} ${styles.iconBtn}`}
+          onClick={handleUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl/Cmd+Z)"
+          aria-label="Undo"
+        >
+          <UndoIcon />
+        </button>
+        <button
+          className={`${styles.btn} ${styles.iconBtn}`}
+          onClick={handleRedo}
+          disabled={!canRedo}
+          title="Redo (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)"
+          aria-label="Redo"
+        >
+          <RedoIcon />
+        </button>
+        <button className={styles.btn} onClick={onSave}>
+          {isDirty && <span className={styles.dirtyIndicator} />}
+          Save
+        </button>
+        <button className={styles.btn} onClick={onLoad}>Load</button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.btn} ${viewMode === 'plan' ? styles.active : ''}`}
+          onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' })}
+          title="Plan View"
+        >
+          Plan
+        </button>
+        <button
+          className={`${styles.btn} ${viewMode === 'elevation_front' ? styles.active : ''}`}
+          onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'elevation_front' })}
+          title="Front Elevation"
+        >
+          Front
+        </button>
+        <button
+          className={`${styles.btn} ${viewMode === 'elevation_left' ? styles.active : ''}`}
+          onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'elevation_left' })}
+          title="Left Elevation"
+        >
+          Left
+        </button>
+        <button
+          className={`${styles.btn} ${viewMode === 'elevation_right' ? styles.active : ''}`}
+          onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'elevation_right' })}
+          title="Right Elevation"
+        >
+          Right
+        </button>
+        <button
+          className={`${styles.btn} ${viewMode === 'section_view' ? styles.active : ''}`}
+          onClick={() => editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'section_view' })}
+          title="Section View"
+        >
+          Section
+        </button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.SELECT ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.SELECT)}
+          title="Select (V)"
+          disabled={!isPlanView}
+        >
+          Select
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.DIMENSION ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.DIMENSION)}
+          title="Place Dimension (M)"
+          disabled={!isPlanView}
+        >
+          Dim
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.WALL ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.WALL)}
+          title="Draw Wall (W)"
+          disabled={!isPlanView}
+        >
+          Wall
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.BEAM ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.BEAM)}
+          title="Place Beam (B)"
+          disabled={!isPlanView}
+        >
+          Beam
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.STAIR ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.STAIR)}
+          title="Place Stair (T)"
+          disabled={!isPlanView}
+        >
+          Stair
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.SECTION ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.SECTION)}
+          title="Draw Section Cut (Q)"
+          disabled={!isPlanView}
+        >
+          Section
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.SLAB ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.SLAB)}
+          title="Draw Slab (S)"
+          disabled={!isPlanView}
+        >
+          Slab
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.ROOM ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.ROOM)}
+          title="Make Room Here (R)"
+          disabled={!isPlanView}
+        >
+          Room
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.DOOR ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.DOOR)}
+          title="Place Door (D)"
+          disabled={!isPlanView}
+        >
+          Door
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.WINDOW ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.WINDOW)}
+          title="Place Window (N)"
+          disabled={!isPlanView}
+        >
+          Window
+        </button>
+        <button
+          className={`${styles.btn} ${activeTool === TOOLS.COLUMN ? styles.active : ''}`}
+          onClick={() => setTool(TOOLS.COLUMN)}
+          title="Place Column (C)"
+          disabled={!isPlanView}
+        >
+          Column
+        </button>
+      </div>
+
+      <div className={styles.group}>
+        <button
+          className={`${styles.toggleBtn} ${!isSidebarCollapsed ? styles.toggleActive : ''} ${styles.iconBtn}`}
+          onClick={onToggleSidebar}
+          title={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+          aria-label={isSidebarCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
+        >
+          <SidebarIcon />
+        </button>
+        <button
+          className={`${styles.toggleBtn} ${!isPropertiesCollapsed ? styles.toggleActive : ''} ${styles.iconBtn}`}
+          onClick={onToggleProperties}
+          title={isPropertiesCollapsed ? 'Show Properties Panel' : 'Hide Properties Panel'}
+          aria-label={isPropertiesCollapsed ? 'Show Properties Panel' : 'Hide Properties Panel'}
+        >
+          <PropertiesIcon />
+        </button>
+        <button
+          className={`${styles.toggleBtn} ${showGrid ? styles.toggleActive : ''}`}
+          onClick={() => editorDispatch({ type: 'TOGGLE_GRID' })}
+          title="Toggle Grid"
+        >
+          Grid
+        </button>
+        <button
+          className={`${styles.toggleBtn} ${snapEnabled ? styles.toggleActive : ''}`}
+          onClick={() => editorDispatch({ type: 'TOGGLE_SNAP' })}
+          title="Toggle Snap"
+        >
+          Snap
+        </button>
+        <button
+          className={styles.btn}
+          onClick={handleDetectRooms}
+          title="Auto-detect Rooms"
+          disabled={!isPlanView}
+        >
+          Auto-detect Rooms
+        </button>
+      </div>
+
+      <div className={styles.spacer} />
+    </div>
+  );
+}

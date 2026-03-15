@@ -1,0 +1,53 @@
+import supabase from "../services/supabase.js";
+import { asyncHandler } from "../utils/controllerHandler.js";
+import { isValidUuid } from "../utils/validation.js";
+
+export const getFollowsDataController = asyncHandler(async (req, res) => {
+    const { userId } = req.query;
+    const loggedInUserId = req.userId || null;
+
+    if (!userId || !isValidUuid(userId)) {
+        return res.status(400).json({ error: 'valid userId is required' });
+    }
+
+    const followersCountPromise = supabase
+        .from('follows')
+        .select('id', { count: 'exact', head: true })
+        .eq('following_id', userId);
+
+    const followingCountPromise = supabase
+        .from('follows')
+        .select('id', { count: 'exact', head: true })
+        .eq('follower_id', userId);
+
+    const promises = [followersCountPromise, followingCountPromise];
+
+    if (loggedInUserId && isValidUuid(loggedInUserId)) {
+        promises.push(
+            supabase
+                .from('follows')
+                .select('id', { count: 'exact', head: true })
+                .eq('follower_id', loggedInUserId)
+                .eq('following_id', userId)
+        );
+    }
+
+    const results = await Promise.all(promises);
+
+    const { count: followersCount, error: errorFollowers } = results[0];
+    const { count: followingsCount, error: errorFollowings } = results[1];
+    const isFollowingResult = results[2];
+    const errorIsfollowing = isFollowingResult?.error;
+    const isFollowingCount = isFollowingResult?.count ?? 0;
+
+    if (errorFollowers || errorFollowings || errorIsfollowing) {
+        console.error('supabase error while fetching data:', errorFollowers?.message, errorFollowings?.message, errorIsfollowing?.message);
+        return res.status(500).json({ error: 'failed to fetch data' });
+    }
+
+    return res.status(200).json({
+        followersCount,
+        followingsCount,
+        isFollowing: isFollowingCount > 0
+    });
+});

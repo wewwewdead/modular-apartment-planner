@@ -1,0 +1,219 @@
+import { useSketch } from '../app/SketchProvider';
+import { useSketchEditor } from '../app/SketchEditorProvider';
+import { MATERIAL_OPTIONS, LEG_PROFILE_OPTIONS, FRAME_AXIS_OPTIONS } from '../domain/partDefaults';
+import styles from './SketchPropertiesPanel.module.css';
+
+function NumberInput({ label, value, onChange, suffix = 'mm', step = 1 }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <div className={styles.fieldInput}>
+        <input
+          type="number"
+          value={Math.round(value)}
+          step={step}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) onChange(v);
+          }}
+          className={styles.numberInput}
+        />
+        {suffix && <span className={styles.suffix}>{suffix}</span>}
+      </div>
+    </label>
+  );
+}
+
+function SelectInput({ label, value, options, onChange }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={styles.selectInput}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextInput({ label, value, onChange }) {
+  return (
+    <label className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={styles.textInput}
+      />
+    </label>
+  );
+}
+
+function PositionSection({ position, onUpdate }) {
+  return (
+    <div className={styles.fieldGroup}>
+      <span className={styles.groupTitle}>Position</span>
+      <div className={styles.fieldRow}>
+        <NumberInput label="X" value={position.x} onChange={(v) => onUpdate({ x: v })} />
+        <NumberInput label="Y" value={position.y} onChange={(v) => onUpdate({ y: v })} />
+        <NumberInput label="Z" value={position.z} onChange={(v) => onUpdate({ z: v })} />
+      </div>
+    </div>
+  );
+}
+
+function PanelFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+      <NumberInput label="Thickness" value={part.thickness} onChange={(v) => onUpdate({ thickness: v })} />
+      <SelectInput label="Material" value={part.material} options={MATERIAL_OPTIONS} onChange={(v) => onUpdate({ material: v })} />
+    </>
+  );
+}
+
+function LegFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+      <NumberInput label="Height" value={part.height} onChange={(v) => onUpdate({ height: v })} />
+      <SelectInput label="Profile" value={part.profile} options={LEG_PROFILE_OPTIONS} onChange={(v) => onUpdate({ profile: v })} />
+    </>
+  );
+}
+
+function FrameFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Height" value={part.height} onChange={(v) => onUpdate({ height: v })} />
+      <NumberInput label="Length" value={part.length} onChange={(v) => onUpdate({ length: v })} />
+      <SelectInput label="Axis" value={part.axis} options={FRAME_AXIS_OPTIONS} onChange={(v) => onUpdate({ axis: v })} />
+    </>
+  );
+}
+
+function CutoutFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Width" value={part.width} onChange={(v) => onUpdate({ width: v })} />
+      <NumberInput label="Height" value={part.height} onChange={(v) => onUpdate({ height: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+    </>
+  );
+}
+
+function HoleFields({ part, onUpdate }) {
+  return (
+    <>
+      <NumberInput label="Diameter" value={part.diameter} onChange={(v) => onUpdate({ diameter: v })} />
+      <NumberInput label="Depth" value={part.depth} onChange={(v) => onUpdate({ depth: v })} />
+    </>
+  );
+}
+
+const dimensionFields = {
+  panel: PanelFields,
+  leg: LegFields,
+  frame: FrameFields,
+  cutout: CutoutFields,
+  hole: HoleFields,
+};
+
+export default function SketchPropertiesPanel() {
+  const { getPart, dispatch, project } = useSketch();
+  const { selectedId } = useSketchEditor();
+
+  const part = selectedId ? getPart(selectedId) : null;
+
+  if (!part || part.type === 'dimension') {
+    return (
+      <div className={styles.panel}>
+        <div className={styles.header}>Properties</div>
+        <div className={styles.empty}>Select a part to view its properties</div>
+      </div>
+    );
+  }
+
+  const handleUpdate = (changes) => {
+    dispatch({ type: 'PART_UPDATE', part: { id: part.id, ...changes } });
+  };
+
+  const handlePositionUpdate = (posChanges) => {
+    dispatch({ type: 'PART_UPDATE', part: { id: part.id, position: { ...part.position, ...posChanges } } });
+  };
+
+  const DimensionFields = dimensionFields[part.type];
+
+  // Find assembly this part belongs to
+  const assembly = part.assemblyId
+    ? project.assemblies.find((a) => a.id === part.assemblyId)
+    : null;
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>Properties</div>
+
+      <div className={styles.content}>
+        {/* Name */}
+        <TextInput label="Name" value={part.name} onChange={(v) => handleUpdate({ name: v })} />
+
+        {/* Type badge */}
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Type</span>
+          <span className={styles.typeBadge}>{part.type}</span>
+        </div>
+
+        {/* Position */}
+        <PositionSection position={part.position} onUpdate={handlePositionUpdate} />
+
+        {/* Type-specific dimensions */}
+        {DimensionFields && (
+          <div className={styles.fieldGroup}>
+            <span className={styles.groupTitle}>Dimensions</span>
+            <DimensionFields part={part} onUpdate={handleUpdate} />
+          </div>
+        )}
+
+        {/* Style */}
+        <div className={styles.fieldGroup}>
+          <span className={styles.groupTitle}>Style</span>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Fill</span>
+            <input
+              type="color"
+              value={part.fill === 'none' ? '#ffffff' : part.fill}
+              onChange={(e) => handleUpdate({ fill: e.target.value })}
+              className={styles.colorInput}
+            />
+          </label>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Stroke</span>
+            <input
+              type="color"
+              value={part.stroke || '#1E2433'}
+              onChange={(e) => handleUpdate({ stroke: e.target.value })}
+              className={styles.colorInput}
+            />
+          </label>
+        </div>
+
+        {/* Assembly */}
+        <div className={styles.fieldGroup}>
+          <span className={styles.groupTitle}>Assembly</span>
+          <div className={styles.field}>
+            <span className={styles.fieldLabel}>{assembly ? assembly.name : 'None'}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

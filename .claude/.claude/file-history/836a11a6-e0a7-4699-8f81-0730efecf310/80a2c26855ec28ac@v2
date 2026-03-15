@@ -1,0 +1,283 @@
+import { useState } from 'react';
+import { useProject } from '@/app/ProjectProvider';
+import { useEditor } from '@/app/EditorProvider';
+import { getBeamDisplayLabel } from '@/domain/beamLabels';
+import { getColumnListLabel } from '@/domain/columnLabels';
+import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
+import { getSlabDisplayLabel } from '@/domain/slabLabels';
+import { getStairDisplayLabel } from '@/domain/stairLabels';
+import { getAnnotationDisplayLabel } from '@/annotations/format';
+import styles from './Sidebar.module.css';
+
+function Section({ title, count, collapsed, onToggle, collapsible = true, children }) {
+  return (
+    <div className={styles.section}>
+      <button
+        type="button"
+        className={`${styles.sectionHeader} ${collapsible ? styles.sectionHeaderClickable : ''}`}
+        onClick={collapsible ? onToggle : undefined}
+        aria-expanded={!collapsed}
+      >
+        <span className={`${styles.chevron} ${collapsed ? styles.chevronCollapsed : ''}`}>
+          {collapsible ? '▾' : ''}
+        </span>
+        <span className={styles.sectionTitle}>{title}</span>
+        {count !== undefined && <span className={styles.count}>{count}</span>}
+      </button>
+      {!collapsed && children}
+    </div>
+  );
+}
+
+export default function Sidebar() {
+  const { project, dispatch } = useProject();
+  const { activeFloorId, activeSheetId, selectedId, workspaceMode, dispatch: editorDispatch } = useEditor();
+  const floor = project.floors.find(f => f.id === activeFloorId);
+  const [collapsedSections, setCollapsedSections] = useState({
+    floors: false,
+    sheets: false,
+    slabs: false,
+    walls: false,
+    annotations: false,
+    beams: false,
+    stairs: false,
+    doors: false,
+    windows: false,
+    columns: false,
+    rooms: false,
+  });
+
+  const selectObject = (id, type) => {
+    editorDispatch({ type: 'SELECT_OBJECT', id, objectType: type });
+  };
+
+  const addSheet = () => {
+    const nextIndex = (project.sheets || []).length + 1;
+    const sheet = createSheet(`Sheet ${nextIndex}`, {
+      drawingName: `Drawing ${nextIndex}`,
+    });
+    dispatch({ type: 'SHEET_ADD', sheet });
+    editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: sheet.id });
+    editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' });
+    editorDispatch({ type: 'SELECT_OBJECT', id: sheet.id, objectType: 'sheet' });
+  };
+
+  const toggleSection = (sectionKey) => {
+    setCollapsedSections(current => ({
+      ...current,
+      [sectionKey]: !current[sectionKey],
+    }));
+  };
+
+  return (
+    <div className={styles.sidebar}>
+      <Section title="Project" collapsible={false}>
+        <input
+          className={styles.projectName}
+          value={project.name}
+          onChange={(e) => dispatch({ type: 'PROJECT_SET_NAME', name: e.target.value })}
+        />
+      </Section>
+
+      <Section
+        title="Floors"
+        collapsed={collapsedSections.floors}
+        onToggle={() => toggleSection('floors')}
+      >
+        {project.floors.map(f => (
+          <div
+            key={f.id}
+            className={`${styles.item} ${f.id === activeFloorId ? styles.itemSelected : ''}`}
+            onClick={() => {
+              editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: f.id });
+              editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'model' });
+            }}
+          >
+            {f.name}
+          </div>
+        ))}
+      </Section>
+
+      <Section
+        title="Sheets"
+        count={(project.sheets || []).length}
+        collapsed={collapsedSections.sheets}
+        onToggle={() => toggleSection('sheets')}
+      >
+        <button type="button" className={styles.item} onClick={addSheet}>
+          + Add Sheet
+        </button>
+        {(project.sheets || []).map((sheet, index) => (
+          <div
+            key={sheet.id}
+            className={`${styles.item} ${workspaceMode === 'sheet' && activeSheetId === sheet.id ? styles.itemSelected : ''}`}
+            onClick={() => {
+              editorDispatch({ type: 'SET_ACTIVE_SHEET', sheetId: sheet.id });
+              editorDispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode: 'sheet' });
+              editorDispatch({ type: 'SELECT_OBJECT', id: sheet.id, objectType: 'sheet' });
+            }}
+          >
+            {getSheetDisplayLabel(sheet, index)}
+          </div>
+        ))}
+      </Section>
+
+      {floor && (
+        <>
+          <Section
+            title="Slabs"
+            count={(floor.slabs || []).length}
+            collapsed={collapsedSections.slabs}
+            onToggle={() => toggleSection('slabs')}
+          >
+            {(floor.slabs || []).map(slab => (
+              <div
+                key={slab.id}
+                className={`${styles.item} ${selectedId === slab.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(slab.id, 'slab')}
+              >
+                {getSlabDisplayLabel(slab)}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Walls"
+            count={floor.walls.length}
+            collapsed={collapsedSections.walls}
+            onToggle={() => toggleSection('walls')}
+          >
+            {floor.walls.map(w => (
+              <div
+                key={w.id}
+                className={`${styles.item} ${selectedId === w.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(w.id, 'wall')}
+              >
+                Wall {w.id.split('_').pop()}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Annotations"
+            count={(floor.annotations || []).length}
+            collapsed={collapsedSections.annotations}
+            onToggle={() => toggleSection('annotations')}
+          >
+            {(floor.annotations || []).map((annotation) => (
+              <div
+                key={annotation.id}
+                className={`${styles.item} ${selectedId === annotation.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(annotation.id, 'annotation')}
+              >
+                {getAnnotationDisplayLabel(annotation)}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Beams"
+            count={(floor.beams || []).length}
+            collapsed={collapsedSections.beams}
+            onToggle={() => toggleSection('beams')}
+          >
+            {(floor.beams || []).map(beam => (
+              <div
+                key={beam.id}
+                className={`${styles.item} ${selectedId === beam.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(beam.id, 'beam')}
+              >
+                {getBeamDisplayLabel(beam, floor.columns || [])}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Stairs"
+            count={(floor.stairs || []).length}
+            collapsed={collapsedSections.stairs}
+            onToggle={() => toggleSection('stairs')}
+          >
+            {(floor.stairs || []).map(stair => (
+              <div
+                key={stair.id}
+                className={`${styles.item} ${selectedId === stair.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(stair.id, 'stair')}
+              >
+                {getStairDisplayLabel(stair)}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Doors"
+            count={floor.doors.length}
+            collapsed={collapsedSections.doors}
+            onToggle={() => toggleSection('doors')}
+          >
+            {floor.doors.map(d => (
+              <div
+                key={d.id}
+                className={`${styles.item} ${selectedId === d.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(d.id, 'door')}
+              >
+                Door {d.id.split('_').pop()}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Windows"
+            count={floor.windows.length}
+            collapsed={collapsedSections.windows}
+            onToggle={() => toggleSection('windows')}
+          >
+            {floor.windows.map(w => (
+              <div
+                key={w.id}
+                className={`${styles.item} ${selectedId === w.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(w.id, 'window')}
+              >
+                Window {w.id.split('_').pop()}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Columns"
+            count={(floor.columns || []).length}
+            collapsed={collapsedSections.columns}
+            onToggle={() => toggleSection('columns')}
+          >
+            {(floor.columns || []).map(column => (
+              <div
+                key={column.id}
+                className={`${styles.item} ${selectedId === column.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(column.id, 'column')}
+              >
+                {getColumnListLabel(column, floor.columns || [])}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Rooms"
+            count={floor.rooms.length}
+            collapsed={collapsedSections.rooms}
+            onToggle={() => toggleSection('rooms')}
+          >
+            {floor.rooms.map(r => (
+              <div
+                key={r.id}
+                className={`${styles.item} ${selectedId === r.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(r.id, 'room')}
+              >
+                {r.name}
+              </div>
+            ))}
+          </Section>
+        </>
+      )}
+    </div>
+  );
+}

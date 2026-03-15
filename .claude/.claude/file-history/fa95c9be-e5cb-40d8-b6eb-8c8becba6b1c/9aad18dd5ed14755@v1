@@ -1,0 +1,113 @@
+.draft-list-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+}
+
+.draft-list-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1.25rem;
+    font-family: var(--font-serif);
+}
+
+.draft-list-loading {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 2rem 0;
+    text-align: center;
+}
+
+/* ── Empty state ── */
+.draft-list-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    text-align: center;
+    gap: 0.5rem;
+}
+.draft-list-empty svg {
+    color: var(--text-muted);
+    opacity: 0.4;
+    margin-bottom: 0.5rem;
+}
+.draft-list-empty p {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin: 0;
+}
+.draft-list-empty span {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+/* ── Draft items ── */
+.draft-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.draft-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    gap: 1rem;
+}
+.draft-list-item:hover {
+    background-color: var(--bg-secondary, rgba(0, 0, 0, 0.03));
+}
+
+.draft-list-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.draft-list-item-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.draft-list-item-date {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.draft-list-item-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background-color 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+}
+.draft-list-item-delete:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+.draft-list-item-delete:hover svg {
+    stroke: #ef4444;
+}

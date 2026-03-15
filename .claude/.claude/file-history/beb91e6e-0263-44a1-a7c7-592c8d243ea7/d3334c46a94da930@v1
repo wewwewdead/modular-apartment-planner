@@ -1,0 +1,173 @@
+# Repost with Caption (Quote Repost) Feature
+
+## Context
+Add the ability for users to repost someone else's post with their own plain text caption/opinion. This is similar to Twitter/X's "Quote Retweet." The original author receives a notification when their post is reposted. Reposts appear in the feed with the user's caption + an embedded preview of the original post.
+
+---
+
+## 1. Database Schema Changes (Supabase SQL Editor)
+
+Add three columns to `journals` table + a unique index:
+
+```sql
+ALTER TABLE journals ADD COLUMN is_repost BOOLEAN DEFAULT FALSE;
+ALTER TABLE journals ADD COLUMN repost_source_journal_id UUID REFERENCES journals(id) ON DELETE SET NULL;
+ALTER TABLE journals ADD COLUMN repost_caption TEXT;
+
+CREATE UNIQUE INDEX idx_unique_user_repost
+  ON journals (user_id, repost_source_journal_id)
+  WHERE is_repost = TRUE;
+```
+
+- `ON DELETE SET NULL` — if original is deleted, repost survives with a "post unavailable" placeholder
+- Partial unique index prevents a user from reposting the same post twice
+
+---
+
+## 2. Backend
+
+### 2a. Repost Service — `server/services/interactService.js`
+
+Add `repostService(sourceJournalId, caption, userId)`:
+- Validate inputs (caption max 280 chars)
+- Fetch source journal — must exist and be `privacy: 'public'`
+- Block self-repost (`sourceJournal.user_id === userId`)
+- If reposting a repost, follow chain to the ultimate original via `repost_source_journal_id`
+- Check for duplicate repost (same user + same source)
+- Insert into `journals` with: `is_repost: true`, `repost_source_journal_id`, `repost_caption`, `post_type: 'text'`, `content: null`, auto-generated title (`"Repost: {original title}"`)
+- Skip embedding generation and universe coordinates (lightweight entry)
+- Insert notification: `{sender_id, receiver_id: originalAuthor, journal_id: originalPostId, type: 'repost', read: false}` (skip if self)
+
+### 2b. Controller — `server/controller/interactController.js`
+
+Add `repostController`:
+- Extract `sourceJournalId`, `caption` from `req.body` + `userId` from `req.userId`
+- Call `repostService()`, return result or error
+
+### 2c. Route — `server/routes/routes.js`
+
+Add after line 156: `router.post('/repost', requireAuth, repostController);`
+Update import on line 12 to include `repostController`.
+
+### 2d. Modify Feed Queries — `server/services/getService.js`
+
+Update the `.select()` in these functions to include the self-referential join for repost source data:
+
+```
+repost_source:journals!repost_source_journal_id(
+  id, title, content, post_type, canvas_doc, created_at,
+  users(id, name, image_url, badge)
+)
+```
+
+Functions to update:
+- `getJournalsService()` (~line 612) — main feed
+- `getJournalByIdService()` (~line 841) — single post view
+- `getUserJournalsService()` — user's own profile
+- `getVisitedUserJournalsService()` — visited profile
+
+This returns `repost_source: null` for non-repost journals so no impact on existing cards.
+
+---
+
+## 3. Frontend
+
+### 3a. API Client — `client/API/Api.js`
+
+Add `createRepost(token, {sourceJournalId, caption})`:
+- `POST /repost` with JSON body + Bearer token
+- Returns `{message, repostId, sourceJournalId}`
+
+### 3b. React Query Mutation — `client/src/utils/useMutation.js`
+
+Add `useRepostMutation(session)`:
+- `mutationFn` calls `createRepost()`
+- `onSuccess` invalidates `['journals']`, `['userJournals']` caches
+- No optimistic update needed (one-time action, not a toggle)
+
+### 3c. Repost Modal — NEW `client/src/components/RepostModal/RepostModal.jsx` + CSS
+
+Simple modal with:
+- Original post preview (author name + title)
+- `<textarea>` for caption (max 280 chars, character counter)
+- "Repost" submit button + "Cancel" button
+- Loading state + error display (e.g., "already reposted", "cannot repost own post")
+- Uses Framer Motion for enter/exit animation (matching existing modal patterns)
+- Glass morphism overlay styling with CSS variables
+
+### 3d. Repost Button — Feed Cards — `client/src/components/HomePage/postCards/PostCards.jsx`
+
+- Add repost icon to `cardIcons` array (between bookmark and view count)
+- Use a "repeat/retweet" SVG icon
+- Hide for user's own posts: `journal.users.id !== userId`
+- On click: require auth, then `setRepostModalJournal(journal)` to open the modal
+- Render `<RepostModal>` at bottom of component
+
+### 3e. Repost Button — Content View — `client/src/components/HomePage/ContentViewer/ContentView.jsx`
+
+- Add a repost button in the `.cv-actions` bar (after bookmark, before the end)
+- Same auth check + hide for own posts
+- Opens `<RepostModal>` with post data
+- Add toast message on success: "Post was reposted"
+
+### 3f. Repost Card Rendering — `PostCards.jsx`
+
+When `journal.is_repost === true`, render a different card layout:
+
+1. **Repost header**: "[User] reposted" with repost icon (above the card content)
+2. **Caption**: The user's plain text opinion
+3. **Embedded original post card**: A bordered preview showing the original post's author, title, and text snippet — clickable to navigate to the original post
+4. **Deleted source fallback**: If `repost_source` is null, show "This post is no longer available"
+5. The repost card still has its own like/comment/bookmark actions (it's a journal entry itself)
+
+### 3g. Notifications
+
+**`client/helpers/formatNoficationType.js`** — Add:
+```js
+repost: 'Reposted your post'
+```
+
+**`client/src/components/Notifications/notificationsCards.jsx`** — Add to `iconArray`:
+```js
+{ type: 'repost', icon: /* repost SVG in accent color */ }
+```
+
+No other notification logic changes needed — existing `handleReadNotif` navigates to `notification.journal_id` which points to the original post.
+
+---
+
+## 4. Files to Modify
+
+| File | Change |
+|------|--------|
+| `server/services/interactService.js` | Add `repostService()` |
+| `server/controller/interactController.js` | Add `repostController()` |
+| `server/routes/routes.js` | Add `POST /repost` route + import |
+| `server/services/getService.js` | Update 4 select queries with repost_source join |
+| `client/API/Api.js` | Add `createRepost()` |
+| `client/src/utils/useMutation.js` | Add `useRepostMutation()` |
+| `client/src/components/RepostModal/RepostModal.jsx` | **NEW** — modal component |
+| `client/src/components/RepostModal/repostmodal.css` | **NEW** — modal styles |
+| `client/src/components/HomePage/postCards/PostCards.jsx` | Add repost button + repost card rendering |
+| `client/src/components/HomePage/postCards/postcards.css` | Add repost card styles |
+| `client/src/components/HomePage/ContentViewer/ContentView.jsx` | Add repost button |
+| `client/src/components/HomePage/ContentViewer/contentviewer.css` | Minor action button styles |
+| `client/helpers/formatNoficationType.js` | Add `repost` type string |
+| `client/src/components/Notifications/notificationsCards.jsx` | Add repost icon to `iconArray` |
+
+## 5. Edge Cases
+
+- **Self-repost**: Blocked — backend rejects, frontend hides button
+- **Duplicate repost**: Blocked by unique index + backend check (409 error)
+- **Repost of a repost**: Follows chain to ultimate original source
+- **Deleted original**: FK SET NULL → frontend shows "post unavailable" placeholder
+- **Private original**: Backend rejects repost of private posts
+
+## 6. Verification
+
+1. Run `ALTER TABLE` SQL in Supabase SQL editor
+2. Start server (`npm run dev` or similar), test `POST /repost` endpoint with Postman/curl
+3. Verify feed query returns `repost_source` data for reposts and `null` for normal posts
+4. Test in browser: click repost button → modal opens → write caption → submit → see repost in feed
+5. Verify notification appears for original author
+6. Test edge cases: self-repost blocked, duplicate blocked, deleted original shows placeholder

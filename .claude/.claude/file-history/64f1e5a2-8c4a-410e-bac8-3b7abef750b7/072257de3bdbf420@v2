@@ -1,0 +1,75 @@
+import React from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts} from '../../theme/typography';
+import {spacing} from '../../theme/spacing';
+
+export type ProfileTab = 'writings' | 'stories';
+
+interface ProfileTabBarProps {
+  activeTab: ProfileTab;
+  onTabChange: (tab: ProfileTab) => void;
+}
+
+const TABS: {key: ProfileTab; label: string}[] = [
+  {key: 'writings', label: 'Writings'},
+  {key: 'stories', label: 'Stories'},
+];
+
+export function ProfileTabBar({activeTab, onTabChange}: ProfileTabBarProps) {
+  const {colors} = useTheme();
+
+  return (
+    <View style={[styles.container, {borderBottomColor: colors.borderCard}]}>
+      {TABS.map(tab => {
+        const active = activeTab === tab.key;
+        return (
+          <Pressable
+            key={tab.key}
+            style={styles.tab}
+            onPress={() => onTabChange(tab.key)}>
+            <Text
+              style={[
+                styles.tabText,
+                {
+                  color: active ? colors.textHeading : colors.textMuted,
+                  fontFamily: active ? fonts.ui.semiBold : fonts.ui.regular,
+                },
+              ]}>
+              {tab.label}
+            </Text>
+            {active ? (
+              <View style={[styles.indicator, {backgroundColor: colors.accentAmber}]} />
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: spacing.xl,
+    marginHorizontal: spacing.lg,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    position: 'relative',
+  },
+  tabText: {
+    fontSize: 15,
+  },
+  indicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '20%',
+    right: '20%',
+    height: 2.5,
+    borderRadius: 2,
+  },
+});

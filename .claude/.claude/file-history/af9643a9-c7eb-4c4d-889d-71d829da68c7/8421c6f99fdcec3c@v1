@@ -1,0 +1,55 @@
+# Fix: "Start Drawing" button doesn't dismiss SketchEmptyState
+
+## Context
+
+The SketchEmptyState overlay shows when the project has no shapes and no objects. Clicking "Start Drawing" only switches the tool to `rectangle` — it doesn't add any shapes or objects, so the `showEmptyState` condition (`!hasShapes && !hasObjects`) remains true and the card stays visible.
+
+## Root Cause
+
+In `SketchCanvas.jsx` (line ~210):
+```js
+const showEmptyState = !hasShapes && !hasObjects;
+```
+
+In `SketchEmptyState.jsx` (line ~11):
+```js
+const handleStartDrawing = () => {
+  editorDispatch({ type: 'SET_TOOL', tool: 'rectangle' });
+};
+```
+
+The tool switch doesn't change any data that the visibility check looks at.
+
+## Fix
+
+Add `emptyStateDismissed: false` to SketchEditorProvider state, with a `DISMISS_EMPTY_STATE` action. Dispatch it from "Start Drawing" click. Include it in the `showEmptyState` check in SketchCanvas.
+
+### Files to modify
+
+| File | Change |
+|------|--------|
+| `src/modules/sketch/app/SketchEditorProvider.jsx` | Add `emptyStateDismissed: false` to initial state, add `DISMISS_EMPTY_STATE` case |
+| `src/modules/sketch/ui/SketchEmptyState.jsx` | Dispatch `DISMISS_EMPTY_STATE` in `handleStartDrawing` |
+| `src/modules/sketch/renderers/SketchCanvas.jsx` | Include `emptyStateDismissed` in the `showEmptyState` condition |
+
+### Step 1: `SketchEditorProvider.jsx`
+- Add `emptyStateDismissed: false` to `createInitialSketchEditorState`
+- Add reducer case:
+  ```js
+  case 'DISMISS_EMPTY_STATE':
+    return { ...state, emptyStateDismissed: true };
+  ```
+
+### Step 2: `SketchEmptyState.jsx`
+- In `handleStartDrawing`, also dispatch `{ type: 'DISMISS_EMPTY_STATE' }` before switching the tool
+
+### Step 3: `SketchCanvas.jsx`
+- Read `emptyStateDismissed` from `useSketchEditor()`
+- Change condition to: `const showEmptyState = !hasShapes && !hasObjects && !emptyStateDismissed;`
+
+## Verification
+
+1. Navigate to `/sketch` — empty-state overlay appears
+2. Click "Start Drawing" — overlay disappears, rectangle tool is active
+3. Click "Try Demo Object" — still works (overlay disappears because shapes are added)
+4. `npm run build` passes

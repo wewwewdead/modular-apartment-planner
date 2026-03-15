@@ -1,0 +1,25 @@
+When a user clicks a "Galaxy" or a "Star," the camera should smoothly fly and zoom into that specific coordinate, centering the object on the screen.
+
+Technical Requirements:
+
+The Math: Calculate the target x and y so the object is perfectly centered.
+
+Formula: targetX = (stageWidth / 2) - (objectX * targetScale)
+
+Formula: targetY = (stageHeight / 2) - (objectY * targetScale)
+
+Konva Tween: Use Konva.Tween or a gsap animation to transition the Stage's x, y, and scaleX/scaleY properties.
+
+Duration: 1.5 to 2 seconds.
+
+Easing: Use Konva.Easings.EaseInOut to make the start and end of the flight feel "weighted" and cinematic.
+
+The "Zoom Out then In" Trick (Optional but 100x better):
+
+To make it feel like Google Maps, the camera should slightly zoom out first as it travels, then zoom in as it arrives at the destination. This creates a "parabolic" flight path.
+
+Disable Interactions during Flight:
+
+Set stage.draggable(false) during the animation and re-enable it once the onFinish callback triggers so the user doesn't interrupt the flight.
+
+Output: A function flyTo(targetX, targetY, targetScale) that can be triggered when a star is clicked

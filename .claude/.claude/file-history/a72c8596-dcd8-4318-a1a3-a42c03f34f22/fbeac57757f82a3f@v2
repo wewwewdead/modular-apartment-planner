@@ -1,0 +1,333 @@
+import React from 'react';
+import {Image, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii, shadows} from '../../theme/spacing';
+import {Avatar} from '../Avatar';
+import {BadgeCheckIcon, RepostIcon} from '../icons';
+import {ActionBar} from './ActionBar';
+
+interface PostCardProps {
+  title: string;
+  bodyPreview: string;
+  authorName: string;
+  authorAvatar?: string | null;
+  authorBadge?: 'legend' | 'og' | null;
+  bannerImage?: string | null;
+  postType?: string;
+  readingTime?: string;
+  likeCount: number;
+  commentCount: number;
+  bookmarkCount?: number;
+  isLiked?: boolean;
+  isBookmarked?: boolean;
+  userReaction?: string | null;
+  onPress?: () => void;
+  onLike?: () => void;
+  onComment?: () => void;
+  onBookmark?: () => void;
+  onRepost?: () => void;
+  onReact?: (type: string) => void;
+  onAuthorPress?: () => void;
+  isRepost?: boolean;
+  repostCaption?: string | null;
+  repostSourceTitle?: string | null;
+  repostSourcePreview?: string | null;
+  repostSourceAuthorName?: string | null;
+  repostSourceAuthorAvatar?: string | null;
+  onEmbeddedPress?: () => void;
+}
+
+export function PostCard({
+  title,
+  bodyPreview,
+  authorName,
+  authorAvatar,
+  authorBadge,
+  bannerImage,
+  postType,
+  readingTime,
+  likeCount,
+  commentCount,
+  bookmarkCount,
+  isLiked,
+  isBookmarked,
+  userReaction,
+  onPress,
+  onLike,
+  onComment,
+  onBookmark,
+  onRepost,
+  onReact,
+  onAuthorPress,
+  isRepost,
+  repostCaption,
+  repostSourceTitle,
+  repostSourcePreview,
+  repostSourceAuthorName,
+  repostSourceAuthorAvatar,
+  onEmbeddedPress,
+}: PostCardProps) {
+  const {colors} = useTheme();
+  const s = shadows(colors);
+
+  const hasSource = !!(repostSourceTitle || repostSourcePreview || repostSourceAuthorName);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({pressed}) => [
+        styles.card,
+        {
+          backgroundColor: colors.bgCard,
+          borderColor: colors.borderCard,
+        },
+        s.card,
+        pressed && styles.pressed,
+      ]}>
+      {isRepost ? (
+        <>
+          {/* Repost badge header */}
+          <View style={styles.repostBadge}>
+            <RepostIcon size={14} color={colors.textFaint} />
+            <Text style={[styles.repostBadgeText, {color: colors.textFaint}]}>
+              <Text style={[styles.repostBadgeName, {color: colors.textSecondary}]}>
+                {authorName}
+              </Text>
+              {' reposted'}
+            </Text>
+          </View>
+
+          <View style={styles.content}>
+            {/* Repost caption */}
+            {repostCaption ? (
+              <Text style={[styles.repostCaption, {color: colors.textBody}]}>
+                {repostCaption}
+              </Text>
+            ) : null}
+
+            {/* Embedded original post card */}
+            {hasSource ? (
+              <Pressable
+                onPress={onEmbeddedPress}
+                style={[
+                  styles.embeddedCard,
+                  {borderColor: colors.borderCard, backgroundColor: colors.bgPrimary},
+                ]}>
+                <View style={styles.embeddedAuthorRow}>
+                  <Avatar
+                    uri={repostSourceAuthorAvatar}
+                    name={repostSourceAuthorName ?? ''}
+                    size={20}
+                  />
+                  <Text
+                    style={[styles.embeddedAuthorName, {color: colors.textSecondary}]}
+                    numberOfLines={1}>
+                    {repostSourceAuthorName}
+                  </Text>
+                </View>
+                {repostSourceTitle ? (
+                  <Text
+                    style={[styles.embeddedTitle, {color: colors.textHeading}]}
+                    numberOfLines={2}>
+                    {repostSourceTitle}
+                  </Text>
+                ) : null}
+                {repostSourcePreview ? (
+                  <Text
+                    style={[styles.embeddedPreview, {color: colors.textBody}]}
+                    numberOfLines={3}>
+                    {repostSourcePreview}
+                  </Text>
+                ) : null}
+              </Pressable>
+            ) : (
+              <View
+                style={[
+                  styles.embeddedCard,
+                  {borderColor: colors.borderCard, backgroundColor: colors.bgPrimary},
+                ]}>
+                <Text style={[styles.repostUnavailable, {color: colors.textFaint}]}>
+                  This post is no longer available
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      ) : (
+        <>
+          {bannerImage ? (
+            <Image
+              source={{uri: bannerImage}}
+              style={styles.banner}
+              resizeMode="cover"
+            />
+          ) : null}
+
+          <View style={styles.content}>
+            {/* Author row */}
+            <View style={styles.authorRow}>
+              <Pressable
+                style={styles.authorTouchable}
+                onPress={onAuthorPress}
+                disabled={!onAuthorPress}>
+                <Avatar uri={authorAvatar} name={authorName} size={22} badge={authorBadge} />
+                <Text
+                  style={[styles.authorName, {color: colors.textSecondary}]}
+                  numberOfLines={1}>
+                  {authorName}
+                </Text>
+                {authorBadge ? <BadgeCheckIcon size={14} badge={authorBadge} /> : null}
+              </Pressable>
+              {postType && postType !== 'journal' ? (
+                <View style={[styles.typePill, {backgroundColor: colors.bgPill}]}>
+                  <Text style={[styles.typeText, {color: colors.accentSage}]}>
+                    {postType}
+                  </Text>
+                </View>
+              ) : null}
+              {readingTime ? (
+                <View style={[styles.typePill, {backgroundColor: colors.bgPill}]}>
+                  <Text style={[styles.typeText, {color: colors.accentSage}]}>
+                    {readingTime}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            {/* Title */}
+            <Text
+              style={[styles.title, {color: colors.textHeading}]}
+              numberOfLines={2}>
+              {title}
+            </Text>
+
+            {/* Body preview */}
+            {bodyPreview ? (
+              <Text
+                style={[styles.body, {color: colors.textBody}]}
+                numberOfLines={3}>
+                {bodyPreview}
+              </Text>
+            ) : null}
+          </View>
+        </>
+      )}
+
+      <ActionBar
+        likeCount={likeCount}
+        commentCount={commentCount}
+        bookmarkCount={bookmarkCount}
+        isLiked={isLiked}
+        isBookmarked={isBookmarked}
+        userReaction={userReaction}
+        onLike={onLike}
+        onComment={onComment}
+        onBookmark={onBookmark}
+        onRepost={onRepost}
+        onReact={onReact}
+      />
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  pressed: {
+    opacity: 0.95,
+    transform: [{scale: 0.995}],
+  },
+  banner: {
+    width: '100%',
+    height: 180,
+  },
+  content: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+  },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  authorTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexShrink: 1,
+  },
+  authorName: {
+    fontSize: 13,
+    fontFamily: fonts.ui.medium,
+    flexShrink: 1,
+  },
+  typePill: {
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  typeText: {
+    fontSize: 11,
+    fontFamily: fonts.ui.medium,
+  },
+  title: {
+    ...typeScale.cardTitle,
+  },
+  body: {
+    ...typeScale.bodySmall,
+    lineHeight: 20,
+  },
+  repostBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  repostBadgeText: {
+    fontSize: 12,
+    fontFamily: fonts.ui.regular,
+  },
+  repostBadgeName: {
+    fontFamily: fonts.ui.semiBold,
+  },
+  repostCaption: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  embeddedCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  embeddedAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  embeddedAuthorName: {
+    fontSize: 13,
+    fontFamily: fonts.ui.semiBold,
+  },
+  embeddedTitle: {
+    ...typeScale.cardTitle,
+    fontSize: 15,
+  },
+  embeddedPreview: {
+    ...typeScale.bodySmall,
+    lineHeight: 20,
+  },
+  repostUnavailable: {
+    fontFamily: fonts.ui.regular,
+    fontSize: 13,
+    fontStyle: 'italic',
+  },
+});

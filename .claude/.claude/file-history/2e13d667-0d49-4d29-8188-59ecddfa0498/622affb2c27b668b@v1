@@ -1,0 +1,20 @@
+# Fix Toast Centering — Use `position: absolute` Pattern
+
+## Context
+The toasts currently use `position: fixed` with hardcoded `left` values per breakpoint to center within the content column. The user wants to copy the simpler pattern used by `.bookmarked-content-message-container` (in `postcards.css`): `position: absolute` inside a `position: relative` parent. Since `.center-bar-holder-container` is already `position: relative`, using `left: 50%; transform: translateX(-50%)` on an absolute child automatically centers within the container at **every** breakpoint — no media queries needed.
+
+## File to change
+
+### `client/src/components/Streak/StreakMilestoneToast.css`
+
+Both `.streak-milestone-toast` and `.streak-freeze-toast`:
+- `position: fixed` → `position: absolute`
+- `left: calc(250px + 375px)` → `left: 50%` (centers within the container, not the viewport)
+- Keep `transform: translateX(-50%)`, `bottom: 24px`, `z-index: 9999`
+
+**Remove** the two media queries at the bottom (lines 90–104) — they're no longer needed since `left: 50%` works at all breakpoints.
+
+## Verification
+1. Publish a post → toast appears centered at bottom of the content column
+2. Resize to tablet/mobile → toast stays centered within the content area
+3. Click toast to dismiss

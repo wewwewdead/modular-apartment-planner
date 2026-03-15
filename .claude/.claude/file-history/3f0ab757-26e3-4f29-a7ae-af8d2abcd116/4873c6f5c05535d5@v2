@@ -1,0 +1,32 @@
+import { ViewStyle } from 'react-native';
+
+export const elevation = {
+  level0: {
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+  } as ViewStyle,
+  level1: {
+    elevation: 1,
+    shadowColor: '#211c16',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  } as ViewStyle,
+  level2: {
+    elevation: 3,
+    shadowColor: '#211c16',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+  } as ViewStyle,
+  level3: {
+    elevation: 6,
+    shadowColor: '#211c16',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+  } as ViewStyle,
+} as const;

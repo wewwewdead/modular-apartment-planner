@@ -1,0 +1,106 @@
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page(viewport={"width": 1280, "height": 720})
+
+    logs = []
+    page.on("console", lambda msg: logs.append(f"[{msg.type}] {msg.text}"))
+    page.on("pageerror", lambda err: logs.append(f"[PAGE ERROR] {err}"))
+
+    print("Navigating to home...")
+    page.goto("http://localhost:5173/#/home")
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(2000)
+
+    # Click Universe in sidebar
+    page.locator("text=Universe").first.click()
+    page.wait_for_timeout(5000)
+
+    print("On Universe page, trying to find a galaxy to click...")
+
+    # Try clicking around the canvas to find a galaxy
+    galaxy_positions = [
+        (690, 400, "center"),
+        (340, 430, "left"),
+        (1130, 76, "top-right"),
+        (1160, 700, "bottom-right"),
+        (640, 360, "dead center"),
+        (400, 300, "upper-left"),
+        (800, 500, "lower-right"),
+    ]
+
+    found_galaxy = False
+    for (cx, cy, name) in galaxy_positions:
+        print(f"  Clicking {name} at ({cx}, {cy})...")
+        page.mouse.click(cx, cy)
+        page.wait_for_timeout(2000)
+
+        explore_btn = page.locator("button:has-text('Explore Galaxy')")
+        if explore_btn.count() > 0 and explore_btn.first.is_visible():
+            print(f"  Found galaxy with Explore button!")
+            page.screenshot(path="test_screenshot_01_galaxy.png")
+            found_galaxy = True
+            break
+
+    if not found_galaxy:
+        page.screenshot(path="test_screenshot_fail.png")
+        print("Could not find a galaxy. Screenshot saved as test_screenshot_fail.png")
+        print("(The camera may have auto-flown to a different position)")
+        browser.close()
+        exit()
+
+    # === Test Rocket Mode ===
+    print("\n=== Entering Rocket Mode ===")
+    explore_btn.first.click()
+    page.wait_for_timeout(1200)
+    page.screenshot(path="test_screenshot_02_pilot.png")
+
+    exit_btn = page.locator("button:has-text('Exit Rocket')")
+    spd = page.locator("text=SPD")
+    controls = page.locator("text=Throttle")
+    print(f"  Exit Rocket button: {exit_btn.count() > 0 and exit_btn.first.is_visible()}")
+    print(f"  SPD label: {spd.count() > 0}")
+    print(f"  Controls hint: {controls.count() > 0}")
+
+    print("\n=== Testing W (thrust) ===")
+    page.keyboard.down("w")
+    page.wait_for_timeout(2000)
+    page.screenshot(path="test_screenshot_03_thrust.png")
+    page.keyboard.up("w")
+
+    print("=== Testing W+A (thrust + turn) ===")
+    page.keyboard.down("w")
+    page.keyboard.down("a")
+    page.wait_for_timeout(1500)
+    page.screenshot(path="test_screenshot_04_turn.png")
+    page.keyboard.up("a")
+    page.keyboard.up("w")
+
+    print("\n=== Testing ESC (exit) ===")
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(1000)
+    page.screenshot(path="test_screenshot_05_exit.png")
+
+    back_btn = page.locator("button:has-text('Back')")
+    exit_btn2 = page.locator("button:has-text('Exit Rocket')")
+    print(f"  Back button restored: {back_btn.count() > 0 and back_btn.first.is_visible()}")
+    print(f"  Rocket HUD gone: {not (exit_btn2.count() > 0 and exit_btn2.first.is_visible())}")
+
+    errors = [l for l in logs if "PAGE ERROR" in l]
+    if errors:
+        print(f"\n--- Page Errors ({len(errors)}) ---")
+        for e in errors:
+            print(e)
+    else:
+        print("\nNo page errors!")
+
+    print("\nScreenshots saved in project root:")
+    print("  test_screenshot_01_galaxy.png")
+    print("  test_screenshot_02_pilot.png")
+    print("  test_screenshot_03_thrust.png")
+    print("  test_screenshot_04_turn.png")
+    print("  test_screenshot_05_exit.png")
+
+    browser.close()
+    print("\nDone!")

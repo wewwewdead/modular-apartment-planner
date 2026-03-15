@@ -1,0 +1,437 @@
+import React, {useMemo, useState} from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {Screen} from '../../components/Screen';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {mobileApi} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {extractPlainTextFromLexical} from '../../lib/content/lexical';
+import {queryClient} from '../../lib/queryClient';
+import {colors} from '../../theme/colors';
+import type {RootStackParamList} from '../../navigation/types';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'PostDetail'>;
+
+const toCount = (value: unknown): number | null => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+};
+
+const resolveCount = (
+  aggregate: Array<{count?: number}> | undefined,
+  fallback?: number,
+): number => {
+  const aggregateCount = toCount(aggregate?.[0]?.count);
+  if (aggregateCount != null) {
+    return aggregateCount;
+  }
+  return toCount(fallback) ?? 0;
+};
+
+const formatTimestamp = (value: string | undefined): string => {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+};
+
+export function PostDetailScreen({route}: Props) {
+  const {user, session} = useAuth();
+  const {journalId} = route.params;
+  const token = session?.access_token ?? '';
+  const [commentInput, setCommentInput] = useState('');
+  const [repostCaption, setRepostCaption] = useState('');
+
+  const detailQuery = useQuery({
+    queryKey: ['journal', journalId, user?.id],
+    queryFn: () => mobileApi.getJournalById(journalId, user?.id),
+  });
+
+  const commentsQuery = useQuery({
+    queryKey: ['journal-comments', journalId],
+    queryFn: () => socialApi.getComments(journalId, null, 20),
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      const journal = detailQuery.data?.journal;
+      const receiverId = journal?.user_id ?? journal?.users?.id;
+      if (!token) {
+        throw new Error('Please log in to like this post.');
+      }
+      if (!journal?.id || !receiverId) {
+        throw new Error('Missing journal data.');
+      }
+
+      const metadata = session?.user.user_metadata as
+        | {name?: string; avatar_url?: string}
+        | undefined;
+
+      return socialApi.likeJournal(token, {
+        journalId: journal.id,
+        receiverId,
+        sendername: metadata?.name,
+        senderImageUrl: metadata?.avatar_url,
+        senderEmail: session?.user.email,
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['journal', journalId]}),
+        queryClient.invalidateQueries({queryKey: ['feed']}),
+      ]);
+    },
+    onError: error => {
+      Alert.alert(
+        'Like failed',
+        error instanceof Error ? error.message : 'Could not update like state.',
+      );
+    },
+  });
+
+  const bookmarkMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) {
+        throw new Error('Please log in to bookmark this post.');
+      }
+      return socialApi.toggleBookmark(token, {journalId});
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['journal', journalId]}),
+        queryClient.invalidateQueries({queryKey: ['feed']}),
+      ]);
+    },
+    onError: error => {
+      Alert.alert(
+        'Bookmark failed',
+        error instanceof Error
+          ? error.message
+          : 'Could not update bookmark state.',
+      );
+    },
+  });
+
+  const addCommentMutation = useMutation({
+    mutationFn: async () => {
+      const body = commentInput.trim();
+      const receiverId =
+        detailQuery.data?.journal?.user_id ?? detailQuery.data?.journal?.users?.id;
+
+      if (!token) {
+        throw new Error('Please log in to comment.');
+      }
+      if (!body) {
+        throw new Error('Comment cannot be empty.');
+      }
+      if (!receiverId) {
+        throw new Error('Missing journal owner.');
+      }
+
+      return socialApi.addComment(token, {
+        comments: body,
+        postId: journalId,
+        receiverId,
+      });
+    },
+    onSuccess: async () => {
+      setCommentInput('');
+      await Promise.all([
+        queryClient.invalidateQueries({queryKey: ['journal-comments', journalId]}),
+        queryClient.invalidateQueries({queryKey: ['journal', journalId]}),
+        queryClient.invalidateQueries({queryKey: ['feed']}),
+      ]);
+    },
+    onError: error => {
+      Alert.alert(
+        'Comment failed',
+        error instanceof Error ? error.message : 'Could not submit comment.',
+      );
+    },
+  });
+
+  const repostMutation = useMutation({
+    mutationFn: async () => {
+      if (!token) {
+        throw new Error('Please log in to repost.');
+      }
+      return socialApi.createRepost(token, {
+        sourceJournalId: journalId,
+        caption: repostCaption.trim() || undefined,
+      });
+    },
+    onSuccess: async () => {
+      setRepostCaption('');
+      Alert.alert('Reposted', 'Post was reposted to your feed.');
+      await queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+    onError: error => {
+      Alert.alert(
+        'Repost failed',
+        error instanceof Error ? error.message : 'Could not repost this post.',
+      );
+    },
+  });
+
+  const journal = detailQuery.data?.journal;
+  const bodyText = useMemo(() => {
+    const text = extractPlainTextFromLexical(journal?.content);
+    return text || 'No content available.';
+  }, [journal?.content]);
+
+  const likeCount = resolveCount(journal?.like_count, journal?.likes_count);
+  const commentCount = resolveCount(journal?.comment_count, journal?.comments_count);
+  const bookmarkCount = resolveCount(journal?.bookmark_count);
+  const comments = commentsQuery.data?.comments ?? [];
+
+  return (
+    <Screen>
+      {detailQuery.isLoading && (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={colors.accent} />
+          <Text style={styles.loadingText}>Loading post...</Text>
+        </View>
+      )}
+
+      {detailQuery.isError && (
+        <Text style={styles.error}>Unable to load this post.</Text>
+      )}
+
+      {!!journal && (
+        <View style={styles.card}>
+          <Text style={styles.title}>
+            {journal.title || 'Untitled Post'}
+          </Text>
+          <Text style={styles.meta}>
+            {journal.users?.name || 'Unknown author'}
+            {journal.created_at
+              ? ` • ${formatTimestamp(journal.created_at)}`
+              : ''}
+          </Text>
+          <Text style={styles.body}>{bodyText}</Text>
+
+          <View style={styles.actionRow}>
+            <Pressable
+              onPress={() => likeMutation.mutate()}
+              disabled={likeMutation.isPending}
+              style={({pressed}) => [
+                styles.actionPill,
+                journal.has_liked && styles.actionPillActive,
+                pressed && styles.actionPillPressed,
+              ]}>
+              <Text
+                style={[
+                  styles.actionText,
+                  journal.has_liked && styles.actionTextActive,
+                ]}>
+                {`${journal.has_liked ? 'Unlike' : 'Like'} (${likeCount})`}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => bookmarkMutation.mutate()}
+              disabled={bookmarkMutation.isPending}
+              style={({pressed}) => [
+                styles.actionPill,
+                journal.has_bookmarked && styles.actionPillActive,
+                pressed && styles.actionPillPressed,
+              ]}>
+              <Text
+                style={[
+                  styles.actionText,
+                  journal.has_bookmarked && styles.actionTextActive,
+                ]}>
+                {`${journal.has_bookmarked ? 'Bookmarked' : 'Bookmark'} (${bookmarkCount})`}
+              </Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.meta}>{`Comments (${commentCount})`}</Text>
+        </View>
+      )}
+
+      {!!journal && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Repost</Text>
+          <TextInput
+            value={repostCaption}
+            onChangeText={setRepostCaption}
+            placeholder="Add an optional caption"
+            placeholderTextColor={colors.textMuted}
+            style={styles.input}
+            maxLength={280}
+            multiline
+          />
+          <PrimaryButton
+            label={repostMutation.isPending ? 'Reposting...' : 'Repost to feed'}
+            onPress={() => repostMutation.mutate()}
+            disabled={repostMutation.isPending}
+          />
+        </View>
+      )}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Comments</Text>
+        {commentsQuery.isLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={styles.loadingText}>Loading comments...</Text>
+          </View>
+        ) : comments.length === 0 ? (
+          <Text style={styles.meta}>No comments yet.</Text>
+        ) : (
+          comments.map(comment => (
+            <View key={comment.id} style={styles.commentCard}>
+              <Text style={styles.commentAuthor}>
+                {comment.users?.name || 'User'}
+              </Text>
+              <Text style={styles.commentBody}>{comment.comment || ''}</Text>
+              <Text style={styles.commentTime}>
+                {formatTimestamp(comment.created_at)}
+              </Text>
+            </View>
+          ))
+        )}
+
+        {!token ? (
+          <Text style={styles.meta}>Log in to leave a comment.</Text>
+        ) : (
+          <>
+            <TextInput
+              value={commentInput}
+              onChangeText={setCommentInput}
+              placeholder="Write a comment"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              maxLength={200}
+              multiline
+            />
+            <PrimaryButton
+              label={
+                addCommentMutation.isPending ? 'Posting...' : 'Post Comment'
+              }
+              onPress={() => addCommentMutation.mutate()}
+              disabled={commentInput.trim().length === 0 || addCommentMutation.isPending}
+            />
+          </>
+        )}
+      </View>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  loadingRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: colors.textMuted,
+  },
+  error: {
+    color: colors.danger,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    gap: 10,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  meta: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  body: {
+    color: colors.text,
+    lineHeight: 23,
+    fontSize: 15,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionPill: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+  },
+  actionPillActive: {
+    borderColor: colors.accent,
+    backgroundColor: '#1d3b37',
+  },
+  actionPillPressed: {
+    opacity: 0.85,
+  },
+  actionText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  actionTextActive: {
+    color: colors.accent,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceAlt,
+    color: colors.text,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    textAlignVertical: 'top',
+    minHeight: 70,
+  },
+  commentCard: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 8,
+    gap: 4,
+  },
+  commentAuthor: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  commentBody: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  commentTime: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+});

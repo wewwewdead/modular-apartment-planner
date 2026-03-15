@@ -1,0 +1,113 @@
+# Plan: Repost Detail View in PostDetailScreen
+
+## Context
+Repost cards on the feed now render correctly (badge, caption, embedded card), but when a user taps a repost card, the `PostDetailScreen` treats it like a normal post — showing the repost's own title/content body instead of the quote + embedded original post. The user wants:
+1. Tapping a repost card → shows the repost detail with the quote/caption and the original post nested below
+2. Tapping the nested original post → navigates to the original post's own `PostDetailScreen`
+
+## File to Modify
+
+**`apps/mobile/src/screens/Home/PostDetailScreen.tsx`**
+
+## Current Layout (normal post)
+```
+Banner → Title → Author row → ActionBar → Content body → Related → Comments
+```
+
+## New Layout (when `journal.is_repost` is true)
+```
+┌──────────────────────────────────────────┐
+│ [↔] AuthorName reposted                 │  ← repost badge
+│                                          │
+│ Author row (reposter avatar/name/date)   │  ← existing author section
+│                                          │
+│ "User's caption text"                    │  ← journal.repost_caption (if present)
+│                                          │
+│ [ActionBar for the repost]               │  ← existing action bar
+│                                          │
+│ ┌─ Embedded Original Post (tappable) ─┐  │
+│ │ [avatar] OriginalAuthor             │  │  ← repost_source.users
+│ │ Original Post Title                 │  │  ← repost_source.title
+│ │ Preview of original post body...    │  │  ← extractPlainText(repost_source.content)
+│ └─────────────────────────────────────┘  │
+│                                          │
+│ ─── divider ───                          │
+│ Comments (on the repost)                 │
+│ Comment input                            │
+└──────────────────────────────────────────┘
+```
+
+When `repost_source` is null (original was deleted): show "This post is no longer available" in the embedded card area.
+
+## Implementation Steps
+
+### 1. Add import for `RepostIcon` and `extractPlainText`
+```ts
+import {BadgeCheckIcon, RepostIcon, XIcon} from '../../components/icons';
+import {extractPlainText} from '../../lib/utils/journalHelpers';
+```
+
+### 2. Derive repost state after `journal` is resolved (around line 156)
+```ts
+const isRepost = !!journal?.is_repost;
+const repostSource = isRepost ? journal?.repost_source : null;
+const repostSourcePreview = repostSource?.content
+  ? extractPlainText(repostSource.content).slice(0, 200)
+  : '';
+```
+
+### 3. Replace the main content section (lines 196–284) with conditional rendering
+
+**When `isRepost`:** skip banner image, skip title, and instead render:
+- **Repost badge** — `[RepostIcon] AuthorName reposted` (same style as PostCard)
+- **Author row** — existing author section (reposter identity + date)
+- **Caption** — `journal.repost_caption` if present
+- **ActionBar** — existing (counts belong to the repost)
+- **Embedded original post card** — bordered `Pressable` containing:
+  - Author avatar + name of original author (`repostSource.users`)
+  - Original post title (`repostSource.title`)
+  - Preview text (`repostSourcePreview`, max 3 lines)
+  - `onPress` → `navigation.push('PostDetail', {journalId: repostSource.id})`
+  - If `repostSource` is null: "This post is no longer available"
+- **Divider → Comments section** — unchanged
+
+**When NOT `isRepost`:** render exactly as today (banner → title → author → actionbar → content → related → comments).
+
+### 4. Add new styles
+```ts
+repostBadge: {
+  flexDirection: 'row', alignItems: 'center', gap: 6,
+  marginBottom: spacing.md,
+},
+repostBadgeText: { fontSize: 13, fontFamily: fonts.ui.regular },
+repostBadgeName: { fontFamily: fonts.ui.semiBold },
+repostCaptionText: {
+  fontFamily: fonts.ui.regular, fontSize: 16, lineHeight: 24,
+  marginBottom: spacing.md,
+},
+embeddedCard: {
+  borderRadius: radii.lg, borderWidth: 1, padding: spacing.md, gap: spacing.sm,
+  marginTop: spacing.md,
+},
+embeddedAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+embeddedAuthorName: { fontSize: 14, fontFamily: fonts.ui.semiBold },
+embeddedTitle: { fontFamily: fonts.serif.bold, fontSize: 18, lineHeight: 24 },
+embeddedPreview: { ...typeScale.bodySmall, lineHeight: 20 },
+repostUnavailable: { fontFamily: fonts.ui.regular, fontSize: 14, fontStyle: 'italic' },
+```
+
+## Reuse Inventory
+- `RepostIcon` — `components/icons` (already used in PostCard)
+- `Avatar` — already imported in PostDetailScreen
+- `extractPlainText` — `lib/utils/journalHelpers` (already used in feed screens)
+- `journal.repost_source` — full `JournalItem` with `.users`, `.title`, `.content` from API
+- `navigation.push` — use push (not navigate) so back button returns to the repost
+
+## Verification
+1. **Normal post** — unchanged rendering
+2. **Repost with caption** — badge + author + caption + action bar + embedded card
+3. **Repost without caption** — badge + author + action bar + embedded card (no caption)
+4. **Deleted source** — "This post is no longer available" in embedded area
+5. **Tap embedded card** → opens original post's PostDetailScreen
+6. **Back button** → returns to the repost detail
+7. **Comments** — shown for the repost itself

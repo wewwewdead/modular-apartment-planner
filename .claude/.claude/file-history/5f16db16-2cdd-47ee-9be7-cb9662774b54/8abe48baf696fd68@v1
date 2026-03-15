@@ -1,0 +1,174 @@
+# Journal Drafts System — Implementation Plan
+
+## Context
+
+Journal posts (the core content type) have **zero draft support**. The editor is purely in-memory — if a user closes the tab, navigates away, or clicks X, all work is permanently lost. There's no autosave, no localStorage backup, and no way to start writing and come back later.
+
+This is a significant retention problem:
+- **Lost work drives users away** — nothing is more frustrating than losing a half-written post
+- **No "open loops"** — drafts create psychological pull to come back and finish
+- **High publish friction** — users must write and publish in one sitting
+
+Story chapters already have a working draft system (`status: 'draft' | 'published'`, 30s autosave, explicit publish). We'll mirror that pattern for journals.
+
+---
+
+## Database Migration
+
+**New file: `server/sql/journal_drafts.sql`**
+
+1. Add `status TEXT NOT NULL DEFAULT 'published' CHECK (status IN ('draft', 'published'))` to `journals`
+2. Add `published_at TIMESTAMPTZ DEFAULT NULL` to `journals`
+3. Backfill: `SET published_at = created_at WHERE status = 'published'`
+4. Add index: `idx_journals_drafts ON journals(user_id, status, updated_at DESC) WHERE status = 'draft'`
+5. Add index: `idx_journals_published_feed ON journals(privacy, created_at DESC) WHERE status = 'published' AND privacy = 'public'`
+6. Update SQL RPCs (`get_following_feed`, `get_for_you_feed`, `get_interest_posts`, `get_monthly_hottest_journals`) — add `AND j.status = 'published'` to WHERE clauses
+
+**Zero-downtime safe**: `DEFAULT 'published'` means all existing rows are immediately correct. RPC updates via `CREATE OR REPLACE` are atomic.
+
+---
+
+## Backend Changes
+
+### New service functions in `server/services/uploadService.js`
+
+**`saveDraftService(content, title, userId, draftId, promptId)`**
+- If `draftId` provided: verify ownership, UPDATE `title` + `content` + `updated_at` only (no embeddings, no preview, no streak)
+- If `draftId` null: INSERT new row with `status: 'draft'`, return new `id`
+- Title allowed to be empty (validated only on publish)
+- Content validated as parseable JSON only
+
+**`publishDraftService(journalId, userId)`**
+1. Fetch draft, verify ownership + `status === 'draft'`
+2. Validate title non-empty, content non-empty
+3. Run `parseTextContentSafely(content)` → extract `preview_text`, `thumbnail_url`, `reading_time`
+4. Run `GenerateEmbeddings(title, embeddingBody)`
+5. UPDATE: `status: 'published'`, `published_at: now()`, embeddings, preview_text, etc.
+6. Fire mention notifications (reuse existing `extractMentionUserIds` logic from `uploadJournalContentService`)
+7. Call `recordPublishForStreak(userId)` — streak only fires on publish
+8. Return result with streak data
+
+**`getDraftsService(userId)`**
+- Query: `journals WHERE user_id = userId AND status = 'draft' ORDER BY updated_at DESC LIMIT 50`
+- Returns: `id, title, created_at, updated_at` (lightweight, no content)
+
+### Modify existing services in `server/services/getService.js`
+
+Add `.eq('status', 'published')` to:
+- `getJournalsService` (line ~500) — public feed
+- `getUserJournalsService` (line ~911) — profile feed
+- `getVisitedUserJournalsService` (line ~1008) — visited profile
+- `searchJournalsService` (line ~1438) — search results
+
+### New controllers in `server/controller/uploadController.js`
+
+- `saveDraftController` — `POST /journal/draft` (requireAuth, writeLimiter)
+- `publishDraftController` — `POST /journal/publish` (requireAuth, writeLimiter)
+
+### New controller in `server/controller/getController.js`
+
+- `getDraftsController` — `GET /journal/drafts` (requireAuth)
+
+### New routes in `server/routes/routes.js`
+
+```
+POST /journal/draft      → saveDraftController
+POST /journal/publish    → publishDraftController
+GET  /journal/drafts     → getDraftsController
+```
+
+Existing `POST /save-journal` stays unchanged (immediate publish, backward-compatible for mobile app).
+
+---
+
+## Frontend Changes
+
+### Client API — `client/API/Api.js`
+
+Add 3 functions using existing `authedJsonRequest`/`authedGet` helpers from `apiHelpers.js`:
+- `saveDraft(token, body)` → `POST /journal/draft`
+- `publishDraft(token, journalId)` → `POST /journal/publish`
+- `getDrafts(token)` → `GET /journal/drafts`
+
+### Editor changes — `client/src/components/HomePage/Editor/RichTextEditor.jsx`
+
+- Add new props: `draftId`, `onDraftIdCreated`
+- Add 30-second autosave timer (same pattern as `ChapterEditor.jsx`)
+- Add save status indicator: "Saved X ago" / "Saving..." / "Unsaved changes"
+- Replace single "Share" button with two buttons: **"Save Draft"** + **"Publish"**
+- "Publish" calls `publishDraft` API, then invalidates feed + draft queries
+- "Save Draft" calls `saveDraft` API, updates `draftIdRef`
+
+### Editor shell — `client/src/components/HomePage/Editor/Editor.jsx`
+
+- Accept new props: `draftId`, `draftContent`
+- On mount with `draftContent`: load into Lexical via `editor.parseEditorState()`
+- Change close behavior: if `currentDraftId` exists, don't delete images (they belong to the draft)
+- If no draft saved and user has unsaved content: prompt "Save draft before closing?"
+
+### Home integration — `client/src/components/HomePage/Home.jsx`
+
+- Expand `DEFAULT_EDITOR_LAUNCH_CONFIG` with `draftId: null`, `draftContent: null`
+- Add "Drafts" sidebar link (similar to Stories link pattern)
+- Add `handleResumeDraft(draft)`: fetch content via `GET /journal/:id/content`, then `handleOpenTextEditor({ draftId, draftContent, initialTitle })`
+
+### New component — `client/src/components/HomePage/Editor/DraftList/DraftList.jsx` + CSS
+
+- Route: `/home/drafts` (lazy-loaded, same pattern as Analytics/Bookmarks)
+- Fetches `GET /journal/drafts`, query key `['journal-drafts', userId]`
+- Shows list: title (or "Untitled"), last edited date, delete button
+- Click → `handleResumeDraft` (fetches full content, opens editor)
+- Delete → existing `DELETE /deleteJournal/:id` endpoint (works for drafts too)
+- Empty state: "No drafts yet — start writing and your work will be saved automatically"
+
+### Route registration — `client/src/App.jsx`
+
+Add `<Route path='drafts' element={<DraftList/>}/>` inside Home routes.
+
+---
+
+## Files to Create
+
+| File | Purpose |
+|------|---------|
+| `server/sql/journal_drafts.sql` | Migration: status column, indexes, updated RPCs |
+| `client/src/components/HomePage/Editor/DraftList/DraftList.jsx` | Draft list page |
+| `client/src/components/HomePage/Editor/DraftList/DraftList.css` | Draft list styles |
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `server/services/uploadService.js` | Add `saveDraftService`, `publishDraftService`, `getDraftsService` |
+| `server/services/getService.js` | Add `.eq('status', 'published')` to 4 feed/profile queries |
+| `server/controller/uploadController.js` | Add `saveDraftController`, `publishDraftController` |
+| `server/controller/getController.js` | Add `getDraftsController` |
+| `server/routes/routes.js` | Add 3 draft routes |
+| `client/API/Api.js` | Add `saveDraft`, `publishDraft`, `getDrafts` |
+| `client/src/components/HomePage/Editor/RichTextEditor.jsx` | Autosave timer, dual buttons, save status |
+| `client/src/components/HomePage/Editor/Editor.jsx` | Draft props, content loading, close behavior |
+| `client/src/components/HomePage/Home.jsx` | Editor config expansion, Drafts sidebar link, resume handler |
+| `client/src/App.jsx` | Add drafts route |
+
+---
+
+## Edge Cases
+
+- **Orphaned images**: Images in saved drafts stay in Storage (owned by draft). Images from unsaved sessions are deleted on close (existing behavior preserved).
+- **Edit published post**: Existing `POST /update-journal` flow unchanged — only applies to published posts. Draft flow uses separate `POST /journal/draft` + `POST /journal/publish`.
+- **Streak safety**: `recordPublishForStreak` only called in `publishDraftService`, never in `saveDraftService`.
+- **Embedding safety**: `GenerateEmbeddings` only called on publish. Drafts have no embeddings and can never appear in feeds.
+- **Mentions**: Extracted and notified only on publish, not on draft save.
+
+---
+
+## Verification
+
+1. **Migration**: Run `journal_drafts.sql` against Supabase. Verify `SELECT status, published_at FROM journals LIMIT 5` shows all `'published'` with `published_at` populated.
+2. **Create draft**: Open editor, type content, click "Save Draft". Verify `POST /journal/draft` returns `{ id }`. Close editor, reopen — verify draft is NOT in the feed.
+3. **Autosave**: Open editor, type content, wait 30s. Check network tab for automatic `POST /journal/draft` call.
+4. **Resume draft**: Navigate to `/home/drafts`. Click a draft. Verify editor opens with title + content restored.
+5. **Publish draft**: Open a draft, click "Publish". Verify it appears in the feed, streak updates, and draft disappears from draft list.
+6. **Close without saving**: Open editor with new content (no draft saved yet), click X. Verify uploaded images are cleaned up.
+7. **Close with draft**: Save a draft, close editor. Verify images are NOT deleted and draft persists.
+8. **Feed isolation**: Verify drafts don't appear in: public feed, Following feed, For You feed, profile page, search results, or visited profiles.

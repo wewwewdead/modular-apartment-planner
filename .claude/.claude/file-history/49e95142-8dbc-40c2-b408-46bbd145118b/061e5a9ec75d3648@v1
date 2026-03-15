@@ -1,0 +1,324 @@
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { userHomeCoords, MAX_UNIVERSE_ZOOM, MIN_UNIVERSE_ZOOM } from '../utils/starUtils';
+
+const useUniverseCamera = (userId, hasOwnPosts) => {
+    const stageRef = useRef(null);
+    const dragStartRef = useRef(null);
+    const lastPinchDist = useRef(null);
+    const isPinching = useRef(false);
+    const hasAdjustedZoom = useRef(false);
+
+    // Flight state
+    const isFlying = useRef(false);
+    const flyAnimRef = useRef(null);
+    const cameraRef = useRef(null);
+    const zoomRef = useRef(null);
+
+    const [stageSize, setStageSize] = useState({
+        width: window.innerWidth,
+        height: window.innerHeight,
+    });
+
+    const initialCamera = useMemo(() => {
+        if (!userId) return { x: 0, y: 0 };
+        return userHomeCoords(userId);
+    }, [userId]);
+
+    // Always enter Universe at maximum zoom-out.
+    const initialZoom = useMemo(() => MIN_UNIVERSE_ZOOM, []);
+
+    const [camera, setCamera] = useState(initialCamera);
+    const [zoom, setZoom] = useState(initialZoom);
+    const [isDragging, setIsDragging] = useState(false);
+
+    // Keep refs in sync with state so flyTo reads fresh values without deps
+    cameraRef.current = camera;
+    zoomRef.current = zoom;
+
+    // If logged-in user has no posts, center camera while keeping max zoom-out.
+    useEffect(() => {
+        if (hasAdjustedZoom.current) return;
+        if (hasOwnPosts === null) return; // still loading
+        if (!userId) return;
+        if (!hasOwnPosts) {
+            hasAdjustedZoom.current = true;
+            setCamera({ x: 0, y: 0 });
+            setZoom(MIN_UNIVERSE_ZOOM);
+        } else {
+            hasAdjustedZoom.current = true;
+        }
+    }, [hasOwnPosts, userId]);
+
+    // Resize
+    useEffect(() => {
+        const onResize = () => setStageSize({ width: window.innerWidth, height: window.innerHeight });
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    // Cleanup flight on unmount
+    useEffect(() => {
+        return () => {
+            if (flyAnimRef.current) {
+                cancelAnimationFrame(flyAnimRef.current);
+                flyAnimRef.current = null;
+            }
+            isFlying.current = false;
+        };
+    }, []);
+
+    // Center world coords (for display)
+    const centerWorld = useMemo(() => ({
+        x: Math.round(camera.x),
+        y: Math.round(camera.y),
+    }), [camera]);
+
+    // Layer transform helper
+    const getLayerProps = useCallback((parallaxFactor) => ({
+        x: stageSize.width / 2 - camera.x * parallaxFactor * zoom,
+        y: stageSize.height / 2 - camera.y * parallaxFactor * zoom,
+        scaleX: zoom,
+        scaleY: zoom,
+    }), [camera, zoom, stageSize]);
+
+    // Viewport bounds at parallax 1.0 (for data fetching)
+    const getViewportBounds = useCallback(() => {
+        const halfW = (stageSize.width / 2) / zoom;
+        const halfH = (stageSize.height / 2) / zoom;
+        const pad = 200 / zoom;
+        return {
+            minX: camera.x - halfW - pad,
+            maxX: camera.x + halfW + pad,
+            minY: camera.y - halfH - pad,
+            maxY: camera.y + halfH + pad,
+        };
+    }, [camera, zoom, stageSize]);
+
+    // --- Drag handling (Stage is NOT draggable) ---
+    const handleMouseDown = useCallback((e) => {
+        if (isFlying.current) return;
+        // Only left button for mouse
+        if (e.evt.button !== undefined && e.evt.button !== 0) return;
+        dragStartRef.current = {
+            pointerX: e.evt.clientX ?? e.evt.touches?.[0]?.clientX,
+            pointerY: e.evt.clientY ?? e.evt.touches?.[0]?.clientY,
+            camX: camera.x,
+            camY: camera.y,
+        };
+        setIsDragging(true);
+    }, [camera]);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!dragStartRef.current) return;
+        if (isPinching.current) return;
+        const px = e.evt.clientX ?? e.evt.touches?.[0]?.clientX;
+        const py = e.evt.clientY ?? e.evt.touches?.[0]?.clientY;
+        if (px == null || py == null) return;
+        const dx = (px - dragStartRef.current.pointerX) / zoom;
+        const dy = (py - dragStartRef.current.pointerY) / zoom;
+        setCamera({
+            x: dragStartRef.current.camX - dx,
+            y: dragStartRef.current.camY - dy,
+        });
+    }, [zoom]);
+
+    const handleMouseUp = useCallback(() => {
+        dragStartRef.current = null;
+        setIsDragging(false);
+        isPinching.current = false;
+        lastPinchDist.current = null;
+    }, []);
+
+    // --- Wheel zoom ---
+    const handleWheel = useCallback((e) => {
+        e.evt.preventDefault();
+        if (isFlying.current) return;
+
+        const stage = stageRef.current;
+        if (!stage) return;
+
+        const pointer = stage.getPointerPosition();
+        if (!pointer) return;
+
+        const screenCenterX = stageSize.width / 2;
+        const screenCenterY = stageSize.height / 2;
+
+        const scaleBy = 1.08;
+        const direction = e.evt.deltaY > 0 ? -1 : 1;
+        const oldZoom = zoom;
+        const newZoom = Math.min(Math.max(
+            direction > 0 ? oldZoom * scaleBy : oldZoom / scaleBy,
+            MIN_UNIVERSE_ZOOM
+        ), MAX_UNIVERSE_ZOOM);
+
+        // World point under cursor before zoom
+        const worldX = camera.x + (pointer.x - screenCenterX) / oldZoom;
+        const worldY = camera.y + (pointer.y - screenCenterY) / oldZoom;
+
+        // Adjust camera so same world point stays under cursor
+        setCamera({
+            x: worldX - (pointer.x - screenCenterX) / newZoom,
+            y: worldY - (pointer.y - screenCenterY) / newZoom,
+        });
+        setZoom(newZoom);
+    }, [zoom, camera, stageSize]);
+
+    // --- Touch / Pinch ---
+    const handleTouchMove = useCallback((e) => {
+        if (isFlying.current) return;
+
+        const touch = e.evt;
+        if (touch.touches.length === 2) {
+            // Pinch zoom
+            isPinching.current = true;
+            touch.preventDefault();
+
+            const t1 = touch.touches[0];
+            const t2 = touch.touches[1];
+            const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+            if (lastPinchDist.current === null) {
+                lastPinchDist.current = dist;
+                return;
+            }
+
+            const oldZoom = zoom;
+            const newZoom = Math.min(
+                Math.max(oldZoom * (dist / lastPinchDist.current), MIN_UNIVERSE_ZOOM),
+                MAX_UNIVERSE_ZOOM
+            );
+            lastPinchDist.current = dist;
+
+            const centerX = (t1.clientX + t2.clientX) / 2;
+            const centerY = (t1.clientY + t2.clientY) / 2;
+            const screenCenterX = stageSize.width / 2;
+            const screenCenterY = stageSize.height / 2;
+
+            const worldX = camera.x + (centerX - screenCenterX) / oldZoom;
+            const worldY = camera.y + (centerY - screenCenterY) / oldZoom;
+
+            setCamera({
+                x: worldX - (centerX - screenCenterX) / newZoom,
+                y: worldY - (centerY - screenCenterY) / newZoom,
+            });
+            setZoom(newZoom);
+        } else if (touch.touches.length === 1 && !isPinching.current) {
+            // Single finger drag — handled by mouseMove logic
+            handleMouseMove(e);
+        }
+    }, [zoom, camera, stageSize, handleMouseMove]);
+
+    const handleTouchEnd = useCallback(() => {
+        lastPinchDist.current = null;
+        if (isPinching.current) {
+            isPinching.current = false;
+            dragStartRef.current = null;
+        }
+    }, []);
+
+    const stageEvents = useMemo(() => ({
+        onMouseDown: handleMouseDown,
+        onMouseMove: handleMouseMove,
+        onMouseUp: handleMouseUp,
+        onWheel: handleWheel,
+        onTouchStart: handleMouseDown,
+        onTouchMove: handleTouchMove,
+        onTouchEnd: handleTouchEnd,
+    }), [handleMouseDown, handleMouseMove, handleMouseUp, handleWheel, handleTouchMove, handleTouchEnd]);
+
+    const jumpTo = useCallback((targetX, targetY) => {
+        if (flyAnimRef.current) {
+            cancelAnimationFrame(flyAnimRef.current);
+            flyAnimRef.current = null;
+        }
+        isFlying.current = false;
+
+        const nextX = Number.isFinite(targetX) ? targetX : cameraRef.current.x;
+        const nextY = Number.isFinite(targetY) ? targetY : cameraRef.current.y;
+        setCamera({ x: nextX, y: nextY });
+    }, []);
+
+    // Google Maps-style fly-to: zoom out → pan → zoom in (parabolic arc)
+    const flyTo = useCallback((targetX, targetY, targetZoom, onComplete) => {
+        // Cancel any in-progress flight (without calling old onComplete)
+        if (flyAnimRef.current) {
+            cancelAnimationFrame(flyAnimRef.current);
+            flyAnimRef.current = null;
+        }
+
+        const startX = cameraRef.current.x;
+        const startY = cameraRef.current.y;
+        const startZoom = zoomRef.current;
+        const resolvedTargetZoom = Number.isFinite(targetZoom) ? targetZoom : startZoom;
+
+        isFlying.current = true;
+
+        // Distance determines how far to zoom out
+        const dist = Math.hypot(targetX - startX, targetY - startY);
+
+        // Fixed cinematic duration
+        const duration = 1800;
+
+        // The "peak altitude" — zoom out proportional to travel distance
+        const minZoom = Math.min(startZoom, resolvedTargetZoom);
+        const peakZoomOut = Math.max(
+            minZoom * 0.15,
+            minZoom - dist * 0.00008
+        );
+        const midZoom = Math.max(MIN_UNIVERSE_ZOOM, Math.min(peakZoomOut, minZoom * 0.6));
+
+        const startTime = performance.now();
+
+        // Cubic ease-in-out
+        const easeInOut = (t) => t < 0.5
+            ? 4 * t * t * t
+            : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        const animate = (now) => {
+            const elapsed = now - startTime;
+            const raw = Math.min(elapsed / duration, 1);
+            const t = easeInOut(raw);
+
+            // Pan linearly with the eased time
+            const cx = startX + (targetX - startX) * t;
+            const cy = startY + (targetY - startY) * t;
+
+            // Parabolic zoom: start → midZoom at t=0.5 → targetZoom at t=1
+            const a = 2 * startZoom - 4 * midZoom + 2 * resolvedTargetZoom;
+            const b = -3 * startZoom + 4 * midZoom - resolvedTargetZoom;
+            const c = startZoom;
+            const z = a * t * t + b * t + c;
+
+            setCamera({ x: cx, y: cy });
+            const safeZ = Number.isFinite(z) ? z : startZoom;
+            setZoom(Math.max(MIN_UNIVERSE_ZOOM, safeZ));
+
+            if (raw < 1) {
+                flyAnimRef.current = requestAnimationFrame(animate);
+            } else {
+                flyAnimRef.current = null;
+                isFlying.current = false;
+                if (onComplete) onComplete();
+            }
+        };
+
+        flyAnimRef.current = requestAnimationFrame(animate);
+    }, []); // stable — reads from refs
+
+    return {
+        stageRef,
+        stageSize,
+        camera,
+        zoom,
+        isDragging,
+        centerWorld,
+        getLayerProps,
+        getViewportBounds,
+        stageEvents,
+        flyTo,
+        jumpTo,
+        isFlying,
+    };
+};
+
+export default useUniverseCamera;

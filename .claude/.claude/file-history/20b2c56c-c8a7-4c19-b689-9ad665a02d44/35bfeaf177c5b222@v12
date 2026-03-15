@@ -1,0 +1,615 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Stage } from 'react-konva';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../Context/useAuth';
+import { getUniversePosts, getUserData } from '../../../API/Api';
+import supabase from '../../utils/supabaseClient';
+import useUniverseCamera from './hooks/useUniverseCamera';
+import useCosmicGravity from './hooks/useCosmicGravity';
+import DeepSpaceLayer from './layers/DeepSpaceLayer';
+import MidGalaxyLayer from './layers/MidGalaxyLayer';
+import NebulaLayer from './layers/NebulaLayer';
+import InteractiveLayer from './layers/InteractiveLayer';
+import WormholeLayer from './layers/WormholeLayer';
+import UniverseMinimap from './components/UniverseMinimap';
+import { extractSnippet, MIN_UNIVERSE_ZOOM, userHomeCoords } from './utils/starUtils';
+import {
+    buildSectorIndex,
+    computeGalaxyCentroids,
+    computeSectorKey,
+    getNeighborSectorKeys,
+} from './utils/cosmicPhysics';
+import { handleClickProfile } from '../../../helpers/handleClicks';
+import styles from './Universe.module.css';
+
+const SECTOR_SIZE = 2000;
+const ENABLE_SETTLED_RPC_SAVE = import.meta.env.VITE_ENABLE_UNIVERSE_SETTLE_SAVE === 'true';
+
+const Universe = () => {
+    const navigate = useNavigate();
+    const { user } = useAuth();
+    const userId = user?.userData?.[0]?.id || null;
+
+    const fetchDebounceRef = useRef(null);
+    const settleDebounceRef = useRef(null);
+    const lastSettledPayloadRef = useRef('');
+    const initialFetchResolvedRef = useRef(false);
+    const hasAutoFocusedOwnGalaxyRef = useRef(false);
+    const ownGalaxyLookupStartedRef = useRef(false);
+
+    const [posts, setPosts] = useState(new Map());
+    const [selectedPost, setSelectedPost] = useState(null);
+    const [selectedGalaxy, setSelectedGalaxy] = useState(null);
+    const [galaxyProfile, setGalaxyProfile] = useState(null);
+    const [pulsingId, setPulsingId] = useState(null);
+    const [hasOwnPosts, setHasOwnPosts] = useState(userId ? null : false);
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [ownGalaxyTarget, setOwnGalaxyTarget] = useState(null);
+    const [wormholes, setWormholes] = useState([]);
+    const [isWarping, setIsWarping] = useState(false);
+
+    // Gravity data from server (fallback paths when embeddings are unavailable in payload)
+    const [centroids, setCentroids] = useState([]);
+    const [galaxyEdges, setGalaxyEdges] = useState([]);
+    const [similarPairs, setSimilarPairs] = useState([]);
+    const [starPulls, setStarPulls] = useState([]);
+
+    const {
+        stageRef, stageSize, camera, zoom, isDragging, centerWorld,
+        getLayerProps, getViewportBounds, stageEvents, flyTo, jumpTo, isFlying,
+    } = useUniverseCamera(userId, hasOwnPosts);
+
+    const postArray = useMemo(() => Array.from(posts.values()), [posts]);
+    const showTitles = zoom > 0.5;
+
+    // Sector partitioning for scalable local gravity math.
+    const postSectorIndex = useMemo(() => (
+        buildSectorIndex(
+            postArray,
+            (post) => ({
+                x: post?.display_x ?? post?.universe_x,
+                y: post?.display_y ?? post?.universe_y,
+            }),
+            SECTOR_SIZE
+        )
+    ), [postArray]);
+
+    const centerSectorKey = useMemo(
+        () => computeSectorKey(centerWorld.x, centerWorld.y, SECTOR_SIZE),
+        [centerWorld.x, centerWorld.y]
+    );
+
+    const activeSectorKeys = useMemo(
+        () => new Set(getNeighborSectorKeys(centerSectorKey)),
+        [centerSectorKey]
+    );
+
+    const activePosts = useMemo(() => {
+        if (activeSectorKeys.size === 0) return postArray;
+
+        const next = [];
+        for (const key of activeSectorKeys) {
+            const bucket = postSectorIndex.get(key);
+            if (bucket?.length) next.push(...bucket);
+        }
+        return next;
+    }, [postArray, postSectorIndex, activeSectorKeys]);
+
+    const activePostIds = useMemo(() => {
+        const ids = new Set();
+        for (const post of activePosts) {
+            if (post?.id) ids.add(post.id);
+        }
+        return ids;
+    }, [activePosts]);
+
+    const { centroidByUser } = useMemo(
+        () => computeGalaxyCentroids(postArray),
+        [postArray]
+    );
+
+    // ── Hash-based galaxies (STARTING positions — always from hash) ──
+    const hashGalaxies = useMemo(() => {
+        const seen = new Map();
+        for (const post of postArray) {
+            const uid = post.users?.id ?? post.user_id;
+            if (!uid || seen.has(uid)) continue;
+            const hash = userHomeCoords(uid);
+            seen.set(uid, {
+                userId: uid,
+                name: post.users?.name ?? post.user_name ?? 'Anonymous',
+                x: hash.x,
+                y: hash.y,
+            });
+        }
+        return Array.from(seen.values());
+    }, [postArray]);
+
+    // ── Centroid targets (WHERE galaxies should fly TO) ──────────────
+    const centroidTargets = useMemo(() => {
+        const map = new Map();
+        for (const c of centroids) {
+            if (c.galaxy_x != null && c.galaxy_y != null) {
+                map.set(c.user_id, { x: c.galaxy_x, y: c.galaxy_y });
+            }
+        }
+        return map;
+    }, [centroids]);
+
+    // ── Gravity hook: animates galaxies + computes star pull offsets ─
+    const {
+        galaxyPositions,
+        starPullOffsets,
+        isSettled,
+        galaxyEdges: effectiveGalaxyEdges,
+        hasEmbeddingGravity,
+    } = useCosmicGravity({
+        galaxies: hashGalaxies,
+        centroidTargets,
+        edges: galaxyEdges,
+        posts: postArray,
+        starPulls,
+        centroidByUser,
+        activeSectorKeys,
+        activePostIds,
+        sectorSize: SECTOR_SIZE,
+    });
+
+    // ── Render galaxies = hash galaxies with animated positions ──────
+    const galaxies = useMemo(() => {
+        return hashGalaxies.map(g => {
+            const animated = galaxyPositions.get(g.userId);
+            return animated ? { ...g, x: animated.x, y: animated.y } : g;
+        });
+    }, [hashGalaxies, galaxyPositions]);
+
+    const getComputedStarPosition = useCallback((post) => {
+        if (!post) return null;
+
+        const uid = post.users?.id ?? post.user_id;
+        const hashGal = userHomeCoords(uid);
+        const animGal = galaxyPositions.get(uid);
+        const galDx = animGal ? (animGal.x - hashGal.x) : 0;
+        const galDy = animGal ? (animGal.y - hashGal.y) : 0;
+        const pull = starPullOffsets.get(post.id);
+
+        const baseX = post.universe_x ?? post.display_x;
+        const baseY = post.universe_y ?? post.display_y;
+        if (baseX == null || baseY == null) return null;
+
+        return {
+            x: baseX + galDx + (pull?.dx ?? 0),
+            y: baseY + galDy + (pull?.dy ?? 0),
+        };
+    }, [galaxyPositions, starPullOffsets]);
+
+    // Resolve logged-in user's galaxy target independently from viewport data.
+    useEffect(() => {
+        if (!userId) return;
+        if (ownGalaxyLookupStartedRef.current) return;
+
+        ownGalaxyLookupStartedRef.current = true;
+        let cancelled = false;
+
+        const resolveOwnGalaxyTarget = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('galaxy_centroids')
+                    .select('galaxy_x, galaxy_y')
+                    .eq('user_id', userId)
+                    .maybeSingle();
+
+                if (cancelled) return;
+
+                if (!error && data?.galaxy_x != null && data?.galaxy_y != null) {
+                    setOwnGalaxyTarget({ x: data.galaxy_x, y: data.galaxy_y });
+                    setHasOwnPosts(true);
+                    return;
+                }
+            } catch (err) {
+                console.warn('[universe] own centroid lookup failed:', err?.message || err);
+            }
+
+            if (!cancelled) {
+                setOwnGalaxyTarget(userHomeCoords(userId));
+            }
+        };
+
+        resolveOwnGalaxyTarget();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [userId]);
+
+    // One-time wormhole fetch on mount
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchWormholes = async () => {
+            try {
+                const { data, error } = await supabase.rpc('find_wormhole_pairs', {
+                    similarity_threshold: 0.7,
+                    min_distance: 0,
+                    max_pairs: 30,
+                });
+                if (cancelled) return;
+                if (error) {
+                    console.warn('[universe] wormhole fetch error:', error.message);
+                    return;
+                }
+                console.log('[universe] wormhole pairs:', data);
+                if (Array.isArray(data) && data.length > 0) {
+                    setWormholes(data);
+                }
+            } catch (err) {
+                if (!cancelled) {
+                    console.warn('[universe] wormhole fetch failed:', err?.message || err);
+                }
+            }
+        };
+
+        fetchWormholes();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Debounced fetch on camera/zoom change
+    useEffect(() => {
+        if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+
+        fetchDebounceRef.current = setTimeout(async () => {
+            const bounds = getViewportBounds();
+            try {
+                const result = await getUniversePosts(
+                    bounds.minX,
+                    bounds.maxX,
+                    bounds.minY,
+                    bounds.maxY,
+                    200
+                );
+                if (result?.data) {
+                    setPosts(prev => {
+                        const next = new Map(prev);
+                        for (const post of result.data) {
+                            next.set(post.id, post);
+                        }
+                        return next;
+                    });
+                    if (userId && hasOwnPosts !== true) {
+                        const ownsAny = result.data.some(p =>
+                            (p.users?.id ?? p.user_id) === userId
+                        );
+                        if (ownsAny) setHasOwnPosts(true);
+                    }
+                }
+                // Keep server gravity data as fallback when embeddings are absent in payload.
+                setCentroids(Array.isArray(result?.centroids) ? result.centroids : []);
+                setGalaxyEdges(Array.isArray(result?.edges) ? result.edges : []);
+                setSimilarPairs(Array.isArray(result?.similarPairs) ? result.similarPairs : []);
+                setStarPulls(Array.isArray(result?.starPulls) ? result.starPulls : []);
+            } catch (err) {
+                console.error('Failed to fetch universe posts:', err);
+            } finally {
+                if (!initialFetchResolvedRef.current) {
+                    initialFetchResolvedRef.current = true;
+                    setIsInitialLoading(false);
+                }
+            }
+        }, 400);
+
+        return () => {
+            if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+        };
+    }, [camera, zoom, getViewportBounds, userId, hasOwnPosts]);
+
+    const handleStarClick = useCallback((post) => {
+        if (isFlying.current) return;
+        setSelectedPost(post);
+        setSelectedGalaxy(null);
+        setGalaxyProfile(null);
+
+        const position = getComputedStarPosition(post);
+        if (!position) return;
+
+        flyTo(position.x, position.y, 1.2, () => {
+            setPulsingId(post.id);
+            setTimeout(() => setPulsingId(null), 700);
+        });
+    }, [flyTo, getComputedStarPosition, isFlying]);
+
+    const handleGalaxyClick = useCallback(async (galaxy) => {
+        if (isFlying.current) return;
+        setSelectedGalaxy(galaxy);
+        setSelectedPost(null);
+        setGalaxyProfile(null);
+        flyTo(galaxy.x, galaxy.y, 0.8);
+
+        try {
+            const data = await getUserData(galaxy.userId);
+            const profile = data?.userData?.[0] || null;
+            setGalaxyProfile(profile);
+        } catch (err) {
+            console.error('Failed to fetch galaxy profile:', err);
+        }
+    }, [flyTo, isFlying]);
+
+    const handleReadPost = useCallback(() => {
+        if (!selectedPost) return;
+        navigate(`/home/post/${selectedPost.id}`);
+    }, [selectedPost, navigate]);
+
+    const handleMinimapNavigate = useCallback((worldX, worldY, mode = 'fly') => {
+        if (mode === 'drag') {
+            jumpTo(worldX, worldY);
+            return;
+        }
+        flyTo(worldX, worldY, zoom);
+    }, [flyTo, jumpTo, zoom]);
+
+    // Enrich wormhole positions with live gravity-computed post coords
+    const enrichedWormholes = useMemo(() => {
+        return wormholes.map(wh => {
+            const postA = posts.get(wh.post_a);
+            const postB = posts.get(wh.post_b);
+            const posA = postA ? getComputedStarPosition(postA) : null;
+            const posB = postB ? getComputedStarPosition(postB) : null;
+            return {
+                ...wh,
+                a_x: posA?.x ?? wh.a_x,
+                a_y: posA?.y ?? wh.a_y,
+                b_x: posB?.x ?? wh.b_x,
+                b_y: posB?.y ?? wh.b_y,
+            };
+        });
+    }, [wormholes, posts, getComputedStarPosition]);
+
+    // Find wormhole connection for a given post (if any)
+    const getWormholeForPost = useCallback((postId) => {
+        if (!postId || enrichedWormholes.length === 0) return null;
+        for (const wh of enrichedWormholes) {
+            if (wh.post_a === postId) return { wormhole: wh, side: 'a', targetTitle: wh.b_title };
+            if (wh.post_b === postId) return { wormhole: wh, side: 'b', targetTitle: wh.a_title };
+        }
+        return null;
+    }, [enrichedWormholes]);
+
+    const handleWormholeTravel = useCallback(() => {
+        if (!selectedPost || isFlying.current) return;
+        const match = getWormholeForPost(selectedPost.id);
+        if (!match) return;
+        const { wormhole, side } = match;
+        const targetX = side === 'a' ? wormhole.b_x : wormhole.a_x;
+        const targetY = side === 'a' ? wormhole.b_y : wormhole.a_y;
+        setSelectedPost(null);
+        setIsWarping(true);
+        flyTo(targetX, targetY, zoom, () => setIsWarping(false));
+    }, [selectedPost, getWormholeForPost, flyTo, isFlying, zoom]);
+
+    // One-time auto focus after first payload is loaded.
+    useEffect(() => {
+        if (!userId) return;
+        if (isInitialLoading) return;
+        if (hasAutoFocusedOwnGalaxyRef.current) return;
+
+        const ownGalaxy = galaxies.find((galaxy) => galaxy.userId === userId);
+        const target = ownGalaxy
+            ? { x: ownGalaxy.x, y: ownGalaxy.y }
+            : (centroidTargets.get(userId) || ownGalaxyTarget);
+
+        // Wait until we have a concrete own target; fallback is resolved asynchronously.
+        if (!target) return;
+
+        hasAutoFocusedOwnGalaxyRef.current = true;
+        flyTo(target.x, target.y, MIN_UNIVERSE_ZOOM);
+    }, [userId, isInitialLoading, galaxies, centroidTargets, ownGalaxyTarget, flyTo]);
+
+    const settledPayload = useMemo(() => {
+        if (!isSettled || activePosts.length === 0) return [];
+
+        const payload = [];
+        for (const post of activePosts) {
+            if (!post?.id) continue;
+            const pos = getComputedStarPosition(post);
+            if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+
+            payload.push({
+                post_id: post.id,
+                settled_x: Math.round(pos.x * 100) / 100,
+                settled_y: Math.round(pos.y * 100) / 100,
+            });
+        }
+
+        payload.sort((a, b) => String(a.post_id).localeCompare(String(b.post_id)));
+        return payload;
+    }, [activePosts, getComputedStarPosition, isSettled]);
+
+    // Placeholder persistence hook: debounced Supabase RPC for settled positions.
+    useEffect(() => {
+        if (!ENABLE_SETTLED_RPC_SAVE) return;
+        if (!isSettled || settledPayload.length === 0) return;
+
+        const signature = JSON.stringify(settledPayload);
+        if (signature === lastSettledPayloadRef.current) return;
+
+        if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+        settleDebounceRef.current = setTimeout(async () => {
+            lastSettledPayloadRef.current = signature;
+            try {
+                const { error } = await supabase.rpc('save_universe_settled_positions', {
+                    positions_payload: settledPayload,
+                });
+                if (error) {
+                    console.warn('[universe] settle save placeholder RPC returned error:', error.message);
+                }
+            } catch (err) {
+                console.warn('[universe] settle save placeholder RPC failed:', err?.message || err);
+            }
+        }, 1200);
+
+        return () => {
+            if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+        };
+    }, [isSettled, settledPayload]);
+
+    useEffect(() => {
+        return () => {
+            if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+            if (settleDebounceRef.current) clearTimeout(settleDebounceRef.current);
+        };
+    }, []);
+
+    return (
+        <div className={`${styles.universeContainer} ${isDragging ? styles.grabbing : ''}`}>
+            <button className={styles.backButton} onClick={() => navigate('/home')}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Back
+            </button>
+
+            <div className={styles.coordsLabel}>
+                {centerWorld.x}, {centerWorld.y}
+            </div>
+
+            {isInitialLoading && (
+                <div className={styles.loadingOverlay}>
+                    <div className={styles.loadingCard}>
+                        <div className={styles.loadingSpinner} />
+                        <div className={styles.loadingText}>Loading universe...</div>
+                    </div>
+                </div>
+            )}
+
+            <Stage
+                ref={stageRef}
+                width={stageSize.width}
+                height={stageSize.height}
+                {...stageEvents}
+            >
+                <DeepSpaceLayer layerProps={getLayerProps(0.1)} />
+                <MidGalaxyLayer layerProps={getLayerProps(0.4)} />
+                <NebulaLayer
+                    layerProps={getLayerProps(0.85)}
+                    galaxies={galaxies}
+                    centroids={centroids}
+                />
+                {enrichedWormholes.length > 0 && (
+                    <WormholeLayer
+                        layerProps={getLayerProps(1.0)}
+                        wormholes={enrichedWormholes}
+                        zoom={zoom}
+                    />
+                )}
+                <InteractiveLayer
+                    layerProps={getLayerProps(1.0)}
+                    posts={postArray}
+                    galaxies={galaxies}
+                    zoom={zoom}
+                    showTitles={showTitles}
+                    pulsingId={pulsingId}
+                    onStarClick={handleStarClick}
+                    onGalaxyClick={handleGalaxyClick}
+                    galaxyPositions={galaxyPositions}
+                    starPullOffsets={starPullOffsets}
+                    similarPairs={similarPairs}
+                    galaxyEdges={effectiveGalaxyEdges}
+                    activePostIds={activePostIds}
+                    useEmbeddingBridges={hasEmbeddingGravity}
+                />
+            </Stage>
+
+            {isWarping && <div className={styles.warpOverlay} />}
+
+            <UniverseMinimap
+                galaxies={galaxies}
+                camera={camera}
+                zoom={zoom}
+                stageSize={stageSize}
+                onNavigate={handleMinimapNavigate}
+            />
+
+            {selectedGalaxy && galaxyProfile && (
+                <div className={styles.galaxyPreviewPanel}>
+                    <button
+                        className={styles.galaxyPreviewClose}
+                        onClick={() => { setSelectedGalaxy(null); setGalaxyProfile(null); }}
+                    >
+                        &times;
+                    </button>
+                    <div
+                        className={styles.galaxyPreviewBg}
+                        style={galaxyProfile.background || {}}
+                    />
+                    <div className={styles.galaxyPreviewContent}>
+                        <img
+                            className={styles.galaxyPreviewAvatar}
+                            src={galaxyProfile.image_url || '/assets/profile.jpg'}
+                            alt=""
+                        />
+                        <div className={styles.galaxyPreviewHeading}>
+                            This is {galaxyProfile.name || selectedGalaxy.name}'s galaxy
+                        </div>
+                        {galaxyProfile.bio && (
+                            <div className={styles.galaxyPreviewBio}>{galaxyProfile.bio}</div>
+                        )}
+                        <button
+                            className={styles.galaxyPreviewVisitBtn}
+                            onClick={(e) => handleClickProfile(navigate)(e, userId, selectedGalaxy.userId)}
+                        >
+                            Visit Profile
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {selectedPost && (
+                <div className={styles.previewPanel}>
+                    <button
+                        className={styles.previewClose}
+                        onClick={() => setSelectedPost(null)}
+                    >
+                        &times;
+                    </button>
+                    <div className={styles.previewAuthor}>
+                        <img
+                            className={styles.previewAvatar}
+                            src={selectedPost.users?.image_url || selectedPost.user_image_url || '/assets/profile.jpg'}
+                            alt=""
+                        />
+                        <span className={styles.previewAuthorName}>
+                            {selectedPost.users?.name || selectedPost.user_name || 'Anonymous'}
+                        </span>
+                    </div>
+                    <div className={styles.previewTitle}>{selectedPost.title}</div>
+                    <div className={styles.previewSnippet}>{extractSnippet(selectedPost)}</div>
+                    <div className={styles.previewLikes}>
+                        {(() => {
+                            const count = selectedPost.like_count != null
+                                ? selectedPost.like_count
+                                : (Array.isArray(selectedPost.likes) && selectedPost.likes[0]?.count != null
+                                    ? selectedPost.likes[0].count : 0);
+                            return `${count} like${count !== 1 ? 's' : ''}`;
+                        })()}
+                    </div>
+                    <div className={styles.previewActions}>
+                        <button className={styles.previewReadBtn} onClick={handleReadPost}>
+                            Read
+                        </button>
+                        {getWormholeForPost(selectedPost.id) && (
+                            <div className={styles.wormholeBtnWrap}>
+                                <button className={styles.wormholeBtn} onClick={handleWormholeTravel}>
+                                    Wormhole to "{getWormholeForPost(selectedPost.id).targetTitle}"
+                                </button>
+                                <div className={styles.wormholeTooltip}>
+                                    This post is semantically linked to a distant post. Click to warp there instantly.
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Universe;

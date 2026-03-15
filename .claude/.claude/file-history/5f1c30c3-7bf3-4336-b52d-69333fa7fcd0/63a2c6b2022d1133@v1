@@ -1,0 +1,100 @@
+.confetti-layer{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 999999;
+}
+.welcome-message-container{
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100vh;
+    background-color: rgba(255, 255, 255, 0.066);
+    backdrop-filter: blur(2px);
+    z-index: 112;
+}
+
+.welcome-message-child-container{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 40%;
+    height: 40%;
+    padding: 1rem;
+    background-color: rgb(255, 255, 255);
+    box-shadow: 1px 1px 20px 1px rgba(0, 0, 0, 0.347);
+    border-radius: 10px;
+}
+.welcome-message{
+    margin: 1rem 0rem;
+    text-align: center;
+    font-size: 1.4rem;
+}
+.iskrib-word{
+    font-weight: 780;
+}
+.welcome-message-close-bttn{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: fit-content;
+    height: fit-content;
+    cursor: pointer;
+    
+}
+.welcome-close-svg{
+    transition: ease-in-out 0.1s;
+}
+.welcome-close-svg:hover{
+    scale: 1.2;
+}
+@media(max-width: 428px){
+    .welcome-message-child-container{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 60%;
+        height: 45%;
+        padding: 1rem;
+        background-color: rgb(255, 255, 255);
+        box-shadow: 1px 1px 20px 1px rgba(0, 0, 0, 0.347);
+        border-radius: 10px;
+    }
+    .welcome-message{
+        margin: 1rem 0rem;
+        text-align: center;
+        font-size: 1.2rem;
+    }
+    .iskrib-word{
+        font-weight: 780;
+    }
+}
+
+@media(max-width: 428px){
+    .welcome-message-child-container{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 60%;
+        height: 45%;
+        padding: 1rem;
+        background-color: rgb(255, 255, 255);
+        box-shadow: 1px 1px 20px 1px rgba(0, 0, 0, 0.347);
+        border-radius: 10px;
+    }
+    .welcome-message{
+        margin: 1rem 0rem;
+        text-align: center;
+        font-size: 1.2rem;
+    }
+    .iskrib-word{
+        font-weight: 780;
+    }
+}

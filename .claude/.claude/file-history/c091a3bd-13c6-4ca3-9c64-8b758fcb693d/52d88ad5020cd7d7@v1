@@ -1,0 +1,112 @@
+# UI Redesign Plan - Productivity-First Dashboard
+
+## Context
+The modular apartment planner's UI is functional but visually flat and generic. Buttons are text-only, tooling requires 2 clicks via dropdowns, there's no clear visual hierarchy, and several components use inline styles. The goal is to transform this into a polished, productivity-focused interface inspired by Figma, Linear, and AutoCAD - where every pixel earns its place and the most-used actions are fastest to reach.
+
+---
+
+## Implementation Sequence
+
+### Step 1: Design Tokens (`src/styles/variables.css`)
+Foundation changes that all subsequent work builds on.
+
+**Changes:**
+- `--toolbar-height`: `48px` -> `52px`
+- `--sidebar-width`: `240px` -> `260px`
+- `--color-border`: `#DDDDD8` -> `#D9D9D4` (warmer)
+- `--color-text-secondary`: `#6B7080` -> `#5F6470` (better readability)
+- Add new tokens:
+  - `--color-card-bg: #EFEFEC` / `--color-card-bg-hover: #E8E8E4`
+  - `--color-segment-bg: rgba(0, 0, 0, 0.05)`
+  - `--color-segment-active-bg: var(--color-surface-elevated)`
+  - `--color-segment-active-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.04)`
+  - `--color-danger-ghost-border: rgba(220, 38, 38, 0.25)`
+  - `--color-danger-ghost-bg-hover: rgba(220, 38, 38, 0.06)`
+  - `--color-divider: rgba(0, 0, 0, 0.04)`
+  - `--color-sticky-bg: rgba(243, 243, 240, 0.92)`
+  - `--space-2xs: 2px`
+
+### Step 2: Toolbar Icons (`src/ui/ToolbarIcons.jsx` - NEW)
+~25 SVG icon components with consistent `viewBox="0 0 20 20"`, `stroke="currentColor"`, `strokeWidth="1.5"`, `aria-hidden="true"`.
+
+Icons for: New, Save, Load, Undo, Redo, Copy, Cut, Paste, Select, Dimension, Wall, Beam, Stair, SectionCut, Slab, Room, Door, Window, Column, Landing, Grid, Snap, DetectRooms, PlanView, Elevation, SectionView, Sheets, Sidebar, Properties.
+
+### Step 3: Toolbar Redesign (`src/ui/Toolbar.jsx` + `Toolbar.module.css`)
+The biggest UX change: eliminate the tool dropdown, use icons everywhere.
+
+**New Layout:**
+```
+[New Undo Redo Save | Load Copy Cut Paste] | [Plan|Front|Rear|Left|Right|Section|Sheets] | [V M W B T Q S R D N C L] | [Sidebar Properties | Grid Snap DetectRooms] | spacer
+```
+
+**Key changes:**
+- All file/clipboard actions become icon buttons (34x34px) with tooltips showing name + shortcut
+- View modes become a segmented pill control (inset track + raised active tab)
+- Tool palette: inline row of 12 icon buttons replacing the 2-click dropdown - active tool highlighted with accent bg
+- Grid/Snap/DetectRooms become icon toggles (saves ~200px of text)
+- Save button gets accent color + pulsing dot via `data-dirty` CSS `::after` instead of child span
+- Remove: `toolMenuOpen` state, `toolMenuRef` ref, click-outside useEffect, dropdown JSX
+- Responsive: tools collapse at 1100px, full collapse at 900px
+
+**CSS additions:** `.segmentedGroup`, `.segmentedBtn`, `.segmentedBtnActive`, `.toolPalette`, `.toolPaletteBtn`, `.toolPaletteBtnActive`, `.divider`
+
+### Step 4: InputField to CSS Module (`src/ui/InputField.jsx` + `InputField.module.css` - NEW)
+Extract all inline styles to CSS Module. No visual change - pure refactor prerequisite for Properties Panel work.
+
+### Step 5: Modal Redesign (`src/ui/Modal.jsx` + `Modal.module.css` - NEW)
+- Convert inline styles to CSS Module
+- Add header row with title + close (X) button + bottom divider
+- Add shared button classes (`.modalBtn`, `.modalBtnDanger`, `.modalCard`)
+- Update `App.jsx` Load Project modal to use these CSS classes instead of inline styles
+
+### Step 6: Sidebar Redesign (`src/ui/Sidebar.jsx` + `Sidebar.module.css`)
+**Changes:**
+- Replace text chevron `'▾'` with SVG chevron (animated 90deg rotation)
+- Floor items become cards (`.floorCard`) with border, background, hover-revealed action icons (duplicate/trash SVG) instead of "Dup"/"Del" text
+- Section add buttons: `"+ Add Floor"` text -> small "+" icon button in section header row (new `action` prop on Section component)
+- Item rows get left accent border on hover/selection
+- Add sticky contextual header "Floor: [name]" between project-level and floor-level sections
+- Section title font: `10.5px` -> `11px`
+- Section headers get subtle bottom border
+
+### Step 7: Properties Panel Redesign (`src/ui/PropertiesPanel.jsx` + `PropertiesPanel.module.css`)
+**Changes:**
+- Unit toggle: two separate buttons -> pill-shaped segmented control (`.segmentControl` + `.segmentBtn`)
+- Delete button: solid red -> ghost outline danger style (border + transparent bg)
+- Split `.deleteBtn` into `.deleteBtn` (danger-ghost) and `.actionBtn` (accent-ghost) for non-destructive actions
+- Color picker: larger swatch (44x32px) + editable hex input
+- Export button: accent-subtle styling with download icon, renamed "Export sheet"
+- Section dividers: lighter color (`--color-divider`), more spacing
+- Color hex display becomes editable input
+
+---
+
+## Files Modified
+| File | Action |
+|------|--------|
+| `src/styles/variables.css` | Edit - add/refine tokens |
+| `src/ui/ToolbarIcons.jsx` | Create - ~25 SVG icon components |
+| `src/ui/Toolbar.jsx` | Edit - restructure to icon-based, inline tool palette |
+| `src/ui/Toolbar.module.css` | Edit - new segmented/icon/palette styles |
+| `src/ui/InputField.jsx` | Edit - replace inline styles with CSS module |
+| `src/ui/InputField.module.css` | Create - extracted styles |
+| `src/ui/Modal.jsx` | Edit - CSS module + header/close button |
+| `src/ui/Modal.module.css` | Create - extracted + enhanced styles |
+| `src/ui/Sidebar.jsx` | Edit - SVG chevrons, floor cards, add buttons, context header |
+| `src/ui/Sidebar.module.css` | Edit - cards, accent bars, sticky header |
+| `src/ui/PropertiesPanel.jsx` | Edit - segmented control, ghost buttons, color picker |
+| `src/ui/PropertiesPanel.module.css` | Edit - segment, ghost-delete, action btn styles |
+| `src/app/App.jsx` | Edit - convert Load modal inline styles to CSS classes |
+| `src/app/App.module.css` | No changes (layout adapts via CSS variables) |
+
+## Verification
+1. `npm run dev` and visually inspect every component
+2. Test all 12 tools are 1-click accessible in the toolbar
+3. Test view mode switching (segmented control)
+4. Test toggle states (grid, snap, sidebar, properties)
+5. Test Save dirty indicator, undo/redo disabled states
+6. Test sidebar: floor card hover actions, section collapse, add buttons, object selection
+7. Test properties panel: unit toggle, color picker, delete/action buttons, export menu
+8. Test modal: open/close, escape key, overlay click, load/delete project
+9. Test responsive: resize below 1100px and 900px breakpoints
+10. Verify no regressions in keyboard shortcuts (V/W/D/N/etc., Ctrl+Z/S)

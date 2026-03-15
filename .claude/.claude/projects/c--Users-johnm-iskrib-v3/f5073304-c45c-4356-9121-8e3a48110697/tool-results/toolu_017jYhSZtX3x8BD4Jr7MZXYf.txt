@@ -1,0 +1,351 @@
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-13-    const openAuthModal = () => setShowAuthModal(true);
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-14-    const closeAuthModal = () => setShowAuthModal(false);
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-15-
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-16-    const queryClient = useQueryClient();
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-17-
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:18:    const {data: authData, isLoading: isAuthLoading} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-19-        queryKey: ['authsession'],
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-20-        queryFn: async() =>{
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-21-            const {data, error} = await supabase.auth.getSession();
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-22-            if(error) throw error;
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-23-            return data.session
+--
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-50-        })
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-51-        return() => listener.subscription.unsubscribe();
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-52-        
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-53-    }, [isAuthLoading])
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-54-
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:55:    const {data: userData, isLoading} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-56-            queryKey: ['userData', authData?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-57-            queryFn: ({queryKey}) => getUserData(queryKey[1]),
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-58-            enabled: !!authData?.access_token, //only runs if token exists
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-59-            staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-60-            cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-61-        })
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-62-
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx:63:    const {data: notifCount, isLoading: isLoadingNotifCount} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-64-        queryKey: ['notifcounts', authData?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-65-        queryFn: ({queryKey}) => getNotificationsCount(queryKey[1], authData?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-66-        enabled: !!authData?.access_token,
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-67-        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\Context\Authcontext.jsx-68-        cacheTime: 1000 * 60 * 60,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-99-        </div>
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-100-    );
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-101-}
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-102-
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-103-export default function RelatedPosts({ journalId }) {
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx:104:    const { data, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-105-        queryKey: ['relatedPosts', journalId],
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-106-        queryFn: () => getRelatedPosts(journalId),
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-107-        enabled: !!journalId,
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-108-        staleTime: 10 * 60 * 1000,
+C:\Users\johnm\iskrib_v3\client\src\components\Discovery\RelatedPosts.jsx-109-        retry: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-2-import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-3-import { getTodaysPrompt, getPromptResponses } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-4-import './DailyPromptCard.css';
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-5-
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-6-const DailyPromptCard = ({ onWriteResponse }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:7:    const { data: prompt, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-8-        queryKey: ['todaysPrompt'],
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-9-        queryFn: getTodaysPrompt,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-10-        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-11-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-12-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-13-
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx:14:    const { data: responsesData } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-15-        queryKey: ['promptResponses', prompt?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-16-        queryFn: () => getPromptResponses(prompt.id),
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-17-        enabled: !!prompt?.id,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-18-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DailyPrompt\DailyPromptCard.jsx-19-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-30-    const { username: urlUsername } = useParams();
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-31-    const queryUserId = new URLSearchParams(location.search).get('userId');
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-32-    const isUsernameRoute = !!urlUsername;
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-33-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-34-    // Fetch user by username if on /@username route
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:35:    const { data: usernameData, isLoading: isLoadingByUsername } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-36-        queryKey: ['userByUsername', urlUsername],
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-37-        queryFn: () => getUserByUsername(urlUsername),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-38-        enabled: isUsernameRoute,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-39-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-40-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-135-        notifCount,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-136-        setShowEditor: setOpenRichTextEditor,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-137-    });
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-138-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-139-    
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:140:    const {data, isLoading} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-141-        queryKey: ['visitedProfile', visitedUserId],
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-142-        queryFn:({queryKey}) => getUserData(queryKey[1]),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-143-        enabled: !!visitedUserId && !isUsernameRoute,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-144-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-145-        staleTime: 1000 * 60 * 10
+--
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-151-        : data?.userData?.[0]
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-152-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-153-    useProfileSeo(userData, profileUsername);
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-154-    const getProfileSectionSize = () => 'md';
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-155-
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx:156:    const{data: followsData, isLoading: isLoadingFollowsData} = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-157-        queryKey: ['followsData', user?.userData?.[0].id, visitedUserId],
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-158-        queryFn: ({queryKey}) => getFollowsData(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-159-        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-160-        cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\VisitProfile\Visitprofile.jsx-161-        enabled: !!user?.userData?.[0].id && !!visitedUserId,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-97-    const location = useLocation();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-98-    const { journalId } = useParams();
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-99-    const statePostData = location.state;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-100-    const shouldFetchPost = !!journalId && (!statePostData || !statePostData?.postType || !statePostData?.content);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-101-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:102:    const { data: fetchedJournalData, isLoading: isLoadingJournalById } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-103-        queryKey: ['journalById', journalId, user?.userData?.[0]?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-104-        queryFn: ({ queryKey }) => getJournalById(queryKey[1], queryKey[2], { includeRepostContent: false }),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-105-        enabled: shouldFetchPost,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-106-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-107-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-169-        };
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-170-    }, [fetchedJournalData, statePostData]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-171-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-172-    usePostSeo(postData);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-173-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx:174:    const { data: followsData, isLoading: isLoadingFollows } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-175-        queryKey: ['followsData', user?.userData?.[0]?.id, postData?.userId],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-176-        queryFn: ({ queryKey }) => getFollowsData(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-177-        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-178-        cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\ContentViewer\ContentView.jsx-179-        enabled: !!user?.userData?.[0]?.id && !!postData?.userId,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-34-        catch { return false; }
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-35-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-36-
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-37-    // ─── Data fetching ───
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-38-
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:39:    const { data: recapData, isLoading: recapLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-40-        queryKey: ['weeklyRecap', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-41-        queryFn: () => getWeeklyRecap(session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-42-        enabled: !!session?.access_token,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-43-        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-44-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-45-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-46-
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:47:    const { data: prompt, isLoading: promptLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-48-        queryKey: ['todaysPrompt'],
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-49-        queryFn: getTodaysPrompt,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-50-        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-51-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-52-    });
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-53-
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx:54:    const { data: responsesData } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-55-        queryKey: ['promptResponses', prompt?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-56-        queryFn: () => getPromptResponses(prompt.id),
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-57-        enabled: !!prompt?.id,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-58-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\DashboardBriefing\DashboardBriefing.jsx-59-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-3-import { getPostReactions } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-4-import { getReactionEmoji } from '../../utils/reactionConfig';
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-5-import './reactions.css';
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-6-
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-7-const ReactionSummary = ({ journalId }) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx:8:    const { data } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-9-        queryKey: ['postReactions', journalId],
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-10-        queryFn: () => getPostReactions(journalId),
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-11-        enabled: !!journalId,
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-12-        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Reactions\ReactionSummary.jsx-13-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-27-        try { return localStorage.getItem(weekKey) === 'true'; }
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-28-        catch { return false; }
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-29-    });
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-30-    const [expanded, setExpanded] = useState(false);
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-31-
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx:32:    const { data, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-33-        queryKey: ['weeklyRecap', session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-34-        queryFn: () => getWeeklyRecap(session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-35-        enabled: !!session?.access_token && !dismissed,
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-36-        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\WeeklyRecap\WeeklyRecapCard.jsx-37-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-16-    const textAreaRef = useRef(null);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-17-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-18-    const [replyOpinion, setReplyOpinion] = useState('');
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-19-    const [isTyping, setIsTyping] = useState(false);
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-20-
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx:21:    const { data, isLoading } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-22-        queryKey: ['getViewOpinion', opinionId, userId],
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-23-        queryFn: ({ queryKey }) => getViewOpinion(queryKey[1], queryKey[2]),
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-24-        staleTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-25-        cacheTime: 1000 * 60 * 60,
+C:\Users\johnm\iskrib_v3\client\src\components\SidebarOpinions\opinionViewer.jsx-26-        enabled: !!opinionId && !!userId,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-1-import { useQuery } from '@tanstack/react-query';
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-2-import { getStreak } from '../../../API/Api';
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-3-
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-4-const useStreakData = (userId) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js:5:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-6-        queryKey: ['streak', userId],
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-7-        queryFn: () => getStreak(userId),
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-8-        enabled: !!userId,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-9-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Streak\useStreakData.js-10-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-215-        return () => clearTimeout(timer);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-216-    }, [searchInput]);
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-217-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-218-    const isSearchMode = committedSearchQuery.length >= 2;
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-219-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:220:    const { data: feedData, isLoading: isLoadingFeed } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-221-        queryKey: ["explore-hottest-monthly-feed", userId, currentUtcMonthKey],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-222-        queryFn: () => getMonthlyHottestJournals(userId, 10),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-223-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-224-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-225-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-226-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:227:    const { data: interestData } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-228-        queryKey: ["explore-interest-sections", session?.user?.id],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-229-        queryFn: () => getInterestSections(session?.access_token),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-230-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-231-        staleTime: 1000 * 60 * 30,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-232-        enabled: !!session?.access_token && !isSearchMode,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-235-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-236-        data: searchData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-237-        isLoading: isLoadingSearch,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-238-        isFetching: isFetchingSearch,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-239-        error: searchError,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:240:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-241-        queryKey: ["explore-search", userId, committedSearchQuery],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-242-        queryFn: () => searchJournals(committedSearchQuery, 10, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-243-        enabled: isSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-244-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-245-        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-246-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-247-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-248-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-249-        data: suggestionData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-250-        isLoading: isSuggestionsLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:251:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-252-        queryKey: ["explore-suggestions", userId, debouncedSearchInput],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-253-        queryFn: () => searchJournals(debouncedSearchInput, 6, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-254-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === "posts",
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-255-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-256-        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-257-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-258-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-259-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-260-        data: userSuggestionData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-261-        isLoading: isUserSuggestionsLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx:262:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-263-        queryKey: ["user-suggestions", debouncedSearchInput],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-264-        queryFn: () => searchUsers(debouncedSearchInput, 6),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-265-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === "people",
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-266-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\ExplorePage.jsx-267-        staleTime: 1000 * 60 * 2,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-22-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-23-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-24-        data: searchData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-25-        isLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-26-        error,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx:27:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-28-        queryKey: ["user-search", searchQuery],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-29-        queryFn: () => searchUsers(searchQuery, 10),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-30-        enabled: searchQuery.length >= 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-31-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\explore\UserSearchResults.jsx-32-        staleTime: 1000 * 60 * 2,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-229-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-230-        data: searchData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-231-        isLoading: isSearchLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-232-        isFetching: isSearchFetching,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-233-        error: searchError,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:234:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-235-        queryKey: ['journals-search', userId, committedSearchQuery],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-236-        queryFn: () => searchJournals(committedSearchQuery, 10, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-237-        enabled: isPostSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-238-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-239-        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-240-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-241-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-242-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-243-        data: suggestionData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-244-        isLoading: isSuggestionsLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:245:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-246-        queryKey: ['journals-suggestions', userId, debouncedSearchInput],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-247-        queryFn: () => searchJournals(debouncedSearchInput, 6, userId),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-248-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === 'posts',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-249-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-250-        staleTime: 1000 * 60 * 2,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-253-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-254-        data: userSearchData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-255-        isLoading: isUserSearchLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-256-        isFetching: isUserSearchFetching,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-257-        error: userSearchError,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:258:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-259-        queryKey: ['users-search', committedSearchQuery],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-260-        queryFn: () => searchUsers(committedSearchQuery, 10),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-261-        enabled: isPeopleSearchMode,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-262-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-263-        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-264-    });
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-265-
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-266-    const {
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-267-        data: userSuggestionData,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-268-        isLoading: isUserSuggestionsLoading,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx:269:    } = useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-270-        queryKey: ['users-suggestions', debouncedSearchInput],
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-271-        queryFn: () => searchUsers(debouncedSearchInput, 6),
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-272-        enabled: debouncedSearchInput.length >= 2 && isSearchFocused && searchType === 'people',
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-273-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\HomePage\postCards\PostCards.jsx-274-        staleTime: 1000 * 60 * 2,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-36-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-37-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-38-};
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-39-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-40-export const useStoryDetail = (storyId, token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:41:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-42-        queryKey: ['story', storyId],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-43-        queryFn: () => getStoryById(storyId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-44-        enabled: !!storyId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-45-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-46-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-47-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-48-};
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-49-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-50-export const useChapter = (storyId, chapterId, token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:51:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-52-        queryKey: ['chapter', storyId, chapterId],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-53-        queryFn: () => getChapter(storyId, chapterId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-54-        enabled: !!storyId && !!chapterId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-55-        staleTime: 1000 * 60 * 10,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-56-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-57-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-58-};
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-59-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-60-export const useChapterCommentCounts = (chapterId, token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:61:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-62-        queryKey: ['chapterCommentCounts', chapterId],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-63-        queryFn: () => getChapterCommentCounts(chapterId, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-64-        enabled: !!chapterId,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-65-        staleTime: 1000 * 60 * 5,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-66-        refetchOnWindowFocus: false,
+--
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-84-        refetchOnWindowFocus: false,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-85-    });
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-86-};
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-87-
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-88-export const useChapterComments = (chapterId, paragraphIndex, token) => {
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js:89:    return useQuery({
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-90-        queryKey: ['chapterComments', chapterId, paragraphIndex],
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-91-        queryFn: () => getChapterComments(chapterId, paragraphIndex, token),
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-92-        enabled: !!chapterId && paragraphIndex !== null && paragraphIndex !== undefined,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-93-        staleTime: 1000 * 60 * 2,
+C:\Users\johnm\iskrib_v3\client\src\components\Stories\hooks\useStoryData.js-94-        refetchOnWindowFocus: false,

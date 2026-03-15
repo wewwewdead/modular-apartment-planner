@@ -1,0 +1,154 @@
+.weekly-recap-card {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(134, 179, 143, 0.08));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 16px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow: hidden;
+}
+
+.recap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.recap-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.recap-icon {
+    color: #f59e0b;
+    opacity: 0.85;
+}
+
+.recap-label {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary, #a1a1aa);
+}
+
+.recap-dismiss-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary, #a1a1aa);
+    padding: 4px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+.recap-dismiss-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.recap-summary-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.recap-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 48px;
+}
+
+.recap-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary, #fafafa);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.recap-stat-label {
+    font-size: 11px;
+    color: var(--text-secondary, #a1a1aa);
+    text-transform: lowercase;
+}
+
+.recap-stat-divider {
+    width: 1px;
+    height: 28px;
+    background: var(--border-color, rgba(255, 255, 255, 0.1));
+    flex-shrink: 0;
+}
+
+.recap-expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary, #a1a1aa);
+    padding: 4px;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.recap-expand-btn.is-expanded {
+    transform: rotate(180deg);
+}
+
+.recap-details {
+    overflow: hidden;
+}
+
+.recap-details-inner {
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.recap-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.recap-detail-heading {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--text-secondary, #a1a1aa);
+}
+
+.recap-detail-text {
+    font-size: 13px;
+    color: var(--text-primary, #fafafa);
+    margin: 0;
+    line-height: 1.4;
+}
+
+.recap-detail-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.recap-detail-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}

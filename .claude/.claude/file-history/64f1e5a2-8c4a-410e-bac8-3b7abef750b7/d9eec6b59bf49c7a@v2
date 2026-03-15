@@ -1,0 +1,332 @@
+import React, {useMemo, useState} from 'react';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {useInfiniteQuery, useMutation} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {SafeAreaView} from 'react-native-safe-area-context';
+import {PostCard} from '../../components/PostCard/PostCard';
+import {PostCardSkeleton} from '../../components/SkeletonLoader';
+import {Chip} from '../../components/Chip';
+import {EmptyState} from '../../components/EmptyState';
+import {PenIcon} from '../../components/icons';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {useTheme} from '../../theme/ThemeProvider';
+import {fonts, typeScale} from '../../theme/typography';
+import {spacing, radii, shadows} from '../../theme/spacing';
+import {
+  mobileApi,
+  type CursorPage,
+  type JournalItem,
+} from '../../lib/api/mobileApi';
+import {socialApi} from '../../lib/api/socialApi';
+import {queryClient} from '../../lib/queryClient';
+import {
+  extractPlainText,
+  extractBannerImage,
+  resolveCount,
+  getNextCursor,
+} from '../../lib/utils/journalHelpers';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+const PAGE_SIZE = 10;
+
+const QUICK_ACTIONS = [
+  {key: 'all', label: 'All'},
+  {key: 'journal', label: 'Journals'},
+  {key: 'canvas', label: 'Canvas'},
+  {key: 'freedom_wall', label: 'Freedom Wall'},
+  {key: 'universe', label: 'Universe'},
+] as const;
+
+export function HomeFeedScreen({navigation}: Props) {
+  const {user, session} = useAuth();
+  const {colors} = useTheme();
+  const token = session?.access_token ?? '';
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  const feedQuery = useInfiniteQuery({
+    queryKey: ['feed', user?.id],
+    queryFn: ({pageParam}) =>
+      mobileApi.getJournals(pageParam ?? null, PAGE_SIZE, user?.id),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => getNextCursor(lastPage, PAGE_SIZE),
+  });
+
+  const reactionMutation = useMutation({
+    mutationFn: async ({
+      journalId,
+      receiverId,
+      reactionType,
+    }: {
+      journalId: string;
+      receiverId: string;
+      reactionType: string;
+    }) => {
+      if (!token) throw new Error('Please log in to react.');
+      return socialApi.toggleReaction(token, {journalId, receiverId, reactionType});
+    },
+    onMutate: async ({journalId, reactionType}) => {
+      await queryClient.cancelQueries({queryKey: ['feed']});
+      const prev = queryClient.getQueryData<{pages: CursorPage<JournalItem>[]}>(
+        ['feed', user?.id],
+      );
+      if (prev) {
+        queryClient.setQueryData<{pages: CursorPage<JournalItem>[]}>(
+          ['feed', user?.id],
+          old => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map(page => ({
+                ...page,
+                data: page.data.map(item => {
+                  if (item.id !== journalId) return item;
+                  const removing = item.user_reaction === reactionType;
+                  const currentCount =
+                    (item.reaction_count?.[0]?.count ??
+                      item.like_count?.[0]?.count ??
+                      item.likes_count ??
+                      0) as number;
+                  const delta = removing ? -1 : item.user_reaction ? 0 : 1;
+                  return {
+                    ...item,
+                    user_reaction: removing ? null : reactionType,
+                    has_liked: removing ? false : true,
+                    like_count: [{count: Math.max(0, currentCount + delta)}],
+                  };
+                }),
+              })),
+            };
+          },
+        );
+      }
+      return {prev};
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) {
+        queryClient.setQueryData(['feed', user?.id], context.prev);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({queryKey: ['feed']});
+    },
+  });
+
+  const handleReact = (journalId: string, receiverId: string, reactionType: string) => {
+    if (!token) return;
+    reactionMutation.mutate({journalId, receiverId, reactionType});
+  };
+
+  const posts = useMemo(
+    () => feedQuery.data?.pages.flatMap(page => page.data ?? []) ?? [],
+    [feedQuery.data?.pages],
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await feedQuery.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleQuickAction = (key: string) => {
+    if (key === 'canvas') {
+      navigation.navigate('Canvas');
+    } else if (key === 'freedom_wall') {
+      navigation.navigate('FreedomWall');
+    } else if (key === 'universe') {
+      navigation.navigate('Universe');
+    } else {
+      setActiveFilter(key);
+    }
+  };
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, {backgroundColor: colors.bgPrimary}]}
+      edges={['top']}>
+      {/* Branded header */}
+      <View
+        style={[
+          styles.header,
+          {borderBottomColor: colors.borderCard},
+        ]}>
+        <Text style={[styles.brandText, {color: colors.textHeading}]}>
+          iskrib
+        </Text>
+      </View>
+
+      {/* Filter chips */}
+      <View style={styles.chipRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipScroll}>
+          {QUICK_ACTIONS.map(action => (
+            <Chip
+              key={action.key}
+              label={action.label}
+              active={activeFilter === action.key}
+              onPress={() => handleQuickAction(action.key)}
+            />
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Feed */}
+      <FlatList
+        data={posts}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        onEndReachedThreshold={0.25}
+        onEndReached={() => {
+          if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
+            feedQuery.fetchNextPage();
+          }
+        }}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          feedQuery.isLoading ? (
+            <View style={styles.skeletonList}>
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+              <PostCardSkeleton />
+            </View>
+          ) : (
+            <EmptyState
+              title="No posts yet"
+              subtitle="Pull to refresh or create your first journal post."
+            />
+          )
+        }
+        ListFooterComponent={
+          feedQuery.isFetchingNextPage ? (
+            <View style={styles.loadingMore}>
+              <PostCardSkeleton />
+            </View>
+          ) : null
+        }
+        keyExtractor={item => item.id}
+        renderItem={({item}) => {
+          const preview = extractPlainText(item.content).slice(0, 180);
+          const likeCount = resolveCount(
+            item.like_count,
+            item.likes_count,
+          );
+          const commentCount = resolveCount(
+            item.comment_count,
+            item.comments_count,
+          );
+          const bookmarkCount = resolveCount(item.bookmark_count);
+          const bannerImage = extractBannerImage(
+            item.content,
+            (item as any).images,
+          );
+
+          const receiverId = item.user_id ?? item.users?.id ?? '';
+
+          return (
+            <PostCard
+              title={item.title || 'Untitled Post'}
+              bodyPreview={preview || 'No preview text available.'}
+              authorName={item.users?.name || 'Unknown author'}
+              authorAvatar={item.users?.image_url}
+              authorBadge={item.users?.badge as 'legend' | 'og' | undefined}
+              bannerImage={bannerImage}
+              postType={item.post_type}
+              likeCount={likeCount}
+              commentCount={commentCount}
+              bookmarkCount={bookmarkCount}
+              userReaction={item.user_reaction}
+              onReact={type => handleReact(item.id, receiverId, type)}
+              onPress={() =>
+                navigation.navigate('PostDetail', {journalId: item.id})
+              }
+            />
+          );
+        }}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      />
+
+      {/* FAB Write Button */}
+      <Pressable
+        onPress={() => navigation.navigate('JournalEditor', {mode: 'create'})}
+        style={({pressed}) => [
+          styles.fab,
+          {backgroundColor: colors.accentAmber},
+          shadows(colors).elevated,
+          pressed && styles.fabPressed,
+        ]}>
+        <PenIcon size={22} color="#1A1612" />
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  brandText: {
+    fontFamily: fonts.brand.semiBold,
+    fontSize: 24,
+    letterSpacing: 1,
+  },
+  chipRow: {
+    paddingVertical: spacing.sm,
+  },
+  chipScroll: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  listContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 100,
+  },
+  separator: {
+    height: spacing.md,
+  },
+  skeletonList: {
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  loadingMore: {
+    paddingTop: spacing.md,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: spacing.xxl,
+    right: spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabPressed: {
+    transform: [{scale: 0.95}],
+    opacity: 0.9,
+  },
+});

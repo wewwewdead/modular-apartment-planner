@@ -1,0 +1,199 @@
+# Add Structural Columns to Apartment Blueprint Editor
+
+## Context
+The editor supports walls, doors, windows, and rooms. The user wants to add structural columns as a first-class entity: placeable via a dedicated tool, selectable/movable, editable in the properties panel, and snappable to by wall endpoints. The column model includes `height` and `type` fields for future 3D/elevation views without overengineering structural analysis.
+
+## Files Overview
+
+| File | Status | Purpose |
+|------|--------|---------|
+| `src/domain/defaults.js` | Modify | Add `COLUMN_WIDTH`, `COLUMN_DEPTH` constants |
+| `src/domain/models.js` | Modify | Add `createColumn()` factory, `columns:[]` in `createFloor()` |
+| `src/geometry/columnGeometry.js` | **New** | Pure geometry: `columnOutline`, `columnSnapPoints` |
+| `src/app/ProjectProvider.jsx` | Modify | Add `COLUMN_ADD/UPDATE/DELETE` reducer cases |
+| `src/editor/tools.js` | Modify | Add `COLUMN: 'column'` |
+| `src/editor/handlers/columnPlaceHandler.js` | **New** | Click-to-place handler with grid snap |
+| `src/editor/useEditorTool.js` | Modify | Wire column handler in switch |
+| `src/editor/handlers/selectHandler.js` | Modify | Column hit test, move, delete |
+| `src/editor/handlers/wallDrawHandler.js` | Modify | Snap wall endpoints to column points |
+| `src/renderers/ColumnRenderer.jsx` | **New** | SVG polygon rendering of columns |
+| `src/renderers/ColumnPreview.jsx` | **New** | Translucent preview during placement |
+| `src/renderers/SvgCanvas.jsx` | Modify | Add renderers, `C` keyboard shortcut |
+| `src/renderers/SelectionOverlay.jsx` | Modify | Dashed outline + corner handles for columns |
+| `src/ui/Toolbar.jsx` | Modify | Add Column tool button |
+| `src/ui/PropertiesPanel.jsx` | Modify | Add `ColumnProperties` component + delete + summary count |
+| `src/persistence/deserialize.js` | Modify | Backfill `columns:[]` for old saves |
+
+---
+
+## Step 1: Domain Model & Defaults
+
+### `src/domain/defaults.js` — add constants
+```js
+export const COLUMN_WIDTH = 300;  // mm
+export const COLUMN_DEPTH = 300;  // mm
+```
+
+### `src/domain/models.js` — add factory + floor field
+Add import of `COLUMN_WIDTH, COLUMN_DEPTH` from defaults.
+
+Add `columns: []` to `createFloor()` return object after `windows: []`.
+
+Add factory (after `createRoom`):
+```js
+export function createColumn(x, y, width = COLUMN_WIDTH, depth = COLUMN_DEPTH, options = {}) {
+  return {
+    id: generateId('col'),
+    x, y, width, depth,
+    height: options.height ?? 3000,
+    rotation: options.rotation ?? 0,
+    type: options.type ?? 'rectangular',
+    name: options.name ?? '',
+  };
+}
+```
+- `x, y` = center position in mm
+- `width` = X-dimension, `depth` = Y-dimension
+- `height` = floor-to-floor (future 3D), `rotation` (future), `type` (future circular)
+
+---
+
+## Step 2: Column Geometry (pure functions)
+
+### `src/geometry/columnGeometry.js` — **new file**
+Reuses existing `rotate` from `src/geometry/point.js:15`.
+
+```js
+import { rotate } from './point';
+
+export function columnOutline(column) {
+  // Returns 4 corner points [TL, TR, BR, BL] accounting for rotation
+  const hw = column.width / 2, hd = column.depth / 2;
+  const { x: cx, y: cy } = column;
+  const corners = [
+    { x: cx - hw, y: cy - hd }, { x: cx + hw, y: cy - hd },
+    { x: cx + hw, y: cy + hd }, { x: cx - hw, y: cy + hd },
+  ];
+  if (!column.rotation) return corners;
+  return corners.map(p => rotate(p, { x: cx, y: cy }, column.rotation));
+}
+
+export function columnSnapPoints(column) {
+  // Center + 4 corners — used by wallDrawHandler for snapping
+  return [{ x: column.x, y: column.y }, ...columnOutline(column)];
+}
+```
+
+---
+
+## Step 3: State Management
+
+### `src/app/ProjectProvider.jsx` — add 3 reducer cases
+After `ROOMS_SET` case, add (follows identical `updateFloor` pattern):
+```js
+case 'COLUMN_ADD':
+  return updateFloor(state, action.floorId, f => ({
+    ...f, columns: [...f.columns, action.column],
+  }));
+case 'COLUMN_UPDATE':
+  return updateFloor(state, action.floorId, f => ({
+    ...f, columns: f.columns.map(c => c.id === action.column.id ? { ...c, ...action.column } : c),
+  }));
+case 'COLUMN_DELETE':
+  return updateFloor(state, action.floorId, f => ({
+    ...f, columns: f.columns.filter(c => c.id !== action.columnId),
+  }));
+```
+
+---
+
+## Step 4: Tool Registration & Handler
+
+### `src/editor/tools.js` — add enum value
+```js
+COLUMN: 'column',
+```
+
+### `src/editor/handlers/columnPlaceHandler.js` — **new file**
+Click-to-place pattern (simpler than doorPlaceHandler — no wall dependency):
+- `onMouseMove`: sets `previewX/Y` in toolState, snaps to `GRID_MINOR` (100mm) grid when snap enabled
+- `onMouseDown`: creates column at preview position via `COLUMN_ADD`
+- `onKeyDown`: Escape → switch to select
+- `getCursor`: returns `'crosshair'`
+
+### `src/editor/useEditorTool.js` — wire handler
+Add import + switch case `TOOLS.COLUMN → createColumnPlaceHandler(ctx)`.
+
+---
+
+## Step 5: Renderers
+
+### `src/renderers/ColumnRenderer.jsx` — **new file**
+Follows `WallRenderer` pattern: maps `columns` → SVG `<polygon>` with `data-id`/`data-type="column"`. Fill: `var(--color-column-fill, #A0A0A0)`, stroke: `var(--color-column-stroke, #555)`. Optional name label via `<text>`.
+
+### `src/renderers/ColumnPreview.jsx` — **new file**
+Shows translucent column outline at cursor when `activeTool === TOOLS.COLUMN`. Uses default `COLUMN_WIDTH/DEPTH` and `columnOutline()`.
+
+---
+
+## Step 6: Integration (SvgCanvas, SelectionOverlay, SelectHandler)
+
+### `src/renderers/SvgCanvas.jsx`
+- Import `ColumnRenderer` + `ColumnPreview`
+- Z-order: insert `<ColumnRenderer>` between `WallRenderer` and `DoorRenderer`
+- Add `<ColumnPreview>` after `DoorWindowPreview`
+- Keyboard: add `case 'c': → SET_TOOL COLUMN` in keydown handler
+
+### `src/renderers/SelectionOverlay.jsx`
+- Import `columnOutline` from columnGeometry
+- Add `selectedType === 'column'` block: dashed polygon outline + 4 corner handle rects
+
+### `src/editor/handlers/selectHandler.js`
+- Import `columnOutline` from columnGeometry
+- **Hit test**: add column check between walls and rooms (`pointInPolygon` on `columnOutline`)
+- **Move**: add `selectedType === 'column'` branch — update `x: col.x + dx, y: col.y + dy`
+- **Delete**: add `selectedType === 'column'` branch — `COLUMN_DELETE`
+
+---
+
+## Step 7: UI (Properties Panel + Toolbar)
+
+### `src/ui/PropertiesPanel.jsx`
+Add `ColumnProperties` component with InputFields for: X, Y, Width, Depth, Height, Name.
+- Uses `updateColumn = (updates) => dispatch({ type: 'COLUMN_UPDATE', ... })` pattern
+- Add to conditional rendering chain after `room` block
+- Add to `handleDelete` after room case
+- Add column count to `ProjectSummary`
+
+### `src/ui/Toolbar.jsx`
+Add Column button after Window button: `title="Place Column (C)"`.
+
+---
+
+## Step 8: Wall-to-Column Snapping + Persistence
+
+### `src/editor/handlers/wallDrawHandler.js`
+- Import `columnSnapPoints` from columnGeometry
+- Add `columns` parameter to `snapToWalls(modelPos, walls, snapDistModel, chainStart, columns)`
+- After endpoint loop, before segment projection: loop column snap points (center + corners) and update `best/bestDist`
+- Update both call sites to pass `floor.columns || []`
+
+### `src/persistence/deserialize.js`
+After door/window backfill block, add:
+```js
+if (!floor.columns) floor.columns = [];
+```
+
+---
+
+## Verification
+1. `npx vite build` — no errors
+2. Press C or click Column button → cursor becomes crosshair
+3. Click to place column → gray rectangle appears at position
+4. Click column with Select tool → dashed outline + corner handles, properties panel shows X/Y/Width/Depth/Height/Name
+5. Drag column → moves smoothly
+6. Edit properties in panel → column updates in real time
+7. Delete key → column removed
+8. Draw wall near column → wall endpoint snaps to column center and corners
+9. Save → Load → columns persist correctly
+10. Load old save (no columns) → loads without error

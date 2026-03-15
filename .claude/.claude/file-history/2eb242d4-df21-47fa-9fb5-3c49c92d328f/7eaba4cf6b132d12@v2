@@ -1,0 +1,126 @@
+import {useCallback, useState} from 'react';
+import {Alert} from 'react-native';
+import {useMutation, useQuery} from '@tanstack/react-query';
+import {socialApi, JournalComment} from '../lib/api/socialApi';
+import {queryClient} from '../lib/queryClient';
+
+export function useComments(
+  postId: string,
+  receiverId: string | undefined,
+  token: string,
+  onReplyActivated?: () => void,
+) {
+  const [commentInput, setCommentInput] = useState('');
+  const [replyingTo, setReplyingTo] = useState<{id: string; userName: string} | null>(null);
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const [fetchedReplies, setFetchedReplies] = useState<Record<string, JournalComment[]>>({});
+  const [loadingReplies, setLoadingReplies] = useState<Set<string>>(new Set());
+
+  const commentsQuery = useQuery({
+    queryKey: ['journal-comments', postId],
+    queryFn: () => socialApi.getComments(postId, null, 20),
+    enabled: !!postId,
+  });
+
+  const handleReply = useCallback((commentId: string, userName: string) => {
+    setReplyingTo({id: commentId, userName});
+    onReplyActivated?.();
+  }, [onReplyActivated]);
+
+  const handleToggleReplies = useCallback((commentId: string) => {
+    setExpandedReplies(prev => {
+      const next = new Set(prev);
+      if (next.has(commentId)) {
+        next.delete(commentId);
+        return next;
+      }
+      next.add(commentId);
+
+      if (!fetchedReplies[commentId]) {
+        setLoadingReplies(p => new Set(p).add(commentId));
+        socialApi.getReplies(postId, commentId).then(res => {
+          setFetchedReplies(p => ({...p, [commentId]: res.comments}));
+          setLoadingReplies(p => {
+            const n = new Set(p);
+            n.delete(commentId);
+            return n;
+          });
+        }).catch(() => {
+          setLoadingReplies(p => {
+            const n = new Set(p);
+            n.delete(commentId);
+            return n;
+          });
+        });
+      }
+
+      return next;
+    });
+  }, [postId, fetchedReplies]);
+
+  const addCommentMutation = useMutation({
+    mutationFn: async () => {
+      const body = commentInput.trim();
+      if (!token) throw new Error('Please log in to comment.');
+      if (!body) throw new Error('Comment cannot be empty.');
+      if (!receiverId) throw new Error('Missing journal owner.');
+      return socialApi.addComment(token, {
+        comments: body,
+        postId,
+        receiverId,
+        parentId: replyingTo?.id,
+      });
+    },
+    onSuccess: () => {
+      const parentId = replyingTo?.id;
+      setCommentInput('');
+      setReplyingTo(null);
+      queryClient.invalidateQueries({queryKey: ['journal-comments', postId]});
+      queryClient.invalidateQueries({queryKey: ['journal', postId]});
+      queryClient.invalidateQueries({queryKey: ['feed']});
+      queryClient.invalidateQueries({queryKey: ['profileWritings']});
+      if (parentId) {
+        setFetchedReplies(prev => {
+          const next = {...prev};
+          delete next[parentId];
+          return next;
+        });
+        setExpandedReplies(prev => new Set(prev).add(parentId));
+        setLoadingReplies(p => new Set(p).add(parentId));
+        socialApi.getReplies(postId, parentId).then(res => {
+          setFetchedReplies(p => ({...p, [parentId]: res.comments}));
+          setLoadingReplies(p => {
+            const n = new Set(p);
+            n.delete(parentId);
+            return n;
+          });
+        }).catch(() => {
+          setLoadingReplies(p => {
+            const n = new Set(p);
+            n.delete(parentId);
+            return n;
+          });
+        });
+      }
+    },
+    onError: e => Alert.alert('Comment failed', e instanceof Error ? e.message : 'Error'),
+  });
+
+  const comments = commentsQuery.data?.comments ?? [];
+
+  return {
+    comments,
+    isLoading: commentsQuery.isLoading,
+    commentInput,
+    setCommentInput,
+    replyingTo,
+    setReplyingTo,
+    expandedReplies,
+    fetchedReplies,
+    loadingReplies,
+    handleReply,
+    handleToggleReplies,
+    submitComment: () => addCommentMutation.mutate(),
+    isSubmitting: addCommentMutation.isPending,
+  };
+}

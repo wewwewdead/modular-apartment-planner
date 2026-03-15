@@ -1,0 +1,255 @@
+import React, {useMemo, useState} from 'react';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useInfiniteQuery} from '@tanstack/react-query';
+import {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
+import {CompositeScreenProps} from '@react-navigation/native';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {PrimaryButton} from '../../components/PrimaryButton';
+import {Screen} from '../../components/Screen';
+import {useAuth} from '../../features/auth/AuthProvider';
+import {mobileApi, type CursorPage, type JournalItem} from '../../lib/api/mobileApi';
+import {colors} from '../../theme/colors';
+import type {MainTabParamList, RootStackParamList} from '../../navigation/types';
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<MainTabParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+const PAGE_SIZE = 10;
+
+const extractPlainText = (rawContent: string | null | undefined): string => {
+  if (!rawContent) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(rawContent) as {
+      root?: {children?: Array<{children?: Array<{text?: string}>}>};
+    };
+
+    const parts: string[] = [];
+    parsed.root?.children?.forEach(node => {
+      node.children?.forEach(child => {
+        if (child.text) {
+          parts.push(child.text);
+        }
+      });
+    });
+
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+  } catch {
+    return rawContent.replace(/\s+/g, ' ').trim();
+  }
+};
+
+const getNextCursor = (page: CursorPage<JournalItem>): string | undefined => {
+  if (page.nextCursor) {
+    return page.nextCursor;
+  }
+
+  if (page.hasMore && page.data.length > 0) {
+    return page.data[page.data.length - 1]?.created_at ?? undefined;
+  }
+
+  if (page.data.length >= PAGE_SIZE) {
+    return page.data[page.data.length - 1]?.created_at ?? undefined;
+  }
+
+  return undefined;
+};
+
+const normalizeCount = (value: unknown): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+};
+
+const resolveCount = (
+  aggregate: Array<{count?: number}> | undefined,
+  fallback?: number,
+): number => {
+  if (Array.isArray(aggregate) && aggregate.length > 0) {
+    return normalizeCount(aggregate[0]?.count);
+  }
+  return normalizeCount(fallback);
+};
+
+export function HomeFeedScreen({navigation}: Props) {
+  const {user} = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const feedQuery = useInfiniteQuery({
+    queryKey: ['feed', user?.id],
+    queryFn: ({pageParam}) => mobileApi.getJournals(pageParam ?? null, PAGE_SIZE, user?.id),
+    initialPageParam: null as string | null,
+    getNextPageParam: lastPage => getNextCursor(lastPage),
+  });
+
+  const posts = useMemo(
+    () => feedQuery.data?.pages.flatMap(page => page.data ?? []) ?? [],
+    [feedQuery.data?.pages],
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await feedQuery.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  return (
+    <Screen scroll={false}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Home Feed</Text>
+        <PrimaryButton
+          label="Write"
+          onPress={() => navigation.navigate('JournalEditor', {mode: 'create'})}
+        />
+      </View>
+
+      <View style={styles.quickActions}>
+        <PrimaryButton
+          label="Canvas"
+          onPress={() => navigation.navigate('Canvas')}
+          kind="secondary"
+        />
+        <PrimaryButton
+          label="Freedom Wall"
+          onPress={() => navigation.navigate('FreedomWall')}
+          kind="secondary"
+        />
+        <PrimaryButton
+          label="Universe"
+          onPress={() => navigation.navigate('Universe')}
+          kind="secondary"
+        />
+      </View>
+
+      <FlatList
+        data={posts}
+        onRefresh={onRefresh}
+        refreshing={refreshing}
+        onEndReachedThreshold={0.25}
+        onEndReached={() => {
+          if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
+            feedQuery.fetchNextPage();
+          }
+        }}
+        ListEmptyComponent={
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No posts yet</Text>
+            <Text style={styles.emptyText}>
+              Pull to refresh or create your first journal post.
+            </Text>
+          </View>
+        }
+        keyExtractor={item => item.id}
+        renderItem={({item}) => {
+          const preview = extractPlainText(item.content).slice(0, 180);
+          const likeCount = resolveCount(item.like_count, item.likes_count);
+          const commentCount = resolveCount(item.comment_count, item.comments_count);
+          const bookmarkCount = resolveCount(item.bookmark_count);
+
+          return (
+            <Pressable
+              onPress={() => navigation.navigate('PostDetail', {journalId: item.id})}
+              style={({pressed}) => [styles.postCard, pressed && styles.postCardPressed]}>
+              <Text style={styles.postTitle}>{item.title || 'Untitled Post'}</Text>
+              <Text style={styles.postMeta}>
+                {item.users?.name || 'Unknown author'}
+                {item.post_type ? ` • ${item.post_type}` : ''}
+              </Text>
+              <Text style={styles.postBody}>
+                {preview || 'No preview text available.'}
+              </Text>
+              <View style={styles.statsRow}>
+                <Text style={styles.statText}>{`Likes ${likeCount}`}</Text>
+                <Text style={styles.statText}>{`Comments ${commentCount}`}</Text>
+                <Text style={styles.statText}>{`Bookmarks ${bookmarkCount}`}</Text>
+              </View>
+            </Pressable>
+          );
+        }}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  postCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 10,
+    gap: 6,
+  },
+  postCardPressed: {
+    opacity: 0.85,
+  },
+  postTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  postMeta: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  postBody: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 2,
+  },
+  statText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyCard: {
+    marginTop: 30,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 16,
+    gap: 8,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  emptyText: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+});

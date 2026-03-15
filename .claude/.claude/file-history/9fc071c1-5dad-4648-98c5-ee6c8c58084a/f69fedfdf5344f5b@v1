@@ -1,0 +1,81 @@
+# Fix: PostCard showing "No preview text available"
+
+## Context
+PostCards across the mobile app show "No preview text available" instead of actual post previews. The root cause is a **server-side optimization**: feed endpoints now use `JOURNAL_METADATA_SELECT` which returns `preview_text` and `thumbnail_url` instead of the full `content` field. The mobile app still tries to parse `item.content` via `extractPlainText()`, but `content` is no longer returned for feed/list views.
+
+**Server evidence** (`iskrib_v3/server/services/getService.js`):
+- Line 36-52: `JOURNAL_METADATA_SELECT` returns `preview_text`, `thumbnail_url`, `reading_time` — **no `content`**
+- Line 12-27: `JOURNAL_BASE_SELECT` returns full `content` — used only for `getJournalByIdService` (detail view)
+- Line 502: `getJournalsService` (main feed) uses `JOURNAL_METADATA_WITH_COUNTS_SELECT`
+- All feed endpoints (following, for-you, hottest-monthly, user journals, explore) use metadata select
+
+**Web app** (`iskrib_v3/client/src/components/HomePage/postCards/PostCards.jsx`):
+- Line 688: Uses `journal.preview_text` directly from API response
+- Line 695: Uses `repostSource?.preview_text` for reposts
+
+**Mobile app** (current, broken):
+- `JournalItem` type is missing `preview_text`, `thumbnail_url`, `reading_time` fields
+- All screens call `extractPlainText(item.content).slice(0, 180)` but `item.content` is `undefined`
+- Falls back to `'No preview text available.'`
+
+## Plan
+
+### 1. Add missing fields to `JournalItem` type
+**File:** `apps/mobile/src/lib/api/mobileApi.ts`
+
+Add to `JournalItem`:
+```typescript
+preview_text?: string | null;
+thumbnail_url?: string | null;
+reading_time?: string | null;
+```
+
+### 2. Update all preview extraction to prefer `preview_text`
+**File:** `apps/mobile/src/lib/utils/journalHelpers.ts`
+
+Add a new helper that prefers the server-computed preview:
+```typescript
+export const getPreviewText = (item: {preview_text?: string | null; content?: string | null}): string => {
+  if (item.preview_text) return item.preview_text;
+  return extractPlainText(item.content);
+};
+```
+
+### 3. Update all screens that extract preview text
+Replace `extractPlainText(item.content).slice(0, 180)` with `getPreviewText(item)` in:
+
+- **`src/screens/Home/HomeFeedScreen.tsx`** — line ~305
+- **`src/screens/Home/ExploreScreen.tsx`** — line ~150 (in `renderPostCard`)
+- **`src/screens/Profile/ProfileWritingsTab.tsx`** — line ~161
+- **`src/components/SearchResultsView.tsx`** — wherever it extracts preview
+- **`src/screens/Home/PromptResponsesScreen.tsx`** — line ~58
+- **`src/components/InterestSection.tsx`** — line ~35
+
+### 4. Update banner image extraction to prefer `thumbnail_url`
+Same screens — replace `extractBannerImage(item.content, ...)` with a pattern like:
+```typescript
+const bannerImage = item.thumbnail_url || extractBannerImage(item.content, (item as any).images);
+```
+
+### 5. Files summary
+
+| File | Change |
+|------|--------|
+| `src/lib/api/mobileApi.ts` | Add `preview_text`, `thumbnail_url`, `reading_time` to `JournalItem` |
+| `src/lib/utils/journalHelpers.ts` | Add `getPreviewText()` helper |
+| `src/screens/Home/HomeFeedScreen.tsx` | Use `getPreviewText(item)` + `item.thumbnail_url` |
+| `src/screens/Home/ExploreScreen.tsx` | Same |
+| `src/screens/Profile/ProfileWritingsTab.tsx` | Same |
+| `src/components/SearchResultsView.tsx` | Same |
+| `src/screens/Home/PromptResponsesScreen.tsx` | Same |
+| `src/components/InterestSection.tsx` | Same |
+
+**Note:** `PostDetailScreen` is fine — the single-journal endpoint (`getJournalByIdService`) still returns full `content` via `JOURNAL_WITH_COUNTS_SELECT`.
+
+## Verification
+1. Check that PostCards in the Home feed show actual preview text
+2. Check Explore screen post cards
+3. Check Profile > Writings tab post cards
+4. Check search results post cards
+5. Check repost previews still work (they already use `preview_text`)
+6. Confirm PostDetailScreen still renders full Lexical content
