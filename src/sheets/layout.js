@@ -66,12 +66,20 @@ function buildSheetZones(paper) {
     height: footer.height,
   };
 
+  const notesBlock = {
+    x: footer.x,
+    y: footer.y,
+    width: Math.max(48, titleBlock.x - footer.x - SHEET_TOKENS.viewportGutter),
+    height: footer.height,
+  };
+
   return {
     border,
     liveArea,
     footer,
     contentArea,
     titleBlock,
+    notesBlock,
   };
 }
 
@@ -232,6 +240,14 @@ function buildTitleBlock(project, sheet, titleBlockRect, index, viewports) {
   };
 }
 
+function buildNotesBlock(sheet, rect) {
+  return {
+    frame: rect,
+    title: 'NOTES',
+    notes: [...(sheet?.notes || [])],
+  };
+}
+
 function rectFromArea(area) {
   return {
     x: area.x,
@@ -379,6 +395,7 @@ export function buildSheetScene(project, sheet, options = {}) {
     liveArea: zones.liveArea,
     contentArea: zones.contentArea,
     footer: zones.footer,
+    notesBlock: buildNotesBlock(sheet, zones.notesBlock),
     titleBlock: buildTitleBlock(project, sheet, zones.titleBlock, Math.max(0, sheetIndex), sceneViewports),
     viewports: sceneViewports,
     graphics: {

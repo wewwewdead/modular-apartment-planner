@@ -11,25 +11,25 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 32px;
   background: var(--color-surface-elevated);
   border-radius: 16px;
-  padding: 40px;
+  padding: 48px 44px;
   text-decoration: none;
   color: inherit;
-  border-left: 4px solid transparent;
+  overflow: hidden;
   transition:
-    transform 0.25s var(--ease-out),
-    box-shadow 0.25s var(--ease-out),
-    border-color 0.2s ease;
+    transform 0.3s var(--ease-out),
+    box-shadow 0.3s var(--ease-out);
   box-shadow: var(--shadow-sm);
   /* scroll-reveal initial state */
   opacity: 0;
   transform: translateY(24px);
-  transition-property: transform, box-shadow, border-color, opacity;
+  transition-property: transform, box-shadow, opacity;
 }
 
 .card[data-visible='true'] {
@@ -39,20 +39,77 @@
 
 .card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-card-hover);
 }
 
-.cardFloorplan:hover {
-  border-left-color: var(--color-workspace-floorplan);
+/* Top accent bar */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: transparent;
+  transition: width 0.4s var(--ease-out), background 0.3s ease;
 }
 
-.cardSketch:hover {
-  border-left-color: var(--color-workspace-sketch);
+.cardFloorplan:hover::before {
+  width: 100%;
+  background: var(--color-workspace-floorplan);
+}
+
+.cardFloorplan {
+  background:
+    radial-gradient(circle at top right, rgba(26, 122, 104, 0.08), transparent 34%),
+    var(--color-surface-elevated);
+}
+
+.cardSketch:hover::before {
+  width: 100%;
+  background: var(--color-workspace-sketch);
+}
+
+.cardSketch {
+  background:
+    radial-gradient(circle at top right, rgba(74, 114, 176, 0.14), transparent 36%),
+    linear-gradient(180deg, #111924 0%, #0e1520 100%);
+  color: #ebf2ff;
+  box-shadow: 0 16px 36px rgba(12, 20, 34, 0.18);
+}
+
+.cardSketch .cardTitle {
+  color: #f4f8ff;
+}
+
+.cardSketch .cardDesc {
+  color: rgba(220, 230, 245, 0.82);
+}
+
+.cardSketch .cardLabel {
+  color: rgba(96, 177, 157, 0.8);
+}
+
+.cardSketch .cardArrow {
+  color: rgba(96, 177, 157, 0.9);
 }
 
 .cardBody {
   flex: 1;
   min-width: 0;
+}
+
+.cardLabel {
+  display: block;
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  opacity: 0.7;
+  margin-bottom: 10px;
 }
 
 .cardTitle {
@@ -76,6 +133,27 @@
   flex-shrink: 0;
   width: 180px;
   height: 135px;
+  transition: transform 0.4s var(--ease-out);
+}
+
+.card:hover .cardIllustration {
+  transform: scale(1.03);
+}
+
+.cardArrow {
+  position: absolute;
+  bottom: 20px;
+  right: 24px;
+  font-size: 18px;
+  color: var(--color-accent);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out);
+}
+
+.card:hover .cardArrow {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -87,7 +165,7 @@
 
 @media (max-width: 1200px) {
   .card {
-    padding: 28px;
+    padding: 32px 28px;
   }
 
   .cardIllustration {
@@ -107,7 +185,7 @@
   }
 
   .card {
-    padding: 24px;
+    padding: 28px 24px;
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
@@ -117,5 +195,10 @@
     width: 100%;
     height: auto;
     max-width: 200px;
+  }
+
+  .cardArrow {
+    opacity: 0.6;
+    transform: translateX(0);
   }
 }

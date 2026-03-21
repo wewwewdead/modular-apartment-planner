@@ -5,7 +5,7 @@ import ErrorBoundary from '@/app/ErrorBoundary';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'));
 const FloorplanWorkspace = lazy(() => import('./modules/floorplan'));
-const SketchWorkspace = lazy(() => import('./modules/sketch'));
+const SketchStudioPage = lazy(() => import('./pages/SketchStudio'));
 
 function RouteErrorBoundary({ children }) {
   return (
@@ -18,7 +18,7 @@ function RouteErrorBoundary({ children }) {
 export const router = createBrowserRouter([
   { path: '/', element: <RouteErrorBoundary><HomePage /></RouteErrorBoundary> },
   { path: '/floorplan', element: <RouteErrorBoundary><FloorplanWorkspace /></RouteErrorBoundary> },
-  { path: '/sketch', element: <RouteErrorBoundary><SketchWorkspace /></RouteErrorBoundary> },
+  { path: '/sketch', element: <RouteErrorBoundary><SketchStudioPage /></RouteErrorBoundary> },
   { path: '/playground', element: <RouteErrorBoundary><PlaygroundPage /></RouteErrorBoundary> },
 ]);
 

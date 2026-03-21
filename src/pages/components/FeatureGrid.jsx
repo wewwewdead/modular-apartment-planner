@@ -73,11 +73,11 @@ const features = [
   },
 ];
 
-function FeatureItem({ label, icon }) {
+function FeatureItem({ label, icon, index }) {
   const ref = useScrollReveal();
 
   return (
-    <div className={styles.item} ref={ref}>
+    <div className={styles.item} ref={ref} style={{ '--item-index': index }}>
       <div className={styles.iconWrap}>{icon}</div>
       <span className={styles.label}>{label}</span>
     </div>
@@ -88,10 +88,14 @@ export default function FeatureGrid() {
   return (
     <section className={styles.section}>
       <div className={styles.inner}>
-        <p className={styles.heading}>Built for architects and planners</p>
+        <div className={styles.headingGroup}>
+          <div className={styles.headingLine} />
+          <p className={styles.heading}>Built for architects and planners</p>
+          <div className={styles.headingLine} />
+        </div>
         <div className={styles.grid}>
-          {features.map((feature) => (
-            <FeatureItem key={feature.label} label={feature.label} icon={feature.icon} />
+          {features.map((feature, index) => (
+            <FeatureItem key={feature.label} label={feature.label} icon={feature.icon} index={index} />
           ))}
         </div>
       </div>

@@ -67,6 +67,7 @@
   /* Typography */
   --font-ui: 'Manrope', system-ui, -apple-system, sans-serif;
   --font-heading: 'Manrope', system-ui, -apple-system, sans-serif;
+  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
   --font-blueprint: 'JetBrains Mono', 'Courier New', monospace;
 
   /* Spacing */
@@ -98,8 +99,19 @@
   /* Workspace accent colors */
   --color-workspace-floorplan: #1A7A68;
   --color-workspace-floorplan-subtle: rgba(26, 122, 104, 0.08);
-  --color-workspace-sketch: #B8860B;
-  --color-workspace-sketch-subtle: rgba(184, 134, 11, 0.08);
+  --color-workspace-sketch: #4A72B0;
+  --color-workspace-sketch-subtle: rgba(74, 114, 176, 0.08);
+
+  /* Architectural atmosphere */
+  --color-warm-glow: rgba(26, 122, 104, 0.04);
+  --color-hero-gradient-start: rgba(250, 245, 240, 0.6);
+  --color-hero-gradient-end: rgba(250, 250, 248, 0);
+  --color-arch-line: rgba(26, 122, 104, 0.12);
+  --color-arch-line-strong: rgba(26, 122, 104, 0.2);
+  --shadow-card-hover: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-cta-glow: 0 4px 20px rgba(26, 122, 104, 0.3), 0 0 40px rgba(26, 122, 104, 0.1);
+  --duration-hero: 0.9s;
+  --ease-dramatic: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Transitions */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);

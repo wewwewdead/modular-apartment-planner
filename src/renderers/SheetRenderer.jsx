@@ -61,8 +61,56 @@ function ViewportCaption({ viewport }) {
   );
 }
 
-export default function SheetRenderer({ project, sheet, selectedId, selectedType }) {
-  const scene = buildSheetScene(project, sheet);
+function SheetNotesBlock({ notesBlock }) {
+  const notes = notesBlock?.notes || [];
+  const rowHeight = 5.6;
+
+  return (
+    <g className="sheet-notes-block">
+      <rect
+        x={notesBlock.frame.x}
+        y={notesBlock.frame.y}
+        width={notesBlock.frame.width}
+        height={notesBlock.frame.height}
+        fill={SHEET_COLORS.paper}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.35}
+      />
+      <rect
+        x={notesBlock.frame.x}
+        y={notesBlock.frame.y}
+        width={notesBlock.frame.width}
+        height={8}
+        fill={SHEET_COLORS.panelFill}
+        stroke={SHEET_COLORS.border}
+        strokeWidth={0.25}
+      />
+      <text
+        x={notesBlock.frame.x + 2}
+        y={notesBlock.frame.y + 5.3}
+        fontSize={2.1}
+        fill={SHEET_COLORS.textMuted}
+        letterSpacing={0.18}
+      >
+        {notesBlock.title}
+      </text>
+      {notes.map((note, index) => (
+        <text
+          key={`${notesBlock.title}-${index}`}
+          x={notesBlock.frame.x + 3}
+          y={notesBlock.frame.y + 13 + (index * rowHeight)}
+          fontSize={2.35}
+          fill={SHEET_COLORS.text}
+        >
+          {`${index + 1}. ${note}`}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+export default function SheetRenderer({ project, sheet, selectedId, selectedType, resolveSource }) {
+  const scene = buildSheetScene(project, sheet, resolveSource ? { resolveSource } : undefined);
   if (!scene) return null;
 
   return (
@@ -93,6 +141,7 @@ export default function SheetRenderer({ project, sheet, selectedId, selectedType
         stroke={SHEET_COLORS.divider}
         strokeWidth={0.2}
       />
+      <SheetNotesBlock notesBlock={scene.notesBlock} />
       <SheetTitleBlock titleBlock={scene.titleBlock} />
 
       {scene.viewports.map((viewport) => {

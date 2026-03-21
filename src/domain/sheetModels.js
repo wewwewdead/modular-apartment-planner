@@ -31,6 +31,7 @@ export function createSheet(title = 'Sheet 1', options = {}) {
       ...createSheetRevision(),
       ...revision,
     })),
+    notes: [...(options.notes || [])],
     viewports: (options.viewports || []).map((viewport) => ({ ...viewport })),
   };
 }
@@ -60,6 +61,7 @@ export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, o
     lockAutoLayout: options.lockAutoLayout ?? false,
     phaseId: options.phaseId ?? null,
     phaseViewMode: options.phaseViewMode ?? 'all',
+    annotations: [...(options.annotations || [])],
   };
 }
 

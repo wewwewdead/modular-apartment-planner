@@ -47,7 +47,7 @@ export default function NavBar() {
             Floorplan
           </Link>
           <Link to="/sketch" className={styles.navLink}>
-            Sketch
+            SketchStudio
           </Link>
           <Link to="/playground" className={styles.navLink}>
             Playground
@@ -76,7 +76,7 @@ export default function NavBar() {
           Floorplan
         </Link>
         <Link to="/sketch" className={styles.mobileLink} onClick={closeMobile}>
-          Sketch
+          SketchStudio
         </Link>
         <Link to="/playground" className={styles.mobileLink} onClick={closeMobile}>
           Playground

@@ -31,9 +31,9 @@
 
 .brandName {
   font-family: var(--font-heading);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.08em;
   color: var(--color-text-primary);
 }
 
@@ -73,6 +73,7 @@
 
 .ctaButton:hover {
   background: var(--color-accent-hover);
+  box-shadow: 0 2px 12px rgba(26, 122, 104, 0.2);
 }
 
 .ctaButton:active {

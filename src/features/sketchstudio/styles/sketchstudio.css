@@ -1,0 +1,837 @@
+.sketchStudioPage {
+  height: 100%;
+  color: #dbe6f4;
+  background:
+    radial-gradient(circle at top left, rgba(48, 92, 148, 0.24), transparent 28%),
+    radial-gradient(circle at right center, rgba(20, 96, 86, 0.16), transparent 32%),
+    linear-gradient(180deg, #0a0f16 0%, #0d131c 100%);
+}
+
+.sketchStudioShell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr) 34px;
+}
+
+.sketchStudioTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(136, 165, 201, 0.16);
+  background: rgba(8, 12, 18, 0.88);
+  backdrop-filter: blur(12px);
+}
+
+.sketchStudioTopBarPrimary,
+.sketchStudioTopBarMeta,
+.sketchStudioTopBarSecondary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sketchStudioTopBarBrand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sketchStudioTopBarEyebrow,
+.sketchStudioPanelEyebrow,
+.sketchStudioTopBarNote {
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #84a0c4;
+}
+
+.sketchStudioTopBarTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #f2f6ff;
+}
+
+.sketchStudioBadge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(136, 165, 201, 0.18);
+  background: rgba(21, 29, 40, 0.92);
+  color: #d9e4f4;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+}
+
+.sketchStudioBadgeAccent {
+  border-color: rgba(104, 163, 255, 0.34);
+  background: rgba(36, 66, 108, 0.92);
+  color: #eef5ff;
+}
+
+.sketchStudioInlineButton {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(136, 165, 201, 0.18);
+  background: rgba(17, 24, 34, 0.9);
+  color: #d9e4f4;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.sketchStudioInlineButton:hover {
+  border-color: rgba(136, 165, 201, 0.36);
+  background: rgba(30, 42, 60, 0.95);
+}
+
+.sketchStudioInlineButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sketchStudioToggleBadge.is-active {
+  border-color: rgba(124, 223, 196, 0.32);
+  background: rgba(18, 48, 45, 0.92);
+  color: #dffff7;
+}
+
+.sketchStudioWorkspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 308px;
+}
+
+.sketchStudioToolbar,
+.sketchStudioRightPanel {
+  min-height: 0;
+  border-right: 1px solid rgba(136, 165, 201, 0.12);
+  background: rgba(8, 12, 18, 0.76);
+}
+
+.sketchStudioRightPanel {
+  border-right: 0;
+  border-left: 1px solid rgba(136, 165, 201, 0.12);
+  padding: 18px;
+  overflow: auto;
+}
+
+.sketchStudioToolbarStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sketchStudioToolButton {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding: 12px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(136, 165, 201, 0.12);
+  background: linear-gradient(180deg, rgba(20, 27, 37, 0.96), rgba(11, 17, 25, 0.96));
+  color: #9eb2cf;
+  transition:
+    border-color var(--duration-normal) ease,
+    transform var(--duration-fast) ease,
+    background var(--duration-normal) ease,
+    color var(--duration-normal) ease;
+}
+
+.sketchStudioToolButton:hover {
+  color: #ebf2ff;
+  border-color: rgba(117, 170, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.sketchStudioToolButton.is-active {
+  color: #ffffff;
+  border-color: rgba(117, 170, 255, 0.42);
+  background: linear-gradient(180deg, rgba(43, 74, 118, 1), rgba(26, 49, 83, 1));
+  box-shadow: 0 12px 24px rgba(3, 9, 18, 0.32);
+}
+
+.sketchStudioToolButtonShort {
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.sketchStudioToolButtonLabel {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sketchStudioToolButtonHotkey {
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(136, 165, 201, 0.2);
+  background: rgba(8, 13, 20, 0.36);
+  color: #d9e7fb;
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.sketchStudioCanvasPanel {
+  min-width: 0;
+  min-height: 0;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(15, 22, 31, 0.3), rgba(8, 12, 18, 0.5)),
+    linear-gradient(90deg, rgba(10, 17, 24, 0.92), rgba(10, 17, 24, 0.84));
+}
+
+.sketchStudioCanvasFrame {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 36px minmax(0, 1fr);
+  border: 1px solid rgba(136, 165, 201, 0.16);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 24px 48px rgba(0, 0, 0, 0.24);
+}
+
+.sketchStudioCanvasChrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  color: #8da5c5;
+  background: linear-gradient(180deg, rgba(17, 24, 34, 0.98), rgba(10, 14, 22, 0.98));
+  border-bottom: 1px solid rgba(136, 165, 201, 0.12);
+}
+
+.sketchStudioCanvasViewport {
+  position: relative;
+  min-height: 0;
+}
+
+.sketchStudioCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(65, 112, 175, 0.08), transparent 28%),
+    linear-gradient(180deg, #0c121a 0%, #0a1118 100%);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.sketchStudioCanvas.is-panning {
+  cursor: grabbing;
+}
+
+.sketchStudioCanvasBackdrop {
+  fill: transparent;
+}
+
+.sketchStudioGridMinor line {
+  stroke: rgba(89, 107, 131, 0.24);
+  stroke-width: 1;
+}
+
+.sketchStudioGridMajor line {
+  stroke: rgba(137, 167, 204, 0.18);
+  stroke-width: 1;
+}
+
+.sketchStudioGridAxis line {
+  stroke: rgba(96, 177, 157, 0.32);
+  stroke-width: 1.2;
+}
+
+.sketchStudioEntity {
+  fill: rgba(88, 150, 255, 0.08);
+  stroke: #d8e6fb;
+  stroke-width: 2;
+  transition: stroke var(--duration-normal) ease, fill var(--duration-normal) ease;
+}
+
+.sketchStudioEntity.is-text {
+  fill: #d8e6fb;
+  stroke: none;
+  font-family: var(--font-blueprint);
+}
+
+.sketchStudioEntity.is-hovered {
+  fill: rgba(147, 189, 255, 0.12);
+  stroke: #f6fbff;
+  filter: drop-shadow(0 0 6px rgba(144, 198, 255, 0.2));
+}
+
+.sketchStudioEntity.is-text.is-hovered {
+  fill: #f6fbff;
+  stroke: none;
+}
+
+.sketchStudioEntity.is-selected {
+  fill: rgba(88, 150, 255, 0.18);
+  stroke: #6ca5ff;
+  filter: drop-shadow(0 0 8px rgba(104, 165, 255, 0.3));
+}
+
+.sketchStudioEntity.is-text.is-selected {
+  fill: #8fbcff;
+  stroke: none;
+}
+
+.sketchStudioEntity.is-profile {
+  fill: rgba(124, 223, 196, 0.1);
+}
+
+.sketchStudioEntity.is-feature {
+  fill: rgba(255, 184, 120, 0.08);
+  stroke: #ffca8d;
+  stroke-dasharray: 8 5;
+}
+
+.sketchStudioEntity.is-broken-line {
+  stroke-dasharray: 10 6;
+}
+
+.sketchStudioEntity.is-feature.is-hole {
+  stroke: #ffd77d;
+}
+
+.sketchStudioEntity.is-feature.is-cutout {
+  stroke: #ffb78e;
+}
+
+.sketchStudioDraftEntity {
+  fill: rgba(124, 223, 196, 0.14);
+  stroke: #7cdfc4;
+  stroke-width: 2;
+  stroke-dasharray: 10 6;
+}
+
+.sketchStudioDraftEntity.is-profile {
+  fill: rgba(124, 223, 196, 0.18);
+}
+
+.sketchStudioDraftEntity.is-feature {
+  fill: rgba(255, 199, 126, 0.12);
+  stroke: #ffd08b;
+}
+
+.sketchStudioDimensionLine,
+.sketchStudioDimensionTick {
+  stroke: #f0d29a;
+  stroke-width: 1.4;
+}
+
+.sketchStudioDimensionText {
+  fill: #f2ddba;
+  font-family: var(--font-blueprint);
+  font-size: 12px;
+}
+
+.sketchStudioDimension.is-selected .sketchStudioDimensionLine,
+.sketchStudioDimension.is-selected .sketchStudioDimensionTick,
+.sketchStudioDimension.is-selected .sketchStudioDimensionText {
+  stroke: #ffd18c;
+  fill: #fff2cf;
+}
+
+.sketchStudioDimension.is-broken-line .sketchStudioDimensionLine,
+.sketchStudioDimension.is-broken-line .sketchStudioDimensionTick {
+  stroke-dasharray: 10 6;
+}
+
+.sketchStudioDimensionDraftLine,
+.sketchStudioDimensionDraftTick {
+  stroke: #9bdcc8;
+  stroke-width: 1.4;
+  stroke-dasharray: 8 5;
+}
+
+.sketchStudioDimensionDraftText {
+  fill: #bdf0df;
+  font-family: var(--font-blueprint);
+  font-size: 12px;
+}
+
+.sketchStudioSnapMarker {
+  fill: rgba(13, 22, 31, 0.95);
+  stroke: #ffe28c;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(255, 226, 140, 0.28));
+}
+
+.sketchStudioSnapMarker.is-intersection {
+  stroke: #ffb287;
+}
+
+.sketchStudioSnapMarker.is-perpendicular {
+  stroke: #8fe0ff;
+}
+
+.sketchStudioSnapMarker.is-nearest {
+  stroke: #b7f6ae;
+}
+
+.sketchStudioSnapLabel {
+  fill: #ffe9ba;
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.sketchStudioSelectionBox {
+  fill: rgba(108, 165, 255, 0.12);
+  stroke: #6ca5ff;
+  stroke-width: 1.4;
+  stroke-dasharray: 8 5;
+}
+
+.sketchStudioEditHandle {
+  fill: #eef6ff;
+  stroke: #0f1722;
+  stroke-width: 2;
+  cursor: grab;
+}
+
+.sketchStudioTransformBounds {
+  fill: rgba(108, 165, 255, 0.03);
+  stroke: rgba(108, 165, 255, 0.7);
+  stroke-width: 1.4;
+  stroke-dasharray: 10 6;
+  cursor: move;
+}
+
+.sketchStudioTransformStem {
+  stroke: rgba(108, 165, 255, 0.56);
+  stroke-width: 1.2;
+}
+
+.sketchStudioTransformHandle {
+  fill: #fff1ce;
+  stroke: #3b2d11;
+  stroke-width: 2;
+  cursor: alias;
+}
+
+.sketchStudioTransformPivot {
+  fill: #d9ebff;
+  stroke: #142031;
+  stroke-width: 2;
+}
+
+.sketchStudioSelectionLabel {
+  fill: #d8e7ff;
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+}
+
+.sketchStudioPrecisionHud {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  min-width: 170px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(124, 223, 196, 0.24);
+  background: rgba(11, 18, 26, 0.94);
+  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.28);
+}
+
+.sketchStudioPrecisionHudTitle,
+.sketchStudioPrecisionLabel {
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  color: #9fc0e5;
+  text-transform: uppercase;
+}
+
+.sketchStudioPrecisionHudTitle {
+  margin: 0;
+  color: #eef6ff;
+}
+
+.sketchStudioPrecisionRow,
+.sketchStudioPrecisionField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sketchStudioPrecisionValue {
+  font-family: var(--font-blueprint);
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.sketchStudioPrecisionInput,
+.sketchStudioPropertyInput {
+  width: 88px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(136, 165, 201, 0.18);
+  background: rgba(20, 28, 39, 0.92);
+  color: #eef6ff;
+  font-family: var(--font-blueprint);
+  font-size: 12px;
+}
+
+.sketchStudioPropertyInput {
+  width: 128px;
+}
+
+.sketchStudioPropertyInputWide {
+  width: 100%;
+}
+
+.sketchStudioEditableList {
+  margin-top: 10px;
+}
+
+.sketchStudioActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sketchStudioEditableRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sketchStudioPanelSection + .sketchStudioPanelSection {
+  margin-top: 18px;
+}
+
+.sketchStudioPanelSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sketchStudioPanelTitle,
+.sketchStudioPanelTitleSmall {
+  margin: 8px 0 12px;
+  color: #eef5ff;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.sketchStudioPanelTitleSmall {
+  font-size: 14px;
+}
+
+.sketchStudioPropertyList {
+  display: grid;
+  gap: 8px;
+}
+
+.sketchStudioSelectionActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.sketchStudioSelectionActions .sketchStudioInlineButton {
+  width: 100%;
+  text-align: center;
+}
+
+.sketchStudioInlineButtonWide {
+  grid-column: 1 / -1;
+}
+
+.sketchStudioLayerList {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.sketchStudioLayerRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(16, 23, 33, 0.88);
+  border: 1px solid rgba(136, 165, 201, 0.1);
+}
+
+.sketchStudioLayerRow.is-active {
+  border-color: rgba(108, 165, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(108, 165, 255, 0.18);
+}
+
+.sketchStudioLayerStateButton {
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(136, 165, 201, 0.16);
+  background: rgba(22, 30, 40, 0.92);
+  color: #e6efff;
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+}
+
+.sketchStudioLayerNameInput {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(136, 165, 201, 0.16);
+  background: rgba(20, 28, 39, 0.92);
+  color: #eef6ff;
+  font-size: 12px;
+}
+
+.sketchStudioPropertyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(16, 23, 33, 0.88);
+  border: 1px solid rgba(136, 165, 201, 0.1);
+}
+
+.sketchStudioLibraryList {
+  display: grid;
+  gap: 10px;
+}
+
+.sketchStudioLibraryCard {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(136, 165, 201, 0.14);
+  background: rgba(14, 20, 29, 0.94);
+  color: #eef5ff;
+  text-align: left;
+}
+
+.sketchStudioLibraryCard.is-active {
+  border-color: rgba(108, 165, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(108, 165, 255, 0.18);
+}
+
+.sketchStudioLibraryName {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sketchStudioLibraryMeta {
+  color: #90a5c3;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+}
+
+.sketchStudioSubpanelCard {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(136, 165, 201, 0.12);
+  background: rgba(14, 20, 29, 0.94);
+}
+
+.sketchStudioSubpanelCard.is-active {
+  border-color: rgba(108, 165, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(108, 165, 255, 0.18);
+}
+
+.sketchStudioSubpanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sketchStudioPropertyKey {
+  color: #8ea3c2;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sketchStudioPropertyValue {
+  color: #eef5ff;
+  font-size: 12px;
+  text-align: right;
+}
+
+.sketchStudioPlaceholderCard {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(14, 20, 28, 0.9);
+  border: 1px dashed rgba(136, 165, 201, 0.18);
+}
+
+.sketchStudioPlaceholderCard.is-success {
+  border-color: rgba(124, 223, 196, 0.28);
+  background: rgba(15, 36, 31, 0.9);
+}
+
+.sketchStudioPlaceholderCard.is-error {
+  border-color: rgba(255, 133, 133, 0.28);
+  background: rgba(42, 18, 22, 0.9);
+}
+
+.sketchStudioPlaceholderText {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #eef5ff;
+  font-weight: 600;
+}
+
+.sketchStudioPlaceholderSubtext {
+  margin: 0;
+  line-height: 1.55;
+  color: #94a8c4;
+  font-size: 12px;
+}
+
+.sketchStudioWarningList {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 187, 120, 0.24);
+  background: rgba(44, 28, 16, 0.92);
+}
+
+.sketchStudioWarningText {
+  margin: 0;
+  color: #ffd39c;
+  font-size: 12px;
+}
+
+.sketchStudioAnchorMarker line,
+.sketchStudioAnchorMarker circle {
+  stroke: #ffcc8e;
+  stroke-width: 1.8;
+}
+
+.sketchStudioAnchorMarker circle {
+  fill: rgba(16, 22, 31, 0.94);
+  cursor: grab;
+}
+
+.sketchStudioAnchorMarker.is-active line,
+.sketchStudioAnchorMarker.is-active circle {
+  stroke: #7cdfc4;
+}
+
+.sketchStudioAnchorLabel {
+  fill: #f5e6c6;
+  font-family: var(--font-blueprint);
+  font-size: 10px;
+}
+
+.sketchStudioStatusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px;
+  border-top: 1px solid rgba(136, 165, 201, 0.12);
+  background: rgba(8, 12, 18, 0.94);
+}
+
+.sketchStudioStatusGroup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sketchStudioStatusItem,
+.sketchStudioStatusHint {
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  color: #c2d0e4;
+}
+
+.sketchStudioStatusHint {
+  color: #7c93b2;
+}
+
+@media (max-width: 1100px) {
+  .sketchStudioWorkspace {
+    grid-template-columns: 80px minmax(0, 1fr) 280px;
+  }
+}
+
+@media (max-width: 920px) {
+  .sketchStudioShell {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .sketchStudioTopBar {
+    padding: 14px 16px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sketchStudioWorkspace {
+    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .sketchStudioRightPanel {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid rgba(136, 165, 201, 0.12);
+  }
+}
+
+@media (max-width: 640px) {
+  .sketchStudioWorkspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .sketchStudioToolbar {
+    border-right: 0;
+    border-bottom: 1px solid rgba(136, 165, 201, 0.12);
+  }
+
+  .sketchStudioToolbarStack {
+    flex-direction: row;
+    overflow: auto;
+    padding: 12px;
+  }
+
+  .sketchStudioToolButton {
+    min-width: 86px;
+  }
+
+  .sketchStudioCanvasPanel {
+    padding: 12px;
+  }
+
+  .sketchStudioStatusBar {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 14px;
+  }
+}

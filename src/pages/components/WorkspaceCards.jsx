@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import useScrollReveal from './useScrollReveal';
 import FloorplanIllustration from './FloorplanIllustration';
-import SketchIllustration from './SketchIllustration';
+import SketchStudioIllustration from './SketchStudioIllustration';
 import styles from './WorkspaceCards.module.css';
 
 export default function WorkspaceCards() {
@@ -17,6 +17,7 @@ export default function WorkspaceCards() {
           ref={floorplanRef}
         >
           <div className={styles.cardBody}>
+            <span className={styles.cardLabel}>01 / Floorplan</span>
             <h3 className={styles.cardTitle}>Floorplan Editor</h3>
             <p className={styles.cardDesc}>
               Draw walls, place doors and windows, define rooms, and generate
@@ -25,6 +26,7 @@ export default function WorkspaceCards() {
             </p>
           </div>
           <FloorplanIllustration className={styles.cardIllustration} />
+          <span className={styles.cardArrow} aria-hidden="true">&rarr;</span>
         </Link>
 
         <Link
@@ -33,14 +35,15 @@ export default function WorkspaceCards() {
           ref={sketchRef}
         >
           <div className={styles.cardBody}>
-            <h3 className={styles.cardTitle}>Sketch Studio</h3>
+            <span className={styles.cardLabel}>02 / Sketch Studio</span>
+            <h3 className={styles.cardTitle}>SketchStudio</h3>
             <p className={styles.cardDesc}>
-              Freeform 2D drawing for quick concepts, site studies, and design
-              explorations. Sketch freely with geometric primitives and
-              annotation tools.
+              Draft panels, cabinets, supports, and custom technical objects in a dedicated 2D workspace built for
+              precise geometry, viewport control, and future export into the planner.
             </p>
           </div>
-          <SketchIllustration className={styles.cardIllustration} />
+          <SketchStudioIllustration className={styles.cardIllustration} />
+          <span className={styles.cardArrow} aria-hidden="true">&rarr;</span>
         </Link>
       </div>
     </section>

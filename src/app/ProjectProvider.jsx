@@ -17,7 +17,14 @@ function snapshotProject(project) {
 }
 
 function syncProjectStructures(project) {
-  return syncProjectRoofSystem(syncProjectTrussSystems(project));
+  const synced = syncProjectRoofSystem(syncProjectTrussSystems(project));
+  return {
+    ...synced,
+    floors: (synced.floors || []).map((floor) => {
+      const { placedSketchAssets, ...rest } = floor || {};
+      return rest;
+    }),
+  };
 }
 
 function applyProjectUpdate(state, nextProject, recordHistory = true) {
