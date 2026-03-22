@@ -82,6 +82,7 @@ export default function TopBar({
   onToggleSnap,
   onSetViewMode,
   onSetIsometricPlane,
+  onDocumentNameCommit,
 }) {
   return (
     <header className="sketchStudioTopBar">
@@ -91,7 +92,16 @@ export default function TopBar({
           <h1 className="sketchStudioTopBarTitle">SketchStudio</h1>
         </div>
         <div className="sketchStudioTopBarMeta">
-          <span className="sketchStudioBadge">{document.name}</span>
+          <input
+            type="text"
+            className="sketchStudioBadge sketchStudioBadgeInput"
+            defaultValue={document.name}
+            key={document.name}
+            onBlur={(e) => onDocumentNameCommit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.target.blur();
+            }}
+          />
           <span className="sketchStudioBadge">{document.units}</span>
           <span className="sketchStudioBadge">{activeLayer?.name ?? 'No Layer'}</span>
           <span className="sketchStudioBadge">{objectDraft?.id ? objectDraft.name || objectDraft.id : 'No Object Draft'}</span>

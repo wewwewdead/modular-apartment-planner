@@ -1,3 +1,4 @@
+import { computeIsometricAngle } from './angleUtils';
 import { calculateDistance } from './canvasMath';
 import { inferDimensionSubtype, measureDistance } from './dimensionUtils';
 
@@ -72,6 +73,40 @@ export function getPrecisionHudData(draft, previewEntity) {
       tool: 'offset',
       measurements: [{ key: 'offset', label: 'Distance', value: parsePositiveNumber(draft.precisionInput.offset) ?? 0 }],
       inputs: [{ key: 'offset', label: 'Distance', value: draft.precisionInput.offset, placeholder: 'Offset' }],
+    };
+  }
+
+  if (draft.type === 'angle') {
+    if (previewEntity?.type === 'angle-dimension' && previewEntity.vertex) {
+      const dir1 = { x: previewEntity.p1.x - previewEntity.vertex.x, y: previewEntity.p1.y - previewEntity.vertex.y };
+      const dir2 = { x: previewEntity.p2.x - previewEntity.vertex.x, y: previewEntity.p2.y - previewEntity.vertex.y };
+      const angleDeg = previewEntity.isometricPlane
+        ? computeIsometricAngle(dir1, dir2, previewEntity.isometricPlane)
+        : (() => {
+            const len1 = Math.hypot(dir1.x, dir1.y) || 1;
+            const len2 = Math.hypot(dir2.x, dir2.y) || 1;
+            const dot = Math.max(-1, Math.min(1, (dir1.x * dir2.x + dir1.y * dir2.y) / (len1 * len2)));
+            return Math.acos(dot) * (180 / Math.PI);
+          })();
+      return {
+        tool: 'angle',
+        measurements: [{ key: 'angle', label: 'Angle', value: angleDeg }],
+        inputs: [{ key: 'angle', label: 'Angle', value: draft.precisionInput.angle, placeholder: 'Degrees' }],
+      };
+    }
+
+    return {
+      tool: 'angle',
+      measurements: [],
+      inputs: [],
+    };
+  }
+
+  if (draft.type === 'fillet') {
+    return {
+      tool: 'fillet',
+      measurements: [],
+      inputs: [{ key: 'radius', label: 'Radius', value: draft.precisionInput.radius, placeholder: 'Radius' }],
     };
   }
 

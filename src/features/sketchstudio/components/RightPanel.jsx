@@ -1,3 +1,5 @@
+import { computeIsometricAngle } from '../utils/angleUtils';
+
 function renderReadOnlyRows(rows) {
   return rows.map(([label, value]) => (
     <div key={label} className="sketchStudioPropertyRow">
@@ -66,6 +68,27 @@ function renderEditableFields(entity, onCommit) {
     }
 
     return ['x', 'y', 'width', 'height'].map((field) => renderEditableField(field, entity[field], onCommit));
+  }
+
+  if (entity.type === 'angle-dimension') {
+    const dir1 = { x: entity.p1.x - entity.vertex.x, y: entity.p1.y - entity.vertex.y };
+    const dir2 = { x: entity.p2.x - entity.vertex.x, y: entity.p2.y - entity.vertex.y };
+    let angleDeg;
+    if (entity.isometricPlane) {
+      angleDeg = computeIsometricAngle(dir1, dir2, entity.isometricPlane);
+    } else {
+      const len1 = Math.hypot(dir1.x, dir1.y) || 1;
+      const len2 = Math.hypot(dir2.x, dir2.y) || 1;
+      const dot = Math.max(-1, Math.min(1, (dir1.x * dir2.x + dir1.y * dir2.y) / (len1 * len2)));
+      angleDeg = Math.acos(dot) * (180 / Math.PI);
+    }
+
+    return (
+      <>
+        {renderReadOnlyRows([['Angle', `${Math.round(angleDeg * 10) / 10}°`]])}
+        {renderEditableField('arcRadius', entity.arcRadius, onCommit)}
+      </>
+    );
   }
 
   if (entity.type === 'dimension') {

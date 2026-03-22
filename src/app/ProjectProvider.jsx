@@ -655,6 +655,39 @@ function projectReducer(state, action) {
       }));
     }
 
+    case 'FILLET_APPLY':
+      return updateFloor(state, action.floorId, f => {
+        const walls = f.walls.map(w => {
+          if (w.id === action.wall1Id) {
+            return { ...w, [action.wall1Endpoint]: { ...action.tangentPoint1 } };
+          }
+          if (w.id === action.wall2Id) {
+            return { ...w, [action.wall2Endpoint]: { ...action.tangentPoint2 } };
+          }
+          return w;
+        });
+        return { ...f, walls: [...walls, action.arcWall] };
+      });
+
+    case 'FILLET_REMOVE':
+      return updateFloor(state, action.floorId, f => {
+        const arcWall = f.walls.find(w => w.id === action.arcWallId);
+        if (!arcWall || !arcWall.controlPoint) return f;
+        const originalCorner = arcWall.controlPoint;
+        const walls = f.walls
+          .filter(w => w.id !== action.arcWallId)
+          .map(w => {
+            if (w.id === action.wall1Id) {
+              return { ...w, [action.wall1Endpoint]: { ...originalCorner } };
+            }
+            if (w.id === action.wall2Id) {
+              return { ...w, [action.wall2Endpoint]: { ...originalCorner } };
+            }
+            return w;
+          });
+        return { ...f, walls };
+      });
+
     case 'DOOR_ADD':
       return updateFloor(state, action.floorId, f => ({
         ...f,

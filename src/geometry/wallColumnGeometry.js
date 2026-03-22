@@ -1,11 +1,15 @@
 import { add, subtract, scale, dot, normalize, perpendicular, distance } from './point';
 import { nearestPointOnSegment } from './line';
 import { columnOutline, columnFaces, columnCenterlines, columnCenter, columnAxes } from './columnGeometry';
+import { arcWallOutline } from './filletGeometry';
 
 const EPSILON = 1e-6;
 const CENTERLINE_ALIGNMENT_THRESHOLD = 0.92;
 
-function makeOutline(start, end, thickness) {
+function makeOutline(start, end, thickness, controlPoint = null) {
+  if (controlPoint) {
+    return arcWallOutline({ start, end, controlPoint, thickness });
+  }
   const dir = normalize(subtract(end, start));
   const perp = perpendicular(dir);
   const halfThick = thickness / 2;
@@ -176,6 +180,19 @@ export function detachColumnAttachments(wall, columns = [], columnId) {
 
 export function getWallRenderData(wall, columns = []) {
   const syncedWall = syncWallAttachmentPoints(wall, columns);
+
+  // Arc walls skip column trimming
+  if (syncedWall.controlPoint) {
+    const outline = makeOutline(syncedWall.start, syncedWall.end, syncedWall.thickness, syncedWall.controlPoint);
+    return {
+      wall: syncedWall,
+      renderWall: syncedWall,
+      outline,
+      trimStart: syncedWall.start,
+      trimEnd: syncedWall.end,
+    };
+  }
+
   const trimStart = findTrimPoint(syncedWall.start, syncedWall.end, syncedWall.startAttachment, columns);
   const trimEnd = findTrimPoint(syncedWall.end, syncedWall.start, syncedWall.endAttachment, columns);
   const outline = makeOutline(trimStart, trimEnd, syncedWall.thickness);

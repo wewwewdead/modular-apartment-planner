@@ -67,6 +67,17 @@
   font-size: 11px;
 }
 
+.sketchStudioBadgeInput {
+  outline: none;
+  cursor: text;
+  min-width: 80px;
+  max-width: 200px;
+}
+.sketchStudioBadgeInput:focus {
+  border-color: rgba(104, 163, 255, 0.5);
+  background: rgba(30, 42, 60, 0.95);
+}
+
 .sketchStudioBadgeAccent {
   border-color: rgba(104, 163, 255, 0.34);
   background: rgba(36, 66, 108, 0.92);

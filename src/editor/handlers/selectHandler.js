@@ -284,16 +284,23 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
 
           if (distance(nextStart, nextEnd) < MIN_WALL_LENGTH) return;
 
-          dispatch({
-            type: 'WALL_UPDATE',
-            floorId: activeFloorId,
-            wall: {
+          const wallUpdate = {
               id: wall.id,
               start: nextStart,
               end: nextEnd,
               startAttachment,
               endAttachment,
-            },
+          };
+          if (wall.controlPoint) {
+            wallUpdate.controlPoint = {
+              x: wall.controlPoint.x + dx,
+              y: wall.controlPoint.y + dy,
+            };
+          }
+          dispatch({
+            type: 'WALL_UPDATE',
+            floorId: activeFloorId,
+            wall: wallUpdate,
           });
         }
         editorDispatch({

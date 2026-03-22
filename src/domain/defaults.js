@@ -70,3 +70,8 @@ export const ROOM_COLOR = '#E8F0FE';
 
 export const ENDPOINT_MERGE_TOLERANCE = 1; // mm
 export const MIN_ROOM_AREA = 100000; // mm² (0.1 m²)
+
+export const FILLET_DEFAULT_RADIUS = 200;  // mm
+export const FILLET_MIN_RADIUS = 50;       // mm
+export const FILLET_MAX_RADIUS = 2000;     // mm
+export const FILLET_RADIUS_STEP = 50;      // mm

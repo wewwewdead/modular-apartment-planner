@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProject } from '@/app/ProjectProvider';
 import { useEditor } from '@/app/EditorProvider';
 import { formatMeasurement, getAnnotationDisplayLabel } from '@/annotations/format';
-import { MIN_WALL_LENGTH } from '@/domain/defaults';
+import { MIN_WALL_LENGTH, FILLET_DEFAULT_RADIUS, FILLET_MIN_RADIUS, FILLET_MAX_RADIUS } from '@/domain/defaults';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { countObjectsInProjectPhase } from '@/domain/phaseAssignments';
 import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
@@ -320,6 +320,7 @@ function PhaseProperties({ phase, project, dispatch }) {
 
 function WallProperties({ wall, dispatch, editorDispatch, floorId, u, phases }) {
   const len = wallLength(wall);
+  const isArc = Boolean(wall.controlPoint);
 
   const updateWall = (updates) => {
     dispatch({ type: 'WALL_UPDATE', floorId, wall: { id: wall.id, ...updates } });
@@ -329,6 +330,31 @@ function WallProperties({ wall, dispatch, editorDispatch, floorId, u, phases }) 
     const resizedWall = resizeWallFromStart(wall, u.fromDisplay(value), MIN_WALL_LENGTH);
     updateWall({ end: resizedWall.end });
   };
+
+  if (isArc) {
+    return (
+      <div>
+        <div className={styles.title}>Arc Wall (Fillet)</div>
+        <PhaseSelector phaseId={wall.phaseId} phases={phases} onChange={(v) => updateWall({ phaseId: v })} />
+        <div className={styles.subtitle}>Properties</div>
+        <InputField
+          label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+          value={u.toDisplay(wall.thickness)}
+          onChange={(v) => updateWall({ thickness: Math.max(50, u.fromDisplay(v)) })}
+        />
+        <InputField
+          label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+          value={u.toDisplay(wall.height)}
+          onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
+        />
+        <InputField
+          label="Arc Length" type="number" suffix={u.suffix}
+          value={u.toDisplay(len)}
+          readOnly
+        />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -2199,6 +2225,24 @@ export default function PropertiesPanel() {
       </div>
       {workspaceMode === 'sheet' && sheet && (
         <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />
+      )}
+      {activeTool === TOOLS.FILLET && modelTarget === 'floor' && workspaceMode === 'model' && (
+        <div>
+          <div className={styles.title}>Fillet Tool</div>
+          <div className={styles.subtitle}>Settings</div>
+          <InputField
+            label="Radius" type="number" suffix={u.suffix} step={u.step(FILLET_DEFAULT_RADIUS / 4)}
+            value={u.toDisplay(toolState.radius ?? FILLET_DEFAULT_RADIUS)}
+            onChange={(v) => {
+              const mm = u.fromDisplay(v);
+              const clamped = Math.max(FILLET_MIN_RADIUS, Math.min(FILLET_MAX_RADIUS, mm));
+              editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { ...toolState, radius: clamped } });
+            }}
+          />
+          <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.4 }}>
+            Click a corner where two walls meet to round it. Use [ / ] to adjust radius.
+          </p>
+        </div>
       )}
       {activeTool === TOOLS.WALL && modelTarget === 'floor' && toolState.start && workspaceMode === 'model' && (
         <WallDrawingInput

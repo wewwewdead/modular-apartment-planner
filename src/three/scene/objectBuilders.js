@@ -5,6 +5,7 @@ import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { isValidSlabBoundary } from '@/geometry/slabGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
+import { arcWallOutline } from '@/geometry/filletGeometry';
 import { buildWallPreviewContexts, buildWallSolidSegments } from './wallPreviewContext';
 
 const FIXTURE_3D_HEIGHTS = {
@@ -163,22 +164,47 @@ function createStairDescriptor(stair, floorLevel, floorId, landings, landingElev
 }
 
 function buildWallObjects(wallContexts) {
-  return wallContexts.flatMap((context) => (
-    buildWallSolidSegments(context).map((segment) => createLinearBoxDescriptor(
-      segment.id,
-      'wall',
-      segment.startPoint,
-      segment.endPoint,
-      segment.thickness,
-      segment.baseElevation,
-      segment.topElevation - segment.baseElevation,
-      {
-        sourceId: segment.wallId,
-        floorId: segment.floorId,
-        wallId: segment.wallId,
-      }
-    ))
-  ));
+  return wallContexts.flatMap((context) => {
+    // Arc walls: create prism directly from wall geometry, skip segment splitting
+    // (positionOnWall uses linear interpolation which gives wrong endpoints for arcs)
+    if (context.wall.controlPoint) {
+      const outline = arcWallOutline({
+        start: context.renderWall.start,
+        end: context.renderWall.end,
+        controlPoint: context.wall.controlPoint,
+        thickness: context.renderWall.thickness,
+      });
+      return [createPrismDescriptor(
+        context.wall.id,
+        'wall',
+        outline,
+        context.wallBase,
+        context.wallTop - context.wallBase,
+        {
+          sourceId: context.wall.id,
+          floorId: context.floorId,
+          wallId: context.wall.id,
+        }
+      )];
+    }
+
+    return buildWallSolidSegments(context).map((segment) =>
+      createLinearBoxDescriptor(
+        segment.id,
+        'wall',
+        segment.startPoint,
+        segment.endPoint,
+        segment.thickness,
+        segment.baseElevation,
+        segment.topElevation - segment.baseElevation,
+        {
+          sourceId: segment.wallId,
+          floorId: segment.floorId,
+          wallId: segment.wallId,
+        }
+      )
+    );
+  });
 }
 
 function buildSlabObjects(floor) {

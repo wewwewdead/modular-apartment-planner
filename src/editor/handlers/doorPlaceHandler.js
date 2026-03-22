@@ -10,6 +10,7 @@ function findNearestWall(modelPos, walls) {
   let bestDist = WALL_DETECT_RADIUS;
 
   for (const wall of walls) {
+    if (wall.controlPoint) continue; // skip arc walls
     const d = distanceToSegment(modelPos, wall.start, wall.end);
     if (d < bestDist) {
       best = wall;

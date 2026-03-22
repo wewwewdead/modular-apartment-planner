@@ -137,6 +137,7 @@ export function buildWallSolidSegments(context) {
       thickness: context.renderWall.thickness,
       baseElevation,
       topElevation,
+      controlPoint: context.wall.controlPoint || null,
     });
   };
 

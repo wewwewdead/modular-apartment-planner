@@ -21,6 +21,7 @@ import { createRoofDrainPlaceHandler } from './handlers/roofDrainPlaceHandler';
 import { createRoofOpeningPlaceHandler } from './handlers/roofOpeningPlaceHandler';
 import { createTrussSelectHandler } from './handlers/trussSelectHandler';
 import { createTrussDrawHandler } from './handlers/trussDrawHandler';
+import { createFilletPlaceHandler } from './handlers/filletPlaceHandler';
 
 function createReadOnlyHandler() {
   return {
@@ -144,6 +145,8 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
         return createFixturePlaceHandler(ctx);
       case TOOLS.RAILING:
         return createRailingPlaceHandler(ctx);
+      case TOOLS.FILLET:
+        return createFilletPlaceHandler(ctx);
       default:
         return null;
     }

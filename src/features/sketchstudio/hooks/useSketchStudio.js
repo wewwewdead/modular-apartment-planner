@@ -59,6 +59,7 @@ import {
   buildSourceRefFromSnap,
   createArcEntity,
   createCircleEntity,
+  createAngleDimensionEntity,
   createDimensionEntity,
   duplicateEntitiesByIds,
   createEllipseEntity,
@@ -82,6 +83,7 @@ import {
   applyIsometricOrthoPoint,
   buildIsometricEllipse,
   buildIsometricPlaneRectangle,
+  getIsometricPlaneAxes,
 } from '../utils/isometricUtils';
 import {
   createLayer,
@@ -120,6 +122,16 @@ import {
   offsetPolylineEntity,
   offsetRectEntity,
 } from '../utils/offsetUtils';
+import { getAngleDimensionGeometry, formatAngleText, computeIsometricAngle } from '../utils/angleUtils';
+import {
+  findFilletableCorner,
+  computeSketchFillet,
+  applyFillet,
+  DEFAULT_FILLET_RADIUS,
+  MIN_FILLET_RADIUS,
+  MAX_FILLET_RADIUS,
+  FILLET_RADIUS_STEP,
+} from '../utils/filletUtils';
 import { closePolyline, isPolylineClosed } from '../utils/profileUtils';
 import { appendPolylineVertex, removeLastPolylineVertex } from '../utils/polylineUtils';
 import { getEntityIdsInSelectionBox, normalizeSelectionBox } from '../utils/selectionUtils';
@@ -166,6 +178,8 @@ export const TOOL_DEFINITIONS = [
   { id: 'holeCircle', label: 'Hole', shortLabel: 'HOL', shortcut: 'J', description: 'Create circular subtractive features' },
   { id: 'cutoutRect', label: 'Cutout', shortLabel: 'CUT', shortcut: 'U', description: 'Create rectangular subtractive features' },
   { id: 'dimension', label: 'Dimension', shortLabel: 'DIM', shortcut: 'D', description: 'Create linear dimension annotations' },
+  { id: 'fillet', label: 'Fillet', shortLabel: 'FIL', shortcut: 'F', description: 'Round corners with an arc radius' },
+  { id: 'angle', label: 'Angle', shortLabel: 'ANG', shortcut: 'Q', description: 'Measure angles between two rays' },
 ];
 
 const TOOL_SHORTCUT_MAP = new Map(
@@ -198,6 +212,65 @@ function mergeSelection(existingIds, nextIds, additive) {
   }
 
   return Array.from(new Set([...existingIds, ...nextIds]));
+}
+
+function constrainAnglePoint(vertex, p1, cursorPoint, angleDeg, isometricPlane) {
+  const dist = calculateDistance(vertex, cursorPoint) || 50;
+
+  if (isometricPlane) {
+    // Work in isometric plane space
+    const { axisA, axisB } = getIsometricPlaneAxes(isometricPlane);
+    const det = (axisA.x * axisB.y) - (axisA.y * axisB.x);
+    if (Math.abs(det) < 1e-6) return cursorPoint;
+
+    // Unproject dir1 and cursor direction to plane space
+    const d1 = { x: p1.x - vertex.x, y: p1.y - vertex.y };
+    const proj1a = ((d1.x * axisB.y) - (d1.y * axisB.x)) / det;
+    const proj1b = ((axisA.x * d1.y) - (axisA.y * d1.x)) / det;
+    const baseAngle = Math.atan2(proj1b, proj1a);
+
+    const dc = { x: cursorPoint.x - vertex.x, y: cursorPoint.y - vertex.y };
+    const projCa = ((dc.x * axisB.y) - (dc.y * axisB.x)) / det;
+    const projCb = ((axisA.x * dc.y) - (axisA.y * dc.x)) / det;
+    const cursorPlaneAngle = Math.atan2(projCb, projCa);
+
+    let delta = cursorPlaneAngle - baseAngle;
+    if (delta > Math.PI) delta -= 2 * Math.PI;
+    if (delta < -Math.PI) delta += 2 * Math.PI;
+    const sign = delta >= 0 ? 1 : -1;
+    const targetPlaneAngle = baseAngle + sign * (angleDeg * Math.PI / 180);
+
+    // Project back to screen space
+    const pa = Math.cos(targetPlaneAngle);
+    const pb = Math.sin(targetPlaneAngle);
+    const screenDir = {
+      x: pa * axisA.x + pb * axisB.x,
+      y: pa * axisA.y + pb * axisB.y,
+    };
+    const screenLen = Math.hypot(screenDir.x, screenDir.y) || 1;
+    return {
+      x: vertex.x + (screenDir.x / screenLen) * dist,
+      y: vertex.y + (screenDir.y / screenLen) * dist,
+    };
+  }
+
+  // Standard screen-space constraint
+  const dir1x = p1.x - vertex.x;
+  const dir1y = p1.y - vertex.y;
+  const baseAngle = Math.atan2(dir1y, dir1x);
+
+  const cursorAngle = Math.atan2(cursorPoint.y - vertex.y, cursorPoint.x - vertex.x);
+  let delta = cursorAngle - baseAngle;
+  if (delta > Math.PI) delta -= 2 * Math.PI;
+  if (delta < -Math.PI) delta += 2 * Math.PI;
+
+  const sign = delta >= 0 ? 1 : -1;
+  const targetAngle = baseAngle + sign * (angleDeg * Math.PI / 180);
+
+  return {
+    x: vertex.x + Math.cos(targetAngle) * dist,
+    y: vertex.y + Math.sin(targetAngle) * dist,
+  };
 }
 
 function parsePositiveNumber(rawValue) {
@@ -441,6 +514,22 @@ function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
     return buildOffsetEntityFromDraft(draft, document, targetLayerId);
   }
 
+  if (draft.type === 'fillet' && draft.hoveredCorner) {
+    if (draft.previewGeometry) {
+      const { tangentPoint1, tangentPoint2, controlPoint } = draft.previewGeometry;
+      return {
+        type: 'fillet-preview',
+        tangentPoint1,
+        tangentPoint2,
+        controlPoint,
+        cornerPoint: draft.hoveredCorner.cornerPoint,
+        radius: draft.previewGeometry.radius,
+      };
+    }
+    // Corner found but geometry failed — show just the corner highlight
+    return { type: 'fillet-preview', cornerPoint: draft.hoveredCorner.cornerPoint };
+  }
+
   if (draft.type === 'polyline' && draft.points.length) {
     return {
       type: 'polyline',
@@ -473,6 +562,30 @@ function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
         subtype,
         offset: getDimensionOffsetFromPlacement(subtype, draft.points[0], draft.points[1], draft.currentPoint),
         units: document.units,
+      };
+    }
+  }
+
+  if (draft.type === 'angle') {
+    if (draft.points.length === 1 && draft.currentPoint) {
+      return { type: 'angle-guide', p1: draft.points[0], p2: draft.currentPoint };
+    }
+
+    if (draft.points.length === 2 && draft.currentPoint) {
+      const vertex = draft.points[1];
+      const arcRadius = calculateDistance(vertex, draft.currentPoint);
+      const inputAngle = parsePositiveNumber(draft.precisionInput?.angle);
+      const isoPlane = ui?.viewMode === 'isometric' ? ui.isometricPlane : null;
+      const p2 = inputAngle != null
+        ? constrainAnglePoint(vertex, draft.points[0], draft.currentPoint, inputAngle, isoPlane)
+        : draft.currentPoint;
+      return {
+        type: 'angle-dimension',
+        vertex,
+        p1: draft.points[0],
+        p2,
+        arcRadius: Math.max(arcRadius, 20),
+        isometricPlane: ui?.viewMode === 'isometric' ? ui.isometricPlane : null,
       };
     }
   }
@@ -685,11 +798,11 @@ export default function useSketchStudio() {
 
   const resolvePointerState = useCallback((screenPoint, nextViewport = state.viewport, options = {}) => {
     const worldPoint = readWorldPoint(screenPoint, nextViewport);
-    const shouldHoverEntities = activeTool === 'select' || activeTool === 'offset';
+    const shouldHoverEntities = activeTool === 'select' || activeTool === 'offset' || activeTool === 'fillet';
     const hoveredEntity = shouldHoverEntities
       ? findTopmostEntityAtPoint(editableEntities, worldPoint, pixelsToWorldUnits(HIT_TOLERANCE_PX, nextViewport.zoom))
       : null;
-    const nextSnap = activeTool === 'select' || activeTool === 'pan' || activeTool === 'offset'
+    const nextSnap = activeTool === 'select' || activeTool === 'pan' || activeTool === 'offset' || activeTool === 'fillet'
       ? getEmptySnapState()
       : resolveSnap(worldPoint, options.anchorPoint ?? null);
 
@@ -943,7 +1056,7 @@ export default function useSketchStudio() {
       return true;
     }
 
-    if (state.draft.type) {
+    if (state.draft.type && state.draft.type !== 'fillet') {
       dispatch(cancelDraft());
       return true;
     }
@@ -960,22 +1073,19 @@ export default function useSketchStudio() {
   }, [canUndo, cancelTransientInteraction]);
 
   const handleRedo = useCallback(() => {
-    if (cancelTransientInteraction() || !canRedo) {
+    if (!canRedo) {
       return;
     }
 
     dispatch(redo());
-  }, [canRedo, cancelTransientInteraction]);
+  }, [canRedo]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (isEditableTarget(event.target)) {
-        return;
-      }
-
       const key = String(event.key).toLowerCase();
       const hasPrimaryModifier = event.ctrlKey || event.metaKey;
 
+      // Undo/redo should always work, even when an input is focused
       if (hasPrimaryModifier && !event.altKey && key === 'z') {
         event.preventDefault();
         if (event.shiftKey) {
@@ -989,6 +1099,11 @@ export default function useSketchStudio() {
       if (event.ctrlKey && !event.metaKey && !event.altKey && key === 'y') {
         event.preventDefault();
         handleRedo();
+        return;
+      }
+
+      // Block remaining shortcuts when an input is focused
+      if (isEditableTarget(event.target)) {
         return;
       }
 
@@ -1013,9 +1128,31 @@ export default function useSketchStudio() {
         }
       }
 
+      if (event.key === ']' && state.draft.type === 'fillet') {
+        event.preventDefault();
+        const currentRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
+        const nextRadius = Math.min(MAX_FILLET_RADIUS, currentRadius + FILLET_RADIUS_STEP);
+        dispatch(setPrecisionInput({ radius: String(nextRadius) }));
+        return;
+      }
+
+      if (event.key === '[' && state.draft.type === 'fillet') {
+        event.preventDefault();
+        const currentRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
+        const nextRadius = Math.max(MIN_FILLET_RADIUS, currentRadius - FILLET_RADIUS_STEP);
+        dispatch(setPrecisionInput({ radius: String(nextRadius) }));
+        return;
+      }
+
       if (event.key === 'Escape') {
         if (state.interaction.mode === 'transform') {
           dispatch(endTransform());
+          return;
+        }
+
+        if (state.draft.type === 'fillet') {
+          dispatch(cancelDraft());
+          dispatch(setActiveTool('select'));
           return;
         }
 
@@ -1050,7 +1187,53 @@ export default function useSketchStudio() {
         return;
       }
 
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) && state.selection.selectedIds.length) {
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 1;
+        const delta = {
+          ArrowUp: { x: 0, y: -step },
+          ArrowDown: { x: 0, y: step },
+          ArrowLeft: { x: -step, y: 0 },
+          ArrowRight: { x: step, y: 0 },
+        }[event.key];
+        dispatch(setDocumentEntities(translateEntities(state.document.entities, state.selection.selectedIds, delta)));
+        return;
+      }
+
       if (event.key === 'Enter') {
+        if (state.draft.type === 'fillet' && state.draft.hoveredCorner && state.draft.previewGeometry) {
+          event.preventDefault();
+          const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
+          const newEntities = applyFillet(state.document.entities, state.draft.hoveredCorner, state.draft.previewGeometry, targetLayerId);
+          dispatch(setDocumentEntities(newEntities));
+          dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null }));
+          return;
+        }
+
+        if (state.draft.type === 'angle' && state.draft.step === 'pickSecond' && state.draft.points.length === 2 && state.draft.currentPoint) {
+          event.preventDefault();
+          const vertex = state.draft.points[1];
+          const inputAngle = parsePositiveNumber(state.draft.precisionInput?.angle);
+          const rawPoint = state.draft.currentPoint;
+          const isoPlane = state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null;
+          const p2 = inputAngle != null
+            ? constrainAnglePoint(vertex, state.draft.points[0], rawPoint, inputAngle, isoPlane)
+            : rawPoint;
+          const arcRadius = Math.max(calculateDistance(vertex, p2), 20);
+          const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
+          dispatch(commitEntity(createAngleDimensionEntity({
+            vertex,
+            p1: state.draft.points[0],
+            p2,
+            arcRadius,
+            entities: state.document.entities,
+            sourceRefs: state.draft.sourceRefs?.filter(Boolean) ?? [],
+            layerId: state.document.layers.some((layer) => layer.id === 'dimensions') ? 'dimensions' : targetLayerId,
+            isometricPlane: state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null,
+          })));
+          return;
+        }
+
         if (state.draft.type === 'polyline' && state.draft.points.length >= 2) {
           event.preventDefault();
           const nextEntity = createPolylineEntity(state.draft.points, state.document.entities, getNextActiveLayer(state.document, state.ui.activeLayerId), state.draft.closedPreview);
@@ -2061,6 +2244,24 @@ export default function useSketchStudio() {
     const draftAnchor = getOrthoReferencePoint(state.draft.type, state.draft);
     const { worldPoint, snap } = resolvePointerState(screenPoint, state.viewport, { anchorPoint: draftAnchor });
 
+    if (activeTool === 'fillet') {
+      if (!state.draft.type) {
+        dispatch(startDraft({ type: 'fillet' }));
+      }
+
+      const filletTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
+      const filletRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
+      const corner = findFilletableCorner(state.document.entities, worldPoint, filletTolerance);
+
+      if (corner) {
+        const geometry = computeSketchFillet(corner, filletRadius);
+        dispatch(patchDraft({ hoveredCorner: corner, previewGeometry: geometry, currentPoint: worldPoint }));
+      } else {
+        dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null, currentPoint: worldPoint }));
+      }
+      return;
+    }
+
     if (!state.draft.type) {
       return;
     }
@@ -2076,6 +2277,13 @@ export default function useSketchStudio() {
       dispatch(patchDraft({
         currentPoint: state.draft.step === 'pickSecond' ? (snap.point ?? worldPoint) : worldPoint,
         subtype: state.draft.step === 'pickSecond' ? inferDimensionSubtype(state.draft.points[0], snap.point ?? worldPoint) : state.draft.subtype,
+      }));
+      return;
+    }
+
+    if (state.draft.type === 'angle') {
+      dispatch(patchDraft({
+        currentPoint: snap.point ?? worldPoint,
       }));
       return;
     }
@@ -2225,6 +2433,23 @@ export default function useSketchStudio() {
 
     if (activeTool === 'select') {
       dispatch(setSelection(mergeSelection(state.selection.selectedIds, hoveredEntity ? [hoveredEntity.id] : [], event.shiftKey)));
+      return;
+    }
+
+    if (activeTool === 'fillet') {
+      // Recompute corner fresh at click time to avoid stale draft state
+      const filletTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
+      const filletRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
+      const corner = findFilletableCorner(state.document.entities, worldPoint, filletTolerance);
+
+      if (corner) {
+        const geometry = computeSketchFillet(corner, filletRadius);
+        if (geometry) {
+          const newEntities = applyFillet(state.document.entities, corner, geometry, targetLayerId);
+          dispatch(setDocumentEntities(newEntities));
+          dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null }));
+        }
+      }
       return;
     }
 
@@ -2502,6 +2727,53 @@ export default function useSketchStudio() {
         subtype: state.draft.subtype,
       })));
     }
+
+    if (activeTool === 'angle') {
+      const point = snap.point ?? worldPoint;
+
+      if (!state.draft.type) {
+        dispatch(startDraft({
+          type: 'angle',
+          step: 'pickVertex',
+          currentPoint: point,
+          points: [point],
+          sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean),
+        }));
+        return;
+      }
+
+      if (state.draft.step === 'pickVertex') {
+        dispatch(patchDraft({
+          step: 'pickSecond',
+          points: [state.draft.points[0], point],
+          currentPoint: worldPoint,
+          sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)].filter(Boolean),
+        }));
+        return;
+      }
+
+      if (state.draft.step === 'pickSecond') {
+        const vertex = state.draft.points[1];
+        const inputAngle = parsePositiveNumber(state.draft.precisionInput?.angle);
+        const isoPlane = state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null;
+        const p2 = inputAngle != null
+          ? constrainAnglePoint(vertex, state.draft.points[0], point, inputAngle, isoPlane)
+          : point;
+        const arcRadius = Math.max(calculateDistance(vertex, p2), 20);
+        // Don't store sourceRef for p2 when precision input constrained it — the stored p2 is authoritative
+        const p2SourceRef = inputAngle != null ? null : buildSourceRefFromSnap(snap);
+        dispatch(commitEntity(createAngleDimensionEntity({
+          vertex,
+          p1: state.draft.points[0],
+          p2,
+          arcRadius,
+          entities: state.document.entities,
+          sourceRefs: [...state.draft.sourceRefs, p2SourceRef].filter(Boolean),
+          layerId: state.document.layers.some((layer) => layer.id === 'dimensions') ? 'dimensions' : targetLayerId,
+          isometricPlane: state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null,
+        })));
+      }
+    }
   }, [activeTool, commitPrecisionDraft, draftPreview, getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, resolvePointerState, resolvedObjectDraft.id, state.document, state.draft, state.interaction.suppressNextClick, state.selection.selectedIds, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode, state.viewport]);
 
   const documentPersistence = useMemo(() => ({
@@ -2717,6 +2989,7 @@ export default function useSketchStudio() {
     createBlankObject: handleCreateBlankObject,
     createBuildFromParts: handleCreateBuildFromParts,
     saveObjectDraft: handleSaveObjectDraft,
+    commitDocumentName: handleDocumentNameCommit,
     precisionBindings: {
       onInputChange: (field, value) => dispatch(setPrecisionInput({ [field]: value, activeField: field })),
       onSubmit: () => commitPrecisionDraft(),

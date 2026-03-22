@@ -2,6 +2,7 @@ import { getArcPath } from '../utils/arcUtils';
 import { buildDraftMeasurementAnnotations } from '../utils/draftMeasurementUtils';
 import { getRectDraftPreviewPolygonPoints } from '../utils/draftPreviewUtils';
 import { formatDimensionText, getDimensionGeometry, measureDistance } from '../utils/dimensionUtils';
+import { getAngleDimensionGeometry, formatAngleText } from '../utils/angleUtils';
 import { normalizeRectFromPoints } from '../utils/entityUtils';
 
 function renderFeaturePreview(draftPreview) {
@@ -84,6 +85,86 @@ function renderGenericEntityPreview(draftPreview) {
     return <path className="sketchStudioDraftEntity" d={getArcPath(draftPreview)} vectorEffect="non-scaling-stroke" fill="none" strokeLinecap="round" />;
   }
 
+  if (draftPreview.type === 'fillet-preview') {
+    const { tangentPoint1, tangentPoint2, controlPoint, cornerPoint, radius } = draftPreview;
+
+    // Corner-only highlight (geometry failed, e.g. radius too large)
+    if (!tangentPoint1 || !tangentPoint2 || !controlPoint) {
+      if (!cornerPoint) {
+        return null;
+      }
+
+      return (
+        <circle
+          className="sketchStudioDraftEntity"
+          cx={cornerPoint.x}
+          cy={cornerPoint.y}
+          r={8}
+          fill="rgba(59, 130, 246, 0.15)"
+          stroke="var(--color-accent, #3b82f6)"
+          vectorEffect="non-scaling-stroke"
+        />
+      );
+    }
+
+    const midX = (tangentPoint1.x + tangentPoint2.x) / 2;
+    const midY = (tangentPoint1.y + tangentPoint2.y) / 2;
+    const labelOffX = midX + (midX - controlPoint.x) * 0.3;
+    const labelOffY = midY + (midY - controlPoint.y) * 0.3;
+
+    return (
+      <g>
+        {cornerPoint && (
+          <circle
+            className="sketchStudioDraftEntity"
+            cx={cornerPoint.x}
+            cy={cornerPoint.y}
+            r={8}
+            fill="rgba(59, 130, 246, 0.15)"
+            stroke="var(--color-accent, #3b82f6)"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+        <path
+          className="sketchStudioDraftEntity"
+          d={`M ${tangentPoint1.x} ${tangentPoint1.y} Q ${controlPoint.x} ${controlPoint.y} ${tangentPoint2.x} ${tangentPoint2.y}`}
+          fill="none"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle className="sketchStudioDraftEntity" cx={tangentPoint1.x} cy={tangentPoint1.y} r={4} vectorEffect="non-scaling-stroke" />
+        <circle className="sketchStudioDraftEntity" cx={tangentPoint2.x} cy={tangentPoint2.y} r={4} vectorEffect="non-scaling-stroke" />
+        {cornerPoint && (
+          <>
+            <line
+              className="sketchStudioDraftEntity"
+              x1={tangentPoint1.x} y1={tangentPoint1.y} x2={cornerPoint.x} y2={cornerPoint.y}
+              strokeDasharray="4 2"
+              opacity={0.4}
+              vectorEffect="non-scaling-stroke"
+            />
+            <line
+              className="sketchStudioDraftEntity"
+              x1={tangentPoint2.x} y1={tangentPoint2.y} x2={cornerPoint.x} y2={cornerPoint.y}
+              strokeDasharray="4 2"
+              opacity={0.4}
+              vectorEffect="non-scaling-stroke"
+            />
+          </>
+        )}
+        <text
+          className="sketchStudioDimensionDraftText"
+          x={labelOffX}
+          y={labelOffY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          R{radius.toFixed(0)}
+        </text>
+      </g>
+    );
+  }
+
   if (draftPreview.type === 'feature') {
     return renderFeaturePreview(draftPreview);
   }
@@ -103,10 +184,32 @@ export default function DraftRenderer({ draft, draftPreview, units, zoom }) {
     zoom,
   });
 
-  if (draftPreview.type === 'dimension-guide') {
+  if (draftPreview.type === 'dimension-guide' || draftPreview.type === 'angle-guide') {
     return (
       <g className="sketchStudioDraftLayer" pointerEvents="none">
         <line className="sketchStudioDraftEntity" x1={draftPreview.p1.x} y1={draftPreview.p1.y} x2={draftPreview.p2.x} y2={draftPreview.p2.y} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+      </g>
+    );
+  }
+
+  if (draftPreview.type === 'angle-dimension') {
+    const geometry = getAngleDimensionGeometry({
+      vertex: draftPreview.vertex,
+      p1: draftPreview.p1,
+      p2: draftPreview.p2,
+      arcRadius: draftPreview.arcRadius,
+      isometricPlane: draftPreview.isometricPlane,
+    });
+    const text = formatAngleText(geometry.angleDeg);
+
+    return (
+      <g className="sketchStudioDimensionDraft" pointerEvents="none">
+        <line className="sketchStudioDimensionDraftLine" {...geometry.ray1} vectorEffect="non-scaling-stroke" />
+        <line className="sketchStudioDimensionDraftLine" {...geometry.ray2} vectorEffect="non-scaling-stroke" />
+        <path className="sketchStudioDimensionDraftLine" d={geometry.arcPath} fill="none" vectorEffect="non-scaling-stroke" />
+        <text className="sketchStudioDimensionDraftText" x={geometry.textPoint.x} y={geometry.textPoint.y} textAnchor="middle" dominantBaseline="middle">
+          {text}
+        </text>
       </g>
     );
   }

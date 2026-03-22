@@ -100,6 +100,7 @@ export function createWall(start, end, thickness = WALL_THICKNESS, options = {})
     height: options.height ?? WALL_HEIGHT,
     startAttachment: options.startAttachment ?? null,
     endAttachment: options.endAttachment ?? null,
+    controlPoint: options.controlPoint ?? null,
   };
 }
 

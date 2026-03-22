@@ -237,6 +237,9 @@ function rebaseWall(wall, anchor, selectedColumns) {
     ...wall,
     start: translatePoint(wall.start, -anchor.x, -anchor.y),
     end: translatePoint(wall.end, -anchor.x, -anchor.y),
+    controlPoint: wall.controlPoint
+      ? translatePoint(wall.controlPoint, -anchor.x, -anchor.y)
+      : null,
     startAttachment: selectedColumns.has(wall.startAttachment?.columnId)
       ? { ...wall.startAttachment }
       : null,
@@ -328,6 +331,9 @@ function translateWall(wall, point) {
     ...wall,
     start: translatePoint(wall.start, point.x, point.y),
     end: translatePoint(wall.end, point.x, point.y),
+    controlPoint: wall.controlPoint
+      ? translatePoint(wall.controlPoint, point.x, point.y)
+      : null,
     startAttachment: wall.startAttachment ? { ...wall.startAttachment } : null,
     endAttachment: wall.endAttachment ? { ...wall.endAttachment } : null,
   };

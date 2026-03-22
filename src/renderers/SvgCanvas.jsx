@@ -45,6 +45,7 @@ import SectionCutRenderer from './SectionCutRenderer';
 import SectionCutPreview from './SectionCutPreview';
 import RailingRenderer from './RailingRenderer';
 import RailingPreview from './RailingPreview';
+import FilletPreview from './FilletPreview';
 import RegionSelectionOverlay from './RegionSelectionOverlay';
 import RoofRenderer from './RoofRenderer';
 import RoofElevationRenderer from './RoofElevationRenderer';
@@ -380,6 +381,9 @@ export default function SvgCanvas() {
             case 'f':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
               editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
+              return;
+            case 'g':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FILLET });
               return;
           }
         }
@@ -738,6 +742,7 @@ export default function SvgCanvas() {
                 <ColumnPreview toolState={toolState} activeTool={activeTool} />
                 <LandingPreview toolState={toolState} activeTool={activeTool} />
                 <FixturePreview toolState={toolState} activeTool={activeTool} />
+                <FilletPreview toolState={toolState} activeTool={activeTool} />
               </>
             ) : viewMode === 'section_view' ? (
               <SectionRenderer

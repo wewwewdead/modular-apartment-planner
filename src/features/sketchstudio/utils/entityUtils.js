@@ -565,6 +565,22 @@ export function createDimensionEntity({
   }, layerId);
 }
 
+export function createAngleDimensionEntity({ vertex, p1, p2, arcRadius, entities, sourceRefs = [], layerId = 'dimensions', isometricPlane = null }) {
+  const entity = {
+    id: createEntityId('ang', entities),
+    type: 'angle-dimension',
+    vertex: { ...vertex },
+    p1: { ...p1 },
+    p2: { ...p2 },
+    arcRadius,
+    meta: { sourceRefs },
+  };
+  if (isometricPlane) {
+    entity.isometricPlane = isometricPlane;
+  }
+  return createBaseEntity(entity, layerId);
+}
+
 export function getDimensionOffsetFromPlacement(subtype, p1, p2, placementPoint) {
   if (subtype === 'horizontal') {
     const baseY = (p1.y + p2.y) / 2;

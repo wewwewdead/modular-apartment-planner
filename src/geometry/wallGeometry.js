@@ -1,8 +1,12 @@
 import { subtract, normalize, perpendicular, scale, add, dot } from './point';
 import { segmentLength } from './line';
 import { MIN_WALL_LENGTH } from '@/domain/defaults';
+import { arcWallOutline, arcWallLength } from './filletGeometry';
 
 export function wallOutline(wall) {
+  if (wall.controlPoint) {
+    return arcWallOutline(wall);
+  }
   const dir = normalize(subtract(wall.end, wall.start));
   const perp = perpendicular(dir);
   const halfThick = wall.thickness / 2;
@@ -17,6 +21,9 @@ export function wallOutline(wall) {
 }
 
 export function wallLength(wall) {
+  if (wall.controlPoint) {
+    return arcWallLength(wall);
+  }
   return segmentLength(wall.start, wall.end);
 }
 

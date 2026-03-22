@@ -1,3 +1,4 @@
+import { getAngleDimensionGeometry } from './angleUtils';
 import { getArcSegments } from './arcUtils';
 import { getDimensionGeometry } from './dimensionUtils';
 import { getRectCorners, getTextCorners, resolveSourceReferenceFromEntities } from './entityUtils';
@@ -175,6 +176,32 @@ export function hitTestText(entity, point, tolerance) {
   ));
 }
 
+export function hitTestAngleDimension(entity, point, tolerance, entities) {
+  const sourceRefs = entity.meta?.sourceRefs ?? [];
+  const vertex = resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.vertex);
+  const p1 = resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1);
+  const p2 = resolveSourceReferenceFromEntities(entities, sourceRefs[2], entity.p2);
+  const geometry = getAngleDimensionGeometry({ vertex, p1, p2, arcRadius: entity.arcRadius });
+
+  // Check rays
+  if (distancePointToSegment(point, { x: geometry.ray1.x1, y: geometry.ray1.y1 }, { x: geometry.ray1.x2, y: geometry.ray1.y2 }) <= tolerance) {
+    return true;
+  }
+  if (distancePointToSegment(point, { x: geometry.ray2.x1, y: geometry.ray2.y1 }, { x: geometry.ray2.x2, y: geometry.ray2.y2 }) <= tolerance) {
+    return true;
+  }
+
+  // Check arc segments
+  const arcPoints = geometry.arcSamples;
+  for (let i = 1; i < arcPoints.length; i += 1) {
+    if (distancePointToSegment(point, arcPoints[i - 1], arcPoints[i]) <= tolerance) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function hitTestEntity(entity, point, tolerance, entities) {
   if (entity.type === 'line') {
     return hitTestLine(entity, point, tolerance);
@@ -202,6 +229,10 @@ export function hitTestEntity(entity, point, tolerance, entities) {
 
   if (entity.type === 'dimension') {
     return hitTestDimension(entity, point, tolerance, entities);
+  }
+
+  if (entity.type === 'angle-dimension') {
+    return hitTestAngleDimension(entity, point, tolerance, entities);
   }
 
   if (entity.type === 'feature') {

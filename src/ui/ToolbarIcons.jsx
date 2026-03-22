@@ -183,6 +183,16 @@ export function CenterViewIcon(props) {
   );
 }
 
+export function FilletIcon(props) {
+  return (
+    <I {...props}>
+      <path d="M5 4v8" {...p} />
+      <path d="M5 16h8" {...p} />
+      <path d="M5 12 Q 5 16 9 16" {...p} />
+    </I>
+  );
+}
+
 // Fixture icons (plan-view symbols — architecturally detailed)
 export function KitchenTopIcon(props) {
   return (

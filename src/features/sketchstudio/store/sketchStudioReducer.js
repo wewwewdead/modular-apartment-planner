@@ -34,6 +34,7 @@ function emptyPrecisionInput() {
     radius: '',
     diameter: '',
     offset: '',
+    angle: '',
     activeField: null,
   };
 }

@@ -27,6 +27,7 @@ export const TOOLS = {
   ROOF_PARAPET: 'roof_parapet',
   ROOF_DRAIN: 'roof_drain',
   ROOF_OPENING: 'roof_opening',
+  FILLET: 'fillet',
 };
 
 export const RAILING_TYPES = {

@@ -16,7 +16,7 @@ import {
   ParapetIcon, DrainIcon, OpeningIcon,
   KitchenTopIcon, ToiletIcon, LavatoryIcon, TableIcon, TVIcon, SofaIcon, BedIcon,
   GridIcon, SnapIcon, DetectRoomsIcon,
-  SidebarIcon, PropertiesIcon,
+  SidebarIcon, PropertiesIcon, FilletIcon,
 } from './ToolbarIcons';
 import { FIXTURE_TYPES } from '@/editor/tools';
 import Tooltip from './Tooltip';
@@ -45,6 +45,7 @@ const toolItems = [
   { tool: TOOLS.COLUMN, label: 'Column', shortcut: 'C', Icon: ColumnIcon },
   { tool: TOOLS.LANDING, label: 'Landing', shortcut: 'L', Icon: LandingIcon },
   { tool: TOOLS.RAILING, label: 'Railing', shortcut: 'H', Icon: RailingIcon },
+  { tool: TOOLS.FILLET, label: 'Fillet', shortcut: 'G', Icon: FilletIcon },
 ];
 
 export default function Toolbar({

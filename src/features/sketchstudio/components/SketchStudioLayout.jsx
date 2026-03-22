@@ -55,6 +55,7 @@ export default function SketchStudioLayout(props) {
     createBlankObject,
     createBuildFromParts,
     saveObjectDraft,
+    commitDocumentName,
     precisionBindings,
     handleBindings,
     canvasBindings,
@@ -118,6 +119,7 @@ export default function SketchStudioLayout(props) {
           onToggleSnap={toggleSnap}
           onSetViewMode={props.setViewMode}
           onSetIsometricPlane={props.setIsometricPlane}
+          onDocumentNameCommit={commitDocumentName}
         />
         <div className="sketchStudioWorkspace">
           <LeftToolbar tools={tools} activeTool={activeTool} onToolChange={setActiveTool} />
