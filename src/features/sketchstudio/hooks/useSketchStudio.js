@@ -6,7 +6,6 @@ import {
   cancelAnchorDrag,
   cancelHandleDrag,
   cancelTransform,
-  clearObjectDraft,
   clearPointerDecorations,
   commitEntity,
   deleteSelected,
@@ -17,15 +16,12 @@ import {
   endTransform,
   patchTransform,
   patchDraft,
-  patchObjectDraft,
   loadWorkspaceSnapshot,
   setActiveLayer,
   setActiveTool,
   setCanvasSize,
   setDocument,
   setDocumentEntities,
-  setObjectDraft,
-  setObjectLibrary,
   setPointerDown,
   setPrecisionInput,
   setSelection,
@@ -33,7 +29,6 @@ import {
   setUiFlag,
   setViewport,
   startDraft,
-  startAnchorDrag,
   startHandleDrag,
   startPan,
   startSelectionBox,
@@ -96,26 +91,8 @@ import {
   toggleLayerVisibility,
 } from '../utils/layerUtils';
 import {
-  applyObjectDefaultsToPart,
-  assignEntitiesToPart,
-  assignFeaturesToPart,
-  createObjectDraftFromSelection,
-  createPartFromSelection,
   getSelectedProfileInfo,
 } from '../utils/objectUtils';
-import { createConstraint } from '../utils/constraintUtils';
-import { createPatternDefinition } from '../utils/patternUtils';
-import { recomputeObjectDraftDerivedData } from '../utils/derivedObjectUtils';
-import { applyGeneratedPartsToObjectDraft, createPartFromTemplate } from '../utils/objectGeneratorUtils';
-import {
-  createBlankObjectDraft,
-  createManualPart,
-  duplicatePart,
-  mirrorPartAcrossAxis,
-  clonePartArray,
-  updatePartTransform,
-} from '../utils/blankObjectUtils';
-import { normalizeObjectDraft } from '../utils/objectNormalization';
 import {
   measureOffsetDistance,
   offsetLineEntity,
@@ -150,14 +127,9 @@ import {
   saveSketchWorkspaceFile,
 } from '../utils/sketchWorkspaceFileUtils';
 import { computeSelectionBounds, mirrorEntities, rotateEntities, translateEntities } from '../utils/transformUtils';
-import { buildExportAnchorPayload, moveAnchor } from '../utils/anchorUtils';
-import { assignFeatureToPart } from '../utils/featureUtils';
-import { getObjectDraftWarnings } from '../utils/validationUtils';
 import {
   loadSketchRecovery,
-  loadSketchObjectLibrary,
   saveSketchRecovery,
-  saveSketchObjectLibrary,
 } from '../../../shared/sketchAssetStorage';
 
 const HIT_TOLERANCE_PX = 10;
@@ -280,18 +252,6 @@ function parsePositiveNumber(rawValue) {
 
   const numericValue = Number(rawValue);
   return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
-}
-
-function setNestedValue(target, path, value) {
-  if (!path.length) {
-    return value;
-  }
-
-  const [head, ...tail] = path;
-  return {
-    ...(target || {}),
-    [head]: setNestedValue(target?.[head], tail, value),
-  };
 }
 
 function isOffsettableEntity(entity) {
@@ -593,70 +553,6 @@ function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
   return null;
 }
 
-function deriveObjectDraft(baseDraft, document, libraryItems) {
-  if (!baseDraft?.id) {
-    return baseDraft;
-  }
-
-  const sourceEntities = document.entities.filter((entity) => baseDraft.sourceEntityIds.includes(entity.id));
-  const derived = sourceEntities.length
-    ? createObjectDraftFromSelection({
-        document,
-        selectedEntities: sourceEntities,
-        existingObjects: libraryItems,
-        nextName: baseDraft.name || 'Custom Object',
-      })
-    : baseDraft;
-
-  const mergedFeatures = (() => {
-    const featureMap = new Map((derived.features || []).map((feature) => [feature.id, feature]));
-    (baseDraft.features || []).forEach((feature) => {
-      featureMap.set(feature.id, {
-        ...(featureMap.get(feature.id) || {}),
-        ...feature,
-      });
-    });
-    return Array.from(featureMap.values());
-  })();
-
-  return recomputeObjectDraftDerivedData({
-    ...derived,
-    ...baseDraft,
-    defaults: {
-      ...derived.defaults,
-      ...baseDraft.defaults,
-    },
-    profileEntityIds: baseDraft.profileEntityIds?.length ? baseDraft.profileEntityIds : derived.profileEntityIds,
-    parts: baseDraft.parts?.length ? baseDraft.parts : derived.parts,
-    features: mergedFeatures,
-    footprint: baseDraft.footprint ?? derived.footprint,
-    bounds: {
-      ...derived.bounds,
-      ...baseDraft.bounds,
-      height: baseDraft.bounds?.height ?? derived.bounds.height,
-    },
-    anchors: baseDraft.anchors?.length ? baseDraft.anchors : derived.anchors,
-    activeAnchorId: baseDraft.activeAnchorId ?? derived.activeAnchorId ?? (baseDraft.anchors?.[0]?.id ?? derived.anchors?.[0]?.id ?? null),
-    anchor: buildExportAnchorPayload({
-      anchors: baseDraft.anchors?.length ? baseDraft.anchors : derived.anchors,
-      anchor: baseDraft.anchor ?? derived.anchor,
-    }),
-    generator: {
-      ...derived.generator,
-      ...baseDraft.generator,
-      params: {
-        ...(derived.generator?.params || {}),
-        ...(baseDraft.generator?.params || {}),
-      },
-    },
-    bom: baseDraft.bom?.rows?.length ? baseDraft.bom : derived.bom,
-    metadata: {
-      ...derived.metadata,
-      ...baseDraft.metadata,
-    },
-  }, sourceEntities);
-}
-
 export default function useSketchStudio() {
   const [state, dispatch] = useReducer(sketchStudioReducer, sketchStudioInitialState);
   const [documentFileHandle, setDocumentFileHandle] = useState(null);
@@ -682,16 +578,7 @@ export default function useSketchStudio() {
   const selectedEntity = useMemo(() => (selectedIds.length === 1 ? state.document.entities.find((entity) => entity.id === selectedIds[0]) ?? null : null), [state.document.entities, selectedIds]);
   const selectedHandles = useMemo(() => (selectedIds.length === 1 ? getEntityHandles(selectedEntity) : []), [selectedEntity, selectedIds.length]);
   const selectionBounds = useMemo(() => computeSelectionBounds(selectedEntities, state.document.entities), [selectedEntities, state.document.entities]);
-  const resolvedObjectDraft = useMemo(() => deriveObjectDraft(state.objectDraft, state.document, state.objectLibrary.items), [state.document, state.objectDraft, state.objectLibrary.items]);
   const selectedProfileInfo = useMemo(() => getSelectedProfileInfo(selectedEntities), [selectedEntities]);
-  const objectDraftWarnings = useMemo(() => getObjectDraftWarnings(resolvedObjectDraft), [resolvedObjectDraft]);
-  const activeAnchor = useMemo(
-    () => (resolvedObjectDraft.anchors || []).find((anchor) => anchor.id === resolvedObjectDraft.activeAnchorId)
-      || (resolvedObjectDraft.anchors || []).find((anchor) => anchor.kind === 'primary')
-      || resolvedObjectDraft.anchors?.[0]
-      || null,
-    [resolvedObjectDraft.activeAnchorId, resolvedObjectDraft.anchors],
-  );
 
   const selectedMeasurements = useMemo(() => {
     if (selectedEntity?.type !== 'dimension') {
@@ -715,7 +602,6 @@ export default function useSketchStudio() {
   const precisionHud = useMemo(() => getPrecisionHudData(state.draft, draftPreview), [state.draft, draftPreview]);
   const currentWorkspaceSnapshot = useMemo(() => buildSketchWorkspaceSnapshot({
     document: state.document,
-    objectDraft: resolvedObjectDraft,
     viewport: state.viewport,
     ui: {
       activeLayerId: state.ui.activeLayerId,
@@ -725,7 +611,6 @@ export default function useSketchStudio() {
       isometricPlane: state.ui.isometricPlane,
     },
   }), [
-    resolvedObjectDraft,
     state.document,
     state.ui.activeLayerId,
     state.ui.isometricPlane,
@@ -815,10 +700,6 @@ export default function useSketchStudio() {
 
     return { worldPoint, hoveredEntity, snap: nextSnap };
   }, [activeTool, editableEntities, readWorldPoint, resolveSnap, state.viewport]);
-
-  useEffect(() => {
-    dispatch(setObjectLibrary(loadSketchObjectLibrary()));
-  }, []);
 
   useEffect(() => {
     const recoverySnapshot = loadSketchRecovery();
@@ -963,7 +844,6 @@ export default function useSketchStudio() {
         ry: draftPreview.ry,
         rotation: draftPreview.rotation,
         meta: {
-          objectDraftId: resolvedObjectDraft.id,
           ...(state.ui.viewMode === 'isometric'
             ? {
                 projectionMode: 'isometric',
@@ -975,13 +855,6 @@ export default function useSketchStudio() {
 
       if (nextEntity) {
         dispatch(commitEntity(nextEntity));
-
-        if (resolvedObjectDraft.id) {
-          dispatch(patchObjectDraft({
-            sourceEntityIds: Array.from(new Set([...resolvedObjectDraft.sourceEntityIds, nextEntity.id])),
-            isDirty: true,
-          }));
-        }
       }
       return;
     }
@@ -996,7 +869,6 @@ export default function useSketchStudio() {
         height: draftPreview.height ?? (draftPreview.startPoint ? Math.abs(draftPreview.endPoint.y - draftPreview.startPoint.y) : undefined),
         points: draftPreview.points,
         meta: {
-          objectDraftId: resolvedObjectDraft.id,
           ...(state.ui.viewMode === 'isometric'
             ? {
                 projectionMode: 'isometric',
@@ -1008,13 +880,6 @@ export default function useSketchStudio() {
 
       if (nextEntity) {
         dispatch(commitEntity(nextEntity));
-
-        if (resolvedObjectDraft.id) {
-          dispatch(patchObjectDraft({
-            sourceEntityIds: Array.from(new Set([...resolvedObjectDraft.sourceEntityIds, nextEntity.id])),
-            isDirty: true,
-          }));
-        }
       }
       return;
     }
@@ -1028,7 +893,7 @@ export default function useSketchStudio() {
         dispatch(cancelDraft());
       }
     }
-  }, [draftPreview, resolvedObjectDraft.id, resolvedObjectDraft.sourceEntityIds, state.document, state.draft, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode]);
+  }, [draftPreview, state.document, state.draft, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode]);
 
   const cancelTransientInteraction = useCallback(() => {
     if (state.interaction.mode === 'transform') {
@@ -1445,460 +1310,9 @@ export default function useSketchStudio() {
     }));
   }, [selectedEntity]);
 
-  const handleAnchorPointerDown = useCallback((anchorId, event) => {
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dispatch(startAnchorDrag({
-      anchorId,
-      pointerId: event.pointerId,
-    }));
-  }, []);
-
-  const handleCreateObjectFromSelection = useCallback(() => {
-    const nextDraft = selectedEntities.length
-      ? createObjectDraftFromSelection({
-          document: state.document,
-          selectedEntities,
-          existingObjects: state.objectLibrary.items,
-          nextName: `Custom Object ${state.objectLibrary.items.length + 1}`,
-        })
-      : createBlankObjectDraft({
-          document: state.document,
-          existingObjects: state.objectLibrary.items,
-          name: `Custom Object ${state.objectLibrary.items.length + 1}`,
-        });
-
-    console.log('[SketchStudio] createObject', nextDraft.id, selectedEntities.length, 'entities');
-    dispatch(setObjectDraft({
-      ...nextDraft,
-      isDirty: true,
-    }));
-  }, [selectedEntities, state.document, state.objectLibrary.items]);
-
-  const handleObjectDraftFieldCommit = useCallback((field, rawValue) => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    if (field === 'name' || field === 'category' || field === 'objectType') {
-      dispatch(patchObjectDraft({
-        [field]: rawValue,
-        isDirty: true,
-      }));
-      return;
-    }
-
-    if (field === 'defaults.material') {
-      dispatch(patchObjectDraft({
-        defaults: {
-          material: rawValue,
-        },
-        isDirty: true,
-      }));
-      return;
-    }
-
-    if (field.startsWith('generator.params.')) {
-      const key = field.split('.').at(-1);
-      const value = key === 'material' ? rawValue : Math.abs(Number(rawValue));
-      if (key !== 'material' && !Number.isFinite(value)) {
-        return;
-      }
-
-      dispatch(patchObjectDraft({
-        generator: {
-          params: {
-            [key]: value,
-          },
-        },
-        isDirty: true,
-      }));
-      return;
-    }
-
-    const numericValue = Number(rawValue);
-
-    if (field.startsWith('anchor.name')) {
-      const anchorId = field.split(':')[1];
-      dispatch(patchObjectDraft({
-        anchors: resolvedObjectDraft.anchors.map((anchor) => (
-          anchor.id === anchorId ? { ...anchor, name: rawValue } : anchor
-        )),
-        isDirty: true,
-      }));
-      return;
-    }
-
-    if (!Number.isFinite(numericValue) && field !== 'defaults.material') {
-      return;
-    }
-
-    if (field === 'defaults.thickness') {
-      dispatch(patchObjectDraft({
-        defaults: {
-          thickness: Math.abs(numericValue),
-        },
-        isDirty: true,
-      }));
-      return;
-    }
-
-    if (field.startsWith('bounds.')) {
-      const key = field.split('.')[1];
-      dispatch(patchObjectDraft({
-        bounds: {
-          [key]: Math.abs(numericValue),
-        },
-        isDirty: true,
-      }));
-      return;
-    }
-
-    if (field.startsWith('anchor.')) {
-      const key = field.split('.')[1];
-      dispatch(patchObjectDraft({
-        anchors: moveAnchor(
-          resolvedObjectDraft.anchors,
-          activeAnchor?.id || resolvedObjectDraft.activeAnchorId,
-          {
-            x: key === 'x' ? numericValue : activeAnchor?.x ?? 0,
-            y: key === 'y' ? numericValue : activeAnchor?.y ?? 0,
-          },
-        ),
-        anchor: buildExportAnchorPayload({
-          anchors: moveAnchor(
-            resolvedObjectDraft.anchors,
-            activeAnchor?.id || resolvedObjectDraft.activeAnchorId,
-            {
-              x: key === 'x' ? numericValue : activeAnchor?.x ?? 0,
-              y: key === 'y' ? numericValue : activeAnchor?.y ?? 0,
-            },
-          ),
-        }),
-        isDirty: true,
-      }));
-    }
-  }, [activeAnchor, resolvedObjectDraft.activeAnchorId, resolvedObjectDraft.anchors, resolvedObjectDraft.id]);
-
-  const handlePartFieldCommit = useCallback((partId, field, rawValue) => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    if (field.startsWith('transform.')) {
-      const key = field.split('.').at(-1);
-      const numericValue = Number(rawValue);
-      if (!Number.isFinite(numericValue)) {
-        return;
-      }
-
-      dispatch(patchObjectDraft({
-        parts: updatePartTransform(resolvedObjectDraft.parts || [], partId, { [key]: numericValue }),
-        isDirty: true,
-      }));
-      return;
-    }
-
-    const nextParts = (resolvedObjectDraft.parts || []).map((part) => {
-      if (part.id !== partId) {
-        return part;
-      }
-
-      if (field === 'name' || field === 'role' || field === 'material' || field === 'kind') {
-        return { ...part, [field]: rawValue };
-      }
-
-      if (field === 'layerId') {
-        return { ...part, layerId: rawValue };
-      }
-
-      if (field === 'thickness') {
-        const nextThickness = Math.abs(Number(rawValue));
-        if (!Number.isFinite(nextThickness)) {
-          return part;
-        }
-
-        return {
-          ...part,
-          thickness: nextThickness,
-          parametric: part.parametric
-            ? {
-                ...part.parametric,
-                thickness: nextThickness,
-              }
-            : part.parametric,
-        };
-      }
-
-      if (field.startsWith('parametric.')) {
-        const path = field.split('.').slice(1);
-        const leafKey = path.at(-1);
-        const nextValue = leafKey === 'template' ? rawValue : Math.abs(Number(rawValue));
-        if (leafKey !== 'template' && !Number.isFinite(nextValue)) {
-          return part;
-        }
-
-        const nextParametric = setNestedValue(part.parametric || {}, path, nextValue);
-        return {
-          ...part,
-          ...(path.length === 1 && (leafKey === 'width' || leafKey === 'height')
-            ? { [leafKey]: nextValue }
-            : {}),
-          ...(path.length === 1 && leafKey === 'thickness'
-            ? { thickness: nextValue }
-            : {}),
-          ...(path.slice(0, 1)[0] === 'origin'
-            ? {
-                transform: {
-                  ...(part.transform || {}),
-                  x: path.at(-1) === 'x' ? nextValue : (Number(part.transform?.x) || Number(part.parametric?.origin?.x) || 0),
-                  y: path.at(-1) === 'y' ? nextValue : (Number(part.transform?.y) || Number(part.parametric?.origin?.y) || 0),
-                  z: path.at(-1) === 'z' ? nextValue : (Number(part.transform?.z) || Number(part.parametric?.origin?.z) || 0),
-                },
-              }
-            : {}),
-          parametric: nextParametric,
-        };
-      }
-
-      const numericValue = Number(rawValue);
-      return Number.isFinite(numericValue)
-        ? { ...part, [field]: Math.abs(numericValue) }
-        : part;
-    });
-
-    dispatch(patchObjectDraft({ parts: nextParts, isDirty: true }));
-  }, [resolvedObjectDraft.id, resolvedObjectDraft.parts]);
-
-  const handleCreatePartFromSelection = useCallback(() => {
-    if (!resolvedObjectDraft.id || !selectedIds.length) {
-      return;
-    }
-
-    const nextPart = createPartFromSelection({
-      objectDraft: resolvedObjectDraft,
-      entities: state.document.entities,
-      selectedIds,
-      name: `Part ${(resolvedObjectDraft.parts || []).length + 1}`,
-    });
-
-    dispatch(patchObjectDraft({
-      parts: [...(resolvedObjectDraft.parts || []), nextPart],
-      metadata: {
-        creationMode: resolvedObjectDraft.metadata?.creationMode && resolvedObjectDraft.metadata.creationMode !== 'blank'
-          ? resolvedObjectDraft.metadata.creationMode
-          : 'parts',
-      },
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft, selectedIds, state.document.entities]);
-
-  const handleCreateParametricPart = useCallback((template) => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    const nextPart = {
-      ...createPartFromTemplate(template, {}, resolvedObjectDraft),
-      id: `part-${(resolvedObjectDraft.parts || []).length + 1}`,
-      name: `${template} ${(resolvedObjectDraft.parts || []).length + 1}`,
-    };
-
-    dispatch(patchObjectDraft({
-      parts: [...(resolvedObjectDraft.parts || []), nextPart],
-      metadata: {
-        creationMode: resolvedObjectDraft.metadata?.creationMode && resolvedObjectDraft.metadata.creationMode !== 'blank'
-          ? resolvedObjectDraft.metadata.creationMode
-          : 'parts',
-      },
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft]);
-
-  const handleApplyObjectGenerator = useCallback((generatorType, params = {}) => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    dispatch(patchObjectDraft({
-      ...applyGeneratedPartsToObjectDraft(resolvedObjectDraft, generatorType, params),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft]);
-
-  const handleAssignSelectionToPart = useCallback((partId) => {
-    if (!resolvedObjectDraft.id || !selectedIds.length) {
-      return;
-    }
-
-    dispatch(patchObjectDraft({
-      parts: assignEntitiesToPart(resolvedObjectDraft.parts || [], partId, selectedIds),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.id, resolvedObjectDraft.parts, selectedIds]);
-
-  const handleAssignFeaturesToPart = useCallback((partId) => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    const selectedFeatureIds = selectedEntities.filter((entity) => entity.type === 'feature').map((entity) => entity.id);
-    if (!selectedFeatureIds.length) {
-      return;
-    }
-
-    dispatch(patchObjectDraft({
-      parts: assignFeaturesToPart(resolvedObjectDraft.parts || [], partId, selectedFeatureIds),
-      features: selectedFeatureIds.reduce(
-        (features, featureId) => assignFeatureToPart(features, featureId, partId),
-        resolvedObjectDraft.features || [],
-      ),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.features, resolvedObjectDraft.id, resolvedObjectDraft.parts, selectedEntities]);
-
-  const handleRemovePart = useCallback((partId) => {
-    dispatch(patchObjectDraft({
-      parts: (resolvedObjectDraft.parts || []).filter((part) => part.id !== partId),
-      features: (resolvedObjectDraft.features || []).map((feature) => (
-        feature.targetPartId === partId ? { ...feature, targetPartId: null } : feature
-      )),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.features, resolvedObjectDraft.parts]);
-
-  const handleFeatureFieldCommit = useCallback((featureId, field, rawValue) => {
-    const nextFeatures = (resolvedObjectDraft.features || []).map((feature) => {
-      if (feature.id !== featureId) {
-        return feature;
-      }
-
-      if (field === 'targetPartId') {
-        return { ...feature, targetPartId: rawValue || null };
-      }
-
-      if (field === 'through') {
-        return { ...feature, through: rawValue === true || rawValue === 'true' };
-      }
-
-      const numericValue = Number(rawValue);
-      if (!Number.isFinite(numericValue)) {
-        return feature;
-      }
-
-      return { ...feature, [field]: numericValue };
-    });
-
-    dispatch(patchObjectDraft({ features: nextFeatures, isDirty: true }));
-  }, [resolvedObjectDraft.features]);
-
-  const handleSetActiveAnchor = useCallback((anchorId) => {
-    dispatch(patchObjectDraft({
-      activeAnchorId: anchorId,
-      anchor: buildExportAnchorPayload({
-        anchors: resolvedObjectDraft.anchors,
-        anchor: resolvedObjectDraft.anchors.find((anchor) => anchor.id === anchorId),
-      }),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.anchors]);
-
-  const handleSetPrimaryAnchor = useCallback((anchorId) => {
-    const nextAnchors = resolvedObjectDraft.anchors.map((anchor) => ({
-      ...anchor,
-      kind: anchor.id === anchorId ? 'primary' : anchor.kind === 'primary' ? 'secondary' : anchor.kind,
-    }));
-
-    dispatch(patchObjectDraft({
-      anchors: nextAnchors,
-      activeAnchorId: anchorId,
-      anchor: buildExportAnchorPayload({ anchors: nextAnchors }),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.anchors]);
-
-  const handleAddAnchor = useCallback(() => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    const nextIndex = (resolvedObjectDraft.anchors || []).length + 1;
-    const point = activeAnchor
-      ? { x: activeAnchor.x + 40, y: activeAnchor.y + 40 }
-      : selectionBounds
-        ? { x: selectionBounds.minX, y: selectionBounds.minY }
-        : { x: 0, y: 0 };
-    const nextAnchor = {
-      id: `anchor-${nextIndex}`,
-      name: `anchor-${nextIndex}`,
-      x: point.x,
-      y: point.y,
-      kind: 'custom',
-    };
-
-    dispatch(patchObjectDraft({
-      anchors: [...(resolvedObjectDraft.anchors || []), nextAnchor],
-      activeAnchorId: nextAnchor.id,
-      isDirty: true,
-    }));
-  }, [activeAnchor, resolvedObjectDraft.anchors, resolvedObjectDraft.id, selectionBounds]);
-
-  const handleRemoveAnchor = useCallback((anchorId) => {
-    const nextAnchors = (resolvedObjectDraft.anchors || []).filter((anchor) => anchor.id !== anchorId);
-    dispatch(patchObjectDraft({
-      anchors: nextAnchors,
-      activeAnchorId: nextAnchors[0]?.id ?? null,
-      anchor: buildExportAnchorPayload({ anchors: nextAnchors }),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.anchors]);
-
-  const handleSaveObjectDraft = useCallback(() => {
-    if (!resolvedObjectDraft.id) {
-      return;
-    }
-
-    const nextItems = [...state.objectLibrary.items];
-    const existingIndex = nextItems.findIndex((item) => item.id === resolvedObjectDraft.id);
-    const savedObject = {
-      ...resolvedObjectDraft,
-      isDirty: false,
-    };
-
-    if (existingIndex >= 0) {
-      nextItems[existingIndex] = savedObject;
-    } else {
-      nextItems.unshift(savedObject);
-    }
-
-    try {
-      saveSketchObjectLibrary(nextItems);
-    } catch (err) {
-      alert(err.message || 'Failed to save object to library.');
-      return;
-    }
-    dispatch(setObjectLibrary(nextItems));
-    dispatch(setObjectDraft(savedObject));
-  }, [resolvedObjectDraft, state.objectLibrary.items]);
-
-  const handleLoadObjectDraft = useCallback((objectItem) => {
-    const normalized = normalizeObjectDraft(objectItem);
-    dispatch(setObjectDraft({
-      ...normalized,
-      isDirty: false,
-    }));
-    dispatch(setSelection((normalized.sourceEntityIds || []).filter((entityId) => state.document.entities.some((entity) => entity.id === entityId))));
-  }, [state.document.entities]);
-
   const applyWorkspace = useCallback((workspace, options = {}) => {
     dispatch(loadWorkspaceSnapshot({
       document: workspace.document,
-      objectDraft: workspace.objectDraft
-        ? {
-            ...workspace.objectDraft,
-            isDirty: false,
-          }
-        : null,
       viewport: workspace.viewport,
       ui: workspace.ui,
     }));
@@ -1930,7 +1344,6 @@ export default function useSketchStudio() {
     });
     const workspace = buildSketchWorkspaceSnapshot({
       document: nextDocument,
-      objectDraft: null,
       viewport: sketchStudioInitialState.viewport,
       ui: {
         activeLayerId: nextDocument.layers[0]?.id || 'default',
@@ -2161,21 +1574,6 @@ export default function useSketchStudio() {
       return;
     }
 
-    if (state.interaction.mode === 'anchor-drag' && state.interaction.anchorDrag) {
-      const rawWorldPoint = readWorldPoint(screenPoint);
-      const nextSnap = resolveSnap(rawWorldPoint);
-      const nextPoint = nextSnap.point ?? rawWorldPoint;
-      const nextAnchors = moveAnchor(resolvedObjectDraft.anchors || [], state.interaction.anchorDrag.anchorId, nextPoint);
-
-      dispatch(patchObjectDraft({
-        anchors: nextAnchors,
-        anchor: buildExportAnchorPayload({ anchors: nextAnchors }),
-        isDirty: true,
-      }));
-      dispatch(syncPointer({ screenPoint, worldPoint: nextPoint, hoveredId: null, snap: nextSnap }));
-      return;
-    }
-
     if (state.interaction.mode === 'transform' && state.interaction.transform) {
       const rawWorldPoint = readWorldPoint(screenPoint);
       const transformState = state.interaction.transform;
@@ -2204,21 +1602,6 @@ export default function useSketchStudio() {
               copiedEntityIds: moveEntityIds,
               startEntities: moveStartEntities,
             }));
-
-            const copiedSourceIds = transformState.entityIds
-              .filter((entityId) => resolvedObjectDraft.sourceEntityIds?.includes(entityId))
-              .map((entityId) => duplicated.idMap.get(entityId))
-              .filter(Boolean);
-
-            if (copiedSourceIds.length && resolvedObjectDraft.id) {
-              dispatch(patchObjectDraft({
-                sourceEntityIds: Array.from(new Set([
-                  ...(resolvedObjectDraft.sourceEntityIds || []),
-                  ...copiedSourceIds,
-                ])),
-                isDirty: true,
-              }, { skipHistory: true }));
-            }
           } else {
             dispatch(patchTransform({
               copyMode: 'off',
@@ -2303,7 +1686,7 @@ export default function useSketchStudio() {
     dispatch(patchDraft({
       currentPoint: getConstrainedDraftPoint(state.draft.type, state.draft, snap.point ?? worldPoint),
     }));
-  }, [getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, readWorldPoint, resolvePointerState, resolveSnap, resolvedObjectDraft.id, resolvedObjectDraft.sourceEntityIds, state.document.entities, state.draft, state.hover.hoveredId, state.interaction, state.selection.selectionBox, state.ui.orthoEnabled, state.viewport]);
+  }, [getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, readWorldPoint, resolvePointerState, resolveSnap, state.document.entities, state.draft, state.hover.hoveredId, state.interaction, state.selection.selectionBox, state.ui.orthoEnabled, state.viewport]);
 
   const handlePointerUp = useCallback((event) => {
     if (state.interaction.mode === 'panning' && event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -2519,7 +1902,6 @@ export default function useSketchStudio() {
           ry: draftPreview?.ry,
           rotation: draftPreview?.rotation,
           meta: {
-            objectDraftId: resolvedObjectDraft.id,
             ...(state.ui.viewMode === 'isometric'
               ? {
                   projectionMode: 'isometric',
@@ -2531,13 +1913,6 @@ export default function useSketchStudio() {
 
         if (nextEntity) {
           dispatch(commitEntity(nextEntity));
-
-          if (resolvedObjectDraft.id) {
-            dispatch(patchObjectDraft({
-              sourceEntityIds: Array.from(new Set([...resolvedObjectDraft.sourceEntityIds, nextEntity.id])),
-              isDirty: true,
-            }));
-          }
         } else {
           dispatch(cancelDraft());
         }
@@ -2554,7 +1929,6 @@ export default function useSketchStudio() {
           height: draftPreview?.height ?? (draftPreview?.startPoint ? Math.abs(draftPreview.endPoint.y - draftPreview.startPoint.y) : undefined),
           points: draftPreview?.points,
           meta: {
-            objectDraftId: resolvedObjectDraft.id,
             ...(state.ui.viewMode === 'isometric'
               ? {
                   projectionMode: 'isometric',
@@ -2566,13 +1940,6 @@ export default function useSketchStudio() {
 
         if (nextEntity) {
           dispatch(commitEntity(nextEntity));
-
-          if (resolvedObjectDraft.id) {
-            dispatch(patchObjectDraft({
-              sourceEntityIds: Array.from(new Set([...resolvedObjectDraft.sourceEntityIds, nextEntity.id])),
-              isDirty: true,
-            }));
-          }
         } else {
           dispatch(cancelDraft());
         }
@@ -2774,7 +2141,7 @@ export default function useSketchStudio() {
         })));
       }
     }
-  }, [activeTool, commitPrecisionDraft, draftPreview, getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, resolvePointerState, resolvedObjectDraft.id, state.document, state.draft, state.interaction.suppressNextClick, state.selection.selectedIds, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode, state.viewport]);
+  }, [activeTool, commitPrecisionDraft, draftPreview, getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, resolvePointerState, state.document, state.draft, state.interaction.suppressNextClick, state.selection.selectedIds, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode, state.viewport]);
 
   const documentPersistence = useMemo(() => ({
     ...documentPersistenceMeta,
@@ -2786,144 +2153,6 @@ export default function useSketchStudio() {
       && documentPersistenceMeta.fileName !== desiredSketchFileName,
     ),
   }), [desiredSketchFileName, documentFileHandle, documentIsDirty, documentPersistenceMeta]);
-
-  const handleCreateBlankObject = useCallback((options = {}) => {
-    const blankDraft = createBlankObjectDraft({
-      document: state.document,
-      existingObjects: state.objectLibrary.items,
-      ...options,
-    });
-    console.log('[SketchStudio] createBlankObject', blankDraft.id, blankDraft);
-    dispatch(setObjectDraft(blankDraft));
-  }, [state.document, state.objectLibrary.items]);
-
-  const handleCreateBuildFromParts = useCallback(() => {
-    const blankDraft = createBlankObjectDraft({
-      document: state.document,
-      existingObjects: state.objectLibrary.items,
-      creationMode: 'parts',
-    });
-    dispatch(setObjectDraft(blankDraft));
-  }, [state.document, state.objectLibrary.items]);
-
-  const handleCreateWithGenerator = useCallback((generatorId) => {
-    const blankDraft = createBlankObjectDraft({
-      document: state.document,
-      existingObjects: state.objectLibrary.items,
-      creationMode: 'generator',
-    });
-    const withParts = applyGeneratedPartsToObjectDraft(blankDraft, generatorId);
-    dispatch(setObjectDraft({
-      ...withParts,
-      isDirty: false,
-    }));
-  }, [state.document, state.objectLibrary.items]);
-
-  const handleCreateManualPart = useCallback((partParams = {}) => {
-    if (!resolvedObjectDraft.id) return;
-    const part = createManualPart({
-      objectDraft: resolvedObjectDraft,
-      ...partParams,
-    });
-    dispatch(patchObjectDraft({
-      parts: [...(resolvedObjectDraft.parts || []), part],
-      metadata: {
-        creationMode: resolvedObjectDraft.metadata?.creationMode && resolvedObjectDraft.metadata.creationMode !== 'blank'
-          ? resolvedObjectDraft.metadata.creationMode
-          : 'parts',
-      },
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft]);
-
-  const handleDuplicatePart = useCallback((partId) => {
-    if (!resolvedObjectDraft.id) return;
-    const nextParts = duplicatePart(resolvedObjectDraft, partId);
-    dispatch(patchObjectDraft({
-      parts: nextParts,
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft]);
-
-  const handleMirrorPart = useCallback((partId, axis = 'x') => {
-    if (!resolvedObjectDraft.id) return;
-    const nextParts = mirrorPartAcrossAxis(resolvedObjectDraft, partId, axis);
-    dispatch(patchObjectDraft({
-      parts: nextParts,
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft]);
-
-  const handleClonePartArray = useCallback((partId, options = {}) => {
-    if (!resolvedObjectDraft.id) return;
-    const nextParts = clonePartArray(resolvedObjectDraft, partId, options);
-    dispatch(patchObjectDraft({
-      parts: nextParts,
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft]);
-
-  const handleApplyInternals = useCallback((internalsParams) => {
-    if (!resolvedObjectDraft.id) return;
-    dispatch(patchObjectDraft({
-      generator: { params: internalsParams },
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.id]);
-
-  const handleAddConstraint = useCallback((constraintInput) => {
-    if (!resolvedObjectDraft.id) return;
-    const constraint = createConstraint(constraintInput);
-    dispatch(patchObjectDraft({
-      constraints: [...(resolvedObjectDraft.constraints || []), constraint],
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.constraints, resolvedObjectDraft.id]);
-
-  const handleRemoveConstraint = useCallback((constraintId) => {
-    dispatch(patchObjectDraft({
-      constraints: (resolvedObjectDraft.constraints || []).filter((c) => c.id !== constraintId),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.constraints]);
-
-  const handleAddPattern = useCallback((patternInput) => {
-    if (!resolvedObjectDraft.id) return;
-    const pattern = createPatternDefinition(patternInput);
-    dispatch(patchObjectDraft({
-      patterns: [...(resolvedObjectDraft.patterns || []), pattern],
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.id, resolvedObjectDraft.patterns]);
-
-  const handleUpdatePattern = useCallback((patternId, updates) => {
-    dispatch(patchObjectDraft({
-      patterns: (resolvedObjectDraft.patterns || []).map((p) =>
-        p.id === patternId ? { ...p, ...updates } : p,
-      ),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.patterns]);
-
-  const handleRemovePattern = useCallback((patternId) => {
-    dispatch(patchObjectDraft({
-      patterns: (resolvedObjectDraft.patterns || []).filter((p) => p.id !== patternId),
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.patterns]);
-
-  const handleUpdateMaterialPricing = useCallback((material, unitCost, costBasis) => {
-    const current = resolvedObjectDraft.metadata?.materialPricing || {};
-    dispatch(patchObjectDraft({
-      metadata: {
-        materialPricing: {
-          ...current,
-          [material]: { unitCost, costBasis },
-        },
-      },
-      isDirty: true,
-    }));
-  }, [resolvedObjectDraft.metadata]);
 
   const groupSelectionSummary = useMemo(() => {
     if (!selectedEntities.length) {
@@ -2952,7 +2181,6 @@ export default function useSketchStudio() {
     draftPreview,
     precisionHud,
     snap: state.snap,
-    objectDraft: resolvedObjectDraft,
     canUndo,
     canRedo,
     activeTool,
@@ -2966,7 +2194,6 @@ export default function useSketchStudio() {
     groupSelectionSummary,
     selectedProfileInfo,
     isBrokenLineSelection,
-    activeAnchor,
     setActiveTool: handleToolChange,
     toggleOrtho,
     toggleSnap,
@@ -2985,10 +2212,6 @@ export default function useSketchStudio() {
     saveSketchAs: () => handleSaveSketch({ saveAs: true }),
     undo: handleUndo,
     redo: handleRedo,
-    createObjectFromSelection: handleCreateObjectFromSelection,
-    createBlankObject: handleCreateBlankObject,
-    createBuildFromParts: handleCreateBuildFromParts,
-    saveObjectDraft: handleSaveObjectDraft,
     commitDocumentName: handleDocumentNameCommit,
     precisionBindings: {
       onInputChange: (field, value) => dispatch(setPrecisionInput({ [field]: value, activeField: field })),
@@ -2997,7 +2220,6 @@ export default function useSketchStudio() {
     handleBindings: {
       onHandlePointerDown: handleHandlePointerDown,
       onTransformPointerDown: handleTransformPointerDown,
-      onAnchorPointerDown: handleAnchorPointerDown,
     },
     canvasBindings: {
       ref: canvasRef,
@@ -3014,9 +2236,7 @@ export default function useSketchStudio() {
         y: roundWorldValue(state.interaction.cursorWorld.y),
       },
       snapPoint: state.snap.point ? { x: roundWorldValue(state.snap.point.x), y: roundWorldValue(state.snap.point.y) } : null,
-      activeObjectName: resolvedObjectDraft.name || null,
       selectedProfileCount: selectedProfileInfo?.count ?? 0,
-      objectWarnings: objectDraftWarnings.length,
       documentStatus: documentPersistence.isDirty ? 'dirty' : documentPersistence.status,
       viewMode: state.ui.viewMode,
       isometricPlane: state.ui.isometricPlane,

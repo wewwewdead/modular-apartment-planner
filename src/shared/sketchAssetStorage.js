@@ -1,5 +1,4 @@
 export const SKETCH_STORAGE_CHANGED_EVENT = 'sketch-storage-changed';
-const SKETCH_OBJECT_LIBRARY_KEY = 'apartment-planner-sketch-library';
 const SKETCH_RECOVERY_KEY = 'apartment-planner-sketch-recovery';
 const LEGACY_SKETCH_DOCUMENT_LIBRARY_KEY = 'apartment-planner-sketch-documents';
 const LEGACY_SKETCH_LAST_DOCUMENT_ID_KEY = 'apartment-planner-sketch-last-document-id';
@@ -75,20 +74,6 @@ function loadLegacyLastSketchDocument() {
   }
 
   return loadLegacySketchDocumentLibrary().find((item) => item.id === lastDocumentId) || null;
-}
-
-export function saveSketchObjectLibrary(items) {
-  try {
-    writeJson(SKETCH_OBJECT_LIBRARY_KEY, items);
-  } catch (err) {
-    console.error('[SketchAssetStorage]', err.message);
-    throw err;
-  }
-  return items;
-}
-
-export function loadSketchObjectLibrary() {
-  return readJson(SKETCH_OBJECT_LIBRARY_KEY, []);
 }
 
 export function saveSketchRecovery(workspaceSnapshot) {

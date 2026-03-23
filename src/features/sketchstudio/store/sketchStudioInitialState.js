@@ -17,45 +17,6 @@ const emptyPrecisionInput = {
   activeField: null,
 };
 
-const emptyObjectDraft = {
-  id: null,
-  name: '',
-  objectType: null,
-  category: 'custom',
-  units: sampleDocument.units,
-  sourceDocumentId: sampleDocument.id,
-  sourceEntityIds: [],
-  profileEntityIds: [],
-  defaults: {
-    thickness: 18,
-    material: 'plywood',
-  },
-  footprint: null,
-  bounds: {
-    width: 0,
-    depth: 0,
-    height: 900,
-  },
-  parts: [],
-  features: [],
-  anchors: [],
-  activeAnchorId: null,
-  anchor: { x: 0, y: 0, name: 'origin', kind: 'primary' },
-  template: null,
-  generator: {
-    type: null,
-    params: {},
-  },
-  bom: {
-    rows: [],
-    groupedRows: [],
-  },
-  constraints: [],
-  patterns: [],
-  metadata: { creationMode: 'blank' },
-  isDirty: false,
-};
-
 const sketchStudioInitialState = {
   document: sampleDocument,
   viewport: {
@@ -71,7 +32,6 @@ const sketchStudioInitialState = {
     viewMode: 'plan',
     isometricPlane: 'top',
     activeLayerId: 'default',
-    activeObjectId: null,
   },
   interaction: {
     mode: 'idle',
@@ -111,10 +71,6 @@ const sketchStudioInitialState = {
     sourceType: null,
     sourceKey: null,
     snapType: null,
-  },
-  objectDraft: emptyObjectDraft,
-  objectLibrary: {
-    items: [],
   },
   history: {
     past: [],

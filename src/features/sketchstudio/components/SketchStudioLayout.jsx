@@ -33,8 +33,6 @@ export default function SketchStudioLayout(props) {
     groupSelectionSummary,
     selectedProfileInfo,
     isBrokenLineSelection,
-    objectDraft,
-    activeAnchor,
     setActiveTool,
     toggleOrtho,
     toggleSnap,
@@ -51,10 +49,6 @@ export default function SketchStudioLayout(props) {
     saveSketchAs,
     undo,
     redo,
-    createObjectFromSelection,
-    createBlankObject,
-    createBuildFromParts,
-    saveObjectDraft,
     commitDocumentName,
     precisionBindings,
     handleBindings,
@@ -95,7 +89,6 @@ export default function SketchStudioLayout(props) {
           document={document}
           activeTool={activeTool}
           activeLayer={activeLayer}
-          objectDraft={objectDraft}
           tools={tools}
           draft={draft}
           orthoEnabled={ui.orthoEnabled}
@@ -109,12 +102,8 @@ export default function SketchStudioLayout(props) {
           onOpenSketch={handleOpenSketch}
           onUndo={undo}
           onRedo={redo}
-          onCreateObject={createObjectFromSelection}
-          onCreateBlank={createBlankObject}
-          onCreateBuildFromParts={createBuildFromParts}
           onSaveSketch={saveSketch}
           onSaveSketchAs={saveSketchAs}
-          onSaveObject={saveObjectDraft}
           onToggleOrtho={toggleOrtho}
           onToggleSnap={toggleSnap}
           onSetViewMode={props.setViewMode}
@@ -137,8 +126,6 @@ export default function SketchStudioLayout(props) {
             snap={snap}
             selectedHandles={selectedHandles}
             selectionBounds={selectionBounds}
-            objectDraft={objectDraft}
-            activeAnchor={activeAnchor}
             isPanning={interaction.mode === 'panning'}
             canvasBindings={canvasBindings}
             precisionBindings={precisionBindings}

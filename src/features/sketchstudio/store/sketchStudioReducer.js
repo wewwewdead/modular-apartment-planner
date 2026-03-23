@@ -39,47 +39,6 @@ function emptyPrecisionInput() {
   };
 }
 
-function emptyObjectDraft(state) {
-  return {
-    id: null,
-    name: '',
-    objectType: null,
-    category: 'custom',
-    units: state?.document?.units ?? 'mm',
-    sourceDocumentId: state?.document?.id ?? null,
-    sourceEntityIds: [],
-    profileEntityIds: [],
-    defaults: {
-      thickness: 18,
-      material: 'plywood',
-    },
-    footprint: null,
-    bounds: {
-      width: 0,
-      depth: 0,
-      height: 900,
-    },
-    parts: [],
-    features: [],
-    anchors: [],
-    activeAnchorId: null,
-    anchor: { x: 0, y: 0, name: 'origin', kind: 'primary' },
-    template: null,
-    generator: {
-      type: null,
-      params: {},
-    },
-    bom: {
-      rows: [],
-      groupedRows: [],
-    },
-    constraints: [],
-    patterns: [],
-    metadata: { creationMode: 'blank' },
-    isDirty: false,
-  };
-}
-
 function emptyDraft() {
   return {
     type: null,
@@ -103,7 +62,6 @@ function restoreUndoableSnapshot(state, snapshot) {
   }
 
   const nextDocument = snapshot.document ?? state.document;
-  const nextObjectDraft = snapshot.objectDraft ?? emptyObjectDraft({ document: nextDocument });
 
   return {
     ...state,
@@ -111,7 +69,6 @@ function restoreUndoableSnapshot(state, snapshot) {
     ui: {
       ...state.ui,
       activeLayerId: getNextActiveLayer(nextDocument, snapshot.ui?.activeLayerId ?? state.ui.activeLayerId),
-      activeObjectId: nextObjectDraft?.id ?? null,
     },
     interaction: {
       ...state.interaction,
@@ -134,7 +91,6 @@ function restoreUndoableSnapshot(state, snapshot) {
     },
     draft: emptyDraft(),
     snap: emptySnap(),
-    objectDraft: nextObjectDraft,
   };
 }
 
@@ -579,7 +535,6 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.LOAD_WORKSPACE_SNAPSHOT: {
       const nextDocument = action.payload.document;
-      const nextObjectDraft = action.payload.objectDraft || emptyObjectDraft({ document: nextDocument });
       const nextViewport = action.payload.viewport || state.viewport;
       const nextUi = action.payload.ui || {};
 
@@ -595,7 +550,6 @@ export default function sketchStudioReducer(state, action) {
           orthoEnabled: nextUi.orthoEnabled ?? state.ui.orthoEnabled,
           viewMode: nextUi.viewMode ?? state.ui.viewMode,
           isometricPlane: nextUi.isometricPlane ?? state.ui.isometricPlane,
-          activeObjectId: nextObjectDraft?.id ?? null,
         },
         interaction: {
           ...state.interaction,
@@ -618,100 +572,7 @@ export default function sketchStudioReducer(state, action) {
         },
         draft: emptyDraft(),
         snap: emptySnap(),
-        objectDraft: nextObjectDraft,
         history: createEmptyHistoryState(),
-      };
-    }
-
-    case SKETCH_STUDIO_ACTIONS.SET_OBJECT_DRAFT:
-      return finalizeUndoableState(state, {
-        ...state,
-        objectDraft: action.payload,
-        ui: {
-          ...state.ui,
-          activeObjectId: action.payload?.id ?? null,
-        },
-      }, {
-        skipHistory: action.meta?.skipHistory,
-      });
-
-    case SKETCH_STUDIO_ACTIONS.PATCH_OBJECT_DRAFT:
-      return finalizeUndoableState(state, {
-        ...state,
-        objectDraft: {
-          ...state.objectDraft,
-          ...action.payload,
-          defaults: {
-            ...state.objectDraft.defaults,
-            ...(action.payload.defaults ?? {}),
-          },
-          bounds: {
-            ...state.objectDraft.bounds,
-            ...(action.payload.bounds ?? {}),
-          },
-          parts: action.payload.parts ?? state.objectDraft.parts,
-          features: action.payload.features ?? state.objectDraft.features,
-          anchors: action.payload.anchors ?? state.objectDraft.anchors,
-          anchor: action.payload.anchor ?? state.objectDraft.anchor,
-          generator: {
-            ...state.objectDraft.generator,
-            ...(action.payload.generator ?? {}),
-            params: {
-              ...(state.objectDraft.generator?.params ?? {}),
-              ...(action.payload.generator?.params ?? {}),
-            },
-          },
-          bom: {
-            ...state.objectDraft.bom,
-            ...(action.payload.bom ?? {}),
-          },
-          metadata: {
-            ...state.objectDraft.metadata,
-            ...(action.payload.metadata ?? {}),
-          },
-          constraints: action.payload.constraints ?? state.objectDraft.constraints,
-          patterns: action.payload.patterns ?? state.objectDraft.patterns,
-          isDirty: action.payload.isDirty ?? true,
-        },
-      }, {
-        skipHistory: action.meta?.skipHistory || state.interaction.mode === 'anchor-drag',
-      });
-
-    case SKETCH_STUDIO_ACTIONS.CLEAR_OBJECT_DRAFT:
-      return finalizeUndoableState(state, {
-        ...state,
-        objectDraft: emptyObjectDraft(state),
-        ui: {
-          ...state.ui,
-          activeObjectId: null,
-        },
-      }, {
-        skipHistory: action.meta?.skipHistory,
-      });
-
-    case SKETCH_STUDIO_ACTIONS.SET_OBJECT_LIBRARY:
-      return {
-        ...state,
-        objectLibrary: {
-          items: action.payload,
-        },
-      };
-
-    case SKETCH_STUDIO_ACTIONS.UPSERT_OBJECT_LIBRARY_ITEM: {
-      const nextItems = [...state.objectLibrary.items];
-      const existingIndex = nextItems.findIndex((item) => item.id === action.payload.id);
-
-      if (existingIndex >= 0) {
-        nextItems[existingIndex] = action.payload;
-      } else {
-        nextItems.unshift(action.payload);
-      }
-
-      return {
-        ...state,
-        objectLibrary: {
-          items: nextItems,
-        },
       };
     }
 

@@ -1,3 +1,5 @@
+import { UndoIcon, RedoIcon, NewIcon, SaveIcon, LoadIcon, SnapIcon } from '@/ui/ToolbarIcons';
+
 function getToolLabel(activeTool, tools) {
   return tools.find((tool) => tool.id === activeTool)?.label ?? activeTool;
 }
@@ -34,22 +36,55 @@ function getDocumentStatusLabel(documentPersistence) {
   return 'Ready';
 }
 
-function ToggleButton({ active, label, onClick }) {
+function SketchTooltip({ label, shortcut, children }) {
   return (
-    <button type="button" className={`sketchStudioBadge sketchStudioToggleBadge ${active ? 'is-active' : ''}`} onClick={onClick}>
-      {label}
-    </button>
+    <span className="sketchStudioTooltipWrap">
+      {children}
+      <span className="sketchStudioTooltip">
+        {label}
+        {shortcut ? <kbd className="sketchStudioTooltipKbd">{shortcut}</kbd> : null}
+      </span>
+    </span>
   );
 }
 
-function SegmentedButton({ active, label, onClick }) {
+function SegmentedControl({ label, options, value, onChange }) {
+  const activeIndex = options.findIndex((o) => o.value === value);
+  const count = options.length;
+  return (
+    <div
+      className="sketchStudioSegmented"
+      role="radiogroup"
+      aria-label={label}
+      style={{ '--ss-seg-count': count, '--ss-seg-active': activeIndex }}
+    >
+      <div className="sketchStudioSegmentedIndicator" />
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          role="radio"
+          aria-checked={opt.value === value}
+          className={`sketchStudioSegmentedBtn ${opt.value === value ? 'is-active' : ''}`}
+          onClick={() => onChange(opt.value)}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ToggleButton({ active, label, icon: Icon, onClick }) {
   return (
     <button
       type="button"
-      className={`sketchStudioBadge sketchStudioToggleBadge ${active ? 'is-active' : ''}`}
+      className={`sketchStudioToggle ${active ? 'is-active' : ''}`}
       onClick={onClick}
+      aria-pressed={active}
     >
-      {label}
+      {Icon ? <Icon className="sketchStudioToggleIcon" /> : null}
+      <span>{label}</span>
     </button>
   );
 }
@@ -58,7 +93,6 @@ export default function TopBar({
   document,
   activeTool,
   activeLayer,
-  objectDraft,
   tools,
   draft,
   orthoEnabled,
@@ -72,12 +106,8 @@ export default function TopBar({
   onOpenSketch,
   onUndo,
   onRedo,
-  onCreateObject,
-  onCreateBlank,
-  onCreateBuildFromParts,
   onSaveSketch,
   onSaveSketchAs,
-  onSaveObject,
   onToggleOrtho,
   onToggleSnap,
   onSetViewMode,
@@ -104,34 +134,91 @@ export default function TopBar({
           />
           <span className="sketchStudioBadge">{document.units}</span>
           <span className="sketchStudioBadge">{activeLayer?.name ?? 'No Layer'}</span>
-          <span className="sketchStudioBadge">{objectDraft?.id ? objectDraft.name || objectDraft.id : 'No Object Draft'}</span>
           <span className="sketchStudioBadge sketchStudioBadgeAccent">{getToolLabel(activeTool, tools)}</span>
           <span className="sketchStudioBadge">{getDocumentStatusLabel(documentPersistence)}</span>
         </div>
       </div>
+
       <div className="sketchStudioTopBarSecondary">
-        <span className="sketchStudioTopBarNote">{draft.type ? `Drafting ${draft.type}` : 'Generic custom drafting and part assembly'}</span>
-        <button type="button" className="sketchStudioInlineButton" onClick={onNewSketch}>New Sketch</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onOpenSketch}>Open Sketch</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onUndo} disabled={!canUndo}>Undo</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onRedo} disabled={!canRedo}>Redo</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onSaveSketch}>Save Sketch</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onSaveSketchAs}>Save As</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onCreateBlank}>New Blank</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onCreateBuildFromParts}>Build From Parts</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onCreateObject}>From Selection</button>
-        <button type="button" className="sketchStudioInlineButton" onClick={onSaveObject} disabled={!objectDraft?.id}>Save Object</button>
-        <SegmentedButton active={viewMode === 'plan'} label="Plan" onClick={() => onSetViewMode('plan')} />
-        <SegmentedButton active={viewMode === 'isometric'} label="Isometric" onClick={() => onSetViewMode('isometric')} />
+        <span className="sketchStudioTopBarNote">
+          {draft.type ? `Drafting ${draft.type}` : 'Ready'}
+        </span>
+
+        <span className="sketchStudioTopBarDivider" aria-hidden="true" />
+
+        <div className="sketchStudioTopBarGroup" role="group" aria-label="File operations">
+          <button type="button" className="sketchStudioFileBtn" onClick={onNewSketch} aria-label="New Sketch">
+            <NewIcon className="sketchStudioFileBtnIcon" /> New
+          </button>
+          <button type="button" className="sketchStudioFileBtn" onClick={onOpenSketch} aria-label="Open Sketch">
+            <LoadIcon className="sketchStudioFileBtnIcon" /> Open
+          </button>
+          <button type="button" className="sketchStudioFileBtn" onClick={onSaveSketch} aria-label="Save Sketch">
+            <SaveIcon className="sketchStudioFileBtnIcon" /> Save
+          </button>
+          <button type="button" className="sketchStudioFileBtn" onClick={onSaveSketchAs} aria-label="Save As">
+            Save As
+          </button>
+        </div>
+
+        <span className="sketchStudioTopBarDivider" aria-hidden="true" />
+
+        <div className="sketchStudioTopBarGroup" role="group" aria-label="History">
+          <SketchTooltip label="Undo" shortcut="Ctrl+Z">
+            <button
+              type="button"
+              className="sketchStudioIconBtn"
+              onClick={onUndo}
+              disabled={!canUndo}
+              aria-label="Undo"
+            >
+              <UndoIcon className="sketchStudioIconBtnSvg" />
+            </button>
+          </SketchTooltip>
+          <SketchTooltip label="Redo" shortcut="Ctrl+Shift+Z">
+            <button
+              type="button"
+              className="sketchStudioIconBtn"
+              onClick={onRedo}
+              disabled={!canRedo}
+              aria-label="Redo"
+            >
+              <RedoIcon className="sketchStudioIconBtnSvg" />
+            </button>
+          </SketchTooltip>
+        </div>
+
+        <span className="sketchStudioTopBarDivider" aria-hidden="true" />
+
+        <SegmentedControl
+          label="View mode"
+          options={[
+            { value: 'plan', label: 'Plan' },
+            { value: 'isometric', label: 'Iso' },
+          ]}
+          value={viewMode}
+          onChange={onSetViewMode}
+        />
+
         {viewMode === 'isometric' ? (
-          <>
-            <SegmentedButton active={isometricPlane === 'top'} label="Top Plane" onClick={() => onSetIsometricPlane('top')} />
-            <SegmentedButton active={isometricPlane === 'left'} label="Left Plane" onClick={() => onSetIsometricPlane('left')} />
-            <SegmentedButton active={isometricPlane === 'right'} label="Right Plane" onClick={() => onSetIsometricPlane('right')} />
-          </>
+          <SegmentedControl
+            label="Isometric plane"
+            options={[
+              { value: 'top', label: 'Top' },
+              { value: 'left', label: 'Left' },
+              { value: 'right', label: 'Right' },
+            ]}
+            value={isometricPlane}
+            onChange={onSetIsometricPlane}
+          />
         ) : null}
-        <ToggleButton active={snapEnabled} label={`Snap ${snapEnabled ? 'On' : 'Off'}`} onClick={onToggleSnap} />
-        <ToggleButton active={orthoEnabled} label={`Ortho ${orthoEnabled ? 'On' : 'Off'}`} onClick={onToggleOrtho} />
+
+        <span className="sketchStudioTopBarDivider" aria-hidden="true" />
+
+        <div className="sketchStudioTopBarGroup" role="group" aria-label="Drawing aids">
+          <ToggleButton active={snapEnabled} label="Snap" icon={SnapIcon} onClick={onToggleSnap} />
+          <ToggleButton active={orthoEnabled} label="Ortho" onClick={onToggleOrtho} />
+        </div>
       </div>
     </header>
   );

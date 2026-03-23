@@ -10,7 +10,6 @@ export function createEmptyHistoryState() {
 export function buildUndoableSketchStateSnapshot(state) {
   return {
     document: state.document,
-    objectDraft: state.objectDraft,
     ui: {
       activeLayerId: state.ui.activeLayerId,
     },
@@ -23,7 +22,6 @@ export function isSameUndoableSketchStateSnapshot(left, right) {
   }
 
   return left.document === right.document
-    && left.objectDraft === right.objectDraft
     && left.ui?.activeLayerId === right.ui?.activeLayerId;
 }
 

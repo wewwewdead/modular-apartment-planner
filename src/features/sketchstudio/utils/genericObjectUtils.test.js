@@ -2,23 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   computeGenericObjectBounds,
   computeGenericObjectFootprint,
-  createBlankObjectDraft,
   migrateLegacyObjectDraft,
 } from './genericObjectUtils';
 
 describe('genericObjectUtils', () => {
-  it('creates blank drafts with custom-first defaults', () => {
-    const draft = createBlankObjectDraft({
-      document: { id: 'doc-1', units: 'mm' },
-      creationMode: 'parts',
-    });
-
-    expect(draft.category).toBe('custom');
-    expect(draft.objectType).toBe('assembly');
-    expect(draft.metadata.creationMode).toBe('parts');
-    expect(draft.template).toBeNull();
-  });
-
   it('migrates legacy generator metadata into the generic draft shape', () => {
     const draft = migrateLegacyObjectDraft({
       id: 'object-1',

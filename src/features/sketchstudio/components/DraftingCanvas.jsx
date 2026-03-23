@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import AnchorOverlay from './AnchorOverlay';
 import DimensionRenderer from './DimensionRenderer';
 import DraftRenderer from './DraftRenderer';
 import EditHandles from './EditHandles';
@@ -26,8 +25,6 @@ export default function DraftingCanvas(props) {
     snap,
     selectedHandles,
     selectionBounds,
-    objectDraft,
-    activeAnchor,
     isPanning,
     canvasBindings,
     precisionBindings,
@@ -135,7 +132,6 @@ export default function DraftingCanvas(props) {
               <TransformOverlay bounds={selectionBounds} selectedCount={selection.selectedIds.length} onTransformPointerDown={handleBindings.onTransformPointerDown} zoom={viewport.zoom} />
               <SnapOverlay snap={snap} />
               <EditHandles handles={selectedHandles} onHandlePointerDown={handleBindings.onHandlePointerDown} />
-              <AnchorOverlay anchors={objectDraft.anchors || []} activeAnchorId={activeAnchor?.id} onAnchorPointerDown={handleBindings.onAnchorPointerDown} />
             </g>
           </svg>
 

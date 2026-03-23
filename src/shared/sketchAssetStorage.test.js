@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  loadSketchObjectLibrary,
   loadSketchRecovery,
   saveSketchRecovery,
-  saveSketchObjectLibrary,
 } from './sketchAssetStorage';
 
 function createMemoryStorage() {
@@ -31,11 +29,6 @@ describe('sketchAssetStorage', () => {
 
   afterEach(() => {
     globalThis.localStorage = originalLocalStorage;
-  });
-
-  it('persists sketch object library items', () => {
-    saveSketchObjectLibrary([{ id: 'object-1', name: 'Cabinet' }]);
-    expect(loadSketchObjectLibrary()).toEqual([{ id: 'object-1', name: 'Cabinet' }]);
   });
 
   it('persists sketch recovery snapshots', () => {

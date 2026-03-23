@@ -35,11 +35,6 @@ export const SKETCH_STUDIO_ACTIONS = {
   DELETE_SELECTED: 'DELETE_SELECTED',
   CLEAR_POINTER_DECORATIONS: 'CLEAR_POINTER_DECORATIONS',
   LOAD_WORKSPACE_SNAPSHOT: 'LOAD_WORKSPACE_SNAPSHOT',
-  SET_OBJECT_DRAFT: 'SET_OBJECT_DRAFT',
-  PATCH_OBJECT_DRAFT: 'PATCH_OBJECT_DRAFT',
-  CLEAR_OBJECT_DRAFT: 'CLEAR_OBJECT_DRAFT',
-  SET_OBJECT_LIBRARY: 'SET_OBJECT_LIBRARY',
-  UPSERT_OBJECT_LIBRARY_ITEM: 'UPSERT_OBJECT_LIBRARY_ITEM',
   UNDO: 'UNDO',
   REDO: 'REDO',
 };
@@ -213,33 +208,6 @@ export const clearPointerDecorations = () => ({
 export const loadWorkspaceSnapshot = (workspace) => ({
   type: SKETCH_STUDIO_ACTIONS.LOAD_WORKSPACE_SNAPSHOT,
   payload: workspace,
-});
-
-export const setObjectDraft = (objectDraft, meta = undefined) => ({
-  type: SKETCH_STUDIO_ACTIONS.SET_OBJECT_DRAFT,
-  payload: objectDraft,
-  meta,
-});
-
-export const patchObjectDraft = (objectDraftPatch, meta = undefined) => ({
-  type: SKETCH_STUDIO_ACTIONS.PATCH_OBJECT_DRAFT,
-  payload: objectDraftPatch,
-  meta,
-});
-
-export const clearObjectDraft = (meta = undefined) => ({
-  type: SKETCH_STUDIO_ACTIONS.CLEAR_OBJECT_DRAFT,
-  meta,
-});
-
-export const setObjectLibrary = (items) => ({
-  type: SKETCH_STUDIO_ACTIONS.SET_OBJECT_LIBRARY,
-  payload: items,
-});
-
-export const upsertObjectLibraryItem = (item) => ({
-  type: SKETCH_STUDIO_ACTIONS.UPSERT_OBJECT_LIBRARY_ITEM,
-  payload: item,
 });
 
 export const undo = () => ({

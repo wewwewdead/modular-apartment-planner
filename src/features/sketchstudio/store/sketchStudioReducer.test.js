@@ -8,7 +8,6 @@ import {
   endTransform,
   loadWorkspaceSnapshot,
   patchTransform,
-  patchObjectDraft,
   redo,
   setDocumentEntities,
   setViewport,
@@ -24,24 +23,6 @@ function createState() {
       ...sketchStudioInitialState.document,
       entities: [...sketchStudioInitialState.document.entities],
       layers: [...sketchStudioInitialState.document.layers],
-    },
-    objectDraft: {
-      ...sketchStudioInitialState.objectDraft,
-      sourceEntityIds: [...sketchStudioInitialState.objectDraft.sourceEntityIds],
-      profileEntityIds: [...sketchStudioInitialState.objectDraft.profileEntityIds],
-      parts: [...sketchStudioInitialState.objectDraft.parts],
-      features: [...sketchStudioInitialState.objectDraft.features],
-      anchors: [...sketchStudioInitialState.objectDraft.anchors],
-      constraints: [...sketchStudioInitialState.objectDraft.constraints],
-      patterns: [...sketchStudioInitialState.objectDraft.patterns],
-      defaults: { ...sketchStudioInitialState.objectDraft.defaults },
-      bounds: { ...sketchStudioInitialState.objectDraft.bounds },
-      generator: {
-        ...sketchStudioInitialState.objectDraft.generator,
-        params: { ...sketchStudioInitialState.objectDraft.generator.params },
-      },
-      bom: { ...sketchStudioInitialState.objectDraft.bom },
-      metadata: { ...sketchStudioInitialState.objectDraft.metadata },
     },
     history: {
       past: [],
@@ -125,7 +106,6 @@ describe('sketchStudioReducer history', () => {
         ...baseState.document,
         id: 'doc-loaded',
       },
-      objectDraft: null,
       viewport: changedState.viewport,
       ui: {
         activeLayerId: 'default',
@@ -178,20 +158,6 @@ describe('sketchStudioReducer history', () => {
     const undoneState = sketchStudioReducer(endedState, undo());
 
     expect(undoneState.document.entities[0].x2).toBe(100);
-  });
-
-  it('tracks object draft edits in undo history', () => {
-    const changedState = sketchStudioReducer(createState(), patchObjectDraft({
-      name: 'Desk Frame',
-      isDirty: true,
-    }));
-
-    expect(changedState.objectDraft.name).toBe('Desk Frame');
-    expect(changedState.history.past).toHaveLength(1);
-
-    const undoneState = sketchStudioReducer(changedState, undo());
-
-    expect(undoneState.objectDraft.name).toBe('');
   });
 
   it('tracks broken-line style toggles in undo history', () => {

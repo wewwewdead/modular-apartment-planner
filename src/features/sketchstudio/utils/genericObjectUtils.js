@@ -116,59 +116,6 @@ export function inferCreationMode(draft) {
   return 'blank';
 }
 
-export function createBlankObjectDraft({
-  document,
-  existingObjects = [],
-  name = 'Custom Object',
-  objectType = DEFAULT_OBJECT_TYPE,
-  category = DEFAULT_CATEGORY,
-  creationMode = 'blank',
-  bounds = DEFAULT_BOUNDS,
-  template = null,
-  generator = null,
-} = {}) {
-  const nextBounds = {
-    width: Math.max(0, Number(bounds?.width) || DEFAULT_BOUNDS.width),
-    depth: Math.max(0, Number(bounds?.depth) || DEFAULT_BOUNDS.depth),
-    height: Math.max(0, Number(bounds?.height) || DEFAULT_BOUNDS.height),
-  };
-  const anchorSet = createAnchorSet(nextBounds);
-
-  return {
-    id: createObjectId(existingObjects),
-    name,
-    objectType,
-    category,
-    units: document?.units || 'mm',
-    sourceDocumentId: document?.id || null,
-    sourceEntityIds: [],
-    profileEntityIds: [],
-    defaults: { ...DEFAULT_DEFAULTS },
-    bounds: nextBounds,
-    footprint: null,
-    parts: [],
-    features: [],
-    anchors: anchorSet.anchors,
-    activeAnchorId: anchorSet.activeAnchorId,
-    anchor: anchorSet.anchor,
-    template: normalizeTemplateMetadata(template, generator),
-    generator: {
-      type: generator?.type || null,
-      params: { ...(generator?.params || {}) },
-    },
-    bom: {
-      rows: [],
-      groupedRows: [],
-    },
-    constraints: [],
-    patterns: [],
-    metadata: {
-      creationMode,
-    },
-    isDirty: false,
-  };
-}
-
 export function computeGenericPartPlanBounds(part, entities = []) {
   const parametric = part?.parametric;
 

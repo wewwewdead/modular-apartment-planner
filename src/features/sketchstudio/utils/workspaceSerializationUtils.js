@@ -1,4 +1,3 @@
-import { normalizeObjectDraft } from './objectNormalization';
 import { validateBasicDocumentShape } from './serializationUtils';
 
 export const SKETCH_WORKSPACE_KIND = 'sketchstudio-workspace';
@@ -59,22 +58,8 @@ function normalizeUi(ui, document) {
   };
 }
 
-function normalizeWorkspaceObjectDraft(objectDraft, document) {
-  if (!objectDraft?.id) {
-    return null;
-  }
-
-  const normalized = normalizeObjectDraft(objectDraft);
-  return {
-    ...normalized,
-    sourceDocumentId: normalized.sourceDocumentId || document?.id || null,
-    isDirty: false,
-  };
-}
-
 export function buildSketchWorkspaceSnapshot({
   document,
-  objectDraft,
   viewport,
   ui,
 } = {}) {
@@ -86,7 +71,7 @@ export function buildSketchWorkspaceSnapshot({
     kind: SKETCH_WORKSPACE_KIND,
     version: SKETCH_WORKSPACE_VERSION,
     document,
-    objectDraft: normalizeWorkspaceObjectDraft(objectDraft, document),
+    objectDraft: null,
     viewport: normalizeViewport(viewport),
     ui: normalizeUi(ui, document),
   };
@@ -135,7 +120,7 @@ export function normalizeParsedSketchWorkspace(parsed) {
     version: Number(parsed.version) || SKETCH_WORKSPACE_VERSION,
     savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null,
     document: parsed.document,
-    objectDraft: normalizeWorkspaceObjectDraft(parsed.objectDraft, parsed.document),
+    objectDraft: null,
     viewport: normalizeViewport(parsed.viewport),
     ui: normalizeUi(parsed.ui, parsed.document),
   };
