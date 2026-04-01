@@ -3,7 +3,7 @@
 .craftsmanSidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
   padding: 12px;
   height: 100%;
   overflow-y: auto;
@@ -641,4 +641,199 @@
   color: #aaa;
   margin: 0;
   line-height: 1.4;
+}
+
+/* Collapsible Sections */
+.collapsibleSection {
+  border-bottom: 1px solid #2a2a3e;
+}
+
+.collapsibleHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 4px;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  min-height: 36px;
+}
+
+.collapsibleHeader:hover {
+  color: #f5a623;
+}
+
+.collapsibleArrow {
+  font-size: 9px;
+  min-width: 12px;
+  color: #666;
+}
+
+.collapsibleBody {
+  padding: 0 4px 8px 4px;
+}
+
+/* Template Quick Start */
+.templateBtn {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a2e;
+  background: #f5a623;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.templateBtn:hover {
+  background: #e6951a;
+}
+
+/* Template Gallery */
+.templateGallery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+.templateGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.templateCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: #252540;
+  border: 1px solid #333;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: #e0e0e0;
+  transition: border-color 0.15s;
+  min-height: 80px;
+}
+
+.templateCard:hover {
+  border-color: #f5a623;
+}
+
+.templateCardName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.templateCardDesc {
+  font-size: 10px;
+  color: #888;
+  line-height: 1.3;
+}
+
+.templateCardMeta {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  color: #666;
+  margin-top: auto;
+}
+
+.templateCardBadge {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #2a2a44;
+  border: 1px solid #444;
+}
+
+.galleryBackBtn {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #aaa;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.galleryBackBtn:hover {
+  color: #f5a623;
+  border-color: #f5a623;
+}
+
+/* Workshop Export Button */
+.workshopExportBtn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1a2e;
+  background: #f5a623;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 32px;
+}
+
+.workshopExportBtn:hover {
+  background: #e6951a;
+}
+
+.workshopExportBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Touch-friendly overrides for tablet */
+@media (pointer: coarse) {
+  .craftsmanToggle {
+    min-height: 44px;
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  .exportBtn {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .workshopExportBtn {
+    min-height: 48px;
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+
+  .collapsibleHeader {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .materialSelect {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .templateCard {
+    min-height: 100px;
+    padding: 12px;
+  }
+
+  .templateBtn {
+    min-height: 52px;
+    font-size: 15px;
+  }
 }

@@ -2,13 +2,15 @@ import { useCallback, useState } from 'react';
 import { downloadDxf } from '../export/dxfExport';
 import { downloadSvg } from '../export/svgExport';
 import { printEntities } from '../export/pdfExport';
+import { generateWorkshopZip } from '../export/workshopExport';
 import styles from '../styles/craftsman.module.css';
 
 const DEFAULT_KERF = 0.2; // mm, typical laser kerf
 
-export default function ExportBar({ entities, selectedIds }) {
+export default function ExportBar({ entities, selectedIds, bomRows, totalCost, costByMaterial, projectName }) {
   const [kerfEnabled, setKerfEnabled] = useState(false);
   const [kerfWidth, setKerfWidth] = useState(DEFAULT_KERF);
+  const [exporting, setExporting] = useState(false);
 
   const kerfOption = kerfEnabled ? { kerf: kerfWidth } : {};
 
@@ -32,11 +34,44 @@ export default function ExportBar({ entities, selectedIds }) {
     printEntities(entities);
   }, [entities]);
 
+  const handleWorkshopExport = useCallback(async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const result = await generateWorkshopZip(
+        entities,
+        bomRows || [],
+        totalCost || 0,
+        costByMaterial || {},
+        projectName || 'Untitled Sketch',
+        kerfOption,
+      );
+      if (result.errors.length) {
+        alert(`Workshop package exported with warnings:\n${result.errors.join('\n')}`);
+      }
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  }, [entities, bomRows, totalCost, costByMaterial, projectName, kerfOption, exporting]);
+
   const hasSelection = selectedIds?.length > 0;
 
   return (
     <div className={styles.exportBar}>
-      <span className={styles.exportLabel}>Export:</span>
+      <button
+        type="button"
+        onClick={handleWorkshopExport}
+        className={styles.workshopExportBtn}
+        disabled={exporting}
+      >
+        {exporting ? 'Exporting...' : 'Workshop Package'}
+      </button>
+
+      <span className={styles.exportDivider} />
+
+      <span className={styles.exportLabel}>Individual:</span>
       <button type="button" onClick={handleDxfAll} className={styles.exportBtn}>DXF</button>
       {hasSelection && <button type="button" onClick={handleDxfSelected} className={styles.exportBtn}>DXF (sel)</button>}
       <button type="button" onClick={handleSvgAll} className={styles.exportBtn}>SVG</button>

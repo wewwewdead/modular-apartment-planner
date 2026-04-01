@@ -14,7 +14,11 @@ All Phase 2 features shipped:
 - Parametric variables system (named vars, expression evaluation, entity references)
 - Assembly instructions generator (role-based step ordering, joint recommendations)
 
-## Craftsman Studio — Phase 3 Ideas
+## Craftsman Studio — Phase 3 DONE
+
+Phase 3 shipped: Enhanced Craftsman Mode UX (collapsible sections, localStorage, touch targets), Template Gallery (8 templates), One-Click Workshop ZIP Export (DXF+SVG+BOM+Assembly in ZIP), web app manifest.
+
+## Craftsman Studio — Phase 4 Ideas
 
 ### Exploded Isometric View for Assembly
 Visual step-by-step with parts pulled apart along isometric axes.

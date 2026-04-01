@@ -1,0 +1,38 @@
+{
+  "kind": "sketchstudio-workspace",
+  "version": 1,
+  "document": {
+    "version": 1,
+    "id": "template-cutting-board",
+    "name": "Cutting Board",
+    "units": "mm",
+    "metadata": { "authoringApp": "CraftsmanStudio", "templateId": "cuttingBoard" },
+    "variables": [
+      { "name": "boardLength", "value": 400, "unit": "mm" },
+      { "name": "boardWidth", "value": 250, "unit": "mm" }
+    ],
+    "layers": [
+      { "id": "default", "name": "Default", "visible": true, "locked": false, "color": "#999999" }
+    ],
+    "entities": [
+      {
+        "id": "rect-1",
+        "type": "rect",
+        "x1": 0,
+        "y1": 0,
+        "x2": 400,
+        "y2": 250,
+        "width": 400,
+        "height": 250,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Cutting Board" },
+        "materialId": "oak-20x95",
+        "thickness": null
+      }
+    ]
+  },
+  "viewport": { "zoom": 0.3, "panX": 200, "panY": 100 },
+  "ui": { "activeLayerId": "default", "snapEnabled": true, "orthoEnabled": false, "viewMode": "plan", "isometricPlane": "top", "craftsmanMode": true }
+}

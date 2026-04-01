@@ -1,0 +1,119 @@
+{
+  "kind": "sketchstudio-workspace",
+  "version": 1,
+  "document": {
+    "version": 1,
+    "id": "template-bookshelf",
+    "name": "Simple Bookshelf",
+    "units": "mm",
+    "metadata": { "authoringApp": "CraftsmanStudio", "templateId": "bookshelf" },
+    "variables": [
+      { "name": "shelfWidth", "value": 600, "unit": "mm" },
+      { "name": "shelfDepth", "value": 300, "unit": "mm" },
+      { "name": "shelfHeight", "value": 800, "unit": "mm" }
+    ],
+    "layers": [
+      { "id": "default", "name": "Default", "visible": true, "locked": false, "color": "#999999" }
+    ],
+    "entities": [
+      {
+        "id": "rect-1",
+        "type": "rect",
+        "x1": 0,
+        "y1": 0,
+        "x2": 300,
+        "y2": 800,
+        "width": 300,
+        "height": 800,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Left Side Panel" },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "rect-2",
+        "type": "rect",
+        "x1": 350,
+        "y1": 0,
+        "x2": 650,
+        "y2": 800,
+        "width": 300,
+        "height": 800,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Right Side Panel" },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "rect-3",
+        "type": "rect",
+        "x1": 700,
+        "y1": 0,
+        "x2": 1300,
+        "y2": 300,
+        "width": 600,
+        "height": 300,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Bottom Shelf" },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "rect-4",
+        "type": "rect",
+        "x1": 700,
+        "y1": 350,
+        "x2": 1300,
+        "y2": 650,
+        "width": 600,
+        "height": 300,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Middle Shelf" },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "rect-5",
+        "type": "rect",
+        "x1": 700,
+        "y1": 700,
+        "x2": 1300,
+        "y2": 1000,
+        "width": 600,
+        "height": 300,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Top Shelf" },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "rect-6",
+        "type": "rect",
+        "x1": 1350,
+        "y1": 0,
+        "x2": 1950,
+        "y2": 800,
+        "width": 600,
+        "height": 800,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": { "label": "Back Panel" },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      }
+    ]
+  },
+  "viewport": { "zoom": 0.3, "panX": 200, "panY": 100 },
+  "ui": { "activeLayerId": "default", "snapEnabled": true, "orthoEnabled": false, "viewMode": "plan", "isometricPlane": "top", "craftsmanMode": true }
+}

@@ -21,3 +21,8 @@
 - **Exports:** `craftsman/export/dxfExport.js` (DXF R13), `svgExport.js` (standalone SVG mm), `pdfExport.js` (browser print with ruler)
 - **UI:** CraftsmanSidebar replaces RightPanel when active. ExportBar appears at bottom. CraftsmanToggle in TopBar.
 - **Constants:** Pure helpers extracted from useSketchStudio to `hooks/sketchConstants.js`
+- **Templates:** `craftsman/templates/` — 8 starter projects (bookshelf, workbench, storage box, shelving, cutting board, plant stand, tool cart, CNC test). Registry in `index.js`, gallery UI in `TemplateGallery.jsx`
+- **Workshop ZIP Export:** `craftsman/export/workshopExport.js` — one-click ZIP with DXF + SVG + BOM CSV + BOM HTML + Assembly HTML. Uses jszip.
+- **localStorage:** Craftsman mode preference persists across sessions via localStorage
+- **Touch-friendly:** CSS `@media (pointer: coarse)` overrides for 44px+ touch targets on tablets
+- **Collapsible Sections:** Sidebar panels collapse/expand to manage vertical space

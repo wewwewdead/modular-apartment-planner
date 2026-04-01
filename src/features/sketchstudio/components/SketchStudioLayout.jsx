@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
 import RightPanel from './RightPanel';
@@ -8,6 +8,8 @@ import { canUseSketchOpenFilePicker } from '../utils/sketchWorkspaceFileUtils';
 import CraftsmanSidebar from '../craftsman/components/CraftsmanSidebar';
 import CraftsmanToggle from '../craftsman/components/CraftsmanToggle';
 import ExportBar from '../craftsman/components/ExportBar';
+import TemplateGallery from '../craftsman/components/TemplateGallery';
+import useSketchBOM from '../craftsman/hooks/useSketchBOM';
 
 export default function SketchStudioLayout(props) {
   const importInputRef = useRef(null);
@@ -62,6 +64,26 @@ export default function SketchStudioLayout(props) {
     toggleCraftsmanMode,
     setVariables,
   } = props;
+
+  const [showGallery, setShowGallery] = useState(false);
+  const { bomRows, totalCost, costByMaterial } = useSketchBOM(document.entities);
+
+  const handleLoadTemplate = useCallback((workspace) => {
+    if (document.entities.length > 0 && !window.confirm('Loading a template will replace your current sketch. Continue?')) return;
+    // Dispatch the workspace load through the existing flow
+    props.newSketch?.(); // Clear first
+    // Use a small delay to let the clear take effect, then load the template workspace
+    setTimeout(() => {
+      if (workspace?.document) {
+        // Dispatch through the hook's loadWorkspaceSnapshot equivalent
+        // For now, we reload via the import mechanism
+        const blob = new Blob([JSON.stringify(workspace)], { type: 'application/json' });
+        const file = new File([blob], 'template.json', { type: 'application/json' });
+        importSketchFile(file);
+      }
+      setShowGallery(false);
+    }, 50);
+  }, [document.entities.length, importSketchFile, props]);
 
   const handleOpenSketch = async () => {
     if (canUseSketchOpenFilePicker()) {
@@ -141,15 +163,23 @@ export default function SketchStudioLayout(props) {
             handleBindings={handleBindings}
           />
           {ui.craftsmanMode ? (
-            <CraftsmanSidebar
-              entities={document.entities}
-              selectedEntity={selectedEntity}
-              selectedIds={selection.selectedIds}
-              variables={document.variables}
-              onMaterialChange={setEntityMaterial}
-              onThicknessChange={setEntityThickness}
-              onVariablesChange={setVariables}
-            />
+            showGallery ? (
+              <TemplateGallery
+                onLoadTemplate={handleLoadTemplate}
+                onBack={() => setShowGallery(false)}
+              />
+            ) : (
+              <CraftsmanSidebar
+                entities={document.entities}
+                selectedEntity={selectedEntity}
+                selectedIds={selection.selectedIds}
+                variables={document.variables}
+                onMaterialChange={setEntityMaterial}
+                onThicknessChange={setEntityThickness}
+                onVariablesChange={setVariables}
+                onLoadTemplate={() => setShowGallery(true)}
+              />
+            )
           ) : (
             <RightPanel
               selectedEntity={selectedEntity}
@@ -167,7 +197,14 @@ export default function SketchStudioLayout(props) {
           )}
         </div>
         {ui.craftsmanMode && (
-          <ExportBar entities={document.entities} selectedIds={selection.selectedIds} />
+          <ExportBar
+            entities={document.entities}
+            selectedIds={selection.selectedIds}
+            bomRows={bomRows}
+            totalCost={totalCost}
+            costByMaterial={costByMaterial}
+            projectName={document.name}
+          />
         )}
         <StatusBar
           zoom={viewport.zoom}
