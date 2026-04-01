@@ -132,22 +132,23 @@
 .bomTableWrap {
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 300px;
+  max-height: 260px;
   border: 1px solid #333;
   border-radius: 4px;
 }
 
 .bomTable {
   width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .bomTable th {
   position: sticky;
   top: 0;
   background: #252540;
-  padding: 4px 6px;
+  padding: 3px 4px;
   text-align: left;
   font-weight: 600;
   color: #aaa;
@@ -156,7 +157,7 @@
 }
 
 .bomTable td {
-  padding: 3px 6px;
+  padding: 2px 4px;
   border-bottom: 1px solid #2a2a3e;
   white-space: nowrap;
 }
@@ -166,7 +167,7 @@
 }
 
 .materialCell {
-  max-width: 100px;
+  max-width: 70px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
