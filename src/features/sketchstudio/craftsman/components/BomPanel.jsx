@@ -27,6 +27,15 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial }) {
       <h3 className={styles.panelTitle}>Bill of Materials</h3>
       <div className={styles.bomTableWrap}>
         <table className={styles.bomTable}>
+          <colgroup>
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '24%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '11%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: '16%' }} />
+          </colgroup>
           <thead>
             <tr>
               <th>Part</th>

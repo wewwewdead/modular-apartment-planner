@@ -139,27 +139,30 @@
 
 .bomTable {
   width: 100%;
-  min-width: 100%;
   border-collapse: collapse;
   font-size: 10px;
+  table-layout: fixed;
 }
 
 .bomTable th {
   position: sticky;
   top: 0;
   background: #252540;
-  padding: 3px 4px;
+  padding: 3px 3px;
   text-align: left;
   font-weight: 600;
   color: #aaa;
   border-bottom: 1px solid #444;
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .bomTable td {
-  padding: 2px 4px;
+  padding: 2px 3px;
   border-bottom: 1px solid #2a2a3e;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bomTable tr:hover td {
