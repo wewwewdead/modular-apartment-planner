@@ -60,6 +60,23 @@ describe('computeRowCost', () => {
     const result = computeRowCost(row, {});
     expect(result.totalCost).toBe(0);
   });
+
+  it('computes perLinearMeter cost using longest dimension', () => {
+    const row = { material: 'pine', width: 2400, height: 45, quantity: 2 };
+    const pricing = { pine: { unitCost: 1.20, costBasis: 'perLinearMeter' } };
+    const result = computeRowCost(row, pricing);
+    // max(2400, 45) = 2400mm = 2.4m * 1.20 * 2 = 5.76
+    expect(result.totalCost).toBeCloseTo(5.76, 2);
+    expect(result.costBasis).toBe('perLinearMeter');
+  });
+
+  it('perLinearMeter with single quantity', () => {
+    const row = { material: 'oak', width: 1000, height: 95, quantity: 1 };
+    const pricing = { oak: { unitCost: 12.00, costBasis: 'perLinearMeter' } };
+    const result = computeRowCost(row, pricing);
+    // max(1000, 95) = 1000mm = 1.0m * 12.00 * 1 = 12.00
+    expect(result.totalCost).toBeCloseTo(12.0, 2);
+  });
 });
 
 describe('computeCostSummary', () => {
