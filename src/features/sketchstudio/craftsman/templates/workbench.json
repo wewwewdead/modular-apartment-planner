@@ -38,24 +38,179 @@
     ],
     "entities": [
       {
-        "id": "polyline-1",
+        "id": "t1",
+        "type": "text",
+        "x": 50,
+        "y": 20,
+        "text": "FRONT VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-1",
+        "type": "rect",
+        "x": 50,
+        "y": 50,
+        "width": 1500,
+        "height": 24,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Benchtop"
+        },
+        "materialId": "birch-plywood-24",
+        "thickness": null
+      },
+      {
+        "id": "r-2",
+        "type": "rect",
+        "x": 100,
+        "y": 74,
+        "width": 95,
+        "height": 826,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Left Leg"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "r-3",
+        "type": "rect",
+        "x": 1355,
+        "y": 74,
+        "width": 95,
+        "height": 826,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Right Leg"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "r-4",
+        "type": "rect",
+        "x": 195,
+        "y": 700,
+        "width": 1110,
+        "height": 45,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Stretcher"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "x": 50,
+        "y": 1050,
+        "text": "SIDE VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-5",
+        "type": "rect",
+        "x": 50,
+        "y": 1080,
+        "width": 600,
+        "height": 24,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Top"
+        },
+        "materialId": "birch-plywood-24",
+        "thickness": null
+      },
+      {
+        "id": "r-6",
+        "type": "rect",
+        "x": 100,
+        "y": 1104,
+        "width": 45,
+        "height": 826,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Leg"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "r-7",
+        "type": "rect",
+        "x": 505,
+        "y": 1104,
+        "width": 45,
+        "height": 826,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Leg"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "t3",
+        "type": "text",
+        "x": 1800,
+        "y": 50,
+        "text": "ISOMETRIC VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "i-t-t",
         "type": "polyline",
         "points": [
           {
-            "x": 50,
-            "y": 50
+            "x": 2100,
+            "y": 100
           },
           {
-            "x": 1349,
-            "y": 800
+            "x": 3399,
+            "y": 850
           },
           {
-            "x": 829.4,
-            "y": 1100
+            "x": 2879,
+            "y": 1150
           },
           {
-            "x": -469.6,
-            "y": 350
+            "x": 1580,
+            "y": 400
           }
         ],
         "closed": true,
@@ -64,31 +219,30 @@
         "visible": true,
         "meta": {
           "label": "Benchtop",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "projectionMode": "isometric"
         },
         "materialId": "birch-plywood-24",
         "thickness": null
       },
       {
-        "id": "polyline-2",
+        "id": "i-t-f",
         "type": "polyline",
         "points": [
           {
-            "x": 50,
-            "y": 700
+            "x": 2100,
+            "y": 124
           },
           {
-            "x": 132.3,
-            "y": 747.5
+            "x": 3399,
+            "y": 874
           },
           {
-            "x": -603.8,
-            "y": 1172.5
+            "x": 3399,
+            "y": 850
           },
           {
-            "x": -686.1,
-            "y": 1125
+            "x": 2100,
+            "y": 100
           }
         ],
         "closed": true,
@@ -96,32 +250,95 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Front Left Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "Benchtop",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-24",
+        "thickness": null
+      },
+      {
+        "id": "i-t-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 3399,
+            "y": 874
+          },
+          {
+            "x": 2879,
+            "y": 1174
+          },
+          {
+            "x": 2879,
+            "y": 1150
+          },
+          {
+            "x": 3399,
+            "y": 850
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Benchtop",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-24",
+        "thickness": null
+      },
+      {
+        "id": "i-fl-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2100,
+            "y": 174
+          },
+          {
+            "x": 2182,
+            "y": 222
+          },
+          {
+            "x": 2143,
+            "y": 244
+          },
+          {
+            "x": 2061,
+            "y": 197
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "FL Leg",
+          "projectionMode": "isometric"
         },
         "materialId": "pine-45x95",
         "thickness": null
       },
       {
-        "id": "polyline-3",
+        "id": "i-fl-f",
         "type": "polyline",
         "points": [
           {
-            "x": 1455,
-            "y": 700
+            "x": 2100,
+            "y": 1000
           },
           {
-            "x": 1537.3,
-            "y": 747.5
+            "x": 2182,
+            "y": 1048
           },
           {
-            "x": 801.2,
-            "y": 1172.5
+            "x": 2182,
+            "y": 222
           },
           {
-            "x": 718.9,
-            "y": 1125
+            "x": 2100,
+            "y": 174
           }
         ],
         "closed": true,
@@ -129,32 +346,31 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Front Right Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "FL Leg",
+          "projectionMode": "isometric"
         },
         "materialId": "pine-45x95",
         "thickness": null
       },
       {
-        "id": "polyline-4",
+        "id": "i-fl-s",
         "type": "polyline",
         "points": [
           {
-            "x": 50,
-            "y": 1600
+            "x": 2182,
+            "y": 1048
           },
           {
-            "x": 132.3,
-            "y": 1647.5
+            "x": 2143,
+            "y": 1070
           },
           {
-            "x": -603.8,
-            "y": 2072.5
+            "x": 2143,
+            "y": 244
           },
           {
-            "x": -686.1,
-            "y": 2025
+            "x": 2182,
+            "y": 222
           }
         ],
         "closed": true,
@@ -162,32 +378,31 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Rear Left Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "FL Leg",
+          "projectionMode": "isometric"
         },
         "materialId": "pine-45x95",
         "thickness": null
       },
       {
-        "id": "polyline-5",
+        "id": "i-fr-t",
         "type": "polyline",
         "points": [
           {
-            "x": 1455,
-            "y": 1600
+            "x": 3230,
+            "y": 826
           },
           {
-            "x": 1537.3,
-            "y": 1647.5
+            "x": 3312,
+            "y": 874
           },
           {
-            "x": 801.2,
-            "y": 2072.5
+            "x": 3273,
+            "y": 896
           },
           {
-            "x": 718.9,
-            "y": 2025
+            "x": 3191,
+            "y": 849
           }
         ],
         "closed": true,
@@ -195,32 +410,31 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Rear Right Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "FR Leg",
+          "projectionMode": "isometric"
         },
         "materialId": "pine-45x95",
         "thickness": null
       },
       {
-        "id": "polyline-6",
+        "id": "i-fr-f",
         "type": "polyline",
         "points": [
           {
-            "x": 145,
-            "y": 700
+            "x": 3230,
+            "y": 1653
           },
           {
-            "x": 1279.5,
-            "y": 1355
+            "x": 3312,
+            "y": 1700
           },
           {
-            "x": 1197.2,
-            "y": 1402.5
+            "x": 3312,
+            "y": 874
           },
           {
-            "x": 62.7,
-            "y": 747.5
+            "x": 3230,
+            "y": 826
           }
         ],
         "closed": true,
@@ -228,32 +442,31 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Front Stretcher",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "FR Leg",
+          "projectionMode": "isometric"
         },
         "materialId": "pine-45x95",
         "thickness": null
       },
       {
-        "id": "polyline-7",
+        "id": "i-fr-s",
         "type": "polyline",
         "points": [
           {
-            "x": 145,
-            "y": 1600
+            "x": 3312,
+            "y": 1700
           },
           {
-            "x": 1279.5,
-            "y": 2255
+            "x": 3273,
+            "y": 1723
           },
           {
-            "x": 1197.2,
-            "y": 2302.5
+            "x": 3273,
+            "y": 896
           },
           {
-            "x": 62.7,
-            "y": 1647.5
+            "x": 3312,
+            "y": 874
           }
         ],
         "closed": true,
@@ -261,9 +474,200 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Rear Stretcher",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "FR Leg",
+          "projectionMode": "isometric"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "i-rl-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1706,
+            "y": 401
+          },
+          {
+            "x": 1788,
+            "y": 449
+          },
+          {
+            "x": 1749,
+            "y": 471
+          },
+          {
+            "x": 1667,
+            "y": 424
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "RL Leg",
+          "projectionMode": "isometric"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "i-rl-f",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1706,
+            "y": 1228
+          },
+          {
+            "x": 1788,
+            "y": 1275
+          },
+          {
+            "x": 1788,
+            "y": 449
+          },
+          {
+            "x": 1706,
+            "y": 401
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "RL Leg",
+          "projectionMode": "isometric"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "i-rl-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1788,
+            "y": 1275
+          },
+          {
+            "x": 1749,
+            "y": 1298
+          },
+          {
+            "x": 1749,
+            "y": 471
+          },
+          {
+            "x": 1788,
+            "y": 449
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "RL Leg",
+          "projectionMode": "isometric"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "i-rr-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2836,
+            "y": 1054
+          },
+          {
+            "x": 2918,
+            "y": 1102
+          },
+          {
+            "x": 2879,
+            "y": 1124
+          },
+          {
+            "x": 2797,
+            "y": 1077
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "RR Leg",
+          "projectionMode": "isometric"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "i-rr-f",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2836,
+            "y": 1880
+          },
+          {
+            "x": 2918,
+            "y": 1928
+          },
+          {
+            "x": 2918,
+            "y": 1102
+          },
+          {
+            "x": 2836,
+            "y": 1054
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "RR Leg",
+          "projectionMode": "isometric"
+        },
+        "materialId": "pine-45x95",
+        "thickness": null
+      },
+      {
+        "id": "i-rr-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2918,
+            "y": 1928
+          },
+          {
+            "x": 2879,
+            "y": 1950
+          },
+          {
+            "x": 2879,
+            "y": 1124
+          },
+          {
+            "x": 2918,
+            "y": 1102
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "RR Leg",
+          "projectionMode": "isometric"
         },
         "materialId": "pine-45x95",
         "thickness": null
@@ -276,15 +680,15 @@
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.2,
-    "panX": 100,
-    "panY": 50
+    "zoom": 0.12,
+    "panX": 50,
+    "panY": 30
   },
   "ui": {
     "activeLayerId": "default",
     "snapEnabled": true,
     "orthoEnabled": false,
-    "viewMode": "isometric",
+    "viewMode": "plan",
     "isometricPlane": "top",
     "craftsmanMode": true
   }

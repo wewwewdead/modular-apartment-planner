@@ -33,168 +33,158 @@
     ],
     "entities": [
       {
-        "id": "polyline-1",
-        "type": "polyline",
-        "points": [
-          {
-            "x": 100,
-            "y": 50
-          },
-          {
-            "x": 359.8,
-            "y": 200
-          },
-          {
-            "x": 100,
-            "y": 350
-          },
-          {
-            "x": -159.8,
-            "y": 200
-          }
-        ],
-        "closed": true,
+        "id": "t1",
+        "type": "text",
+        "x": 50,
+        "y": 20,
+        "text": "FRONT VIEW",
+        "fontSize": 50,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-1",
+        "type": "rect",
+        "x": 50,
+        "y": 50,
+        "width": 300,
+        "height": 12,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Top Shelf",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "Shelf"
         },
         "materialId": "birch-plywood-12",
         "thickness": null
       },
       {
-        "id": "polyline-2",
-        "type": "polyline",
-        "points": [
-          {
-            "x": 80,
-            "y": 380
-          },
-          {
-            "x": 97.3,
-            "y": 390
-          },
-          {
-            "x": -335.7,
-            "y": 640
-          },
-          {
-            "x": -353,
-            "y": 630
-          }
-        ],
-        "closed": true,
+        "id": "r-2",
+        "type": "rect",
+        "x": 70,
+        "y": 62,
+        "width": 20,
+        "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Front Left Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "L Leg"
         },
         "materialId": "pine-20x45",
         "thickness": null
       },
       {
-        "id": "polyline-3",
-        "type": "polyline",
-        "points": [
-          {
-            "x": 400,
-            "y": 380
-          },
-          {
-            "x": 417.3,
-            "y": 390
-          },
-          {
-            "x": -15.7,
-            "y": 640
-          },
-          {
-            "x": -33,
-            "y": 630
-          }
-        ],
-        "closed": true,
+        "id": "r-3",
+        "type": "rect",
+        "x": 310,
+        "y": 62,
+        "width": 20,
+        "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Front Right Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "R Leg"
         },
         "materialId": "pine-20x45",
         "thickness": null
       },
       {
-        "id": "polyline-4",
-        "type": "polyline",
-        "points": [
-          {
-            "x": 80,
-            "y": 920
-          },
-          {
-            "x": 97.3,
-            "y": 930
-          },
-          {
-            "x": -335.7,
-            "y": 1180
-          },
-          {
-            "x": -353,
-            "y": 1170
-          }
-        ],
-        "closed": true,
+        "id": "t2",
+        "type": "text",
+        "x": 500,
+        "y": 20,
+        "text": "SIDE VIEW",
+        "fontSize": 50,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-4",
+        "type": "rect",
+        "x": 500,
+        "y": 50,
+        "width": 300,
+        "height": 12,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Rear Left Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "Shelf"
+        },
+        "materialId": "birch-plywood-12",
+        "thickness": null
+      },
+      {
+        "id": "r-5",
+        "type": "rect",
+        "x": 520,
+        "y": 62,
+        "width": 20,
+        "height": 500,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Leg"
         },
         "materialId": "pine-20x45",
         "thickness": null
       },
       {
-        "id": "polyline-5",
-        "type": "polyline",
-        "points": [
-          {
-            "x": 400,
-            "y": 920
-          },
-          {
-            "x": 417.3,
-            "y": 930
-          },
-          {
-            "x": -15.7,
-            "y": 1180
-          },
-          {
-            "x": -33,
-            "y": 1170
-          }
-        ],
-        "closed": true,
+        "id": "r-6",
+        "type": "rect",
+        "x": 760,
+        "y": 62,
+        "width": 20,
+        "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Rear Right Leg",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "Leg"
         },
         "materialId": "pine-20x45",
+        "thickness": null
+      },
+      {
+        "id": "t3",
+        "type": "text",
+        "x": 50,
+        "y": 620,
+        "text": "TOP VIEW",
+        "fontSize": 50,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-7",
+        "type": "rect",
+        "x": 50,
+        "y": 650,
+        "width": 300,
+        "height": 300,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Top"
+        },
+        "materialId": "birch-plywood-12",
         "thickness": null
       }
     ],
@@ -205,15 +195,15 @@
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.2,
-    "panX": 100,
-    "panY": 50
+    "zoom": 0.12,
+    "panX": 50,
+    "panY": 30
   },
   "ui": {
     "activeLayerId": "default",
     "snapEnabled": true,
     "orthoEnabled": false,
-    "viewMode": "isometric",
+    "viewMode": "plan",
     "isometricPlane": "top",
     "craftsmanMode": true
   }

@@ -33,34 +33,59 @@
     ],
     "entities": [
       {
-        "id": "polyline-1",
-        "type": "polyline",
-        "points": [
-          {
-            "x": 100,
-            "y": 100
-          },
-          {
-            "x": 446.4,
-            "y": 300
-          },
-          {
-            "x": 229.9,
-            "y": 425
-          },
-          {
-            "x": -116.5,
-            "y": 225
-          }
-        ],
-        "closed": true,
+        "id": "t1",
+        "type": "text",
+        "x": 50,
+        "y": 20,
+        "text": "TOP VIEW",
+        "fontSize": 50,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-1",
+        "type": "rect",
+        "x": 50,
+        "y": 50,
+        "width": 400,
+        "height": 250,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Cutting Board",
-          "projectionMode": "isometric",
-          "isometricPlane": "top"
+          "label": "Board"
+        },
+        "materialId": "oak-20x95",
+        "thickness": null
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "x": 50,
+        "y": 370,
+        "text": "SIDE VIEW",
+        "fontSize": 50,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-2",
+        "type": "rect",
+        "x": 50,
+        "y": 400,
+        "width": 400,
+        "height": 20,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Edge"
         },
         "materialId": "oak-20x95",
         "thickness": null
@@ -73,15 +98,15 @@
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.2,
-    "panX": 100,
-    "panY": 50
+    "zoom": 0.12,
+    "panX": 50,
+    "panY": 30
   },
   "ui": {
     "activeLayerId": "default",
     "snapEnabled": true,
     "orthoEnabled": false,
-    "viewMode": "isometric",
+    "viewMode": "plan",
     "isometricPlane": "top",
     "craftsmanMode": true
   }

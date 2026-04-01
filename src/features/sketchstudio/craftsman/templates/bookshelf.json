@@ -38,24 +38,191 @@
     ],
     "entities": [
       {
-        "id": "polyline-1",
+        "id": "t1",
+        "type": "text",
+        "x": 50,
+        "y": 20,
+        "text": "FRONT VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-1",
+        "type": "rect",
+        "x": 50,
+        "y": 50,
+        "width": 18,
+        "height": 800,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Left Side"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "r-2",
+        "type": "rect",
+        "x": 632,
+        "y": 50,
+        "width": 18,
+        "height": 800,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Right Side"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "r-3",
+        "type": "rect",
+        "x": 68,
+        "y": 50,
+        "width": 564,
+        "height": 18,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Top Shelf"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "r-4",
+        "type": "rect",
+        "x": 68,
+        "y": 441,
+        "width": 564,
+        "height": 18,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Mid Shelf"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "r-5",
+        "type": "rect",
+        "x": 68,
+        "y": 832,
+        "width": 564,
+        "height": 18,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Bot Shelf"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "t2",
+        "type": "text",
+        "x": 800,
+        "y": 20,
+        "text": "SIDE VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-6",
+        "type": "rect",
+        "x": 800,
+        "y": 50,
+        "width": 300,
+        "height": 800,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Side Panel"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "t3",
+        "type": "text",
+        "x": 50,
+        "y": 950,
+        "text": "TOP VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "r-7",
+        "type": "rect",
+        "x": 50,
+        "y": 980,
+        "width": 600,
+        "height": 300,
+        "rotation": 0,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Top Plan"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "t4",
+        "type": "text",
+        "x": 1400,
+        "y": 50,
+        "text": "ISOMETRIC VIEW",
+        "fontSize": 60,
+        "layerId": "dimensions",
+        "locked": false,
+        "visible": true,
+        "meta": {}
+      },
+      {
+        "id": "i-ls-t",
         "type": "polyline",
         "points": [
           {
-            "x": 50,
-            "y": 50
+            "x": 1700,
+            "y": 0
           },
           {
-            "x": 65.6,
-            "y": 59
+            "x": 1716,
+            "y": 9
           },
           {
-            "x": 65.6,
-            "y": -741
+            "x": 1456,
+            "y": 159
           },
           {
-            "x": 50,
-            "y": -750
+            "x": 1440,
+            "y": 150
           }
         ],
         "closed": true,
@@ -64,31 +231,94 @@
         "visible": true,
         "meta": {
           "label": "Left Side",
-          "projectionMode": "isometric",
-          "isometricPlane": "front"
+          "projectionMode": "isometric"
         },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
       {
-        "id": "polyline-2",
+        "id": "i-ls-f",
         "type": "polyline",
         "points": [
           {
-            "x": 668,
-            "y": 50
+            "x": 1700,
+            "y": 800
           },
           {
-            "x": 683.6,
-            "y": 59
+            "x": 1716,
+            "y": 809
           },
           {
-            "x": 683.6,
-            "y": -741
+            "x": 1716,
+            "y": 9
           },
           {
-            "x": 668,
-            "y": -750
+            "x": 1700,
+            "y": 0
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Left Side",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-ls-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1716,
+            "y": 809
+          },
+          {
+            "x": 1456,
+            "y": 959
+          },
+          {
+            "x": 1456,
+            "y": 159
+          },
+          {
+            "x": 1716,
+            "y": 9
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Left Side",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-rs-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2204,
+            "y": 291
+          },
+          {
+            "x": 2220,
+            "y": 300
+          },
+          {
+            "x": 1960,
+            "y": 450
+          },
+          {
+            "x": 1944,
+            "y": 441
           }
         ],
         "closed": true,
@@ -97,31 +327,190 @@
         "visible": true,
         "meta": {
           "label": "Right Side",
-          "projectionMode": "isometric",
-          "isometricPlane": "front"
+          "projectionMode": "isometric"
         },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
       {
-        "id": "polyline-3",
+        "id": "i-rs-f",
         "type": "polyline",
         "points": [
           {
-            "x": 68,
+            "x": 2204,
+            "y": 1091
+          },
+          {
+            "x": 2220,
+            "y": 1100
+          },
+          {
+            "x": 2220,
+            "y": 300
+          },
+          {
+            "x": 2204,
+            "y": 291
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Right Side",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-rs-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2220,
+            "y": 1100
+          },
+          {
+            "x": 1960,
+            "y": 1250
+          },
+          {
+            "x": 1960,
+            "y": 450
+          },
+          {
+            "x": 2220,
+            "y": 300
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Right Side",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-bs-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1716,
+            "y": 791
+          },
+          {
+            "x": 2204,
+            "y": 1073
+          },
+          {
+            "x": 1944,
+            "y": 1223
+          },
+          {
+            "x": 1456,
+            "y": 941
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Bot Shelf",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-bs-f",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1716,
+            "y": 809
+          },
+          {
+            "x": 2204,
+            "y": 1091
+          },
+          {
+            "x": 2204,
+            "y": 1073
+          },
+          {
+            "x": 1716,
+            "y": 791
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Bot Shelf",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-bs-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2204,
+            "y": 1091
+          },
+          {
+            "x": 1944,
+            "y": 1241
+          },
+          {
+            "x": 1944,
+            "y": 1223
+          },
+          {
+            "x": 2204,
+            "y": 1073
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Bot Shelf",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-ms-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1716,
+            "y": 400
+          },
+          {
+            "x": 2204,
+            "y": 682
+          },
+          {
+            "x": 1944,
             "y": 832
           },
           {
-            "x": 587.6,
-            "y": 1132
-          },
-          {
-            "x": 587.6,
-            "y": 1114
-          },
-          {
-            "x": 68,
-            "y": 814
+            "x": 1456,
+            "y": 550
           }
         ],
         "closed": true,
@@ -129,32 +518,31 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Bottom Shelf",
-          "projectionMode": "isometric",
-          "isometricPlane": "front"
+          "label": "Mid Shelf",
+          "projectionMode": "isometric"
         },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
       {
-        "id": "polyline-4",
+        "id": "i-ms-f",
         "type": "polyline",
         "points": [
           {
-            "x": 68,
-            "y": 440
+            "x": 1716,
+            "y": 418
           },
           {
-            "x": 587.6,
-            "y": 740
+            "x": 2204,
+            "y": 700
           },
           {
-            "x": 587.6,
-            "y": 722
+            "x": 2204,
+            "y": 682
           },
           {
-            "x": 68,
-            "y": 422
+            "x": 1716,
+            "y": 400
           }
         ],
         "closed": true,
@@ -162,32 +550,63 @@
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Middle Shelf",
-          "projectionMode": "isometric",
-          "isometricPlane": "front"
+          "label": "Mid Shelf",
+          "projectionMode": "isometric"
         },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
       {
-        "id": "polyline-5",
+        "id": "i-ms-s",
         "type": "polyline",
         "points": [
           {
-            "x": 68,
-            "y": 50
+            "x": 2204,
+            "y": 700
           },
           {
-            "x": 587.6,
-            "y": 350
+            "x": 1944,
+            "y": 850
           },
           {
-            "x": 587.6,
-            "y": 332
+            "x": 1944,
+            "y": 832
           },
           {
-            "x": 68,
-            "y": 32
+            "x": 2204,
+            "y": 682
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Mid Shelf",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-ts-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1716,
+            "y": 9
+          },
+          {
+            "x": 2204,
+            "y": 291
+          },
+          {
+            "x": 1944,
+            "y": 441
+          },
+          {
+            "x": 1456,
+            "y": 159
           }
         ],
         "closed": true,
@@ -196,31 +615,94 @@
         "visible": true,
         "meta": {
           "label": "Top Shelf",
-          "projectionMode": "isometric",
-          "isometricPlane": "front"
+          "projectionMode": "isometric"
         },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
       {
-        "id": "polyline-6",
+        "id": "i-ts-f",
         "type": "polyline",
         "points": [
           {
-            "x": 50,
-            "y": 50
+            "x": 1716,
+            "y": 27
           },
           {
-            "x": 600.8,
-            "y": 368
+            "x": 2204,
+            "y": 309
           },
           {
-            "x": 600.8,
-            "y": -432
+            "x": 2204,
+            "y": 291
           },
           {
-            "x": 50,
-            "y": -750
+            "x": 1716,
+            "y": 9
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Top Shelf",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-ts-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 2204,
+            "y": 309
+          },
+          {
+            "x": 1944,
+            "y": 459
+          },
+          {
+            "x": 1944,
+            "y": 441
+          },
+          {
+            "x": 2204,
+            "y": 291
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Top Shelf",
+          "projectionMode": "isometric"
+        },
+        "materialId": "birch-plywood-18",
+        "thickness": null
+      },
+      {
+        "id": "i-bp-t",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1445,
+            "y": 147
+          },
+          {
+            "x": 1965,
+            "y": 447
+          },
+          {
+            "x": 1960,
+            "y": 450
+          },
+          {
+            "x": 1440,
+            "y": 150
           }
         ],
         "closed": true,
@@ -229,8 +711,71 @@
         "visible": true,
         "meta": {
           "label": "Back Panel",
-          "projectionMode": "isometric",
-          "isometricPlane": "front"
+          "projectionMode": "isometric"
+        },
+        "materialId": "mdf-6",
+        "thickness": null
+      },
+      {
+        "id": "i-bp-f",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1445,
+            "y": 947
+          },
+          {
+            "x": 1965,
+            "y": 1247
+          },
+          {
+            "x": 1965,
+            "y": 447
+          },
+          {
+            "x": 1445,
+            "y": 147
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Back Panel",
+          "projectionMode": "isometric"
+        },
+        "materialId": "mdf-6",
+        "thickness": null
+      },
+      {
+        "id": "i-bp-s",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 1965,
+            "y": 1247
+          },
+          {
+            "x": 1960,
+            "y": 1250
+          },
+          {
+            "x": 1960,
+            "y": 450
+          },
+          {
+            "x": 1965,
+            "y": 447
+          }
+        ],
+        "closed": true,
+        "layerId": "default",
+        "locked": false,
+        "visible": true,
+        "meta": {
+          "label": "Back Panel",
+          "projectionMode": "isometric"
         },
         "materialId": "mdf-6",
         "thickness": null
@@ -243,16 +788,16 @@
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.2,
-    "panX": 100,
-    "panY": 50
+    "zoom": 0.12,
+    "panX": 50,
+    "panY": 30
   },
   "ui": {
     "activeLayerId": "default",
     "snapEnabled": true,
     "orthoEnabled": false,
-    "viewMode": "isometric",
-    "isometricPlane": "front",
+    "viewMode": "plan",
+    "isometricPlane": "top",
     "craftsmanMode": true
   }
 }
