@@ -33,18 +33,34 @@
     ],
     "entities": [
       {
-        "id": "rect-1",
-        "type": "rect",
-        "x": 100,
-        "y": 100,
-        "width": 400,
-        "height": 250,
-        "rotation": 0,
+        "id": "polyline-1",
+        "type": "polyline",
+        "points": [
+          {
+            "x": 100,
+            "y": 100
+          },
+          {
+            "x": 446.4,
+            "y": 300
+          },
+          {
+            "x": 229.9,
+            "y": 425
+          },
+          {
+            "x": -116.5,
+            "y": 225
+          }
+        ],
+        "closed": true,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Cutting Board"
+          "label": "Cutting Board",
+          "projectionMode": "isometric",
+          "isometricPlane": "top"
         },
         "materialId": "oak-20x95",
         "thickness": null
