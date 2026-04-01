@@ -15,6 +15,84 @@ export function createVariable(name, value, unit = 'mm') {
   };
 }
 
+/**
+ * Safe recursive-descent math parser.
+ * Grammar: expr = term (('+' | '-') term)*
+ *          term = factor (('*' | '/') factor)*
+ *          factor = NUMBER | VARIABLE | '(' expr ')' | '-' factor
+ * No eval/Function — only arithmetic on numbers and resolved variable values.
+ */
+function safeParse(formula, varMap) {
+  let pos = 0;
+  const src = formula.replace(/\s+/g, '');
+
+  function peek() { return src[pos] ?? ''; }
+  function advance() { return src[pos++]; }
+
+  function parseNumber() {
+    let start = pos;
+    if (peek() === '-') pos++; // allow negative in this context only after ( or start
+    while (/[0-9]/.test(peek())) pos++;
+    if (peek() === '.') { pos++; while (/[0-9]/.test(peek())) pos++; }
+    const val = Number(src.slice(start, pos));
+    return Number.isFinite(val) ? val : null;
+  }
+
+  function parseIdentifier() {
+    let start = pos;
+    while (/[a-zA-Z0-9_]/.test(peek())) pos++;
+    const name = src.slice(start, pos);
+    return name in varMap ? varMap[name] : null;
+  }
+
+  function parseFactor() {
+    if (peek() === '(') {
+      advance(); // skip (
+      const val = parseExpr();
+      if (peek() !== ')') return null;
+      advance(); // skip )
+      return val;
+    }
+    if (peek() === '-') {
+      advance();
+      const val = parseFactor();
+      return val !== null ? -val : null;
+    }
+    if (/[0-9.]/.test(peek())) return parseNumber();
+    if (/[a-zA-Z_]/.test(peek())) return parseIdentifier();
+    return null;
+  }
+
+  function parseTerm() {
+    let left = parseFactor();
+    if (left === null) return null;
+    while (peek() === '*' || peek() === '/') {
+      const op = advance();
+      const right = parseFactor();
+      if (right === null) return null;
+      left = op === '*' ? left * right : (right !== 0 ? left / right : null);
+      if (left === null) return null;
+    }
+    return left;
+  }
+
+  function parseExpr() {
+    let left = parseTerm();
+    if (left === null) return null;
+    while (peek() === '+' || peek() === '-') {
+      const op = advance();
+      const right = parseTerm();
+      if (right === null) return null;
+      left = op === '+' ? left + right : left - right;
+    }
+    return left;
+  }
+
+  const result = parseExpr();
+  if (pos !== src.length) return null; // trailing characters = invalid
+  return Number.isFinite(result) ? result : null;
+}
+
 export function evaluateExpression(expr, variables) {
   if (typeof expr === 'number') return expr;
   if (typeof expr !== 'string') return null;
@@ -37,35 +115,7 @@ export function evaluateExpression(expr, variables) {
     varMap[v.name] = v.value;
   }
 
-  // Safe expression evaluation — only allows: numbers, variable names, +, -, *, /, (, ), spaces
-  const safePattern = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
-  const tokens = formula.match(/[a-zA-Z_][a-zA-Z0-9_]*|[0-9]+\.?[0-9]*|[+\-*/().\s]/g);
-  if (!tokens) return null;
-
-  let jsExpr = '';
-  for (const token of tokens) {
-    const t = token.trim();
-    if (!t) continue;
-
-    if (safePattern.test(t)) {
-      if (!(t in varMap)) return null; // undefined variable
-      jsExpr += varMap[t];
-    } else if (/^[0-9]+\.?[0-9]*$/.test(t)) {
-      jsExpr += t;
-    } else if (/^[+\-*/().]$/.test(t)) {
-      jsExpr += t;
-    } else {
-      return null; // invalid token
-    }
-  }
-
-  try {
-    // eslint-disable-next-line no-new-func
-    const result = new Function(`return (${jsExpr})`)();
-    return Number.isFinite(result) ? result : null;
-  } catch {
-    return null;
-  }
+  return safeParse(formula, varMap);
 }
 
 export function resolveEntityDimensions(entity, variables) {
