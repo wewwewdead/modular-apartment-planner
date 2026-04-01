@@ -144,7 +144,7 @@ function nestOnSheets(parts, sheet, kerf) {
     if (currentSheet.placements.length > 0) {
       currentSheet.usedArea = currentSheet.placements.reduce((sum, p) => sum + p.placedWidth * p.placedHeight, 0);
       currentSheet.totalArea = sheet.width * sheet.height;
-      currentSheet.wastePercent = Math.round((1 - currentSheet.usedArea / currentSheet.totalArea) * 100);
+      currentSheet.wastePercent = currentSheet.totalArea > 0 ? Math.round((1 - currentSheet.usedArea / currentSheet.totalArea) * 100) : 0;
       sheets.push(currentSheet);
     }
 

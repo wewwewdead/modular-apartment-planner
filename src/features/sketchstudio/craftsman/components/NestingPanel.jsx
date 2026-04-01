@@ -5,7 +5,7 @@ import styles from '../styles/craftsman.module.css';
 const COLORS = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#f06595'];
 
 function SheetDiagram({ sheet, index }) {
-  const scale = 200 / Math.max(sheet.width, sheet.height);
+  const scale = 200 / Math.max(sheet.width, sheet.height, 1);
   const w = sheet.width * scale;
   const h = sheet.height * scale;
 
