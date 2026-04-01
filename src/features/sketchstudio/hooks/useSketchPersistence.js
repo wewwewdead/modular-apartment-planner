@@ -306,6 +306,7 @@ export default function useSketchPersistence(state, dispatch) {
     documentIsDirty,
     currentWorkspaceSnapshot,
     comparableWorkspaceSnapshot,
+    applyWorkspace,
     handleNewSketch,
     handleOpenSketch,
     handleImportSketchFile,

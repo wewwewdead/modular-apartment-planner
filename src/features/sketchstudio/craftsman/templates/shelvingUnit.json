@@ -6,15 +6,40 @@
     "id": "template-shelving-unit",
     "name": "Tall Shelving Unit",
     "units": "mm",
-    "metadata": { "authoringApp": "CraftsmanStudio", "templateId": "shelvingUnit" },
+    "metadata": {
+      "authoringApp": "CraftsmanStudio",
+      "templateId": "shelvingUnit"
+    },
     "variables": [
-      { "name": "unitWidth", "value": 800, "unit": "mm" },
-      { "name": "unitDepth", "value": 300, "unit": "mm" },
-      { "name": "unitHeight", "value": 1800, "unit": "mm" },
-      { "name": "shelfCount", "value": 6, "unit": "" }
+      {
+        "name": "unitWidth",
+        "value": 800,
+        "unit": "mm"
+      },
+      {
+        "name": "unitDepth",
+        "value": 300,
+        "unit": "mm"
+      },
+      {
+        "name": "unitHeight",
+        "value": 1800,
+        "unit": "mm"
+      },
+      {
+        "name": "shelfCount",
+        "value": 6,
+        "unit": ""
+      }
     ],
     "layers": [
-      { "id": "default", "name": "Default", "visible": true, "locked": false, "color": "#999999" }
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false,
+        "color": "#999999"
+      }
     ],
     "entities": [
       {
@@ -29,7 +54,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Left Side Panel" },
+        "meta": {
+          "label": "Left Side Panel"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -45,7 +72,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Right Side Panel" },
+        "meta": {
+          "label": "Right Side Panel"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -61,7 +90,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Shelf 1" },
+        "meta": {
+          "label": "Shelf 1"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -77,7 +108,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Shelf 2" },
+        "meta": {
+          "label": "Shelf 2"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -93,7 +126,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Shelf 3" },
+        "meta": {
+          "label": "Shelf 3"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -109,7 +144,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Shelf 4" },
+        "meta": {
+          "label": "Shelf 4"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -125,7 +162,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Shelf 5" },
+        "meta": {
+          "label": "Shelf 5"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -141,7 +180,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Shelf 6" },
+        "meta": {
+          "label": "Shelf 6"
+        },
         "materialId": "birch-plywood-18",
         "thickness": null
       },
@@ -157,12 +198,26 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Back Panel" },
+        "meta": {
+          "label": "Back Panel"
+        },
         "materialId": "mdf-6",
         "thickness": null
       }
-    ]
+    ],
+    "constraints": []
   },
-  "viewport": { "zoom": 0.3, "panX": 200, "panY": 100 },
-  "ui": { "activeLayerId": "default", "snapEnabled": true, "orthoEnabled": false, "viewMode": "plan", "isometricPlane": "top", "craftsmanMode": true }
+  "viewport": {
+    "zoom": 0.3,
+    "panX": 200,
+    "panY": 100
+  },
+  "ui": {
+    "activeLayerId": "default",
+    "snapEnabled": true,
+    "orthoEnabled": false,
+    "viewMode": "plan",
+    "isometricPlane": "top",
+    "craftsmanMode": true
+  }
 }

@@ -63,6 +63,7 @@ export default function SketchStudioLayout(props) {
     setEntityThickness,
     toggleCraftsmanMode,
     setVariables,
+    loadTemplate,
   } = props;
 
   const [showGallery, setShowGallery] = useState(false);
@@ -70,20 +71,11 @@ export default function SketchStudioLayout(props) {
 
   const handleLoadTemplate = useCallback((workspace) => {
     if (document.entities.length > 0 && !window.confirm('Loading a template will replace your current sketch. Continue?')) return;
-    // Dispatch the workspace load through the existing flow
-    props.newSketch?.(); // Clear first
-    // Use a small delay to let the clear take effect, then load the template workspace
-    setTimeout(() => {
-      if (workspace?.document) {
-        // Dispatch through the hook's loadWorkspaceSnapshot equivalent
-        // For now, we reload via the import mechanism
-        const blob = new Blob([JSON.stringify(workspace)], { type: 'application/json' });
-        const file = new File([blob], 'template.json', { type: 'application/json' });
-        importSketchFile(file);
-      }
-      setShowGallery(false);
-    }, 50);
-  }, [document.entities.length, importSketchFile, props]);
+    if (workspace?.document) {
+      loadTemplate(workspace);
+    }
+    setShowGallery(false);
+  }, [document.entities.length, loadTemplate]);
 
   const handleOpenSketch = async () => {
     if (canUseSketchOpenFilePicker()) {

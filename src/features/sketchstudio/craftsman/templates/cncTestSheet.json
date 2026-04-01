@@ -6,10 +6,19 @@
     "id": "template-cnc-test-sheet",
     "name": "CNC Test Sheet",
     "units": "mm",
-    "metadata": { "authoringApp": "CraftsmanStudio", "templateId": "cncTestSheet" },
+    "metadata": {
+      "authoringApp": "CraftsmanStudio",
+      "templateId": "cncTestSheet"
+    },
     "variables": [],
     "layers": [
-      { "id": "default", "name": "Default", "visible": true, "locked": false, "color": "#999999" }
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false,
+        "color": "#999999"
+      }
     ],
     "entities": [
       {
@@ -24,7 +33,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Small Square 1" },
+        "meta": {
+          "label": "Small Square 1"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       },
@@ -40,7 +51,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Small Square 2" },
+        "meta": {
+          "label": "Small Square 2"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       },
@@ -56,7 +69,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Small Square 3" },
+        "meta": {
+          "label": "Small Square 3"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       },
@@ -72,7 +87,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Small Square 4" },
+        "meta": {
+          "label": "Small Square 4"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       },
@@ -88,7 +105,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Medium Rect 1" },
+        "meta": {
+          "label": "Medium Rect 1"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       },
@@ -104,7 +123,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Medium Rect 2" },
+        "meta": {
+          "label": "Medium Rect 2"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       },
@@ -120,12 +141,26 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Large Rect" },
+        "meta": {
+          "label": "Large Rect"
+        },
         "materialId": "birch-plywood-3",
         "thickness": null
       }
-    ]
+    ],
+    "constraints": []
   },
-  "viewport": { "zoom": 0.3, "panX": 200, "panY": 100 },
-  "ui": { "activeLayerId": "default", "snapEnabled": true, "orthoEnabled": false, "viewMode": "plan", "isometricPlane": "top", "craftsmanMode": true }
+  "viewport": {
+    "zoom": 0.3,
+    "panX": 200,
+    "panY": 100
+  },
+  "ui": {
+    "activeLayerId": "default",
+    "snapEnabled": true,
+    "orthoEnabled": false,
+    "viewMode": "plan",
+    "isometricPlane": "top",
+    "craftsmanMode": true
+  }
 }

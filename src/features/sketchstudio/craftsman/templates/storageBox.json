@@ -6,14 +6,35 @@
     "id": "template-storage-box",
     "name": "Dovetail Storage Box",
     "units": "mm",
-    "metadata": { "authoringApp": "CraftsmanStudio", "templateId": "storageBox" },
+    "metadata": {
+      "authoringApp": "CraftsmanStudio",
+      "templateId": "storageBox"
+    },
     "variables": [
-      { "name": "boxLength", "value": 300, "unit": "mm" },
-      { "name": "boxWidth", "value": 200, "unit": "mm" },
-      { "name": "boxHeight", "value": 150, "unit": "mm" }
+      {
+        "name": "boxLength",
+        "value": 300,
+        "unit": "mm"
+      },
+      {
+        "name": "boxWidth",
+        "value": 200,
+        "unit": "mm"
+      },
+      {
+        "name": "boxHeight",
+        "value": 150,
+        "unit": "mm"
+      }
     ],
     "layers": [
-      { "id": "default", "name": "Default", "visible": true, "locked": false, "color": "#999999" }
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false,
+        "color": "#999999"
+      }
     ],
     "entities": [
       {
@@ -28,7 +49,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Long Side 1" },
+        "meta": {
+          "label": "Long Side 1"
+        },
         "materialId": "birch-plywood-12",
         "thickness": null
       },
@@ -44,7 +67,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Long Side 2" },
+        "meta": {
+          "label": "Long Side 2"
+        },
         "materialId": "birch-plywood-12",
         "thickness": null
       },
@@ -60,7 +85,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Short Side 1" },
+        "meta": {
+          "label": "Short Side 1"
+        },
         "materialId": "birch-plywood-12",
         "thickness": null
       },
@@ -76,7 +103,9 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Short Side 2" },
+        "meta": {
+          "label": "Short Side 2"
+        },
         "materialId": "birch-plywood-12",
         "thickness": null
       },
@@ -92,12 +121,26 @@
         "layerId": "default",
         "locked": false,
         "visible": true,
-        "meta": { "label": "Bottom" },
+        "meta": {
+          "label": "Bottom"
+        },
         "materialId": "birch-plywood-12",
         "thickness": null
       }
-    ]
+    ],
+    "constraints": []
   },
-  "viewport": { "zoom": 0.3, "panX": 200, "panY": 100 },
-  "ui": { "activeLayerId": "default", "snapEnabled": true, "orthoEnabled": false, "viewMode": "plan", "isometricPlane": "top", "craftsmanMode": true }
+  "viewport": {
+    "zoom": 0.3,
+    "panX": 200,
+    "panY": 100
+  },
+  "ui": {
+    "activeLayerId": "default",
+    "snapEnabled": true,
+    "orthoEnabled": false,
+    "viewMode": "plan",
+    "isometricPlane": "top",
+    "craftsmanMode": true
+  }
 }

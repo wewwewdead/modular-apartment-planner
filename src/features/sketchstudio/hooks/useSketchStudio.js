@@ -803,5 +803,6 @@ export default function useSketchStudio() {
     setEntityThickness: (entityIds, thickness) => dispatch(setEntityThickness(entityIds, thickness)),
     toggleCraftsmanMode: () => dispatch(toggleCraftsmanMode()),
     setVariables: (vars) => dispatch(setVariables(vars)),
+    loadTemplate: (workspace) => persistence.applyWorkspace(workspace, { status: 'idle' }),
   };
 }
