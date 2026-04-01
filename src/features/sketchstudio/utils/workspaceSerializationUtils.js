@@ -15,6 +15,7 @@ export const DEFAULT_SKETCH_UI = {
   orthoEnabled: false,
   viewMode: 'plan',
   isometricPlane: 'top',
+  craftsmanMode: false,
 };
 
 function getFallbackLayerId(document) {
@@ -55,6 +56,7 @@ function normalizeUi(ui, document) {
     orthoEnabled: ui?.orthoEnabled === true,
     viewMode: ui?.viewMode === 'isometric' ? 'isometric' : DEFAULT_SKETCH_UI.viewMode,
     isometricPlane: ['top', 'left', 'right'].includes(ui?.isometricPlane) ? ui.isometricPlane : DEFAULT_SKETCH_UI.isometricPlane,
+    craftsmanMode: ui?.craftsmanMode === true,
   };
 }
 

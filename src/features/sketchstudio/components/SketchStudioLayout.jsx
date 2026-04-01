@@ -5,6 +5,9 @@ import RightPanel from './RightPanel';
 import StatusBar from './StatusBar';
 import TopBar from './TopBar';
 import { canUseSketchOpenFilePicker } from '../utils/sketchWorkspaceFileUtils';
+import CraftsmanSidebar from '../craftsman/components/CraftsmanSidebar';
+import CraftsmanToggle from '../craftsman/components/CraftsmanToggle';
+import ExportBar from '../craftsman/components/ExportBar';
 
 export default function SketchStudioLayout(props) {
   const importInputRef = useRef(null);
@@ -54,6 +57,10 @@ export default function SketchStudioLayout(props) {
     handleBindings,
     canvasBindings,
     status,
+    setEntityMaterial,
+    setEntityThickness,
+    toggleCraftsmanMode,
+    setVariables,
   } = props;
 
   const handleOpenSketch = async () => {
@@ -109,7 +116,9 @@ export default function SketchStudioLayout(props) {
           onSetViewMode={props.setViewMode}
           onSetIsometricPlane={props.setIsometricPlane}
           onDocumentNameCommit={commitDocumentName}
-        />
+        >
+          <CraftsmanToggle isActive={ui.craftsmanMode} onToggle={toggleCraftsmanMode} />
+        </TopBar>
         <div className="sketchStudioWorkspace">
           <LeftToolbar tools={tools} activeTool={activeTool} onToolChange={setActiveTool} />
           <DraftingCanvas
@@ -131,20 +140,35 @@ export default function SketchStudioLayout(props) {
             precisionBindings={precisionBindings}
             handleBindings={handleBindings}
           />
-          <RightPanel
-            selectedEntity={selectedEntity}
-            groupSelectionSummary={groupSelectionSummary}
-            selectedMeasurements={selectedMeasurements}
-            selectedProfileInfo={selectedProfileInfo}
-            isBrokenLineSelection={isBrokenLineSelection}
-            onEntityFieldCommit={updateSelectedEntityField}
-            onRotateLeft={rotateSelectionLeft}
-            onRotateRight={rotateSelectionRight}
-            onFlipHorizontal={flipSelectionHorizontal}
-            onFlipVertical={flipSelectionVertical}
-            onToggleBrokenLines={toggleBrokenLines}
-          />
+          {ui.craftsmanMode ? (
+            <CraftsmanSidebar
+              entities={document.entities}
+              selectedEntity={selectedEntity}
+              selectedIds={selection.selectedIds}
+              variables={document.variables}
+              onMaterialChange={setEntityMaterial}
+              onThicknessChange={setEntityThickness}
+              onVariablesChange={setVariables}
+            />
+          ) : (
+            <RightPanel
+              selectedEntity={selectedEntity}
+              groupSelectionSummary={groupSelectionSummary}
+              selectedMeasurements={selectedMeasurements}
+              selectedProfileInfo={selectedProfileInfo}
+              isBrokenLineSelection={isBrokenLineSelection}
+              onEntityFieldCommit={updateSelectedEntityField}
+              onRotateLeft={rotateSelectionLeft}
+              onRotateRight={rotateSelectionRight}
+              onFlipHorizontal={flipSelectionHorizontal}
+              onFlipVertical={flipSelectionVertical}
+              onToggleBrokenLines={toggleBrokenLines}
+            />
+          )}
         </div>
+        {ui.craftsmanMode && (
+          <ExportBar entities={document.entities} selectedIds={selection.selectedIds} />
+        )}
         <StatusBar
           zoom={viewport.zoom}
           cursorWorld={status.cursorWorld}

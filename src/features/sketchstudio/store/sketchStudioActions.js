@@ -37,6 +37,10 @@ export const SKETCH_STUDIO_ACTIONS = {
   LOAD_WORKSPACE_SNAPSHOT: 'LOAD_WORKSPACE_SNAPSHOT',
   UNDO: 'UNDO',
   REDO: 'REDO',
+  SET_ENTITY_MATERIAL: 'SET_ENTITY_MATERIAL',
+  SET_ENTITY_THICKNESS: 'SET_ENTITY_THICKNESS',
+  TOGGLE_CRAFTSMAN_MODE: 'TOGGLE_CRAFTSMAN_MODE',
+  SET_VARIABLES: 'SET_VARIABLES',
 };
 
 export const setCanvasSize = (canvasSize) => ({
@@ -216,4 +220,23 @@ export const undo = () => ({
 
 export const redo = () => ({
   type: SKETCH_STUDIO_ACTIONS.REDO,
+});
+
+export const setEntityMaterial = (entityIds, materialId) => ({
+  type: SKETCH_STUDIO_ACTIONS.SET_ENTITY_MATERIAL,
+  payload: { entityIds, materialId },
+});
+
+export const setEntityThickness = (entityIds, thickness) => ({
+  type: SKETCH_STUDIO_ACTIONS.SET_ENTITY_THICKNESS,
+  payload: { entityIds, thickness },
+});
+
+export const toggleCraftsmanMode = () => ({
+  type: SKETCH_STUDIO_ACTIONS.TOGGLE_CRAFTSMAN_MODE,
+});
+
+export const setVariables = (variables) => ({
+  type: SKETCH_STUDIO_ACTIONS.SET_VARIABLES,
+  payload: variables,
 });

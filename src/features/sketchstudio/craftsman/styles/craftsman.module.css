@@ -1,0 +1,644 @@
+/* Craftsman Studio Styles */
+
+.craftsmanSidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+  overflow-y: auto;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-size: 13px;
+}
+
+.sidebarTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #f5a623;
+  margin: 0 0 4px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.section {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2a2a3e;
+}
+
+.panelTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ccc;
+  margin: 0 0 8px 0;
+}
+
+.hint {
+  font-size: 12px;
+  color: #888;
+  margin: 0 0 8px 0;
+}
+
+.emptyMessage {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+  margin: 8px 0;
+}
+
+/* Material Picker */
+.materialPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fieldHint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #777;
+}
+
+.materialSelect {
+  width: 100%;
+  padding: 6px 8px;
+  background: #252540;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.materialSelect:focus {
+  outline: none;
+  border-color: #f5a623;
+}
+
+.thicknessInput {
+  width: 100%;
+  padding: 6px 8px;
+  background: #252540;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.thicknessInput:focus {
+  outline: none;
+  border-color: #f5a623;
+}
+
+.materialPreview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.materialSwatch {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid #555;
+  flex-shrink: 0;
+}
+
+.materialInfo {
+  font-size: 11px;
+  color: #888;
+}
+
+/* BOM Panel */
+.bomPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.bomTableWrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 300px;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.bomTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.bomTable th {
+  position: sticky;
+  top: 0;
+  background: #252540;
+  padding: 4px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: #aaa;
+  border-bottom: 1px solid #444;
+  white-space: nowrap;
+}
+
+.bomTable td {
+  padding: 3px 6px;
+  border-bottom: 1px solid #2a2a3e;
+  white-space: nowrap;
+}
+
+.bomTable tr:hover td {
+  background: #252540;
+}
+
+.materialCell {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bomFooter {
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.totalCost {
+  font-size: 14px;
+  color: #f5a623;
+}
+
+.costBreakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.costRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #888;
+}
+
+/* Export */
+.exportBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #1a1a2e;
+  border-top: 1px solid #333;
+  flex-wrap: wrap;
+}
+
+.exportLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  margin-right: 4px;
+}
+
+.exportBtn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #e0e0e0;
+  background: #2a2a44;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.exportBtn:hover {
+  background: #3a3a5a;
+  border-color: #f5a623;
+}
+
+.exportButtons {
+  display: flex;
+  gap: 6px;
+}
+
+/* Toggle Button */
+.craftsmanToggle {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #aaa;
+  background: transparent;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.craftsmanToggle:hover {
+  border-color: #f5a623;
+  color: #f5a623;
+}
+
+.craftsmanToggleActive {
+  background: #f5a623;
+  color: #1a1a2e;
+  border-color: #f5a623;
+  font-weight: 600;
+}
+
+.craftsmanToggleActive:hover {
+  background: #e6951a;
+  color: #1a1a2e;
+}
+
+/* Kerf Controls */
+.exportDivider {
+  width: 1px;
+  height: 20px;
+  background: #444;
+  margin: 0 4px;
+}
+
+.kerfToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #aaa;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kerfToggle input[type="checkbox"] {
+  accent-color: #f5a623;
+}
+
+.kerfInput {
+  width: 52px;
+  padding: 3px 6px;
+  font-size: 11px;
+  background: #252540;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.kerfInput:focus {
+  outline: none;
+  border-color: #f5a623;
+}
+
+/* Nesting Panel */
+.nestingPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nestingConfig {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nestingSizeInputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nestingSizeInputs input {
+  width: 70px;
+}
+
+.nestingSizeX {
+  color: #666;
+  font-size: 12px;
+}
+
+.nestingSummary {
+  display: flex;
+  gap: 12px;
+  padding: 8px;
+  background: #252540;
+  border-radius: 4px;
+}
+
+.nestingStat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.nestingStatValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f5a623;
+}
+
+.nestingStatLabel {
+  font-size: 10px;
+  color: #888;
+  text-transform: uppercase;
+}
+
+.nestingSheets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.nestingSheet {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nestingSheetLabel {
+  font-size: 10px;
+  color: #888;
+}
+
+.nestingSvg {
+  border: 1px solid #444;
+  border-radius: 3px;
+  width: 100%;
+  height: auto;
+}
+
+/* Joint Panel */
+.jointPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jointList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.jointCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #252540;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: #e0e0e0;
+  transition: border-color 0.1s;
+}
+
+.jointCard:hover {
+  border-color: #666;
+}
+
+.jointCardActive {
+  border-color: #f5a623;
+  background: #2a2a44;
+}
+
+.jointIcon {
+  font-size: 16px;
+  min-width: 28px;
+  text-align: center;
+  font-family: monospace;
+}
+
+.jointCardInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.jointName {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.jointMeta {
+  font-size: 10px;
+  color: #888;
+}
+
+.jointDetail {
+  padding: 8px;
+  background: #252540;
+  border-radius: 4px;
+}
+
+.jointDescription {
+  font-size: 11px;
+  color: #aaa;
+  margin: 0 0 8px 0;
+}
+
+.jointParams {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jointParam {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.jointParamLabel {
+  color: #888;
+}
+
+.jointParamValue {
+  color: #f5a623;
+  font-weight: 600;
+}
+
+.fingerPreview {
+  margin-top: 6px;
+  border: 1px solid #444;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* Parametric Panel */
+.parametricPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.varList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.varRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.varName {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a9eff;
+  min-width: 60px;
+  font-family: monospace;
+}
+
+.varInput {
+  width: 65px;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: #252540;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.varInput:focus {
+  outline: none;
+  border-color: #f5a623;
+}
+
+.varUnit {
+  font-size: 10px;
+  color: #666;
+}
+
+.varRefs {
+  font-size: 10px;
+  color: #f5a623;
+  min-width: 22px;
+}
+
+.varDelete {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #888;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.varDelete:hover {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.varAddRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.varNameInput {
+  width: 70px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: monospace;
+  background: #252540;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.varNameInput:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+/* Assembly Panel */
+.assemblyPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assemblyMeta {
+  font-size: 11px;
+  color: #888;
+}
+
+.assemblySteps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.assemblyStep {
+  padding: 8px;
+  background: #252540;
+  border-radius: 4px;
+  border-left: 3px solid #f5a623;
+}
+
+.stepHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.stepNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f5a623;
+  color: #1a1a2e;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.stepIcon {
+  font-size: 14px;
+}
+
+.stepTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.stepDescription {
+  font-size: 11px;
+  color: #aaa;
+  margin: 0;
+  line-height: 1.4;
+}

@@ -113,6 +113,7 @@ export default function TopBar({
   onSetViewMode,
   onSetIsometricPlane,
   onDocumentNameCommit,
+  children,
 }) {
   return (
     <header className="sketchStudioTopBar">
@@ -219,6 +220,13 @@ export default function TopBar({
           <ToggleButton active={snapEnabled} label="Snap" icon={SnapIcon} onClick={onToggleSnap} />
           <ToggleButton active={orthoEnabled} label="Ortho" onClick={onToggleOrtho} />
         </div>
+
+        {children && (
+          <>
+            <span className="sketchStudioTopBarDivider" aria-hidden="true" />
+            {children}
+          </>
+        )}
       </div>
     </header>
   );

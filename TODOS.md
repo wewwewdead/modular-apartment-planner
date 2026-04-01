@@ -1,20 +1,36 @@
 # TODOS
 
-## Phase 8 Preparation
+## Craftsman Studio — Phase 1 DONE
 
-### Split useSketchStudio hook into composable sub-hooks
-**Priority:** Medium
-**Effort:** human: ~2 days / CC: ~30 min
+Phase 1 shipped: Material Library (23 materials), BOM + Cost Estimator, DXF/SVG/PDF export, Craftsman Mode toggle. All in `src/features/sketchstudio/craftsman/`.
 
-The `useSketchStudio.js` hook is 1,957 lines — a single orchestration point for the entire SketchStudio workspace. As Phase 8+ adds nesting, constraints, and costing features, this will grow past 2500 lines and become hard to maintain.
+## Craftsman Studio — Phase 2 DONE
 
-**Proposed split:**
-- `useObjectDraft` — object draft CRUD, field commits, save/load/clear
-- `useSketchCanvas` — pointer events, pan, zoom, tool dispatch
-- `usePartManagement` — part creation, parametric templates, generators, feature assignment
-- `useExport` — validation, export, send-to-floor-planner
+All Phase 2 features shipped:
+- Kerf compensation toggle in export bar (default 0.2mm laser kerf)
+- Per-linear-meter lumber pricing (materialCostUtils extended)
+- Cut-list optimizer with visual sheet nesting diagram (FFDH algorithm)
+- Smart joint library (7 joint types, auto-recommendation by material/thickness)
+- Parametric variables system (named vars, expression evaluation, entity references)
+- Assembly instructions generator (role-based step ordering, joint recommendations)
 
-**Why:** Better testability, clearer ownership boundaries, easier navigation.
-**Risk:** Shared state dependencies between sub-hooks need careful extraction.
-**Depends on:** Nothing. Can be done anytime before Phase 8 features land.
-**Added:** 2026-03-21 via /plan-eng-review
+## Craftsman Studio — Phase 3 Ideas
+
+### Exploded Isometric View for Assembly
+Visual step-by-step with parts pulled apart along isometric axes.
+
+### Custom Material Editor
+Let users add/edit materials in the catalog, persist to workspace.
+
+### Project Templates
+Pre-built parametric templates: bookshelf, workbench, storage box, etc.
+
+### Cost Comparison Mode
+Compare costs across material alternatives side-by-side.
+
+### Multi-sheet DXF Export
+One DXF per sheet from the nesting optimizer — ready for batch CNC.
+
+## Hook Refactor — DONE
+
+useSketchStudio.js split into 7 files (2,224 → 804 line coordinator + 6 sub-hooks). Completed 2026-04-01.

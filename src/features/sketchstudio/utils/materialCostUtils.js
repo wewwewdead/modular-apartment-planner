@@ -15,6 +15,8 @@ export function createMaterialPricing(material, unitCost = 0, costBasis = 'perM2
   };
 }
 
+const MM_TO_M = 1 / 1_000;
+
 export function computeRowCost(bomRow, materialPricing = {}) {
   const pricing = materialPricing[bomRow.material];
   if (!pricing || !pricing.unitCost) {
@@ -30,6 +32,17 @@ export function computeRowCost(bomRow, materialPricing = {}) {
       unitCost: pricing.unitCost,
       totalCost: pricing.unitCost * (bomRow.quantity || 1),
       costBasis: 'perPiece',
+    };
+  }
+
+  if (pricing.costBasis === 'perLinearMeter') {
+    const lengthM = Math.max(cutSize.width, cutSize.height) * MM_TO_M;
+    const totalCost = lengthM * pricing.unitCost * (bomRow.quantity || 1);
+    return {
+      area,
+      unitCost: pricing.unitCost,
+      totalCost,
+      costBasis: 'perLinearMeter',
     };
   }
 

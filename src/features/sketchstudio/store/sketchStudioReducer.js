@@ -612,6 +612,45 @@ export default function sketchStudioReducer(state, action) {
       };
     }
 
+    case SKETCH_STUDIO_ACTIONS.SET_ENTITY_MATERIAL: {
+      const { entityIds, materialId } = action.payload;
+      const idSet = new Set(entityIds);
+      const nextEntities = state.document.entities.map((entity) => {
+        if (!idSet.has(entity.id)) return entity;
+        return { ...entity, materialId: materialId || null };
+      });
+      return finalizeUndoableState(state, {
+        ...state,
+        document: { ...state.document, entities: nextEntities },
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.SET_ENTITY_THICKNESS: {
+      const { entityIds, thickness } = action.payload;
+      const idSet = new Set(entityIds);
+      const parsedThickness = Number(thickness);
+      const nextEntities = state.document.entities.map((entity) => {
+        if (!idSet.has(entity.id)) return entity;
+        return { ...entity, thickness: Number.isFinite(parsedThickness) && parsedThickness > 0 ? parsedThickness : null };
+      });
+      return finalizeUndoableState(state, {
+        ...state,
+        document: { ...state.document, entities: nextEntities },
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.TOGGLE_CRAFTSMAN_MODE:
+      return {
+        ...state,
+        ui: { ...state.ui, craftsmanMode: !state.ui.craftsmanMode },
+      };
+
+    case SKETCH_STUDIO_ACTIONS.SET_VARIABLES:
+      return finalizeUndoableState(state, {
+        ...state,
+        document: { ...state.document, variables: action.payload ?? [] },
+      });
+
     default:
       return state;
   }
