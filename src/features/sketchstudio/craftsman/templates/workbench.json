@@ -4,12 +4,21 @@
   "document": {
     "version": 1,
     "id": "template-workbench",
-    "name": "Heavy Workbench",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "workbench"
-    },
+    "name": "Heavy-Duty Workbench",
+    "layers": [
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
+      }
+    ],
     "variables": [
       {
         "name": "benchLength",
@@ -27,21 +36,15 @@
         "unit": "mm"
       }
     ],
-    "layers": [
-      {
-        "id": "default",
-        "name": "Default",
-        "visible": true,
-        "locked": false,
-        "color": "#999999"
-      }
-    ],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
+        "x": 50,
+        "y": 50,
         "width": 1500,
         "height": 600,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -49,16 +52,16 @@
           "label": "Benchtop"
         },
         "materialId": "birch-plywood-24",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-2",
         "type": "rect",
+        "x": 50,
+        "y": 700,
         "width": 95,
         "height": 850,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -66,16 +69,16 @@
           "label": "Front Left Leg"
         },
         "materialId": "pine-45x95",
-        "thickness": null,
-        "x": 0,
-        "y": 650,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-3",
         "type": "rect",
+        "x": 1455,
+        "y": 700,
         "width": 95,
         "height": 850,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -83,16 +86,16 @@
           "label": "Front Right Leg"
         },
         "materialId": "pine-45x95",
-        "thickness": null,
-        "x": 145,
-        "y": 650,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-4",
         "type": "rect",
+        "x": 50,
+        "y": 1600,
         "width": 95,
         "height": 850,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -100,16 +103,16 @@
           "label": "Rear Left Leg"
         },
         "materialId": "pine-45x95",
-        "thickness": null,
-        "x": 290,
-        "y": 650,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-5",
         "type": "rect",
+        "x": 1455,
+        "y": 1600,
         "width": 95,
         "height": 850,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -117,16 +120,16 @@
           "label": "Rear Right Leg"
         },
         "materialId": "pine-45x95",
-        "thickness": null,
-        "x": 435,
-        "y": 650,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-6",
         "type": "rect",
-        "width": 1400,
-        "height": 45,
+        "x": 145,
+        "y": 700,
+        "width": 1310,
+        "height": 95,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -134,16 +137,16 @@
           "label": "Front Stretcher"
         },
         "materialId": "pine-45x95",
-        "thickness": null,
-        "x": 580,
-        "y": 650,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-7",
         "type": "rect",
-        "width": 1400,
-        "height": 45,
+        "x": 145,
+        "y": 1600,
+        "width": 1310,
+        "height": 95,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -151,18 +154,19 @@
           "label": "Rear Stretcher"
         },
         "materialId": "pine-45x95",
-        "thickness": null,
-        "x": 580,
-        "y": 745,
-        "rotation": 0
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",

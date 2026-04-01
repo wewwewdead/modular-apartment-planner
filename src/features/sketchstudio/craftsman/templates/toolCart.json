@@ -3,13 +3,22 @@
   "version": 1,
   "document": {
     "version": 1,
-    "id": "template-tool-cart",
-    "name": "Tool Cart",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "toolCart"
-    },
+    "id": "template-toolCart",
+    "name": "Workshop Tool Cart",
+    "layers": [
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
+      }
+    ],
     "variables": [
       {
         "name": "cartWidth",
@@ -27,55 +36,49 @@
         "unit": "mm"
       }
     ],
-    "layers": [
-      {
-        "id": "default",
-        "name": "Default",
-        "visible": true,
-        "locked": false,
-        "color": "#999999"
-      }
-    ],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
-        "width": 400,
+        "x": 50,
+        "y": 50,
+        "width": 18,
         "height": 800,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Left Side Panel"
+          "label": "Left Side"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-2",
         "type": "rect",
-        "width": 400,
+        "x": 668,
+        "y": 50,
+        "width": 18,
         "height": 800,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Right Side Panel"
+          "label": "Right Side"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 450,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-3",
         "type": "rect",
+        "x": 68,
+        "y": 50,
         "width": 600,
-        "height": 400,
+        "height": 18,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -83,16 +86,16 @@
           "label": "Top Shelf"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 900,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-4",
         "type": "rect",
+        "x": 68,
+        "y": 420,
         "width": 600,
-        "height": 400,
+        "height": 18,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -100,16 +103,16 @@
           "label": "Middle Shelf"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 900,
-        "y": 450,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-5",
         "type": "rect",
+        "x": 68,
+        "y": 832,
         "width": 600,
-        "height": 400,
+        "height": 18,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -117,86 +120,87 @@
           "label": "Bottom Shelf"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 900,
-        "y": 900,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-6",
         "type": "rect",
+        "x": 50,
+        "y": 870,
         "width": 45,
-        "height": 800,
+        "height": 45,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 1"
+          "label": "FL Caster"
         },
         "materialId": "pine-45x45",
-        "thickness": null,
-        "x": 1550,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-7",
         "type": "rect",
+        "x": 641,
+        "y": 870,
         "width": 45,
-        "height": 800,
+        "height": 45,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 2"
+          "label": "FR Caster"
         },
         "materialId": "pine-45x45",
-        "thickness": null,
-        "x": 1645,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-8",
         "type": "rect",
+        "x": 50,
+        "y": 930,
         "width": 45,
-        "height": 800,
+        "height": 45,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 3"
+          "label": "RL Caster"
         },
         "materialId": "pine-45x45",
-        "thickness": null,
-        "x": 1740,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-9",
         "type": "rect",
+        "x": 641,
+        "y": 930,
         "width": 45,
-        "height": 800,
+        "height": 45,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 4"
+          "label": "RR Caster"
         },
         "materialId": "pine-45x45",
-        "thickness": null,
-        "x": 1835,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",

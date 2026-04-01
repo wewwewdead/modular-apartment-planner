@@ -3,13 +3,22 @@
   "version": 1,
   "document": {
     "version": 1,
-    "id": "template-storage-box",
+    "id": "template-storageBox",
     "name": "Dovetail Storage Box",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "storageBox"
-    },
+    "layers": [
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
+      }
+    ],
     "variables": [
       {
         "name": "boxLength",
@@ -27,89 +36,83 @@
         "unit": "mm"
       }
     ],
-    "layers": [
-      {
-        "id": "default",
-        "name": "Default",
-        "visible": true,
-        "locked": false,
-        "color": "#999999"
-      }
-    ],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
+        "x": 50,
+        "y": 50,
         "width": 300,
-        "height": 150,
+        "height": 12,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Long Side 1"
+          "label": "Front Wall"
         },
         "materialId": "birch-plywood-12",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-2",
         "type": "rect",
+        "x": 50,
+        "y": 250,
         "width": 300,
-        "height": 150,
+        "height": 12,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Long Side 2"
+          "label": "Back Wall"
         },
         "materialId": "birch-plywood-12",
-        "thickness": null,
-        "x": 350,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-3",
         "type": "rect",
-        "width": 200,
-        "height": 150,
+        "x": 38,
+        "y": 62,
+        "width": 12,
+        "height": 200,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Short Side 1"
+          "label": "Left Wall"
         },
         "materialId": "birch-plywood-12",
-        "thickness": null,
-        "x": 700,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-4",
         "type": "rect",
-        "width": 200,
-        "height": 150,
+        "x": 350,
+        "y": 62,
+        "width": 12,
+        "height": 200,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Short Side 2"
+          "label": "Right Wall"
         },
         "materialId": "birch-plywood-12",
-        "thickness": null,
-        "x": 950,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-5",
         "type": "rect",
+        "x": 50,
+        "y": 62,
         "width": 300,
         "height": 200,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -117,18 +120,19 @@
           "label": "Bottom"
         },
         "materialId": "birch-plywood-12",
-        "thickness": null,
-        "x": 0,
-        "y": 200,
-        "rotation": 0
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",

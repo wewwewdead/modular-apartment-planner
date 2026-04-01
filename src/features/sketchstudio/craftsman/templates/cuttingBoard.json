@@ -3,13 +3,22 @@
   "version": 1,
   "document": {
     "version": 1,
-    "id": "template-cutting-board",
-    "name": "Cutting Board",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "cuttingBoard"
-    },
+    "id": "template-cuttingBoard",
+    "name": "Edge-Grain Cutting Board",
+    "layers": [
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
+      }
+    ],
     "variables": [
       {
         "name": "boardLength",
@@ -22,21 +31,15 @@
         "unit": "mm"
       }
     ],
-    "layers": [
-      {
-        "id": "default",
-        "name": "Default",
-        "visible": true,
-        "locked": false,
-        "color": "#999999"
-      }
-    ],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
+        "x": 100,
+        "y": 100,
         "width": 400,
         "height": 250,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -44,18 +47,19 @@
           "label": "Cutting Board"
         },
         "materialId": "oak-20x95",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",

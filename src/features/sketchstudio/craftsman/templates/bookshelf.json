@@ -5,11 +5,20 @@
     "version": 1,
     "id": "template-bookshelf",
     "name": "Simple Bookshelf",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "bookshelf"
-    },
+    "layers": [
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
+      }
+    ],
     "variables": [
       {
         "name": "shelfWidth",
@@ -27,55 +36,49 @@
         "unit": "mm"
       }
     ],
-    "layers": [
-      {
-        "id": "default",
-        "name": "Default",
-        "visible": true,
-        "locked": false,
-        "color": "#999999"
-      }
-    ],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
-        "width": 300,
+        "x": 50,
+        "y": 50,
+        "width": 18,
         "height": 800,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Left Side Panel"
+          "label": "Left Side"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-2",
         "type": "rect",
-        "width": 300,
+        "x": 668,
+        "y": 50,
+        "width": 18,
         "height": 800,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Right Side Panel"
+          "label": "Right Side"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 350,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-3",
         "type": "rect",
+        "x": 68,
+        "y": 832,
         "width": 600,
-        "height": 300,
+        "height": 18,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -83,16 +86,16 @@
           "label": "Bottom Shelf"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 700,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-4",
         "type": "rect",
+        "x": 68,
+        "y": 440,
         "width": 600,
-        "height": 300,
+        "height": 18,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -100,16 +103,16 @@
           "label": "Middle Shelf"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 700,
-        "y": 350,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-5",
         "type": "rect",
+        "x": 68,
+        "y": 50,
         "width": 600,
-        "height": 300,
+        "height": 18,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -117,35 +120,36 @@
           "label": "Top Shelf"
         },
         "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 700,
-        "y": 700,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-6",
         "type": "rect",
-        "width": 600,
+        "x": 50,
+        "y": 50,
+        "width": 636,
         "height": 800,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
           "label": "Back Panel"
         },
-        "materialId": "birch-plywood-18",
-        "thickness": null,
-        "x": 1350,
-        "y": 0,
-        "rotation": 0
+        "materialId": "mdf-6",
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",

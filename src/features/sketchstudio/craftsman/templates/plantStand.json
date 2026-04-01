@@ -3,13 +3,22 @@
   "version": 1,
   "document": {
     "version": 1,
-    "id": "template-plant-stand",
-    "name": "Plant Stand",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "plantStand"
-    },
+    "id": "template-plantStand",
+    "name": "Mid-Century Plant Stand",
+    "layers": [
+      {
+        "id": "default",
+        "name": "Default",
+        "visible": true,
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
+      }
+    ],
     "variables": [
       {
         "name": "shelfSize",
@@ -22,21 +31,15 @@
         "unit": "mm"
       }
     ],
-    "layers": [
-      {
-        "id": "default",
-        "name": "Default",
-        "visible": true,
-        "locked": false,
-        "color": "#999999"
-      }
-    ],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
+        "x": 100,
+        "y": 50,
         "width": 300,
         "height": 300,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
@@ -44,86 +47,87 @@
           "label": "Top Shelf"
         },
         "materialId": "birch-plywood-12",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-2",
         "type": "rect",
-        "width": 40,
+        "x": 80,
+        "y": 380,
+        "width": 20,
         "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 1"
+          "label": "Front Left Leg"
         },
         "materialId": "pine-20x45",
-        "thickness": null,
-        "x": 350,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-3",
         "type": "rect",
-        "width": 40,
+        "x": 400,
+        "y": 380,
+        "width": 20,
         "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 2"
+          "label": "Front Right Leg"
         },
         "materialId": "pine-20x45",
-        "thickness": null,
-        "x": 440,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-4",
         "type": "rect",
-        "width": 40,
+        "x": 80,
+        "y": 920,
+        "width": 20,
         "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 3"
+          "label": "Rear Left Leg"
         },
         "materialId": "pine-20x45",
-        "thickness": null,
-        "x": 530,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-5",
         "type": "rect",
-        "width": 40,
+        "x": 400,
+        "y": 920,
+        "width": 20,
         "height": 500,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Leg 4"
+          "label": "Rear Right Leg"
         },
         "materialId": "pine-20x45",
-        "thickness": null,
-        "x": 620,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",

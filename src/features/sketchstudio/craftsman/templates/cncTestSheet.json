@@ -3,150 +3,154 @@
   "version": 1,
   "document": {
     "version": 1,
-    "id": "template-cnc-test-sheet",
-    "name": "CNC Test Sheet",
-    "units": "mm",
-    "metadata": {
-      "authoringApp": "CraftsmanStudio",
-      "templateId": "cncTestSheet"
-    },
-    "variables": [],
+    "id": "template-cncTestSheet",
+    "name": "CNC Nesting Test",
     "layers": [
       {
         "id": "default",
         "name": "Default",
         "visible": true,
-        "locked": false,
-        "color": "#999999"
+        "locked": false
+      },
+      {
+        "id": "dimensions",
+        "name": "Dimensions",
+        "visible": true,
+        "locked": false
       }
     ],
+    "variables": [],
     "entities": [
       {
         "id": "rect-1",
         "type": "rect",
+        "x": 60,
+        "y": 60,
         "width": 100,
         "height": 100,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Small Square 1"
+          "label": "Small A"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 0,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-2",
         "type": "rect",
+        "x": 180,
+        "y": 60,
         "width": 100,
         "height": 100,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Small Square 2"
+          "label": "Small B"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 150,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-3",
         "type": "rect",
+        "x": 300,
+        "y": 60,
         "width": 100,
         "height": 100,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Small Square 3"
+          "label": "Small C"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 300,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-4",
         "type": "rect",
+        "x": 420,
+        "y": 60,
         "width": 100,
         "height": 100,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Small Square 4"
+          "label": "Small D"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 450,
-        "y": 0,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-5",
         "type": "rect",
+        "x": 60,
+        "y": 200,
         "width": 200,
         "height": 150,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Medium Rect 1"
+          "label": "Medium A"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 0,
-        "y": 150,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-6",
         "type": "rect",
+        "x": 300,
+        "y": 200,
         "width": 200,
         "height": 150,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Medium Rect 2"
+          "label": "Medium B"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 250,
-        "y": 150,
-        "rotation": 0
+        "thickness": null
       },
       {
         "id": "rect-7",
         "type": "rect",
+        "x": 60,
+        "y": 400,
         "width": 400,
         "height": 300,
+        "rotation": 0,
         "layerId": "default",
         "locked": false,
         "visible": true,
         "meta": {
-          "label": "Large Rect"
+          "label": "Large"
         },
         "materialId": "birch-plywood-3",
-        "thickness": null,
-        "x": 0,
-        "y": 350,
-        "rotation": 0
+        "thickness": null
       }
     ],
+    "units": "mm",
+    "metadata": {
+      "authoringApp": "CraftsmanStudio"
+    },
     "constraints": []
   },
   "viewport": {
-    "zoom": 0.3,
-    "panX": 200,
-    "panY": 100
+    "zoom": 0.25,
+    "panX": 100,
+    "panY": 50
   },
   "ui": {
     "activeLayerId": "default",
