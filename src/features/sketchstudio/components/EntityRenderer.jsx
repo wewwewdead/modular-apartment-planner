@@ -1,4 +1,4 @@
-import { getArcPath } from '../utils/arcUtils';
+import { getArcPath, getArcMidpoint } from '../utils/arcUtils';
 import { getRectCorners } from '../utils/entityUtils';
 
 function rectPoints(entity) {
@@ -112,7 +112,31 @@ function renderEntity(entity, className) {
   }
 
   if (entity.type === 'arc') {
-    return <path key={entity.id} {...sharedProps} d={getArcPath(entity)} fill="none" strokeLinecap="round" />;
+    const hasFillet = entity.meta?.filletRadius != null;
+
+    if (!hasFillet) {
+      return <path key={entity.id} {...sharedProps} d={getArcPath(entity)} fill="none" strokeLinecap="round" />;
+    }
+
+    const mid = getArcMidpoint(entity);
+    const labelOffX = mid.x + (mid.x - entity.control.x) * 0.4;
+    const labelOffY = mid.y + (mid.y - entity.control.y) * 0.4;
+
+    return (
+      <g key={entity.id}>
+        <path {...sharedProps} d={getArcPath(entity)} fill="none" strokeLinecap="round" />
+        <text
+          className="sketchStudioFilletLabel"
+          x={labelOffX}
+          y={labelOffY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          pointerEvents="none"
+        >
+          R{entity.meta.filletRadius.toFixed(0)}
+        </text>
+      </g>
+    );
   }
 
   if (entity.type === 'feature') {

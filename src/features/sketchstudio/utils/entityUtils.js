@@ -507,18 +507,24 @@ export function createPolylineEntity(points, entities, layerId = 'default', clos
   }, layerId);
 }
 
-export function createArcEntity(start, end, control, entities, layerId = 'default') {
+export function createArcEntity(start, end, control, entities, layerId = 'default', meta) {
   if (!start || !end || !control) {
     return null;
   }
 
-  return createBaseEntity({
+  const entity = createBaseEntity({
     id: createEntityId('arc', entities),
     type: 'arc',
     start: { ...start },
     end: { ...end },
     control: { ...control },
   }, layerId);
+
+  if (meta) {
+    entity.meta = { ...entity.meta, ...meta };
+  }
+
+  return entity;
 }
 
 export function createTextEntity(point, entities, layerId = 'default', options = {}) {
@@ -1038,7 +1044,18 @@ export function getEntityMeasurementRows(entity) {
   }
 
   if (entity.type === 'arc') {
+    const chord = calculateDistance(entity.start, entity.end);
+    const chordMid = getMidpoint(entity.start, entity.end);
+    const arcMid = {
+      x: (entity.start.x + 2 * entity.control.x + entity.end.x) / 4,
+      y: (entity.start.y + 2 * entity.control.y + entity.end.y) / 4,
+    };
+    const sagitta = calculateDistance(chordMid, arcMid);
+    const radius = sagitta > 0.001 ? (chord * chord) / (8 * sagitta) + sagitta / 2 : 0;
+
     return [
+      ['Radius', radius],
+      ['Chord', chord],
       ['Start', `${entity.start.x.toFixed(1)}, ${entity.start.y.toFixed(1)}`],
       ['End', `${entity.end.x.toFixed(1)}, ${entity.end.y.toFixed(1)}`],
       ['Control', `${entity.control.x.toFixed(1)}, ${entity.control.y.toFixed(1)}`],

@@ -563,7 +563,6 @@ export default function useSketchStudio() {
     error: null,
   });
   const canvasRef = useRef(null);
-  const previousToolBeforeSpaceRef = useRef(null);
   const isSpacePanActiveRef = useRef(false);
   const persistedWorkspaceSnapshotRef = useRef(null);
 
@@ -974,13 +973,7 @@ export default function useSketchStudio() {
 
       if (event.code === 'Space') {
         event.preventDefault();
-
-        if (!isSpacePanActiveRef.current && state.ui.activeTool !== 'pan') {
-          previousToolBeforeSpaceRef.current = state.ui.activeTool;
-          isSpacePanActiveRef.current = true;
-          dispatch(setActiveTool('pan'));
-        }
-
+        isSpacePanActiveRef.current = true;
         return;
       }
 
@@ -1121,28 +1114,11 @@ export default function useSketchStudio() {
       }
 
       event.preventDefault();
-
-      if (isSpacePanActiveRef.current) {
-        const previousTool = previousToolBeforeSpaceRef.current;
-        previousToolBeforeSpaceRef.current = null;
-        isSpacePanActiveRef.current = false;
-
-        if (previousTool && previousTool !== 'pan') {
-          dispatch(setActiveTool(previousTool));
-        }
-      }
+      isSpacePanActiveRef.current = false;
     };
 
     const handleWindowBlur = () => {
-      if (isSpacePanActiveRef.current) {
-        const previousTool = previousToolBeforeSpaceRef.current;
-        previousToolBeforeSpaceRef.current = null;
-        isSpacePanActiveRef.current = false;
-
-        if (previousTool && previousTool !== 'pan') {
-          dispatch(setActiveTool(previousTool));
-        }
-      }
+      isSpacePanActiveRef.current = false;
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -1471,7 +1447,7 @@ export default function useSketchStudio() {
   }, [handleSaveSketch]);
 
   const handlePointerDown = useCallback((event) => {
-    const shouldPan = event.button === 1 || (event.button === 0 && activeTool === 'pan');
+    const shouldPan = event.button === 1 || (event.button === 0 && activeTool === 'pan') || (event.button === 0 && isSpacePanActiveRef.current);
 
     if (shouldPan) {
       event.preventDefault();
@@ -1692,6 +1668,7 @@ export default function useSketchStudio() {
     if (state.interaction.mode === 'panning' && event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
       dispatch(endPan());
+      dispatch(setSuppressNextClick(true));
       return;
     }
 

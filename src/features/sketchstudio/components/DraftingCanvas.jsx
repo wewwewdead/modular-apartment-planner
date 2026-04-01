@@ -131,7 +131,7 @@ export default function DraftingCanvas(props) {
               <SelectionOverlay selectionBox={selection.selectionBox} />
               <TransformOverlay bounds={selectionBounds} selectedCount={selection.selectedIds.length} onTransformPointerDown={handleBindings.onTransformPointerDown} zoom={viewport.zoom} />
               <SnapOverlay snap={snap} />
-              <EditHandles handles={selectedHandles} onHandlePointerDown={handleBindings.onHandlePointerDown} />
+              <EditHandles handles={selectedHandles} onHandlePointerDown={handleBindings.onHandlePointerDown} zoom={viewport.zoom} />
             </g>
           </svg>
 

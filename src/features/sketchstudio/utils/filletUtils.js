@@ -338,6 +338,7 @@ function getRectEdgePairForCorner(cornerKey) {
 
 export function applyFillet(entities, corner, geometry, layerId) {
   const { tangentPoint1, tangentPoint2, controlPoint } = geometry;
+  const filletMeta = { filletRadius: geometry.radius };
 
   if (corner.type === 'line-line') {
     const newEntities = entities.map((entity) => {
@@ -352,7 +353,7 @@ export function applyFillet(entities, corner, geometry, layerId) {
       return entity;
     });
 
-    const arcEntity = createArcEntity(tangentPoint1, tangentPoint2, controlPoint, newEntities, layerId);
+    const arcEntity = createArcEntity(tangentPoint1, tangentPoint2, controlPoint, newEntities, layerId, filletMeta);
 
     return [...newEntities, arcEntity];
   }
@@ -370,7 +371,7 @@ export function applyFillet(entities, corner, geometry, layerId) {
     // Replace rect with lines + arc
     const withoutRect = entities.filter((entity) => entity.id !== rect.id);
     const allEntities = [...withoutRect, ...lines];
-    const arcEntity = createArcEntity(tangentPoint1, tangentPoint2, controlPoint, allEntities, rect.layerId || layerId);
+    const arcEntity = createArcEntity(tangentPoint1, tangentPoint2, controlPoint, allEntities, rect.layerId || layerId, filletMeta);
 
     return [...allEntities, arcEntity];
   }

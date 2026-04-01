@@ -699,6 +699,13 @@
   font-size: 12px;
 }
 
+.sketchStudioFilletLabel {
+  fill: #f2ddba;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  opacity: 0.85;
+}
+
 .sketchStudioSnapMarker {
   fill: rgba(13, 22, 31, 0.95);
   stroke: #ffe28c;
@@ -736,6 +743,10 @@
   fill: #eef6ff;
   stroke: #0f1722;
   stroke-width: 2;
+  cursor: grab;
+}
+
+.sketchStudioEditHandleHitArea {
   cursor: grab;
 }
 
