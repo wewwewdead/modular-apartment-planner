@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useEditor } from '@/app/EditorProvider';
 import { useProject } from '@/app/ProjectProvider';
 import { usePlanClipboardController } from '@/clipboard/usePlanClipboardController';
@@ -206,6 +207,18 @@ export default function Toolbar({
     <div className={styles.toolbar}>
       {/* File & clipboard actions */}
       <div className={styles.group}>
+        <Tooltip label="Home">
+          <Link to="/" className={styles.homeBtn} aria-label="Back to home">
+            <svg className={styles.homeBtnChevron} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            <svg className={styles.homeBtnHouse} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 10.5L12 3l9 7.5" />
+              <path d="M5 10v9a1 1 0 001 1h3v-5a1 1 0 011-1h4a1 1 0 011 1v5h3a1 1 0 001-1v-9" />
+            </svg>
+          </Link>
+        </Tooltip>
+        <div className={styles.divider} />
         <Tooltip label="New Project">
           <button className={styles.btn} onClick={onNew} aria-label="New Project">
             <NewIcon className={styles.icon} />

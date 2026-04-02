@@ -1,5 +1,5 @@
-const MIN_ZOOM = 0.05;
-const MAX_ZOOM = 12;
+const MIN_ZOOM = 0.002;
+const MAX_ZOOM = 200;
 
 export function clampZoom(zoom) {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));

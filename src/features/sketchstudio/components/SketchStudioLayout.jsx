@@ -64,6 +64,7 @@ export default function SketchStudioLayout(props) {
     toggleCraftsmanMode,
     setVariables,
     loadTemplate,
+    duplicateEntities,
   } = props;
 
   const [showGallery, setShowGallery] = useState(false);
@@ -153,6 +154,7 @@ export default function SketchStudioLayout(props) {
             canvasBindings={canvasBindings}
             precisionBindings={precisionBindings}
             handleBindings={handleBindings}
+            onUpdateEntityField={updateSelectedEntityField}
           />
           {ui.craftsmanMode ? (
             showGallery ? (
@@ -170,6 +172,7 @@ export default function SketchStudioLayout(props) {
                 onThicknessChange={setEntityThickness}
                 onVariablesChange={setVariables}
                 onLoadTemplate={() => setShowGallery(true)}
+                onDuplicateEntities={duplicateEntities}
               />
             )
           ) : (

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { UndoIcon, RedoIcon, NewIcon, SaveIcon, LoadIcon, SnapIcon } from '@/ui/ToolbarIcons';
 
 function getToolLabel(activeTool, tools) {
@@ -119,8 +120,19 @@ export default function TopBar({
     <header className="sketchStudioTopBar">
       <div className="sketchStudioTopBarPrimary">
         <div className="sketchStudioTopBarBrand">
-          <span className="sketchStudioTopBarEyebrow">Workspace</span>
-          <h1 className="sketchStudioTopBarTitle">SketchStudio</h1>
+          <Link to="/" className="sketchStudioHomeBtn" aria-label="Back to home">
+            <svg className="sketchStudioHomeBtnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            <svg className="sketchStudioHomeBtnHouse" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 10.5L12 3l9 7.5" />
+              <path d="M5 10v9a1 1 0 001 1h3v-5a1 1 0 011-1h4a1 1 0 011 1v5h3a1 1 0 001-1v-9" />
+            </svg>
+          </Link>
+          <div className="sketchStudioTopBarBrandText">
+            <span className="sketchStudioTopBarEyebrow">Workspace</span>
+            <h1 className="sketchStudioTopBarTitle">SketchStudio</h1>
+          </div>
         </div>
         <div className="sketchStudioTopBarMeta">
           <input
@@ -138,6 +150,7 @@ export default function TopBar({
           <span className="sketchStudioBadge sketchStudioBadgeAccent">{getToolLabel(activeTool, tools)}</span>
           <span className="sketchStudioBadge">{getDocumentStatusLabel(documentPersistence)}</span>
         </div>
+        {children}
       </div>
 
       <div className="sketchStudioTopBarSecondary">
@@ -221,12 +234,6 @@ export default function TopBar({
           <ToggleButton active={orthoEnabled} label="Ortho" onClick={onToggleOrtho} />
         </div>
 
-        {children && (
-          <>
-            <span className="sketchStudioTopBarDivider" aria-hidden="true" />
-            {children}
-          </>
-        )}
       </div>
     </header>
   );

@@ -1,6 +1,6 @@
 import { screenToWorld } from './canvasMath';
 
-const GRID_STEPS = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000];
+const GRID_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
 
 function buildLinePositions(min, max, step) {
   const positions = [];
@@ -51,22 +51,35 @@ export function getVisibleWorldBounds(viewport, canvasSize) {
 export function getGridLines(viewport, canvasSize) {
   const { minor, major } = getGridSpacing(viewport.zoom);
   const bounds = getVisibleWorldBounds(viewport, canvasSize);
-  const padding = major * 2;
-  const extendedBounds = {
-    minX: bounds.minX - padding,
-    minY: bounds.minY - padding,
-    maxX: bounds.maxX + padding,
-    maxY: bounds.maxY + padding,
+
+  // Padding for line positions (which lines exist) — small extension
+  const posPadding = major * 2;
+  const positionBounds = {
+    minX: bounds.minX - posPadding,
+    maxX: bounds.maxX + posPadding,
+    minY: bounds.minY - posPadding,
+    maxY: bounds.maxY + posPadding,
   };
 
-  const xLines = buildLinePositions(extendedBounds.minX, extendedBounds.maxX, minor);
-  const yLines = buildLinePositions(extendedBounds.minY, extendedBounds.maxY, minor);
+  // Line endpoints extend far beyond the viewport so they never appear cut
+  const viewWidth = bounds.maxX - bounds.minX;
+  const viewHeight = bounds.maxY - bounds.minY;
+  const span = Math.max(viewWidth, viewHeight, major * 10);
+  const lineBounds = {
+    minX: bounds.minX - span,
+    maxX: bounds.maxX + span,
+    minY: bounds.minY - span,
+    maxY: bounds.maxY + span,
+  };
+
+  const xLines = buildLinePositions(positionBounds.minX, positionBounds.maxX, minor);
+  const yLines = buildLinePositions(positionBounds.minY, positionBounds.maxY, minor);
 
   return {
-    bounds: extendedBounds,
+    bounds: lineBounds,
     xMinor: xLines.filter((value) => !isMajorLine(value, major)),
     yMinor: yLines.filter((value) => !isMajorLine(value, major)),
-    xMajor: buildLinePositions(extendedBounds.minX, extendedBounds.maxX, major),
-    yMajor: buildLinePositions(extendedBounds.minY, extendedBounds.maxY, major),
+    xMajor: buildLinePositions(positionBounds.minX, positionBounds.maxX, major),
+    yMajor: buildLinePositions(positionBounds.minY, positionBounds.maxY, major),
   };
 }

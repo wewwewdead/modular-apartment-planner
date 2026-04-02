@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DimensionRenderer from './DimensionRenderer';
 import DraftRenderer from './DraftRenderer';
 import EditHandles from './EditHandles';
@@ -9,6 +9,73 @@ import SnapOverlay from './SnapOverlay';
 import TransformOverlay from './TransformOverlay';
 import { getGridLines } from '../utils/gridUtils';
 import { getIsometricGridData } from '../utils/isometricUtils';
+import { getTextMetrics } from '../utils/entityUtils';
+
+function InlineTextEditor({ entity, viewport, onCommit, onCancel }) {
+  const inputRef = useRef(null);
+  const metrics = getTextMetrics(entity);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  }, []);
+
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      onCommit(inputRef.current.value);
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onCancel();
+    }
+    e.stopPropagation();
+  }, [onCommit, onCancel]);
+
+  const handleBlur = useCallback(() => {
+    onCommit(inputRef.current.value);
+  }, [onCommit]);
+
+  // Position in screen space
+  const screenX = entity.x * viewport.zoom + viewport.panX;
+  const screenY = entity.y * viewport.zoom + viewport.panY;
+  const fontSize = Math.max(entity.fontSize * viewport.zoom, 12);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: screenX,
+        top: screenY,
+        zIndex: 100,
+        transform: `rotate(${entity.rotation ?? 0}deg)`,
+        transformOrigin: '0 0',
+      }}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        defaultValue={entity.text}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        style={{
+          font: `${fontSize}px sans-serif`,
+          background: 'rgba(21, 29, 40, 0.95)',
+          color: '#f2f6ff',
+          border: '1.5px solid rgba(104, 163, 255, 0.6)',
+          borderRadius: 3,
+          padding: '2px 4px',
+          outline: 'none',
+          minWidth: Math.max(metrics.width * viewport.zoom, 80),
+          boxSizing: 'border-box',
+        }}
+      />
+    </div>
+  );
+}
 
 export default function DraftingCanvas(props) {
   const {
@@ -29,7 +96,10 @@ export default function DraftingCanvas(props) {
     canvasBindings,
     precisionBindings,
     handleBindings,
+    onUpdateEntityField,
   } = props;
+
+  const [editingTextId, setEditingTextId] = useState(null);
   const transform = `translate(${viewport.panX} ${viewport.panY}) scale(${viewport.zoom})`;
   const grid = useMemo(
     () => (ui.viewMode === 'isometric'
@@ -37,6 +107,52 @@ export default function DraftingCanvas(props) {
       : getGridLines(viewport, interaction.canvasSize)),
     [interaction.canvasSize, ui.viewMode, viewport],
   );
+
+  const editingEntity = editingTextId ? document.entities.find((e) => e.id === editingTextId) : null;
+
+  // Clear editing if entity is deselected or deleted
+  useEffect(() => {
+    if (editingTextId && !selection.selectedIds.includes(editingTextId)) {
+      setEditingTextId(null);
+    }
+  }, [editingTextId, selection.selectedIds]);
+
+  // Auto-enter edit mode for freshly placed text with default label
+  const prevSelectedRef = useRef(null);
+  useEffect(() => {
+    if (selection.selectedIds.length === 1) {
+      const id = selection.selectedIds[0];
+      if (id !== prevSelectedRef.current) {
+        const entity = document.entities.find((e) => e.id === id);
+        if (entity?.type === 'text' && entity.text === 'Label') {
+          setEditingTextId(id);
+        }
+      }
+    }
+    prevSelectedRef.current = selection.selectedIds.length === 1 ? selection.selectedIds[0] : null;
+  }, [selection.selectedIds, document.entities]);
+
+  const handleDoubleClick = useCallback((event) => {
+    if (selection.selectedIds.length !== 1) return;
+    const selectedId = selection.selectedIds[0];
+    const entity = document.entities.find((e) => e.id === selectedId);
+    if (entity?.type === 'text') {
+      event.preventDefault();
+      event.stopPropagation();
+      setEditingTextId(entity.id);
+    }
+  }, [selection.selectedIds, document.entities]);
+
+  const handleTextCommit = useCallback((newText) => {
+    if (onUpdateEntityField && editingTextId) {
+      onUpdateEntityField('text', newText);
+    }
+    setEditingTextId(null);
+  }, [onUpdateEntityField, editingTextId]);
+
+  const handleTextCancel = useCallback(() => {
+    setEditingTextId(null);
+  }, []);
 
   return (
     <section className="sketchStudioCanvasPanel">
@@ -51,6 +167,7 @@ export default function DraftingCanvas(props) {
             ref={canvasBindings.ref}
             className={`sketchStudioCanvas ${isPanning ? 'is-panning' : ''}`}
             onClick={canvasBindings.onClick}
+            onDoubleClick={handleDoubleClick}
             onPointerDown={canvasBindings.onPointerDown}
             onPointerMove={canvasBindings.onPointerMove}
             onPointerUp={canvasBindings.onPointerUp}
@@ -134,6 +251,15 @@ export default function DraftingCanvas(props) {
               <EditHandles handles={selectedHandles} onHandlePointerDown={handleBindings.onHandlePointerDown} zoom={viewport.zoom} />
             </g>
           </svg>
+
+          {editingEntity && (
+            <InlineTextEditor
+              entity={editingEntity}
+              viewport={viewport}
+              onCommit={handleTextCommit}
+              onCancel={handleTextCancel}
+            />
+          )}
 
           <PrecisionHud
             precisionHud={precisionHud}

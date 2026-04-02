@@ -26,3 +26,12 @@
 - **localStorage:** Craftsman mode preference persists across sessions via localStorage
 - **Touch-friendly:** CSS `@media (pointer: coarse)` overrides for 44px+ touch targets on tablets
 - **Collapsible Sections:** Sidebar panels collapse/expand to manage vertical space
+
+# Dev Tooling & Quality
+
+- **ESLint:** `eslint.config.js` (flat config, React + hooks, prettier compat). Run: `npm run lint`
+- **Prettier:** `.prettierrc` (single quotes, trailing commas, 2-space, 120 width). Run: `npm run format`
+- **Husky + lint-staged:** Pre-commit hook auto-formats and lints staged files
+- **Tests:** `npm test` runs Vitest. Test files in `craftsman/utils/*.test.js` (3 existing) and `craftsman/__tests__/` (4 new: BOM pipeline, parametric resolution, DXF export, SVG export)
+- **PWA:** Service worker at `public/sw.js`, registered in `src/main.jsx`. Network-first with cache fallback for offline workshop use
+- **Error handling:** ExportBar uses toast notifications (not alert()) for all export failures

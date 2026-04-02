@@ -121,6 +121,17 @@ export function computeEntityBoundingBox(entity, entities = []) {
     ]);
   }
 
+  if (entity.type === 'angle-dimension') {
+    const r = entity.arcRadius ?? 0;
+    return getPointsBoundingBox([
+      entity.vertex,
+      entity.p1,
+      entity.p2,
+      { x: entity.vertex.x - r, y: entity.vertex.y - r },
+      { x: entity.vertex.x + r, y: entity.vertex.y + r },
+    ]);
+  }
+
   if (entity.type === 'feature') {
     if (entity.shape === 'circle') {
       const radius = entity.diameter / 2;

@@ -715,8 +715,45 @@ export default function useSketchStudio() {
 
     if (activeTool === 'angle') {
       const point = snap.point ?? worldPoint;
+      const tolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX, state.viewport.zoom);
+      const hitEntity = findTopmostEntityAtPoint(editableEntities, worldPoint, tolerance);
+      const isLineHit = hitEntity && (hitEntity.type === 'line' || hitEntity.type === 'polyline');
+
+      // Line-to-line shortcut: click two lines → auto-compute intersection + angle
+      if (!state.draft.type && isLineHit) {
+        dispatch(startDraft({ type: 'angle', step: 'pickLine2', currentPoint: point, points: [point], sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean), lineEntity1: hitEntity }));
+        return;
+      }
+      if (state.draft.step === 'pickLine2' && isLineHit && hitEntity.id !== state.draft.lineEntity1?.id) {
+        const line1 = state.draft.lineEntity1;
+        const a1 = { x: line1.x1, y: line1.y1 };
+        const a2 = { x: line1.x2, y: line1.y2 };
+        const b1 = { x: hitEntity.x1, y: hitEntity.y1 };
+        const b2 = { x: hitEntity.x2, y: hitEntity.y2 };
+        // Compute ray intersection (extend lines infinitely)
+        const dax = a2.x - a1.x; const day = a2.y - a1.y;
+        const dbx = b2.x - b1.x; const dby = b2.y - b1.y;
+        const denom = dax * dby - day * dbx;
+        if (Math.abs(denom) > 1e-6) {
+          const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denom;
+          const vertex = { x: a1.x + t * dax, y: a1.y + t * day };
+          // Pick points on each line away from vertex for the arc
+          const distA = Math.max(calculateDistance(vertex, a1), calculateDistance(vertex, a2));
+          const distB = Math.max(calculateDistance(vertex, b1), calculateDistance(vertex, b2));
+          const arcRadius = Math.min(distA, distB, 60) * 0.5;
+          const p1 = calculateDistance(vertex, a2) > calculateDistance(vertex, a1) ? a2 : a1;
+          const p2 = calculateDistance(vertex, b2) > calculateDistance(vertex, b1) ? b2 : b1;
+          const isoPlane = state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null;
+          dispatch(commitEntity(createAngleDimensionEntity({ vertex, p1, p2, arcRadius: Math.max(arcRadius, 20), entities: state.document.entities, sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean), layerId: state.document.layers.some((l) => l.id === 'dimensions') ? 'dimensions' : targetLayerId, isometricPlane: isoPlane })));
+          return;
+        }
+        // Lines are parallel — fall through to manual mode
+      }
+
+      // Manual 3-click mode (fallback: click empty space or non-line entities)
       if (!state.draft.type) { dispatch(startDraft({ type: 'angle', step: 'pickVertex', currentPoint: point, points: [point], sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean) })); return; }
       if (state.draft.step === 'pickVertex') { dispatch(patchDraft({ step: 'pickSecond', points: [state.draft.points[0], point], currentPoint: worldPoint, sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)].filter(Boolean) })); return; }
+      if (state.draft.step === 'pickLine2') { dispatch(patchDraft({ step: 'pickSecond', points: [state.draft.points[0], point], currentPoint: worldPoint, sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)].filter(Boolean), lineEntity1: undefined })); return; }
       if (state.draft.step === 'pickSecond') {
         const vertex = state.draft.points[1];
         const inputAngle = parsePositiveNumber(state.draft.precisionInput?.angle);
@@ -727,7 +764,7 @@ export default function useSketchStudio() {
         dispatch(commitEntity(createAngleDimensionEntity({ vertex, p1: state.draft.points[0], p2, arcRadius, entities: state.document.entities, sourceRefs: [...state.draft.sourceRefs, p2SourceRef].filter(Boolean), layerId: state.document.layers.some((l) => l.id === 'dimensions') ? 'dimensions' : targetLayerId, isometricPlane: isoPlane })));
       }
     }
-  }, [activeTool, commitPrecisionDraft, draftPreview, getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, resolvePointerState, state.document, state.draft, state.interaction.suppressNextClick, state.selection.selectedIds, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode, state.viewport]);
+  }, [activeTool, commitPrecisionDraft, draftPreview, editableEntities, getConstrainedDraftPoint, getOrthoReferencePoint, readCanvasPoint, resolvePointerState, state.document, state.draft, state.interaction.suppressNextClick, state.selection.selectedIds, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode, state.viewport]);
 
   // --- Return composed API ---
   return {
@@ -804,5 +841,13 @@ export default function useSketchStudio() {
     toggleCraftsmanMode: () => dispatch(toggleCraftsmanMode()),
     setVariables: (vars) => dispatch(setVariables(vars)),
     loadTemplate: (workspace) => persistence.applyWorkspace(workspace, { status: 'idle' }),
+    duplicateEntities: (entityIds) => {
+      const idSet = new Set(entityIds);
+      const toDuplicate = state.document.entities.filter((e) => idSet.has(e.id));
+      for (const entity of toDuplicate) {
+        const clone = { ...entity, id: `${entity.type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}` };
+        dispatch(commitEntity(clone));
+      }
+    },
   };
 }

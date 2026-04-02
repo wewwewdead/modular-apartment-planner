@@ -93,6 +93,12 @@ export function entityIntersectsSelectionBox(entity, box, entities) {
       || segmentIntersectsBox({ x: geometry.dimLine.x1, y: geometry.dimLine.y1 }, { x: geometry.dimLine.x2, y: geometry.dimLine.y2 }, box);
   }
 
+  if (entity.type === 'angle-dimension') {
+    return pointInBox(entity.vertex, box)
+      || segmentIntersectsBox(entity.vertex, entity.p1, box)
+      || segmentIntersectsBox(entity.vertex, entity.p2, box);
+  }
+
   return false;
 }
 

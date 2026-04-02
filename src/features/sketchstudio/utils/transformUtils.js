@@ -123,9 +123,18 @@ export function translateEntity(entity, delta) {
     };
   }
 
-  if (entity.type === 'dimension' && !(entity.meta?.sourceRefs?.length)) {
+  if (entity.type === 'dimension') {
     return {
       ...entity,
+      p1: translatePoint(entity.p1, delta),
+      p2: translatePoint(entity.p2, delta),
+    };
+  }
+
+  if (entity.type === 'angle-dimension') {
+    return {
+      ...entity,
+      vertex: translatePoint(entity.vertex, delta),
       p1: translatePoint(entity.p1, delta),
       p2: translatePoint(entity.p2, delta),
     };
@@ -167,10 +176,16 @@ export function translateEntity(entity, delta) {
   return entity;
 }
 
+function hasSourceRefIn(entity, idSet) {
+  const refs = entity.meta?.sourceRefs;
+  if (!refs?.length) return false;
+  return refs.some((ref) => ref?.entityId && idSet.has(ref.entityId));
+}
+
 export function translateEntities(entities, entityIds, delta) {
   const idSet = new Set(entityIds);
   return entities.map((entity) => (
-    idSet.has(entity.id)
+    idSet.has(entity.id) || hasSourceRefIn(entity, idSet)
       ? translateEntity(entity, delta)
       : entity
   ));
@@ -261,7 +276,7 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
     }
   }
 
-  if (entity.type === 'dimension' && !(entity.meta?.sourceRefs?.length)) {
+  if (entity.type === 'dimension') {
     const p1 = rotatePointAroundPivot(entity.p1, pivot, angleRadians);
     const p2 = rotatePointAroundPivot(entity.p2, pivot, angleRadians);
 
@@ -270,6 +285,15 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
       p1,
       p2,
       subtype: inferDimensionSubtype(p1, p2),
+    };
+  }
+
+  if (entity.type === 'angle-dimension') {
+    return {
+      ...entity,
+      vertex: rotatePointAroundPivot(entity.vertex, pivot, angleRadians),
+      p1: rotatePointAroundPivot(entity.p1, pivot, angleRadians),
+      p2: rotatePointAroundPivot(entity.p2, pivot, angleRadians),
     };
   }
 
@@ -289,7 +313,7 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
 export function rotateEntities(entities, entityIds, pivot, angleRadians) {
   const idSet = new Set(entityIds);
   return entities.map((entity) => (
-    idSet.has(entity.id)
+    idSet.has(entity.id) || hasSourceRefIn(entity, idSet)
       ? rotateEntityAroundPivot(entity, pivot, angleRadians)
       : entity
   ));
@@ -386,7 +410,7 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
     }
   }
 
-  if (entity.type === 'dimension' && !(entity.meta?.sourceRefs?.length)) {
+  if (entity.type === 'dimension') {
     const p1 = mirrorPointAcrossAxis(entity.p1, pivot, direction);
     const p2 = mirrorPointAcrossAxis(entity.p2, pivot, direction);
 
@@ -396,6 +420,15 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
       p2,
       offset: mirrorDimensionOffset(entity, direction),
       subtype: inferDimensionSubtype(p1, p2),
+    };
+  }
+
+  if (entity.type === 'angle-dimension') {
+    return {
+      ...entity,
+      vertex: mirrorPointAcrossAxis(entity.vertex, pivot, direction),
+      p1: mirrorPointAcrossAxis(entity.p1, pivot, direction),
+      p2: mirrorPointAcrossAxis(entity.p2, pivot, direction),
     };
   }
 
@@ -415,7 +448,7 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
 export function mirrorEntities(entities, entityIds, pivot, direction = 'horizontal') {
   const idSet = new Set(entityIds);
   return entities.map((entity) => (
-    idSet.has(entity.id)
+    idSet.has(entity.id) || hasSourceRefIn(entity, idSet)
       ? mirrorEntityAcrossAxis(entity, pivot, direction)
       : entity
   ));

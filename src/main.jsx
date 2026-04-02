@@ -8,3 +8,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <AppRouter />
   </React.StrictMode>
 );
+
+// Register service worker for offline workshop use
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Service worker registration failed — app works fine without it
+    });
+  });
+}

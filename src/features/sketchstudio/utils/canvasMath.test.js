@@ -19,9 +19,9 @@ describe('canvasMath', () => {
   });
 
   it('clamps zoom updates to configured bounds', () => {
-    expect(clampZoom(20)).toBe(12);
-    expect(clampZoom(0.01)).toBe(0.05);
-    expect(getNextZoom(12, -1000)).toBe(12);
-    expect(getNextZoom(0.05, 1000)).toBe(0.05);
+    expect(clampZoom(500)).toBe(200);
+    expect(clampZoom(0.001)).toBe(0.002);
+    expect(getNextZoom(200, -1000)).toBe(200);
+    expect(getNextZoom(0.002, 1000)).toBe(0.002);
   });
 });

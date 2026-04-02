@@ -30,12 +30,12 @@ export function generateBomHtml(bomRows, totalCost, projectName = 'Untitled') {
 <title>${safeName} — Cutting List</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }
-  h1 { font-size: 24px; border-bottom: 2px solid #f5a623; padding-bottom: 8px; }
+  h1 { font-size: 24px; border-bottom: 2px solid #d4856b; padding-bottom: 8px; }
   table { width: 100%; border-collapse: collapse; margin: 20px 0; }
   th { background: #f5f5f5; padding: 8px 12px; text-align: left; font-size: 12px; text-transform: uppercase; color: #666; border-bottom: 2px solid #ddd; }
   td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 14px; }
   tr:hover td { background: #fafafa; }
-  .total { font-size: 20px; font-weight: 700; color: #f5a623; margin: 20px 0; }
+  .total { font-size: 20px; font-weight: 700; color: #d4856b; margin: 20px 0; }
   .footer { font-size: 11px; color: #999; margin-top: 40px; border-top: 1px solid #eee; padding-top: 12px; }
 </style>
 </head>

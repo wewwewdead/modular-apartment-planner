@@ -38,3 +38,15 @@ One DXF per sheet from the nesting optimizer — ready for batch CNC.
 ## Hook Refactor — DONE
 
 useSketchStudio.js split into 7 files (2,224 → 804 line coordinator + 6 sub-hooks). Completed 2026-04-01.
+
+## Final Polish to Production — DONE
+
+Completed 2026-04-02. All items shipped:
+- .gitignore updated (.claude/, .codex-build/)
+- Professional README.md with Craftsman Studio as hero feature
+- ESLint (flat config) + Prettier + Husky + lint-staged
+- 4 new Vitest test files (BOM pipeline, parametric resolution, DXF export, SVG export) — 26 new tests
+- Error handling on all export buttons with toast notifications (replaced alert())
+- PWA service worker for offline workshop use
+- npm audit clean (picomatch fix)
+- .env.example placeholder

@@ -24,10 +24,10 @@ export function generateAssemblyHtml(assembly, projectName = 'Untitled') {
 <title>${safeName} — Assembly Instructions</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; color: #333; }
-  h1 { font-size: 24px; border-bottom: 2px solid #f5a623; padding-bottom: 8px; }
+  h1 { font-size: 24px; border-bottom: 2px solid #d4856b; padding-bottom: 8px; }
   .meta { font-size: 14px; color: #666; margin-bottom: 24px; }
   .step { display: flex; gap: 16px; margin-bottom: 20px; }
-  .step-num { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #f5a623; color: #fff; font-size: 16px; font-weight: 700; flex-shrink: 0; }
+  .step-num { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #d4856b; color: #fff; font-size: 16px; font-weight: 700; flex-shrink: 0; }
   .step-content h3 { margin: 0 0 4px; font-size: 16px; }
   .step-content p { margin: 0; font-size: 14px; color: #555; line-height: 1.5; }
   .footer { font-size: 11px; color: #999; margin-top: 40px; border-top: 1px solid #eee; padding-top: 12px; }

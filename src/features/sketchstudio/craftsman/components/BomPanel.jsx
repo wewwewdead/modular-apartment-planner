@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { exportBomWithCost, downloadAsFile } from '../../utils/bomExportUtils';
 import styles from '../styles/craftsman.module.css';
 
-export default function BomPanel({ bomRows, totalCost, costByMaterial }) {
+export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveRow, onDuplicateRow }) {
   const handleExportCSV = useCallback(() => {
     const content = exportBomWithCost(bomRows, 'csv', { rows: bomRows, totalCost, costByMaterial });
     downloadAsFile(content, 'cutting-list.csv', 'text/csv');
@@ -12,6 +12,16 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial }) {
     const content = exportBomWithCost(bomRows, 'json', { rows: bomRows, totalCost, costByMaterial });
     downloadAsFile(content, 'cutting-list.json', 'application/json');
   }, [bomRows, totalCost, costByMaterial]);
+
+  const handleRemove = useCallback((row) => {
+    if (!onRemoveRow || !row.entityIds?.length) return;
+    onRemoveRow(row.entityIds, null);
+  }, [onRemoveRow]);
+
+  const handleDuplicate = useCallback((row) => {
+    if (!onDuplicateRow || !row.entityIds?.length) return;
+    onDuplicateRow(row.entityIds);
+  }, [onDuplicateRow]);
 
   if (!bomRows.length) {
     return (
@@ -28,13 +38,14 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial }) {
       <div className={styles.bomTableWrap}>
         <table className={styles.bomTable}>
           <colgroup>
+            <col style={{ width: '20%' }} />
             <col style={{ width: '22%' }} />
-            <col style={{ width: '24%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '16%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '7%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '10%' }} />
           </colgroup>
           <thead>
             <tr>
@@ -45,6 +56,7 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial }) {
               <th>T</th>
               <th>Qty</th>
               <th>Cost</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -57,6 +69,30 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial }) {
                 <td>{row.thickness}</td>
                 <td>{row.quantity}</td>
                 <td>{row.totalCost > 0 ? `$${row.totalCost.toFixed(2)}` : '-'}</td>
+                <td className={styles.bomActions}>
+                  {onDuplicateRow && (
+                    <button
+                      type="button"
+                      className={styles.bomDuplicateBtn}
+                      onClick={() => handleDuplicate(row)}
+                      title={`Duplicate — add another ${row.quantity > 1 ? row.quantity + ' pieces' : 'piece'}`}
+                      aria-label={`Duplicate ${row.partName}`}
+                    >
+                      +
+                    </button>
+                  )}
+                  {onRemoveRow && (
+                    <button
+                      type="button"
+                      className={styles.bomRemoveBtn}
+                      onClick={() => handleRemove(row)}
+                      title={`Remove ${row.partName} (clears material from ${row.entityIds?.length || 0} entit${row.entityIds?.length === 1 ? 'y' : 'ies'})`}
+                      aria-label={`Remove ${row.partName}`}
+                    >
+                      &times;
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

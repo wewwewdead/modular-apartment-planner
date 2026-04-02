@@ -35,6 +35,7 @@ export default function CraftsmanSidebar({
   onThicknessChange,
   onVariablesChange,
   onLoadTemplate,
+  onDuplicateEntities,
 }) {
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(entities);
   const hasEntities = entities.length > 0;
@@ -76,7 +77,7 @@ export default function CraftsmanSidebar({
       )}
 
       <CollapsibleSection title="Bill of Materials" defaultOpen={hasEntities}>
-        <BomPanel bomRows={bomRows} totalCost={totalCost} costByMaterial={costByMaterial} />
+        <BomPanel bomRows={bomRows} totalCost={totalCost} costByMaterial={costByMaterial} onRemoveRow={onMaterialChange} onDuplicateRow={onDuplicateEntities} />
       </CollapsibleSection>
 
       <CollapsibleSection title="Cut-List Optimizer" defaultOpen={false}>

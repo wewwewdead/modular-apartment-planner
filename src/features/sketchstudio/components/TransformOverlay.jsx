@@ -3,7 +3,9 @@ export default function TransformOverlay({ bounds, onTransformPointerDown, selec
     return null;
   }
 
-  const MIN_SIZE = 10;
+  const s = 1 / (zoom || 1);
+
+  const MIN_SIZE = 10 * s;
   const rawWidth = bounds.maxX - bounds.minX;
   const rawHeight = bounds.maxY - bounds.minY;
   const width = Math.max(rawWidth, MIN_SIZE);
@@ -16,7 +18,7 @@ export default function TransformOverlay({ bounds, onTransformPointerDown, selec
     x: centerX,
     y: centerY,
   };
-  const handleOffset = 28 / (zoom || 1);
+  const handleOffset = 28 * s;
   const rotateHandle = {
     x: pivot.x,
     y: displayMinY - handleOffset,
@@ -46,7 +48,7 @@ export default function TransformOverlay({ bounds, onTransformPointerDown, selec
         className="sketchStudioTransformHandle"
         cx={rotateHandle.x}
         cy={rotateHandle.y}
-        r={7}
+        r={7 * s}
         vectorEffect="non-scaling-stroke"
         onPointerDown={(event) => onTransformPointerDown('rotate', event, { pivot })}
       />
@@ -54,12 +56,12 @@ export default function TransformOverlay({ bounds, onTransformPointerDown, selec
         className="sketchStudioTransformPivot"
         cx={pivot.x}
         cy={pivot.y}
-        r={4}
+        r={4 * s}
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
       />
       {selectedCount > 1 ? (
-        <text className="sketchStudioSelectionLabel" x={displayMinX} y={displayMinY - 10 / (zoom || 1)}>
+        <text className="sketchStudioSelectionLabel" x={displayMinX} y={displayMinY - 10 * s} style={{ fontSize: `${12 * s}px` }}>
           {selectedCount} selected
         </text>
       ) : null}

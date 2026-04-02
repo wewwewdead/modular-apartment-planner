@@ -15,7 +15,7 @@
 .sidebarTitle {
   font-size: 16px;
   font-weight: 600;
-  color: #f5a623;
+  color: #d4856b;
   margin: 0 0 4px 0;
   padding-bottom: 8px;
   border-bottom: 1px solid #333;
@@ -81,7 +81,7 @@
 
 .materialSelect:focus {
   outline: none;
-  border-color: #f5a623;
+  border-color: #d4856b;
 }
 
 .thicknessInput {
@@ -97,7 +97,7 @@
 
 .thicknessInput:focus {
   outline: none;
-  border-color: #f5a623;
+  border-color: #d4856b;
 }
 
 .materialPreview {
@@ -184,7 +184,7 @@
 
 .totalCost {
   font-size: 14px;
-  color: #f5a623;
+  color: #d4856b;
 }
 
 .costBreakdown {
@@ -198,6 +198,59 @@
   justify-content: space-between;
   font-size: 11px;
   color: #888;
+}
+
+.bomActions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.bomDuplicateBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: #666;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.bomDuplicateBtn:hover {
+  color: #51cf66;
+  border-color: #51cf66;
+  background: rgba(81, 207, 102, 0.1);
+}
+
+.bomRemoveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: #666;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.bomRemoveBtn:hover {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
 }
 
 /* Export */
@@ -232,7 +285,7 @@
 
 .exportBtn:hover {
   background: #3a3a5a;
-  border-color: #f5a623;
+  border-color: #d4856b;
 }
 
 .exportButtons {
@@ -240,34 +293,53 @@
   gap: 6px;
 }
 
-/* Toggle Button */
+/* Toggle Button — CTA */
 .craftsmanToggle {
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #aaa;
-  background: transparent;
-  border: 1px solid #555;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #d4856b;
+  background: rgba(212, 133, 107, 0.08);
+  border: 1.5px solid rgba(212, 133, 107, 0.5);
+  border-radius: 999px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 0 0 rgba(212, 133, 107, 0);
 }
 
 .craftsmanToggle:hover {
-  border-color: #f5a623;
-  color: #f5a623;
+  color: #e8a48e;
+  background: rgba(212, 133, 107, 0.14);
+  border-color: rgba(212, 133, 107, 0.7);
+  box-shadow: 0 0 12px rgba(212, 133, 107, 0.15);
+  transform: translateY(-1px);
+}
+
+.craftsmanToggle:active {
+  transform: scale(0.97);
 }
 
 .craftsmanToggleActive {
-  background: #f5a623;
   color: #1a1a2e;
-  border-color: #f5a623;
-  font-weight: 600;
+  background: #d4856b;
+  border-color: #d4856b;
+  box-shadow:
+    0 0 0 1px rgba(212, 133, 107, 0.2),
+    0 0 16px rgba(212, 133, 107, 0.2);
 }
 
 .craftsmanToggleActive:hover {
-  background: #e6951a;
+  background: #c07460;
+  border-color: #c07460;
   color: #1a1a2e;
+  box-shadow:
+    0 0 0 1px rgba(192, 116, 96, 0.3),
+    0 0 20px rgba(212, 133, 107, 0.25);
 }
 
 /* Kerf Controls */
@@ -289,7 +361,7 @@
 }
 
 .kerfToggle input[type="checkbox"] {
-  accent-color: #f5a623;
+  accent-color: #d4856b;
 }
 
 .kerfInput {
@@ -305,7 +377,7 @@
 
 .kerfInput:focus {
   outline: none;
-  border-color: #f5a623;
+  border-color: #d4856b;
 }
 
 /* Nesting Panel */
@@ -354,7 +426,7 @@
 .nestingStatValue {
   font-size: 18px;
   font-weight: 700;
-  color: #f5a623;
+  color: #d4856b;
 }
 
 .nestingStatLabel {
@@ -423,7 +495,7 @@
 }
 
 .jointCardActive {
-  border-color: #f5a623;
+  border-color: #d4856b;
   background: #2a2a44;
 }
 
@@ -479,22 +551,23 @@
 }
 
 .jointParamValue {
-  color: #f5a623;
+  color: #d4856b;
   font-weight: 600;
 }
 
-.fingerPreview {
+.jointPreview {
   margin-top: 6px;
   border: 1px solid #444;
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
+  background: rgba(37, 37, 64, 0.5);
 }
 
-.fingerLegend {
+.jointPreviewLegend {
   display: block;
   font-size: 9px;
   text-align: center;
-  padding: 3px 0;
+  padding: 4px 0;
   color: #888;
 }
 
@@ -523,12 +596,12 @@
   margin: 6px 0 0 0;
   padding: 6px 8px;
   background: #1a1a2e;
-  border-left: 2px solid #f5a623;
+  border-left: 2px solid #d4856b;
   border-radius: 0 4px 4px 0;
 }
 
 .jointHowTo strong {
-  color: #f5a623;
+  color: #d4856b;
 }
 
 .recommendedBadge {
@@ -567,7 +640,7 @@
 }
 
 .strengthBarFilled {
-  background: #f5a623;
+  background: #d4856b;
 }
 
 /* Parametric Panel */
@@ -610,7 +683,7 @@
 
 .varInput:focus {
   outline: none;
-  border-color: #f5a623;
+  border-color: #d4856b;
 }
 
 .varUnit {
@@ -620,7 +693,7 @@
 
 .varRefs {
   font-size: 10px;
-  color: #f5a623;
+  color: #d4856b;
   min-width: 22px;
 }
 
@@ -686,7 +759,7 @@
   padding: 8px;
   background: #252540;
   border-radius: 4px;
-  border-left: 3px solid #f5a623;
+  border-left: 3px solid #d4856b;
 }
 
 .stepHeader {
@@ -703,7 +776,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #f5a623;
+  background: #d4856b;
   color: #1a1a2e;
   font-size: 11px;
   font-weight: 700;
@@ -749,7 +822,7 @@
 }
 
 .collapsibleHeader:hover {
-  color: #f5a623;
+  color: #d4856b;
 }
 
 .collapsibleArrow {
@@ -769,7 +842,7 @@
   font-size: 13px;
   font-weight: 600;
   color: #1a1a2e;
-  background: #f5a623;
+  background: #d4856b;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -777,7 +850,7 @@
 }
 
 .templateBtn:hover {
-  background: #e6951a;
+  background: #c07460;
 }
 
 /* Template Gallery */
@@ -814,7 +887,7 @@
 }
 
 .templateCard:hover {
-  border-color: #f5a623;
+  border-color: #d4856b;
 }
 
 .templateCardName {
@@ -854,8 +927,8 @@
 }
 
 .galleryBackBtn:hover {
-  color: #f5a623;
-  border-color: #f5a623;
+  color: #d4856b;
+  border-color: #d4856b;
 }
 
 /* Workshop Export Button */
@@ -864,7 +937,7 @@
   font-size: 12px;
   font-weight: 600;
   color: #1a1a2e;
-  background: #f5a623;
+  background: #d4856b;
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -873,7 +946,7 @@
 }
 
 .workshopExportBtn:hover {
-  background: #e6951a;
+  background: #c07460;
 }
 
 .workshopExportBtn:disabled {
@@ -885,7 +958,7 @@
 @media (pointer: coarse) {
   .craftsmanToggle {
     min-height: 44px;
-    padding: 8px 16px;
+    padding: 10px 20px;
     font-size: 14px;
   }
 
