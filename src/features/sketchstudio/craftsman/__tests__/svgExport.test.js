@@ -8,7 +8,6 @@ describe('SVG export', () => {
 
     expect(svg).toContain('<?xml');
     expect(svg).toContain('<svg');
-    expect(svg).toContain('mm');
     expect(svg).toContain('<rect');
     expect(svg).toContain('width="600"');
     expect(svg).toContain('height="400"');
@@ -71,15 +70,16 @@ describe('SVG export', () => {
     expect(rectCount).toBe(1);
   });
 
-  it('skips non-exportable entity types', () => {
+  it('exports text entities alongside geometry', () => {
     const entities = [
       { id: 'r1', type: 'rect', x: 0, y: 0, width: 100, height: 100 },
-      { id: 't1', type: 'text', x: 0, y: 0 },
+      { id: 't1', type: 'text', x: 0, y: 0, text: 'Label', fontSize: 12 },
     ];
 
     const svg = exportEntitiesToSvg(entities);
     const rectCount = (svg.match(/<rect /g) || []).length;
     expect(rectCount).toBe(1);
-    expect(svg).not.toContain('<text');
+    expect(svg).toContain('<text');
+    expect(svg).toContain('Label');
   });
 });

@@ -35,9 +35,10 @@ export function printEntities(entities, options = {}) {
   const rulerX = viewBox[0] + 5;
   const rulerY = viewBox[1] + viewBox[3] - 5;
 
-  // Expand viewBox to fit ruler
+  // Expand viewBox to fit ruler and ensure mm units for print scale
   const newHeight = viewBox[3] + 15;
   svgEl.setAttribute('viewBox', `${viewBox[0]} ${viewBox[1]} ${viewBox[2]} ${newHeight}`);
+  svgEl.setAttribute('width', `${viewBox[2]}mm`);
   svgEl.setAttribute('height', `${newHeight}mm`);
 
   // Add ruler

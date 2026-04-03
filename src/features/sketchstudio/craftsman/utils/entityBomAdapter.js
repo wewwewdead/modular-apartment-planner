@@ -1,7 +1,10 @@
 import { calculateDistance } from '../../utils/canvasMath';
-import { computePartCutSize } from '../../utils/bomUtils';
 
 const BOM_ELIGIBLE_TYPES = new Set(['rect', 'line', 'circle', 'polyline']);
+
+function getMaterialStockKind(material) {
+  return material?.costBasis === 'perLinearMeter' ? 'linear' : 'sheet';
+}
 
 export function isEntityBomEligible(entity) {
   return BOM_ELIGIBLE_TYPES.has(entity?.type) && Boolean(entity?.materialId);
@@ -18,7 +21,9 @@ function getEntityLabel(entity) {
   }
 }
 
-function getEntityDimensions(entity) {
+function getEntityDimensions(entity, material = null) {
+  const stockKind = getMaterialStockKind(material);
+
   switch (entity.type) {
     case 'rect':
       return {
@@ -31,6 +36,9 @@ function getEntityDimensions(entity) {
         { x: entity.x1, y: entity.y1 },
         { x: entity.x2, y: entity.y2 },
       );
+      if (stockKind === 'linear') {
+        return { width: length, height: material?.defaultWidth ?? 0 };
+      }
       return { width: length, height: entity.thickness ?? 0 };
     }
 
@@ -61,8 +69,9 @@ export function entityToBomRow(entity, materialCatalog) {
   if (!isEntityBomEligible(entity)) return null;
 
   const material = materialCatalog?.[entity.materialId] ?? null;
-  const dims = getEntityDimensions(entity);
+  const dims = getEntityDimensions(entity, material);
   const thickness = entity.thickness ?? material?.thickness ?? 0;
+  const stockKind = getMaterialStockKind(material);
 
   return {
     partId: entity.id,
@@ -73,6 +82,10 @@ export function entityToBomRow(entity, materialCatalog) {
     thickness,
     width: Math.round(dims.width * 100) / 100,
     height: Math.round(dims.height * 100) / 100,
+    costBasis: material?.costBasis ?? 'perM2',
+    stockKind,
+    defaultStockWidth: material?.defaultWidth ?? 0,
+    defaultStockLength: material?.defaultHeight ?? 0,
     quantity: 1,
   };
 }

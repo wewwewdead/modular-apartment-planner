@@ -3,6 +3,14 @@ import { entityToBomRow, entitiesToBomRows, isEntityBomEligible } from './entity
 
 const catalog = {
   'birch-plywood-18': { id: 'birch-plywood-18', name: '18mm Birch Plywood', thickness: 18, pricePerM2: 45 },
+  'steel-sq-25': {
+    id: 'steel-sq-25',
+    name: 'Steel SQ Tube 25x25x1.5mm',
+    thickness: 1.5,
+    defaultWidth: 25,
+    defaultHeight: 6000,
+    costBasis: 'perLinearMeter',
+  },
 };
 
 describe('entityBomAdapter', () => {
@@ -50,6 +58,20 @@ describe('entityBomAdapter', () => {
       expect(row.partName).toBe('Strip');
     });
 
+    it('uses stock metadata for linear material line entities', () => {
+      const entity = { id: 'l2', type: 'line', materialId: 'steel-sq-25', x1: 0, y1: 0, x2: 1000, y2: 0 };
+      const row = entityToBomRow(entity, catalog);
+      expect(row).toMatchObject({
+        width: 1000,
+        height: 25,
+        thickness: 1.5,
+        costBasis: 'perLinearMeter',
+        stockKind: 'linear',
+        defaultStockWidth: 25,
+        defaultStockLength: 6000,
+      });
+    });
+
     it('converts circle entity to BOM row', () => {
       const entity = { id: 'c1', type: 'circle', materialId: 'birch-plywood-18', radius: 50 };
       const row = entityToBomRow(entity, catalog);
@@ -66,6 +88,13 @@ describe('entityBomAdapter', () => {
       const entity = { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 100, height: 100, thickness: 25 };
       const row = entityToBomRow(entity, catalog);
       expect(row.thickness).toBe(25);
+    });
+
+    it('keeps wall thickness separate from stock width for linear materials', () => {
+      const entity = { id: 'l3', type: 'line', materialId: 'steel-sq-25', x1: 0, y1: 0, x2: 1000, y2: 0, thickness: 2 };
+      const row = entityToBomRow(entity, catalog);
+      expect(row.thickness).toBe(2);
+      expect(row.height).toBe(25);
     });
   });
 

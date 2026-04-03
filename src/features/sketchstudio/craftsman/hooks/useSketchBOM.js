@@ -38,6 +38,7 @@ export default function useSketchBOM(entities) {
         ...row,
         entityIds: entityIdsByKey.get(key) || [],
         area: cost.area,
+        costBasis: row.costBasis ?? cost.costBasis,
         unitCost: cost.unitCost,
         totalCost: cost.totalCost,
       };
