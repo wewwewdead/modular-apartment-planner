@@ -18,7 +18,7 @@ export default function WorkspaceCards() {
         >
           <div className={styles.cardBody}>
             <span className={styles.cardLabel}>01 / Floorplan</span>
-            <h3 className={styles.cardTitle}>Floorplan Editor</h3>
+            <h2 className={styles.cardTitle}>Floorplan Editor</h2>
             <p className={styles.cardDesc}>
               Draw walls, place doors and windows, define rooms, and generate
               construction-ready documentation with millimeter precision and
@@ -36,7 +36,7 @@ export default function WorkspaceCards() {
         >
           <div className={styles.cardBody}>
             <span className={styles.cardLabel}>02 / Sketch Studio</span>
-            <h3 className={styles.cardTitle}>SketchStudio</h3>
+            <h2 className={styles.cardTitle}>SketchStudio</h2>
             <p className={styles.cardDesc}>
               Draft panels, cabinets, supports, and custom technical objects in a dedicated 2D workspace built for
               precise geometry, viewport control, and future export into the planner.

@@ -24,7 +24,7 @@ export default function FooterCTA() {
     <footer className={styles.footer}>
       <div className={styles.inner} ref={ref}>
         <Ornament />
-        <h2 className={styles.heading}>Ready to start designing?</h2>
+        <h3 className={styles.heading}>Ready to start designing?</h3>
         <Link to="/floorplan" className={styles.ctaButton}>
           Get Started
         </Link>
