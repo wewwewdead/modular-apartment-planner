@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import templates from '../templates/index';
+import TemplateThumbnail from './TemplateThumbnail';
 import styles from '../styles/craftsman.module.css';
 
 const DIFFICULTY_COLORS = {
@@ -44,6 +45,7 @@ export default function TemplateGallery({ onLoadTemplate, onBack }) {
             onClick={() => handleLoad(t)}
             disabled={loading === t.id}
           >
+            <TemplateThumbnail templateId={t.id} />
             <span className={styles.templateCardName}>
               {loading === t.id ? 'Loading...' : t.name}
             </span>
