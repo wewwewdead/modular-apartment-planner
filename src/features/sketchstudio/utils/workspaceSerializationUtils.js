@@ -1,4 +1,5 @@
 import { validateBasicDocumentShape } from './serializationUtils';
+import { normalizeSketchDocument } from './sketchDocumentUtils';
 
 export const SKETCH_WORKSPACE_KIND = 'sketchstudio-workspace';
 export const SKETCH_WORKSPACE_VERSION = 1;
@@ -24,13 +25,11 @@ function getFallbackLayerId(document) {
 
 function isProbablyApartmentPlannerProject(value) {
   return Boolean(
-    value
-    && typeof value === 'object'
-    && (
-      Array.isArray(value.floors)
-      || Array.isArray(value.sheets)
-      || (value.project && typeof value.project === 'object')
-    ),
+    value &&
+    typeof value === 'object' &&
+    (Array.isArray(value.floors) ||
+      Array.isArray(value.sheets) ||
+      (value.project && typeof value.project === 'object')),
   );
 }
 
@@ -43,9 +42,8 @@ function normalizeViewport(viewport) {
 }
 
 function normalizeUi(ui, document) {
-  const requestedLayerId = typeof ui?.activeLayerId === 'string' && ui.activeLayerId
-    ? ui.activeLayerId
-    : getFallbackLayerId(document);
+  const requestedLayerId =
+    typeof ui?.activeLayerId === 'string' && ui.activeLayerId ? ui.activeLayerId : getFallbackLayerId(document);
   const nextLayerId = document?.layers?.some((layer) => layer.id === requestedLayerId)
     ? requestedLayerId
     : getFallbackLayerId(document);
@@ -55,27 +53,27 @@ function normalizeUi(ui, document) {
     snapEnabled: ui?.snapEnabled !== false,
     orthoEnabled: ui?.orthoEnabled === true,
     viewMode: ui?.viewMode === 'isometric' ? 'isometric' : DEFAULT_SKETCH_UI.viewMode,
-    isometricPlane: ['top', 'left', 'right'].includes(ui?.isometricPlane) ? ui.isometricPlane : DEFAULT_SKETCH_UI.isometricPlane,
+    isometricPlane: ['top', 'left', 'right'].includes(ui?.isometricPlane)
+      ? ui.isometricPlane
+      : DEFAULT_SKETCH_UI.isometricPlane,
     craftsmanMode: ui?.craftsmanMode === true,
   };
 }
 
-export function buildSketchWorkspaceSnapshot({
-  document,
-  viewport,
-  ui,
-} = {}) {
+export function buildSketchWorkspaceSnapshot({ document, viewport, ui } = {}) {
   if (!validateBasicDocumentShape(document)) {
     throw new Error('Invalid SketchStudio document shape.');
   }
 
+  const normalizedDocument = normalizeSketchDocument(document);
+
   return {
     kind: SKETCH_WORKSPACE_KIND,
     version: SKETCH_WORKSPACE_VERSION,
-    document,
+    document: normalizedDocument,
     objectDraft: null,
     viewport: normalizeViewport(viewport),
-    ui: normalizeUi(ui, document),
+    ui: normalizeUi(ui, normalizedDocument),
   };
 }
 
@@ -85,22 +83,27 @@ export function serializeComparableSketchWorkspace(workspace) {
 
 export function serializeSketchWorkspace(workspace, options = {}) {
   const snapshot = buildSketchWorkspaceSnapshot(workspace);
-  return JSON.stringify({
-    ...snapshot,
-    savedAt: options.savedAt || new Date().toISOString(),
-  }, null, 2);
+  return JSON.stringify(
+    {
+      ...snapshot,
+      savedAt: options.savedAt || new Date().toISOString(),
+    },
+    null,
+    2,
+  );
 }
 
 export function normalizeParsedSketchWorkspace(parsed) {
   if (validateBasicDocumentShape(parsed)) {
+    const normalizedDocument = normalizeSketchDocument(parsed);
     return {
       kind: SKETCH_WORKSPACE_KIND,
       version: SKETCH_WORKSPACE_VERSION,
       savedAt: null,
-      document: parsed,
+      document: normalizedDocument,
       objectDraft: null,
       viewport: { ...DEFAULT_SKETCH_VIEWPORT },
-      ui: normalizeUi(null, parsed),
+      ui: normalizeUi(null, normalizedDocument),
     };
   }
 
@@ -109,22 +112,24 @@ export function normalizeParsedSketchWorkspace(parsed) {
   }
 
   if (
-    !parsed
-    || typeof parsed !== 'object'
-    || parsed.kind !== SKETCH_WORKSPACE_KIND
-    || !validateBasicDocumentShape(parsed.document)
+    !parsed ||
+    typeof parsed !== 'object' ||
+    parsed.kind !== SKETCH_WORKSPACE_KIND ||
+    !validateBasicDocumentShape(parsed.document)
   ) {
     throw new Error('Invalid SketchStudio file.');
   }
+
+  const normalizedDocument = normalizeSketchDocument(parsed.document);
 
   return {
     kind: SKETCH_WORKSPACE_KIND,
     version: Number(parsed.version) || SKETCH_WORKSPACE_VERSION,
     savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null,
-    document: parsed.document,
+    document: normalizedDocument,
     objectDraft: null,
     viewport: normalizeViewport(parsed.viewport),
-    ui: normalizeUi(parsed.ui, parsed.document),
+    ui: normalizeUi(parsed.ui, normalizedDocument),
   };
 }
 

@@ -41,6 +41,12 @@ export const SKETCH_STUDIO_ACTIONS = {
   SET_ENTITY_THICKNESS: 'SET_ENTITY_THICKNESS',
   TOGGLE_CRAFTSMAN_MODE: 'TOGGLE_CRAFTSMAN_MODE',
   SET_VARIABLES: 'SET_VARIABLES',
+  ADD_CONSTRAINT: 'ADD_CONSTRAINT',
+  UPDATE_CONSTRAINT: 'UPDATE_CONSTRAINT',
+  REMOVE_CONSTRAINT: 'REMOVE_CONSTRAINT',
+  ADD_JOINT: 'ADD_JOINT',
+  UPDATE_JOINT: 'UPDATE_JOINT',
+  REMOVE_JOINT: 'REMOVE_JOINT',
 };
 
 export const setCanvasSize = (canvasSize) => ({
@@ -239,4 +245,34 @@ export const toggleCraftsmanMode = () => ({
 export const setVariables = (variables) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_VARIABLES,
   payload: variables,
+});
+
+export const addConstraint = (constraint) => ({
+  type: SKETCH_STUDIO_ACTIONS.ADD_CONSTRAINT,
+  payload: constraint,
+});
+
+export const updateConstraint = (constraintId, patch) => ({
+  type: SKETCH_STUDIO_ACTIONS.UPDATE_CONSTRAINT,
+  payload: { constraintId, patch },
+});
+
+export const removeConstraint = (constraintId) => ({
+  type: SKETCH_STUDIO_ACTIONS.REMOVE_CONSTRAINT,
+  payload: constraintId,
+});
+
+export const addJoint = (joint) => ({
+  type: SKETCH_STUDIO_ACTIONS.ADD_JOINT,
+  payload: joint,
+});
+
+export const updateJoint = (jointId, patch) => ({
+  type: SKETCH_STUDIO_ACTIONS.UPDATE_JOINT,
+  payload: { jointId, patch },
+});
+
+export const removeJoint = (jointId) => ({
+  type: SKETCH_STUDIO_ACTIONS.REMOVE_JOINT,
+  payload: jointId,
 });

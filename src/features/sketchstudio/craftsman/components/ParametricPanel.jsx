@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { createVariable, findVariableReferences } from '../utils/parametricEngine';
 import styles from '../styles/craftsman.module.css';
 
-export default function ParametricPanel({ variables, entities, onVariablesChange }) {
+export default function ParametricPanel({ variables, entities, constraints = [], onVariablesChange }) {
   const [newName, setNewName] = useState('');
   const [newValue, setNewValue] = useState('');
 
@@ -17,19 +17,28 @@ export default function ParametricPanel({ variables, entities, onVariablesChange
     setNewValue('');
   }, [newName, newValue, variables, onVariablesChange]);
 
-  const handleUpdate = useCallback((varId, newVal) => {
-    const parsed = Number(newVal);
-    if (!Number.isFinite(parsed)) return;
-    onVariablesChange(variables.map((v) => v.id === varId ? { ...v, value: parsed } : v));
-  }, [variables, onVariablesChange]);
+  const handleUpdate = useCallback(
+    (varId, newVal) => {
+      const parsed = Number(newVal);
+      if (!Number.isFinite(parsed)) return;
+      onVariablesChange(variables.map((v) => (v.id === varId ? { ...v, value: parsed } : v)));
+    },
+    [variables, onVariablesChange],
+  );
 
-  const handleDelete = useCallback((varId) => {
-    onVariablesChange(variables.filter((v) => v.id !== varId));
-  }, [variables, onVariablesChange]);
+  const handleDelete = useCallback(
+    (varId) => {
+      onVariablesChange(variables.filter((v) => v.id !== varId));
+    },
+    [variables, onVariablesChange],
+  );
 
-  const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Enter') handleAdd();
-  }, [handleAdd]);
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Enter') handleAdd();
+    },
+    [handleAdd],
+  );
 
   return (
     <div className={styles.parametricPanel}>
@@ -38,7 +47,7 @@ export default function ParametricPanel({ variables, entities, onVariablesChange
       {variables.length > 0 && (
         <div className={styles.varList}>
           {variables.map((v) => {
-            const refs = findVariableReferences(entities, v.name);
+            const refs = findVariableReferences(entities, v.name, constraints);
             return (
               <div key={v.id} className={styles.varRow}>
                 <span className={styles.varName}>{v.name}</span>
@@ -54,7 +63,14 @@ export default function ParametricPanel({ variables, entities, onVariablesChange
                     {refs.length}x
                   </span>
                 )}
-                <button type="button" className={styles.varDelete} onClick={() => handleDelete(v.id)} title="Delete variable">x</button>
+                <button
+                  type="button"
+                  className={styles.varDelete}
+                  onClick={() => handleDelete(v.id)}
+                  title="Delete variable"
+                >
+                  x
+                </button>
               </div>
             );
           })}
@@ -78,12 +94,12 @@ export default function ParametricPanel({ variables, entities, onVariablesChange
           onChange={(e) => setNewValue(e.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <button type="button" className={styles.exportBtn} onClick={handleAdd}>Add</button>
+        <button type="button" className={styles.exportBtn} onClick={handleAdd}>
+          Add
+        </button>
       </div>
 
-      <p className={styles.emptyMessage}>
-        Use =variableName in entity dimensions (e.g., =width, =width/2+10)
-      </p>
+      <p className={styles.emptyMessage}>Use =variableName in entity dimensions (e.g., =width, =width/2+10)</p>
     </div>
   );
 }

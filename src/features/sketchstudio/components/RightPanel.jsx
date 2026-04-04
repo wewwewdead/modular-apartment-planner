@@ -1,4 +1,26 @@
+import { useEffect, useMemo, useState } from 'react';
 import { computeIsometricAngle } from '../utils/angleUtils';
+import ParametricPanel from '../craftsman/components/ParametricPanel';
+import {
+  createSketchConstraint,
+  getConstraintMidpointOptions,
+  getConstraintPointOptions,
+  getConstraintSegmentOptions,
+  getConstraintSupportedEntityOptions,
+  getConstraintTypeOptions,
+  getSuggestedConstraintTypesForSelection,
+  getSketchConstraintSummary,
+  listConstraintEntityIds,
+  parseSerializedConstraintReference,
+} from '../utils/sketchConstraintUtils';
+
+function serializeConstraintReference(reference) {
+  if (!reference?.entityId || !reference?.sourceType) {
+    return '';
+  }
+
+  return `${reference.entityId}:${reference.sourceType}:${reference.sourceKey ?? ''}`;
+}
 
 function renderReadOnlyRows(rows) {
   return rows.map(([label, value]) => (
@@ -48,7 +70,9 @@ function renderEditableFields(entity, onCommit) {
   }
 
   if (entity.type === 'rect') {
-    return ['x', 'y', 'width', 'height', 'rotation'].map((field) => renderEditableField(field, entity[field] ?? 0, onCommit));
+    return ['x', 'y', 'width', 'height', 'rotation'].map((field) =>
+      renderEditableField(field, entity[field] ?? 0, onCommit),
+    );
   }
 
   if (entity.type === 'circle') {
@@ -96,7 +120,11 @@ function renderEditableFields(entity, onCommit) {
       <>
         <label key={`subtype-${entity.subtype}`} className="sketchStudioEditableRow">
           <span className="sketchStudioPropertyKey">Subtype</span>
-          <select className="sketchStudioPropertyInput" defaultValue={entity.subtype} onChange={(event) => onCommit('subtype', event.target.value)}>
+          <select
+            className="sketchStudioPropertyInput"
+            defaultValue={entity.subtype}
+            onChange={(event) => onCommit('subtype', event.target.value)}
+          >
             <option value="horizontal">Horizontal</option>
             <option value="vertical">Vertical</option>
             <option value="aligned">Aligned</option>
@@ -120,24 +148,565 @@ function SelectionActions({
 }) {
   return (
     <div className="sketchStudioSelectionActions">
-      <button type="button" className="sketchStudioInlineButton" onClick={onRotateLeft}>Rotate Left</button>
-      <button type="button" className="sketchStudioInlineButton" onClick={onRotateRight}>Rotate Right</button>
-      <button type="button" className="sketchStudioInlineButton" onClick={onFlipHorizontal}>Flip Horizontal</button>
-      <button type="button" className="sketchStudioInlineButton" onClick={onFlipVertical}>Flip Vertical</button>
-      <button type="button" className="sketchStudioInlineButton sketchStudioInlineButtonWide" onClick={onToggleBrokenLines}>
+      <button type="button" className="sketchStudioInlineButton" onClick={onRotateLeft}>
+        Rotate Left
+      </button>
+      <button type="button" className="sketchStudioInlineButton" onClick={onRotateRight}>
+        Rotate Right
+      </button>
+      <button type="button" className="sketchStudioInlineButton" onClick={onFlipHorizontal}>
+        Flip Horizontal
+      </button>
+      <button type="button" className="sketchStudioInlineButton" onClick={onFlipVertical}>
+        Flip Vertical
+      </button>
+      <button
+        type="button"
+        className="sketchStudioInlineButton sketchStudioInlineButtonWide"
+        onClick={onToggleBrokenLines}
+      >
         {isBrokenLineSelection ? 'Use Solid Lines' : 'Use Broken Lines'}
       </button>
     </div>
   );
 }
 
+function buildConstraintForm(type, entities, selectedEntities, existing = null) {
+  const referenceEntities = existing ? entities : selectedEntities.length ? selectedEntities : entities;
+  const supportedEntities = getConstraintSupportedEntityOptions(entities, type);
+  const pointOptions = getConstraintPointOptions(referenceEntities.length ? referenceEntities : entities);
+  const midpointOptions = getConstraintMidpointOptions(referenceEntities.length ? referenceEntities : entities);
+  const segmentOptions = getConstraintSegmentOptions(referenceEntities.length ? referenceEntities : entities);
+  const firstEntityId = selectedEntities[0]?.id || supportedEntities[0]?.value || '';
+  const secondEntityId =
+    selectedEntities[1]?.id ||
+    supportedEntities.find((option) => option.value !== firstEntityId)?.value ||
+    supportedEntities[0]?.value ||
+    '';
+
+  return {
+    id: existing?.id || null,
+    type,
+    label: existing?.label || '',
+    enabled: existing?.enabled !== false,
+    driverEntityId: existing?.driverEntityId || firstEntityId,
+    drivenEntityId: existing?.drivenEntityId || secondEntityId,
+    entityId: existing?.entityId || firstEntityId,
+    driverRefValue: serializeConstraintReference(existing?.driverRef) || pointOptions[0]?.value || '',
+    drivenRefValue:
+      serializeConstraintReference(existing?.drivenRef) || pointOptions[1]?.value || pointOptions[0]?.value || '',
+    midpointRefValue: serializeConstraintReference(existing?.midpointRef) || midpointOptions[0]?.value || '',
+    betweenStartRefValue: serializeConstraintReference(existing?.betweenStartRef) || pointOptions[0]?.value || '',
+    betweenEndRefValue:
+      serializeConstraintReference(existing?.betweenEndRef) || pointOptions[1]?.value || pointOptions[0]?.value || '',
+    sourceSegmentValue: serializeConstraintReference(existing?.sourceSegmentRef) || segmentOptions[0]?.value || '',
+    targetSegmentValue:
+      serializeConstraintReference(existing?.targetSegmentRef) ||
+      segmentOptions[1]?.value ||
+      segmentOptions[0]?.value ||
+      '',
+    axis: existing?.axis || 'x',
+    distanceExpression: existing?.distanceExpression || '=thickness',
+  };
+}
+
+function buildConstraintPayload(formState) {
+  const base = {
+    type: formState.type,
+    label: formState.label,
+    enabled: formState.enabled,
+  };
+
+  if (formState.type === 'equal_length' || formState.type === 'equal_width' || formState.type === 'equal_height') {
+    return formState.driverEntityId && formState.drivenEntityId
+      ? createSketchConstraint({
+          ...base,
+          driverEntityId: formState.driverEntityId,
+          drivenEntityId: formState.drivenEntityId,
+        })
+      : null;
+  }
+
+  if (formState.type === 'horizontal' || formState.type === 'vertical') {
+    return formState.entityId ? createSketchConstraint({ ...base, entityId: formState.entityId }) : null;
+  }
+
+  if (formState.type === 'coincident_point') {
+    const driverRef = parseSerializedConstraintReference(formState.driverRefValue);
+    const drivenRef = parseSerializedConstraintReference(formState.drivenRefValue);
+    return driverRef && drivenRef ? createSketchConstraint({ ...base, driverRef, drivenRef }) : null;
+  }
+
+  if (formState.type === 'midpoint_lock') {
+    const midpointRef = parseSerializedConstraintReference(formState.midpointRefValue);
+    const drivenRef = parseSerializedConstraintReference(formState.drivenRefValue);
+    return midpointRef && drivenRef ? createSketchConstraint({ ...base, midpointRef, drivenRef }) : null;
+  }
+
+  if (formState.type === 'centered_between') {
+    const betweenStartRef = parseSerializedConstraintReference(formState.betweenStartRefValue);
+    const betweenEndRef = parseSerializedConstraintReference(formState.betweenEndRefValue);
+    return betweenStartRef && betweenEndRef && formState.drivenEntityId
+      ? createSketchConstraint({
+          ...base,
+          betweenStartRef,
+          betweenEndRef,
+          drivenEntityId: formState.drivenEntityId,
+          axis: formState.axis,
+        })
+      : null;
+  }
+
+  if (formState.type === 'offset_distance' || formState.type === 'thickness_offset') {
+    const sourceSegmentRef = parseSerializedConstraintReference(formState.sourceSegmentValue);
+    const targetSegmentRef = parseSerializedConstraintReference(formState.targetSegmentValue);
+    return sourceSegmentRef && targetSegmentRef
+      ? createSketchConstraint({
+          ...base,
+          sourceSegmentRef,
+          targetSegmentRef,
+          distanceExpression: formState.distanceExpression,
+        })
+      : null;
+  }
+
+  return null;
+}
+
+function ConstraintForm({ document, selectedEntities, formState, setFormState, onSubmit, onCancel, submitLabel }) {
+  const entityOptions = getConstraintSupportedEntityOptions(document.entities, formState.type);
+  const referenceEntities = selectedEntities.length ? selectedEntities : document.entities;
+  const pointOptions = getConstraintPointOptions(referenceEntities);
+  const midpointOptions = getConstraintMidpointOptions(referenceEntities);
+  const segmentOptions = getConstraintSegmentOptions(referenceEntities);
+  const setField = (field, value) => setFormState((current) => ({ ...current, [field]: value }));
+
+  return (
+    <div className="sketchStudioSubpanelCard">
+      <div className="sketchStudioPropertyList">
+        <label className="sketchStudioEditableRow">
+          <span className="sketchStudioPropertyKey">Type</span>
+          <select
+            className="sketchStudioPropertyInput"
+            value={formState.type}
+            onChange={(event) =>
+              setFormState(
+                buildConstraintForm(
+                  event.target.value,
+                  document.entities,
+                  selectedEntities,
+                  formState.id ? { ...formState, type: event.target.value } : null,
+                ),
+              )
+            }
+          >
+            {getConstraintTypeOptions().map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="sketchStudioEditableRow">
+          <span className="sketchStudioPropertyKey">Label</span>
+          <input
+            type="text"
+            className="sketchStudioPropertyInput"
+            value={formState.label}
+            onChange={(event) => setField('label', event.target.value)}
+            placeholder="Optional label"
+          />
+        </label>
+      </div>
+      {(formState.type === 'equal_length' || formState.type === 'equal_width' || formState.type === 'equal_height') && (
+        <div className="sketchStudioPropertyList">
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driver</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.driverEntityId}
+              onChange={(event) => setField('driverEntityId', event.target.value)}
+            >
+              {entityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driven</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.drivenEntityId}
+              onChange={(event) => setField('drivenEntityId', event.target.value)}
+            >
+              {entityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {(formState.type === 'horizontal' || formState.type === 'vertical') && (
+        <div className="sketchStudioPropertyList">
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Entity</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.entityId}
+              onChange={(event) => setField('entityId', event.target.value)}
+            >
+              {entityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {formState.type === 'coincident_point' && (
+        <div className="sketchStudioPropertyList">
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driver Point</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.driverRefValue}
+              onChange={(event) => setField('driverRefValue', event.target.value)}
+            >
+              {pointOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driven Point</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.drivenRefValue}
+              onChange={(event) => setField('drivenRefValue', event.target.value)}
+            >
+              {pointOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {formState.type === 'midpoint_lock' && (
+        <div className="sketchStudioPropertyList">
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Midpoint</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.midpointRefValue}
+              onChange={(event) => setField('midpointRefValue', event.target.value)}
+            >
+              {midpointOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driven Point</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.drivenRefValue}
+              onChange={(event) => setField('drivenRefValue', event.target.value)}
+            >
+              {pointOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {formState.type === 'centered_between' && (
+        <div className="sketchStudioPropertyList">
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Start Ref</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.betweenStartRefValue}
+              onChange={(event) => setField('betweenStartRefValue', event.target.value)}
+            >
+              {pointOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">End Ref</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.betweenEndRefValue}
+              onChange={(event) => setField('betweenEndRefValue', event.target.value)}
+            >
+              {pointOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driven</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.drivenEntityId}
+              onChange={(event) => setField('drivenEntityId', event.target.value)}
+            >
+              {entityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Axis</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.axis}
+              onChange={(event) => setField('axis', event.target.value)}
+            >
+              <option value="x">X</option>
+              <option value="y">Y</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+        </div>
+      )}
+      {(formState.type === 'offset_distance' || formState.type === 'thickness_offset') && (
+        <div className="sketchStudioPropertyList">
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Source Segment</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.sourceSegmentValue}
+              onChange={(event) => setField('sourceSegmentValue', event.target.value)}
+            >
+              {segmentOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Driven Segment</span>
+            <select
+              className="sketchStudioPropertyInput"
+              value={formState.targetSegmentValue}
+              onChange={(event) => setField('targetSegmentValue', event.target.value)}
+            >
+              {segmentOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.entityLabel} · {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="sketchStudioEditableRow">
+            <span className="sketchStudioPropertyKey">Distance</span>
+            <input
+              type="text"
+              className="sketchStudioPropertyInput"
+              value={formState.distanceExpression}
+              onChange={(event) => setField('distanceExpression', event.target.value)}
+              placeholder="=thickness"
+            />
+          </label>
+        </div>
+      )}
+      <div className="sketchStudioActionRow">
+        <button type="button" className="sketchStudioInlineButton" onClick={onSubmit}>
+          {submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" className="sketchStudioInlineButton" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConstraintsSection({
+  document,
+  selectedIds,
+  selectedEntities,
+  diagnostics,
+  onVariablesChange,
+  onConstraintAdd,
+  onConstraintUpdate,
+  onConstraintRemove,
+}) {
+  const suggestions = useMemo(() => getSuggestedConstraintTypesForSelection(selectedEntities), [selectedEntities]);
+  const constraintEntries = useMemo(
+    () =>
+      (document.constraints || [])
+        .map((constraint) => ({
+          constraint,
+          diagnostic: diagnostics.find((item) => item.constraintId === constraint.id) || null,
+          relevant:
+            !selectedIds.length ||
+            listConstraintEntityIds(constraint).some((entityId) => selectedIds.includes(entityId)),
+        }))
+        .sort((left, right) => Number(right.relevant) - Number(left.relevant)),
+    [diagnostics, document.constraints, selectedIds],
+  );
+  const initialType = suggestions[0] || 'equal_length';
+  const [editingConstraintId, setEditingConstraintId] = useState(null);
+  const [formState, setFormState] = useState(() =>
+    buildConstraintForm(initialType, document.entities, selectedEntities),
+  );
+
+  useEffect(() => {
+    if (!editingConstraintId) {
+      setFormState(buildConstraintForm(suggestions[0] || 'equal_length', document.entities, selectedEntities));
+    }
+  }, [document.entities, editingConstraintId, selectedEntities, suggestions]);
+
+  const handleSubmit = () => {
+    const payload = buildConstraintPayload(formState);
+    if (!payload) return;
+    if (editingConstraintId) {
+      onConstraintUpdate(editingConstraintId, payload);
+      setEditingConstraintId(null);
+    } else {
+      onConstraintAdd(payload);
+    }
+    setFormState(buildConstraintForm(formState.type, document.entities, selectedEntities));
+  };
+
+  return (
+    <section className="sketchStudioPanelSection">
+      <p className="sketchStudioPanelEyebrow">Constraints</p>
+      {suggestions.length > 0 && (
+        <div className="sketchStudioActionRow">
+          {suggestions.map((type) => (
+            <button
+              key={type}
+              type="button"
+              className="sketchStudioInlineButton"
+              onClick={() => {
+                setEditingConstraintId(null);
+                setFormState(buildConstraintForm(type, document.entities, selectedEntities));
+              }}
+            >
+              {type.replace(/_/g, ' ')}
+            </button>
+          ))}
+        </div>
+      )}
+      <ConstraintForm
+        document={document}
+        selectedEntities={selectedEntities}
+        formState={formState}
+        setFormState={setFormState}
+        onSubmit={handleSubmit}
+        onCancel={
+          editingConstraintId
+            ? () => {
+                setEditingConstraintId(null);
+                setFormState(
+                  buildConstraintForm(suggestions[0] || 'equal_length', document.entities, selectedEntities),
+                );
+              }
+            : null
+        }
+        submitLabel={editingConstraintId ? 'Save Constraint' : 'Add Constraint'}
+      />
+      <div className="sketchStudioConstraintList">
+        {constraintEntries.length ? (
+          constraintEntries.map(({ constraint, diagnostic, relevant }) => (
+            <div key={constraint.id} className={`sketchStudioConstraintCard ${relevant ? 'is-active' : ''}`}>
+              <div className="sketchStudioSubpanelHeader">
+                <strong className="sketchStudioLibraryName">{constraint.label}</strong>
+                <span className={`sketchStudioConstraintStatus is-${diagnostic?.status || 'applied'}`}>
+                  {diagnostic?.statusLabel || 'Applied'}
+                </span>
+              </div>
+              <p className="sketchStudioLibraryMeta">{constraint.type.replace(/_/g, ' ')}</p>
+              <p className="sketchStudioConstraintSummary">{getSketchConstraintSummary(constraint)}</p>
+              {diagnostic?.message && <p className="sketchStudioConstraintMessage">{diagnostic.message}</p>}
+              <div className="sketchStudioActionRow">
+                <button
+                  type="button"
+                  className="sketchStudioInlineButton"
+                  onClick={() => {
+                    setEditingConstraintId(constraint.id);
+                    setFormState(buildConstraintForm(constraint.type, document.entities, selectedEntities, constraint));
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="sketchStudioInlineButton"
+                  onClick={() => onConstraintUpdate(constraint.id, { enabled: !constraint.enabled })}
+                >
+                  {constraint.enabled === false ? 'Enable' : 'Disable'}
+                </button>
+                <button
+                  type="button"
+                  className="sketchStudioInlineButton"
+                  onClick={() => onConstraintRemove(constraint.id)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="sketchStudioPlaceholderCard">
+            <p className="sketchStudioPlaceholderText">No constraints</p>
+            <p className="sketchStudioPlaceholderSubtext">Use the form above to tie selected geometry together.</p>
+          </div>
+        )}
+      </div>
+      <div className="sketchStudioSubpanelCard">
+        <ParametricPanel
+          variables={document.variables || []}
+          entities={document.entities}
+          constraints={document.constraints || []}
+          onVariablesChange={onVariablesChange}
+        />
+      </div>
+    </section>
+  );
+}
+
 export default function RightPanel({
+  document,
   selectedEntity,
+  selectedEntities,
+  selectedIds,
   groupSelectionSummary,
   selectedMeasurements,
   selectedProfileInfo,
   isBrokenLineSelection,
+  constraintDiagnostics,
   onEntityFieldCommit,
+  onVariablesChange,
+  onConstraintAdd,
+  onConstraintUpdate,
+  onConstraintRemove,
   onRotateLeft,
   onRotateRight,
   onFlipHorizontal,
@@ -160,11 +729,19 @@ export default function RightPanel({
               onToggleBrokenLines={onToggleBrokenLines}
             />
             <div className="sketchStudioPropertyList">
-              <div className="sketchStudioPropertyRow"><span className="sketchStudioPropertyKey">Type</span><span className="sketchStudioPropertyValue">{selectedEntity.type}</span></div>
-              <div className="sketchStudioPropertyRow"><span className="sketchStudioPropertyKey">Layer</span><span className="sketchStudioPropertyValue">{selectedEntity.layerId}</span></div>
+              <div className="sketchStudioPropertyRow">
+                <span className="sketchStudioPropertyKey">Type</span>
+                <span className="sketchStudioPropertyValue">{selectedEntity.type}</span>
+              </div>
+              <div className="sketchStudioPropertyRow">
+                <span className="sketchStudioPropertyKey">Layer</span>
+                <span className="sketchStudioPropertyValue">{selectedEntity.layerId}</span>
+              </div>
               {renderReadOnlyRows(selectedMeasurements)}
             </div>
-            <div className="sketchStudioPropertyList sketchStudioEditableList">{renderEditableFields(selectedEntity, onEntityFieldCommit)}</div>
+            <div className="sketchStudioPropertyList sketchStudioEditableList">
+              {renderEditableFields(selectedEntity, onEntityFieldCommit)}
+            </div>
           </>
         ) : groupSelectionSummary ? (
           <>
@@ -180,19 +757,29 @@ export default function RightPanel({
               <p className="sketchStudioPlaceholderText">{groupSelectionSummary.count} entities selected</p>
               <p className="sketchStudioPlaceholderSubtext">
                 {groupSelectionSummary.types}
-                {selectedProfileInfo ? ` • ${selectedProfileInfo.count} profile source${selectedProfileInfo.count > 1 ? 's' : ''}` : ''}
+                {selectedProfileInfo
+                  ? ` • ${selectedProfileInfo.count} profile source${selectedProfileInfo.count > 1 ? 's' : ''}`
+                  : ''}
               </p>
             </div>
           </>
         ) : (
           <div className="sketchStudioPlaceholderCard">
             <p className="sketchStudioPlaceholderText">No selection</p>
-            <p className="sketchStudioPlaceholderSubtext">
-              Select an entity to inspect and edit it here.
-            </p>
+            <p className="sketchStudioPlaceholderSubtext">Select an entity to inspect and edit it here.</p>
           </div>
         )}
       </section>
+      <ConstraintsSection
+        document={document}
+        selectedIds={selectedIds}
+        selectedEntities={selectedEntities}
+        diagnostics={constraintDiagnostics || []}
+        onVariablesChange={onVariablesChange}
+        onConstraintAdd={onConstraintAdd}
+        onConstraintUpdate={onConstraintUpdate}
+        onConstraintRemove={onConstraintRemove}
+      />
     </aside>
   );
 }

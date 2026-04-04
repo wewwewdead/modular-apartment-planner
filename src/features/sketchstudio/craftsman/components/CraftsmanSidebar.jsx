@@ -12,12 +12,7 @@ function CollapsibleSection({ title, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className={styles.collapsibleSection}>
-      <button
-        type="button"
-        className={styles.collapsibleHeader}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
+      <button type="button" className={styles.collapsibleHeader} onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className={styles.collapsibleArrow}>{open ? '\u25BC' : '\u25B6'}</span>
         {title}
       </button>
@@ -29,11 +24,18 @@ function CollapsibleSection({ title, defaultOpen = true, children }) {
 export default function CraftsmanSidebar({
   entities,
   selectedEntity,
+  selectedEntities,
   selectedIds,
   variables,
+  constraints,
+  joints,
+  jointDiagnostics,
   onMaterialChange,
   onThicknessChange,
   onVariablesChange,
+  onJointAdd,
+  onJointUpdate,
+  onJointRemove,
   onLoadTemplate,
   onDuplicateEntities,
 }) {
@@ -77,7 +79,13 @@ export default function CraftsmanSidebar({
       )}
 
       <CollapsibleSection title="Bill of Materials" defaultOpen={hasEntities}>
-        <BomPanel bomRows={bomRows} totalCost={totalCost} costByMaterial={costByMaterial} onRemoveRow={onMaterialChange} onDuplicateRow={onDuplicateEntities} />
+        <BomPanel
+          bomRows={bomRows}
+          totalCost={totalCost}
+          costByMaterial={costByMaterial}
+          onRemoveRow={onMaterialChange}
+          onDuplicateRow={onDuplicateEntities}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="Cut-List Optimizer" defaultOpen={false}>
@@ -85,11 +93,26 @@ export default function CraftsmanSidebar({
       </CollapsibleSection>
 
       <CollapsibleSection title="Joint Library" defaultOpen={false}>
-        <JointPanel selectedEntity={selectedEntity} entities={entities} />
+        <JointPanel
+          entities={entities}
+          selectedEntity={selectedEntity}
+          selectedEntities={selectedEntities}
+          selectedIds={selectedIds}
+          joints={joints || []}
+          diagnostics={jointDiagnostics || []}
+          onJointAdd={onJointAdd}
+          onJointUpdate={onJointUpdate}
+          onJointRemove={onJointRemove}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="Parametric Variables" defaultOpen={false}>
-        <ParametricPanel variables={variables || []} entities={entities} onVariablesChange={onVariablesChange} />
+        <ParametricPanel
+          variables={variables || []}
+          entities={entities}
+          constraints={constraints || []}
+          onVariablesChange={onVariablesChange}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="Assembly Instructions" defaultOpen={false}>

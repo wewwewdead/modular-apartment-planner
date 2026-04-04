@@ -3,17 +3,22 @@ import { toggleBrokenLineForEntities } from '../utils/entityUtils';
 import sketchStudioInitialState from './sketchStudioInitialState';
 import sketchStudioReducer from './sketchStudioReducer';
 import {
+  addJoint,
   commitEntity,
+  deleteSelected,
   endHandleDrag,
   endTransform,
   loadWorkspaceSnapshot,
   patchTransform,
   redo,
+  removeJoint,
+  setSelection,
   setDocumentEntities,
   setViewport,
   startHandleDrag,
   startTransform,
   undo,
+  updateJoint,
 } from './sketchStudioActions';
 
 function createState() {
@@ -51,6 +56,21 @@ function createCircleEntity(id, cx, cy, r) {
     cx,
     cy,
     r,
+    layerId: 'default',
+    meta: {},
+  };
+}
+
+function createRectEntity(id, x, y, width, height, thickness = 18) {
+  return {
+    id,
+    type: 'rect',
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    thickness,
     layerId: 'default',
     meta: {},
   };
@@ -279,5 +299,91 @@ describe('sketchStudioReducer history', () => {
     const undoneState = sketchStudioReducer(endedState, undo());
 
     expect(undoneState.document.entities.map((entity) => entity.id)).toEqual(['circle-1', 'arc-1']);
+  });
+
+  it('adds, updates, and removes joints while keeping generated geometry in sync', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [
+          createRectEntity('panel', 0, 0, 200, 120, 18),
+          createRectEntity('shelf', 40, -18, 60, 18, 18),
+        ],
+      },
+    };
+    const joint = {
+      id: 'joint-dado',
+      type: 'dado',
+      primaryEntityId: 'panel',
+      secondaryEntityId: 'shelf',
+      primaryEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
+      secondaryEdgeRef: { entityId: 'shelf', sourceType: 'segment', sourceKey: 'bottom' },
+      parameters: {
+        width: 60,
+        depth: 6,
+      },
+    };
+
+    const addedState = sketchStudioReducer(baseState, addJoint(joint));
+
+    expect(addedState.document.joints).toHaveLength(1);
+    expect(addedState.jointDiagnostics[0]).toMatchObject({ jointId: 'joint-dado', status: 'applied' });
+    expect(addedState.manufacturingPreviewEntities[0]).toMatchObject({
+      type: 'feature',
+      width: 60,
+      depth: 6,
+    });
+
+    const updatedState = sketchStudioReducer(addedState, updateJoint('joint-dado', {
+      parameters: {
+        depth: 9,
+      },
+    }));
+
+    expect(updatedState.manufacturingPreviewEntities[0]).toMatchObject({
+      type: 'feature',
+      width: 60,
+      depth: 9,
+    });
+
+    const removedState = sketchStudioReducer(updatedState, removeJoint('joint-dado'));
+
+    expect(removedState.document.joints).toEqual([]);
+    expect(removedState.manufacturingPreviewEntities).toEqual([]);
+  });
+
+  it('prunes dependent joints when selected source entities are deleted', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [
+          createRectEntity('panel', 0, 0, 200, 120, 18),
+          createRectEntity('back', 50, -18, 100, 18, 6),
+        ],
+      },
+    };
+    const joint = {
+      id: 'joint-rabbet',
+      type: 'rabbet',
+      primaryEntityId: 'panel',
+      secondaryEntityId: 'back',
+      primaryEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
+      secondaryEdgeRef: { entityId: 'back', sourceType: 'segment', sourceKey: 'bottom' },
+      parameters: {
+        width: 100,
+        depth: 9,
+      },
+    };
+    const withJointState = sketchStudioReducer(baseState, addJoint(joint));
+    const withSelectionState = sketchStudioReducer(withJointState, setSelection(['back']));
+    const deletedState = sketchStudioReducer(withSelectionState, deleteSelected());
+
+    expect(deletedState.document.entities.map((entity) => entity.id)).toEqual(['panel']);
+    expect(deletedState.document.joints).toEqual([]);
+    expect(deletedState.manufacturingPreviewEntities).toEqual([]);
   });
 });

@@ -1,4 +1,5 @@
 import sampleDocument from '../data/sampleDocument';
+import { resolveSketchDocument } from '../utils/sketchDocumentResolver';
 
 const emptySelectionBox = {
   start: null,
@@ -14,11 +15,14 @@ const emptyPrecisionInput = {
   radius: '',
   diameter: '',
   offset: '',
+  angle: '',
   activeField: null,
 };
 
+const initialDocumentState = resolveSketchDocument(sampleDocument);
+
 const sketchStudioInitialState = {
-  document: sampleDocument,
+  document: initialDocumentState.document,
   viewport: {
     zoom: 1,
     panX: 0,
@@ -77,6 +81,10 @@ const sketchStudioInitialState = {
     past: [],
     future: [],
   },
+  constraintDiagnostics: initialDocumentState.constraintDiagnostics,
+  jointDiagnostics: initialDocumentState.jointDiagnostics,
+  manufacturingPreviewEntities: initialDocumentState.manufacturingPreviewEntities,
+  manufacturingExportEntities: initialDocumentState.manufacturingExportEntities,
 };
 
 export default sketchStudioInitialState;

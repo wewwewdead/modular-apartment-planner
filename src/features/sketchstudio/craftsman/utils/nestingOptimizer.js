@@ -92,10 +92,11 @@ function expandLinearRows(bomRows) {
 
     const rawWidth = toPositiveNumber(row.width);
     const rawHeight = toPositiveNumber(row.height);
-    const cutLength = Math.max(rawWidth, rawHeight);
+    const cutLength = firstPositive(row.stockLength, Math.max(rawWidth, rawHeight));
     if (!cutLength) continue;
 
     const sectionWidth = firstPositive(
+      row.stockSectionWidth,
       minPositive(rawWidth, rawHeight),
       row.defaultStockWidth,
       row.thickness,

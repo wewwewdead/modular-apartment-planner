@@ -12,6 +12,18 @@ function getPartDimension(part, key) {
   return 0;
 }
 
+function serializeBomKeyPart(value) {
+  if (value == null || value === '') {
+    return '';
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value.toFixed(4) : '';
+  }
+
+  return String(value);
+}
+
 export function computePartCutSize(part) {
   return {
     width: getPartDimension(part, 'width'),
@@ -36,18 +48,27 @@ export function buildObjectBom(objectDraft) {
   });
 }
 
+export function getBomRowGroupKey(row = {}) {
+  return [
+    row.partName,
+    row.role,
+    row.material,
+    row.thickness,
+    row.width,
+    row.height,
+    row.areaMm2,
+    row.stockLength,
+    row.stockSectionWidth,
+    row.dimensionAccuracy,
+    row.dimensionNote,
+  ].map(serializeBomKeyPart).join('|');
+}
+
 export function groupBomRows(rows = []) {
   const grouped = new Map();
 
   rows.forEach((row) => {
-    const key = [
-      row.partName,
-      row.role,
-      row.material,
-      row.thickness,
-      row.width,
-      row.height,
-    ].join('|');
+    const key = getBomRowGroupKey(row);
     const existing = grouped.get(key);
     if (existing) {
       existing.quantity += row.quantity || 1;

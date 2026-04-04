@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { groupBomRows } from '../../utils/bomUtils';
+import { getBomRowGroupKey, groupBomRows } from '../../utils/bomUtils';
 import { computeRowCost } from '../../utils/materialCostUtils';
 import { entitiesToBomRows } from '../utils/entityBomAdapter';
 import materials, { buildMaterialPricingDict } from '../data/materials';
@@ -15,7 +15,7 @@ export default function useSketchBOM(entities) {
     // Collect all entity IDs per grouped row for removal support
     const entityIdsByKey = new Map();
     for (const row of rawRows) {
-      const key = [row.partName, row.role, row.material, row.thickness, row.width, row.height].join('|');
+      const key = getBomRowGroupKey(row);
       const ids = entityIdsByKey.get(key);
       if (ids) {
         ids.push(row.partId);
@@ -24,24 +24,27 @@ export default function useSketchBOM(entities) {
       }
     }
 
-    let totalCost = 0;
-    const costByMaterial = {};
-
-    const bomRows = grouped.map((row) => {
+    const { bomRows, totalCost, costByMaterial } = grouped.reduce((accumulator, row) => {
       const cost = computeRowCost(row, materialPricing);
-      totalCost += cost.totalCost;
+      const key = getBomRowGroupKey(row);
+
       if (row.material) {
-        costByMaterial[row.material] = (costByMaterial[row.material] || 0) + cost.totalCost;
+        accumulator.costByMaterial[row.material] = (accumulator.costByMaterial[row.material] || 0) + cost.totalCost;
       }
-      const key = [row.partName, row.role, row.material, row.thickness, row.width, row.height].join('|');
-      return {
+
+      accumulator.totalCost += cost.totalCost;
+      accumulator.bomRows.push({
         ...row,
         entityIds: entityIdsByKey.get(key) || [],
-        area: cost.area,
+        ...cost,
         costBasis: row.costBasis ?? cost.costBasis,
-        unitCost: cost.unitCost,
-        totalCost: cost.totalCost,
-      };
+      });
+
+      return accumulator;
+    }, {
+      bomRows: [],
+      totalCost: 0,
+      costByMaterial: {},
     });
 
     return { bomRows, totalCost, costByMaterial };

@@ -32,12 +32,17 @@ export default function SketchStudioLayout(props) {
     tools,
     visibleEntities,
     selectedEntity,
+    selectedEntities,
     selectedMeasurements,
     selectedHandles,
     selectionBounds,
     groupSelectionSummary,
     selectedProfileInfo,
     isBrokenLineSelection,
+    constraintDiagnostics,
+    jointDiagnostics,
+    manufacturingPreviewEntities,
+    manufacturingExportEntities,
     setActiveTool,
     toggleOrtho,
     toggleSnap,
@@ -63,6 +68,12 @@ export default function SketchStudioLayout(props) {
     setEntityThickness,
     toggleCraftsmanMode,
     setVariables,
+    addConstraint,
+    updateConstraint,
+    removeConstraint,
+    addJoint,
+    updateJoint,
+    removeJoint,
     loadTemplate,
     duplicateEntities,
   } = props;
@@ -70,13 +81,20 @@ export default function SketchStudioLayout(props) {
   const [showGallery, setShowGallery] = useState(false);
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(document.entities);
 
-  const handleLoadTemplate = useCallback((workspace) => {
-    if (document.entities.length > 0 && !window.confirm('Loading a template will replace your current sketch. Continue?')) return;
-    if (workspace?.document) {
-      loadTemplate(workspace);
-    }
-    setShowGallery(false);
-  }, [document.entities.length, loadTemplate]);
+  const handleLoadTemplate = useCallback(
+    (workspace) => {
+      if (
+        document.entities.length > 0 &&
+        !window.confirm('Loading a template will replace your current sketch. Continue?')
+      )
+        return;
+      if (workspace?.document) {
+        loadTemplate(workspace);
+      }
+      setShowGallery(false);
+    },
+    [document.entities.length, loadTemplate],
+  );
 
   const handleOpenSketch = async () => {
     if (canUseSketchOpenFilePicker()) {
@@ -148,6 +166,7 @@ export default function SketchStudioLayout(props) {
             draftPreview={draftPreview}
             precisionHud={precisionHud}
             snap={snap}
+            manufacturingPreviewEntities={ui.craftsmanMode ? manufacturingPreviewEntities : []}
             selectedHandles={selectedHandles}
             selectionBounds={selectionBounds}
             isPanning={interaction.mode === 'panning'}
@@ -158,31 +177,43 @@ export default function SketchStudioLayout(props) {
           />
           {ui.craftsmanMode ? (
             showGallery ? (
-              <TemplateGallery
-                onLoadTemplate={handleLoadTemplate}
-                onBack={() => setShowGallery(false)}
-              />
+              <TemplateGallery onLoadTemplate={handleLoadTemplate} onBack={() => setShowGallery(false)} />
             ) : (
               <CraftsmanSidebar
                 entities={document.entities}
                 selectedEntity={selectedEntity}
+                selectedEntities={selectedEntities}
                 selectedIds={selection.selectedIds}
                 variables={document.variables}
+                constraints={document.constraints}
+                joints={document.joints}
+                jointDiagnostics={jointDiagnostics}
                 onMaterialChange={setEntityMaterial}
                 onThicknessChange={setEntityThickness}
                 onVariablesChange={setVariables}
+                onJointAdd={addJoint}
+                onJointUpdate={updateJoint}
+                onJointRemove={removeJoint}
                 onLoadTemplate={() => setShowGallery(true)}
                 onDuplicateEntities={duplicateEntities}
               />
             )
           ) : (
             <RightPanel
+              document={document}
               selectedEntity={selectedEntity}
+              selectedEntities={selectedEntities}
+              selectedIds={selection.selectedIds}
               groupSelectionSummary={groupSelectionSummary}
               selectedMeasurements={selectedMeasurements}
               selectedProfileInfo={selectedProfileInfo}
               isBrokenLineSelection={isBrokenLineSelection}
+              constraintDiagnostics={constraintDiagnostics}
               onEntityFieldCommit={updateSelectedEntityField}
+              onVariablesChange={setVariables}
+              onConstraintAdd={addConstraint}
+              onConstraintUpdate={updateConstraint}
+              onConstraintRemove={removeConstraint}
               onRotateLeft={rotateSelectionLeft}
               onRotateRight={rotateSelectionRight}
               onFlipHorizontal={flipSelectionHorizontal}
@@ -193,7 +224,8 @@ export default function SketchStudioLayout(props) {
         </div>
         {ui.craftsmanMode && (
           <ExportBar
-            entities={document.entities}
+            entities={manufacturingExportEntities}
+            referenceEntities={document.entities}
             selectedIds={selection.selectedIds}
             bomRows={bomRows}
             totalCost={totalCost}

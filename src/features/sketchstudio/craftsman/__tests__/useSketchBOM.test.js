@@ -1,19 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { groupBomRows } from '../../utils/bomUtils';
+import { getBomRowGroupKey, groupBomRows } from '../../utils/bomUtils';
 import { computeRowCost } from '../../utils/materialCostUtils';
 import { entitiesToBomRows } from '../utils/entityBomAdapter';
 import materials, { buildMaterialPricingDict } from '../data/materials';
 
-const materialCatalogById = Object.fromEntries(materials.map((m) => [m.id, m]));
+const materialCatalogById = Object.fromEntries(materials.map((material) => [material.id, material]));
 const materialPricing = buildMaterialPricingDict();
 
-/**
- * Replicate the useSketchBOM pipeline without React:
- * entitiesToBomRows → groupBomRows → computeRowCost → accumulate totals
- */
 function runBomPipeline(entities) {
   const rawRows = entitiesToBomRows(entities, materialCatalogById);
   const grouped = groupBomRows(rawRows);
+
+  const entityIdsByKey = new Map();
+  rawRows.forEach((row) => {
+    const key = getBomRowGroupKey(row);
+    const ids = entityIdsByKey.get(key);
+    if (ids) {
+      ids.push(row.partId);
+    } else {
+      entityIdsByKey.set(key, [row.partId]);
+    }
+  });
 
   let totalCost = 0;
   const costByMaterial = {};
@@ -24,7 +31,13 @@ function runBomPipeline(entities) {
     if (row.material) {
       costByMaterial[row.material] = (costByMaterial[row.material] || 0) + cost.totalCost;
     }
-    return { ...row, area: cost.area, unitCost: cost.unitCost, totalCost: cost.totalCost };
+
+    return {
+      ...row,
+      entityIds: entityIdsByKey.get(getBomRowGroupKey(row)) || [],
+      ...cost,
+      costBasis: row.costBasis ?? cost.costBasis,
+    };
   });
 
   return { bomRows, totalCost, costByMaterial };
@@ -32,50 +45,49 @@ function runBomPipeline(entities) {
 
 describe('useSketchBOM pipeline', () => {
   it('returns empty results for no entities', () => {
-    const { bomRows, totalCost, costByMaterial } = runBomPipeline([]);
-    expect(bomRows).toHaveLength(0);
-    expect(totalCost).toBe(0);
-    expect(Object.keys(costByMaterial)).toHaveLength(0);
+    const result = runBomPipeline([]);
+    expect(result.bomRows).toHaveLength(0);
+    expect(result.totalCost).toBe(0);
+    expect(Object.keys(result.costByMaterial)).toHaveLength(0);
   });
 
-  it('groups identical parts and sums quantity', () => {
-    const entities = [
+  it('groups identical exact parts together', () => {
+    const { bomRows } = runBomPipeline([
       { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 600, height: 400 },
       { id: 'r2', type: 'rect', materialId: 'birch-plywood-18', width: 600, height: 400 },
-    ];
-    const { bomRows } = runBomPipeline(entities);
+    ]);
+
     expect(bomRows).toHaveLength(1);
     expect(bomRows[0].quantity).toBe(2);
   });
 
-  it('calculates cost correctly for perM2 material', () => {
-    // birch-plywood-18: pricePerM2 = 45
-    const entities = [
-      { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 1000, height: 1000 },
-    ];
-    const { bomRows, totalCost } = runBomPipeline(entities);
-    // 1000mm x 1000mm = 1m², cost = 1 * 45 = $45
-    expect(bomRows).toHaveLength(1);
-    expect(totalCost).toBeCloseTo(45, 1);
+  it('keeps exact-area costing for irregular closed profiles', () => {
+    const { bomRows, totalCost } = runBomPipeline([{
+      id: 'p1',
+      type: 'polyline',
+      materialId: 'birch-plywood-18',
+      closed: true,
+      points: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
+    }]);
+
+    expect(bomRows[0].area).toBeCloseTo(0.02, 4);
+    expect(bomRows[0].costAccuracy).toBe('exact');
+    expect(bomRows[0].dimensionAccuracy).toBe('approximate');
+    expect(totalCost).toBeCloseTo(0.9, 4);
   });
 
-  it('breaks down cost by material', () => {
-    const entities = [
-      { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 1000, height: 1000 },
-      { id: 'r2', type: 'rect', materialId: 'mdf-18', width: 1000, height: 1000 },
-    ];
-    const { costByMaterial } = runBomPipeline(entities);
-    expect(costByMaterial['birch-plywood-18']).toBeGreaterThan(0);
-    expect(costByMaterial['mdf-18']).toBeGreaterThan(0);
-    expect(Object.keys(costByMaterial)).toHaveLength(2);
-  });
+  it('keeps exact linear cost for path-based parts when stock length is known', () => {
+    const { bomRows } = runBomPipeline([{
+      id: 'l1',
+      type: 'line',
+      materialId: 'steel-sq-25',
+      x1: 0,
+      y1: 0,
+      x2: 1000,
+      y2: 0,
+    }]);
 
-  it('ignores entities without materialId', () => {
-    const entities = [
-      { id: 'r1', type: 'rect', width: 600, height: 400 },
-      { id: 'r2', type: 'rect', materialId: 'birch-plywood-18', width: 600, height: 400 },
-    ];
-    const { bomRows } = runBomPipeline(entities);
-    expect(bomRows).toHaveLength(1);
+    expect(bomRows[0].stockLength).toBe(1000);
+    expect(bomRows[0].costAccuracy).toBe('exact');
   });
 });

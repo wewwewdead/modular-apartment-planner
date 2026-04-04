@@ -34,7 +34,7 @@ function getEllipseBoundingBox(entity) {
   };
 }
 
-export function computeEntityBoundingBox(entity, entities = []) {
+export function computeEntityBoundingBox(entity, _entities = []) {
   if (!entity) {
     return null;
   }
@@ -85,11 +85,12 @@ export function computeEntityBoundingBox(entity, entities = []) {
   }
 
   if (entity.type === 'circle') {
+    const radius = entity.r ?? entity.radius ?? 0;
     return {
-      minX: entity.cx - entity.r,
-      minY: entity.cy - entity.r,
-      maxX: entity.cx + entity.r,
-      maxY: entity.cy + entity.r,
+      minX: entity.cx - radius,
+      minY: entity.cy - radius,
+      maxX: entity.cx + radius,
+      maxY: entity.cy + radius,
     };
   }
 

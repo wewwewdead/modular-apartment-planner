@@ -157,10 +157,10 @@ function canDuplicateDimension(entity, selectedIdSet) {
 
 export function duplicateEntitiesByIds(entities, entityIds) {
   const selectedIdSet = new Set(entityIds);
-  const duplicableEntities = entities.filter((entity) => (
-    selectedIdSet.has(entity.id)
-      && (entity.type !== 'dimension' || canDuplicateDimension(entity, selectedIdSet))
-  ));
+  const duplicableEntities = entities.filter(
+    (entity) =>
+      selectedIdSet.has(entity.id) && (entity.type !== 'dimension' || canDuplicateDimension(entity, selectedIdSet)),
+  );
   const idMap = new Map();
   const nextEntities = [...entities];
 
@@ -175,10 +175,7 @@ export function duplicateEntitiesByIds(entities, entityIds) {
 
   const duplicatedEntities = duplicableEntities.map((entity) => cloneEntityWithId(entity, idMap.get(entity.id), idMap));
   const duplicatedIdSet = new Set(duplicatedEntities.map((entity) => entity.id));
-  const mergedEntities = [
-    ...entities,
-    ...duplicatedEntities,
-  ];
+  const mergedEntities = [...entities, ...duplicatedEntities];
 
   return {
     entities: mergedEntities,
@@ -246,7 +243,9 @@ export function normalizeRectFromPoints(startPoint, endPoint) {
 }
 
 function sanitizeTextValue(rawValue) {
-  const normalized = String(rawValue ?? '').replace(/\r?\n/g, ' ').trim();
+  const normalized = String(rawValue ?? '')
+    .replace(/\r?\n/g, ' ')
+    .trim();
   return normalized || DEFAULT_TEXT_LABEL;
 }
 
@@ -286,14 +285,19 @@ export function getTextCorners(entity) {
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
 
-  return Object.fromEntries(Object.entries(corners).map(([key, point]) => {
-    const dx = point.x - anchor.x;
-    const dy = point.y - anchor.y;
-    return [key, {
-      x: anchor.x + (dx * cos) - (dy * sin),
-      y: anchor.y + (dx * sin) + (dy * cos),
-    }];
-  }));
+  return Object.fromEntries(
+    Object.entries(corners).map(([key, point]) => {
+      const dx = point.x - anchor.x;
+      const dy = point.y - anchor.y;
+      return [
+        key,
+        {
+          x: anchor.x + dx * cos - dy * sin,
+          y: anchor.y + dx * sin + dy * cos,
+        },
+      ];
+    }),
+  );
 }
 
 export function getRectCenter(entity) {
@@ -321,14 +325,19 @@ export function getRectCorners(entity) {
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
 
-  return Object.fromEntries(Object.entries(corners).map(([key, point]) => {
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    return [key, {
-      x: center.x + (dx * cos) - (dy * sin),
-      y: center.y + (dx * sin) + (dy * cos),
-    }];
-  }));
+  return Object.fromEntries(
+    Object.entries(corners).map(([key, point]) => {
+      const dx = point.x - center.x;
+      const dy = point.y - center.y;
+      return [
+        key,
+        {
+          x: center.x + dx * cos - dy * sin,
+          y: center.y + dx * sin + dy * cos,
+        },
+      ];
+    }),
+  );
 }
 
 export function createLineEntity(startPoint, endPoint, entities, layerId = 'default') {
@@ -338,14 +347,17 @@ export function createLineEntity(startPoint, endPoint, entities, layerId = 'defa
     return null;
   }
 
-  return createBaseEntity({
-    id: createEntityId('line', entities),
-    type: 'line',
-    x1: startPoint.x,
-    y1: startPoint.y,
-    x2: endPoint.x,
-    y2: endPoint.y,
-  }, layerId);
+  return createBaseEntity(
+    {
+      id: createEntityId('line', entities),
+      type: 'line',
+      x1: startPoint.x,
+      y1: startPoint.y,
+      x2: endPoint.x,
+      y2: endPoint.y,
+    },
+    layerId,
+  );
 }
 
 export function createRectEntity(startPoint, endPoint, entities, layerId = 'default') {
@@ -355,12 +367,15 @@ export function createRectEntity(startPoint, endPoint, entities, layerId = 'defa
     return null;
   }
 
-  return createBaseEntity({
-    id: createEntityId('rect', entities),
-    type: 'rect',
-    rotation: 0,
-    ...rect,
-  }, layerId);
+  return createBaseEntity(
+    {
+      id: createEntityId('rect', entities),
+      type: 'rect',
+      rotation: 0,
+      ...rect,
+    },
+    layerId,
+  );
 }
 
 export function createCircleEntity(centerPoint, radiusPoint, entities, layerId = 'default') {
@@ -370,13 +385,16 @@ export function createCircleEntity(centerPoint, radiusPoint, entities, layerId =
     return null;
   }
 
-  return createBaseEntity({
-    id: createEntityId('circle', entities),
-    type: 'circle',
-    cx: centerPoint.x,
-    cy: centerPoint.y,
-    r: radius,
-  }, layerId);
+  return createBaseEntity(
+    {
+      id: createEntityId('circle', entities),
+      type: 'circle',
+      cx: centerPoint.x,
+      cy: centerPoint.y,
+      r: radius,
+    },
+    layerId,
+  );
 }
 
 export function createEllipseEntity(centerPoint, radiusPoint, entities, layerId = 'default', options = {}) {
@@ -386,20 +404,23 @@ export function createEllipseEntity(centerPoint, radiusPoint, entities, layerId 
     return null;
   }
 
-  return createBaseEntity({
-    id: createEntityId('ellipse', entities),
-    type: 'ellipse',
-    cx: ellipse.cx,
-    cy: ellipse.cy,
-    rx: ellipse.rx,
-    ry: ellipse.ry,
-    rotation: ellipse.rotation,
-    meta: {
-      projectionMode: 'isometric',
-      isometricPlane: options.plane || ellipse.plane || 'top',
-      ...options.meta,
+  return createBaseEntity(
+    {
+      id: createEntityId('ellipse', entities),
+      type: 'ellipse',
+      cx: ellipse.cx,
+      cy: ellipse.cy,
+      rx: ellipse.rx,
+      ry: ellipse.ry,
+      rotation: ellipse.rotation,
+      meta: {
+        projectionMode: 'isometric',
+        isometricPlane: options.plane || ellipse.plane || 'top',
+        ...options.meta,
+      },
     },
-  }, layerId);
+    layerId,
+  );
 }
 
 export function createFeatureEntity(featureConfig, entities, layerId = 'default') {
@@ -432,12 +453,15 @@ export function createFeatureEntity(featureConfig, entities, layerId = 'default'
       return null;
     }
 
-    return createBaseEntity({
-      ...base,
-      cx: featureConfig.cx,
-      cy: featureConfig.cy,
-      diameter,
-    }, layerId);
+    return createBaseEntity(
+      {
+        ...base,
+        cx: featureConfig.cx,
+        cy: featureConfig.cy,
+        diameter,
+      },
+      layerId,
+    );
   }
 
   if (featureConfig.shape === 'rect') {
@@ -448,13 +472,16 @@ export function createFeatureEntity(featureConfig, entities, layerId = 'default'
       return null;
     }
 
-    return createBaseEntity({
-      ...base,
-      x: featureConfig.x,
-      y: featureConfig.y,
-      width,
-      height,
-    }, layerId);
+    return createBaseEntity(
+      {
+        ...base,
+        x: featureConfig.x,
+        y: featureConfig.y,
+        width,
+        height,
+      },
+      layerId,
+    );
   }
 
   if (featureConfig.shape === 'ellipse') {
@@ -465,14 +492,17 @@ export function createFeatureEntity(featureConfig, entities, layerId = 'default'
       return null;
     }
 
-    return createBaseEntity({
-      ...base,
-      cx: featureConfig.cx,
-      cy: featureConfig.cy,
-      rx,
-      ry,
-      rotation: Number(featureConfig.rotation) || 0,
-    }, layerId);
+    return createBaseEntity(
+      {
+        ...base,
+        cx: featureConfig.cx,
+        cy: featureConfig.cy,
+        rx,
+        ry,
+        rotation: Number(featureConfig.rotation) || 0,
+      },
+      layerId,
+    );
   }
 
   if (featureConfig.shape === 'polygon') {
@@ -484,11 +514,14 @@ export function createFeatureEntity(featureConfig, entities, layerId = 'default'
       return null;
     }
 
-    return createBaseEntity({
-      ...base,
-      points,
-      closed: true,
-    }, layerId);
+    return createBaseEntity(
+      {
+        ...base,
+        points,
+        closed: true,
+      },
+      layerId,
+    );
   }
 
   return null;
@@ -499,12 +532,15 @@ export function createPolylineEntity(points, entities, layerId = 'default', clos
     return null;
   }
 
-  return createBaseEntity({
-    id: createEntityId('polyline', entities),
-    type: 'polyline',
-    points: points.map((point) => ({ ...point })),
-    closed,
-  }, layerId);
+  return createBaseEntity(
+    {
+      id: createEntityId('polyline', entities),
+      type: 'polyline',
+      points: points.map((point) => ({ ...point })),
+      closed,
+    },
+    layerId,
+  );
 }
 
 export function createArcEntity(start, end, control, entities, layerId = 'default', meta) {
@@ -512,13 +548,16 @@ export function createArcEntity(start, end, control, entities, layerId = 'defaul
     return null;
   }
 
-  const entity = createBaseEntity({
-    id: createEntityId('arc', entities),
-    type: 'arc',
-    start: { ...start },
-    end: { ...end },
-    control: { ...control },
-  }, layerId);
+  const entity = createBaseEntity(
+    {
+      id: createEntityId('arc', entities),
+      type: 'arc',
+      start: { ...start },
+      end: { ...end },
+      control: { ...control },
+    },
+    layerId,
+  );
 
   if (meta) {
     entity.meta = { ...entity.meta, ...meta };
@@ -532,15 +571,18 @@ export function createTextEntity(point, entities, layerId = 'default', options =
     return null;
   }
 
-  return createBaseEntity({
-    id: createEntityId('text', entities),
-    type: 'text',
-    x: point.x,
-    y: point.y,
-    text: sanitizeTextValue(options.text),
-    fontSize: Math.max(Number(options.fontSize) || DEFAULT_TEXT_SIZE, 1),
-    rotation: Number(options.rotation) || 0,
-  }, layerId);
+  return createBaseEntity(
+    {
+      id: createEntityId('text', entities),
+      type: 'text',
+      x: point.x,
+      y: point.y,
+      text: sanitizeTextValue(options.text),
+      fontSize: Math.max(Number(options.fontSize) || DEFAULT_TEXT_SIZE, 1),
+      rotation: Number(options.rotation) || 0,
+    },
+    layerId,
+  );
 }
 
 export function createDimensionEntity({
@@ -556,22 +598,34 @@ export function createDimensionEntity({
   const subtype = explicitSubtype ?? inferDimensionSubtype(p1, p2);
   const offset = placementPoint ? getDimensionOffsetFromPlacement(subtype, p1, p2, placementPoint) : 40;
 
-  return createBaseEntity({
-    id: createEntityId('dim', entities),
-    type: 'dimension',
-    subtype,
-    p1,
-    p2,
-    offset,
-    text: formatDimensionText(measureDistance(p1, p2, subtype), units),
-    units,
-    meta: {
-      sourceRefs,
+  return createBaseEntity(
+    {
+      id: createEntityId('dim', entities),
+      type: 'dimension',
+      subtype,
+      p1,
+      p2,
+      offset,
+      text: formatDimensionText(measureDistance(p1, p2, subtype), units),
+      units,
+      meta: {
+        sourceRefs,
+      },
     },
-  }, layerId);
+    layerId,
+  );
 }
 
-export function createAngleDimensionEntity({ vertex, p1, p2, arcRadius, entities, sourceRefs = [], layerId = 'dimensions', isometricPlane = null }) {
+export function createAngleDimensionEntity({
+  vertex,
+  p1,
+  p2,
+  arcRadius,
+  entities,
+  sourceRefs = [],
+  layerId = 'dimensions',
+  isometricPlane = null,
+}) {
   const entity = {
     id: createEntityId('ang', entities),
     type: 'angle-dimension',
@@ -652,6 +706,10 @@ export function resolveEntityReference(entity, ref) {
       left: getMidpoint(corners.topLeft, corners.bottomLeft),
     };
 
+    if (ref.sourceType === 'center') {
+      return getRectCenter(entity);
+    }
+
     if (ref.sourceType === 'corner') {
       return corners[ref.sourceKey] ?? null;
     }
@@ -705,6 +763,40 @@ export function resolveEntityReference(entity, ref) {
   }
 
   if (entity.type === 'feature') {
+    if (entity.shape === 'circle' && ref.sourceType === 'center') {
+      return { x: entity.cx, y: entity.cy };
+    }
+
+    if (entity.shape === 'rect') {
+      const corners = {
+        topLeft: { x: entity.x, y: entity.y },
+        topRight: { x: entity.x + entity.width, y: entity.y },
+        bottomRight: { x: entity.x + entity.width, y: entity.y + entity.height },
+        bottomLeft: { x: entity.x, y: entity.y + entity.height },
+      };
+      const edgeMidpoints = {
+        top: getMidpoint(corners.topLeft, corners.topRight),
+        right: getMidpoint(corners.topRight, corners.bottomRight),
+        bottom: getMidpoint(corners.bottomLeft, corners.bottomRight),
+        left: getMidpoint(corners.topLeft, corners.bottomLeft),
+      };
+
+      if (ref.sourceType === 'center') {
+        return {
+          x: entity.x + entity.width / 2,
+          y: entity.y + entity.height / 2,
+        };
+      }
+
+      if (ref.sourceType === 'corner') {
+        return corners[ref.sourceKey] ?? null;
+      }
+
+      if (ref.sourceType === 'midpoint') {
+        return edgeMidpoints[ref.sourceKey] ?? null;
+      }
+    }
+
     if (entity.shape === 'ellipse') {
       if (ref.sourceType === 'center') {
         return { x: entity.cx, y: entity.cy };
@@ -814,13 +906,13 @@ export function updateEllipseRadius(entity, handleKey, point) {
   if (handleKey === 'east' || handleKey === 'west') {
     return {
       ...entity,
-      rx: Math.max(0, Math.abs((dx * cos) + (dy * sin))),
+      rx: Math.max(0, Math.abs(dx * cos + dy * sin)),
     };
   }
 
   return {
     ...entity,
-    ry: Math.max(0, Math.abs((-dx * sin) + (dy * cos))),
+    ry: Math.max(0, Math.abs(-dx * sin + dy * cos)),
   };
 }
 
@@ -830,8 +922,8 @@ export function updateTextFontSize(entity, point) {
   const sin = Math.sin(radians);
   const dx = point.x - entity.x;
   const dy = point.y - entity.y;
-  const localX = (dx * cos) + (dy * sin);
-  const localY = (-dx * sin) + (dy * cos);
+  const localX = dx * cos + dy * sin;
+  const localY = -dx * sin + dy * cos;
   const metrics = getTextMetrics(entity);
   const widthFontSize = Math.abs(localX) / (Math.max(metrics.text.length, 1) * TEXT_WIDTH_FACTOR);
   const heightFontSize = Math.abs(localY) / TEXT_LINE_HEIGHT_FACTOR;
@@ -843,9 +935,7 @@ export function updateTextFontSize(entity, point) {
 }
 
 export function updateEntityInList(entities, entityId, updater) {
-  return entities.map((entity) => (
-    entity.id === entityId ? updater(entity) : entity
-  ));
+  return entities.map((entity) => (entity.id === entityId ? updater(entity) : entity));
 }
 
 export function patchDimensionText(entity) {

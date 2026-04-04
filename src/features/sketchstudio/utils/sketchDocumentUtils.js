@@ -18,25 +18,65 @@ function cloneLayer(layer) {
   };
 }
 
-export function createBlankSketchDocument(overrides = {}) {
+function cloneVariable(variable, index) {
+  return {
+    ...variable,
+    id: variable?.id || `var-${variable?.name || 'value'}-${index + 1}`,
+    name: String(variable?.name || '').trim(),
+    value: Number(variable?.value) || 0,
+    unit: variable?.unit || 'mm',
+  };
+}
+
+function cloneConstraint(constraint) {
+  return {
+    ...constraint,
+  };
+}
+
+function cloneJoint(joint) {
+  return {
+    ...joint,
+    parameters: {
+      ...(joint?.parameters || {}),
+    },
+    primaryEdgeRef: joint?.primaryEdgeRef ? { ...joint.primaryEdgeRef } : null,
+    secondaryEdgeRef: joint?.secondaryEdgeRef ? { ...joint.secondaryEdgeRef } : null,
+  };
+}
+
+export function normalizeSketchDocument(document) {
+  const source = document && typeof document === 'object' ? document : {};
+
   return {
     ...sampleDocument,
-    ...overrides,
-    id: overrides.id || createDocumentId(),
-    name: normalizeCommittedSketchName(overrides.name || sampleDocument.name),
-    units: overrides.units || sampleDocument.units || 'mm',
+    ...source,
+    id: typeof source.id === 'string' && source.id ? source.id : sampleDocument.id,
+    name: normalizeCommittedSketchName(source.name || sampleDocument.name),
+    units: source.units || sampleDocument.units || 'mm',
     metadata: {
       ...(sampleDocument.metadata || {}),
-      ...(overrides.metadata || {}),
+      ...(source.metadata || {}),
     },
     objectDefinition: {
       ...(sampleDocument.objectDefinition || {}),
-      ...(overrides.objectDefinition || {}),
+      ...(source.objectDefinition || {}),
     },
-    constraints: Array.isArray(overrides.constraints) ? [...overrides.constraints] : [],
-    layers: Array.isArray(overrides.layers) && overrides.layers.length
-      ? overrides.layers.map(cloneLayer)
-      : (sampleDocument.layers || []).map(cloneLayer),
-    entities: Array.isArray(overrides.entities) ? [...overrides.entities] : [],
+    variables: Array.isArray(source.variables) ? source.variables.map(cloneVariable) : [],
+    constraints: Array.isArray(source.constraints) ? source.constraints.map(cloneConstraint) : [],
+    joints: Array.isArray(source.joints) ? source.joints.map(cloneJoint) : [],
+    layers:
+      Array.isArray(source.layers) && source.layers.length
+        ? source.layers.map(cloneLayer)
+        : (sampleDocument.layers || []).map(cloneLayer),
+    entities: Array.isArray(source.entities) ? [...source.entities] : [],
   };
+}
+
+export function createBlankSketchDocument(overrides = {}) {
+  return normalizeSketchDocument({
+    ...overrides,
+    id: overrides.id || createDocumentId(),
+    name: overrides.name || sampleDocument.name,
+  });
 }

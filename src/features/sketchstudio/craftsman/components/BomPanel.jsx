@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { exportBomWithCost, downloadAsFile } from '../../utils/bomExportUtils';
+import { exportBomWithCost, downloadAsFile, getBomEstimateSummary } from '../../utils/bomExportUtils';
 import styles from '../styles/craftsman.module.css';
 
 export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveRow, onDuplicateRow }) {
@@ -60,41 +60,61 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveR
             </tr>
           </thead>
           <tbody>
-            {bomRows.map((row, i) => (
-              <tr key={row.entityIds?.join(',') || `bom-${i}`}>
-                <td>{row.partName}</td>
-                <td className={styles.materialCell}>{row.materialName || row.material}</td>
-                <td>{Math.round(row.width)}</td>
-                <td>{Math.round(row.height)}</td>
-                <td>{row.thickness}</td>
-                <td>{row.quantity}</td>
-                <td>{row.totalCost > 0 ? `$${row.totalCost.toFixed(2)}` : '-'}</td>
-                <td className={styles.bomActions}>
-                  {onDuplicateRow && (
-                    <button
-                      type="button"
-                      className={styles.bomDuplicateBtn}
-                      onClick={() => handleDuplicate(row)}
-                      title={`Duplicate — add another ${row.quantity > 1 ? row.quantity + ' pieces' : 'piece'}`}
-                      aria-label={`Duplicate ${row.partName}`}
-                    >
-                      +
-                    </button>
-                  )}
-                  {onRemoveRow && (
-                    <button
-                      type="button"
-                      className={styles.bomRemoveBtn}
-                      onClick={() => handleRemove(row)}
-                      title={`Remove ${row.partName} (clears material from ${row.entityIds?.length || 0} entit${row.entityIds?.length === 1 ? 'y' : 'ies'})`}
-                      aria-label={`Remove ${row.partName}`}
-                    >
-                      &times;
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {bomRows.map((row, i) => {
+              const estimate = getBomEstimateSummary(row);
+
+              return (
+                <tr key={row.entityIds?.join(',') || `bom-${i}`}>
+                  <td>
+                    <div className={styles.bomPartCell}>
+                      <span>{row.partName}</span>
+                      {estimate.shortLabel && (
+                        <span className={styles.bomEstimateBadge} title={estimate.estimateNote || estimate.shortLabel}>
+                          {estimate.shortLabel}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className={styles.materialCell}>{row.materialName || row.material}</td>
+                  <td>{Math.round(row.width)}</td>
+                  <td>{Math.round(row.height)}</td>
+                  <td>{row.thickness}</td>
+                  <td>{row.quantity}</td>
+                  <td>
+                    <div className={styles.bomCostCell}>
+                      <span>{row.totalCost > 0 ? `$${row.totalCost.toFixed(2)}` : '-'}</span>
+                      {estimate.costApproximate && (
+                        <span className={styles.bomEstimateNote}>Approximate cost</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className={styles.bomActions}>
+                    {onDuplicateRow && (
+                      <button
+                        type="button"
+                        className={styles.bomDuplicateBtn}
+                        onClick={() => handleDuplicate(row)}
+                        title={`Duplicate - add another ${row.quantity > 1 ? row.quantity + ' pieces' : 'piece'}`}
+                        aria-label={`Duplicate ${row.partName}`}
+                      >
+                        +
+                      </button>
+                    )}
+                    {onRemoveRow && (
+                      <button
+                        type="button"
+                        className={styles.bomRemoveBtn}
+                        onClick={() => handleRemove(row)}
+                        title={`Remove ${row.partName} (clears material from ${row.entityIds?.length || 0} entit${row.entityIds?.length === 1 ? 'y' : 'ies'})`}
+                        aria-label={`Remove ${row.partName}`}
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

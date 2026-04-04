@@ -45,6 +45,7 @@ describe('computeRowCost', () => {
     const result = computeRowCost(row, pricing);
     expect(result.area).toBeCloseTo(0.5, 4);
     expect(result.totalCost).toBeCloseTo(20, 1); // 0.5 m² * 20 $/m² * 2
+    expect(result.costAccuracy).toBe('approximate');
   });
 
   it('computes perPiece cost', () => {
@@ -68,6 +69,7 @@ describe('computeRowCost', () => {
     // max(2400, 45) = 2400mm = 2.4m * 1.20 * 2 = 5.76
     expect(result.totalCost).toBeCloseTo(5.76, 2);
     expect(result.costBasis).toBe('perLinearMeter');
+    expect(result.costAccuracy).toBe('approximate');
   });
 
   it('perLinearMeter with single quantity', () => {
@@ -76,6 +78,27 @@ describe('computeRowCost', () => {
     const result = computeRowCost(row, pricing);
     // max(1000, 95) = 1000mm = 1.0m * 12.00 * 1 = 12.00
     expect(result.totalCost).toBeCloseTo(12.0, 2);
+  });
+
+  it('uses exact geometry area when provided for irregular sheet parts', () => {
+    const row = { material: 'plywood', width: 200, height: 100, areaMm2: 15000, quantity: 1 };
+    const pricing = { plywood: { unitCost: 20, costBasis: 'perM2' } };
+    const result = computeRowCost(row, pricing);
+
+    expect(result.area).toBeCloseTo(0.015, 4);
+    expect(result.totalCost).toBeCloseTo(0.3, 4);
+    expect(result.costAccuracy).toBe('exact');
+    expect(result.costNote).toContain('exact geometry area');
+  });
+
+  it('uses exact stock length when provided for irregular linear parts', () => {
+    const row = { material: 'steel', width: 100, height: 50, stockLength: 350, quantity: 2 };
+    const pricing = { steel: { unitCost: 10, costBasis: 'perLinearMeter' } };
+    const result = computeRowCost(row, pricing);
+
+    expect(result.totalCost).toBeCloseTo(7, 4);
+    expect(result.costAccuracy).toBe('exact');
+    expect(result.costNote).toContain('exact cut length');
   });
 });
 

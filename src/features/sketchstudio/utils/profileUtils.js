@@ -75,11 +75,14 @@ export function getProfilePoints(entity) {
   }
 
   if (entity.type === 'circle') {
+    const radius = entity.r ?? entity.radius ?? 0;
+    const cx = entity.cx ?? entity.center?.x ?? 0;
+    const cy = entity.cy ?? entity.center?.y ?? 0;
     return Array.from({ length: CIRCLE_SEGMENTS }, (_, index) => {
       const angle = (Math.PI * 2 * index) / CIRCLE_SEGMENTS;
       return {
-        x: entity.cx + Math.cos(angle) * entity.r,
-        y: entity.cy + Math.sin(angle) * entity.r,
+        x: cx + Math.cos(angle) * radius,
+        y: cy + Math.sin(angle) * radius,
       };
     });
   }

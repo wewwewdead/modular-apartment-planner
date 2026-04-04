@@ -1,6 +1,50 @@
 import { computePartCutSize, buildObjectBom, groupBomRows } from './bomUtils';
 
 const MM2_TO_M2 = 1 / 1_000_000;
+const MM_TO_M = 1 / 1_000;
+
+function toPositiveNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function getFallbackAreaMm2(bomRow) {
+  return toPositiveNumber(bomRow.width) * toPositiveNumber(bomRow.height);
+}
+
+function buildAreaCostMetadata(bomRow) {
+  const exactAreaMm2 = toPositiveNumber(bomRow.areaMm2);
+  if (exactAreaMm2 > 0) {
+    return {
+      area: exactAreaMm2 * MM2_TO_M2,
+      costAccuracy: 'exact',
+      costNote: 'Cost uses exact geometry area.',
+    };
+  }
+
+  return {
+    area: getFallbackAreaMm2(bomRow) * MM2_TO_M2,
+    costAccuracy: 'approximate',
+    costNote: 'Cost uses a bounding-box area estimate because exact geometry area is unavailable.',
+  };
+}
+
+function buildLinearCostMetadata(bomRow) {
+  const exactLengthMm = toPositiveNumber(bomRow.stockLength);
+  if (exactLengthMm > 0) {
+    return {
+      lengthM: exactLengthMm * MM_TO_M,
+      costAccuracy: 'exact',
+      costNote: 'Cost uses exact cut length.',
+    };
+  }
+
+  return {
+    lengthM: Math.max(toPositiveNumber(bomRow.width), toPositiveNumber(bomRow.height)) * MM_TO_M,
+    costAccuracy: 'approximate',
+    costNote: 'Cost uses the largest displayed dimension as an estimate because exact cut length is unavailable.',
+  };
+}
 
 export function computePartArea(part) {
   const { width, height } = computePartCutSize(part);
@@ -11,47 +55,46 @@ export function createMaterialPricing(material, unitCost = 0, costBasis = 'perM2
   return {
     material: material || '',
     unitCost: Number(unitCost) || 0,
-    costBasis: costBasis === 'perPiece' ? 'perPiece' : 'perM2',
+    costBasis: ['perM2', 'perLinearMeter', 'perPiece'].includes(costBasis) ? costBasis : 'perM2',
   };
 }
 
-const MM_TO_M = 1 / 1_000;
-
 export function computeRowCost(bomRow, materialPricing = {}) {
   const pricing = materialPricing[bomRow.material];
-  if (!pricing || !pricing.unitCost) {
-    return { area: 0, unitCost: 0, totalCost: 0, costBasis: 'perM2' };
-  }
+  const costBasis = pricing?.costBasis || bomRow.costBasis || 'perM2';
+  const quantity = bomRow.quantity || 1;
 
-  const cutSize = { width: bomRow.width, height: bomRow.height };
-  const area = cutSize.width * cutSize.height * MM2_TO_M2;
-
-  if (pricing.costBasis === 'perPiece') {
+  if (costBasis === 'perPiece') {
     return {
-      area,
-      unitCost: pricing.unitCost,
-      totalCost: pricing.unitCost * (bomRow.quantity || 1),
+      area: buildAreaCostMetadata(bomRow).area,
+      unitCost: pricing?.unitCost || 0,
+      totalCost: (pricing?.unitCost || 0) * quantity,
       costBasis: 'perPiece',
+      costAccuracy: 'exact',
+      costNote: '',
     };
   }
 
-  if (pricing.costBasis === 'perLinearMeter') {
-    const lengthM = Math.max(cutSize.width, cutSize.height) * MM_TO_M;
-    const totalCost = lengthM * pricing.unitCost * (bomRow.quantity || 1);
+  if (costBasis === 'perLinearMeter') {
+    const linearCost = buildLinearCostMetadata(bomRow);
     return {
-      area,
-      unitCost: pricing.unitCost,
-      totalCost,
+      area: buildAreaCostMetadata(bomRow).area,
+      unitCost: pricing?.unitCost || 0,
+      totalCost: linearCost.lengthM * (pricing?.unitCost || 0) * quantity,
       costBasis: 'perLinearMeter',
+      costAccuracy: linearCost.costAccuracy,
+      costNote: linearCost.costNote,
     };
   }
 
-  const totalCost = area * pricing.unitCost * (bomRow.quantity || 1);
+  const areaCost = buildAreaCostMetadata(bomRow);
   return {
-    area,
-    unitCost: pricing.unitCost,
-    totalCost,
+    area: areaCost.area,
+    unitCost: pricing?.unitCost || 0,
+    totalCost: areaCost.area * (pricing?.unitCost || 0) * quantity,
     costBasis: 'perM2',
+    costAccuracy: areaCost.costAccuracy,
+    costNote: areaCost.costNote,
   };
 }
 

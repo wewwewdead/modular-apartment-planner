@@ -90,6 +90,7 @@ export default function DraftingCanvas(props) {
     draftPreview,
     precisionHud,
     snap,
+    manufacturingPreviewEntities = [],
     selectedHandles,
     selectionBounds,
     isPanning,
@@ -244,6 +245,14 @@ export default function DraftingCanvas(props) {
 
               <EntityRenderer entities={visibleEntities} hoveredId={hover.hoveredId} selectedIds={selection.selectedIds} />
               <DimensionRenderer entities={visibleEntities} allEntities={document.entities} hoveredId={hover.hoveredId} selectedIds={selection.selectedIds} />
+              {manufacturingPreviewEntities.length ? (
+                <EntityRenderer
+                  entities={manufacturingPreviewEntities}
+                  hoveredId={null}
+                  selectedIds={[]}
+                  baseClassName="sketchStudioEntity sketchStudioEntityJoinery"
+                />
+              ) : null}
               <DraftRenderer draft={draft} draftPreview={draftPreview} units={document.units} zoom={viewport.zoom} />
               <SelectionOverlay selectionBox={selection.selectionBox} />
               <TransformOverlay bounds={selectionBounds} selectedCount={selection.selectedIds.length} onTransformPointerDown={handleBindings.onTransformPointerDown} zoom={viewport.zoom} />

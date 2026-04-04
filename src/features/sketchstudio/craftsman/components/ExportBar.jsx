@@ -38,7 +38,15 @@ function Toast({ message, type, onDismiss }) {
   );
 }
 
-export default function ExportBar({ entities, selectedIds, bomRows, totalCost, costByMaterial, projectName }) {
+export default function ExportBar({
+  entities,
+  referenceEntities = entities,
+  selectedIds,
+  bomRows,
+  totalCost,
+  costByMaterial,
+  projectName,
+}) {
   const [kerfEnabled, setKerfEnabled] = useState(false);
   const [kerfWidth, setKerfWidth] = useState(DEFAULT_KERF);
   const [exporting, setExporting] = useState(false);
@@ -54,43 +62,48 @@ export default function ExportBar({ entities, selectedIds, bomRows, totalCost, c
 
   const handleDxfAll = useCallback(() => {
     try {
-      downloadDxf(entities, 'sketch-all.dxf', kerfOption);
+      downloadDxf(entities, 'sketch-all.dxf', { ...kerfOption, referenceEntities });
     } catch (err) {
       showToast(`DXF export failed: ${err.message}`);
     }
-  }, [entities, kerfOption, showToast]);
+  }, [entities, kerfOption, referenceEntities, showToast]);
 
   const handleDxfSelected = useCallback(() => {
     try {
-      downloadDxf(entities, 'sketch-selected.dxf', { selectedOnly: true, selectedIds, ...kerfOption });
+      downloadDxf(entities, 'sketch-selected.dxf', {
+        selectedOnly: true,
+        selectedIds,
+        ...kerfOption,
+        referenceEntities,
+      });
     } catch (err) {
       showToast(`DXF export failed: ${err.message}`);
     }
-  }, [entities, selectedIds, kerfOption, showToast]);
+  }, [entities, selectedIds, kerfOption, referenceEntities, showToast]);
 
   const handleSvgAll = useCallback(() => {
     try {
-      downloadSvg(entities, 'sketch-all.svg');
+      downloadSvg(entities, 'sketch-all.svg', { referenceEntities });
     } catch (err) {
       showToast(`SVG export failed: ${err.message}`);
     }
-  }, [entities, showToast]);
+  }, [entities, referenceEntities, showToast]);
 
   const handleSvgSelected = useCallback(() => {
     try {
-      downloadSvg(entities, 'sketch-selected.svg', { selectedOnly: true, selectedIds });
+      downloadSvg(entities, 'sketch-selected.svg', { selectedOnly: true, selectedIds, referenceEntities });
     } catch (err) {
       showToast(`SVG export failed: ${err.message}`);
     }
-  }, [entities, selectedIds, showToast]);
+  }, [entities, selectedIds, referenceEntities, showToast]);
 
   const handlePdf = useCallback(() => {
     try {
-      printEntities(entities);
+      printEntities(entities, { referenceEntities });
     } catch (err) {
       showToast(`PDF export failed: ${err.message}`);
     }
-  }, [entities, showToast]);
+  }, [entities, referenceEntities, showToast]);
 
   const handleWorkshopExport = useCallback(async () => {
     if (exporting) return;
@@ -102,7 +115,7 @@ export default function ExportBar({ entities, selectedIds, bomRows, totalCost, c
         totalCost || 0,
         costByMaterial || {},
         projectName || 'Untitled Sketch',
-        kerfOption,
+        { ...kerfOption, referenceEntities },
       );
       if (result.errors.length) {
         showToast(`Workshop package exported with warnings:\n${result.errors.join(', ')}`, 'warning');
@@ -112,7 +125,7 @@ export default function ExportBar({ entities, selectedIds, bomRows, totalCost, c
     } finally {
       setExporting(false);
     }
-  }, [entities, bomRows, totalCost, costByMaterial, projectName, kerfOption, exporting, showToast]);
+  }, [entities, bomRows, totalCost, costByMaterial, projectName, kerfOption, exporting, referenceEntities, showToast]);
 
   const hasSelection = selectedIds?.length > 0;
 

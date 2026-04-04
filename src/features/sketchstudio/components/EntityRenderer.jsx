@@ -150,7 +150,7 @@ function renderEntity(entity, className) {
   return null;
 }
 
-export default function EntityRenderer({ entities, hoveredId, selectedIds }) {
+export default function EntityRenderer({ entities, hoveredId, selectedIds, baseClassName = 'sketchStudioEntity' }) {
   return (
     <g className="sketchStudioEntities">
       {entities
@@ -160,7 +160,7 @@ export default function EntityRenderer({ entities, hoveredId, selectedIds }) {
           const isSelected = selectedIds.includes(entity.id);
           const isHovered = hoveredId === entity.id;
           const className = [
-            'sketchStudioEntity',
+            baseClassName,
             entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
             isHovered ? 'is-hovered' : '',
             isSelected ? 'is-selected' : '',

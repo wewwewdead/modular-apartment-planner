@@ -4,6 +4,7 @@ import {
   pushUndoableHistorySnapshot,
 } from '../utils/historyUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
+import { resolveSketchDocument } from '../utils/sketchDocumentResolver';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
 
 function emptySnap() {
@@ -56,19 +57,52 @@ function getIdleMode(draftType) {
   return draftType ? 'drawing' : 'idle';
 }
 
+function buildResolvedDocumentState(document) {
+  return resolveSketchDocument(document);
+}
+
+function getJointStatePatch(resolvedDocumentState) {
+  return {
+    jointDiagnostics: resolvedDocumentState.jointDiagnostics,
+    manufacturingPreviewEntities: resolvedDocumentState.manufacturingPreviewEntities,
+    manufacturingExportEntities: resolvedDocumentState.manufacturingExportEntities,
+  };
+}
+
+function filterDocumentJointsByEntityIds(document, removedEntityIds) {
+  const removedIdSet = new Set(removedEntityIds);
+
+  return {
+    ...document,
+    joints: (document.joints || []).filter(
+      (joint) =>
+        !removedIdSet.has(joint.primaryEntityId) &&
+        !removedIdSet.has(joint.secondaryEntityId) &&
+        !removedIdSet.has(joint.primaryEdgeRef?.entityId) &&
+        !removedIdSet.has(joint.secondaryEdgeRef?.entityId),
+    ),
+  };
+}
+
 function restoreUndoableSnapshot(state, snapshot) {
   if (!snapshot) {
     return state;
   }
 
   const nextDocument = snapshot.document ?? state.document;
+  const resolvedDocumentState = buildResolvedDocumentState(nextDocument);
 
   return {
     ...state,
-    document: nextDocument,
+    document: resolvedDocumentState.document,
+    constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+    ...getJointStatePatch(resolvedDocumentState),
     ui: {
       ...state.ui,
-      activeLayerId: getNextActiveLayer(nextDocument, snapshot.ui?.activeLayerId ?? state.ui.activeLayerId),
+      activeLayerId: getNextActiveLayer(
+        resolvedDocumentState.document,
+        snapshot.ui?.activeLayerId ?? state.ui.activeLayerId,
+      ),
     },
     interaction: {
       ...state.interaction,
@@ -355,13 +389,17 @@ export default function sketchStudioReducer(state, action) {
         snap: action.payload,
       };
 
-    case SKETCH_STUDIO_ACTIONS.COMMIT_ENTITY:
+    case SKETCH_STUDIO_ACTIONS.COMMIT_ENTITY: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        entities: [...state.document.entities, action.payload],
+      });
+
       return finalizeUndoableState(state, {
         ...state,
-        document: {
-          ...state.document,
-          entities: [...state.document.entities, action.payload],
-        },
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
         selection: {
           ...state.selection,
           selectedIds: [action.payload.id],
@@ -375,29 +413,51 @@ export default function sketchStudioReducer(state, action) {
         },
         draft: emptyDraft(),
       });
+    }
 
-    case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT:
-      return finalizeUndoableState(state, {
-        ...state,
-        document: action.payload,
-        ui: {
-          ...state.ui,
-          activeLayerId: getNextActiveLayer(action.payload, state.ui.activeLayerId),
+    case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT: {
+      const resolvedDocumentState = buildResolvedDocumentState(action.payload);
+
+      return finalizeUndoableState(
+        state,
+        {
+          ...state,
+          document: resolvedDocumentState.document,
+          constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+          ...getJointStatePatch(resolvedDocumentState),
+          ui: {
+            ...state.ui,
+            activeLayerId: getNextActiveLayer(resolvedDocumentState.document, state.ui.activeLayerId),
+          },
         },
-      }, {
-        skipHistory: action.meta?.skipHistory,
+        {
+          skipHistory: action.meta?.skipHistory,
+        },
+      );
+    }
+
+    case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT_ENTITIES: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        entities: action.payload,
       });
 
-    case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT_ENTITIES:
-      return finalizeUndoableState(state, {
-        ...state,
-        document: {
-          ...state.document,
-          entities: action.payload,
+      return finalizeUndoableState(
+        state,
+        {
+          ...state,
+          document: resolvedDocumentState.document,
+          constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+          ...getJointStatePatch(resolvedDocumentState),
         },
-      }, {
-        skipHistory: action.meta?.skipHistory || state.interaction.mode === 'handle-drag' || state.interaction.mode === 'transform',
-      });
+        {
+          skipHistory:
+            action.meta?.skipHistory ||
+            state.interaction.mode === 'handle-drag' ||
+            state.interaction.mode === 'transform',
+        },
+      );
+    }
 
     case SKETCH_STUDIO_ACTIONS.START_HANDLE_DRAG:
       return {
@@ -414,17 +474,21 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.END_HANDLE_DRAG:
-      return finalizeUndoableState(state, {
-        ...state,
-        interaction: {
-          ...state.interaction,
-          mode: 'idle',
-          handleDrag: null,
-          isPointerDown: false,
+      return finalizeUndoableState(
+        state,
+        {
+          ...state,
+          interaction: {
+            ...state.interaction,
+            mode: 'idle',
+            handleDrag: null,
+            isPointerDown: false,
+          },
         },
-      }, {
-        previousSnapshot: state.interaction.handleDrag?.historySnapshot,
-      });
+        {
+          previousSnapshot: state.interaction.handleDrag?.historySnapshot,
+        },
+      );
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_HANDLE_DRAG:
       return restoreUndoableSnapshot(state, state.interaction.handleDrag?.historySnapshot);
@@ -444,17 +508,21 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG:
-      return finalizeUndoableState(state, {
-        ...state,
-        interaction: {
-          ...state.interaction,
-          mode: 'idle',
-          anchorDrag: null,
-          isPointerDown: false,
+      return finalizeUndoableState(
+        state,
+        {
+          ...state,
+          interaction: {
+            ...state.interaction,
+            mode: 'idle',
+            anchorDrag: null,
+            isPointerDown: false,
+          },
         },
-      }, {
-        previousSnapshot: state.interaction.anchorDrag?.historySnapshot,
-      });
+        {
+          previousSnapshot: state.interaction.anchorDrag?.historySnapshot,
+        },
+      );
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_ANCHOR_DRAG:
       return restoreUndoableSnapshot(state, state.interaction.anchorDrag?.historySnapshot);
@@ -490,30 +558,38 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.END_TRANSFORM:
-      return finalizeUndoableState(state, {
-        ...state,
-        interaction: {
-          ...state.interaction,
-          mode: 'idle',
-          transform: null,
-          isPointerDown: false,
+      return finalizeUndoableState(
+        state,
+        {
+          ...state,
+          interaction: {
+            ...state.interaction,
+            mode: 'idle',
+            transform: null,
+            isPointerDown: false,
+          },
         },
-      }, {
-        previousSnapshot: state.interaction.transform?.historySnapshot,
-      });
+        {
+          previousSnapshot: state.interaction.transform?.historySnapshot,
+        },
+      );
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_TRANSFORM:
       return restoreUndoableSnapshot(state, state.interaction.transform?.historySnapshot);
 
     case SKETCH_STUDIO_ACTIONS.DELETE_SELECTED: {
       const selectedIdSet = new Set(state.selection.selectedIds);
+      const nextDocument = filterDocumentJointsByEntityIds({
+        ...state.document,
+        entities: state.document.entities.filter((entity) => !selectedIdSet.has(entity.id)),
+      }, state.selection.selectedIds);
+      const resolvedDocumentState = buildResolvedDocumentState(nextDocument);
 
       return finalizeUndoableState(state, {
         ...state,
-        document: {
-          ...state.document,
-          entities: state.document.entities.filter((entity) => !selectedIdSet.has(entity.id)),
-        },
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
         selection: {
           ...state.selection,
           selectedIds: [],
@@ -534,13 +610,16 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.LOAD_WORKSPACE_SNAPSHOT: {
-      const nextDocument = action.payload.document;
+      const resolvedDocumentState = buildResolvedDocumentState(action.payload.document);
+      const nextDocument = resolvedDocumentState.document;
       const nextViewport = action.payload.viewport || state.viewport;
       const nextUi = action.payload.ui || {};
 
       return {
         ...state,
         document: nextDocument,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
         viewport: nextViewport,
         ui: {
           ...state.ui,
@@ -619,9 +698,15 @@ export default function sketchStudioReducer(state, action) {
         if (!idSet.has(entity.id)) return entity;
         return { ...entity, materialId: materialId || null };
       });
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        entities: nextEntities,
+      });
       return finalizeUndoableState(state, {
         ...state,
-        document: { ...state.document, entities: nextEntities },
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
       });
     }
 
@@ -631,11 +716,20 @@ export default function sketchStudioReducer(state, action) {
       const parsedThickness = Number(thickness);
       const nextEntities = state.document.entities.map((entity) => {
         if (!idSet.has(entity.id)) return entity;
-        return { ...entity, thickness: Number.isFinite(parsedThickness) && parsedThickness > 0 ? parsedThickness : null };
+        return {
+          ...entity,
+          thickness: Number.isFinite(parsedThickness) && parsedThickness > 0 ? parsedThickness : null,
+        };
+      });
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        entities: nextEntities,
       });
       return finalizeUndoableState(state, {
         ...state,
-        document: { ...state.document, entities: nextEntities },
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
       });
     }
 
@@ -645,11 +739,109 @@ export default function sketchStudioReducer(state, action) {
         ui: { ...state.ui, craftsmanMode: !state.ui.craftsmanMode },
       };
 
-    case SKETCH_STUDIO_ACTIONS.SET_VARIABLES:
+    case SKETCH_STUDIO_ACTIONS.SET_VARIABLES: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        variables: action.payload ?? [],
+      });
+
       return finalizeUndoableState(state, {
         ...state,
-        document: { ...state.document, variables: action.payload ?? [] },
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
       });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.ADD_CONSTRAINT: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        constraints: [...(state.document.constraints || []), action.payload],
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.UPDATE_CONSTRAINT: {
+      const { constraintId, patch } = action.payload;
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        constraints: (state.document.constraints || []).map((constraint) =>
+          constraint.id === constraintId ? { ...constraint, ...patch } : constraint,
+        ),
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.REMOVE_CONSTRAINT: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        constraints: (state.document.constraints || []).filter((constraint) => constraint.id !== action.payload),
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.ADD_JOINT: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        joints: [...(state.document.joints || []), action.payload],
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.UPDATE_JOINT: {
+      const { jointId, patch } = action.payload;
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        joints: (state.document.joints || []).map((joint) =>
+          joint.id === jointId ? { ...joint, ...patch, parameters: { ...(joint.parameters || {}), ...(patch.parameters || {}) } } : joint,
+        ),
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.REMOVE_JOINT: {
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        joints: (state.document.joints || []).filter((joint) => joint.id !== action.payload),
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
 
     default:
       return state;

@@ -29,7 +29,9 @@ const sampleDocument = {
     origin: { x: 0, y: 0 },
     tags: [],
   },
+  variables: [],
   constraints: [],
+  joints: [],
   layers: [
     baseLayer({
       id: 'default',
