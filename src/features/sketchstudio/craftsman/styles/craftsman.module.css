@@ -7,15 +7,15 @@
   padding: 12px;
   height: 100%;
   overflow-y: auto;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: var(--dark-bg-primary);
+  color: var(--dark-text-primary);
   font-size: 13px;
 }
 
 .sidebarTitle {
   font-size: 16px;
   font-weight: 600;
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
   margin: 0 0 4px 0;
   padding-bottom: 8px;
   border-bottom: 1px solid #333;
@@ -71,9 +71,9 @@
 .materialSelect {
   width: 100%;
   padding: 6px 8px;
-  background: #252540;
-  color: #e0e0e0;
-  border: 1px solid #444;
+  background: var(--dark-bg-input);
+  color: var(--dark-text-primary);
+  border: 1px solid var(--dark-border);
   border-radius: 4px;
   font-size: 12px;
   cursor: pointer;
@@ -81,16 +81,16 @@
 
 .materialSelect:focus {
   outline: none;
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
 }
 
 .thicknessInput {
   width: 100%;
   padding: 6px 8px;
-  background: #252540;
-  color: #e0e0e0;
-  border: 1px solid #444;
+  background: var(--dark-bg-input);
+  color: var(--dark-text-primary);
+  border: 1px solid var(--dark-border);
   border-radius: 4px;
   font-size: 12px;
   box-sizing: border-box;
@@ -98,7 +98,7 @@
 
 .thicknessInput:focus {
   outline: none;
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
 }
 
@@ -149,7 +149,7 @@
 .bomTable th {
   position: sticky;
   top: 0;
-  background: #252540;
+  background: var(--dark-bg-input);
   padding: 3px 3px;
   text-align: left;
   font-weight: 600;
@@ -168,7 +168,7 @@
 }
 
 .bomTable tr:hover td {
-  background: #252540;
+  background: var(--dark-bg-input);
 }
 
 .materialCell {
@@ -186,7 +186,7 @@
 
 .totalCost {
   font-size: 14px;
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
 }
 
 .costBreakdown {
@@ -261,7 +261,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #1a1a2e;
+  background: var(--dark-bg-primary);
   border-top: 1px solid #333;
   flex-wrap: wrap;
 }
@@ -277,9 +277,9 @@
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 500;
-  color: #e0e0e0;
+  color: var(--dark-text-primary);
   background: #2a2a44;
-  border: 1px solid #444;
+  border: 1px solid var(--dark-border);
   border-radius: 4px;
   cursor: pointer;
   white-space: nowrap;
@@ -287,7 +287,7 @@
 
 .exportBtn:hover {
   background: #3a3a5a;
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
 }
 
 .exportButtons {
@@ -304,7 +304,7 @@
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
   background: rgba(212, 133, 107, 0.08);
   border: 1.5px solid rgba(212, 133, 107, 0.5);
   border-radius: 999px;
@@ -328,8 +328,8 @@
 
 .craftsmanToggleActive {
   color: #1a1a2e;
-  background: #d4856b;
-  border-color: #d4856b;
+  background: var(--dark-accent-craftsman);
+  border-color: var(--dark-accent-craftsman);
   box-shadow:
     0 0 0 1px rgba(212, 133, 107, 0.2),
     0 0 16px rgba(212, 133, 107, 0.2);
@@ -363,23 +363,23 @@
 }
 
 .kerfToggle input[type="checkbox"] {
-  accent-color: #d4856b;
+  accent-color: var(--dark-accent-craftsman);
 }
 
 .kerfInput {
   width: 52px;
   padding: 3px 6px;
   font-size: 11px;
-  background: #252540;
-  color: #e0e0e0;
-  border: 1px solid #444;
+  background: var(--dark-bg-input);
+  color: var(--dark-text-primary);
+  border: 1px solid var(--dark-border);
   border-radius: 3px;
   box-sizing: border-box;
 }
 
 .kerfInput:focus {
   outline: none;
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
 }
 
@@ -434,7 +434,7 @@
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px;
-  background: #252540;
+  background: var(--dark-bg-input);
   border-radius: 4px;
 }
 
@@ -449,7 +449,7 @@
 .nestingStatValue {
   font-size: 18px;
   font-weight: 700;
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
 }
 
 .nestingStatLabel {
@@ -520,7 +520,7 @@
 }
 
 .nestingSvg {
-  border: 1px solid #444;
+  border: 1px solid var(--dark-border);
   border-radius: 3px;
   width: 100%;
   height: auto;
@@ -546,12 +546,12 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  background: #252540;
+  background: var(--dark-bg-input);
   border: 1px solid #333;
   border-radius: 4px;
   cursor: pointer;
   text-align: left;
-  color: #e0e0e0;
+  color: var(--dark-text-primary);
   transition: border-color 0.1s;
 }
 
@@ -560,7 +560,7 @@
 }
 
 .jointCardActive {
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
   background: #2a2a44;
 }
 
@@ -589,7 +589,7 @@
 
 .jointDetail {
   padding: 8px;
-  background: #252540;
+  background: var(--dark-bg-input);
   border-radius: 4px;
 }
 
@@ -616,13 +616,13 @@
 }
 
 .jointParamValue {
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
   font-weight: 600;
 }
 
 .jointPreview {
   margin-top: 6px;
-  border: 1px solid #444;
+  border: 1px solid var(--dark-border);
   border-radius: 4px;
   overflow: hidden;
   background: rgba(37, 37, 64, 0.5);
@@ -660,13 +660,13 @@
   line-height: 1.5;
   margin: 6px 0 0 0;
   padding: 6px 8px;
-  background: #1a1a2e;
-  border-left: 2px solid #d4856b;
+  background: var(--dark-bg-primary);
+  border-left: 2px solid var(--dark-accent-craftsman);
   border-radius: 0 4px 4px 0;
 }
 
 .jointHowTo strong {
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
 }
 
 .recommendedBadge {
@@ -705,7 +705,7 @@
 }
 
 .strengthBarFilled {
-  background: #d4856b;
+  background: var(--dark-accent-craftsman);
 }
 
 /* Parametric Panel */
@@ -739,16 +739,16 @@
   width: 65px;
   padding: 3px 6px;
   font-size: 12px;
-  background: #252540;
-  color: #e0e0e0;
-  border: 1px solid #444;
+  background: var(--dark-bg-input);
+  color: var(--dark-text-primary);
+  border: 1px solid var(--dark-border);
   border-radius: 3px;
   box-sizing: border-box;
 }
 
 .varInput:focus {
   outline: none;
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
 }
 
@@ -759,7 +759,7 @@
 
 .varRefs {
   font-size: 10px;
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
   min-width: 22px;
 }
 
@@ -768,7 +768,7 @@
   font-size: 10px;
   color: #888;
   background: none;
-  border: 1px solid #444;
+  border: 1px solid var(--dark-border);
   border-radius: 3px;
   cursor: pointer;
 }
@@ -789,9 +789,9 @@
   padding: 3px 6px;
   font-size: 12px;
   font-family: monospace;
-  background: #252540;
-  color: #e0e0e0;
-  border: 1px solid #444;
+  background: var(--dark-bg-input);
+  color: var(--dark-text-primary);
+  border: 1px solid var(--dark-border);
   border-radius: 3px;
   box-sizing: border-box;
 }
@@ -824,9 +824,9 @@
 
 .assemblyStep {
   padding: 8px;
-  background: #252540;
+  background: var(--dark-bg-input);
   border-radius: 4px;
-  border-left: 3px solid #d4856b;
+  border-left: 3px solid var(--dark-accent-craftsman);
 }
 
 .stepHeader {
@@ -843,7 +843,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #d4856b;
+  background: var(--dark-accent-craftsman);
   color: #1a1a2e;
   font-size: 11px;
   font-weight: 700;
@@ -857,7 +857,7 @@
 .stepTitle {
   font-size: 12px;
   font-weight: 600;
-  color: #e0e0e0;
+  color: var(--dark-text-primary);
 }
 
 .stepDescription {
@@ -889,7 +889,7 @@
 }
 
 .collapsibleHeader:hover {
-  color: #d4856b;
+  color: var(--dark-accent-craftsman);
 }
 
 .collapsibleArrow {
@@ -909,7 +909,7 @@
   font-size: 13px;
   font-weight: 600;
   color: #1a1a2e;
-  background: #d4856b;
+  background: var(--dark-accent-craftsman);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -928,8 +928,8 @@
   padding: 12px;
   height: 100%;
   overflow-y: auto;
-  background: #1a1a2e;
-  color: #e0e0e0;
+  background: var(--dark-bg-primary);
+  color: var(--dark-text-primary);
 }
 
 .templateGrid {
@@ -943,18 +943,18 @@
   flex-direction: column;
   gap: 6px;
   padding: 10px;
-  background: #252540;
+  background: var(--dark-bg-input);
   border: 1px solid #333;
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
-  color: #e0e0e0;
+  color: var(--dark-text-primary);
   transition: border-color 0.15s;
   min-height: 80px;
 }
 
 .templateCard:hover {
-  border-color: #d4856b;
+  border-color: var(--dark-accent-craftsman);
 }
 
 .templateCardName {
@@ -980,7 +980,7 @@
   padding: 1px 5px;
   border-radius: 3px;
   background: #2a2a44;
-  border: 1px solid #444;
+  border: 1px solid var(--dark-border);
 }
 
 .galleryBackBtn {
@@ -988,14 +988,14 @@
   font-size: 12px;
   color: #aaa;
   background: none;
-  border: 1px solid #444;
+  border: 1px solid var(--dark-border);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .galleryBackBtn:hover {
-  color: #d4856b;
-  border-color: #d4856b;
+  color: var(--dark-accent-craftsman);
+  border-color: var(--dark-accent-craftsman);
 }
 
 /* Workshop Export Button */
@@ -1004,7 +1004,7 @@
   font-size: 12px;
   font-weight: 600;
   color: #1a1a2e;
-  background: #d4856b;
+  background: var(--dark-accent-craftsman);
   border: none;
   border-radius: 4px;
   cursor: pointer;
