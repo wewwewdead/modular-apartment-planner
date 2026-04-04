@@ -35,6 +35,32 @@ Compare costs across material alternatives side-by-side.
 ### Multi-sheet DXF Export
 One DXF per sheet from the nesting optimizer — ready for batch CNC.
 
+## Design Review Findings (2026-04-04)
+
+### Touch Target Sizes
+All interactive elements across Floorplan and Sketch Studio are below the 44px minimum.
+Floorplan toolbar: 34-36px, Sidebar: 20-26px, Sketch Studio: 28-32px.
+Impact: accessibility violation, unusable on touch devices.
+
+### Mobile Responsive Layout
+Craftsman sidebar takes over entire viewport on mobile, hiding the drawing canvas.
+Needs slide-out drawer or bottom sheet pattern instead of full-screen overlay.
+
+### Cross-Page Theme Consistency
+Homepage (cream), Floorplan (white/light), Sketch Studio (dark navy) — three different visual languages.
+Consider unifying or creating a clear transition between themes.
+
+### Sketch Studio Color Tokens
+Sketch Studio uses hardcoded hex/rgba values instead of CSS custom properties.
+Floorplan already uses variables.css tokens. Align Sketch Studio to use the same system.
+
+### BOM Table React Key Collisions
+Multiple entities with same name+material generate duplicate React keys, causing
+console warnings and potential rendering issues.
+
+### Template Gallery Previews
+Templates show text-only descriptions. Add SVG thumbnail previews generated from template data.
+
 ## Hook Refactor — DONE
 
 useSketchStudio.js split into 7 files (2,224 → 804 line coordinator + 6 sub-hooks). Completed 2026-04-01.
