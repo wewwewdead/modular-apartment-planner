@@ -71,8 +71,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 6px;
   border: 1px solid rgba(136, 165, 201, 0.14);
   background: var(--dark-bg-elevated);
@@ -244,7 +244,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  min-height: 32px;
+  min-height: 36px;
   border-radius: 6px;
   border: 1px solid var(--dark-ss-border);
   background: var(--dark-ss-bg-surface);
@@ -286,8 +286,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border-radius: 6px;
   border: 1px solid rgba(136, 165, 201, 0.14);
@@ -411,7 +411,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  min-height: 32px;
+  min-height: 36px;
   border-radius: 6px;
   border: 1px solid var(--dark-ss-border);
   background: var(--dark-ss-bg-surface);
@@ -1325,13 +1325,38 @@
   }
 
   .sketchStudioRightPanel {
-    max-height: 40vh;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 50vh;
     overflow-y: auto;
+    z-index: 20;
+    border-top: 2px solid var(--dark-ss-border);
+    border-radius: 12px 12px 0 0;
+    transform: translateY(calc(100% - 44px));
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .sketchStudioRightPanel:focus-within,
+  .sketchStudioRightPanel:hover {
+    transform: translateY(0);
+  }
+
+  .sketchStudioRightPanel::before {
+    content: '';
+    display: block;
+    width: 32px;
+    height: 4px;
+    background: var(--dark-text-helper);
+    border-radius: 2px;
+    margin: 8px auto;
+    opacity: 0.5;
   }
 
   .sketchStudioCanvasPanel {
     padding: 12px;
-    min-height: 40vh;
+    min-height: 60vh;
   }
 
   .sketchStudioStatusBar {
