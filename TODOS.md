@@ -37,29 +37,29 @@ One DXF per sheet from the nesting optimizer — ready for batch CNC.
 
 ## Design Review Findings (2026-04-04)
 
-### Touch Target Sizes
-All interactive elements across Floorplan and Sketch Studio are below the 44px minimum.
-Floorplan toolbar: 34-36px, Sidebar: 20-26px, Sketch Studio: 28-32px.
-Impact: accessibility violation, unusable on touch devices.
+### Touch Target Sizes — IMPROVED
+Increased site-wide: BOM buttons 18→28px, toolbar icons 34→40px, sidebar buttons 20-26→28-32px,
+Sketch Studio file/toggle buttons 26→32px. Still below 44px WCAG ideal in dense areas.
 
-### Mobile Responsive Layout
-Craftsman sidebar takes over entire viewport on mobile, hiding the drawing canvas.
-Needs slide-out drawer or bottom sheet pattern instead of full-screen overlay.
+### Mobile Responsive Layout — IMPROVED
+Craftsman sidebar now capped at 40vh on mobile with scroll overflow. Canvas visible above.
+Future: full slide-out drawer pattern for better mobile UX.
 
-### Cross-Page Theme Consistency
-Homepage (cream), Floorplan (white/light), Sketch Studio (dark navy) — three different visual languages.
-Consider unifying or creating a clear transition between themes.
+### Cross-Page Theme Consistency — INTENTIONAL
+Homepage (cream), Floorplan (white/light), Sketch Studio (dark navy) — three visual languages.
+This is an intentional design choice: light themes for 2D drafting/planning, dark theme for
+the technical workshop environment. Common in CAD/design tools (Figma, Fusion 360).
+Future work: add user preference toggle for dark/light mode across all workspaces.
 
-### Sketch Studio Color Tokens
-Sketch Studio uses hardcoded hex/rgba values instead of CSS custom properties.
-Floorplan already uses variables.css tokens. Align Sketch Studio to use the same system.
+### Sketch Studio Color Tokens — PARTIALLY DONE
+Added --dark-* token system to variables.css. Migrated 70+ hardcoded values in craftsman.module.css
+to tokens. Remaining: ~70 minor color values in craftsman, sketchstudio.css still needs migration.
 
-### BOM Table React Key Collisions
-Multiple entities with same name+material generate duplicate React keys, causing
-console warnings and potential rendering issues.
+### BOM Table React Key Collisions — FIXED
+Keys now use entity IDs instead of partName-material-index.
 
-### Template Gallery Previews
-Templates show text-only descriptions. Add SVG thumbnail previews generated from template data.
+### Template Gallery Previews — DONE
+Each template card now shows an SVG wireframe icon (TemplateThumbnail.jsx).
 
 ## Hook Refactor — DONE
 
