@@ -39,7 +39,11 @@ function renderFeature(entity, className) {
     return <polygon key={entity.id} {...sharedProps} points={points} />;
   }
 
-  return <rect key={entity.id} {...sharedProps} x={entity.x} y={entity.y} width={entity.width} height={entity.height} />;
+  const w = Math.abs(entity.width);
+  const h = Math.abs(entity.height);
+  const x = entity.width < 0 ? entity.x + entity.width : entity.x;
+  const y = entity.height < 0 ? entity.y + entity.height : entity.y;
+  return <rect key={entity.id} {...sharedProps} x={x} y={y} width={w} height={h} />;
 }
 
 function renderEntity(entity, className) {
