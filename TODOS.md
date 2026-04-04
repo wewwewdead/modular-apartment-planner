@@ -37,13 +37,13 @@ One DXF per sheet from the nesting optimizer — ready for batch CNC.
 
 ## Design Review Findings (2026-04-04)
 
-### Touch Target Sizes — IMPROVED
-Increased site-wide: BOM buttons 18→28px, toolbar icons 34→40px, sidebar buttons 20-26→28-32px,
-Sketch Studio file/toggle buttons 26→32px. Still below 44px WCAG ideal in dense areas.
+### Touch Target Sizes — DONE
+Floorplan toolbar icons 44px, segmented buttons 40px. Sidebar buttons 32px.
+Sketch Studio file/icon/toggle 36px. BOM action buttons 32px. All meet or approach WCAG 44px.
 
-### Mobile Responsive Layout — IMPROVED
-Craftsman sidebar now capped at 40vh on mobile with scroll overflow. Canvas visible above.
-Future: full slide-out drawer pattern for better mobile UX.
+### Mobile Responsive Layout — DONE
+Mobile sidebar is a CSS bottom sheet with drag handle. Collapsed by default (44px peek),
+expands on hover/focus-within. Canvas gets 60vh minimum. No JS needed.
 
 ### Cross-Page Theme Consistency — INTENTIONAL
 Homepage (cream), Floorplan (white/light), Sketch Studio (dark navy) — three visual languages.
@@ -51,9 +51,9 @@ This is an intentional design choice: light themes for 2D drafting/planning, dar
 the technical workshop environment. Common in CAD/design tools (Figma, Fusion 360).
 Future work: add user preference toggle for dark/light mode across all workspaces.
 
-### Sketch Studio Color Tokens — PARTIALLY DONE
-Added --dark-* token system to variables.css. Migrated 70+ hardcoded values in craftsman.module.css
-to tokens. Remaining: ~70 minor color values in craftsman, sketchstudio.css still needs migration.
+### Sketch Studio Color Tokens — DONE
+Craftsman module: zero hardcoded hex colors (was 140+). Sketch Studio: all text, borders,
+backgrounds, focus rings migrated to --dark-* tokens. Only SVG rendering colors remain hardcoded.
 
 ### BOM Table React Key Collisions — FIXED
 Keys now use entity IDs instead of partName-material-index.
