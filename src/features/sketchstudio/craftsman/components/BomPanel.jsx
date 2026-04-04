@@ -61,7 +61,7 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveR
           </thead>
           <tbody>
             {bomRows.map((row, i) => (
-              <tr key={`${row.partName}-${row.material}-${i}`}>
+              <tr key={row.entityIds?.join(',') || `bom-${i}`}>
                 <td>{row.partName}</td>
                 <td className={styles.materialCell}>{row.materialName || row.material}</td>
                 <td>{Math.round(row.width)}</td>
