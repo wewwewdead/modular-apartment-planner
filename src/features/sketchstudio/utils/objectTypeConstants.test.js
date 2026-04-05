@@ -46,7 +46,7 @@ describe('objectTypeConstants', () => {
     expect(DEFAULT_OBJECT_TYPE).toBe('assembly');
   });
 
-  it('DEFAULT_CATEGORY is furniture', () => {
-    expect(DEFAULT_CATEGORY).toBe('furniture');
+  it('DEFAULT_CATEGORY is custom', () => {
+    expect(DEFAULT_CATEGORY).toBe('custom');
   });
 });
