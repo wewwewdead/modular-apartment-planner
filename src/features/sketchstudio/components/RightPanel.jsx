@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { computeIsometricAngle } from '../utils/angleUtils';
 import ParametricPanel from '../craftsman/components/ParametricPanel';
+import MaterialPicker from '../craftsman/components/MaterialPicker';
+import { getMaterialSelectionState } from '../craftsman/utils/materialSelectionUtils';
 import {
   createSketchConstraint,
   getConstraintMidpointOptions,
@@ -83,6 +85,25 @@ function renderEditableFields(entity, onCommit) {
     return [
       renderEditableTextField('text', entity.text, onCommit),
       ...['x', 'y', 'fontSize', 'rotation'].map((field) => renderEditableField(field, entity[field] ?? 0, onCommit)),
+      (
+        <label key={`leaderEnabled-${entity.id}`} className="sketchStudioEditableRow">
+          <span className="sketchStudioPropertyKey">Arrow</span>
+          <select
+            className="sketchStudioPropertyInput"
+            defaultValue={entity.leader?.target ? 'on' : 'off'}
+            onChange={(event) => onCommit('leaderEnabled', event.target.value === 'on' ? 'true' : 'false')}
+          >
+            <option value="off">None</option>
+            <option value="on">Leader arrow</option>
+          </select>
+        </label>
+      ),
+      ...(entity.leader?.target
+        ? [
+            renderEditableField('leaderTargetX', entity.leader.target.x, onCommit),
+            renderEditableField('leaderTargetY', entity.leader.target.y, onCommit),
+          ]
+        : []),
     ];
   }
 
@@ -712,7 +733,14 @@ export default function RightPanel({
   onFlipHorizontal,
   onFlipVertical,
   onToggleBrokenLines,
+  onMaterialChange,
+  onThicknessChange,
 }) {
+  const materialSelection = useMemo(
+    () => getMaterialSelectionState(document.entities, selectedIds),
+    [document.entities, selectedIds],
+  );
+
   return (
     <aside className="sketchStudioRightPanel">
       <section className="sketchStudioPanelSection">
@@ -770,6 +798,22 @@ export default function RightPanel({
           </div>
         )}
       </section>
+      {selectedIds.length > 0 && (
+        <section className="sketchStudioPanelSection">
+          <p className="sketchStudioPanelEyebrow">Materials</p>
+          <div className="sketchStudioSubpanelCard">
+            <MaterialPicker
+              selectedMaterialId={materialSelection.selectedMaterialId}
+              thickness={materialSelection.thickness}
+              selectionCount={materialSelection.selectionCount}
+              isMixedMaterial={materialSelection.isMixedMaterial}
+              isMixedThickness={materialSelection.isMixedThickness}
+              onMaterialChange={(materialId) => onMaterialChange(selectedIds, materialId)}
+              onThicknessChange={(thickness) => onThicknessChange(selectedIds, thickness)}
+            />
+          </div>
+        </section>
+      )}
       <ConstraintsSection
         document={document}
         selectedIds={selectedIds}

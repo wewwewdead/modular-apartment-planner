@@ -1,5 +1,11 @@
 import { calculateDistance, projectPointFromStart } from '../utils/canvasMath';
-import { buildLineFromExactLength, getDimensionOffsetFromPlacement, createFeatureEntity } from '../utils/entityUtils';
+import {
+  buildLineFromExactLength,
+  getDimensionOffsetFromPlacement,
+  createFeatureEntity,
+  DEFAULT_TEXT_LABEL,
+  DEFAULT_TEXT_SIZE,
+} from '../utils/entityUtils';
 import { inferDimensionSubtype } from '../utils/dimensionUtils';
 import { buildIsometricEllipse, buildIsometricPlaneRectangle, getIsometricPlaneAxes } from '../utils/isometricUtils';
 import { measureOffsetDistance, offsetLineEntity, offsetPolylineEntity, offsetRectEntity } from '../utils/offsetUtils';
@@ -19,7 +25,7 @@ export const TOOL_DEFINITIONS = [
   { id: 'circle', label: 'Circle', shortLabel: 'CIR', shortcut: 'C', description: 'Create circle entities' },
   { id: 'polyline', label: 'Polyline', shortLabel: 'PLY', shortcut: 'P', description: 'Create multi-segment paths' },
   { id: 'arc', label: 'Arc', shortLabel: 'ARC', shortcut: 'A', description: 'Create three-point arcs' },
-  { id: 'text', label: 'Text', shortLabel: 'TXT', shortcut: 'T', description: 'Place text labels on the canvas' },
+  { id: 'text', label: 'Text', shortLabel: 'TXT', shortcut: 'T', description: 'Place leader labels with a target point and offset' },
   { id: 'offset', label: 'Offset', shortLabel: 'OFF', shortcut: 'O', description: 'Create offset copies of supported profiles' },
   { id: 'holeCircle', label: 'Hole', shortLabel: 'HOL', shortcut: 'J', description: 'Create circular subtractive features' },
   { id: 'cutoutRect', label: 'Cutout', shortLabel: 'CUT', shortcut: 'U', description: 'Create rectangular subtractive features' },
@@ -374,6 +380,20 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
 
     if (draft.points.length === 2 && draft.currentPoint) {
       return { type: 'arc', start: draft.points[0], end: draft.points[1], control: draft.currentPoint };
+    }
+  }
+
+  if (draft.type === 'text') {
+    if (draft.points.length === 1 && draft.currentPoint) {
+      return {
+        type: 'text-leader',
+        x: draft.currentPoint.x,
+        y: draft.currentPoint.y,
+        text: DEFAULT_TEXT_LABEL,
+        fontSize: DEFAULT_TEXT_SIZE,
+        rotation: 0,
+        target: draft.points[0],
+      };
     }
   }
 

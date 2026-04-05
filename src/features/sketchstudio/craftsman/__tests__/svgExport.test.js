@@ -61,10 +61,10 @@ describe('SVG export', () => {
     const joint = createSketchJoint({
       id: 'joint-rabbet',
       type: 'rabbet',
-      primaryEntityId: 'panel',
-      secondaryEntityId: 'back',
-      primaryEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
-      secondaryEdgeRef: { entityId: 'back', sourceType: 'segment', sourceKey: 'bottom' },
+      sourcePartId: 'back',
+      targetPartId: 'panel',
+      sourceEdgeRef: { entityId: 'back', sourceType: 'segment', sourceKey: 'bottom' },
+      targetEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
       parameters: {
         width: 100,
         depth: 9,
@@ -91,5 +91,23 @@ describe('SVG export', () => {
     expect(svg).toContain('<circle');
     expect(svg).toContain('<text');
     expect(svg).toContain('Label');
+  });
+
+  it('exports text leader arrows with the label', () => {
+    const svg = exportEntitiesToSvg([
+      {
+        id: 't1',
+        type: 'text',
+        x: 100,
+        y: 20,
+        text: 'Label',
+        fontSize: 12,
+        leader: { target: { x: 40, y: 80 } },
+      },
+    ]);
+
+    expect(svg).toContain('<line');
+    expect(svg).toContain('<polygon');
+    expect(svg).toContain('<text');
   });
 });

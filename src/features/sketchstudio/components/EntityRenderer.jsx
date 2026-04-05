@@ -1,5 +1,6 @@
 import { getArcPath, getArcMidpoint } from '../utils/arcUtils';
 import { getRectCorners } from '../utils/entityUtils';
+import { getTextLeaderGeometry } from '../utils/textLeaderUtils';
 
 function rectPoints(entity) {
   const corners = getRectCorners(entity);
@@ -80,19 +81,42 @@ function renderEntity(entity, className) {
   }
 
   if (entity.type === 'text') {
+    const leaderGeometry = getTextLeaderGeometry(entity);
+
     return (
-      <text
-        key={entity.id}
-        {...sharedProps}
-        className={`${className} is-text`}
-        x={entity.x}
-        y={entity.y}
-        fontSize={entity.fontSize}
-        dominantBaseline="hanging"
-        transform={`rotate(${entity.rotation ?? 0} ${entity.x} ${entity.y})`}
-      >
-        {entity.text}
-      </text>
+      <g key={entity.id}>
+        {leaderGeometry ? (
+          <>
+            <line
+              {...sharedProps}
+              className={`${className} sketchStudioEntityLeader`}
+              x1={leaderGeometry.anchor.x}
+              y1={leaderGeometry.anchor.y}
+              x2={leaderGeometry.shaftEnd.x}
+              y2={leaderGeometry.shaftEnd.y}
+              fill="none"
+              strokeLinecap="round"
+            />
+            <polygon
+              {...sharedProps}
+              className={`${className} sketchStudioEntityLeaderHead`}
+              points={leaderGeometry.arrowHead.map((point) => `${point.x},${point.y}`).join(' ')}
+              strokeLinejoin="round"
+            />
+          </>
+        ) : null}
+        <text
+          {...sharedProps}
+          className={`${className} is-text`}
+          x={entity.x}
+          y={entity.y}
+          fontSize={entity.fontSize}
+          dominantBaseline="hanging"
+          transform={`rotate(${entity.rotation ?? 0} ${entity.x} ${entity.y})`}
+        >
+          {entity.text}
+        </text>
+      </g>
     );
   }
 

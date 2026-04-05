@@ -180,6 +180,28 @@
   transform: scale(0.97);
 }
 
+.tertiaryLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  margin-top: 20px;
+  padding: 6px 4px;
+  transition: color 0.2s ease, transform 0.15s ease;
+  opacity: 0;
+  transform: translateY(12px);
+  animation: heroEntrance 0.8s var(--ease-dramatic) 0.7s forwards;
+}
+
+.tertiaryLink:hover {
+  color: var(--color-accent);
+  transform: translateX(2px);
+}
+
 /* Animations */
 @keyframes heroEntrance {
   from {
@@ -204,7 +226,8 @@
   .titleDisplay,
   .titleStructural,
   .tagline,
-  .ctas {
+  .ctas,
+  .tertiaryLink {
     opacity: 1;
     transform: none;
     animation: none;

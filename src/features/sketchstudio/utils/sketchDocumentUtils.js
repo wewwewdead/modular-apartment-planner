@@ -1,4 +1,5 @@
 import sampleDocument from '../data/sampleDocument';
+import { cloneJoint as cloneJoineryJoint } from '../joinery';
 
 export function normalizeCommittedSketchName(name) {
   return String(name || '').trim() || 'Untitled Sketch';
@@ -35,14 +36,7 @@ function cloneConstraint(constraint) {
 }
 
 function cloneJoint(joint) {
-  return {
-    ...joint,
-    parameters: {
-      ...(joint?.parameters || {}),
-    },
-    primaryEdgeRef: joint?.primaryEdgeRef ? { ...joint.primaryEdgeRef } : null,
-    secondaryEdgeRef: joint?.secondaryEdgeRef ? { ...joint.secondaryEdgeRef } : null,
-  };
+  return cloneJoineryJoint(joint);
 }
 
 export function normalizeSketchDocument(document) {

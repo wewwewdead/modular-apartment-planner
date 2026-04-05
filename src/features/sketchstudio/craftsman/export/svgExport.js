@@ -8,6 +8,7 @@ import { getArcPath } from '../../utils/arcUtils';
 import { computeEntityBoundingBox } from '../../utils/bboxUtils';
 import { getDimensionGeometry, measureDistance, formatDimensionText } from '../../utils/dimensionUtils';
 import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
+import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
 
 const EXPORTABLE_TYPES = new Set([
@@ -236,7 +237,17 @@ function angleDimensionToSvgElement(entity, allEntities) {
 
 function textToSvgElement(entity) {
   const transform = entity.rotation ? ` transform="rotate(${entity.rotation} ${entity.x} ${entity.y})"` : '';
-  return `  <text x="${entity.x}" y="${entity.y}" font-size="${entity.fontSize}" font-family="sans-serif" fill="black" dominant-baseline="hanging"${transform}>${escapeXml(entity.text)}</text>`;
+  const leaderGeometry = getTextLeaderGeometry(entity);
+
+  if (!leaderGeometry) {
+    return `  <text x="${entity.x}" y="${entity.y}" font-size="${entity.fontSize}" font-family="sans-serif" fill="black" dominant-baseline="hanging"${transform}>${escapeXml(entity.text)}</text>`;
+  }
+
+  return `  <g>
+    <line x1="${leaderGeometry.anchor.x}" y1="${leaderGeometry.anchor.y}" x2="${leaderGeometry.shaftEnd.x}" y2="${leaderGeometry.shaftEnd.y}" ${GEO_ATTRS} />
+    <polygon points="${leaderGeometry.arrowHead.map((point) => `${point.x},${point.y}`).join(' ')}" stroke="black" stroke-width="0.5" fill="black" />
+    <text x="${entity.x}" y="${entity.y}" font-size="${entity.fontSize}" font-family="sans-serif" fill="black" dominant-baseline="hanging"${transform}>${escapeXml(entity.text)}</text>
+  </g>`;
 }
 
 function entityToSvgElement(entity, allEntities) {

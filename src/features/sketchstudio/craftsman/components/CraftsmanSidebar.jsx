@@ -6,6 +6,7 @@ import JointPanel from './JointPanel';
 import ParametricPanel from './ParametricPanel';
 import AssemblyPanel from './AssemblyPanel';
 import useSketchBOM from '../hooks/useSketchBOM';
+import { getMaterialSelectionState } from '../utils/materialSelectionUtils';
 import styles from '../styles/craftsman.module.css';
 
 function CollapsibleSection({ title, defaultOpen = true, children }) {
@@ -18,6 +19,58 @@ function CollapsibleSection({ title, defaultOpen = true, children }) {
       </button>
       {open && <div className={styles.collapsibleBody}>{children}</div>}
     </div>
+  );
+}
+
+function LabelAnnotationSection({ entity, onEntityFieldCommit, styles: cssStyles }) {
+  if (!entity || entity.type !== 'text' || !onEntityFieldCommit) {
+    return null;
+  }
+
+  return (
+    <CollapsibleSection title="Label Annotation">
+      <div className={cssStyles.materialPicker}>
+        <label className={cssStyles.fieldLabel}>Text</label>
+        <input
+          type="text"
+          className={cssStyles.thicknessInput}
+          defaultValue={entity.text}
+          onBlur={(event) => onEntityFieldCommit('text', event.target.value)}
+        />
+
+        <label className={cssStyles.fieldLabel}>Arrow</label>
+        <select
+          className={cssStyles.materialSelect}
+          defaultValue={entity.leader?.target ? 'on' : 'off'}
+          onChange={(event) => onEntityFieldCommit('leaderEnabled', event.target.value === 'on' ? 'true' : 'false')}
+        >
+          <option value="off">None</option>
+          <option value="on">Leader arrow</option>
+        </select>
+
+        {entity.leader?.target && (
+          <>
+            <label className={cssStyles.fieldLabel}>Arrow Target X</label>
+            <input
+              type="number"
+              step="0.1"
+              className={cssStyles.thicknessInput}
+              defaultValue={entity.leader.target.x}
+              onBlur={(event) => onEntityFieldCommit('leaderTargetX', event.target.value)}
+            />
+
+            <label className={cssStyles.fieldLabel}>Arrow Target Y</label>
+            <input
+              type="number"
+              step="0.1"
+              className={cssStyles.thicknessInput}
+              defaultValue={entity.leader.target.y}
+              onBlur={(event) => onEntityFieldCommit('leaderTargetY', event.target.value)}
+            />
+          </>
+        )}
+      </div>
+    </CollapsibleSection>
   );
 }
 
@@ -38,36 +91,31 @@ export default function CraftsmanSidebar({
   onJointRemove,
   onLoadTemplate,
   onDuplicateEntities,
+  onEntityFieldCommit,
 }) {
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(entities);
   const hasEntities = entities.length > 0;
+  const materialSelection = getMaterialSelectionState(entities, selectedIds);
 
   return (
     <div className={styles.craftsmanSidebar}>
       <h2 className={styles.sidebarTitle}>Craftsman Studio</h2>
 
-      {selectedEntity && (
-        <CollapsibleSection title="Material Assignment">
+      {selectedIds.length > 0 && (
+        <CollapsibleSection title={selectedIds.length > 1 ? 'Bulk Material Assignment' : 'Material Assignment'}>
           <MaterialPicker
-            selectedMaterialId={selectedEntity.materialId ?? null}
-            thickness={selectedEntity.thickness ?? null}
+            selectedMaterialId={materialSelection.selectedMaterialId}
+            thickness={materialSelection.thickness}
+            selectionCount={materialSelection.selectionCount}
+            isMixedMaterial={materialSelection.isMixedMaterial}
+            isMixedThickness={materialSelection.isMixedThickness}
             onMaterialChange={(materialId) => onMaterialChange(selectedIds, materialId)}
             onThicknessChange={(thickness) => onThicknessChange(selectedIds, thickness)}
           />
         </CollapsibleSection>
       )}
 
-      {!selectedEntity && selectedIds.length > 1 && (
-        <CollapsibleSection title="Bulk Material Assignment">
-          <p className={styles.hint}>{selectedIds.length} entities selected</p>
-          <MaterialPicker
-            selectedMaterialId={null}
-            thickness={null}
-            onMaterialChange={(materialId) => onMaterialChange(selectedIds, materialId)}
-            onThicknessChange={(thickness) => onThicknessChange(selectedIds, thickness)}
-          />
-        </CollapsibleSection>
-      )}
+      <LabelAnnotationSection entity={selectedEntity} onEntityFieldCommit={onEntityFieldCommit} styles={styles} />
 
       {!hasEntities && onLoadTemplate && (
         <CollapsibleSection title="Quick Start" defaultOpen={true}>

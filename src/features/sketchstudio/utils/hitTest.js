@@ -3,6 +3,7 @@ import { getArcSegments } from './arcUtils';
 import { getDimensionGeometry } from './dimensionUtils';
 import { getRectCorners, getTextCorners, resolveSourceReferenceFromEntities } from './entityUtils';
 import { getPolylineSegments } from './polylineUtils';
+import { getTextLeaderGeometry } from './textLeaderUtils';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -166,9 +167,30 @@ export function hitTestFeature(entity, point, tolerance) {
 
 export function hitTestText(entity, point, tolerance) {
   const corners = Object.values(getTextCorners(entity));
+  const leaderGeometry = getTextLeaderGeometry(entity);
 
   if (pointInPolygon(point, corners)) {
     return true;
+  }
+
+  if (leaderGeometry) {
+    if (distancePointToSegment(point, leaderGeometry.anchor, leaderGeometry.shaftEnd) <= tolerance) {
+      return true;
+    }
+
+    if (pointInPolygon(point, leaderGeometry.arrowHead)) {
+      return true;
+    }
+
+    if (leaderGeometry.arrowHead.some((arrowPoint, index) => (
+      distancePointToSegment(
+        point,
+        arrowPoint,
+        leaderGeometry.arrowHead[(index + 1) % leaderGeometry.arrowHead.length],
+      ) <= tolerance
+    ))) {
+      return true;
+    }
   }
 
   return corners.some((corner, index) => (

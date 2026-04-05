@@ -2,6 +2,7 @@ import { getArcBoundingBox } from './arcUtils';
 import { getDimensionGeometry } from './dimensionUtils';
 import { getTextCorners } from './entityUtils';
 import { getPolylineBoundingBox } from './polylineUtils';
+import { getTextLeaderGeometry } from './textLeaderUtils';
 
 function getPointsBoundingBox(points) {
   if (!points.length) {
@@ -163,7 +164,11 @@ export function computeEntityBoundingBox(entity, _entities = []) {
   }
 
   if (entity.type === 'text') {
-    return getPointsBoundingBox(Object.values(getTextCorners(entity)));
+    const leaderGeometry = getTextLeaderGeometry(entity);
+    return getPointsBoundingBox([
+      ...Object.values(getTextCorners(entity)),
+      ...(leaderGeometry ? [leaderGeometry.anchor, leaderGeometry.target, ...leaderGeometry.arrowHead] : []),
+    ]);
   }
 
   return null;

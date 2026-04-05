@@ -1,21 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getJointById } from '../data/joints';
 import styles from '../styles/craftsman.module.css';
 import {
+  JOINT_PARAMETER_DEPTH_MODES,
+  JOINT_PLACEMENT_MODES,
   computeSketchJointDefaults,
   createSketchJoint,
+  getJointTypeDefinition,
   getSketchJointSegmentOptions,
   getSketchJointSummary,
   getSketchJointTypeOptions,
+  isSketchJointPairSupported,
+  listJointTypeParameterFields,
   listSketchJointEntityIds,
   parseSerializedSketchJointReference,
   resolveSketchJoinery,
   serializeSketchJointReference,
+  supportsAutoOverlapDepth,
 } from '../../utils/sketchJoineryUtils';
 
 function getRectPartOptions(entities = []) {
   return entities
-    .filter((entity) => entity.type === 'rect' && !Number(entity.rotation))
+    .filter((entity) => entity.type === 'rect')
     .map((entity) => ({
       value: entity.id,
       label: `${entity.id} (${Math.round(entity.width)} x ${Math.round(entity.height)} mm)`,
@@ -31,30 +36,91 @@ function getEdgeOptionsForEntity(entities, entityId) {
   return entity ? getSketchJointSegmentOptions([entity]) : [];
 }
 
+function supportsAutoDepthMode(type, placementMode) {
+  return placementMode === JOINT_PLACEMENT_MODES.AUTO_CONTACT && supportsAutoOverlapDepth(type);
+}
+
+function formatNumericValue(value) {
+  return Number.isFinite(Number(value)) ? `${Number(value)} mm` : 'Not resolved';
+}
+
+function formatEdgeLabel(edgeKey) {
+  return edgeKey ? String(edgeKey).replace(/^./, (value) => value.toUpperCase()) : 'Unknown';
+}
+
+function buildParameterValues(type, defaults = {}, existingParameters = null) {
+  return listJointTypeParameterFields(type).reduce((accumulator, field) => ({
+    ...accumulator,
+    [field.key]:
+      existingParameters?.[field.key] != null
+        ? String(existingParameters[field.key])
+        : defaults?.[field.key] != null
+          ? String(defaults[field.key])
+          : '',
+  }), {});
+}
+
+function buildSeedJoint(formState) {
+  return createSketchJoint({
+    id: formState.id || 'joint-draft',
+    type: formState.type,
+    placementMode: formState.placementMode,
+    parameterModes: formState.parameterModes,
+    sourcePartId: formState.sourcePartId,
+    targetPartId: formState.targetPartId,
+    sourceEdgeRef:
+      formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
+        ? parseSerializedSketchJointReference(formState.sourceEdgeValue)
+        : null,
+    targetEdgeRef:
+      formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
+        ? parseSerializedSketchJointReference(formState.targetEdgeValue)
+        : null,
+  });
+}
+
+export function orderSelectedJoineryEntities(entities = [], selectedEntities = [], selectedIds = []) {
+  const selectedEntityMap = new Map(
+    (selectedEntities || []).map((entity) => [entity.id, entity]),
+  );
+  const orderedSelection = (selectedIds || [])
+    .map((entityId) => selectedEntityMap.get(entityId) || getEntityById(entities, entityId))
+    .filter(Boolean);
+
+  return orderedSelection.length ? orderedSelection : selectedEntities;
+}
+
 function buildJointFormState(entities, selectedEntities = [], existing = null) {
   const partOptions = getRectPartOptions(entities);
-  const initialPrimaryId = existing?.primaryEntityId || selectedEntities[0]?.id || partOptions[0]?.value || '';
-  const initialSecondaryId =
-    existing?.secondaryEntityId ||
-    selectedEntities[1]?.id ||
-    partOptions.find((option) => option.value !== initialPrimaryId)?.value ||
-    partOptions[0]?.value ||
-    '';
-  const primaryEdgeOptions = getEdgeOptionsForEntity(entities, initialPrimaryId);
-  const secondaryEdgeOptions = getEdgeOptionsForEntity(entities, initialSecondaryId);
-  const type = existing?.type || 'finger';
+  const sourcePartId = existing?.sourcePartId || selectedEntities[0]?.id || partOptions[0]?.value || '';
+  const targetPartId =
+    existing?.targetPartId
+    || selectedEntities[1]?.id
+    || partOptions.find((option) => option.value !== sourcePartId)?.value
+    || partOptions[0]?.value
+    || '';
+  const sourceEdgeOptions = getEdgeOptionsForEntity(entities, sourcePartId);
+  const targetEdgeOptions = getEdgeOptionsForEntity(entities, targetPartId);
+  const type = existing?.type || 'dado';
+  const placementMode = existing?.placementMode || JOINT_PLACEMENT_MODES.AUTO_CONTACT;
   const seedJoint = createSketchJoint({
     id: existing?.id || 'joint-draft',
     type,
-    primaryEntityId: initialPrimaryId,
-    secondaryEntityId: initialSecondaryId,
-    primaryEdgeRef:
-      existing?.primaryEdgeRef || parseSerializedSketchJointReference(primaryEdgeOptions[0]?.value || ''),
-    secondaryEdgeRef:
-      existing?.secondaryEdgeRef || parseSerializedSketchJointReference(secondaryEdgeOptions[0]?.value || ''),
+    placementMode,
+    parameterModes: existing?.parameterModes,
+    sourcePartId,
+    targetPartId,
+    sourceEdgeRef:
+      placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
+        ? (existing?.sourceEdgeRef || parseSerializedSketchJointReference(sourceEdgeOptions[0]?.value || ''))
+        : null,
+    targetEdgeRef:
+      placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
+        ? (existing?.targetEdgeRef || parseSerializedSketchJointReference(targetEdgeOptions[0]?.value || ''))
+        : null,
+    parameters: existing?.parameters,
   });
   const computedDefaults = computeSketchJointDefaults(seedJoint, entities);
-  const defaults = existing ? { ...computedDefaults, ...(existing.parameters || {}) } : computedDefaults;
 
   return {
     id: existing?.id || null,
@@ -62,57 +128,97 @@ function buildJointFormState(entities, selectedEntities = [], existing = null) {
     type,
     label: existing?.label || '',
     enabled: existing?.enabled !== false,
-    primaryEntityId: initialPrimaryId,
-    secondaryEntityId: initialSecondaryId,
-    primaryEdgeValue:
-      serializeSketchJointReference(existing?.primaryEdgeRef) || primaryEdgeOptions[0]?.value || '',
-    secondaryEdgeValue:
-      serializeSketchJointReference(existing?.secondaryEdgeRef) || secondaryEdgeOptions[0]?.value || '',
-    width: defaults.width != null ? String(defaults.width) : '',
-    depth: defaults.depth != null ? String(defaults.depth) : '',
-    fingerCount: defaults.fingerCount != null ? String(defaults.fingerCount) : '',
-    fingerWidth: defaults.fingerWidth != null ? String(defaults.fingerWidth) : '',
+    placementMode: seedJoint.placementMode,
+    parameterModes: {
+      ...seedJoint.parameterModes,
+    },
+    sourcePartId,
+    targetPartId,
+    sourceEdgeValue:
+      serializeSketchJointReference(existing?.sourceEdgeRef) || sourceEdgeOptions[0]?.value || '',
+    targetEdgeValue:
+      serializeSketchJointReference(existing?.targetEdgeRef) || targetEdgeOptions[0]?.value || '',
+    parameterValues: buildParameterValues(type, computedDefaults, existing?.parameters || null),
   };
 }
 
 function buildJointFromForm(formState) {
+  const parameters = listJointTypeParameterFields(formState.type).reduce((accumulator, field) => {
+    if (
+      field.key === 'depth'
+      && formState.parameterModes.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP
+    ) {
+      return accumulator;
+    }
+
+    const rawValue = formState.parameterValues[field.key];
+    if (rawValue == null || rawValue === '') {
+      return accumulator;
+    }
+
+    const numericValue = field.kind === 'integer'
+      ? Math.round(Number(rawValue))
+      : Number(rawValue);
+
+    return Number.isFinite(numericValue)
+      ? { ...accumulator, [field.key]: numericValue }
+      : accumulator;
+  }, {});
+
   return createSketchJoint({
     id: formState.id || 'joint-draft',
     type: formState.type,
     label: formState.label,
     enabled: formState.enabled,
-    primaryEntityId: formState.primaryEntityId,
-    secondaryEntityId: formState.secondaryEntityId,
-    primaryEdgeRef: parseSerializedSketchJointReference(formState.primaryEdgeValue),
-    secondaryEdgeRef: parseSerializedSketchJointReference(formState.secondaryEdgeValue),
-    parameters:
-      formState.type === 'finger'
-        ? {
-            fingerCount: Number(formState.fingerCount),
-            fingerWidth: Number(formState.fingerWidth),
-            depth: Number(formState.depth),
-          }
-        : {
-            width: Number(formState.width),
-            depth: Number(formState.depth),
-          },
+    placementMode: formState.placementMode,
+    parameterModes: formState.parameterModes,
+    sourcePartId: formState.sourcePartId,
+    targetPartId: formState.targetPartId,
+    sourceEdgeRef:
+      formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
+        ? parseSerializedSketchJointReference(formState.sourceEdgeValue)
+        : null,
+    targetEdgeRef:
+      formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
+        ? parseSerializedSketchJointReference(formState.targetEdgeValue)
+        : null,
+    parameters,
   });
+}
+
+function buildContactSummary(joint) {
+  const contact = joint?.resolvedContact;
+  if (!contact || !joint?.sourcePartId || !joint?.targetPartId) {
+    return null;
+  }
+
+  const directionSummary = contact.autoFlipped ? ' Automatic source and target roles were corrected from the detected overlap.' : '';
+
+  if (contact.kind === 'penetration') {
+    return [
+      `Detected overlap: ${joint.sourcePartId} ${formatEdgeLabel(contact.sourceEdgeKey).toLowerCase()} edge enters`,
+      `${joint.targetPartId} ${formatEdgeLabel(contact.targetEdgeKey).toLowerCase()} edge by`,
+      `${formatNumericValue(contact.penetrationDepth)} over a ${formatNumericValue(contact.overlap?.length)} span.${directionSummary}`,
+    ].join(' ');
+  }
+
+  return [
+    `Detected contact: ${joint.sourcePartId} ${formatEdgeLabel(contact.sourceEdgeKey).toLowerCase()} edge touches`,
+    `${joint.targetPartId} ${formatEdgeLabel(contact.targetEdgeKey).toLowerCase()} edge over`,
+    `${formatNumericValue(contact.overlap?.length)}.${directionSummary}`,
+  ].join(' ');
 }
 
 function getJointStatusClassName(diagnostic) {
   switch (diagnostic?.status) {
     case 'applied':
       return styles.jointStatusApplied;
+    case 'warning':
+      return styles.jointStatusWarning;
     case 'disabled':
       return styles.jointStatusDisabled;
-    case 'conflict':
-      return styles.jointStatusConflict;
-    case 'invalid_ref':
-      return styles.jointStatusInvalid;
-    case 'unsupported':
-      return styles.jointStatusUnsupported;
     default:
-      return '';
+      return styles.jointStatusInvalid;
   }
 }
 
@@ -140,100 +246,129 @@ function JointForm({
   submitLabel,
 }) {
   const partOptions = useMemo(() => getRectPartOptions(entities), [entities]);
-  const primaryEdgeOptions = useMemo(
-    () => getEdgeOptionsForEntity(entities, formState.primaryEntityId),
-    [entities, formState.primaryEntityId],
+  const sourceEdgeOptions = useMemo(
+    () => getEdgeOptionsForEntity(entities, formState.sourcePartId),
+    [entities, formState.sourcePartId],
   );
-  const secondaryEdgeOptions = useMemo(
-    () => getEdgeOptionsForEntity(entities, formState.secondaryEntityId),
-    [entities, formState.secondaryEntityId],
+  const targetEdgeOptions = useMemo(
+    () => getEdgeOptionsForEntity(entities, formState.targetPartId),
+    [entities, formState.targetPartId],
   );
-  const currentType = getJointById(formState.type);
+  const currentType = getJointTypeDefinition(formState.type);
+  const parameterFields = listJointTypeParameterFields(formState.type);
   const pairSelectionIds = selectedEntities.map((entity) => entity.id);
+  const isManualPlacement = formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS;
+  const autoDepthEnabled = supportsAutoDepthMode(formState.type, formState.placementMode);
+  const depthIsAuto = formState.parameterModes.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP;
+  const defaultSeedJoint = useMemo(() => buildSeedJoint(formState), [formState]);
+  const defaultParameters = useMemo(
+    () => computeSketchJointDefaults(defaultSeedJoint, entities),
+    [defaultSeedJoint, entities],
+  );
+  const contactSummary = buildContactSummary(candidateJoint);
 
   useEffect(() => {
-    if (!formState.primaryEntityId && partOptions[0]?.value) {
+    if (!formState.sourcePartId && partOptions[0]?.value) {
       setFormState((current) => ({
         ...current,
-        primaryEntityId: partOptions[0].value,
+        sourcePartId: partOptions[0].value,
       }));
     }
-  }, [formState.primaryEntityId, partOptions, setFormState]);
+  }, [formState.sourcePartId, partOptions, setFormState]);
 
   useEffect(() => {
-    if (formState.primaryEntityId === formState.secondaryEntityId) {
-      const nextSecondaryId = partOptions.find((option) => option.value !== formState.primaryEntityId)?.value || '';
-      if (nextSecondaryId) {
+    if (formState.sourcePartId === formState.targetPartId) {
+      const nextTargetId = partOptions.find((option) => option.value !== formState.sourcePartId)?.value || '';
+      if (nextTargetId) {
         setFormState((current) => ({
           ...current,
-          secondaryEntityId: nextSecondaryId,
+          targetPartId: nextTargetId,
         }));
       }
     }
-  }, [formState.primaryEntityId, formState.secondaryEntityId, partOptions, setFormState]);
+  }, [formState.sourcePartId, formState.targetPartId, partOptions, setFormState]);
 
   useEffect(() => {
-    if (!primaryEdgeOptions.some((option) => option.value === formState.primaryEdgeValue)) {
-      setFormState((current) => ({
-        ...current,
-        primaryEdgeValue: primaryEdgeOptions[0]?.value || '',
-      }));
-    }
-  }, [formState.primaryEdgeValue, primaryEdgeOptions, setFormState]);
-
-  useEffect(() => {
-    if (!secondaryEdgeOptions.some((option) => option.value === formState.secondaryEdgeValue)) {
-      setFormState((current) => ({
-        ...current,
-        secondaryEdgeValue: secondaryEdgeOptions[0]?.value || '',
-      }));
-    }
-  }, [formState.secondaryEdgeValue, secondaryEdgeOptions, setFormState]);
-
-  useEffect(() => {
-    if (!formState.autoDefaults) {
+    if (!isManualPlacement) {
       return;
     }
 
-    const defaults = computeSketchJointDefaults(candidateJoint, entities);
+    if (!sourceEdgeOptions.some((option) => option.value === formState.sourceEdgeValue)) {
+      setFormState((current) => ({
+        ...current,
+        sourceEdgeValue: sourceEdgeOptions[0]?.value || '',
+      }));
+    }
+  }, [formState.sourceEdgeValue, isManualPlacement, sourceEdgeOptions, setFormState]);
 
-    setFormState((current) =>
-      current.autoDefaults !== true
-        ? current
-        : (
-      current.type === 'finger'
+  useEffect(() => {
+    if (!isManualPlacement) {
+      return;
+    }
+
+    if (!targetEdgeOptions.some((option) => option.value === formState.targetEdgeValue)) {
+      setFormState((current) => ({
+        ...current,
+        targetEdgeValue: targetEdgeOptions[0]?.value || '',
+      }));
+    }
+  }, [formState.targetEdgeValue, isManualPlacement, targetEdgeOptions, setFormState]);
+
+  useEffect(() => {
+    setFormState((current) => {
+      let nextParameterValues = current.parameterValues;
+      let didChange = false;
+
+      if (current.autoDefaults) {
+        const computedValues = buildParameterValues(current.type, defaultParameters, null);
+        const currentSerialized = JSON.stringify(current.parameterValues);
+        const nextSerialized = JSON.stringify(computedValues);
+
+        if (currentSerialized !== nextSerialized) {
+          nextParameterValues = computedValues;
+          didChange = true;
+        }
+      } else if (current.parameterModes.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP) {
+        const nextDepthValue = defaultParameters.depth != null ? String(defaultParameters.depth) : '';
+        if ((current.parameterValues.depth ?? '') !== nextDepthValue) {
+          nextParameterValues = {
+            ...current.parameterValues,
+            depth: nextDepthValue,
+          };
+          didChange = true;
+        }
+      }
+
+      return didChange
         ? {
             ...current,
-            fingerCount: defaults.fingerCount != null ? String(defaults.fingerCount) : '',
-            fingerWidth: defaults.fingerWidth != null ? String(defaults.fingerWidth) : '',
-            depth: defaults.depth != null ? String(defaults.depth) : '',
+            parameterValues: nextParameterValues,
           }
-        : {
-            ...current,
-            width: defaults.width != null ? String(defaults.width) : '',
-            depth: defaults.depth != null ? String(defaults.depth) : '',
-          }
-        ),
-    );
+        : current;
+    });
   }, [
+    defaultParameters,
     formState.autoDefaults,
-    candidateJoint.primaryEntityId,
-    candidateJoint.secondaryEntityId,
-    candidateJoint.primaryEdgeRef?.entityId,
-    candidateJoint.primaryEdgeRef?.sourceKey,
-    candidateJoint.secondaryEdgeRef?.entityId,
-    candidateJoint.secondaryEdgeRef?.sourceKey,
-    candidateJoint.type,
-    entities,
+    formState.parameterModes.depth,
+    formState.placementMode,
+    formState.sourceEdgeValue,
+    formState.sourcePartId,
+    formState.targetEdgeValue,
+    formState.targetPartId,
+    formState.type,
     setFormState,
   ]);
 
-  const canSubmit = candidateDiagnostic?.status === 'applied';
+  const canSubmit =
+    candidateDiagnostic
+    && candidateDiagnostic.status !== 'invalid'
+    && candidateDiagnostic.status !== 'disabled'
+    && candidateDiagnostic.canApply !== false;
 
   return (
     <div className={styles.jointDetail}>
       <p className={styles.jointDescription}>
-        {currentType?.description || 'Generate manufacturable joinery geometry from the selected parts.'}
+        {currentType?.description || 'Generate manufacturing-aware joinery from the selected parts.'}
       </p>
 
       {pairSelectionIds.length === 2 ? (
@@ -248,9 +383,24 @@ function JointForm({
           <select
             className={styles.materialSelect}
             value={formState.type}
-            onChange={(event) =>
-              setFormState((current) => ({ ...current, type: event.target.value, autoDefaults: true }))
-            }
+            onChange={(event) => {
+              const nextType = event.target.value;
+              const nextDepthMode =
+                supportsAutoDepthMode(nextType, formState.placementMode)
+                  ? JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP
+                  : JOINT_PARAMETER_DEPTH_MODES.MANUAL;
+
+              setFormState((current) => ({
+                ...current,
+                type: nextType,
+                autoDefaults: true,
+                parameterModes: {
+                  ...current.parameterModes,
+                  depth: nextDepthMode,
+                },
+                parameterValues: {},
+              }));
+            }}
           >
             {getSketchJointTypeOptions().map((option) => (
               <option key={option.value} value={option.value}>
@@ -261,12 +411,16 @@ function JointForm({
         </label>
 
         <label className={styles.fieldLabel}>
-          Primary Part
+          Source Part
           <select
             className={styles.materialSelect}
-            value={formState.primaryEntityId}
+            value={formState.sourcePartId}
             onChange={(event) =>
-              setFormState((current) => ({ ...current, primaryEntityId: event.target.value, autoDefaults: true }))
+              setFormState((current) => ({
+                ...current,
+                sourcePartId: event.target.value,
+                autoDefaults: true,
+              }))
             }
           >
             {partOptions.map((option) => (
@@ -278,12 +432,16 @@ function JointForm({
         </label>
 
         <label className={styles.fieldLabel}>
-          Secondary Part
+          Target Part
           <select
             className={styles.materialSelect}
-            value={formState.secondaryEntityId}
+            value={formState.targetPartId}
             onChange={(event) =>
-              setFormState((current) => ({ ...current, secondaryEntityId: event.target.value, autoDefaults: true }))
+              setFormState((current) => ({
+                ...current,
+                targetPartId: event.target.value,
+                autoDefaults: true,
+              }))
             }
           >
             {partOptions.map((option) => (
@@ -295,38 +453,57 @@ function JointForm({
         </label>
 
         <label className={styles.fieldLabel}>
-          Primary Edge
-          <select
-            className={styles.materialSelect}
-            value={formState.primaryEdgeValue}
-            onChange={(event) =>
-              setFormState((current) => ({ ...current, primaryEdgeValue: event.target.value, autoDefaults: true }))
-            }
-          >
-            {primaryEdgeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          Placement
+          <div className={styles.jointModeValue}>
+            {isManualPlacement ? 'Manual edge references' : 'Automatic contact detection'}
+          </div>
         </label>
 
-        <label className={styles.fieldLabel}>
-          Secondary Edge
-          <select
-            className={styles.materialSelect}
-            value={formState.secondaryEdgeValue}
-            onChange={(event) =>
-              setFormState((current) => ({ ...current, secondaryEdgeValue: event.target.value, autoDefaults: true }))
-            }
-          >
-            {secondaryEdgeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isManualPlacement ? (
+          <>
+            <label className={styles.fieldLabel}>
+              Source Edge
+              <select
+                className={styles.materialSelect}
+                value={formState.sourceEdgeValue}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    sourceEdgeValue: event.target.value,
+                    autoDefaults: true,
+                  }))
+                }
+              >
+                {sourceEdgeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className={styles.fieldLabel}>
+              Target Edge
+              <select
+                className={styles.materialSelect}
+                value={formState.targetEdgeValue}
+                onChange={(event) =>
+                  setFormState((current) => ({
+                    ...current,
+                    targetEdgeValue: event.target.value,
+                    autoDefaults: true,
+                  }))
+                }
+              >
+                {targetEdgeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
 
         <label className={styles.fieldLabel}>
           Label
@@ -339,78 +516,89 @@ function JointForm({
           />
         </label>
 
-        {formState.type === 'finger' ? (
-          <>
-            <label className={styles.fieldLabel}>
-              Finger Count
+        {parameterFields.map((field) => {
+          if (field.key === 'depth' && autoDepthEnabled && depthIsAuto) {
+            return (
+              <label key={field.key} className={styles.fieldLabel}>
+                {field.label}
+                <input
+                  type="text"
+                  className={styles.thicknessInput}
+                  value={formState.parameterValues.depth ?? ''}
+                  readOnly
+                />
+                <div className={styles.jointFieldControls}>
+                  <button
+                    type="button"
+                    className={styles.exportBtn}
+                    onClick={() =>
+                      setFormState((current) => ({
+                        ...current,
+                        autoDefaults: false,
+                        parameterModes: {
+                          ...current.parameterModes,
+                          depth: JOINT_PARAMETER_DEPTH_MODES.MANUAL,
+                        },
+                        parameterValues: {
+                          ...current.parameterValues,
+                          depth: current.parameterValues.depth ?? '',
+                        },
+                      }))
+                    }
+                  >
+                    Use Manual Depth
+                  </button>
+                </div>
+              </label>
+            );
+          }
+
+          return (
+            <label key={field.key} className={styles.fieldLabel}>
+              {field.label}
               <input
                 type="number"
-                min="3"
-                step="2"
+                min={field.min}
+                step={field.step}
                 className={styles.thicknessInput}
-                value={formState.fingerCount}
+                value={formState.parameterValues[field.key] ?? ''}
                 onChange={(event) =>
-                  setFormState((current) => ({ ...current, fingerCount: event.target.value, autoDefaults: false }))
+                  setFormState((current) => ({
+                    ...current,
+                    autoDefaults: false,
+                    parameterValues: {
+                      ...current.parameterValues,
+                      [field.key]: event.target.value,
+                    },
+                  }))
                 }
               />
+              {field.key === 'depth' && autoDepthEnabled ? (
+                <div className={styles.jointFieldControls}>
+                  <button
+                    type="button"
+                    className={styles.exportBtn}
+                    onClick={() =>
+                      setFormState((current) => ({
+                        ...current,
+                        parameterModes: {
+                          ...current.parameterModes,
+                          depth: JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP,
+                        },
+                        parameterValues: {
+                          ...current.parameterValues,
+                          depth: defaultParameters.depth != null ? String(defaultParameters.depth) : '',
+                        },
+                      }))
+                    }
+                  >
+                    Link To Overlap
+                  </button>
+                </div>
+              ) : null}
             </label>
-            <label className={styles.fieldLabel}>
-              Finger Width (mm)
-              <input
-                type="number"
-                min="1"
-                step="0.1"
-                className={styles.thicknessInput}
-                value={formState.fingerWidth}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, fingerWidth: event.target.value, autoDefaults: false }))
-                }
-              />
-            </label>
-            <label className={styles.fieldLabel}>
-              Finger Depth (mm)
-              <input
-                type="number"
-                min="1"
-                step="0.1"
-                className={styles.thicknessInput}
-                value={formState.depth}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, depth: event.target.value, autoDefaults: false }))
-                }
-              />
-            </label>
-          </>
-        ) : (
-          <>
-            <label className={styles.fieldLabel}>
-              Width (mm)
-              <input
-                type="number"
-                min="1"
-                step="0.1"
-                className={styles.thicknessInput}
-                value={formState.width}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, width: event.target.value, autoDefaults: false }))
-                }
-              />
-            </label>
-            <label className={styles.fieldLabel}>
-              Depth (mm)
-              <input
-                type="number"
-                min="1"
-                step="0.1"
-                className={styles.thicknessInput}
-                value={formState.depth}
-                onChange={(event) =>
-                  setFormState((current) => ({ ...current, depth: event.target.value, autoDefaults: false }))
-                }
-              />
-            </label>
-          </>
-        )}
+          );
+        })}
       </div>
 
       <div className={styles.jointCandidateRow}>
@@ -418,15 +606,16 @@ function JointForm({
         <span className={styles.jointSummary}>{getSketchJointSummary(candidateJoint)}</span>
       </div>
 
+      {contactSummary ? (
+        <p className={styles.jointHowTo}>{contactSummary}</p>
+      ) : null}
+
       {candidateDiagnostic?.message ? (
         <p className={styles.jointHowTo}>{candidateDiagnostic.message}</p>
       ) : (
         <p className={styles.jointHowTo}>
-          {formState.type === 'finger'
-            ? 'Generated finger joints replace both source part outlines with interlocking manufacturing profiles.'
-            : formState.type === 'rabbet'
-              ? 'Generated rabbets replace the primary part outline with a stepped manufacturing profile.'
-              : 'Generated dados create subtractive slot geometry on the primary host part.'}
+          Automatic joints detect the single valid contact or overlap region between the selected parts, keep the joint
+          definition intact after edits, and regenerate manufacturing geometry instead of decorative labels.
         </p>
       )}
 
@@ -452,8 +641,8 @@ function ExistingJointList({ joints, diagnostics, selectedIds, onEdit, onToggle,
           joint,
           diagnostic: diagnostics.find((item) => item.jointId === joint.id) || null,
           relevant:
-            !selectedIds.length ||
-            listSketchJointEntityIds(joint).some((entityId) => selectedIds.includes(entityId)),
+            !selectedIds.length
+            || listSketchJointEntityIds(joint).some((entityId) => selectedIds.includes(entityId)),
         }))
         .sort((left, right) => Number(right.relevant) - Number(left.relevant)),
     [diagnostics, joints, selectedIds],
@@ -462,7 +651,8 @@ function ExistingJointList({ joints, diagnostics, selectedIds, onEdit, onToggle,
   if (!entries.length) {
     return (
       <p className={styles.emptyMessage}>
-        No generated joints yet. Select two rectangular parts, choose touching edges, then apply a joint.
+        No joints yet. Select two rectangular parts, choose a joint type, and let automatic detection resolve the
+        active mating region.
       </p>
     );
   }
@@ -481,6 +671,7 @@ function ExistingJointList({ joints, diagnostics, selectedIds, onEdit, onToggle,
             </div>
             <JointStatus diagnostic={diagnostic} />
           </div>
+          {diagnostic?.message ? <p className={styles.jointDescription}>{diagnostic.message}</p> : null}
           <div className={styles.jointActionRow}>
             <button type="button" className={styles.exportBtn} onClick={() => onEdit(joint)}>
               Edit
@@ -510,37 +701,47 @@ export default function JointPanel({
   onJointRemove,
 }) {
   const [editingJointId, setEditingJointId] = useState(null);
-  const selectionIsPair = selectedEntities.length === 2;
-  const editablePair = selectionIsPair && selectedEntities.every((entity) => entity.type === 'rect' && !Number(entity.rotation));
   const editingJoint = joints.find((joint) => joint.id === editingJointId) || null;
-  const [formState, setFormState] = useState(() => buildJointFormState(entities, selectedEntities, null));
+  const orderedSelectedEntities = useMemo(
+    () => orderSelectedJoineryEntities(entities, selectedEntities, selectedIds),
+    [entities, selectedEntities, selectedIds],
+  );
+  const [formState, setFormState] = useState(() => buildJointFormState(entities, orderedSelectedEntities, null));
+  const editablePair = isSketchJointPairSupported(orderedSelectedEntities);
 
   useEffect(() => {
     if (!editingJointId) {
-      setFormState(buildJointFormState(entities, selectedEntities, null));
+      setFormState(buildJointFormState(entities, orderedSelectedEntities, null));
     }
-  }, [editingJointId, entities, selectedEntities]);
+  }, [editingJointId, entities, orderedSelectedEntities]);
 
-  const candidateJoint = useMemo(() => buildJointFromForm(formState), [formState]);
-  const candidateDiagnostic = useMemo(() => {
-    const resolution = resolveSketchJoinery(entities, [candidateJoint]);
-    return resolution.diagnostics[0] || null;
-  }, [candidateJoint, entities]);
+  const candidateDraftJoint = useMemo(() => buildJointFromForm(formState), [formState]);
+  const candidateResolution = useMemo(
+    () => resolveSketchJoinery(entities, [candidateDraftJoint]),
+    [candidateDraftJoint, entities],
+  );
+  const candidateJoint = candidateResolution.joints[0] || candidateDraftJoint;
+  const candidateDiagnostic = candidateResolution.diagnostics[0] || null;
 
   const handleEdit = (joint) => {
     setEditingJointId(joint.id);
-    setFormState(buildJointFormState(entities, selectedEntities, joint));
+    setFormState(buildJointFormState(entities, orderedSelectedEntities, joint));
   };
 
   const handleSubmit = () => {
-    const payload = createSketchJoint({
-      ...candidateJoint,
-      id: editingJoint?.id || undefined,
-    });
-
-    if (candidateDiagnostic?.status !== 'applied') {
+    if (
+      !candidateDiagnostic
+      || candidateDiagnostic.status === 'invalid'
+      || candidateDiagnostic.status === 'disabled'
+      || candidateDiagnostic.canApply === false
+    ) {
       return;
     }
+
+    const payload = createSketchJoint({
+      ...candidateDraftJoint,
+      id: editingJoint?.id || undefined,
+    });
 
     if (editingJoint) {
       onJointUpdate?.(editingJoint.id, payload);
@@ -549,19 +750,19 @@ export default function JointPanel({
     }
 
     setEditingJointId(null);
-    setFormState(buildJointFormState(entities, selectedEntities, null));
+    setFormState(buildJointFormState(entities, orderedSelectedEntities, null));
   };
 
   const handleCancel = () => {
     setEditingJointId(null);
-    setFormState(buildJointFormState(entities, selectedEntities, null));
+    setFormState(buildJointFormState(entities, orderedSelectedEntities, null));
   };
 
   const contextMessage = editablePair
-    ? `Selected parts: ${selectedEntities.map((entity) => entity.id).join(' + ')}`
+    ? `Selected parts: ${orderedSelectedEntities.map((entity) => entity.id).join(' + ')}`
     : selectedEntity
-      ? `Select one more rectangular part to generate a joint from ${selectedEntity.id}.`
-      : 'Select exactly two touching rectangular parts to generate joinery.';
+      ? `Select one more rectangular part to create automatic joinery from ${selectedEntity.id}.`
+      : 'Select exactly two rectangular parts to create joinery.';
 
   return (
     <div className={styles.jointPanel}>
@@ -570,7 +771,7 @@ export default function JointPanel({
       {editablePair || editingJoint ? (
         <JointForm
           entities={entities}
-          selectedEntities={selectedEntities}
+          selectedEntities={orderedSelectedEntities}
           formState={formState}
           setFormState={setFormState}
           candidateJoint={candidateJoint}
@@ -581,8 +782,9 @@ export default function JointPanel({
         />
       ) : (
         <p className={styles.jointHelp}>
-          The first version of generated joinery supports <strong>non-rotated rectangular parts</strong> only.
-          Assign thickness to both parts, pick the touching edges, and Craftsman Studio will generate the buildable cut geometry for export.
+          Joinery supports <strong>entity-backed rectangular panels</strong>, including rotated rectangles. New joints
+          detect contact or overlap automatically, while legacy manual-reference joints remain editable without
+          migration.
         </p>
       )}
 

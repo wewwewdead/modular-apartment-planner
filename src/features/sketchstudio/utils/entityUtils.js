@@ -4,10 +4,57 @@ import { formatDimensionText, inferDimensionSubtype, measureDistance } from './d
 import { buildIsometricEllipse, getEllipseSnapPoints } from './isometricUtils';
 import { getPolylineMidpoints } from './polylineUtils';
 
-const DEFAULT_TEXT_LABEL = 'Label';
-const DEFAULT_TEXT_SIZE = 120;
+export const DEFAULT_TEXT_LABEL = 'Label';
+export const DEFAULT_TEXT_SIZE = 120;
 const TEXT_WIDTH_FACTOR = 0.6;
 const TEXT_LINE_HEIGHT_FACTOR = 1.2;
+
+function createDefaultTextLeaderTarget(entity) {
+  const { fontSize, height } = getTextMetrics(entity);
+
+  return {
+    x: entity.x - Math.max(fontSize * 0.9, 48),
+    y: entity.y + Math.max(height * 0.85, 36),
+  };
+}
+
+function applyTextFontSize(entity, nextFontSize) {
+  const normalizedFontSize = Math.max(Math.abs(Number(nextFontSize)) || DEFAULT_TEXT_SIZE, 1);
+  const currentFontSize = getTextMetrics(entity).fontSize;
+  const leaderTarget = entity.leader?.target
+    ? {
+        x: Number(entity.leader.target.x),
+        y: Number(entity.leader.target.y),
+      }
+    : null;
+
+  if (
+    !leaderTarget
+    || !Number.isFinite(leaderTarget.x)
+    || !Number.isFinite(leaderTarget.y)
+    || !Number.isFinite(currentFontSize)
+    || currentFontSize <= 0
+  ) {
+    return {
+      ...entity,
+      fontSize: normalizedFontSize,
+    };
+  }
+
+  const scaleRatio = normalizedFontSize / currentFontSize;
+
+  return {
+    ...entity,
+    fontSize: normalizedFontSize,
+    leader: {
+      ...entity.leader,
+      target: {
+        x: entity.x + ((leaderTarget.x - entity.x) * scaleRatio),
+        y: entity.y + ((leaderTarget.y - entity.y) * scaleRatio),
+      },
+    },
+  };
+}
 
 function getHighestEntityNumber(entities, prefix) {
   return entities.reduce((highest, entity) => {
@@ -139,6 +186,14 @@ function cloneEntityWithId(entity, nextId, idMap = new Map()) {
       text: entity.text,
       fontSize: entity.fontSize ?? DEFAULT_TEXT_SIZE,
       rotation: entity.rotation ?? 0,
+      leader: entity.leader?.target
+        ? {
+            target: {
+              x: entity.leader.target.x,
+              y: entity.leader.target.y,
+            },
+          }
+        : null,
     };
   }
 
@@ -580,6 +635,14 @@ export function createTextEntity(point, entities, layerId = 'default', options =
       text: sanitizeTextValue(options.text),
       fontSize: Math.max(Number(options.fontSize) || DEFAULT_TEXT_SIZE, 1),
       rotation: Number(options.rotation) || 0,
+      leader: options.leader?.target
+        ? {
+            target: {
+              x: Number(options.leader.target.x) || point.x,
+              y: Number(options.leader.target.y) || point.y,
+            },
+          }
+        : null,
     },
     layerId,
   );
@@ -928,10 +991,7 @@ export function updateTextFontSize(entity, point) {
   const widthFontSize = Math.abs(localX) / (Math.max(metrics.text.length, 1) * TEXT_WIDTH_FACTOR);
   const heightFontSize = Math.abs(localY) / TEXT_LINE_HEIGHT_FACTOR;
 
-  return {
-    ...entity,
-    fontSize: Math.max(widthFontSize, heightFontSize, 8),
-  };
+  return applyTextFontSize(entity, Math.max(widthFontSize, heightFontSize, 8));
 }
 
 export function updateEntityInList(entities, entityId, updater) {
@@ -955,6 +1015,17 @@ export function updateEntityFromNumericField(entity, field, rawValue) {
     return {
       ...entity,
       text: sanitizeTextValue(rawValue),
+    };
+  }
+
+  if (entity.type === 'text' && field === 'leaderEnabled') {
+    const shouldEnable = rawValue === true || rawValue === 'true' || rawValue === 'on';
+
+    return {
+      ...entity,
+      leader: shouldEnable
+        ? (entity.leader?.target ? entity.leader : { target: createDefaultTextLeaderTarget(entity) })
+        : null,
     };
   }
 
@@ -1071,11 +1142,25 @@ export function updateEntityFromNumericField(entity, field, rawValue) {
   }
 
   if (entity.type === 'text') {
-    if (field === 'fontSize') {
+    if (field === 'leaderTargetX' || field === 'leaderTargetY') {
+      const leader = entity.leader?.target
+        ? entity.leader
+        : { target: createDefaultTextLeaderTarget(entity) };
+
       return {
         ...entity,
-        fontSize: Math.max(Math.abs(numericValue), 1),
+        leader: {
+          ...leader,
+          target: {
+            ...leader.target,
+            [field === 'leaderTargetX' ? 'x' : 'y']: numericValue,
+          },
+        },
       };
+    }
+
+    if (field === 'fontSize') {
+      return applyTextFontSize(entity, numericValue);
     }
 
     if (field === 'rotation') {
@@ -1210,6 +1295,7 @@ export function getEntityMeasurementRows(entity) {
     return [
       ['Text', metrics.text],
       ['Font Size', metrics.fontSize],
+      ['Arrow', entity.leader?.target ? 'Yes' : 'No'],
       ['Rotation', entity.rotation ?? 0],
       ['Position', `${entity.x.toFixed(1)}, ${entity.y.toFixed(1)}`],
     ];

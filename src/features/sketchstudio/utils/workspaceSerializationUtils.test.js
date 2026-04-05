@@ -68,17 +68,18 @@ describe('workspaceSerializationUtils', () => {
       ],
       joints: [
         {
-          id: 'joint-rabbet',
-          type: 'rabbet',
-          label: 'Back Panel Rabbet',
+          id: 'joint-dado',
+          type: 'dado',
+          label: 'Shelf Dado',
           enabled: true,
-          primaryEntityId: 'panel',
-          secondaryEntityId: 'back',
-          primaryEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
-          secondaryEdgeRef: { entityId: 'back', sourceType: 'segment', sourceKey: 'bottom' },
+          placementMode: 'auto_contact',
+          parameterModes: {
+            depth: 'auto_overlap',
+          },
+          sourcePartId: 'back',
+          targetPartId: 'panel',
           parameters: {
             width: 100,
-            depth: 9,
           },
         },
       ],
@@ -95,13 +96,17 @@ describe('workspaceSerializationUtils', () => {
 
     expect(deserialized.document.joints).toHaveLength(1);
     expect(deserialized.document.joints[0]).toMatchObject({
-      id: 'joint-rabbet',
-      type: 'rabbet',
-      primaryEntityId: 'panel',
-      secondaryEntityId: 'back',
+      id: 'joint-dado',
+      type: 'dado',
+      placementMode: 'auto_contact',
+      parameterModes: {
+        depth: 'auto_overlap',
+      },
+      sourcePartId: 'back',
+      targetPartId: 'panel',
       parameters: {
         width: 100,
-        depth: 9,
+        depth: null,
       },
     });
     expect(deserialized.ui.craftsmanMode).toBe(true);

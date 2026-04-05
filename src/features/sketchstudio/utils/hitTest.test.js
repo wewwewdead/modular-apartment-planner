@@ -20,6 +20,15 @@ describe('hitTest', () => {
   it('hit tests text labels using their approximated text box', () => {
     expect(hitTestText({ type: 'text', x: 100, y: 40, text: 'Desk', fontSize: 100, rotation: 0 }, { x: 120, y: 70 }, 2)).toBe(true);
     expect(hitTestText({ type: 'text', x: 100, y: 40, text: 'Desk', fontSize: 100, rotation: 0 }, { x: 10, y: 10 }, 2)).toBe(false);
+    expect(hitTestText({
+      type: 'text',
+      x: 100,
+      y: 40,
+      text: 'Desk',
+      fontSize: 100,
+      rotation: 0,
+      leader: { target: { x: 60, y: 140 } },
+    }, { x: 82, y: 140 }, 3)).toBe(true);
   });
 
   it('returns the topmost matching entity', () => {

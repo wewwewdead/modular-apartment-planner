@@ -111,6 +111,9 @@ export default function HeroSection() {
             Explore Playground
           </Link>
         </div>
+        <Link to="/docs" className={styles.tertiaryLink}>
+          Read the docs &rarr;
+        </Link>
       </div>
     </section>
   );

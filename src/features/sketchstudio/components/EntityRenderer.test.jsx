@@ -54,4 +54,33 @@ describe('EntityRenderer', () => {
     expect(markup).toContain('is-text');
     expect(markup).toContain('Desk A');
   });
+
+  it('renders leader arrows for text entities when present', () => {
+    const markup = renderToStaticMarkup(
+      <svg>
+        <EntityRenderer
+          entities={[
+            {
+              id: 'text-1',
+              type: 'text',
+              x: 120,
+              y: 80,
+              text: 'Desk A',
+              fontSize: 120,
+              rotation: 0,
+              leader: { target: { x: 40, y: 180 } },
+              visible: true,
+              meta: {},
+            },
+          ]}
+          hoveredId={null}
+          selectedIds={[]}
+        />
+      </svg>,
+    );
+
+    expect(markup).toContain('sketchStudioEntityLeader');
+    expect(markup).toContain('<line');
+    expect(markup).toContain('<polygon');
+  });
 });

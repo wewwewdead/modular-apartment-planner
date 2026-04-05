@@ -11,6 +11,20 @@ import { getGridLines } from '../utils/gridUtils';
 import { getIsometricGridData } from '../utils/isometricUtils';
 import { getTextMetrics } from '../utils/entityUtils';
 
+export function getJoineryPreviewVisibleEntities(visibleEntities = [], manufacturingPreviewEntities = []) {
+  const hiddenEntityIds = new Set(
+    manufacturingPreviewEntities
+      .filter((entity) => entity.meta?.manufacturingDetailType === 'profile')
+      .flatMap((entity) => entity.meta?.manufacturingSourceEntityIds || []),
+  );
+
+  if (!hiddenEntityIds.size) {
+    return visibleEntities;
+  }
+
+  return visibleEntities.filter((entity) => !hiddenEntityIds.has(entity.id));
+}
+
 function InlineTextEditor({ entity, viewport, onCommit, onCancel }) {
   const inputRef = useRef(null);
   const metrics = getTextMetrics(entity);
@@ -102,6 +116,10 @@ export default function DraftingCanvas(props) {
 
   const [editingTextId, setEditingTextId] = useState(null);
   const transform = `translate(${viewport.panX} ${viewport.panY}) scale(${viewport.zoom})`;
+  const previewVisibleEntities = useMemo(
+    () => getJoineryPreviewVisibleEntities(visibleEntities, manufacturingPreviewEntities),
+    [visibleEntities, manufacturingPreviewEntities],
+  );
   const grid = useMemo(
     () => (ui.viewMode === 'isometric'
       ? getIsometricGridData(viewport, interaction.canvasSize)
@@ -243,8 +261,8 @@ export default function DraftingCanvas(props) {
                 )}
               </g>
 
-              <EntityRenderer entities={visibleEntities} hoveredId={hover.hoveredId} selectedIds={selection.selectedIds} />
-              <DimensionRenderer entities={visibleEntities} allEntities={document.entities} hoveredId={hover.hoveredId} selectedIds={selection.selectedIds} />
+              <EntityRenderer entities={previewVisibleEntities} hoveredId={hover.hoveredId} selectedIds={selection.selectedIds} />
+              <DimensionRenderer entities={previewVisibleEntities} allEntities={document.entities} hoveredId={hover.hoveredId} selectedIds={selection.selectedIds} />
               {manufacturingPreviewEntities.length ? (
                 <EntityRenderer
                   entities={manufacturingPreviewEntities}

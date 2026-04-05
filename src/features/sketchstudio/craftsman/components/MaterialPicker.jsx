@@ -1,17 +1,39 @@
 import materials, { MATERIAL_CATEGORIES, getMaterialById } from '../data/materials';
 import styles from '../styles/craftsman.module.css';
 
-export default function MaterialPicker({ selectedMaterialId, onMaterialChange, onThicknessChange, thickness }) {
-  const currentMaterial = selectedMaterialId ? getMaterialById(selectedMaterialId) : null;
+const MIXED_SELECT_VALUE = '__mixed__';
+
+export default function MaterialPicker({
+  selectedMaterialId,
+  onMaterialChange,
+  onThicknessChange,
+  thickness,
+  selectionCount = 1,
+  isMixedMaterial = false,
+  isMixedThickness = false,
+}) {
+  const currentMaterial = !isMixedMaterial && selectedMaterialId ? getMaterialById(selectedMaterialId) : null;
+  const selectedValue = isMixedMaterial ? MIXED_SELECT_VALUE : (selectedMaterialId || '');
+  const thicknessValue = isMixedThickness ? '' : (thickness ?? '');
+  const thicknessPlaceholder = isMixedThickness ? 'Mixed' : (currentMaterial?.thickness ?? '');
 
   return (
     <div className={styles.materialPicker}>
+      {selectionCount > 1 && (
+        <p className={styles.hint}>Apply changes to all {selectionCount} selected entities.</p>
+      )}
+
       <label className={styles.fieldLabel}>Material</label>
       <select
         className={styles.materialSelect}
-        value={selectedMaterialId || ''}
+        value={selectedValue}
         onChange={(e) => onMaterialChange(e.target.value || null)}
       >
+        {isMixedMaterial && (
+          <option value={MIXED_SELECT_VALUE} disabled>
+            Mixed materials
+          </option>
+        )}
         <option value="">None</option>
         {MATERIAL_CATEGORIES.map((cat) => {
           const catMaterials = materials.filter((m) => m.category === cat.id);
@@ -30,6 +52,7 @@ export default function MaterialPicker({ selectedMaterialId, onMaterialChange, o
 
       <label className={styles.fieldLabel}>
         Thickness (mm)
+        {isMixedThickness && <span className={styles.fieldHint}> — mixed selection</span>}
         {currentMaterial && !thickness && (
           <span className={styles.fieldHint}> — default: {currentMaterial.thickness}mm</span>
         )}
@@ -37,8 +60,8 @@ export default function MaterialPicker({ selectedMaterialId, onMaterialChange, o
       <input
         type="number"
         className={styles.thicknessInput}
-        value={thickness ?? ''}
-        placeholder={currentMaterial?.thickness ?? ''}
+        value={thicknessValue}
+        placeholder={thicknessPlaceholder}
         min="0.1"
         step="0.5"
         onChange={(e) => onThicknessChange(e.target.value ? Number(e.target.value) : null)}

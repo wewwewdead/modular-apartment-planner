@@ -830,6 +830,11 @@ export default function useSketchStudio() {
         return;
       }
 
+      if (state.draft.type === 'text') {
+        dispatch(patchDraft({ currentPoint: worldPoint }));
+        return;
+      }
+
       if (state.draft.type === 'angle') {
         dispatch(patchDraft({ currentPoint: snap.point ?? worldPoint }));
         return;
@@ -1010,7 +1015,26 @@ export default function useSketchStudio() {
       }
 
       if (activeTool === 'text') {
-        const nextEntity = createTextEntity(snap.point ?? worldPoint, state.document.entities, targetLayerId);
+        const point = snap.point ?? worldPoint;
+
+        if (!state.draft.type) {
+          dispatch(
+            startDraft({
+              type: 'text',
+              step: 'placeLabel',
+              currentPoint: point,
+              points: [point],
+              sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean),
+            }),
+          );
+          return;
+        }
+
+        const nextEntity = createTextEntity(worldPoint, state.document.entities, targetLayerId, {
+          leader: {
+            target: state.draft.points[0],
+          },
+        });
         if (nextEntity) {
           dispatch(commitEntity(nextEntity));
           dispatch(setSelection([nextEntity.id]));

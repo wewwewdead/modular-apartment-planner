@@ -3,7 +3,8 @@ import { buildDraftMeasurementAnnotations } from '../utils/draftMeasurementUtils
 import { getRectDraftPreviewPolygonPoints } from '../utils/draftPreviewUtils';
 import { formatDimensionText, getDimensionGeometry, measureDistance } from '../utils/dimensionUtils';
 import { getAngleDimensionGeometry, formatAngleText } from '../utils/angleUtils';
-import { normalizeRectFromPoints } from '../utils/entityUtils';
+import { getTextMetrics, normalizeRectFromPoints } from '../utils/entityUtils';
+import { getTextLeaderGeometry } from '../utils/textLeaderUtils';
 
 function renderFeaturePreview(draftPreview) {
   if (draftPreview.shape === 'circle') {
@@ -167,6 +168,63 @@ function renderGenericEntityPreview(draftPreview) {
 
   if (draftPreview.type === 'feature') {
     return renderFeaturePreview(draftPreview);
+  }
+
+  if (draftPreview.type === 'text-leader') {
+    const previewEntity = {
+      x: draftPreview.x,
+      y: draftPreview.y,
+      text: draftPreview.text,
+      fontSize: draftPreview.fontSize,
+      rotation: draftPreview.rotation ?? 0,
+      leader: {
+        target: draftPreview.target,
+      },
+    };
+    const leaderGeometry = getTextLeaderGeometry(previewEntity);
+    const textMetrics = getTextMetrics(previewEntity);
+
+    return (
+      <g>
+        {leaderGeometry ? (
+          <>
+            <line
+              className="sketchStudioDraftLeader"
+              x1={leaderGeometry.anchor.x}
+              y1={leaderGeometry.anchor.y}
+              x2={leaderGeometry.shaftEnd.x}
+              y2={leaderGeometry.shaftEnd.y}
+              vectorEffect="non-scaling-stroke"
+              strokeLinecap="round"
+            />
+            <polygon
+              className="sketchStudioDraftLeaderHead"
+              points={leaderGeometry.arrowHead.map((point) => `${point.x},${point.y}`).join(' ')}
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : null}
+        <rect
+          className="sketchStudioDraftTextBox"
+          x={draftPreview.x}
+          y={draftPreview.y}
+          width={textMetrics.width}
+          height={textMetrics.height}
+          rx={6}
+          ry={6}
+          vectorEffect="non-scaling-stroke"
+        />
+        <text
+          className="sketchStudioDimensionDraftText"
+          x={draftPreview.x}
+          y={draftPreview.y}
+          dominantBaseline="hanging"
+        >
+          {textMetrics.text}
+        </text>
+      </g>
+    );
   }
 
   return null;

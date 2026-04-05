@@ -729,6 +729,35 @@
   stroke: none;
 }
 
+.sketchStudioEntityLeader {
+  fill: none;
+  stroke: #d8e6fb;
+}
+
+.sketchStudioEntityLeaderHead {
+  fill: rgba(216, 230, 251, 0.9);
+  stroke: #d8e6fb;
+  stroke-width: 1.5;
+}
+
+.sketchStudioEntityLeader.is-hovered,
+.sketchStudioEntityLeaderHead.is-hovered {
+  stroke: #f6fbff;
+}
+
+.sketchStudioEntityLeaderHead.is-hovered {
+  fill: rgba(246, 251, 255, 0.92);
+}
+
+.sketchStudioEntityLeader.is-selected,
+.sketchStudioEntityLeaderHead.is-selected {
+  stroke: #6ca5ff;
+}
+
+.sketchStudioEntityLeaderHead.is-selected {
+  fill: rgba(108, 165, 255, 0.9);
+}
+
 .sketchStudioEntity.is-profile {
   fill: rgba(124, 223, 196, 0.1);
 }
@@ -781,6 +810,26 @@
 .sketchStudioDraftEntity.is-feature {
   fill: rgba(255, 199, 126, 0.12);
   stroke: #ffd08b;
+}
+
+.sketchStudioDraftLeader {
+  fill: none;
+  stroke: #9bdcc8;
+  stroke-width: 1.4;
+  stroke-dasharray: 8 5;
+}
+
+.sketchStudioDraftLeaderHead {
+  fill: rgba(155, 220, 200, 0.9);
+  stroke: #9bdcc8;
+  stroke-width: 1.2;
+}
+
+.sketchStudioDraftTextBox {
+  fill: rgba(124, 223, 196, 0.12);
+  stroke: #7cdfc4;
+  stroke-width: 1.4;
+  stroke-dasharray: 8 5;
 }
 
 .sketchStudioDimensionLine,

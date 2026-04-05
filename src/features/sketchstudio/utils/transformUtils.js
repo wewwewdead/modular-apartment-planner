@@ -145,6 +145,12 @@ export function translateEntity(entity, delta) {
       ...entity,
       x: entity.x + delta.x,
       y: entity.y + delta.y,
+      leader: entity.leader?.target
+        ? {
+            ...entity.leader,
+            target: translatePoint(entity.leader.target, delta),
+          }
+        : entity.leader ?? null,
     };
   }
 
@@ -304,6 +310,12 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
       x: anchor.x,
       y: anchor.y,
       rotation: (entity.rotation ?? 0) + ((angleRadians * 180) / Math.PI),
+      leader: entity.leader?.target
+        ? {
+            ...entity.leader,
+            target: rotatePointAroundPivot(entity.leader.target, pivot, angleRadians),
+          }
+        : entity.leader ?? null,
     };
   }
 
@@ -439,6 +451,12 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
       x: anchor.x,
       y: anchor.y,
       rotation: mirrorRotationDegrees(entity.rotation ?? 0, direction),
+      leader: entity.leader?.target
+        ? {
+            ...entity.leader,
+            target: mirrorPointAcrossAxis(entity.leader.target, pivot, direction),
+          }
+        : entity.leader ?? null,
     };
   }
 

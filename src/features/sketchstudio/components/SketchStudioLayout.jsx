@@ -196,6 +196,7 @@ export default function SketchStudioLayout(props) {
                 onJointRemove={removeJoint}
                 onLoadTemplate={() => setShowGallery(true)}
                 onDuplicateEntities={duplicateEntities}
+                onEntityFieldCommit={updateSelectedEntityField}
               />
             )
           ) : (
@@ -219,6 +220,8 @@ export default function SketchStudioLayout(props) {
               onFlipHorizontal={flipSelectionHorizontal}
               onFlipVertical={flipSelectionVertical}
               onToggleBrokenLines={toggleBrokenLines}
+              onMaterialChange={setEntityMaterial}
+              onThicknessChange={setEntityThickness}
             />
           )}
         </div>

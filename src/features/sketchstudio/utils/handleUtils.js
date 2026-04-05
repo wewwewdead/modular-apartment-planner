@@ -46,9 +46,19 @@ export function getEntityHandles(entity) {
   }
 
   if (entity.type === 'text') {
-    return [
+    const handles = [
       { id: 'size', ...resolveEntityReference(entity, { sourceType: 'corner', sourceKey: 'bottomRight' }) },
     ];
+
+    if (entity.leader?.target) {
+      handles.push({
+        id: 'leaderTarget',
+        x: entity.leader.target.x,
+        y: entity.leader.target.y,
+      });
+    }
+
+    return handles;
   }
 
   return [];
@@ -84,6 +94,19 @@ export function updateEntityFromHandle(entity, handleId, point) {
 
   if (entity.type === 'text' && handleId === 'size') {
     return updateTextFontSize(entity, point);
+  }
+
+  if (entity.type === 'text' && handleId === 'leaderTarget') {
+    return {
+      ...entity,
+      leader: {
+        ...(entity.leader || {}),
+        target: {
+          x: point.x,
+          y: point.y,
+        },
+      },
+    };
   }
 
   return entity;

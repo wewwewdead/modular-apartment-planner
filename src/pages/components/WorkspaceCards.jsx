@@ -39,7 +39,7 @@ export default function WorkspaceCards() {
             <h2 className={styles.cardTitle}>SketchStudio</h2>
             <p className={styles.cardDesc}>
               Draft panels, cabinets, supports, and custom technical objects in a dedicated 2D workspace built for
-              precise geometry, viewport control, and future export into the planner.
+              precise geometry, viewport control, and workshop-ready exports with BOM and cost.
             </p>
           </div>
           <SketchStudioIllustration className={styles.cardIllustration} />

@@ -102,20 +102,28 @@ describe('transformUtils', () => {
       text: 'Desk',
       fontSize: 120,
       rotation: 0,
+       leader: { target: { x: 40, y: 120 } },
       meta: {},
     };
 
-    expect(translateEntities([text], ['text-1'], { x: 20, y: 15 })[0]).toMatchObject({ x: 120, y: 65 });
+    expect(translateEntities([text], ['text-1'], { x: 20, y: 15 })[0]).toMatchObject({
+      x: 120,
+      y: 65,
+      leader: { target: { x: 60, y: 135 } },
+    });
 
     const rotated = rotateEntities([text], ['text-1'], { x: 0, y: 0 }, Math.PI / 2)[0];
     expect(rotated.x).toBeCloseTo(-50, 4);
     expect(rotated.y).toBeCloseTo(100, 4);
     expect(rotated.rotation).toBe(90);
+    expect(rotated.leader.target.x).toBeCloseTo(-120, 4);
+    expect(rotated.leader.target.y).toBeCloseTo(40, 4);
 
     expect(mirrorEntities([text], ['text-1'], { x: 200, y: 50 }, 'horizontal')[0]).toMatchObject({
       x: 300,
       y: 50,
       rotation: 180,
+      leader: { target: { x: 360, y: 120 } },
     });
   });
 });

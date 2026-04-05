@@ -3,6 +3,12 @@ import {
   createEmptyHistoryState,
   pushUndoableHistorySnapshot,
 } from '../utils/historyUtils';
+import {
+  addJointToDocument,
+  pruneDocumentJointsByEntityIds,
+  removeJointFromDocument,
+  updateJointInDocument,
+} from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { resolveSketchDocument } from '../utils/sketchDocumentResolver';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
@@ -66,21 +72,6 @@ function getJointStatePatch(resolvedDocumentState) {
     jointDiagnostics: resolvedDocumentState.jointDiagnostics,
     manufacturingPreviewEntities: resolvedDocumentState.manufacturingPreviewEntities,
     manufacturingExportEntities: resolvedDocumentState.manufacturingExportEntities,
-  };
-}
-
-function filterDocumentJointsByEntityIds(document, removedEntityIds) {
-  const removedIdSet = new Set(removedEntityIds);
-
-  return {
-    ...document,
-    joints: (document.joints || []).filter(
-      (joint) =>
-        !removedIdSet.has(joint.primaryEntityId) &&
-        !removedIdSet.has(joint.secondaryEntityId) &&
-        !removedIdSet.has(joint.primaryEdgeRef?.entityId) &&
-        !removedIdSet.has(joint.secondaryEdgeRef?.entityId),
-    ),
   };
 }
 
@@ -579,7 +570,7 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.DELETE_SELECTED: {
       const selectedIdSet = new Set(state.selection.selectedIds);
-      const nextDocument = filterDocumentJointsByEntityIds({
+      const nextDocument = pruneDocumentJointsByEntityIds({
         ...state.document,
         entities: state.document.entities.filter((entity) => !selectedIdSet.has(entity.id)),
       }, state.selection.selectedIds);
@@ -799,10 +790,7 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.ADD_JOINT: {
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        joints: [...(state.document.joints || []), action.payload],
-      });
+      const resolvedDocumentState = buildResolvedDocumentState(addJointToDocument(state.document, action.payload));
 
       return finalizeUndoableState(state, {
         ...state,
@@ -814,12 +802,9 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.UPDATE_JOINT: {
       const { jointId, patch } = action.payload;
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        joints: (state.document.joints || []).map((joint) =>
-          joint.id === jointId ? { ...joint, ...patch, parameters: { ...(joint.parameters || {}), ...(patch.parameters || {}) } } : joint,
-        ),
-      });
+      const resolvedDocumentState = buildResolvedDocumentState(
+        updateJointInDocument(state.document, jointId, patch),
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -830,10 +815,9 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.REMOVE_JOINT: {
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        joints: (state.document.joints || []).filter((joint) => joint.id !== action.payload),
-      });
+      const resolvedDocumentState = buildResolvedDocumentState(
+        removeJointFromDocument(state.document, action.payload),
+      );
 
       return finalizeUndoableState(state, {
         ...state,

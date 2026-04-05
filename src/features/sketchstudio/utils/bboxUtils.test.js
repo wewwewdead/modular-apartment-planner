@@ -67,6 +67,25 @@ describe('bboxUtils and serializationUtils', () => {
     });
   });
 
+  it('includes text leader arrows in text bounding boxes', () => {
+    const textEntity = {
+      id: 'text-1',
+      type: 'text',
+      x: 200,
+      y: 100,
+      text: 'Desk A',
+      fontSize: 120,
+      rotation: 0,
+      leader: { target: { x: 120, y: 220 } },
+    };
+
+    expect(computeEntityBoundingBox(textEntity)).toMatchObject({
+      minX: 120,
+      maxX: expect.any(Number),
+      maxY: 244,
+    });
+  });
+
   it('computes a footprint polygon', () => {
     expect(computeFootprintFromEntities(document.entities)).toMatchObject({
       width: 100,

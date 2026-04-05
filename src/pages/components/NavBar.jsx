@@ -52,6 +52,9 @@ export default function NavBar() {
           <Link to="/playground" className={styles.navLink}>
             Playground
           </Link>
+          <Link to="/docs" className={styles.navLink}>
+            Docs
+          </Link>
           <Link to="/floorplan" className={styles.ctaButton}>
             Get Started
           </Link>
@@ -80,6 +83,9 @@ export default function NavBar() {
         </Link>
         <Link to="/playground" className={styles.mobileLink} onClick={closeMobile}>
           Playground
+        </Link>
+        <Link to="/docs" className={styles.mobileLink} onClick={closeMobile}>
+          Docs
         </Link>
         <Link to="/floorplan" className={styles.mobileCta} onClick={closeMobile}>
           Get Started

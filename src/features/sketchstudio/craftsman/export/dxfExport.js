@@ -8,6 +8,7 @@ import { getArcMidpoint, getArcSamplePoints, solveThreePointCircle } from '../..
 import { computeEntityBoundingBox } from '../../utils/bboxUtils';
 import { getDimensionGeometry, measureDistance, formatDimensionText } from '../../utils/dimensionUtils';
 import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
+import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
 import { createDxfWriter } from './dxfWriter';
 
@@ -341,6 +342,13 @@ function writeAngleDimensionEntity(writer, entity, allEntities) {
 }
 
 function writeTextEntity(writer, entity, layer = 'TEXT') {
+  const leaderGeometry = getTextLeaderGeometry(entity);
+
+  if (leaderGeometry) {
+    writeLineEntity(writer, leaderGeometry.anchor, leaderGeometry.shaftEnd, layer);
+    writePolylineEntity(writer, leaderGeometry.arrowHead, true, layer);
+  }
+
   writer.pair(0, 'TEXT');
   writer.pair(8, layer);
   writer.pair(10, toNumber(entity.x));

@@ -628,6 +628,24 @@
   gap: 8px;
 }
 
+.jointModeValue {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--dark-bg-primary);
+  color: var(--dark-text-primary);
+  border: 1px solid var(--dark-border);
+  border-radius: 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.jointFieldControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .jointCandidateRow {
   display: flex;
   align-items: center;
@@ -656,6 +674,11 @@
 .jointStatusApplied {
   background: rgba(81, 207, 102, 0.16);
   color: #b5f6c0;
+}
+
+.jointStatusWarning {
+  background: rgba(255, 196, 77, 0.16);
+  color: #ffe4a3;
 }
 
 .jointStatusDisabled {

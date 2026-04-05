@@ -12,6 +12,7 @@ import {
   patchTransform,
   redo,
   removeJoint,
+  setEntityMaterial,
   setSelection,
   setDocumentEntities,
   setViewport,
@@ -316,10 +317,10 @@ describe('sketchStudioReducer history', () => {
     const joint = {
       id: 'joint-dado',
       type: 'dado',
-      primaryEntityId: 'panel',
-      secondaryEntityId: 'shelf',
-      primaryEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
-      secondaryEdgeRef: { entityId: 'shelf', sourceType: 'segment', sourceKey: 'bottom' },
+      sourcePartId: 'shelf',
+      targetPartId: 'panel',
+      sourceEdgeRef: { entityId: 'shelf', sourceType: 'segment', sourceKey: 'bottom' },
+      targetEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
       parameters: {
         width: 60,
         depth: 6,
@@ -329,6 +330,11 @@ describe('sketchStudioReducer history', () => {
     const addedState = sketchStudioReducer(baseState, addJoint(joint));
 
     expect(addedState.document.joints).toHaveLength(1);
+    expect(addedState.document.joints[0]).toMatchObject({
+      id: 'joint-dado',
+      sourcePartId: 'shelf',
+      targetPartId: 'panel',
+    });
     expect(addedState.jointDiagnostics[0]).toMatchObject({ jointId: 'joint-dado', status: 'applied' });
     expect(addedState.manufacturingPreviewEntities[0]).toMatchObject({
       type: 'feature',
@@ -369,10 +375,10 @@ describe('sketchStudioReducer history', () => {
     const joint = {
       id: 'joint-rabbet',
       type: 'rabbet',
-      primaryEntityId: 'panel',
-      secondaryEntityId: 'back',
-      primaryEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
-      secondaryEdgeRef: { entityId: 'back', sourceType: 'segment', sourceKey: 'bottom' },
+      sourcePartId: 'back',
+      targetPartId: 'panel',
+      sourceEdgeRef: { entityId: 'back', sourceType: 'segment', sourceKey: 'bottom' },
+      targetEdgeRef: { entityId: 'panel', sourceType: 'segment', sourceKey: 'top' },
       parameters: {
         width: 100,
         depth: 9,
@@ -385,5 +391,32 @@ describe('sketchStudioReducer history', () => {
     expect(deletedState.document.entities.map((entity) => entity.id)).toEqual(['panel']);
     expect(deletedState.document.joints).toEqual([]);
     expect(deletedState.manufacturingPreviewEntities).toEqual([]);
+  });
+
+  it('applies one material change across multiple selected entities', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [
+          createRectEntity('panel-left', 0, 0, 200, 120, 18),
+          createRectEntity('panel-right', 220, 0, 200, 120, 18),
+          createRectEntity('panel-top', 0, 140, 420, 18, 18),
+        ],
+      },
+    };
+
+    const nextState = sketchStudioReducer(
+      baseState,
+      setEntityMaterial(['panel-left', 'panel-right'], 'plywood-birch-18'),
+    );
+
+    expect(nextState.document.entities).toEqual([
+      expect.objectContaining({ id: 'panel-left', materialId: 'plywood-birch-18' }),
+      expect.objectContaining({ id: 'panel-right', materialId: 'plywood-birch-18' }),
+      expect.objectContaining({ id: 'panel-top' }),
+    ]);
+    expect(nextState.document.entities.find((entity) => entity.id === 'panel-top')).not.toHaveProperty('materialId');
   });
 });

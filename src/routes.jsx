@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import ErrorBoundary from '@/app/ErrorBoundary';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
+const DocsPage = lazy(() => import('./pages/DocsPage'));
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'));
 const FloorplanWorkspace = lazy(() => import('./modules/floorplan'));
 const SketchStudioPage = lazy(() => import('./pages/SketchStudio'));
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
   { path: '/floorplan', element: <RouteErrorBoundary><FloorplanWorkspace /></RouteErrorBoundary> },
   { path: '/sketch', element: <RouteErrorBoundary><SketchStudioPage /></RouteErrorBoundary> },
   { path: '/playground', element: <RouteErrorBoundary><PlaygroundPage /></RouteErrorBoundary> },
+  { path: '/docs', element: <RouteErrorBoundary><DocsPage /></RouteErrorBoundary> },
 ]);
 
 export function AppRouter() {

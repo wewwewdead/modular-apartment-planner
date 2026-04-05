@@ -195,9 +195,53 @@ describe('entityUtils', () => {
     expect(getEntityMeasurementRows(text)).toEqual([
       ['Text', 'Label'],
       ['Font Size', 120],
+      ['Arrow', 'No'],
       ['Rotation', 0],
       ['Position', '10.0, 20.0'],
     ]);
+  });
+
+  it('can enable and edit a text leader arrow from the selection editor', () => {
+    const text = {
+      id: 'text-1',
+      type: 'text',
+      x: 10,
+      y: 20,
+      text: 'Label',
+      fontSize: 120,
+      rotation: 0,
+      layerId: 'default',
+      meta: {},
+    };
+
+    const enabled = updateEntityFromNumericField(text, 'leaderEnabled', 'true');
+    const moved = updateEntityFromNumericField(enabled, 'leaderTargetX', '240');
+
+    expect(enabled.leader?.target).toMatchObject({
+      x: expect.any(Number),
+      y: expect.any(Number),
+    });
+    expect(moved.leader?.target.x).toBe(240);
+  });
+
+  it('scales the full text leader when font size is edited numerically', () => {
+    const text = {
+      id: 'text-1',
+      type: 'text',
+      x: 20,
+      y: 30,
+      text: 'Desk',
+      fontSize: 100,
+      rotation: 0,
+      leader: { target: { x: -40, y: 120 } },
+      layerId: 'default',
+      meta: {},
+    };
+
+    const resized = updateEntityFromNumericField(text, 'fontSize', '150');
+
+    expect(resized.fontSize).toBe(150);
+    expect(resized.leader?.target).toEqual({ x: -70, y: 165 });
   });
 
   it('remaps dimension source refs when the referenced geometry is duplicated', () => {
