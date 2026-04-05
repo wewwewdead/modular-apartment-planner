@@ -260,7 +260,23 @@ function JointForm({
   const isManualPlacement = formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS;
   const autoDepthEnabled = supportsAutoDepthMode(formState.type, formState.placementMode);
   const depthIsAuto = formState.parameterModes.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP;
-  const defaultSeedJoint = useMemo(() => buildSeedJoint(formState), [formState]);
+  // Narrow deps to fields buildSeedJoint actually reads, so typing in label /
+  // editing parameterValues / toggling autoDefaults doesn't invalidate the
+  // memo and trigger a full joinery-pipeline re-run per keystroke.
+  const defaultSeedJoint = useMemo(
+    () => buildSeedJoint(formState),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      formState.id,
+      formState.type,
+      formState.placementMode,
+      formState.parameterModes,
+      formState.sourcePartId,
+      formState.targetPartId,
+      formState.sourceEdgeValue,
+      formState.targetEdgeValue,
+    ],
+  );
   const defaultParameters = useMemo(
     () => computeSketchJointDefaults(defaultSeedJoint, entities),
     [defaultSeedJoint, entities],
@@ -321,10 +337,23 @@ function JointForm({
 
       if (current.autoDefaults) {
         const computedValues = buildParameterValues(current.type, defaultParameters, null);
-        const currentSerialized = JSON.stringify(current.parameterValues);
-        const nextSerialized = JSON.stringify(computedValues);
 
-        if (currentSerialized !== nextSerialized) {
+        // Shallow-equal check avoids JSON.stringify's O(n) serialization on
+        // every render. parameterValues is a flat string map, so key-by-key
+        // comparison is sufficient and much cheaper in this hot path.
+        const currentKeys = Object.keys(current.parameterValues);
+        const nextKeys = Object.keys(computedValues);
+        let equal = currentKeys.length === nextKeys.length;
+        if (equal) {
+          for (const key of nextKeys) {
+            if (current.parameterValues[key] !== computedValues[key]) {
+              equal = false;
+              break;
+            }
+          }
+        }
+
+        if (!equal) {
           nextParameterValues = computedValues;
           didChange = true;
         }
