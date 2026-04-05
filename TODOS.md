@@ -84,6 +84,13 @@ FixtureRenderer.jsx TV bezel inset was `width * 0.04`, subtracted from depth. Th
 TVs (width=2000, depth=100) produced negative rect height and a console error. Fixed to use
 `Math.min(width, depth) * 0.04`. Commit 86542e1 + regression tests at a0d7994.
 
+### Cut-List Optimizer React Key Collisions — FIXED by /qa on main, 2026-04-05
+nestingOptimizer.js `getPartId` used `partName-material-quantityIndex` and ignored dimensions.
+BOM rows that share partName+material but differ in width/height (CNC Nesting Test template
+ships two "Small B" parts in birch-plywood-3) produced identical IDs that React used as keys in
+NestingPanel's placement render. Fixed by including width×height in the part ID. Commit f5b1fb9 +
+regression tests at 787c13d.
+
 ### Stale Unit Test — PRE-EXISTING (NEEDS ATTENTION)
 `src/features/sketchstudio/utils/objectTypeConstants.test.js` asserts `DEFAULT_CATEGORY === 'furniture'`,
 but `objectTypeConstants.js` exports `'custom'`. Align the test with the current constant value
