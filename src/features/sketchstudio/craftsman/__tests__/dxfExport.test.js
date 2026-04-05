@@ -69,6 +69,65 @@ describe('DXF export', () => {
     expect(withKerf).toContain('LWPOLYLINE');
   });
 
+  it('expands a closed polyline outward when kerf is applied (winding: joinery profile convention)', () => {
+    // Regression: joinery profiles walk topLeft -> topRight -> bottomRight -> bottomLeft
+    // which is CW-in-screen-coords. The kerf normal formula must produce OUTWARD
+    // normals for this winding so that CNC parts come out the right size, not
+    // undersized by the kerf amount.
+    // Square centered at (50, 50), 100mm per side.
+    const entity = {
+      id: 'poly1',
+      type: 'polyline',
+      closed: true,
+      points: [
+        { x: 0, y: 0 },     // topLeft
+        { x: 100, y: 0 },   // topRight
+        { x: 100, y: 100 }, // bottomRight
+        { x: 0, y: 100 },   // bottomLeft
+      ],
+    };
+    const kerf = 1.0; // 1mm kerf, halfKerf = 0.5
+    const withKerf = exportEntitiesToDxf([entity], { kerf });
+
+    // LWPOLYLINE vertices in DXF appear as pairs: group 10 = x, group 20 = y.
+    // Parse every (10, 20) pair from the output.
+    const lines = withKerf.split('\n').map((l) => l.trim());
+    const vertices = [];
+    for (let i = 0; i < lines.length - 3; i += 1) {
+      if (lines[i] === '10' && lines[i + 2] === '20') {
+        vertices.push({ x: Number(lines[i + 1]), y: Number(lines[i + 3]) });
+      }
+    }
+    // Only include the 4 polyline vertices (filter out other DXF x/y pairs).
+    const polylineVerts = vertices.filter((v) =>
+      Math.abs(v.x - 0) < 10 || Math.abs(v.x - 100) < 10,
+    ).slice(0, 4);
+
+    expect(polylineVerts).toHaveLength(4);
+
+    // Computed bounds (min x/y vs max x/y) across the expanded polyline.
+    const minX = Math.min(...polylineVerts.map((v) => v.x));
+    const maxX = Math.max(...polylineVerts.map((v) => v.x));
+    // DXF Y is negated (screen-down -> DXF-up), but relative bounds are what matters.
+    const ys = polylineVerts.map((v) => v.y);
+    const rangeY = Math.max(...ys) - Math.min(...ys);
+    const rangeX = maxX - minX;
+
+    // After applying kerf to a 100x100 square, the outer bounds MUST be
+    // larger than 100 (expansion, not contraction). Prior to the winding fix
+    // the signed-area-aware normal flip, bounds shrank to ~99x99, producing
+    // undersized CNC parts. Algorithm approximates true polygon offset by
+    // displacing each vertex by halfKerf along the bisector diagonal, so 90-deg
+    // corners see ~halfKerf * sqrt(2) total range expansion rather than
+    // kerf (proper polygon-edge offset would require intersecting offset lines).
+    expect(rangeX).toBeGreaterThan(100);
+    expect(rangeY).toBeGreaterThan(100);
+    // The vertex-bisector approximation for a right-angle corner produces
+    // roughly halfKerf * cos(45) = 0.354 per axis end -> 0.707 total.
+    expect(rangeX).toBeCloseTo(100 + Math.SQRT1_2 * kerf, 1);
+    expect(rangeY).toBeCloseTo(100 + Math.SQRT1_2 * kerf, 1);
+  });
+
   it('filters to the selected entities when requested', () => {
     const dxf = exportEntitiesToDxf([
       { id: 'r1', type: 'rect', x: 0, y: 0, width: 100, height: 100 },

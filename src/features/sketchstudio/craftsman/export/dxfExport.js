@@ -479,11 +479,26 @@ function applyKerfToEntity(entity, kerf) {
         return entity;
       }
 
+      // Kerf expansion must move vertices OUTWARD from the polygon. The normal
+      // formula (-dy, dx) is 90-deg left-rotation, which yields outward normals
+      // only for a specific winding direction. Detect winding via the signed
+      // shoelace area: positive in screen coords (y-down) means CW-visually,
+      // and for that winding the formula happens to yield INWARD normals, so
+      // we flip the sign. This keeps both user-drawn polylines and joinery-
+      // generated profiles correct regardless of their traversal order.
+      let signedAreaX2 = 0;
+      for (let i = 0; i < entity.points.length; i += 1) {
+        const p = entity.points[i];
+        const q = entity.points[(i + 1) % entity.points.length];
+        signedAreaX2 += p.x * q.y - q.x * p.y;
+      }
+      const outwardSign = signedAreaX2 < 0 ? 1 : -1;
+
       const expandedPoints = entity.points.map((point, index, points) => {
         const previous = points[(index - 1 + points.length) % points.length];
         const next = points[(index + 1) % points.length];
-        const normalX = -(next.y - previous.y);
-        const normalY = next.x - previous.x;
+        const normalX = -(next.y - previous.y) * outwardSign;
+        const normalY = (next.x - previous.x) * outwardSign;
         const length = Math.hypot(normalX, normalY) || 1;
         return {
           x: point.x + (normalX / length) * halfKerf,
