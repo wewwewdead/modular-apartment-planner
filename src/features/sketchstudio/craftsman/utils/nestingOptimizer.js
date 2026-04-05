@@ -43,7 +43,12 @@ function getStockKind(row) {
 }
 
 function getPartId(row, quantityIndex) {
-  return `${row.partName || 'Part'}-${row.material || '__none__'}-${quantityIndex}`;
+  // Include dimensions so two BOM rows that share partName+material but have
+  // different widths/heights don't collide on the React key used downstream
+  // (NestingPanel's placement render).
+  const w = row.width ?? 0;
+  const h = row.height ?? 0;
+  return `${row.partName || 'Part'}-${row.material || '__none__'}-${w}x${h}-${quantityIndex}`;
 }
 
 function groupByMaterial(parts) {
