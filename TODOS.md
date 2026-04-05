@@ -91,7 +91,76 @@ ships two "Small B" parts in birch-plywood-3) produced identical IDs that React 
 NestingPanel's placement render. Fixed by including width×height in the part ID. Commit f5b1fb9 +
 regression tests at 787c13d.
 
-### Stale Unit Test — PRE-EXISTING (NEEDS ATTENTION)
-`src/features/sketchstudio/utils/objectTypeConstants.test.js` asserts `DEFAULT_CATEGORY === 'furniture'`,
-but `objectTypeConstants.js` exports `'custom'`. Align the test with the current constant value
-(or revert the constant if 'furniture' was the intended default).
+### Stale Unit Test — FIXED by /review on main, 2026-04-05
+Test asserted `DEFAULT_CATEGORY === 'furniture'` but source exports `'custom'`. Aligned the
+test with the source value; three production callsites already use 'custom' as the default.
+Commit f74bf55.
+
+## Review Findings (2026-04-05)
+
+### Joint ID Counter Collision — FIXED by /review on main, 2026-04-05
+nextJointCounter started at 1 on every page load and was never seeded from loaded joints.
+Loading a saved workspace with joint-3, joint-4 then adding a new joint produced joint-1 —
+colliding with any existing joint-1. Switched to crypto.randomUUID. Commit 43f237d.
+
+### Polyline Kerf Winding Bug — FIXED by /review on main, 2026-04-05
+dxfExport.js polyline kerf normal formula (-dy, dx) produced INWARD normals for CW-in-screen
+polygons (joinery profiles). Parts came out undersized. Verified with a regression test that
+shrinks from 100 to 99.29 pre-fix. Added signed-area-based winding detection. Commit b90a031.
+
+### JointPanel Performance — FIXED by /review on main, 2026-04-05
+Two keystroke-path wins: replaced JSON.stringify equality with shallow-equal in the
+autoDefaults sync effect, and narrowed defaultSeedJoint useMemo deps from full formState
+object to the 8 fields buildSeedJoint actually reads. Prevents per-keystroke joinery
+pipeline re-runs. Commit 303f587.
+
+## Deferred from Review (P1)
+
+### Polyline Kerf Magnitude — DEFERRED
+Kerf formula displaces each vertex by halfKerf along the bisector diagonal rather than
+computing per-edge parallel offsets. For 90-deg corners this yields ~halfKerf * sqrt(2)
+total range expansion instead of kerf. Parts are ~30% undersized on 90-deg corners.
+Direction is correct (see "Polyline Kerf Winding Bug" above), but proper polygon
+offsetting would require intersecting offset edges.
+
+### Missing Unit Tests for Joinery Modules — DEFERRED
+2,680 lines of new joinery logic (jointGeometryUtils 1017 lines, jointResolvers 652 lines,
+jointValidationUtils 367 lines, jointDefaults 346 lines) have no direct unit test files.
+Integration coverage exists via sketchJoineryUtils.test.js (+736 lines), but individual
+helpers can regress silently while integration tests still pass. Add per-module test files
+before the next major joinery refactor.
+
+### Parallel Joint Catalogs — DEFERRED
+craftsman/data/joints.js exports JOINTS with IDs [finger, dovetail, pocket-hole, biscuit,
+rabbet, dado, butt], while joinery/jointTypes.js ships JOINT_TYPES = [butt, dado, rabbet,
+mortise_tenon, dowel, pocket_screw, tab_slot]. Only recommendJoint from the former is
+consumed (by assemblyGenerator.js:8); getJointById, computeFingerJointParams, and the
+JOINTS array are unused. Reconcile by migrating assemblyGenerator to the new registry
+(adding metadata like minThickness, strength, difficulty, cncFriendly) and deleting the
+old data file.
+
+### JointPanel.jsx Component Extraction — DEFERRED
+File is 801 lines with 4+ components (JointStatus, JointForm ~400 lines, ExistingJointList,
+JointPanel) in one file. Extract into separate files for readability. Non-blocking.
+
+### Joinery Module Splits — DEFERRED
+jointGeometryUtils.js is 1017 lines with 20+ helpers + resolveJointGeometry orchestrator
+(~184 lines, 5 levels of nesting). jointResolvers.js is 652 lines mixing vector math,
+edge geometry, and contact resolution. Split each into 2-3 focused files before adding
+new joint types.
+
+### Joint-Type Switch Duplication — DEFERRED
+The same JOINT_TYPES switch is repeated across 7 sites (jointDefaults.js x3,
+jointGeometryUtils.js, jointValidationUtils.js, joinery/index.js, JointPanel.jsx).
+Adding a new joint type requires touching all 7. Replace with a registry/strategy
+table in jointTypes.js (each joint type entry carries its own defaults/geometry/
+validator/summary functions).
+
+### Additional Correctness Edge Cases — DEFERRED
+- parseSerializedJointReference splits on ':' with 3-arg destructure — entityIds with
+  colons silently truncate. Fix: split(':', 3) + slice(3).join(':'), OR reject colons
+  in entityId creation.
+- cloneJoint = normalizeJoint, which mints new IDs when input lacks one. Separate
+  cloneJoint (preserve id, throw if missing) from normalizeJoint.
+- toFiniteNumber(v, 0) silently coerces malformed input to 0, masking validation errors.
+  Surface parse failures via warnings instead.
