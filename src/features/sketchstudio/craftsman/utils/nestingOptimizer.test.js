@@ -194,4 +194,37 @@ describe('optimizeCutList', () => {
     expect(result.summary.linear?.unitsNeeded).toBe(1);
     expect(result.groups.map((group) => group.stockKind)).toEqual(['sheet', 'linear']);
   });
+
+  // Regression: ISSUE-002 — duplicate React keys in NestingPanel
+  // Found by /qa on 2026-04-05
+  // Report: .gstack/qa-reports/qa-report-localhost-2026-04-05.md
+  it('produces unique part IDs when parts share name+material but differ in dimensions', () => {
+    // CNC Nesting Test template ships two separate 'Small B' entries in
+    // birch-plywood-3 with different dimensions. Prior to the fix both got
+    // id 'Small B-birch-plywood-3-0' and React complained about colliding keys.
+    const rows = [
+      { partName: 'Small B', material: 'birch-plywood-3', materialName: 'Birch 3mm', width: 100, height: 100, quantity: 1 },
+      { partName: 'Small B', material: 'birch-plywood-3', materialName: 'Birch 3mm', width: 200, height: 100, quantity: 1 },
+    ];
+    const result = nestPartsOnSheets(rows);
+    const ids = result.sheets.flatMap((sheet) => sheet.placements.map((p) => p.id));
+    const unique = new Set(ids);
+    expect(ids).toHaveLength(2);
+    expect(unique.size).toBe(2);
+  });
+
+  it('produces unique part IDs across multiple quantity slots with different dimensions', () => {
+    // Same part name, same material, quantity > 1, but different dimensions
+    // in each BOM row. quantityIndex was the only disambiguator, so both
+    // quantityIndex=0 slots collided.
+    const rows = [
+      { partName: 'Shelf', material: 'oak', materialName: 'Oak', width: 600, height: 300, quantity: 2 },
+      { partName: 'Shelf', material: 'oak', materialName: 'Oak', width: 400, height: 200, quantity: 2 },
+    ];
+    const result = nestPartsOnSheets(rows);
+    const ids = result.sheets.flatMap((sheet) => sheet.placements.map((p) => p.id));
+    const unique = new Set(ids);
+    expect(ids).toHaveLength(4);
+    expect(unique.size).toBe(4);
+  });
 });
