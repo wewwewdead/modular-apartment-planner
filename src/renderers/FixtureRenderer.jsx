@@ -131,7 +131,9 @@ function FixtureDetails({ fixture }) {
       );
     }
     case 'tv': {
-      const bezelInset = width * 0.04;
+      // Cap bezel inset by the smaller dimension so wall-mounted TVs (thin depth, wide width) don't
+      // produce a negative-height inner rect when width * 0.04 exceeds depth / 2.
+      const bezelInset = Math.min(width, depth) * 0.04;
       return (
         <g transform={transform}>
           {/* Inner bezel rect */}
