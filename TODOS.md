@@ -76,3 +76,15 @@ Completed 2026-04-02. All items shipped:
 - PWA service worker for offline workshop use
 - npm audit clean (picomatch fix)
 - .env.example placeholder
+
+## QA Findings (2026-04-05)
+
+### TV Fixture Negative Height — FIXED by /qa on main, 2026-04-05
+FixtureRenderer.jsx TV bezel inset was `width * 0.04`, subtracted from depth. Thin wall-mounted
+TVs (width=2000, depth=100) produced negative rect height and a console error. Fixed to use
+`Math.min(width, depth) * 0.04`. Commit 86542e1 + regression tests at a0d7994.
+
+### Stale Unit Test — PRE-EXISTING (NEEDS ATTENTION)
+`src/features/sketchstudio/utils/objectTypeConstants.test.js` asserts `DEFAULT_CATEGORY === 'furniture'`,
+but `objectTypeConstants.js` exports `'custom'`. Align the test with the current constant value
+(or revert the constant if 'furniture' was the intended default).
