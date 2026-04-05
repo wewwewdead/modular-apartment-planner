@@ -11,10 +11,11 @@ import { getJointTypeLabel, resolveJointType } from './jointTypes';
 
 const VALIDATION_STATUSES = new Set(['pending', 'disabled', 'valid', 'warning', 'invalid']);
 
-let nextJointCounter = 1;
-
 function createJointId() {
-  return `joint-${nextJointCounter++}`;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `joint-${crypto.randomUUID()}`;
+  }
+  return `joint-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 }
 
 function normalizeLabel(type, label) {
