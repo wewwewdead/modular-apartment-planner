@@ -1,4 +1,5 @@
 import { JOINT_TYPES } from './jointTypes';
+import { getJointTypeEntry } from './jointRegistry';
 
 export const JOINERY_TOUCH_TOLERANCE = 0.5;
 export const DEFAULT_JOINT_CLEARANCE = 0.2;
@@ -13,21 +14,13 @@ export const JOINT_PARAMETER_DEPTH_MODES = Object.freeze({
 });
 
 const ROUNDING_FACTOR = 100;
-const DEFAULT_DADO_DEPTH_FACTOR = 0.33;
-const DEFAULT_RABBET_DEPTH_FACTOR = 0.5;
-const DEFAULT_TENON_DEPTH_FACTOR = 0.6;
-const DEFAULT_DOWEL_DIAMETER_FACTOR = 0.35;
-const DEFAULT_POCKET_DIAMETER = 9.5;
-const DEFAULT_PILOT_DIAMETER = 3.5;
-const DEFAULT_REPEAT_MARGIN_FACTOR = 0.5;
-const DEFAULT_DRAFT_DEPTH = 12;
 
 export function supportsAutoOverlapDepth(type) {
   return (
-    type === JOINT_TYPES.DADO
-    || type === JOINT_TYPES.RABBET
-    || type === JOINT_TYPES.MORTISE_TENON
-    || type === JOINT_TYPES.TAB_SLOT
+    type === JOINT_TYPES.DADO ||
+    type === JOINT_TYPES.RABBET ||
+    type === JOINT_TYPES.MORTISE_TENON ||
+    type === JOINT_TYPES.TAB_SLOT
   );
 }
 
@@ -58,11 +51,7 @@ export function normalizeJointParameterModes(type, placementMode, parameterModes
     };
   }
 
-  if (
-    placementMode === JOINT_PLACEMENT_MODES.AUTO_CONTACT
-    && supportsAutoOverlapDepth(type)
-    && !hasExplicitDepth
-  ) {
+  if (placementMode === JOINT_PLACEMENT_MODES.AUTO_CONTACT && supportsAutoOverlapDepth(type) && !hasExplicitDepth) {
     return {
       depth: JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP,
     };
@@ -114,10 +103,7 @@ export function createDefaultFaceReference(partId, input = {}) {
 }
 
 export function createDefaultTolerance(input = {}, legacyClearance = null) {
-  const normalizedClearance = toNonNegativeNumber(
-    input?.clearance ?? legacyClearance,
-    DEFAULT_JOINT_CLEARANCE,
-  );
+  const normalizedClearance = toNonNegativeNumber(input?.clearance ?? legacyClearance, DEFAULT_JOINT_CLEARANCE);
 
   return {
     clearance: roundJoineryValue(normalizedClearance) ?? DEFAULT_JOINT_CLEARANCE,
@@ -126,51 +112,8 @@ export function createDefaultTolerance(input = {}, legacyClearance = null) {
 }
 
 function getFabricationDefaultsByType(type) {
-  switch (type) {
-    case JOINT_TYPES.DADO:
-      return {
-        process: 'milling',
-        operationKind: 'slot',
-        hardware: null,
-      };
-    case JOINT_TYPES.RABBET:
-      return {
-        process: 'milling',
-        operationKind: 'profile-step',
-        hardware: null,
-      };
-    case JOINT_TYPES.MORTISE_TENON:
-      return {
-        process: 'milling',
-        operationKind: 'tenon-mortise',
-        hardware: null,
-      };
-    case JOINT_TYPES.DOWEL:
-      return {
-        process: 'drilling',
-        operationKind: 'paired-holes',
-        hardware: { kind: 'dowel' },
-      };
-    case JOINT_TYPES.POCKET_SCREW:
-      return {
-        process: 'drilling',
-        operationKind: 'pocket-screw',
-        hardware: { kind: 'pocket-screw' },
-      };
-    case JOINT_TYPES.TAB_SLOT:
-      return {
-        process: 'milling',
-        operationKind: 'tab-slot',
-        hardware: null,
-      };
-    case JOINT_TYPES.BUTT:
-    default:
-      return {
-        process: 'assembly',
-        operationKind: 'butt',
-        hardware: null,
-      };
-  }
+  const entry = getJointTypeEntry(type);
+  return { ...entry.fabrication };
 }
 
 export function createDefaultFabrication(type, input = {}) {
@@ -190,48 +133,7 @@ export function createDefaultFabrication(type, input = {}) {
 }
 
 export function normalizeJointParameters(type, parameters = {}) {
-  switch (type) {
-    case JOINT_TYPES.DADO:
-    case JOINT_TYPES.RABBET:
-    case JOINT_TYPES.MORTISE_TENON:
-      return {
-        width: toPositiveNumber(parameters.width),
-        depth: toPositiveNumber(parameters.depth),
-        inset: toNonNegativeNumber(parameters.inset, 0),
-        offset: toFiniteNumber(parameters.offset, 0),
-      };
-    case JOINT_TYPES.DOWEL:
-      return {
-        dowelDiameter: toPositiveNumber(parameters.dowelDiameter),
-        count: toPositiveInteger(parameters.count),
-        spacing: toNonNegativeNumber(parameters.spacing, 0),
-        edgeOffset: toNonNegativeNumber(parameters.edgeOffset, 0),
-        depth: toPositiveNumber(parameters.depth),
-      };
-    case JOINT_TYPES.POCKET_SCREW:
-      return {
-        pocketDiameter: toPositiveNumber(parameters.pocketDiameter),
-        pilotDiameter: toPositiveNumber(parameters.pilotDiameter),
-        count: toPositiveInteger(parameters.count),
-        spacing: toNonNegativeNumber(parameters.spacing, 0),
-        edgeOffset: toNonNegativeNumber(parameters.edgeOffset, 0),
-        pocketOffset: toNonNegativeNumber(parameters.pocketOffset, 0),
-        depth: toPositiveNumber(parameters.depth),
-      };
-    case JOINT_TYPES.TAB_SLOT:
-      return {
-        count: toPositiveInteger(parameters.count),
-        tabWidth: toPositiveNumber(parameters.tabWidth),
-        spacing: toNonNegativeNumber(parameters.spacing, 0),
-        edgeOffset: toNonNegativeNumber(parameters.edgeOffset, 0),
-        depth: toPositiveNumber(parameters.depth),
-      };
-    case JOINT_TYPES.BUTT:
-    default:
-      return {
-        offset: toFiniteNumber(parameters.offset, 0),
-      };
-  }
+  return getJointTypeEntry(type).normalizeParameters(parameters);
 }
 
 export function mergeJointParameters(type, baseParameters = {}, patchParameters = {}) {
@@ -241,106 +143,6 @@ export function mergeJointParameters(type, baseParameters = {}, patchParameters 
   });
 }
 
-function computeRepeatCount(span, minimumPitch, minCount = 1, maxCount = 4) {
-  if (!(span > 0)) {
-    return minCount;
-  }
-
-  const estimated = Math.floor(span / Math.max(minimumPitch, 1));
-  return Math.max(minCount, Math.min(maxCount, estimated || minCount));
-}
-
-function computeDefaultEdgeMargin(context, fallback = 6) {
-  return roundJoineryValue((context?.minThickness || fallback) * DEFAULT_REPEAT_MARGIN_FACTOR) || fallback;
-}
-
 export function computeJointDefaultParameters(type, context = null) {
-  const overlapLength = context?.overlap?.length || 0;
-  const sourceThickness = context?.sourceThickness ?? null;
-  const targetThickness = context?.targetThickness ?? null;
-  const minThickness = context?.minThickness ?? (
-    sourceThickness != null && targetThickness != null
-      ? Math.min(sourceThickness, targetThickness)
-      : null
-  );
-
-  switch (type) {
-    case JOINT_TYPES.DADO:
-      return normalizeJointParameters(type, {
-        width: overlapLength || null,
-        depth: targetThickness ? targetThickness * DEFAULT_DADO_DEPTH_FACTOR : null,
-        inset: 0,
-        offset: 0,
-      });
-
-    case JOINT_TYPES.RABBET:
-      return normalizeJointParameters(type, {
-        width: overlapLength || null,
-        depth: targetThickness ? targetThickness * DEFAULT_RABBET_DEPTH_FACTOR : null,
-        inset: 0,
-        offset: 0,
-      });
-
-    case JOINT_TYPES.MORTISE_TENON:
-      return normalizeJointParameters(type, {
-        width: overlapLength ? Math.max((minThickness || DEFAULT_DRAFT_DEPTH) * 1.5, overlapLength * 0.6) : null,
-        depth: targetThickness ? targetThickness * DEFAULT_TENON_DEPTH_FACTOR : DEFAULT_DRAFT_DEPTH,
-        inset: 0,
-        offset: 0,
-      });
-
-    case JOINT_TYPES.DOWEL: {
-      const count = computeRepeatCount(overlapLength, Math.max((minThickness || DEFAULT_DRAFT_DEPTH) * 4, 80), 1, 4);
-      const edgeOffset = computeDefaultEdgeMargin(context, 6);
-      const usableLength = Math.max(0, overlapLength - (edgeOffset * 2));
-      const spacing = count > 1 ? usableLength / (count - 1) : 0;
-
-      return normalizeJointParameters(type, {
-        dowelDiameter: minThickness ? minThickness * DEFAULT_DOWEL_DIAMETER_FACTOR : 8,
-        count,
-        spacing,
-        edgeOffset,
-        depth: minThickness ? minThickness * 0.6 : DEFAULT_DRAFT_DEPTH,
-      });
-    }
-
-    case JOINT_TYPES.POCKET_SCREW: {
-      const count = computeRepeatCount(overlapLength, Math.max((minThickness || DEFAULT_DRAFT_DEPTH) * 5, 110), 1, 4);
-      const edgeOffset = computeDefaultEdgeMargin(context, 8);
-      const usableLength = Math.max(0, overlapLength - (edgeOffset * 2));
-      const spacing = count > 1 ? usableLength / (count - 1) : 0;
-
-      return normalizeJointParameters(type, {
-        pocketDiameter: DEFAULT_POCKET_DIAMETER,
-        pilotDiameter: DEFAULT_PILOT_DIAMETER,
-        count,
-        spacing,
-        edgeOffset,
-        pocketOffset: roundJoineryValue((sourceThickness || minThickness || 12) * 0.75),
-        depth: roundJoineryValue((sourceThickness || minThickness || 12) * 0.75),
-      });
-    }
-
-    case JOINT_TYPES.TAB_SLOT: {
-      const count = computeRepeatCount(overlapLength, Math.max((minThickness || DEFAULT_DRAFT_DEPTH) * 3, 70), 1, 5);
-      const edgeOffset = computeDefaultEdgeMargin(context, 6);
-      const spacing = count > 1 ? computeDefaultEdgeMargin(context, 4) : 0;
-      const usableLength = Math.max(0, overlapLength - (edgeOffset * 2) - (Math.max(0, count - 1) * spacing));
-      const tabWidth = count > 0 ? usableLength / count : usableLength;
-
-      return normalizeJointParameters(type, {
-        count,
-        tabWidth,
-        spacing,
-        edgeOffset,
-        depth: targetThickness ? targetThickness * DEFAULT_TENON_DEPTH_FACTOR : DEFAULT_DRAFT_DEPTH,
-      });
-    }
-
-    case JOINT_TYPES.BUTT:
-    default:
-      return normalizeJointParameters(type, {
-        offset: 0,
-      });
-  }
+  return getJointTypeEntry(type).computeDefaults(context);
 }

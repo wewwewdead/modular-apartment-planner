@@ -24,9 +24,9 @@ import {
   detectOccupiedRegionConflicts,
   validateResolvedJoint,
 } from './jointValidationUtils';
-import { JOINT_TYPES } from './jointTypes';
 import { normalizeJointCollection } from './jointSerializationUtils';
 import { getRectCorners } from '../utils/entityUtils';
+import { getJointTypeEntry } from './jointRegistry';
 
 function cloneManufacturingEntity(entity) {
   return {
@@ -38,9 +38,7 @@ function cloneManufacturingEntity(entity) {
 }
 
 function compactJointParameters(parameters = {}) {
-  return Object.fromEntries(
-    Object.entries(parameters).filter(([, value]) => value != null),
-  );
+  return Object.fromEntries(Object.entries(parameters).filter(([, value]) => value != null));
 }
 
 function createResolvedContact(context) {
@@ -77,8 +75,8 @@ function resolveJointFaceReference(reference, partId) {
 
 function applyJointParameterModes(joint, context, parameters) {
   if (
-    joint.parameterModes?.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP
-    && supportsAutoOverlapDepth(joint.type)
+    joint.parameterModes?.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP &&
+    supportsAutoOverlapDepth(joint.type)
   ) {
     return mergeJointParameters(joint.type, parameters, {
       depth: context?.penetrationDepth ?? null,
@@ -113,9 +111,7 @@ function attachJointConnectionMetadata(entity, joint, role, edgeKey, fabrication
   }
 
   const fabricationReady = fabricationState.fabricationReady !== false;
-  const nextConnections = Array.isArray(entity.meta?.joineryConnections)
-    ? [...entity.meta.joineryConnections]
-    : [];
+  const nextConnections = Array.isArray(entity.meta?.joineryConnections) ? [...entity.meta.joineryConnections] : [];
 
   nextConnections.push({
     jointId: joint.id,
@@ -159,7 +155,17 @@ function createJoineryMeta(joint, part, role, operationKind, detailType, fabrica
   };
 }
 
-function createRectFeatureEntity(joint, part, role, edge, interval, depth, operationKind, fabricationState = {}, index = 0) {
+function createRectFeatureEntity(
+  joint,
+  part,
+  role,
+  edge,
+  interval,
+  depth,
+  operationKind,
+  fabricationState = {},
+  index = 0,
+) {
   if (Number(part.rotation)) {
     return {
       id: `joinery-feature-${joint.id}-${part.id}-${operationKind}-${index + 1}`,
@@ -235,7 +241,17 @@ function createRectFeatureEntity(joint, part, role, edge, interval, depth, opera
   };
 }
 
-function createCircleFeatureEntity(joint, part, role, center, diameter, depth, operationKind, fabricationState = {}, index = 0) {
+function createCircleFeatureEntity(
+  joint,
+  part,
+  role,
+  center,
+  diameter,
+  depth,
+  operationKind,
+  fabricationState = {},
+  index = 0,
+) {
   return {
     id: `joinery-feature-${joint.id}-${part.id}-${operationKind}-${index + 1}`,
     type: 'feature',
@@ -270,16 +286,13 @@ function pushUniquePoint(points, point) {
 }
 
 function pointsMatch(left, right) {
-  return Math.abs(left.x - right.x) <= JOINERY_TOUCH_TOLERANCE
-    && Math.abs(left.y - right.y) <= JOINERY_TOUCH_TOLERANCE;
+  return Math.abs(left.x - right.x) <= JOINERY_TOUCH_TOLERANCE && Math.abs(left.y - right.y) <= JOINERY_TOUCH_TOLERANCE;
 }
 
 function sortEdgeModifications(modifications, isForwardTraversal) {
-  return [...modifications].sort((left, right) => (
-    isForwardTraversal
-      ? left.start - right.start
-      : right.start - left.start
-  ));
+  return [...modifications].sort((left, right) =>
+    isForwardTraversal ? left.start - right.start : right.start - left.start,
+  );
 }
 
 function pushTraversalModificationPoints(points, edge, modification, isForwardTraversal) {
@@ -316,7 +329,8 @@ function buildRectProfilePoints(part, partState) {
       return;
     }
 
-    const isForwardTraversal = pointsMatch(step.startPoint, edge.startPoint) && pointsMatch(step.endPoint, edge.endPoint);
+    const isForwardTraversal =
+      pointsMatch(step.startPoint, edge.startPoint) && pointsMatch(step.endPoint, edge.endPoint);
     const sortedModifications = sortEdgeModifications(partState[step.edgeKey], isForwardTraversal);
 
     sortedModifications.forEach((modification) => {
@@ -479,21 +493,15 @@ function expandIntervalByWidth(interval, extraWidth, edge) {
   }
 
   const widthDelta = Number(extraWidth) || 0;
-  const start = interval.start - (widthDelta / 2);
-  const end = interval.end + (widthDelta / 2);
+  const start = interval.start - widthDelta / 2;
+  const end = interval.end + widthDelta / 2;
   const length = end - start;
 
   if (length <= JOINERY_TOUCH_TOLERANCE) {
     return null;
   }
 
-  if (
-    edge
-    && (
-      start < edge.start - JOINERY_TOUCH_TOLERANCE
-      || end > edge.end + JOINERY_TOUCH_TOLERANCE
-    )
-  ) {
+  if (edge && (start < edge.start - JOINERY_TOUCH_TOLERANCE || end > edge.end + JOINERY_TOUCH_TOLERANCE)) {
     return null;
   }
 
@@ -533,12 +541,14 @@ function buildFemaleClearanceIntervals(joint, context) {
 }
 
 function buildRepeatedIntervals(context, parameters, widthKey) {
-  return buildRepeatedEdgeIntervals(context.overlap, {
-    count: parameters.count,
-    width: parameters[widthKey],
-    spacing: parameters.spacing,
-    edgeOffset: parameters.edgeOffset,
-  }).intervals || null;
+  return (
+    buildRepeatedEdgeIntervals(context.overlap, {
+      count: parameters.count,
+      width: parameters[widthKey],
+      spacing: parameters.spacing,
+      edgeOffset: parameters.edgeOffset,
+    }).intervals || null
+  );
 }
 
 function buildHoleCenters(edge, intervals, inwardDistance) {
@@ -554,281 +564,25 @@ function getJointFabricationState(context) {
   };
 }
 
-function buildButtGeometry(joint, context) {
-  return {
-    occupiedRegions: [
-      ...buildOccupiedRegions(joint, context.sourcePart.id, context.sourceEdge.edgeKey, [context.overlap]),
-      ...buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, [context.overlap]),
-    ],
-  };
-}
-
-function buildDadoGeometry(joint, context) {
-  const interval = buildWidthOffsetInterval(context, joint.parameters);
-  if (!interval) {
-    return { error: 'Dado dimensions do not fit within the available overlap.' };
-  }
-
-  const fabricationState = getJointFabricationState(context);
-
-  return {
-    featureEntities: [
-      createRectFeatureEntity(
-        joint,
-        context.targetPart,
-        'target',
-        context.targetEdge,
-        interval,
-        joint.parameters.depth,
-        'dado-slot',
-        fabricationState,
-      ),
-    ],
-    occupiedRegions: buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, [interval]),
-  };
-}
-
-function buildRabbetGeometry(joint, context) {
-  const { femaleInterval } = buildFemaleClearanceIntervals(joint, context);
-  if (!femaleInterval) {
-    return { error: 'Rabbet dimensions do not fit within the available overlap.' };
-  }
-
-  return {
-    partModifications: [
-      {
-        partId: context.targetPart.id,
-        edgeKey: context.targetEdge.edgeKey,
-        modifications: [{
-          ...femaleInterval,
-          depth: joint.parameters.depth,
-          mode: 'cut',
-        }],
-      },
-    ],
-    occupiedRegions: buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, [femaleInterval]),
-  };
-}
-
-function buildMortiseTenonGeometry(joint, context) {
-  const { nominalInterval, femaleInterval } = buildFemaleClearanceIntervals(joint, context);
-  if (!nominalInterval || !femaleInterval) {
-    return { error: 'Mortise and tenon dimensions do not fit within the available overlap.' };
-  }
-
-  const maleInterval = nominalInterval;
-  const overlapDrivenSourceReliefIntervals = context.contactKind === 'penetration'
-    ? buildComplementIntervals(context.overlap, [maleInterval])
-    : null;
-  const sourceModifications = context.contactKind === 'penetration'
-    ? overlapDrivenSourceReliefIntervals.map((reliefInterval) => ({
-        ...reliefInterval,
-        depth: joint.parameters.depth,
-        mode: 'cut',
-      }))
-    : [{
-        ...maleInterval,
-        depth: joint.parameters.depth,
-        mode: 'add',
-      }];
-
-  return {
-    partModifications: [
-      ...(sourceModifications.length
-        ? [{
-            partId: context.sourcePart.id,
-            edgeKey: context.sourceEdge.edgeKey,
-            modifications: sourceModifications,
-          }]
-        : []),
-      {
-        partId: context.targetPart.id,
-        edgeKey: context.targetEdge.edgeKey,
-        modifications: [{
-          ...femaleInterval,
-          depth: joint.parameters.depth,
-          mode: 'cut',
-        }],
-      },
-    ],
-    occupiedRegions: [
-      ...buildOccupiedRegions(
-        joint,
-        context.sourcePart.id,
-        context.sourceEdge.edgeKey,
-        context.contactKind === 'penetration' ? [context.overlap] : [maleInterval],
-      ),
-      ...buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, [femaleInterval]),
-    ],
-  };
-}
-
-function buildDowelGeometry(joint, context) {
-  const intervals = buildRepeatedIntervals(context, joint.parameters, 'dowelDiameter');
-  if (!intervals?.length) {
-    return { error: 'The dowel pattern could not be laid out on the selected overlap.' };
-  }
-
-  const fabricationState = getJointFabricationState(context);
-  const sourceCenters = buildHoleCenters(context.sourceEdge, intervals, joint.parameters.edgeOffset);
-  const targetCenters = buildHoleCenters(context.targetEdge, intervals, joint.parameters.edgeOffset);
-  const holeDiameter = (joint.parameters.dowelDiameter || 0) + (joint.tolerance?.clearance || 0);
-
-  return {
-    featureEntities: [
-      ...sourceCenters.map((center, index) => createCircleFeatureEntity(
-        joint,
-        context.sourcePart,
-        'source',
-        center,
-        holeDiameter,
-        joint.parameters.depth,
-        'dowel-hole',
-        fabricationState,
-        index,
-      )),
-      ...targetCenters.map((center, index) => createCircleFeatureEntity(
-        joint,
-        context.targetPart,
-        'target',
-        center,
-        holeDiameter,
-        joint.parameters.depth,
-        'dowel-hole',
-        fabricationState,
-        index,
-      )),
-    ],
-    occupiedRegions: [
-      ...buildOccupiedRegions(joint, context.sourcePart.id, context.sourceEdge.edgeKey, intervals),
-      ...buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, intervals),
-    ],
-  };
-}
-
-function buildPocketScrewGeometry(joint, context) {
-  const layoutIntervals = buildRepeatedEdgeIntervals(context.overlap, {
-    count: joint.parameters.count,
-    width: Math.max(joint.parameters.pocketDiameter || 0, joint.parameters.pilotDiameter || 0),
-    spacing: joint.parameters.spacing,
-    edgeOffset: joint.parameters.edgeOffset,
-  }).intervals;
-
-  if (!layoutIntervals?.length) {
-    return { error: 'The pocket screw pattern could not be laid out on the selected overlap.' };
-  }
-
-  const fabricationState = getJointFabricationState(context);
-  const sourceCenters = buildHoleCenters(context.sourceEdge, layoutIntervals, joint.parameters.pocketOffset);
-  const targetCenters = buildHoleCenters(context.targetEdge, layoutIntervals, joint.parameters.edgeOffset);
-  const pilotDepth = context.targetThickness != null
-    ? Math.min(joint.parameters.depth || 0, context.targetThickness)
-    : (joint.parameters.depth || 0);
-
-  return {
-    featureEntities: [
-      ...sourceCenters.map((center, index) => createCircleFeatureEntity(
-        joint,
-        context.sourcePart,
-        'source',
-        center,
-        joint.parameters.pocketDiameter,
-        joint.parameters.depth,
-        'pocket-bore',
-        fabricationState,
-        index,
-      )),
-      ...targetCenters.map((center, index) => createCircleFeatureEntity(
-        joint,
-        context.targetPart,
-        'target',
-        center,
-        (joint.parameters.pilotDiameter || 0) + (joint.tolerance?.clearance || 0),
-        pilotDepth,
-        'pilot-hole',
-        fabricationState,
-        index,
-      )),
-    ],
-    occupiedRegions: [
-      ...buildOccupiedRegions(joint, context.sourcePart.id, context.sourceEdge.edgeKey, layoutIntervals),
-      ...buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, layoutIntervals),
-    ],
-  };
-}
-
-function buildTabSlotGeometry(joint, context) {
-  const intervals = buildRepeatedIntervals(context, joint.parameters, 'tabWidth');
-  if (!intervals?.length) {
-    return { error: 'The tab-and-slot pattern could not be laid out on the selected overlap.' };
-  }
-
-  const maleIntervals = intervals.map((interval) => shrinkInterval(interval, joint.tolerance?.clearance));
-  const femaleIntervals = intervals.map((interval) => expandInterval(interval, joint.tolerance?.clearance, context.overlap));
-  const overlapDrivenSourceReliefIntervals = context.contactKind === 'penetration'
-    ? buildComplementIntervals(context.overlap, maleIntervals)
-    : null;
-  const sourceModifications = context.contactKind === 'penetration'
-    ? overlapDrivenSourceReliefIntervals.map((reliefInterval) => ({
-        ...reliefInterval,
-        depth: joint.parameters.depth,
-        mode: 'cut',
-      }))
-    : maleIntervals.map((interval) => ({
-        ...interval,
-        depth: joint.parameters.depth,
-        mode: 'add',
-      }));
-
-  return {
-    partModifications: [
-      ...(sourceModifications.length
-        ? [{
-            partId: context.sourcePart.id,
-            edgeKey: context.sourceEdge.edgeKey,
-            modifications: sourceModifications,
-          }]
-        : []),
-      {
-        partId: context.targetPart.id,
-        edgeKey: context.targetEdge.edgeKey,
-        modifications: femaleIntervals.map((interval) => ({
-          ...interval,
-          depth: joint.parameters.depth,
-          mode: 'cut',
-        })),
-      },
-    ],
-    occupiedRegions: [
-      ...buildOccupiedRegions(
-        joint,
-        context.sourcePart.id,
-        context.sourceEdge.edgeKey,
-        context.contactKind === 'penetration' ? [context.overlap] : maleIntervals,
-      ),
-      ...buildOccupiedRegions(joint, context.targetPart.id, context.targetEdge.edgeKey, femaleIntervals),
-    ],
-  };
-}
+const geometryHelpers = {
+  buildOccupiedRegions,
+  createRectFeatureEntity,
+  createCircleFeatureEntity,
+  buildWidthOffsetInterval,
+  buildFemaleClearanceIntervals,
+  buildComplementIntervals,
+  buildRepeatedIntervals,
+  buildHoleCenters,
+  getJointFabricationState,
+  shrinkInterval,
+  expandInterval,
+  buildRepeatedEdgeIntervalsRaw(overlap, options) {
+    return buildRepeatedEdgeIntervals(overlap, options).intervals || null;
+  },
+};
 
 function buildJointGeometry(joint, context) {
-  switch (joint.type) {
-    case JOINT_TYPES.DADO:
-      return buildDadoGeometry(joint, context);
-    case JOINT_TYPES.RABBET:
-      return buildRabbetGeometry(joint, context);
-    case JOINT_TYPES.MORTISE_TENON:
-      return buildMortiseTenonGeometry(joint, context);
-    case JOINT_TYPES.DOWEL:
-      return buildDowelGeometry(joint, context);
-    case JOINT_TYPES.POCKET_SCREW:
-      return buildPocketScrewGeometry(joint, context);
-    case JOINT_TYPES.TAB_SLOT:
-      return buildTabSlotGeometry(joint, context);
-    case JOINT_TYPES.BUTT:
-    default:
-      return buildButtGeometry(joint, context);
-  }
+  return getJointTypeEntry(joint.type).buildGeometry(joint, context, geometryHelpers);
 }
 
 export function resolveJointGeometry(entities = [], joints = []) {
@@ -853,8 +607,8 @@ export function resolveJointGeometry(entities = [], joints = []) {
         compactJointParameters(joint.parameters),
       ),
     );
-    const resolvedSourcePartId = context.error ? joint.sourcePartId : (context.sourcePart?.id || joint.sourcePartId);
-    const resolvedTargetPartId = context.error ? joint.targetPartId : (context.targetPart?.id || joint.targetPartId);
+    const resolvedSourcePartId = context.error ? joint.sourcePartId : context.sourcePart?.id || joint.sourcePartId;
+    const resolvedTargetPartId = context.error ? joint.targetPartId : context.targetPart?.id || joint.targetPartId;
     const resolvedSourceFaceRef = context.error
       ? joint.sourceFaceRef
       : resolveJointFaceReference(
@@ -874,8 +628,8 @@ export function resolveJointGeometry(entities = [], joints = []) {
       sourceFaceRef: resolvedSourceFaceRef,
       targetFaceRef: resolvedTargetFaceRef,
       parameters: effectiveParameters,
-      sourceEdgeRef: context.error ? joint.sourceEdgeRef : (context.resolvedSourceEdgeRef || joint.sourceEdgeRef),
-      targetEdgeRef: context.error ? joint.targetEdgeRef : (context.resolvedTargetEdgeRef || joint.targetEdgeRef),
+      sourceEdgeRef: context.error ? joint.sourceEdgeRef : context.resolvedSourceEdgeRef || joint.sourceEdgeRef,
+      targetEdgeRef: context.error ? joint.targetEdgeRef : context.resolvedTargetEdgeRef || joint.targetEdgeRef,
       resolvedContact: createResolvedContact(context),
       validationState: validateResolvedJoint(joint, context, effectiveParameters),
     };
@@ -954,14 +708,11 @@ export function resolveJointGeometry(entities = [], joints = []) {
 
     nextJoint = {
       ...nextJoint,
-      validationState: createValidationState(
-        nextJoint.validationState.warnings.length ? 'warning' : 'valid',
-        {
-          warnings: nextJoint.validationState.warnings,
-          canApply: true,
-          generatedEntityIds: Array.from(generatedIdsByJoint.get(nextJoint.id) || []),
-        },
-      ),
+      validationState: createValidationState(nextJoint.validationState.warnings.length ? 'warning' : 'valid', {
+        warnings: nextJoint.validationState.warnings,
+        canApply: true,
+        generatedEntityIds: Array.from(generatedIdsByJoint.get(nextJoint.id) || []),
+      }),
     };
 
     return nextJoint;
@@ -1004,7 +755,9 @@ export function resolveJointGeometry(entities = [], joints = []) {
     ...joint,
     validationState: {
       ...joint.validationState,
-      generatedEntityIds: Array.from(generatedIdsByJoint.get(joint.id) || joint.validationState.generatedEntityIds || []),
+      generatedEntityIds: Array.from(
+        generatedIdsByJoint.get(joint.id) || joint.validationState.generatedEntityIds || [],
+      ),
     },
   }));
 
