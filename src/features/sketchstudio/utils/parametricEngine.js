@@ -1,4 +1,4 @@
-import { evaluateSketchExpression, findVariableReferencesInDocument } from '../../utils/sketchExpressionUtils';
+import { evaluateSketchExpression, findVariableReferencesInDocument } from './sketchExpressionUtils';
 
 export function createVariable(name, value, unit = 'mm') {
   return {

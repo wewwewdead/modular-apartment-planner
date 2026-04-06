@@ -5,7 +5,6 @@ import NestingPanel from './NestingPanel';
 import JointPanel from './JointPanel';
 import ParametricPanel from './ParametricPanel';
 import AssemblyPanel from './AssemblyPanel';
-import useSketchBOM from '../hooks/useSketchBOM';
 import { getMaterialSelectionState } from '../utils/materialSelectionUtils';
 import styles from '../styles/craftsman.module.css';
 
@@ -83,6 +82,9 @@ export default function CraftsmanSidebar({
   constraints,
   joints,
   jointDiagnostics,
+  bomRows = [],
+  totalCost = 0,
+  costByMaterial = {},
   onMaterialChange,
   onThicknessChange,
   onVariablesChange,
@@ -93,7 +95,6 @@ export default function CraftsmanSidebar({
   onDuplicateEntities,
   onEntityFieldCommit,
 }) {
-  const { bomRows, totalCost, costByMaterial } = useSketchBOM(entities);
   const hasEntities = entities.length > 0;
   const materialSelection = getMaterialSelectionState(entities, selectedIds);
 

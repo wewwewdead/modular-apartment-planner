@@ -84,7 +84,11 @@ export function roundJoineryValue(value) {
 
 export function toFiniteNumber(value, fallback = null) {
   const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
+  if (Number.isFinite(numeric)) return numeric;
+  if (value != null && value !== '') {
+    console.warn(`toFiniteNumber: "${value}" is not a finite number, using fallback ${fallback}`);
+  }
+  return fallback;
 }
 
 export function toPositiveNumber(value) {

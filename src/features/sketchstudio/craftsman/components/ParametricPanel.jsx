@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { createVariable, findVariableReferences } from '../utils/parametricEngine';
+import { createVariable, findVariableReferences } from '../../utils/parametricEngine';
 import styles from '../styles/craftsman.module.css';
 
 export default function ParametricPanel({ variables, entities, constraints = [], onVariablesChange }) {

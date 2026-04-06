@@ -15,6 +15,7 @@ import {
 } from '../utils/sketchWorkspaceFileUtils';
 import { createBlankSketchDocument } from '../utils/sketchDocumentUtils';
 import {
+  clearSketchRecovery,
   loadSketchRecovery,
   saveSketchRecovery,
 } from '../../../shared/sketchAssetStorage';
@@ -245,6 +246,7 @@ export default function useSketchPersistence(state, dispatch) {
         status: 'saved',
         error: null,
       });
+      clearSketchRecovery();
     } catch (err) {
       if (isFilePickerAbortError(err)) {
         setDocumentPersistenceMeta((current) => ({

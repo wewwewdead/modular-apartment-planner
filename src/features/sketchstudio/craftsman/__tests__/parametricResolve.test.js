@@ -3,7 +3,7 @@ import {
   createVariable,
   resolveEntityDimensions,
   resolveAllEntities,
-} from '../utils/parametricEngine';
+} from '../../utils/parametricEngine';
 
 const vars = [
   { ...createVariable('W', 1200), id: 'v1' },

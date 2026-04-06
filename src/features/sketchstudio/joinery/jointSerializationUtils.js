@@ -160,7 +160,7 @@ export function serializeJointReference(reference) {
 }
 
 export function parseSerializedJointReference(serialized) {
-  const [entityId, sourceType, sourceKey = ''] = String(serialized || '').split(':');
+  const [entityId, sourceType, sourceKey = ''] = String(serialized || '').split(':', 3);
 
   if (!entityId || sourceType !== 'segment' || !sourceKey) {
     return null;
@@ -223,7 +223,13 @@ export function normalizeJointCollection(joints = []) {
 }
 
 export function cloneJoint(joint) {
-  return normalizeJoint(joint);
+  if (!joint || !joint.id) {
+    throw new Error('cloneJoint requires a joint with an id');
+  }
+  return {
+    ...normalizeJoint(joint),
+    id: joint.id,
+  };
 }
 
 export function listJointEntityIds(joint) {

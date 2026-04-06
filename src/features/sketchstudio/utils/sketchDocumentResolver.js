@@ -1,4 +1,4 @@
-import { resolveAllEntities } from '../craftsman/utils/parametricEngine';
+import { resolveAllEntities } from './parametricEngine';
 import { normalizeSketchDocument } from './sketchDocumentUtils';
 import { resolveSketchConstraints } from './sketchConstraintUtils';
 import { resolveSketchJoinery } from './sketchJoineryUtils';

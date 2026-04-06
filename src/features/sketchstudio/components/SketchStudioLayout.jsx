@@ -79,7 +79,8 @@ export default function SketchStudioLayout(props) {
   } = props;
 
   const [showGallery, setShowGallery] = useState(false);
-  const { bomRows, totalCost, costByMaterial } = useSketchBOM(document.entities);
+  const bomEntities = ui.craftsmanMode ? document.entities : [];
+  const { bomRows, totalCost, costByMaterial } = useSketchBOM(bomEntities);
 
   const handleLoadTemplate = useCallback(
     (workspace) => {
@@ -188,6 +189,9 @@ export default function SketchStudioLayout(props) {
                 constraints={document.constraints}
                 joints={document.joints}
                 jointDiagnostics={jointDiagnostics}
+                bomRows={bomRows}
+                totalCost={totalCost}
+                costByMaterial={costByMaterial}
                 onMaterialChange={setEntityMaterial}
                 onThicknessChange={setEntityThickness}
                 onVariablesChange={setVariables}
