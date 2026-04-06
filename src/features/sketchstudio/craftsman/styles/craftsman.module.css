@@ -79,7 +79,7 @@
   cursor: pointer;
 }
 
-.materialSelect:focus {
+.materialSelect:focus-visible {
   outline: none;
   border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
@@ -96,7 +96,7 @@
   box-sizing: border-box;
 }
 
-.thicknessInput:focus {
+.thicknessInput:focus-visible {
   outline: none;
   border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
@@ -407,7 +407,7 @@
   box-sizing: border-box;
 }
 
-.kerfInput:focus {
+.kerfInput:focus-visible {
   outline: none;
   border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
@@ -878,7 +878,7 @@
   box-sizing: border-box;
 }
 
-.varInput:focus {
+.varInput:focus-visible {
   outline: none;
   border-color: var(--dark-accent-craftsman);
   box-shadow: 0 0 0 2px rgba(212, 133, 107, 0.3);
@@ -928,7 +928,7 @@
   box-sizing: border-box;
 }
 
-.varNameInput:focus {
+.varNameInput:focus-visible {
   outline: none;
   border-color: var(--dark-accent-param-blue);
   box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.3);
