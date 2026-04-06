@@ -75,25 +75,27 @@
 .cardSketch {
   background:
     radial-gradient(circle at top right, rgba(74, 114, 176, 0.14), transparent 36%),
-    linear-gradient(180deg, #111924 0%, #0e1520 100%);
-  color: #ebf2ff;
+    linear-gradient(180deg, var(--dark-bg-primary) 0%, #0e1520 100%);
+  color: var(--dark-ss-text-body);
   box-shadow: 0 16px 36px rgba(12, 20, 34, 0.18);
 }
 
 .cardSketch .cardTitle {
-  color: #f4f8ff;
+  color: var(--dark-ss-text-heading);
 }
 
 .cardSketch .cardDesc {
-  color: rgba(220, 230, 245, 0.82);
+  color: var(--dark-ss-text-secondary);
 }
 
 .cardSketch .cardLabel {
-  color: rgba(96, 177, 157, 0.8);
+  color: var(--dark-accent-active);
+  opacity: 0.7;
 }
 
 .cardSketch .cardArrow {
-  color: rgba(96, 177, 157, 0.9);
+  color: var(--dark-accent-active);
+  opacity: 0.8;
 }
 
 .cardBody {
