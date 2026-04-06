@@ -5,7 +5,7 @@
  */
 
 import { getMaterialById } from '../data/materials';
-import { recommendJoint } from '../data/joints';
+import { recommendJoint } from '../../joinery/jointRecommendation';
 
 const ROLE_PRIORITY = {
   base: 1,
@@ -47,8 +47,8 @@ function inferPartRole(entity) {
 function getPartDimensions(entity) {
   if (entity.type === 'rect') {
     return {
-      width: Math.round(Math.abs(entity.width ?? (entity.x2 - entity.x1) ?? 0)),
-      height: Math.round(Math.abs(entity.height ?? (entity.y2 - entity.y1) ?? 0)),
+      width: Math.round(Math.abs(entity.width ?? (entity.x2 ?? 0) - (entity.x1 ?? 0))),
+      height: Math.round(Math.abs(entity.height ?? (entity.y2 ?? 0) - (entity.y1 ?? 0))),
     };
   }
   if (entity.type === 'line') {
@@ -110,7 +110,7 @@ export function generateAssemblySteps(entities) {
   }
 
   for (const [role, roleParts] of byRole) {
-    const jointName = roleParts[0]?.recommendedJoint?.name ?? 'butt joint';
+    const jointName = roleParts[0]?.recommendedJoint?.label ?? 'butt joint';
 
     steps.push({
       number: stepNum++,
@@ -118,7 +118,7 @@ export function generateAssemblySteps(entities) {
       description: `Attach ${roleParts.length} ${role} part${roleParts.length > 1 ? 's' : ''} using ${jointName}. ${roleParts.map((p) => `${p.partName} (${p.dimensions.width}x${p.dimensions.height}mm, ${p.materialName})`).join('; ')}.`,
       type: 'assembly',
       parts: roleParts.map((p) => p.entityId),
-      joint: roleParts[0]?.recommendedJoint?.id,
+      joint: roleParts[0]?.recommendedJoint?.type,
     });
   }
 
@@ -146,9 +146,7 @@ export function exportAssemblyToText(assembly) {
     `Total parts: ${assembly.totalParts}`,
     `Estimated time: ${assembly.estimatedTime}`,
     '',
-    ...assembly.steps.map((step) =>
-      `Step ${step.number}: ${step.title}\n  ${step.description}`
-    ),
+    ...assembly.steps.map((step) => `Step ${step.number}: ${step.title}\n  ${step.description}`),
   ];
   return lines.join('\n');
 }
