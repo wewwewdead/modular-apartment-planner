@@ -253,7 +253,10 @@
   border: 1px solid transparent;
   border-radius: 3px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .bomDuplicateBtn:hover {
@@ -276,7 +279,10 @@
   border: 1px solid transparent;
   border-radius: 3px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .bomRemoveBtn:hover {
@@ -392,7 +398,7 @@
   white-space: nowrap;
 }
 
-.kerfToggle input[type="checkbox"] {
+.kerfToggle input[type='checkbox'] {
   accent-color: var(--dark-accent-craftsman);
 }
 
@@ -716,6 +722,12 @@
 .jointExistingCardActive {
   border-color: var(--dark-accent-craftsman);
   background: var(--dark-bg-card);
+}
+
+.jointExistingCardFocused {
+  border-color: var(--dark-accent-craftsman);
+  background: var(--dark-bg-card);
+  box-shadow: 0 0 8px rgba(212, 133, 107, 0.25);
 }
 
 .jointExistingHeader {

@@ -106,8 +106,13 @@ export default function useSketchStudio() {
   const { commitPrecisionDraft } = useSketchDraftCommit(state, dispatch, draftPreview);
 
   // --- Transform handlers ---
-  const { handleTransformPointerDown, handleRotateSelection, handleFlipSelection, handleToggleBrokenLines, handleHandlePointerDown } =
-    useSketchTransform(state, dispatch, viewport, selection);
+  const {
+    handleTransformPointerDown,
+    handleRotateSelection,
+    handleFlipSelection,
+    handleToggleBrokenLines,
+    handleHandlePointerDown,
+  } = useSketchTransform(state, dispatch, viewport, selection);
 
   // --- Keyboard effect ---
   useSketchKeyboard(state, dispatch, {
@@ -135,6 +140,17 @@ export default function useSketchStudio() {
     commitPrecisionDraft,
     getConstrainedDraftPoint: viewport.getConstrainedDraftPoint,
   });
+
+  const focusJoint = useCallback(
+    (jointId) => {
+      dispatch(setUiFlag('focusedJointId', jointId || null));
+      dispatch(setUiFlag('editingJointId', jointId || null));
+    },
+    [dispatch],
+  );
+  const clearFocusedJoint = useCallback(() => dispatch(setUiFlag('focusedJointId', null)), [dispatch]);
+  const editJoint = useCallback((jointId) => dispatch(setUiFlag('editingJointId', jointId || null)), [dispatch]);
+  const clearEditingJoint = useCallback(() => dispatch(setUiFlag('editingJointId', null)), [dispatch]);
 
   // --- Return composed API ---
   return {
@@ -189,15 +205,13 @@ export default function useSketchStudio() {
       onHandlePointerDown: handleHandlePointerDown,
       onTransformPointerDown: handleTransformPointerDown,
     },
-    canvasBindings: {
-      ref: canvasRef,
-      onClick: handleCanvasClick,
-      onPointerDown: handlePointerDown,
-      onPointerMove: handlePointerMove,
-      onPointerUp: handlePointerUp,
-      onPointerCancel: handlePointerCancel,
-      onPointerLeave: handlePointerLeave,
-    },
+    canvasRef,
+    onCanvasClick: handleCanvasClick,
+    onCanvasPointerDown: handlePointerDown,
+    onCanvasPointerMove: handlePointerMove,
+    onCanvasPointerUp: handlePointerUp,
+    onCanvasPointerCancel: handlePointerCancel,
+    onCanvasPointerLeave: handlePointerLeave,
     status: {
       cursorWorld: {
         x: roundWorldValue(state.interaction.cursorWorld.x),
@@ -223,6 +237,10 @@ export default function useSketchStudio() {
     addConstraint: (constraint) => dispatch(addConstraint(constraint)),
     updateConstraint: (constraintId, patch) => dispatch(updateConstraint(constraintId, patch)),
     removeConstraint: (constraintId) => dispatch(removeConstraint(constraintId)),
+    focusJoint,
+    clearFocusedJoint,
+    editJoint,
+    clearEditingJoint,
     addJoint: (joint) => dispatch(addJoint(joint)),
     updateJoint: (jointId, patch) => dispatch(updateJoint(jointId, patch)),
     removeJoint: (jointId) => dispatch(removeJoint(jointId)),

@@ -25,9 +25,7 @@ function JointStatus({ diagnostic }) {
   }
 
   return (
-    <span className={`${styles.jointStatus} ${getJointStatusClassName(diagnostic)}`}>
-      {diagnostic.statusLabel}
-    </span>
+    <span className={`${styles.jointStatus} ${getJointStatusClassName(diagnostic)}`}>{diagnostic.statusLabel}</span>
   );
 }
 
@@ -38,6 +36,8 @@ export default function JointForm({
   setFormState,
   candidateJoint,
   candidateDiagnostic,
+  contextPairIds = [],
+  isEditingExistingJoint = false,
   onSubmit,
   onCancel,
   submitLabel,
@@ -53,7 +53,7 @@ export default function JointForm({
   );
   const currentType = getJointTypeDefinition(formState.type);
   const parameterFields = listJointTypeParameterFields(formState.type);
-  const pairSelectionIds = selectedEntities.map((entity) => entity.id);
+  const pairSelectionIds = contextPairIds.length ? contextPairIds : selectedEntities.map((entity) => entity.id);
   const isManualPlacement = formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS;
   const autoDepthEnabled = supportsAutoDepthMode(formState.type, formState.placementMode);
   const depthIsAuto = formState.parameterModes.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP;
@@ -180,10 +180,10 @@ export default function JointForm({
   ]);
 
   const canSubmit =
-    candidateDiagnostic
-    && candidateDiagnostic.status !== 'invalid'
-    && candidateDiagnostic.status !== 'disabled'
-    && candidateDiagnostic.canApply !== false;
+    candidateDiagnostic &&
+    candidateDiagnostic.status !== 'invalid' &&
+    candidateDiagnostic.status !== 'disabled' &&
+    candidateDiagnostic.canApply !== false;
 
   return (
     <div className={styles.jointDetail}>
@@ -193,7 +193,7 @@ export default function JointForm({
 
       {pairSelectionIds.length === 2 ? (
         <p className={styles.jointContext}>
-          Selected pair: <strong>{pairSelectionIds.join(' + ')}</strong>
+          {isEditingExistingJoint ? 'Editing pair' : 'Selected pair'}: <strong>{pairSelectionIds.join(' + ')}</strong>
         </p>
       ) : null}
 
@@ -205,10 +205,9 @@ export default function JointForm({
             value={formState.type}
             onChange={(event) => {
               const nextType = event.target.value;
-              const nextDepthMode =
-                supportsAutoDepthMode(nextType, formState.placementMode)
-                  ? JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP
-                  : JOINT_PARAMETER_DEPTH_MODES.MANUAL;
+              const nextDepthMode = supportsAutoDepthMode(nextType, formState.placementMode)
+                ? JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP
+                : JOINT_PARAMETER_DEPTH_MODES.MANUAL;
 
               setFormState((current) => ({
                 ...current,
@@ -426,9 +425,7 @@ export default function JointForm({
         <span className={styles.jointSummary}>{getSketchJointSummary(candidateJoint)}</span>
       </div>
 
-      {contactSummary ? (
-        <p className={styles.jointHowTo}>{contactSummary}</p>
-      ) : null}
+      {contactSummary ? <p className={styles.jointHowTo}>{contactSummary}</p> : null}
 
       {candidateDiagnostic?.message ? (
         <p className={styles.jointHowTo}>{candidateDiagnostic.message}</p>

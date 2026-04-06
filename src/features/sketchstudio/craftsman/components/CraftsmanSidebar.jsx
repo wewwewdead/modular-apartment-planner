@@ -8,15 +8,22 @@ import AssemblyPanel from './AssemblyPanel';
 import { getMaterialSelectionState } from '../utils/materialSelectionUtils';
 import styles from '../styles/craftsman.module.css';
 
-function CollapsibleSection({ title, defaultOpen = true, children }) {
+function CollapsibleSection({ title, defaultOpen = true, forceOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
+  const isOpen = forceOpen || open;
+
   return (
     <div className={styles.collapsibleSection}>
-      <button type="button" className={styles.collapsibleHeader} onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className={styles.collapsibleArrow}>{open ? '\u25BC' : '\u25B6'}</span>
+      <button
+        type="button"
+        className={styles.collapsibleHeader}
+        onClick={() => setOpen(!isOpen)}
+        aria-expanded={isOpen}
+      >
+        <span className={styles.collapsibleArrow}>{isOpen ? '\u25BC' : '\u25B6'}</span>
         {title}
       </button>
-      {open && <div className={styles.collapsibleBody}>{children}</div>}
+      {isOpen && <div className={styles.collapsibleBody}>{children}</div>}
     </div>
   );
 }
@@ -82,6 +89,11 @@ export default function CraftsmanSidebar({
   constraints,
   joints,
   jointDiagnostics,
+  focusedJointId,
+  editingJointId,
+  onClearFocusedJoint,
+  onEditJoint,
+  onClearEditingJoint,
   bomRows = [],
   totalCost = 0,
   costByMaterial = {},
@@ -141,7 +153,7 @@ export default function CraftsmanSidebar({
         <NestingPanel bomRows={bomRows} />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Joint Library" defaultOpen={false}>
+      <CollapsibleSection title="Joint Library" defaultOpen={false} forceOpen={!!focusedJointId}>
         <JointPanel
           entities={entities}
           selectedEntity={selectedEntity}
@@ -149,6 +161,11 @@ export default function CraftsmanSidebar({
           selectedIds={selectedIds}
           joints={joints || []}
           diagnostics={jointDiagnostics || []}
+          focusedJointId={focusedJointId}
+          editingJointId={editingJointId}
+          onClearFocusedJoint={onClearFocusedJoint}
+          onEditJoint={onEditJoint}
+          onClearEditingJoint={onClearEditingJoint}
           onJointAdd={onJointAdd}
           onJointUpdate={onJointUpdate}
           onJointRemove={onJointRemove}

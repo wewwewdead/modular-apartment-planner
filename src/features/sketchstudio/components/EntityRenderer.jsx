@@ -9,12 +9,13 @@ function rectPoints(entity) {
     .join(' ');
 }
 
-function renderFeature(entity, className) {
+function renderFeature(entity, className, interactive) {
   const featureClassName = `${className} is-feature is-${entity.featureType}`;
   const sharedProps = {
     className: featureClassName,
     vectorEffect: 'non-scaling-stroke',
-    pointerEvents: 'none',
+    pointerEvents: interactive ? 'all' : 'none',
+    ...(interactive ? { cursor: 'pointer' } : {}),
   };
 
   if (entity.shape === 'circle') {
@@ -47,15 +48,26 @@ function renderFeature(entity, className) {
   return <rect key={entity.id} {...sharedProps} x={x} y={y} width={w} height={h} />;
 }
 
-function renderEntity(entity, className) {
+function renderEntity(entity, className, interactive) {
   const sharedProps = {
     className,
     vectorEffect: 'non-scaling-stroke',
-    pointerEvents: 'none',
+    pointerEvents: interactive ? 'all' : 'none',
+    ...(interactive ? { cursor: 'pointer' } : {}),
   };
 
   if (entity.type === 'line') {
-    return <line key={entity.id} {...sharedProps} x1={entity.x1} y1={entity.y1} x2={entity.x2} y2={entity.y2} strokeLinecap="round" />;
+    return (
+      <line
+        key={entity.id}
+        {...sharedProps}
+        x1={entity.x1}
+        y1={entity.y1}
+        x2={entity.x2}
+        y2={entity.y2}
+        strokeLinecap="round"
+      />
+    );
   }
 
   if (entity.type === 'rect') {
@@ -168,13 +180,20 @@ function renderEntity(entity, className) {
   }
 
   if (entity.type === 'feature') {
-    return renderFeature(entity, className);
+    return renderFeature(entity, className, interactive);
   }
 
   return null;
 }
 
-export default function EntityRenderer({ entities, hoveredId, selectedIds, baseClassName = 'sketchStudioEntity' }) {
+export default function EntityRenderer({
+  entities,
+  hoveredId,
+  selectedIds,
+  baseClassName = 'sketchStudioEntity',
+  onEntityClick,
+}) {
+  const interactive = !!onEntityClick;
   return (
     <g className="sketchStudioEntities">
       {entities
@@ -188,8 +207,25 @@ export default function EntityRenderer({ entities, hoveredId, selectedIds, baseC
             entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
             isHovered ? 'is-hovered' : '',
             isSelected ? 'is-selected' : '',
-          ].filter(Boolean).join(' ');
-          return renderEntity(entity, className);
+          ]
+            .filter(Boolean)
+            .join(' ');
+          const rendered = renderEntity(entity, className, interactive);
+          if (interactive && rendered) {
+            return (
+              <g
+                key={`click-${entity.id}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEntityClick(entity);
+                }}
+              >
+                {rendered}
+              </g>
+            );
+          }
+          return rendered;
         })}
     </g>
   );

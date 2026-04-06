@@ -570,10 +570,13 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.DELETE_SELECTED: {
       const selectedIdSet = new Set(state.selection.selectedIds);
-      const nextDocument = pruneDocumentJointsByEntityIds({
-        ...state.document,
-        entities: state.document.entities.filter((entity) => !selectedIdSet.has(entity.id)),
-      }, state.selection.selectedIds);
+      const nextDocument = pruneDocumentJointsByEntityIds(
+        {
+          ...state.document,
+          entities: state.document.entities.filter((entity) => !selectedIdSet.has(entity.id)),
+        },
+        state.selection.selectedIds,
+      );
       const resolvedDocumentState = buildResolvedDocumentState(nextDocument);
 
       return finalizeUndoableState(state, {
@@ -620,6 +623,8 @@ export default function sketchStudioReducer(state, action) {
           orthoEnabled: nextUi.orthoEnabled ?? state.ui.orthoEnabled,
           viewMode: nextUi.viewMode ?? state.ui.viewMode,
           isometricPlane: nextUi.isometricPlane ?? state.ui.isometricPlane,
+          focusedJointId: null,
+          editingJointId: null,
         },
         interaction: {
           ...state.interaction,
@@ -802,9 +807,7 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.UPDATE_JOINT: {
       const { jointId, patch } = action.payload;
-      const resolvedDocumentState = buildResolvedDocumentState(
-        updateJointInDocument(state.document, jointId, patch),
-      );
+      const resolvedDocumentState = buildResolvedDocumentState(updateJointInDocument(state.document, jointId, patch));
 
       return finalizeUndoableState(state, {
         ...state,
@@ -815,9 +818,7 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.REMOVE_JOINT: {
-      const resolvedDocumentState = buildResolvedDocumentState(
-        removeJointFromDocument(state.document, action.payload),
-      );
+      const resolvedDocumentState = buildResolvedDocumentState(removeJointFromDocument(state.document, action.payload));
 
       return finalizeUndoableState(state, {
         ...state,

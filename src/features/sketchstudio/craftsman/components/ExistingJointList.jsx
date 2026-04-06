@@ -1,9 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import styles from '../styles/craftsman.module.css';
-import {
-  getSketchJointSummary,
-  listSketchJointEntityIds,
-} from '../../utils/sketchJoineryUtils';
+import { getSketchJointSummary, listSketchJointEntityIds } from '../../utils/sketchJoineryUtils';
 import { getJointStatusClassName } from './jointPanelHelpers';
 
 function JointStatus({ diagnostic }) {
@@ -12,13 +9,29 @@ function JointStatus({ diagnostic }) {
   }
 
   return (
-    <span className={`${styles.jointStatus} ${getJointStatusClassName(diagnostic)}`}>
-      {diagnostic.statusLabel}
-    </span>
+    <span className={`${styles.jointStatus} ${getJointStatusClassName(diagnostic)}`}>{diagnostic.statusLabel}</span>
   );
 }
 
-export default function ExistingJointList({ joints, diagnostics, selectedIds, onEdit, onToggle, onRemove }) {
+export default function ExistingJointList({
+  joints,
+  diagnostics,
+  selectedIds,
+  focusedJointId,
+  onEdit,
+  onToggle,
+  onRemove,
+}) {
+  const cardRefs = useRef({});
+
+  useEffect(() => {
+    if (!focusedJointId) {
+      return;
+    }
+
+    cardRefs.current[focusedJointId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [focusedJointId]);
+
   const entries = useMemo(
     () =>
       joints
@@ -26,8 +39,7 @@ export default function ExistingJointList({ joints, diagnostics, selectedIds, on
           joint,
           diagnostic: diagnostics.find((item) => item.jointId === joint.id) || null,
           relevant:
-            !selectedIds.length
-            || listSketchJointEntityIds(joint).some((entityId) => selectedIds.includes(entityId)),
+            !selectedIds.length || listSketchJointEntityIds(joint).some((entityId) => selectedIds.includes(entityId)),
         }))
         .sort((left, right) => Number(right.relevant) - Number(left.relevant)),
     [diagnostics, joints, selectedIds],
@@ -36,8 +48,8 @@ export default function ExistingJointList({ joints, diagnostics, selectedIds, on
   if (!entries.length) {
     return (
       <p className={styles.emptyMessage}>
-        No joints yet. Select two rectangular parts, choose a joint type, and let automatic detection resolve the
-        active mating region.
+        No joints yet. Select two rectangular parts, choose a joint type, and let automatic detection resolve the active
+        mating region.
       </p>
     );
   }
@@ -47,7 +59,10 @@ export default function ExistingJointList({ joints, diagnostics, selectedIds, on
       {entries.map(({ joint, diagnostic, relevant }) => (
         <div
           key={joint.id}
-          className={`${styles.jointExistingCard} ${relevant ? styles.jointExistingCardActive : ''}`}
+          ref={(el) => {
+            cardRefs.current[joint.id] = el;
+          }}
+          className={`${styles.jointExistingCard} ${relevant ? styles.jointExistingCardActive : ''} ${focusedJointId === joint.id ? styles.jointExistingCardFocused : ''}`}
         >
           <div className={styles.jointExistingHeader}>
             <div>

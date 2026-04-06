@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
 import RightPanel from './RightPanel';
@@ -62,7 +62,13 @@ export default function SketchStudioLayout(props) {
     commitDocumentName,
     precisionBindings,
     handleBindings,
-    canvasBindings,
+    canvasRef,
+    onCanvasClick,
+    onCanvasPointerDown,
+    onCanvasPointerMove,
+    onCanvasPointerUp,
+    onCanvasPointerCancel,
+    onCanvasPointerLeave,
     status,
     setEntityMaterial,
     setEntityThickness,
@@ -71,6 +77,10 @@ export default function SketchStudioLayout(props) {
     addConstraint,
     updateConstraint,
     removeConstraint,
+    focusJoint,
+    clearFocusedJoint,
+    editJoint,
+    clearEditingJoint,
     addJoint,
     updateJoint,
     removeJoint,
@@ -79,6 +89,11 @@ export default function SketchStudioLayout(props) {
   } = props;
 
   const [showGallery, setShowGallery] = useState(false);
+
+  useEffect(() => {
+    if (ui.focusedJointId) clearFocusedJoint();
+    if (ui.editingJointId) clearEditingJoint();
+  }, [selection.selectedIds]); // eslint-disable-line react-hooks/exhaustive-deps
   const bomEntities = ui.craftsmanMode ? document.entities : [];
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(bomEntities);
 
@@ -168,10 +183,17 @@ export default function SketchStudioLayout(props) {
             precisionHud={precisionHud}
             snap={snap}
             manufacturingPreviewEntities={ui.craftsmanMode ? manufacturingPreviewEntities : []}
+            onJoineryClick={ui.craftsmanMode ? focusJoint : undefined}
             selectedHandles={selectedHandles}
             selectionBounds={selectionBounds}
             isPanning={interaction.mode === 'panning'}
-            canvasBindings={canvasBindings}
+            canvasRef={canvasRef}
+            onCanvasClick={onCanvasClick}
+            onCanvasPointerDown={onCanvasPointerDown}
+            onCanvasPointerMove={onCanvasPointerMove}
+            onCanvasPointerUp={onCanvasPointerUp}
+            onCanvasPointerCancel={onCanvasPointerCancel}
+            onCanvasPointerLeave={onCanvasPointerLeave}
             precisionBindings={precisionBindings}
             handleBindings={handleBindings}
             onUpdateEntityField={updateSelectedEntityField}
@@ -189,6 +211,11 @@ export default function SketchStudioLayout(props) {
                 constraints={document.constraints}
                 joints={document.joints}
                 jointDiagnostics={jointDiagnostics}
+                focusedJointId={ui.focusedJointId}
+                editingJointId={ui.editingJointId}
+                onClearFocusedJoint={clearFocusedJoint}
+                onEditJoint={editJoint}
+                onClearEditingJoint={clearEditingJoint}
                 bomRows={bomRows}
                 totalCost={totalCost}
                 costByMaterial={costByMaterial}

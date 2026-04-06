@@ -41,15 +41,18 @@ export function formatEdgeLabel(edgeKey) {
 }
 
 export function buildParameterValues(type, defaults = {}, existingParameters = null) {
-  return listJointTypeParameterFields(type).reduce((accumulator, field) => ({
-    ...accumulator,
-    [field.key]:
-      existingParameters?.[field.key] != null
-        ? String(existingParameters[field.key])
-        : defaults?.[field.key] != null
-          ? String(defaults[field.key])
-          : '',
-  }), {});
+  return listJointTypeParameterFields(type).reduce(
+    (accumulator, field) => ({
+      ...accumulator,
+      [field.key]:
+        existingParameters?.[field.key] != null
+          ? String(existingParameters[field.key])
+          : defaults?.[field.key] != null
+            ? String(defaults[field.key])
+            : '',
+    }),
+    {},
+  );
 }
 
 export function buildSeedJoint(formState) {
@@ -72,9 +75,7 @@ export function buildSeedJoint(formState) {
 }
 
 export function orderSelectedJoineryEntities(entities = [], selectedEntities = [], selectedIds = []) {
-  const selectedEntityMap = new Map(
-    (selectedEntities || []).map((entity) => [entity.id, entity]),
-  );
+  const selectedEntityMap = new Map((selectedEntities || []).map((entity) => [entity.id, entity]));
   const orderedSelection = (selectedIds || [])
     .map((entityId) => selectedEntityMap.get(entityId) || getEntityById(entities, entityId))
     .filter(Boolean);
@@ -82,15 +83,52 @@ export function orderSelectedJoineryEntities(entities = [], selectedEntities = [
   return orderedSelection.length ? orderedSelection : selectedEntities;
 }
 
+export function getFocusedJointForEditing(joints = [], focusedJointId = null) {
+  if (!focusedJointId) {
+    return null;
+  }
+
+  return joints.find((joint) => joint.id === focusedJointId) || null;
+}
+
+export function getJointFormContextPairIds(editingJoint = null, orderedSelectedEntities = []) {
+  return editingJoint
+    ? [editingJoint.sourcePartId, editingJoint.targetPartId].filter(Boolean)
+    : orderedSelectedEntities.map((entity) => entity.id);
+}
+
+export function getJointPanelContextMessage({
+  editingJoint = null,
+  formContextPairIds = [],
+  editablePair = false,
+  orderedSelectedEntities = [],
+  selectedEntity = null,
+}) {
+  if (editingJoint) {
+    const editingPairLabel = formContextPairIds.join(' + ') || editingJoint.label || editingJoint.id;
+    return `Editing pair: ${editingPairLabel}`;
+  }
+
+  if (editablePair) {
+    return `Selected parts: ${orderedSelectedEntities.map((entity) => entity.id).join(' + ')}`;
+  }
+
+  if (selectedEntity) {
+    return `Select one more rectangular part to create automatic joinery from ${selectedEntity.id}.`;
+  }
+
+  return 'Select exactly two rectangular parts to create joinery.';
+}
+
 export function buildJointFormState(entities, selectedEntities = [], existing = null) {
   const partOptions = getRectPartOptions(entities);
   const sourcePartId = existing?.sourcePartId || selectedEntities[0]?.id || partOptions[0]?.value || '';
   const targetPartId =
-    existing?.targetPartId
-    || selectedEntities[1]?.id
-    || partOptions.find((option) => option.value !== sourcePartId)?.value
-    || partOptions[0]?.value
-    || '';
+    existing?.targetPartId ||
+    selectedEntities[1]?.id ||
+    partOptions.find((option) => option.value !== sourcePartId)?.value ||
+    partOptions[0]?.value ||
+    '';
   const sourceEdgeOptions = getEdgeOptionsForEntity(entities, sourcePartId);
   const targetEdgeOptions = getEdgeOptionsForEntity(entities, targetPartId);
   const type = existing?.type || 'dado';
@@ -104,11 +142,11 @@ export function buildJointFormState(entities, selectedEntities = [], existing = 
     targetPartId,
     sourceEdgeRef:
       placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
-        ? (existing?.sourceEdgeRef || parseSerializedSketchJointReference(sourceEdgeOptions[0]?.value || ''))
+        ? existing?.sourceEdgeRef || parseSerializedSketchJointReference(sourceEdgeOptions[0]?.value || '')
         : null,
     targetEdgeRef:
       placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
-        ? (existing?.targetEdgeRef || parseSerializedSketchJointReference(targetEdgeOptions[0]?.value || ''))
+        ? existing?.targetEdgeRef || parseSerializedSketchJointReference(targetEdgeOptions[0]?.value || '')
         : null,
     parameters: existing?.parameters,
   });
@@ -126,20 +164,15 @@ export function buildJointFormState(entities, selectedEntities = [], existing = 
     },
     sourcePartId,
     targetPartId,
-    sourceEdgeValue:
-      serializeSketchJointReference(existing?.sourceEdgeRef) || sourceEdgeOptions[0]?.value || '',
-    targetEdgeValue:
-      serializeSketchJointReference(existing?.targetEdgeRef) || targetEdgeOptions[0]?.value || '',
+    sourceEdgeValue: serializeSketchJointReference(existing?.sourceEdgeRef) || sourceEdgeOptions[0]?.value || '',
+    targetEdgeValue: serializeSketchJointReference(existing?.targetEdgeRef) || targetEdgeOptions[0]?.value || '',
     parameterValues: buildParameterValues(type, computedDefaults, existing?.parameters || null),
   };
 }
 
 export function buildJointFromForm(formState) {
   const parameters = listJointTypeParameterFields(formState.type).reduce((accumulator, field) => {
-    if (
-      field.key === 'depth'
-      && formState.parameterModes.depth === 'auto_overlap'
-    ) {
+    if (field.key === 'depth' && formState.parameterModes.depth === 'auto_overlap') {
       return accumulator;
     }
 
@@ -148,13 +181,9 @@ export function buildJointFromForm(formState) {
       return accumulator;
     }
 
-    const numericValue = field.kind === 'integer'
-      ? Math.round(Number(rawValue))
-      : Number(rawValue);
+    const numericValue = field.kind === 'integer' ? Math.round(Number(rawValue)) : Number(rawValue);
 
-    return Number.isFinite(numericValue)
-      ? { ...accumulator, [field.key]: numericValue }
-      : accumulator;
+    return Number.isFinite(numericValue) ? { ...accumulator, [field.key]: numericValue } : accumulator;
   }, {});
 
   return createSketchJoint({
@@ -184,7 +213,9 @@ export function buildContactSummary(joint) {
     return null;
   }
 
-  const directionSummary = contact.autoFlipped ? ' Automatic source and target roles were corrected from the detected overlap.' : '';
+  const directionSummary = contact.autoFlipped
+    ? ' Automatic source and target roles were corrected from the detected overlap.'
+    : '';
 
   if (contact.kind === 'penetration') {
     return [
