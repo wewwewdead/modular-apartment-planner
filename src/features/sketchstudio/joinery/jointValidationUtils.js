@@ -1,6 +1,7 @@
 import { JOINT_TYPES, getJointTypeLabel } from './jointTypes';
 import { JOINERY_TOUCH_TOLERANCE } from './jointDefaults';
 import { applyInsetToOverlap, buildRepeatedEdgeIntervals } from './jointResolvers';
+import { getJointTypeEntry } from './jointRegistry';
 
 const DIAGNOSTIC_LABELS = {
   applied: 'Applied',
@@ -62,10 +63,7 @@ function getWidthOffsetState(context, parameters) {
     return null;
   }
 
-  const baseWidth = Math.min(
-    Math.max(Number(parameters?.width) || 0, JOINERY_TOUCH_TOLERANCE),
-    insetOverlap.length,
-  );
+  const baseWidth = Math.min(Math.max(Number(parameters?.width) || 0, JOINERY_TOUCH_TOLERANCE), insetOverlap.length);
   const effectiveWidth = baseWidth + (Number(parameters?.offset) || 0);
 
   return {
@@ -82,10 +80,7 @@ function getFemaleAllowanceState(joint, context, parameters) {
     return null;
   }
 
-  const baseWidth = Math.min(
-    Math.max(Number(parameters?.width) || 0, JOINERY_TOUCH_TOLERANCE),
-    insetOverlap.length,
-  );
+  const baseWidth = Math.min(Math.max(Number(parameters?.width) || 0, JOINERY_TOUCH_TOLERANCE), insetOverlap.length);
   const femaleWidth = baseWidth + (Number(parameters?.offset) || 0) + (Number(joint?.tolerance?.clearance) || 0);
 
   return {
@@ -109,6 +104,13 @@ function buildRepeatedPatternResult(context, parameters, widthKey) {
     : { intervals: intervalsResult.intervals };
 }
 
+const validationHelpers = {
+  validatePositiveDimension,
+  getWidthOffsetState,
+  getFemaleAllowanceState,
+  buildRepeatedPatternResult,
+};
+
 export function validateResolvedJoint(joint, context, parameters) {
   if (joint?.enabled === false) {
     return createValidationState('disabled', {
@@ -121,170 +123,9 @@ export function validateResolvedJoint(joint, context, parameters) {
     return buildInvalidState([context?.error || 'The joint context could not be resolved.']);
   }
 
-  const reasons = [];
   const warnings = [];
-
-  switch (joint.type) {
-    case JOINT_TYPES.DADO: {
-      validatePositiveDimension(parameters, 'width', 'Width', reasons);
-      validatePositiveDimension(parameters, 'depth', 'Depth', reasons);
-
-      const widthOffsetState = getWidthOffsetState(context, parameters);
-      if (!widthOffsetState) {
-        reasons.push('Inset leaves no usable overlap for this joint.');
-      } else {
-        if (widthOffsetState.effectiveWidth <= JOINERY_TOUCH_TOLERANCE) {
-          reasons.push('Width offset reduces the joint width to zero or less.');
-        }
-
-        const halfWidth = widthOffsetState.effectiveWidth / 2;
-        const start = widthOffsetState.center - halfWidth;
-        const end = widthOffsetState.center + halfWidth;
-
-        if (
-          start < context.targetEdge.start - JOINERY_TOUCH_TOLERANCE
-          || end > context.targetEdge.end + JOINERY_TOUCH_TOLERANCE
-        ) {
-          reasons.push('Width plus width offset exceeds the available target edge span.');
-        }
-      }
-
-      if (
-        context.targetThickness != null
-        && (parameters.depth || 0) > context.targetThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Depth exceeds the target material thickness.');
-      }
-
-      break;
-    }
-
-    case JOINT_TYPES.RABBET:
-    case JOINT_TYPES.MORTISE_TENON: {
-      validatePositiveDimension(parameters, 'width', 'Width', reasons);
-      validatePositiveDimension(parameters, 'depth', 'Depth', reasons);
-
-      const femaleAllowanceState = getFemaleAllowanceState(joint, context, parameters);
-      if (!femaleAllowanceState) {
-        reasons.push('Inset leaves no usable overlap for this joint.');
-      } else {
-        if (femaleAllowanceState.femaleWidth <= JOINERY_TOUCH_TOLERANCE) {
-          reasons.push('Width offset plus clearance reduces the receiving joint width to zero or less.');
-        }
-
-        const halfWidth = femaleAllowanceState.femaleWidth / 2;
-        const start = femaleAllowanceState.center - halfWidth;
-        const end = femaleAllowanceState.center + halfWidth;
-
-        if (
-          start < context.targetEdge.start - JOINERY_TOUCH_TOLERANCE
-          || end > context.targetEdge.end + JOINERY_TOUCH_TOLERANCE
-        ) {
-          reasons.push('Receiving width plus width offset exceeds the available target edge span.');
-        }
-      }
-
-      if (
-        context.targetThickness != null
-        && (parameters.depth || 0) > context.targetThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Depth exceeds the target material thickness.');
-      }
-
-      break;
-    }
-
-    case JOINT_TYPES.DOWEL: {
-      validatePositiveDimension(parameters, 'dowelDiameter', 'Dowel diameter', reasons);
-      validatePositiveDimension(parameters, 'depth', 'Drill depth', reasons);
-
-      if (!Number.isInteger(parameters.count) || parameters.count < 1) {
-        reasons.push('Dowel count must be an integer greater than zero.');
-      }
-
-      if (
-        context.minThickness != null
-        && (parameters.dowelDiameter || 0) > context.minThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Dowel diameter exceeds the available material thickness.');
-      }
-
-      if (
-        context.minThickness != null
-        && (parameters.depth || 0) > context.minThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Drill depth exceeds the available material thickness.');
-      }
-
-      const pattern = buildRepeatedPatternResult(context, parameters, 'dowelDiameter');
-      if (pattern.error) {
-        reasons.push(pattern.error);
-      }
-
-      break;
-    }
-
-    case JOINT_TYPES.POCKET_SCREW: {
-      validatePositiveDimension(parameters, 'pocketDiameter', 'Pocket diameter', reasons);
-      validatePositiveDimension(parameters, 'pilotDiameter', 'Pilot diameter', reasons);
-      validatePositiveDimension(parameters, 'depth', 'Pocket depth', reasons);
-
-      if (!Number.isInteger(parameters.count) || parameters.count < 1) {
-        reasons.push('Pocket count must be an integer greater than zero.');
-      }
-
-      if (
-        context.sourceThickness != null
-        && (parameters.depth || 0) > context.sourceThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Pocket depth exceeds the source material thickness.');
-      }
-
-      if (
-        context.sourceThickness != null
-        && (parameters.pocketOffset || 0) > context.sourceThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Pocket offset exceeds the source material thickness.');
-      }
-
-      const pattern = buildRepeatedPatternResult(context, {
-        ...parameters,
-        pocketDiameter: Math.max(parameters.pocketDiameter || 0, parameters.pilotDiameter || 0),
-      }, 'pocketDiameter');
-      if (pattern.error) {
-        reasons.push(pattern.error);
-      }
-
-      break;
-    }
-
-    case JOINT_TYPES.TAB_SLOT: {
-      validatePositiveDimension(parameters, 'tabWidth', 'Tab width', reasons);
-      validatePositiveDimension(parameters, 'depth', 'Tab depth', reasons);
-
-      if (!Number.isInteger(parameters.count) || parameters.count < 1) {
-        reasons.push('Tab count must be an integer greater than zero.');
-      }
-
-      if (
-        context.targetThickness != null
-        && (parameters.depth || 0) > context.targetThickness + JOINERY_TOUCH_TOLERANCE
-      ) {
-        reasons.push('Tab depth exceeds the target material thickness.');
-      }
-
-      const pattern = buildRepeatedPatternResult(context, parameters, 'tabWidth');
-      if (pattern.error) {
-        reasons.push(pattern.error);
-      }
-
-      break;
-    }
-
-    case JOINT_TYPES.BUTT:
-    default:
-      break;
-  }
+  const entry = getJointTypeEntry(joint.type);
+  const reasons = entry.validate(joint, context, parameters, validationHelpers) || [];
 
   const draftThicknessWarning = buildDraftThicknessWarning(context);
   if (draftThicknessWarning) {
@@ -292,10 +133,10 @@ export function validateResolvedJoint(joint, context, parameters) {
   }
 
   if (
-    context.sourceThickness != null
-    && context.targetThickness != null
-    && context.sourceThickness !== context.targetThickness
-    && joint.type === JOINT_TYPES.TAB_SLOT
+    context.sourceThickness != null &&
+    context.targetThickness != null &&
+    context.sourceThickness !== context.targetThickness &&
+    joint.type === JOINT_TYPES.TAB_SLOT
   ) {
     warnings.push('Tab-and-slot joints are easiest to manufacture when both parts share the same thickness.');
   }
@@ -304,10 +145,12 @@ export function validateResolvedJoint(joint, context, parameters) {
 }
 
 function regionsOverlap(firstRegion, secondRegion) {
-  return firstRegion.partId === secondRegion.partId
-    && firstRegion.edgeKey === secondRegion.edgeKey
-    && Math.max(firstRegion.start, secondRegion.start)
-      < Math.min(firstRegion.end, secondRegion.end) - JOINERY_TOUCH_TOLERANCE;
+  return (
+    firstRegion.partId === secondRegion.partId &&
+    firstRegion.edgeKey === secondRegion.edgeKey &&
+    Math.max(firstRegion.start, secondRegion.start) <
+      Math.min(firstRegion.end, secondRegion.end) - JOINERY_TOUCH_TOLERANCE
+  );
 }
 
 export function detectOccupiedRegionConflicts(existingRegions = [], nextRegions = []) {
@@ -349,10 +192,12 @@ function buildDiagnosticMessage(validationState) {
 }
 
 export function createJointDiagnostic(joint) {
-  const validationState = joint?.validationState || createValidationState('invalid', {
-    reasons: ['Joint validation state is missing.'],
-    canApply: false,
-  });
+  const validationState =
+    joint?.validationState ||
+    createValidationState('invalid', {
+      reasons: ['Joint validation state is missing.'],
+      canApply: false,
+    });
   const diagnosticStatus = validationState.status === 'valid' ? 'applied' : validationState.status;
 
   return {

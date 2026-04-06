@@ -22,10 +22,13 @@ import {
   getJointTypeOptions,
   listJointTypeParameterFields,
 } from './jointTypes';
+import { getAllJointTypes, getJointTypeEntry } from './jointRegistry';
 
 export {
   cloneJoint,
+  getAllJointTypes,
   getJointTypeDefinition,
+  getJointTypeEntry,
   getJointTypeLabel,
   getJointTypeOptions,
   isJoineryRectGenerationSupported,
