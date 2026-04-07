@@ -90,6 +90,12 @@ export default {
     return reasons;
   },
 
+  supportsAutoOverlapDepth: false,
+
+  summary(joint) {
+    return `${joint.sourcePartId || 'Unset'} → ${joint.targetPartId || 'Unset'} · ${joint.parameters.count || '?'} dowels`;
+  },
+
   buildGeometry(joint, context, helpers) {
     const intervals = helpers.buildRepeatedIntervals(context, joint.parameters, 'dowelDiameter');
     if (!intervals?.length) {

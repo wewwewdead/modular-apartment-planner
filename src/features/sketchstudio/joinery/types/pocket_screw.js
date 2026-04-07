@@ -112,6 +112,12 @@ export default {
     return reasons;
   },
 
+  supportsAutoOverlapDepth: false,
+
+  summary(joint) {
+    return `${joint.sourcePartId || 'Unset'} → ${joint.targetPartId || 'Unset'} · ${joint.parameters.count || '?'} pockets`;
+  },
+
   buildGeometry(joint, context, helpers) {
     const layoutIntervals = helpers.buildRepeatedEdgeIntervalsRaw(context.overlap, {
       count: joint.parameters.count,

@@ -68,6 +68,13 @@ export default {
     return reasons;
   },
 
+  supportsAutoOverlapDepth: true,
+
+  summary(joint) {
+    const widthWithOffset = (joint.parameters.width || 0) + (joint.parameters.offset || 0) || '?';
+    return `${joint.sourcePartId || 'Unset'} → ${joint.targetPartId || 'Unset'} · ${widthWithOffset}mm × ${joint.parameters.depth || '?'}mm`;
+  },
+
   buildGeometry(joint, context, helpers) {
     const interval = helpers.buildWidthOffsetInterval(context, joint.parameters);
     if (!interval) {
