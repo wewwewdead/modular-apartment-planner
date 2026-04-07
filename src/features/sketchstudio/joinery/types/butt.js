@@ -25,6 +25,12 @@ export default {
     // Butt joints have no type-specific validation rules.
   },
 
+  supportsAutoOverlapDepth: false,
+
+  summary(joint) {
+    return `${joint.sourcePartId || 'Unset'} → ${joint.targetPartId || 'Unset'} · butt joint`;
+  },
+
   buildGeometry(joint, context, helpers) {
     return {
       occupiedRegions: [

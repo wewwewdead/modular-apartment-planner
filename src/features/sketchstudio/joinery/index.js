@@ -75,7 +75,7 @@ export function getSketchJointTypeOptions() {
 export function getSketchJointSegmentOptions(entities = []) {
   return entities
     .filter((entity) => entity.visible !== false && entity.type === 'rect')
-    .flatMap((entity) => (
+    .flatMap((entity) =>
       collectSnapSegmentsFromEntities([entity]).map((segment) => ({
         entityId: entity.id,
         entityLabel: `${entity.id} (${entity.type})`,
@@ -86,8 +86,8 @@ export function getSketchJointSegmentOptions(entities = []) {
           sourceType: segment.sourceType,
           sourceKey: segment.sourceKey,
         }),
-      }))
-    ));
+      })),
+    );
 }
 
 export function computeSketchJointDefaults(input, entities = []) {
@@ -96,9 +96,9 @@ export function computeSketchJointDefaults(input, entities = []) {
   const defaults = computeJointDefaultParameters(joint.type, context.error ? null : context);
 
   if (
-    !context.error
-    && joint.parameterModes?.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP
-    && supportsAutoOverlapDepth(joint.type)
+    !context.error &&
+    joint.parameterModes?.depth === JOINT_PARAMETER_DEPTH_MODES.AUTO_OVERLAP &&
+    supportsAutoOverlapDepth(joint.type)
   ) {
     return {
       ...defaults,
@@ -111,30 +111,8 @@ export function computeSketchJointDefaults(input, entities = []) {
 
 export function getSketchJointSummary(joint) {
   const normalized = normalizeJoint(joint);
-  const widthWithOffset = (
-    normalized.type === 'dado'
-    || normalized.type === 'rabbet'
-    || normalized.type === 'mortise_tenon'
-  )
-    ? (((normalized.parameters.width || 0) + (normalized.parameters.offset || 0)) || '?')
-    : null;
-
-  switch (normalized.type) {
-    case 'dowel':
-      return `${normalized.sourcePartId || 'Unset'} → ${normalized.targetPartId || 'Unset'} · ${normalized.parameters.count || '?'} dowels`;
-    case 'pocket_screw':
-      return `${normalized.sourcePartId || 'Unset'} → ${normalized.targetPartId || 'Unset'} · ${normalized.parameters.count || '?'} pockets`;
-    case 'tab_slot':
-      return `${normalized.sourcePartId || 'Unset'} → ${normalized.targetPartId || 'Unset'} · ${normalized.parameters.count || '?'} tabs × ${normalized.parameters.depth || '?'}mm`;
-    case 'butt':
-      return `${normalized.sourcePartId || 'Unset'} → ${normalized.targetPartId || 'Unset'} · butt joint`;
-    case 'dado':
-    case 'rabbet':
-    case 'mortise_tenon':
-      return `${normalized.sourcePartId || 'Unset'} → ${normalized.targetPartId || 'Unset'} · ${widthWithOffset}mm × ${normalized.parameters.depth || '?'}mm`;
-    default:
-      return `${normalized.sourcePartId || 'Unset'} → ${normalized.targetPartId || 'Unset'} · ${normalized.parameters.width || '?'}mm × ${normalized.parameters.depth || '?'}mm`;
-  }
+  const entry = getJointTypeEntry(normalized.type);
+  return entry.summary(normalized);
 }
 
 export function resolveSketchJoinery(entities = [], joints = []) {

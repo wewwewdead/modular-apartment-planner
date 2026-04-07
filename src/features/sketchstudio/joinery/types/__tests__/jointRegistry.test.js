@@ -57,4 +57,41 @@ describe('jointRegistry', () => {
       expect(Array.isArray(entry.materials)).toBe(true);
     }
   });
+
+  it('every entry has a summary function', () => {
+    for (const entry of getAllJointTypes()) {
+      expect(typeof entry.summary).toBe('function');
+    }
+  });
+
+  it('every entry has a supportsAutoOverlapDepth boolean', () => {
+    for (const entry of getAllJointTypes()) {
+      expect(typeof entry.supportsAutoOverlapDepth).toBe('boolean');
+    }
+  });
+
+  it('supportsAutoOverlapDepth matches expected values per type', () => {
+    expect(getJointTypeEntry('butt').supportsAutoOverlapDepth).toBe(false);
+    expect(getJointTypeEntry('dado').supportsAutoOverlapDepth).toBe(true);
+    expect(getJointTypeEntry('rabbet').supportsAutoOverlapDepth).toBe(true);
+    expect(getJointTypeEntry('mortise_tenon').supportsAutoOverlapDepth).toBe(true);
+    expect(getJointTypeEntry('dowel').supportsAutoOverlapDepth).toBe(false);
+    expect(getJointTypeEntry('pocket_screw').supportsAutoOverlapDepth).toBe(false);
+    expect(getJointTypeEntry('tab_slot').supportsAutoOverlapDepth).toBe(true);
+  });
+
+  it('summary returns a string for each type', () => {
+    const mockJoint = {
+      sourcePartId: 'part-a',
+      targetPartId: 'part-b',
+      parameters: { width: 50, depth: 10, offset: 0, count: 3, tabWidth: 20 },
+    };
+
+    for (const entry of getAllJointTypes()) {
+      const result = entry.summary(mockJoint);
+      expect(typeof result).toBe('string');
+      expect(result).toContain('part-a');
+      expect(result).toContain('part-b');
+    }
+  });
 });

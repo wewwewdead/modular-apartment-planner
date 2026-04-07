@@ -88,6 +88,12 @@ export default {
     return reasons;
   },
 
+  supportsAutoOverlapDepth: true,
+
+  summary(joint) {
+    return `${joint.sourcePartId || 'Unset'} → ${joint.targetPartId || 'Unset'} · ${joint.parameters.count || '?'} tabs × ${joint.parameters.depth || '?'}mm`;
+  },
+
   buildGeometry(joint, context, helpers) {
     const intervals = helpers.buildRepeatedIntervals(context, joint.parameters, 'tabWidth');
     if (!intervals?.length) {

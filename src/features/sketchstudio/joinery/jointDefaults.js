@@ -1,4 +1,3 @@
-import { JOINT_TYPES } from './jointTypes';
 import { getJointTypeEntry } from './jointRegistry';
 
 export const JOINERY_TOUCH_TOLERANCE = 0.5;
@@ -16,12 +15,7 @@ export const JOINT_PARAMETER_DEPTH_MODES = Object.freeze({
 const ROUNDING_FACTOR = 100;
 
 export function supportsAutoOverlapDepth(type) {
-  return (
-    type === JOINT_TYPES.DADO ||
-    type === JOINT_TYPES.RABBET ||
-    type === JOINT_TYPES.MORTISE_TENON ||
-    type === JOINT_TYPES.TAB_SLOT
-  );
+  return getJointTypeEntry(type).supportsAutoOverlapDepth === true;
 }
 
 export function normalizeJointPlacementMode(mode, hasExplicitReferences = false) {
