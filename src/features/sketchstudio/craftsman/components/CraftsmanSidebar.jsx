@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import MaterialPicker from './MaterialPicker';
 import BomPanel from './BomPanel';
 import NestingPanel from './NestingPanel';
@@ -80,7 +80,7 @@ function LabelAnnotationSection({ entity, onEntityFieldCommit, styles: cssStyles
   );
 }
 
-export default function CraftsmanSidebar({
+function CraftsmanSidebar({
   entities,
   selectedEntity,
   selectedEntities,
@@ -187,3 +187,5 @@ export default function CraftsmanSidebar({
     </div>
   );
 }
+
+export default memo(CraftsmanSidebar);

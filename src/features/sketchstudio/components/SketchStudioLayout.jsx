@@ -112,14 +112,14 @@ export default function SketchStudioLayout(props) {
     [document.entities.length, loadTemplate],
   );
 
-  const handleOpenSketch = async () => {
+  const handleOpenSketch = useCallback(async () => {
     if (canUseSketchOpenFilePicker()) {
       await openSketch();
       return;
     }
 
     importInputRef.current?.click();
-  };
+  }, [openSketch]);
 
   const handleImportSketchChange = async (event) => {
     const file = event.target.files?.[0] || null;
