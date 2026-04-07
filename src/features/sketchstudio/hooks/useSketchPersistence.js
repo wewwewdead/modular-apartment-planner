@@ -14,11 +14,7 @@ import {
   saveSketchWorkspaceFile,
 } from '../utils/sketchWorkspaceFileUtils';
 import { createBlankSketchDocument } from '../utils/sketchDocumentUtils';
-import {
-  clearSketchRecovery,
-  loadSketchRecovery,
-  saveSketchRecovery,
-} from '../../../shared/sketchAssetStorage';
+import { clearSketchRecovery, loadSketchRecovery, saveSketchRecovery } from '../../../shared/sketchAssetStorage';
 import { isEditableTarget } from './sketchConstants';
 
 export default function useSketchPersistence(state, dispatch) {
@@ -31,41 +27,50 @@ export default function useSketchPersistence(state, dispatch) {
   });
   const persistedWorkspaceSnapshotRef = useRef(null);
 
-  const currentWorkspaceSnapshot = useMemo(() => buildSketchWorkspaceSnapshot({
-    document: state.document,
-    viewport: state.viewport,
-    ui: {
-      activeLayerId: state.ui.activeLayerId,
-      snapEnabled: state.ui.snapEnabled,
-      orthoEnabled: state.ui.orthoEnabled,
-      viewMode: state.ui.viewMode,
-      isometricPlane: state.ui.isometricPlane,
-      craftsmanMode: state.ui.craftsmanMode,
-    },
-  }), [
-    state.document,
-    state.ui.activeLayerId,
-    state.ui.craftsmanMode,
-    state.ui.isometricPlane,
-    state.ui.orthoEnabled,
-    state.ui.snapEnabled,
-    state.ui.viewMode,
-    state.viewport,
-  ]);
+  // Document snapshot excludes viewport so dirty detection is not triggered by pan/zoom.
+  const documentSnapshot = useMemo(
+    () =>
+      buildSketchWorkspaceSnapshot({
+        document: state.document,
+        ui: {
+          activeLayerId: state.ui.activeLayerId,
+          snapEnabled: state.ui.snapEnabled,
+          orthoEnabled: state.ui.orthoEnabled,
+          viewMode: state.ui.viewMode,
+          isometricPlane: state.ui.isometricPlane,
+          craftsmanMode: state.ui.craftsmanMode,
+        },
+      }),
+    [
+      state.document,
+      state.ui.activeLayerId,
+      state.ui.craftsmanMode,
+      state.ui.isometricPlane,
+      state.ui.orthoEnabled,
+      state.ui.snapEnabled,
+      state.ui.viewMode,
+    ],
+  );
 
+  // Full snapshot includes viewport — used for recovery autosave and explicit file save.
+  const currentWorkspaceSnapshot = useMemo(
+    () => ({ ...documentSnapshot, viewport: state.viewport }),
+    [documentSnapshot, state.viewport],
+  );
+
+  // Comparable string derives from document-only snapshot so viewport changes
+  // do not mark the file as dirty.
   const comparableWorkspaceSnapshot = useMemo(
-    () => serializeComparableSketchWorkspace(currentWorkspaceSnapshot),
-    [currentWorkspaceSnapshot],
+    () => serializeComparableSketchWorkspace(documentSnapshot),
+    [documentSnapshot],
   );
 
-  const desiredSketchFileName = useMemo(
-    () => getSketchWorkspaceFileName(state.document.name),
-    [state.document.name],
-  );
+  const desiredSketchFileName = useMemo(() => getSketchWorkspaceFileName(state.document.name), [state.document.name]);
 
-  const documentIsDirty = persistedWorkspaceSnapshotRef.current != null
-    ? comparableWorkspaceSnapshot !== persistedWorkspaceSnapshotRef.current
-    : false;
+  const documentIsDirty =
+    persistedWorkspaceSnapshotRef.current != null
+      ? comparableWorkspaceSnapshot !== persistedWorkspaceSnapshotRef.current
+      : false;
 
   // Recovery load on mount
   useEffect(() => {
@@ -80,7 +85,11 @@ export default function useSketchPersistence(state, dispatch) {
     try {
       const workspace = normalizeParsedSketchWorkspace(recoverySnapshot);
       dispatch(loadWorkspaceSnapshot(workspace));
-      persistedWorkspaceSnapshotRef.current = serializeComparableSketchWorkspace(workspace);
+      // Use document-only comparable string so viewport is excluded from dirty detection.
+      persistedWorkspaceSnapshotRef.current = serializeComparableSketchWorkspace({
+        document: workspace.document,
+        ui: workspace.ui,
+      });
       setDocumentPersistenceMeta({
         savedAt: workspace.savedAt ?? null,
         fileName: null,
@@ -117,7 +126,7 @@ export default function useSketchPersistence(state, dispatch) {
   // Dirty status tracking
   useEffect(() => {
     setDocumentPersistenceMeta((current) => {
-      const nextStatus = documentIsDirty ? 'dirty' : (current.status === 'dirty' ? 'idle' : current.status);
+      const nextStatus = documentIsDirty ? 'dirty' : current.status === 'dirty' ? 'idle' : current.status;
 
       if (nextStatus === current.status) {
         return current;
@@ -130,21 +139,31 @@ export default function useSketchPersistence(state, dispatch) {
     });
   }, [documentIsDirty]);
 
-  const applyWorkspace = useCallback((workspace, options = {}) => {
-    dispatch(loadWorkspaceSnapshot({
-      document: workspace.document,
-      viewport: workspace.viewport,
-      ui: workspace.ui,
-    }));
-    persistedWorkspaceSnapshotRef.current = serializeComparableSketchWorkspace(workspace);
-    setDocumentFileHandle(options.fileHandle ?? null);
-    setDocumentPersistenceMeta({
-      savedAt: workspace.savedAt ?? options.savedAt ?? null,
-      fileName: options.fileName ?? options.fileHandle?.name ?? null,
-      status: options.status ?? 'idle',
-      error: null,
-    });
-  }, [dispatch]);
+  const applyWorkspace = useCallback(
+    (workspace, options = {}) => {
+      dispatch(
+        loadWorkspaceSnapshot({
+          document: workspace.document,
+          viewport: workspace.viewport,
+          ui: workspace.ui,
+        }),
+      );
+      // Persist the document-only comparable string so dirty detection stays
+      // viewport-agnostic after loading a workspace.
+      persistedWorkspaceSnapshotRef.current = serializeComparableSketchWorkspace({
+        document: workspace.document,
+        ui: workspace.ui,
+      });
+      setDocumentFileHandle(options.fileHandle ?? null);
+      setDocumentPersistenceMeta({
+        savedAt: workspace.savedAt ?? options.savedAt ?? null,
+        fileName: options.fileName ?? options.fileHandle?.name ?? null,
+        status: options.status ?? 'idle',
+        error: null,
+      });
+    },
+    [dispatch],
+  );
 
   const shouldConfirmWorkspaceReplacement = useCallback(() => {
     if (!documentIsDirty) {
@@ -177,28 +196,37 @@ export default function useSketchPersistence(state, dispatch) {
       savedAt: null,
       status: 'idle',
     });
-  }, [applyWorkspace, shouldConfirmWorkspaceReplacement, state.document.units, state.ui.orthoEnabled, state.ui.snapEnabled]);
+  }, [
+    applyWorkspace,
+    shouldConfirmWorkspaceReplacement,
+    state.document.units,
+    state.ui.orthoEnabled,
+    state.ui.snapEnabled,
+  ]);
 
-  const handleImportSketchFile = useCallback(async (file) => {
-    if (!file) {
-      return;
-    }
+  const handleImportSketchFile = useCallback(
+    async (file) => {
+      if (!file) {
+        return;
+      }
 
-    if (!shouldConfirmWorkspaceReplacement()) {
-      return;
-    }
+      if (!shouldConfirmWorkspaceReplacement()) {
+        return;
+      }
 
-    try {
-      const { workspace, fileName } = await importSketchWorkspaceFile(file);
-      applyWorkspace(workspace, {
-        fileHandle: null,
-        fileName,
-        status: 'opened',
-      });
-    } catch (err) {
-      alert(err.message || 'Failed to open sketch.');
-    }
-  }, [applyWorkspace, shouldConfirmWorkspaceReplacement]);
+      try {
+        const { workspace, fileName } = await importSketchWorkspaceFile(file);
+        applyWorkspace(workspace, {
+          fileHandle: null,
+          fileName,
+          status: 'opened',
+        });
+      } catch (err) {
+        alert(err.message || 'Failed to open sketch.');
+      }
+    },
+    [applyWorkspace, shouldConfirmWorkspaceReplacement],
+  );
 
   const handleOpenSketch = useCallback(async () => {
     if (!shouldConfirmWorkspaceReplacement()) {
@@ -221,57 +249,60 @@ export default function useSketchPersistence(state, dispatch) {
     }
   }, [applyWorkspace, shouldConfirmWorkspaceReplacement]);
 
-  const handleSaveSketch = useCallback(async (options = {}) => {
-    const saveAs = options.saveAs === true;
-    const renamePending = Boolean(
-      documentFileHandle
-      && documentPersistenceMeta.fileName
-      && documentPersistenceMeta.fileName !== desiredSketchFileName,
-    );
-    setDocumentPersistenceMeta((current) => ({
-      ...current,
-      status: 'saving',
-      error: null,
-    }));
-
-    try {
-      const { savedAt, fileHandle, fileName } = await saveSketchWorkspaceFile(currentWorkspaceSnapshot, {
-        fileHandle: saveAs || renamePending ? null : documentFileHandle,
-      });
-      persistedWorkspaceSnapshotRef.current = comparableWorkspaceSnapshot;
-      setDocumentFileHandle(fileHandle);
-      setDocumentPersistenceMeta({
-        savedAt,
-        fileName,
-        status: 'saved',
-        error: null,
-      });
-      clearSketchRecovery();
-    } catch (err) {
-      if (isFilePickerAbortError(err)) {
-        setDocumentPersistenceMeta((current) => ({
-          ...current,
-          status: documentIsDirty ? 'dirty' : 'idle',
-          error: null,
-        }));
-        return;
-      }
-
+  const handleSaveSketch = useCallback(
+    async (options = {}) => {
+      const saveAs = options.saveAs === true;
+      const renamePending = Boolean(
+        documentFileHandle &&
+        documentPersistenceMeta.fileName &&
+        documentPersistenceMeta.fileName !== desiredSketchFileName,
+      );
       setDocumentPersistenceMeta((current) => ({
         ...current,
-        status: 'error',
-        error: err.message || 'Failed to save sketch.',
+        status: 'saving',
+        error: null,
       }));
-      alert(err.message || 'Failed to save sketch.');
-    }
-  }, [
-    comparableWorkspaceSnapshot,
-    currentWorkspaceSnapshot,
-    desiredSketchFileName,
-    documentFileHandle,
-    documentIsDirty,
-    documentPersistenceMeta.fileName,
-  ]);
+
+      try {
+        const { savedAt, fileHandle, fileName } = await saveSketchWorkspaceFile(currentWorkspaceSnapshot, {
+          fileHandle: saveAs || renamePending ? null : documentFileHandle,
+        });
+        persistedWorkspaceSnapshotRef.current = comparableWorkspaceSnapshot;
+        setDocumentFileHandle(fileHandle);
+        setDocumentPersistenceMeta({
+          savedAt,
+          fileName,
+          status: 'saved',
+          error: null,
+        });
+        clearSketchRecovery();
+      } catch (err) {
+        if (isFilePickerAbortError(err)) {
+          setDocumentPersistenceMeta((current) => ({
+            ...current,
+            status: documentIsDirty ? 'dirty' : 'idle',
+            error: null,
+          }));
+          return;
+        }
+
+        setDocumentPersistenceMeta((current) => ({
+          ...current,
+          status: 'error',
+          error: err.message || 'Failed to save sketch.',
+        }));
+        alert(err.message || 'Failed to save sketch.');
+      }
+    },
+    [
+      comparableWorkspaceSnapshot,
+      currentWorkspaceSnapshot,
+      desiredSketchFileName,
+      documentFileHandle,
+      documentIsDirty,
+      documentPersistenceMeta.fileName,
+    ],
+  );
 
   // Ctrl+S shortcut
   useEffect(() => {
@@ -292,16 +323,18 @@ export default function useSketchPersistence(state, dispatch) {
     };
   }, [handleSaveSketch]);
 
-  const documentPersistence = useMemo(() => ({
-    ...documentPersistenceMeta,
-    isDirty: documentIsDirty,
-    hasFileHandle: Boolean(documentFileHandle),
-    desiredFileName: desiredSketchFileName,
-    renamePending: Boolean(
-      documentPersistenceMeta.fileName
-      && documentPersistenceMeta.fileName !== desiredSketchFileName,
-    ),
-  }), [desiredSketchFileName, documentFileHandle, documentIsDirty, documentPersistenceMeta]);
+  const documentPersistence = useMemo(
+    () => ({
+      ...documentPersistenceMeta,
+      isDirty: documentIsDirty,
+      hasFileHandle: Boolean(documentFileHandle),
+      desiredFileName: desiredSketchFileName,
+      renamePending: Boolean(
+        documentPersistenceMeta.fileName && documentPersistenceMeta.fileName !== desiredSketchFileName,
+      ),
+    }),
+    [desiredSketchFileName, documentFileHandle, documentIsDirty, documentPersistenceMeta],
+  );
 
   return {
     documentPersistence,
