@@ -1,42 +1,12 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { downloadDxf } from '../export/dxfExport';
 import { downloadSvg } from '../export/svgExport';
 import { printEntities } from '../export/pdfExport';
 import { generateWorkshopZip } from '../export/workshopExport';
+import Toast from '../../components/Toast';
 import styles from '../styles/craftsman.module.css';
 
 const DEFAULT_KERF = 0.2; // mm, typical laser kerf
-const TOAST_DURATION = 4000;
-
-function Toast({ message, type, onDismiss }) {
-  useEffect(() => {
-    const timer = setTimeout(onDismiss, TOAST_DURATION);
-    return () => clearTimeout(timer);
-  }, [onDismiss]);
-
-  const bgColor = type === 'error' ? '#ff6b6b' : type === 'warning' ? '#d4856b' : '#51cf66';
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 60,
-        right: 16,
-        padding: '10px 16px',
-        background: bgColor,
-        color: '#1a1a2e',
-        borderRadius: 6,
-        fontSize: 13,
-        fontWeight: 600,
-        zIndex: 9999,
-        maxWidth: 320,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-      }}
-    >
-      {message}
-    </div>
-  );
-}
 
 export default function ExportBar({
   entities,
@@ -131,23 +101,32 @@ export default function ExportBar({
 
   return (
     <div className={styles.exportBar}>
-      <button
-        type="button"
-        onClick={handleWorkshopExport}
-        className={styles.workshopExportBtn}
-        disabled={exporting}
-      >
+      <button type="button" onClick={handleWorkshopExport} className={styles.workshopExportBtn} disabled={exporting}>
         {exporting ? 'Exporting...' : 'Workshop Package'}
       </button>
 
       <span className={styles.exportDivider} />
 
       <span className={styles.exportLabel}>Individual:</span>
-      <button type="button" onClick={handleDxfAll} className={styles.exportBtn}>DXF</button>
-      {hasSelection && <button type="button" onClick={handleDxfSelected} className={styles.exportBtn}>DXF (sel)</button>}
-      <button type="button" onClick={handleSvgAll} className={styles.exportBtn}>SVG</button>
-      {hasSelection && <button type="button" onClick={handleSvgSelected} className={styles.exportBtn}>SVG (sel)</button>}
-      <button type="button" onClick={handlePdf} className={styles.exportBtn}>PDF 1:1</button>
+      <button type="button" onClick={handleDxfAll} className={styles.exportBtn}>
+        DXF
+      </button>
+      {hasSelection && (
+        <button type="button" onClick={handleDxfSelected} className={styles.exportBtn}>
+          DXF (sel)
+        </button>
+      )}
+      <button type="button" onClick={handleSvgAll} className={styles.exportBtn}>
+        SVG
+      </button>
+      {hasSelection && (
+        <button type="button" onClick={handleSvgSelected} className={styles.exportBtn}>
+          SVG (sel)
+        </button>
+      )}
+      <button type="button" onClick={handlePdf} className={styles.exportBtn}>
+        PDF 1:1
+      </button>
 
       <span className={styles.exportDivider} />
 

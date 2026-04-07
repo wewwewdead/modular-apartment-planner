@@ -3,6 +3,7 @@ import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
 import RightPanel from './RightPanel';
 import StatusBar from './StatusBar';
+import Toast from './Toast';
 import TopBar from './TopBar';
 import { canUseSketchOpenFilePicker } from '../utils/sketchWorkspaceFileUtils';
 import CraftsmanSidebar from '../craftsman/components/CraftsmanSidebar';
@@ -39,6 +40,7 @@ export default function SketchStudioLayout(props) {
     groupSelectionSummary,
     selectedProfileInfo,
     isBrokenLineSelection,
+    hasGroupedSelection,
     constraintDiagnostics,
     jointDiagnostics,
     manufacturingPreviewEntities,
@@ -46,6 +48,8 @@ export default function SketchStudioLayout(props) {
     setActiveTool,
     toggleOrtho,
     toggleSnap,
+    groupSelection,
+    degroupSelection,
     updateSelectedEntityField,
     rotateSelectionLeft,
     rotateSelectionRight,
@@ -240,12 +244,16 @@ export default function SketchStudioLayout(props) {
               selectedMeasurements={selectedMeasurements}
               selectedProfileInfo={selectedProfileInfo}
               isBrokenLineSelection={isBrokenLineSelection}
+              canGroupSelection={selection.selectedIds.length >= 2}
+              canUngroupSelection={hasGroupedSelection}
               constraintDiagnostics={constraintDiagnostics}
               onEntityFieldCommit={updateSelectedEntityField}
               onVariablesChange={setVariables}
               onConstraintAdd={addConstraint}
               onConstraintUpdate={updateConstraint}
               onConstraintRemove={removeConstraint}
+              onGroupSelection={groupSelection}
+              onUngroupSelection={degroupSelection}
               onRotateLeft={rotateSelectionLeft}
               onRotateRight={rotateSelectionRight}
               onFlipHorizontal={flipSelectionHorizontal}
@@ -284,6 +292,9 @@ export default function SketchStudioLayout(props) {
           isometricPlane={ui.isometricPlane}
         />
       </section>
+      {documentPersistence.status === 'error' && documentPersistence.error && (
+        <Toast message={documentPersistence.error} type="error" onDismiss={() => {}} />
+      )}
     </main>
   );
 }

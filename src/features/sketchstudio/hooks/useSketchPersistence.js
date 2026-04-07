@@ -222,7 +222,11 @@ export default function useSketchPersistence(state, dispatch) {
           status: 'opened',
         });
       } catch (err) {
-        alert(err.message || 'Failed to open sketch.');
+        setDocumentPersistenceMeta((current) => ({
+          ...current,
+          status: 'error',
+          error: err.message || 'Failed to open sketch.',
+        }));
       }
     },
     [applyWorkspace, shouldConfirmWorkspaceReplacement],
@@ -245,7 +249,11 @@ export default function useSketchPersistence(state, dispatch) {
         return;
       }
 
-      alert(err.message || 'Failed to open sketch.');
+      setDocumentPersistenceMeta((current) => ({
+        ...current,
+        status: 'error',
+        error: err.message || 'Failed to open sketch.',
+      }));
     }
   }, [applyWorkspace, shouldConfirmWorkspaceReplacement]);
 
@@ -291,7 +299,6 @@ export default function useSketchPersistence(state, dispatch) {
           status: 'error',
           error: err.message || 'Failed to save sketch.',
         }));
-        alert(err.message || 'Failed to save sketch.');
       }
     },
     [
