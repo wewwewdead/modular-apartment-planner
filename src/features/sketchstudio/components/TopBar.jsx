@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { UndoIcon, RedoIcon, NewIcon, SaveIcon, LoadIcon, SnapIcon } from '@/ui/ToolbarIcons';
 
@@ -90,7 +91,7 @@ function ToggleButton({ active, label, icon: Icon, onClick }) {
   );
 }
 
-export default function TopBar({
+function TopBar({
   document,
   activeTool,
   activeLayer,
@@ -121,10 +122,30 @@ export default function TopBar({
       <div className="sketchStudioTopBarPrimary">
         <div className="sketchStudioTopBarBrand">
           <Link to="/" className="sketchStudioHomeBtn" aria-label="Back to home">
-            <svg className="sketchStudioHomeBtnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="sketchStudioHomeBtnIcon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M15 18l-6-6 6-6" />
             </svg>
-            <svg className="sketchStudioHomeBtnHouse" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              className="sketchStudioHomeBtnHouse"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M3 10.5L12 3l9 7.5" />
               <path d="M5 10v9a1 1 0 001 1h3v-5a1 1 0 011-1h4a1 1 0 011 1v5h3a1 1 0 001-1v-9" />
             </svg>
@@ -154,9 +175,7 @@ export default function TopBar({
       </div>
 
       <div className="sketchStudioTopBarSecondary">
-        <span className="sketchStudioTopBarNote">
-          {draft.type ? `Drafting ${draft.type}` : 'Ready'}
-        </span>
+        <span className="sketchStudioTopBarNote">{draft.type ? `Drafting ${draft.type}` : 'Ready'}</span>
 
         <span className="sketchStudioTopBarDivider" aria-hidden="true" />
 
@@ -233,8 +252,9 @@ export default function TopBar({
           <ToggleButton active={snapEnabled} label="Snap" icon={SnapIcon} onClick={onToggleSnap} />
           <ToggleButton active={orthoEnabled} label="Ortho" onClick={onToggleOrtho} />
         </div>
-
       </div>
     </header>
   );
 }
+
+export default memo(TopBar);
