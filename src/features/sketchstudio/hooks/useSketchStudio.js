@@ -2,9 +2,9 @@ import { useCallback, useMemo, useReducer, useRef } from 'react';
 import sketchStudioInitialState from '../store/sketchStudioInitialState';
 import sketchStudioReducer from '../store/sketchStudioReducer';
 import {
-  commitEntity,
   setActiveTool,
   setDocumentEntities,
+  setSelection,
   setPrecisionInput,
   setUiFlag,
   setEntityMaterial,
@@ -17,9 +17,11 @@ import {
   addJoint,
   updateJoint,
   removeJoint,
+  groupSelection as groupSelectionAction,
+  degroupSelection as degroupSelectionAction,
 } from '../store/sketchStudioActions';
 import { roundWorldValue } from '../utils/canvasMath';
-import { updateEntityFromNumericField, updateEntityInList } from '../utils/entityUtils';
+import { duplicateEntitiesByIds, updateEntityFromNumericField, updateEntityInList } from '../utils/entityUtils';
 import { getPrecisionHudData } from '../utils/draftPrecisionUtils';
 import { getEditableEntities, getNextActiveLayer, getVisibleEntities } from '../utils/layerUtils';
 import { getDraftPreviewEntity, TOOL_DEFINITIONS } from './sketchConstants';
@@ -79,6 +81,22 @@ export default function useSketchStudio() {
     () => dispatch(setUiFlag('snapEnabled', !state.ui.snapEnabled)),
     [state.ui.snapEnabled],
   );
+  const handleGroupSelection = useCallback(() => {
+    if (selection.selectedIds.length < 2) {
+      return false;
+    }
+
+    dispatch(groupSelectionAction());
+    return true;
+  }, [dispatch, selection.selectedIds.length]);
+  const handleDegroupSelection = useCallback(() => {
+    if (!selection.hasGroupedSelection) {
+      return false;
+    }
+
+    dispatch(degroupSelectionAction());
+    return true;
+  }, [dispatch, selection.hasGroupedSelection]);
   const setViewMode = useCallback(
     (viewMode) => dispatch(setUiFlag('viewMode', viewMode === 'isometric' ? 'isometric' : 'plan')),
     [],
@@ -120,6 +138,8 @@ export default function useSketchStudio() {
     undo: handleUndo,
     redo: handleRedo,
     isSpacePanActiveRef,
+    groupSelection: handleGroupSelection,
+    degroupSelection: handleDegroupSelection,
   });
 
   // --- Pointer handlers ---
@@ -178,9 +198,12 @@ export default function useSketchStudio() {
     groupSelectionSummary: selection.groupSelectionSummary,
     selectedProfileInfo: selection.selectedProfileInfo,
     isBrokenLineSelection: selection.isBrokenLineSelection,
+    hasGroupedSelection: selection.hasGroupedSelection,
     setActiveTool: handleToolChange,
     toggleOrtho,
     toggleSnap,
+    groupSelection: handleGroupSelection,
+    degroupSelection: handleDegroupSelection,
     setViewMode,
     setIsometricPlane,
     updateSelectedEntityField,
@@ -246,15 +269,11 @@ export default function useSketchStudio() {
     removeJoint: (jointId) => dispatch(removeJoint(jointId)),
     loadTemplate: (workspace) => persistence.applyWorkspace(workspace, { status: 'idle' }),
     duplicateEntities: (entityIds) => {
-      const idSet = new Set(entityIds);
-      const toDuplicate = state.document.entities.filter((e) => idSet.has(e.id));
-      for (const entity of toDuplicate) {
-        const clone = {
-          ...entity,
-          id: `${entity.type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
-        };
-        dispatch(commitEntity(clone));
-      }
+      const result = duplicateEntitiesByIds(state.document.entities, entityIds);
+      if (!result.duplicatedIds.length) return [];
+      dispatch(setDocumentEntities(result.entities));
+      dispatch(setSelection(result.duplicatedIds));
+      return result.duplicatedIds;
     },
   };
 }

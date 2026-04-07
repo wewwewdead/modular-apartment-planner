@@ -12,24 +12,14 @@ import {
 import { calculateDistance } from '../utils/canvasMath';
 import { createAngleDimensionEntity, createPolylineEntity } from '../utils/entityUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
-import {
-  DEFAULT_FILLET_RADIUS,
-  MAX_FILLET_RADIUS,
-  MIN_FILLET_RADIUS,
-  FILLET_RADIUS_STEP,
-} from '../utils/filletUtils';
+import { DEFAULT_FILLET_RADIUS, MAX_FILLET_RADIUS, MIN_FILLET_RADIUS, FILLET_RADIUS_STEP } from '../utils/filletUtils';
 import { applyFillet } from '../utils/filletUtils';
 import { removeLastPolylineVertex } from '../utils/polylineUtils';
 import { translateEntities } from '../utils/transformUtils';
-import {
-  TOOL_SHORTCUT_MAP,
-  isEditableTarget,
-  constrainAnglePoint,
-  parsePositiveNumber,
-} from './sketchConstants';
+import { TOOL_SHORTCUT_MAP, isEditableTarget, constrainAnglePoint, parsePositiveNumber } from './sketchConstants';
 
 export default function useSketchKeyboard(state, dispatch, callbacks) {
-  const { commitPrecisionDraft, undo, redo, isSpacePanActiveRef } = callbacks;
+  const { commitPrecisionDraft, undo, redo, isSpacePanActiveRef, groupSelection, degroupSelection } = callbacks;
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -53,6 +43,23 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
       }
 
       if (isEditableTarget(event.target)) return;
+
+      if (hasPrimaryModifier && !event.altKey && key === 'g') {
+        if (event.shiftKey) {
+          if (
+            state.document.entities.some(
+              (entity) => state.selection.selectedIds.includes(entity.id) && Boolean(entity.meta?.groupId),
+            )
+          ) {
+            event.preventDefault();
+            degroupSelection();
+          }
+        } else if (state.selection.selectedIds.length >= 2) {
+          event.preventDefault();
+          groupSelection();
+        }
+        return;
+      }
 
       if (event.code === 'Space') {
         event.preventDefault();
@@ -233,15 +240,19 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     };
   }, [
     commitPrecisionDraft,
+    degroupSelection,
     dispatch,
+    groupSelection,
     isSpacePanActiveRef,
     redo,
     undo,
     state.document,
     state.draft,
     state.interaction.mode,
-    state.selection.selectedIds.length,
+    state.selection.selectedIds,
     state.ui.activeLayerId,
     state.ui.activeTool,
+    state.ui.isometricPlane,
+    state.ui.viewMode,
   ]);
 }

@@ -1,14 +1,12 @@
 import { useCallback } from 'react';
 import { calculateDistance, pixelsToWorldUnits } from '../utils/canvasMath';
-import {
-  duplicateEntitiesByIds,
-  updateEntityInList,
-} from '../utils/entityUtils';
+import { duplicateEntitiesByIds, updateEntityInList } from '../utils/entityUtils';
 import { inferDimensionSubtype } from '../utils/dimensionUtils';
 import { updateEntityFromHandle } from '../utils/handleUtils';
 import { applyIsometricOrthoPoint } from '../utils/isometricUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { findFilletableCorner, computeSketchFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
+import { expandGroupedSelection } from '../utils/groupUtils';
 import { applyOrthoPoint } from '../utils/canvasMath';
 import { rotateEntities, translateEntities } from '../utils/transformUtils';
 import { getEntityIdsInSelectionBox, normalizeSelectionBox } from '../utils/selectionUtils';
@@ -334,6 +332,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       state.interaction,
       state.selection.selectionBox,
       state.ui.orthoEnabled,
+      state.ui.viewMode,
       state.viewport,
       activeTool,
     ],
@@ -353,9 +352,12 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           event.currentTarget.releasePointerCapture(event.pointerId);
         const { selectionBox } = state.selection;
         if (selectionBox.isActive && selectionBox.hasMoved) {
-          const nextIds = getEntityIdsInSelectionBox(
+          const nextIds = expandGroupedSelection(
             editableEntities,
-            normalizeSelectionBox(selectionBox.start, selectionBox.current),
+            getEntityIdsInSelectionBox(
+              editableEntities,
+              normalizeSelectionBox(selectionBox.start, selectionBox.current),
+            ),
           );
           dispatch(setSelection(mergeSelection(state.selection.selectedIds, nextIds, event.shiftKey)));
           dispatch(setSuppressNextClick(true));
@@ -388,7 +390,15 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
 
       dispatch(setPointerDown(false));
     },
-    [dispatch, editableEntities, readCanvasPoint, readWorldPoint, state.interaction, state.selection, state.viewport.zoom],
+    [
+      dispatch,
+      editableEntities,
+      readCanvasPoint,
+      readWorldPoint,
+      state.interaction,
+      state.selection,
+      state.viewport.zoom,
+    ],
   );
 
   const handlePointerCancel = useCallback(() => {

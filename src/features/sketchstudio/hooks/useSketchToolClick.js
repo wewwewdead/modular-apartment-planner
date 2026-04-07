@@ -17,6 +17,7 @@ import { inferDimensionSubtype } from '../utils/dimensionUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { findFilletableCorner, computeSketchFillet, applyFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
+import { expandGroupedSelection } from '../utils/groupUtils';
 import { closePolyline } from '../utils/profileUtils';
 import { appendPolylineVertex } from '../utils/polylineUtils';
 import {
@@ -63,11 +64,9 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
       const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
 
       if (activeTool === 'select') {
-        dispatch(
-          setSelection(
-            mergeSelection(state.selection.selectedIds, hoveredEntity ? [hoveredEntity.id] : [], event.shiftKey),
-          ),
-        );
+        const nextSelectionIds = expandGroupedSelection(editableEntities, hoveredEntity ? [hoveredEntity.id] : []);
+
+        dispatch(setSelection(mergeSelection(state.selection.selectedIds, nextSelectionIds, event.shiftKey)));
         return;
       }
 
@@ -518,7 +517,6 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
     },
     [
       activeTool,
-      commitPrecisionDraft,
       dispatch,
       draftPreview,
       editableEntities,

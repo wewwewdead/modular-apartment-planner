@@ -5,9 +5,11 @@ import sketchStudioReducer from './sketchStudioReducer';
 import {
   addJoint,
   commitEntity,
+  degroupSelection,
   deleteSelected,
   endHandleDrag,
   endTransform,
+  groupSelection,
   loadWorkspaceSnapshot,
   patchTransform,
   redo,
@@ -122,16 +124,19 @@ describe('sketchStudioReducer history', () => {
   it('resets history when a workspace snapshot is loaded', () => {
     const baseState = createState();
     const changedState = sketchStudioReducer(baseState, commitEntity(createLineEntity('line-1', 0, 0, 100, 0)));
-    const loadedState = sketchStudioReducer(changedState, loadWorkspaceSnapshot({
-      document: {
-        ...baseState.document,
-        id: 'doc-loaded',
-      },
-      viewport: changedState.viewport,
-      ui: {
-        activeLayerId: 'default',
-      },
-    }));
+    const loadedState = sketchStudioReducer(
+      changedState,
+      loadWorkspaceSnapshot({
+        document: {
+          ...baseState.document,
+          id: 'doc-loaded',
+        },
+        viewport: changedState.viewport,
+        ui: {
+          activeLayerId: 'default',
+        },
+      }),
+    );
 
     expect(loadedState.document.id).toBe('doc-loaded');
     expect(loadedState.history.past).toHaveLength(0);
@@ -139,11 +144,14 @@ describe('sketchStudioReducer history', () => {
   });
 
   it('does not track viewport-only changes in history', () => {
-    const nextState = sketchStudioReducer(createState(), setViewport({
-      zoom: 2,
-      panX: 10,
-      panY: 20,
-    }));
+    const nextState = sketchStudioReducer(
+      createState(),
+      setViewport({
+        zoom: 2,
+        panX: 10,
+        panY: 20,
+      }),
+    );
 
     expect(nextState.viewport.zoom).toBe(2);
     expect(nextState.history.past).toHaveLength(0);
@@ -159,15 +167,19 @@ describe('sketchStudioReducer history', () => {
       },
     };
 
-    const startedState = sketchStudioReducer(baseState, startHandleDrag({
-      entityId: 'line-1',
-      handleId: 'end',
-      pointerId: 1,
-    }));
+    const startedState = sketchStudioReducer(
+      baseState,
+      startHandleDrag({
+        entityId: 'line-1',
+        handleId: 'end',
+        pointerId: 1,
+      }),
+    );
 
-    const movedState = sketchStudioReducer(startedState, setDocumentEntities([
-      createLineEntity('line-1', 0, 0, 160, 0),
-    ]));
+    const movedState = sketchStudioReducer(
+      startedState,
+      setDocumentEntities([createLineEntity('line-1', 0, 0, 160, 0)]),
+    );
 
     expect(movedState.history.past).toHaveLength(0);
 
@@ -203,6 +215,62 @@ describe('sketchStudioReducer history', () => {
     expect(undoneState.document.entities[0].meta.lineStyle).toBeUndefined();
   });
 
+  it('groups and de-groups a multi-selection as undoable document changes', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [
+          createRectEntity('panel-left', 0, 0, 200, 120, 18),
+          createRectEntity('panel-right', 220, 0, 200, 120, 18),
+        ],
+      },
+    };
+
+    const selectedState = sketchStudioReducer(baseState, setSelection(['panel-left', 'panel-right']));
+    const groupedState = sketchStudioReducer(selectedState, groupSelection());
+    const groupId = groupedState.document.entities[0].meta.groupId;
+
+    expect(groupId).toBeTruthy();
+    expect(groupedState.document.entities[1].meta.groupId).toBe(groupId);
+    expect(groupedState.history.past).toHaveLength(1);
+
+    const degroupedState = sketchStudioReducer(groupedState, degroupSelection());
+
+    expect(degroupedState.document.entities[0].meta.groupId).toBeUndefined();
+    expect(degroupedState.document.entities[1].meta.groupId).toBeUndefined();
+    expect(degroupedState.history.past).toHaveLength(2);
+
+    const undoneState = sketchStudioReducer(degroupedState, undo());
+
+    expect(undoneState.document.entities[0].meta.groupId).toBe(groupId);
+    expect(undoneState.document.entities[1].meta.groupId).toBe(groupId);
+  });
+
+  it('cleans up singleton group ids after grouped members are deleted', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [
+          createRectEntity('panel-left', 0, 0, 200, 120, 18),
+          createRectEntity('panel-right', 220, 0, 200, 120, 18),
+        ].map((entity) => ({
+          ...entity,
+          meta: { groupId: 'group-a' },
+        })),
+      },
+    };
+
+    const selectedState = sketchStudioReducer(baseState, setSelection(['panel-left']));
+    const deletedState = sketchStudioReducer(selectedState, deleteSelected());
+
+    expect(deletedState.document.entities).toHaveLength(1);
+    expect(deletedState.document.entities[0].meta.groupId).toBeUndefined();
+  });
+
   it('treats copy-drag transforms as a single undo step', () => {
     const state = createState();
     const baseState = {
@@ -213,32 +281,35 @@ describe('sketchStudioReducer history', () => {
       },
     };
 
-    const startedState = sketchStudioReducer(baseState, startTransform({
-      type: 'move',
-      pointerId: 1,
-      startWorld: { x: 0, y: 0 },
-      startAngle: 0,
-      pivot: null,
-      entityIds: ['line-1'],
-      startEntities: baseState.document.entities,
-      copyMode: 'pending',
-      copiedEntityIds: [],
-    }));
+    const startedState = sketchStudioReducer(
+      baseState,
+      startTransform({
+        type: 'move',
+        pointerId: 1,
+        startWorld: { x: 0, y: 0 },
+        startAngle: 0,
+        pivot: null,
+        entityIds: ['line-1'],
+        startEntities: baseState.document.entities,
+        copyMode: 'pending',
+        copiedEntityIds: [],
+      }),
+    );
 
-    const activatedState = sketchStudioReducer(startedState, patchTransform({
-      copyMode: 'active',
-      entityIds: ['line-2'],
-      copiedEntityIds: ['line-2'],
-      startEntities: [
-        createLineEntity('line-1', 0, 0, 100, 0),
-        createLineEntity('line-2', 0, 0, 100, 0),
-      ],
-    }));
+    const activatedState = sketchStudioReducer(
+      startedState,
+      patchTransform({
+        copyMode: 'active',
+        entityIds: ['line-2'],
+        copiedEntityIds: ['line-2'],
+        startEntities: [createLineEntity('line-1', 0, 0, 100, 0), createLineEntity('line-2', 0, 0, 100, 0)],
+      }),
+    );
 
-    const movedState = sketchStudioReducer(activatedState, setDocumentEntities([
-      createLineEntity('line-1', 0, 0, 100, 0),
-      createLineEntity('line-2', 50, 0, 150, 0),
-    ]));
+    const movedState = sketchStudioReducer(
+      activatedState,
+      setDocumentEntities([createLineEntity('line-1', 0, 0, 100, 0), createLineEntity('line-2', 50, 0, 150, 0)]),
+    );
     const endedState = sketchStudioReducer(movedState, endTransform());
 
     expect(endedState.history.past).toHaveLength(1);
@@ -262,36 +333,45 @@ describe('sketchStudioReducer history', () => {
       },
     };
 
-    const startedState = sketchStudioReducer(baseState, startTransform({
-      type: 'move',
-      pointerId: 1,
-      startWorld: { x: 0, y: 0 },
-      startAngle: 0,
-      pivot: null,
-      entityIds: ['circle-1', 'arc-1'],
-      startEntities: baseState.document.entities,
-      copyMode: 'pending',
-      copiedEntityIds: [],
-    }));
+    const startedState = sketchStudioReducer(
+      baseState,
+      startTransform({
+        type: 'move',
+        pointerId: 1,
+        startWorld: { x: 0, y: 0 },
+        startAngle: 0,
+        pivot: null,
+        entityIds: ['circle-1', 'arc-1'],
+        startEntities: baseState.document.entities,
+        copyMode: 'pending',
+        copiedEntityIds: [],
+      }),
+    );
 
-    const activatedState = sketchStudioReducer(startedState, patchTransform({
-      copyMode: 'active',
-      entityIds: ['circle-2', 'arc-2'],
-      copiedEntityIds: ['circle-2', 'arc-2'],
-      startEntities: [
+    const activatedState = sketchStudioReducer(
+      startedState,
+      patchTransform({
+        copyMode: 'active',
+        entityIds: ['circle-2', 'arc-2'],
+        copiedEntityIds: ['circle-2', 'arc-2'],
+        startEntities: [
+          createCircleEntity('circle-1', 40, 40, 20),
+          createArcEntity('arc-1', { x: 100, y: 10 }, { x: 160, y: 10 }, { x: 130, y: 45 }),
+          createCircleEntity('circle-2', 40, 40, 20),
+          createArcEntity('arc-2', { x: 100, y: 10 }, { x: 160, y: 10 }, { x: 130, y: 45 }),
+        ],
+      }),
+    );
+
+    const movedState = sketchStudioReducer(
+      activatedState,
+      setDocumentEntities([
         createCircleEntity('circle-1', 40, 40, 20),
         createArcEntity('arc-1', { x: 100, y: 10 }, { x: 160, y: 10 }, { x: 130, y: 45 }),
-        createCircleEntity('circle-2', 40, 40, 20),
-        createArcEntity('arc-2', { x: 100, y: 10 }, { x: 160, y: 10 }, { x: 130, y: 45 }),
-      ],
-    }));
-
-    const movedState = sketchStudioReducer(activatedState, setDocumentEntities([
-      createCircleEntity('circle-1', 40, 40, 20),
-      createArcEntity('arc-1', { x: 100, y: 10 }, { x: 160, y: 10 }, { x: 130, y: 45 }),
-      createCircleEntity('circle-2', 90, 40, 20),
-      createArcEntity('arc-2', { x: 150, y: 10 }, { x: 210, y: 10 }, { x: 180, y: 45 }),
-    ]));
+        createCircleEntity('circle-2', 90, 40, 20),
+        createArcEntity('arc-2', { x: 150, y: 10 }, { x: 210, y: 10 }, { x: 180, y: 45 }),
+      ]),
+    );
     const endedState = sketchStudioReducer(movedState, endTransform());
 
     expect(endedState.history.past).toHaveLength(1);
@@ -308,10 +388,7 @@ describe('sketchStudioReducer history', () => {
       ...state,
       document: {
         ...state.document,
-        entities: [
-          createRectEntity('panel', 0, 0, 200, 120, 18),
-          createRectEntity('shelf', 40, -18, 60, 18, 18),
-        ],
+        entities: [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -18, 60, 18, 18)],
       },
     };
     const joint = {
@@ -342,11 +419,14 @@ describe('sketchStudioReducer history', () => {
       depth: 6,
     });
 
-    const updatedState = sketchStudioReducer(addedState, updateJoint('joint-dado', {
-      parameters: {
-        depth: 9,
-      },
-    }));
+    const updatedState = sketchStudioReducer(
+      addedState,
+      updateJoint('joint-dado', {
+        parameters: {
+          depth: 9,
+        },
+      }),
+    );
 
     expect(updatedState.manufacturingPreviewEntities[0]).toMatchObject({
       type: 'feature',
@@ -366,10 +446,7 @@ describe('sketchStudioReducer history', () => {
       ...state,
       document: {
         ...state.document,
-        entities: [
-          createRectEntity('panel', 0, 0, 200, 120, 18),
-          createRectEntity('back', 50, -18, 100, 18, 6),
-        ],
+        entities: [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('back', 50, -18, 100, 18, 6)],
       },
     };
     const joint = {

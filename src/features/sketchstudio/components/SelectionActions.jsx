@@ -2,11 +2,15 @@ import { memo } from 'react';
 
 function SelectionActions({
   isBrokenLineSelection,
+  canGroupSelection,
+  canUngroupSelection,
   onRotateLeft,
   onRotateRight,
   onFlipHorizontal,
   onFlipVertical,
   onToggleBrokenLines,
+  onGroupSelection,
+  onUngroupSelection,
 }) {
   return (
     <div className="sketchStudioSelectionActions">
@@ -29,6 +33,16 @@ function SelectionActions({
       >
         {isBrokenLineSelection ? 'Use Solid Lines' : 'Use Broken Lines'}
       </button>
+      {canGroupSelection && (
+        <button type="button" className="sketchStudioInlineButton" onClick={onGroupSelection}>
+          Group
+        </button>
+      )}
+      {canUngroupSelection && (
+        <button type="button" className="sketchStudioInlineButton" onClick={onUngroupSelection}>
+          De-group
+        </button>
+      )}
     </div>
   );
 }

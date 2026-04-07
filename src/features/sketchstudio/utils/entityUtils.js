@@ -1,6 +1,7 @@
 import { getArcReferencePoint } from './arcUtils';
 import { calculateDistance, getMidpoint, projectPointFromStart } from './canvasMath';
 import { formatDimensionText, inferDimensionSubtype, measureDistance } from './dimensionUtils';
+import { remapDuplicateEntityGroups } from './groupUtils';
 import { buildIsometricEllipse, getEllipseSnapPoints } from './isometricUtils';
 import { getPolylineMidpoints } from './polylineUtils';
 
@@ -29,11 +30,11 @@ function applyTextFontSize(entity, nextFontSize) {
     : null;
 
   if (
-    !leaderTarget
-    || !Number.isFinite(leaderTarget.x)
-    || !Number.isFinite(leaderTarget.y)
-    || !Number.isFinite(currentFontSize)
-    || currentFontSize <= 0
+    !leaderTarget ||
+    !Number.isFinite(leaderTarget.x) ||
+    !Number.isFinite(leaderTarget.y) ||
+    !Number.isFinite(currentFontSize) ||
+    currentFontSize <= 0
   ) {
     return {
       ...entity,
@@ -49,8 +50,8 @@ function applyTextFontSize(entity, nextFontSize) {
     leader: {
       ...entity.leader,
       target: {
-        x: entity.x + ((leaderTarget.x - entity.x) * scaleRatio),
-        y: entity.y + ((leaderTarget.y - entity.y) * scaleRatio),
+        x: entity.x + (leaderTarget.x - entity.x) * scaleRatio,
+        y: entity.y + (leaderTarget.y - entity.y) * scaleRatio,
       },
     },
   };
@@ -228,7 +229,11 @@ export function duplicateEntitiesByIds(entities, entityIds) {
     });
   });
 
-  const duplicatedEntities = duplicableEntities.map((entity) => cloneEntityWithId(entity, idMap.get(entity.id), idMap));
+  const duplicatedEntities = remapDuplicateEntityGroups(
+    entities,
+    duplicableEntities.map((entity) => cloneEntityWithId(entity, idMap.get(entity.id), idMap)),
+    idMap,
+  );
   const duplicatedIdSet = new Set(duplicatedEntities.map((entity) => entity.id));
   const mergedEntities = [...entities, ...duplicatedEntities];
 
@@ -1024,7 +1029,9 @@ export function updateEntityFromNumericField(entity, field, rawValue) {
     return {
       ...entity,
       leader: shouldEnable
-        ? (entity.leader?.target ? entity.leader : { target: createDefaultTextLeaderTarget(entity) })
+        ? entity.leader?.target
+          ? entity.leader
+          : { target: createDefaultTextLeaderTarget(entity) }
         : null,
     };
   }
@@ -1143,9 +1150,7 @@ export function updateEntityFromNumericField(entity, field, rawValue) {
 
   if (entity.type === 'text') {
     if (field === 'leaderTargetX' || field === 'leaderTargetY') {
-      const leader = entity.leader?.target
-        ? entity.leader
-        : { target: createDefaultTextLeaderTarget(entity) };
+      const leader = entity.leader?.target ? entity.leader : { target: createDefaultTextLeaderTarget(entity) };
 
       return {
         ...entity,

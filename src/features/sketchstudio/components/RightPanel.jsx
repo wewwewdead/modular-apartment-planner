@@ -14,6 +14,8 @@ function RightPanel({
   selectedMeasurements,
   selectedProfileInfo,
   isBrokenLineSelection,
+  canGroupSelection,
+  canUngroupSelection,
   constraintDiagnostics,
   onEntityFieldCommit,
   onVariablesChange,
@@ -25,6 +27,8 @@ function RightPanel({
   onFlipHorizontal,
   onFlipVertical,
   onToggleBrokenLines,
+  onGroupSelection,
+  onUngroupSelection,
   onMaterialChange,
   onThicknessChange,
 }) {
@@ -42,11 +46,15 @@ function RightPanel({
             <h2 className="sketchStudioPanelTitle">{selectedEntity.id}</h2>
             <SelectionActions
               isBrokenLineSelection={isBrokenLineSelection}
+              canGroupSelection={canGroupSelection}
+              canUngroupSelection={canUngroupSelection}
               onRotateLeft={onRotateLeft}
               onRotateRight={onRotateRight}
               onFlipHorizontal={onFlipHorizontal}
               onFlipVertical={onFlipVertical}
               onToggleBrokenLines={onToggleBrokenLines}
+              onGroupSelection={onGroupSelection}
+              onUngroupSelection={onUngroupSelection}
             />
             <div className="sketchStudioPropertyList">
               <div className="sketchStudioPropertyRow">
@@ -67,11 +75,15 @@ function RightPanel({
           <>
             <SelectionActions
               isBrokenLineSelection={isBrokenLineSelection}
+              canGroupSelection={canGroupSelection}
+              canUngroupSelection={canUngroupSelection}
               onRotateLeft={onRotateLeft}
               onRotateRight={onRotateRight}
               onFlipHorizontal={onFlipHorizontal}
               onFlipVertical={onFlipVertical}
               onToggleBrokenLines={onToggleBrokenLines}
+              onGroupSelection={onGroupSelection}
+              onUngroupSelection={onUngroupSelection}
             />
             <div className="sketchStudioPlaceholderCard">
               <p className="sketchStudioPlaceholderText">{groupSelectionSummary.count} entities selected</p>

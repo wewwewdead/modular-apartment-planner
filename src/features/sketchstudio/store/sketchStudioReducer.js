@@ -11,6 +11,7 @@ import {
 } from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { resolveSketchDocument } from '../utils/sketchDocumentResolver';
+import { assignEntitiesToGroup, removeEntitiesFromGroups } from '../utils/groupUtils';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
 
 function emptySnap() {
@@ -448,6 +449,54 @@ export default function sketchStudioReducer(state, action) {
             state.interaction.mode === 'transform',
         },
       );
+    }
+
+    case SKETCH_STUDIO_ACTIONS.GROUP_SELECTION: {
+      if (state.selection.selectedIds.length < 2) {
+        return state;
+      }
+
+      const nextEntities = assignEntitiesToGroup(state.document.entities, state.selection.selectedIds);
+
+      if (nextEntities === state.document.entities) {
+        return state;
+      }
+
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        entities: nextEntities,
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.DEGROUP_SELECTION: {
+      if (!state.selection.selectedIds.length) {
+        return state;
+      }
+
+      const nextEntities = removeEntitiesFromGroups(state.document.entities, state.selection.selectedIds);
+
+      if (nextEntities === state.document.entities) {
+        return state;
+      }
+
+      const resolvedDocumentState = buildResolvedDocumentState({
+        ...state.document,
+        entities: nextEntities,
+      });
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
     }
 
     case SKETCH_STUDIO_ACTIONS.START_HANDLE_DRAG:

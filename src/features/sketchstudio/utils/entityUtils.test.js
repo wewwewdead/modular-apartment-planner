@@ -30,7 +30,11 @@ describe('entityUtils', () => {
     const entities = [{ id: 'line-2', type: 'line', x1: 0, y1: 0, x2: 10, y2: 0 }];
 
     expect(createLineEntity({ x: 10, y: 10 }, { x: 30, y: 30 }, entities)?.id).toBe('line-3');
-    expect(createRectEntity({ x: 20, y: 30 }, { x: 60, y: 90 }, [{ id: 'rect-4', type: 'rect', x: 0, y: 0, width: 10, height: 10 }])?.id).toBe('rect-5');
+    expect(
+      createRectEntity({ x: 20, y: 30 }, { x: 60, y: 90 }, [
+        { id: 'rect-4', type: 'rect', x: 0, y: 0, width: 10, height: 10 },
+      ])?.id,
+    ).toBe('rect-5');
   });
 
   it('returns measurement rows for rectangles', () => {
@@ -43,7 +47,16 @@ describe('entityUtils', () => {
   });
 
   it('creates polyline and arc entities', () => {
-    expect(createPolylineEntity([{ x: 0, y: 0 }, { x: 100, y: 0 }], [], 'default')?.type).toBe('polyline');
+    expect(
+      createPolylineEntity(
+        [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+        ],
+        [],
+        'default',
+      )?.type,
+    ).toBe('polyline');
     expect(createArcEntity({ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 50, y: 50 }, [], 'default')?.type).toBe('arc');
   });
 
@@ -102,7 +115,12 @@ describe('entityUtils', () => {
         type: 'feature',
         shape: 'polygon',
         featureType: 'cutout',
-        points: [{ x: 10, y: 10 }, { x: 40, y: 10 }, { x: 40, y: 30 }, { x: 10, y: 30 }],
+        points: [
+          { x: 10, y: 10 },
+          { x: 40, y: 10 },
+          { x: 40, y: 30 },
+          { x: 10, y: 30 },
+        ],
         layerId: 'default',
         meta: {},
       },
@@ -124,7 +142,12 @@ describe('entityUtils', () => {
         id: 'feature-2',
         type: 'feature',
         shape: 'polygon',
-        points: [{ x: 10, y: 10 }, { x: 40, y: 10 }, { x: 40, y: 30 }, { x: 10, y: 30 }],
+        points: [
+          { x: 10, y: 10 },
+          { x: 40, y: 10 },
+          { x: 40, y: 30 },
+          { x: 10, y: 30 },
+        ],
       }),
     ]);
   });
@@ -150,6 +173,53 @@ describe('entityUtils', () => {
     expect(result.entities).toHaveLength(6);
   });
 
+  it('duplicates a full grouped selection into a new independent group', () => {
+    const entities = [
+      {
+        id: 'rect-1',
+        type: 'rect',
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 40,
+        rotation: 0,
+        layerId: 'default',
+        meta: { groupId: 'group-a' },
+      },
+      { id: 'circle-1', type: 'circle', cx: 80, cy: 50, r: 15, layerId: 'default', meta: { groupId: 'group-a' } },
+    ];
+
+    const result = duplicateEntitiesByIds(entities, ['rect-1', 'circle-1']);
+    const duplicatedGroupIds = result.duplicatedEntities.map((entity) => entity.meta.groupId);
+
+    expect(result.duplicatedIds).toEqual(['rect-2', 'circle-2']);
+    expect(duplicatedGroupIds[0]).toBeTruthy();
+    expect(duplicatedGroupIds[0]).toBe(duplicatedGroupIds[1]);
+    expect(duplicatedGroupIds[0]).not.toBe('group-a');
+  });
+
+  it('drops group membership when only part of a group is duplicated', () => {
+    const entities = [
+      {
+        id: 'rect-1',
+        type: 'rect',
+        x: 10,
+        y: 20,
+        width: 30,
+        height: 40,
+        rotation: 0,
+        layerId: 'default',
+        meta: { groupId: 'group-a' },
+      },
+      { id: 'circle-1', type: 'circle', cx: 80, cy: 50, r: 15, layerId: 'default', meta: { groupId: 'group-a' } },
+    ];
+
+    const result = duplicateEntitiesByIds(entities, ['rect-1']);
+
+    expect(result.duplicatedIds).toEqual(['rect-2']);
+    expect(result.duplicatedEntities[0].meta.groupId).toBeUndefined();
+  });
+
   it('applies broken-line style to selected entities only', () => {
     const entities = [
       { id: 'line-1', type: 'line', x1: 0, y1: 0, x2: 100, y2: 0, layerId: 'default', meta: {} },
@@ -165,7 +235,15 @@ describe('entityUtils', () => {
   it('toggles mixed selections to broken lines first, then back to solid', () => {
     const entities = [
       { id: 'line-1', type: 'line', x1: 0, y1: 0, x2: 100, y2: 0, layerId: 'default', meta: {} },
-      { id: 'arc-1', type: 'arc', start: { x: 0, y: 0 }, end: { x: 50, y: 0 }, control: { x: 25, y: 20 }, layerId: 'default', meta: { lineStyle: 'broken' } },
+      {
+        id: 'arc-1',
+        type: 'arc',
+        start: { x: 0, y: 0 },
+        end: { x: 50, y: 0 },
+        control: { x: 25, y: 20 },
+        layerId: 'default',
+        meta: { lineStyle: 'broken' },
+      },
     ];
 
     const broken = toggleBrokenLineForEntities(entities, ['line-1', 'arc-1']);

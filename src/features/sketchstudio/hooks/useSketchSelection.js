@@ -14,7 +14,10 @@ export default function useSketchSelection(state) {
   );
 
   const selectedEntity = useMemo(
-    () => (selectedIds.length === 1 ? state.document.entities.find((entity) => entity.id === selectedIds[0]) ?? null : null),
+    () =>
+      selectedIds.length === 1
+        ? (state.document.entities.find((entity) => entity.id === selectedIds[0]) ?? null)
+        : null,
     [state.document.entities, selectedIds],
   );
 
@@ -28,10 +31,7 @@ export default function useSketchSelection(state) {
     [selectedEntities, state.document.entities],
   );
 
-  const selectedProfileInfo = useMemo(
-    () => getSelectedProfileInfo(selectedEntities),
-    [selectedEntities],
-  );
+  const selectedProfileInfo = useMemo(() => getSelectedProfileInfo(selectedEntities), [selectedEntities]);
 
   const selectedMeasurements = useMemo(() => {
     if (selectedEntity?.type !== 'dimension') {
@@ -53,6 +53,11 @@ export default function useSketchSelection(state) {
     [selectedEntities],
   );
 
+  const hasGroupedSelection = useMemo(
+    () => selectedEntities.some((entity) => Boolean(entity.meta?.groupId)),
+    [selectedEntities],
+  );
+
   const groupSelectionSummary = useMemo(() => {
     if (!selectedEntities.length) {
       return null;
@@ -65,7 +70,9 @@ export default function useSketchSelection(state) {
 
     return {
       count: selectedEntities.length,
-      types: Object.entries(typeCounts).map(([type, count]) => `${type} x${count}`).join(', '),
+      types: Object.entries(typeCounts)
+        .map(([type, count]) => `${type} x${count}`)
+        .join(', '),
     };
   }, [selectedEntities]);
 
@@ -78,6 +85,7 @@ export default function useSketchSelection(state) {
     selectedProfileInfo,
     selectedMeasurements,
     isBrokenLineSelection,
+    hasGroupedSelection,
     groupSelectionSummary,
   };
 }

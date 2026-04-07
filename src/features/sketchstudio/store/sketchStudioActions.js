@@ -22,6 +22,8 @@ export const SKETCH_STUDIO_ACTIONS = {
   COMMIT_ENTITY: 'COMMIT_ENTITY',
   SET_DOCUMENT: 'SET_DOCUMENT',
   SET_DOCUMENT_ENTITIES: 'SET_DOCUMENT_ENTITIES',
+  GROUP_SELECTION: 'GROUP_SELECTION',
+  DEGROUP_SELECTION: 'DEGROUP_SELECTION',
   START_HANDLE_DRAG: 'START_HANDLE_DRAG',
   END_HANDLE_DRAG: 'END_HANDLE_DRAG',
   CANCEL_HANDLE_DRAG: 'CANCEL_HANDLE_DRAG',
@@ -161,6 +163,14 @@ export const setDocumentEntities = (entities, meta = undefined) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_DOCUMENT_ENTITIES,
   payload: entities,
   meta,
+});
+
+export const groupSelection = () => ({
+  type: SKETCH_STUDIO_ACTIONS.GROUP_SELECTION,
+});
+
+export const degroupSelection = () => ({
+  type: SKETCH_STUDIO_ACTIONS.DEGROUP_SELECTION,
 });
 
 export const startHandleDrag = (handleDrag) => ({
