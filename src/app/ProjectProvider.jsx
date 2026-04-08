@@ -11,158 +11,29 @@ import {
   sortFloors,
 } from '@/domain/floorModels';
 import { sortPhases } from '@/domain/phaseModels';
-import { getRoofAttachmentElevation, syncProjectRoofSystem } from '@/domain/roofModels';
-import { syncProjectTrussSystems } from '@/domain/trussModels';
-import { detachColumnAttachments, syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
-import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
-import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
+import { getRoofAttachmentElevation } from '@/domain/roofModels';
+import { syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
+import {
+  HISTORY_LIMIT,
+  snapshotProject,
+  syncProjectStructures,
+  applyProjectUpdate,
+  updateFloor,
+  replaceFloors,
+  updateRoofSystem,
+  updateTrussSystems,
+} from '@/domain/projectStateHelpers';
+import {
+  replaceDeletedFloorReferences,
+  clearStairRoofAccessReferences,
+  applyWallUpdate,
+  applyColumnUpdate,
+  applyColumnDelete,
+  applyLandingUpdate,
+  applyLandingDelete,
+} from '@/domain/projectCommands';
 
 const ProjectContext = createContext(null);
-const HISTORY_LIMIT = 100;
-
-function snapshotProject(project) {
-  return JSON.stringify(project);
-}
-
-function syncProjectStructures(project) {
-  return syncProjectRoofSystem(syncProjectTrussSystems(project));
-}
-
-function applyProjectUpdate(state, nextProject, recordHistory = true) {
-  const syncedProject = syncProjectStructures(nextProject);
-  const nextSnapshot = snapshotProject(syncedProject);
-  const history = recordHistory ? [...state.history, state.project].slice(-HISTORY_LIMIT) : state.history;
-
-  return {
-    ...state,
-    history,
-    future: recordHistory ? [] : state.future,
-    project: syncedProject,
-    isDirty: nextSnapshot !== state.savedSnapshot,
-  };
-}
-
-function updateFloor(state, floorId, updater, recordHistory = true, options = {}) {
-  const nextFloors = state.project.floors.map((floor) => (floor.id === floorId ? updater(floor) : floor));
-
-  return applyProjectUpdate(
-    state,
-    {
-      ...state.project,
-      updatedAt: new Date().toISOString(),
-      floors: options.sort ? sortFloors(nextFloors) : nextFloors,
-    },
-    recordHistory,
-  );
-}
-
-function replaceFloors(state, floors, recordHistory = true) {
-  return applyProjectUpdate(
-    state,
-    {
-      ...state.project,
-      updatedAt: new Date().toISOString(),
-      floors: sortFloors(floors),
-    },
-    recordHistory,
-  );
-}
-
-function replaceDeletedFloorReferences(project, deletedFloorId, fallbackFloorId) {
-  return {
-    ...project,
-    floors: project.floors.map((floor) => ({
-      ...floor,
-      stairs: (floor.stairs || []).map((stair) => ({
-        ...stair,
-        floorRelation: {
-          fromFloorId:
-            stair.floorRelation?.fromFloorId === deletedFloorId
-              ? fallbackFloorId
-              : (stair.floorRelation?.fromFloorId ?? floor.id),
-          toFloorId:
-            stair.floorRelation?.toFloorId === deletedFloorId
-              ? fallbackFloorId
-              : (stair.floorRelation?.toFloorId ?? floor.id),
-        },
-      })),
-    })),
-    sheets: (project.sheets || []).map((sheet) => ({
-      ...sheet,
-      viewports: (sheet.viewports || []).map((viewport) => ({
-        ...viewport,
-        sourceFloorId: viewport.sourceFloorId === deletedFloorId ? fallbackFloorId : viewport.sourceFloorId,
-        sourceRefId: viewport.sourceFloorId === deletedFloorId ? null : viewport.sourceRefId,
-      })),
-    })),
-  };
-}
-
-function clearStairRoofAccessReferences(project, roofOpeningId = null) {
-  return {
-    ...project,
-    floors: (project.floors || []).map((floor) => ({
-      ...floor,
-      stairs: (floor.stairs || []).map((stair) => {
-        const currentRoofOpeningId = stair.roofAccess?.roofOpeningId || null;
-        if (!currentRoofOpeningId) return stair;
-        if (roofOpeningId && currentRoofOpeningId !== roofOpeningId) return stair;
-        return {
-          ...stair,
-          roofAccess: null,
-        };
-      }),
-    })),
-  };
-}
-
-function updateRoofSystem(state, updater, recordHistory = true) {
-  const nextRoofSystem = updater(state.project.roofSystem);
-  return applyProjectUpdate(
-    state,
-    {
-      ...state.project,
-      updatedAt: new Date().toISOString(),
-      roofSystem: nextRoofSystem,
-    },
-    recordHistory,
-  );
-}
-
-function updateTrussSystems(state, updater, recordHistory = true) {
-  const nextTrussSystems = updater(state.project.trussSystems || []);
-  return applyProjectUpdate(
-    state,
-    {
-      ...state.project,
-      updatedAt: new Date().toISOString(),
-      trussSystems: nextTrussSystems,
-    },
-    recordHistory,
-  );
-}
-
-function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
-  const nextWall = { ...existingWall, ...wallUpdate };
-
-  if ('start' in wallUpdate && !('startAttachment' in wallUpdate)) {
-    nextWall.startAttachment = null;
-  }
-  if ('end' in wallUpdate && !('endAttachment' in wallUpdate)) {
-    nextWall.endAttachment = null;
-  }
-
-  return syncWallAttachmentPoints(nextWall, columns);
-}
-
-function clampWallMountedOpenings(openings, wallId, nextWallLength) {
-  return openings.map((opening) => {
-    if (opening.wallId !== wallId) return opening;
-
-    const nextOffset = clampWallOpeningOffset(nextWallLength, opening.width, opening.offset);
-    return nextOffset === opening.offset ? opening : { ...opening, offset: nextOffset };
-  });
-}
 
 function projectReducer(state, action) {
   switch (action.type) {
@@ -210,6 +81,8 @@ function projectReducer(state, action) {
         updatedAt: new Date().toISOString(),
       });
 
+    // --- Roof system ---
+
     case 'ROOF_CREATE':
       return updateRoofSystem(state, () => action.roofSystem);
 
@@ -217,10 +90,7 @@ function projectReducer(state, action) {
       return updateRoofSystem(state, (roofSystem) => {
         if (!roofSystem || roofSystem.id !== action.roofSystem.id) return roofSystem;
 
-        const mergedRoofSystem = {
-          ...roofSystem,
-          ...action.roofSystem,
-        };
+        const mergedRoofSystem = { ...roofSystem, ...action.roofSystem };
         const trussAttachmentChanged =
           Object.prototype.hasOwnProperty.call(action.roofSystem, 'trussAttachmentId') &&
           (action.roofSystem.trussAttachmentId || null) !== (roofSystem.trussAttachmentId || null);
@@ -260,6 +130,8 @@ function projectReducer(state, action) {
         roofSystem: null,
       });
 
+    // --- Truss systems ---
+
     case 'TRUSS_SYSTEM_ADD':
       return updateTrussSystems(state, (trussSystems) => [...trussSystems, action.trussSystem]);
 
@@ -272,10 +144,7 @@ function projectReducer(state, action) {
             ...trussSystem,
             ...action.trussSystem,
             trussInstances: (action.trussSystem.trussInstances || trussSystem.trussInstances || []).map(
-              (trussInstance) => ({
-                ...trussInstance,
-                floorId: nextFloorId,
-              }),
+              (trussInstance) => ({ ...trussInstance, floorId: nextFloorId }),
             ),
           };
         }),
@@ -290,10 +159,7 @@ function projectReducer(state, action) {
       return updateTrussSystems(state, (trussSystems) =>
         trussSystems.map((trussSystem) =>
           trussSystem.id === action.trussSystemId
-            ? {
-                ...trussSystem,
-                trussInstances: [...(trussSystem.trussInstances || []), action.trussInstance],
-              }
+            ? { ...trussSystem, trussInstances: [...(trussSystem.trussInstances || []), action.trussInstance] }
             : trussSystem,
         ),
       );
@@ -328,79 +194,52 @@ function projectReducer(state, action) {
         ),
       );
 
+    // --- Roof sub-entities ---
+
     case 'PARAPET_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem ? { ...roofSystem, parapets: [...(roofSystem.parapets || []), action.parapet] } : roofSystem,
-      );
-
+      return updateRoofSystem(state, (rs) => (rs ? { ...rs, parapets: [...(rs.parapets || []), action.parapet] } : rs));
     case 'PARAPET_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
+      return updateRoofSystem(state, (rs) =>
+        rs
           ? {
-              ...roofSystem,
-              parapets: (roofSystem.parapets || []).map((parapet) =>
-                parapet.id === action.parapet.id ? { ...parapet, ...action.parapet } : parapet,
-              ),
+              ...rs,
+              parapets: (rs.parapets || []).map((p) => (p.id === action.parapet.id ? { ...p, ...action.parapet } : p)),
             }
-          : roofSystem,
+          : rs,
       );
-
     case 'PARAPET_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? {
-              ...roofSystem,
-              parapets: (roofSystem.parapets || []).filter((parapet) => parapet.id !== action.parapetId),
-            }
-          : roofSystem,
+      return updateRoofSystem(state, (rs) =>
+        rs ? { ...rs, parapets: (rs.parapets || []).filter((p) => p.id !== action.parapetId) } : rs,
       );
 
     case 'DRAIN_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem ? { ...roofSystem, drains: [...(roofSystem.drains || []), action.drain] } : roofSystem,
-      );
-
+      return updateRoofSystem(state, (rs) => (rs ? { ...rs, drains: [...(rs.drains || []), action.drain] } : rs));
     case 'DRAIN_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? {
-              ...roofSystem,
-              drains: (roofSystem.drains || []).map((drain) =>
-                drain.id === action.drain.id ? { ...drain, ...action.drain } : drain,
-              ),
-            }
-          : roofSystem,
+      return updateRoofSystem(state, (rs) =>
+        rs
+          ? { ...rs, drains: (rs.drains || []).map((d) => (d.id === action.drain.id ? { ...d, ...action.drain } : d)) }
+          : rs,
       );
-
     case 'DRAIN_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? {
-              ...roofSystem,
-              drains: (roofSystem.drains || []).filter((drain) => drain.id !== action.drainId),
-            }
-          : roofSystem,
+      return updateRoofSystem(state, (rs) =>
+        rs ? { ...rs, drains: (rs.drains || []).filter((d) => d.id !== action.drainId) } : rs,
       );
 
     case 'ROOF_OPENING_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
-          ? { ...roofSystem, roofOpenings: [...(roofSystem.roofOpenings || []), action.roofOpening] }
-          : roofSystem,
+      return updateRoofSystem(state, (rs) =>
+        rs ? { ...rs, roofOpenings: [...(rs.roofOpenings || []), action.roofOpening] } : rs,
       );
-
     case 'ROOF_OPENING_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
+      return updateRoofSystem(state, (rs) =>
+        rs
           ? {
-              ...roofSystem,
-              roofOpenings: (roofSystem.roofOpenings || []).map((roofOpening) =>
-                roofOpening.id === action.roofOpening.id ? { ...roofOpening, ...action.roofOpening } : roofOpening,
+              ...rs,
+              roofOpenings: (rs.roofOpenings || []).map((o) =>
+                o.id === action.roofOpening.id ? { ...o, ...action.roofOpening } : o,
               ),
             }
-          : roofSystem,
+          : rs,
       );
-
     case 'ROOF_OPENING_DELETE':
       return applyProjectUpdate(
         state,
@@ -412,7 +251,7 @@ function projectReducer(state, action) {
               ? {
                   ...state.project.roofSystem,
                   roofOpenings: (state.project.roofSystem.roofOpenings || []).filter(
-                    (roofOpening) => roofOpening.id !== action.roofOpeningId,
+                    (o) => o.id !== action.roofOpeningId,
                   ),
                 }
               : null,
@@ -422,74 +261,62 @@ function projectReducer(state, action) {
       );
 
     case 'ROOF_PLANE_ADD':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem ? { ...roofSystem, roofPlanes: [...(roofSystem.roofPlanes || []), action.roofPlane] } : roofSystem,
+      return updateRoofSystem(state, (rs) =>
+        rs ? { ...rs, roofPlanes: [...(rs.roofPlanes || []), action.roofPlane] } : rs,
       );
-
     case 'ROOF_PLANE_UPDATE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
+      return updateRoofSystem(state, (rs) =>
+        rs
           ? {
-              ...roofSystem,
-              roofPlanes: (roofSystem.roofPlanes || []).map((roofPlane) =>
-                roofPlane.id === action.roofPlane.id ? { ...roofPlane, ...action.roofPlane } : roofPlane,
+              ...rs,
+              roofPlanes: (rs.roofPlanes || []).map((p) =>
+                p.id === action.roofPlane.id ? { ...p, ...action.roofPlane } : p,
               ),
             }
-          : roofSystem,
+          : rs,
       );
-
     case 'ROOF_PLANE_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
+      return updateRoofSystem(state, (rs) =>
+        rs
           ? {
-              ...roofSystem,
-              roofPlanes: (roofSystem.roofPlanes || []).filter((roofPlane) => roofPlane.id !== action.roofPlaneId),
-              roofEdges: (roofSystem.roofEdges || []).filter(
-                (roofEdge) => !(roofEdge.planeIds || []).includes(action.roofPlaneId),
-              ),
+              ...rs,
+              roofPlanes: (rs.roofPlanes || []).filter((p) => p.id !== action.roofPlaneId),
+              roofEdges: (rs.roofEdges || []).filter((e) => !(e.planeIds || []).includes(action.roofPlaneId)),
             }
-          : roofSystem,
+          : rs,
       );
 
     case 'ROOF_EDGE_UPDATE':
-      return updateRoofSystem(state, (roofSystem) => {
-        if (!roofSystem) return roofSystem;
-
-        const existingEdges = roofSystem.roofEdges || [];
+      return updateRoofSystem(state, (rs) => {
+        if (!rs) return rs;
+        const existingEdges = rs.roofEdges || [];
         const existingIndex = existingEdges.findIndex(
-          (roofEdge) =>
-            roofEdge.id === action.roofEdge.id ||
-            (action.roofEdge.geometryKey && roofEdge.geometryKey === action.roofEdge.geometryKey),
+          (e) =>
+            e.id === action.roofEdge.id ||
+            (action.roofEdge.geometryKey && e.geometryKey === action.roofEdge.geometryKey),
         );
-
         if (existingIndex === -1) {
-          return {
-            ...roofSystem,
-            roofEdges: [...existingEdges, action.roofEdge],
-          };
+          return { ...rs, roofEdges: [...existingEdges, action.roofEdge] };
         }
-
         return {
-          ...roofSystem,
-          roofEdges: existingEdges.map((roofEdge, index) =>
-            index === existingIndex ? { ...roofEdge, ...action.roofEdge } : roofEdge,
-          ),
+          ...rs,
+          roofEdges: existingEdges.map((e, i) => (i === existingIndex ? { ...e, ...action.roofEdge } : e)),
         };
       });
 
     case 'ROOF_EDGE_DELETE':
-      return updateRoofSystem(state, (roofSystem) =>
-        roofSystem
+      return updateRoofSystem(state, (rs) =>
+        rs
           ? {
-              ...roofSystem,
-              roofEdges: (roofSystem.roofEdges || []).filter(
-                (roofEdge) =>
-                  roofEdge.id !== action.roofEdgeId &&
-                  (action.geometryKey ? roofEdge.geometryKey !== action.geometryKey : true),
+              ...rs,
+              roofEdges: (rs.roofEdges || []).filter(
+                (e) => e.id !== action.roofEdgeId && (action.geometryKey ? e.geometryKey !== action.geometryKey : true),
               ),
             }
-          : roofSystem,
+          : rs,
       );
+
+    // --- Floors ---
 
     case 'FLOOR_ADD':
       return replaceFloors(state, [...state.project.floors, action.floor]);
@@ -501,31 +328,18 @@ function projectReducer(state, action) {
           let elevationDelta = 0;
           const nextFloors = state.project.floors.map((floor) => {
             if (floor.id !== action.floor.id) return floor;
-
-            const mergedFloor = {
-              ...floor,
-              ...action.floor,
-            };
+            const mergedFloor = { ...floor, ...action.floor };
             const nextElevation = getFloorElevation(mergedFloor);
             elevationDelta = nextElevation - getFloorElevation(floor);
             return {
-              ...shiftFloorAbsoluteElements(
-                {
-                  ...mergedFloor,
-                  elevation: getFloorElevation(floor),
-                },
-                elevationDelta,
-              ),
+              ...shiftFloorAbsoluteElements({ ...mergedFloor, elevation: getFloorElevation(floor) }, elevationDelta),
               elevation: nextElevation,
             };
           });
 
           const nextTrussSystems = (state.project.trussSystems || []).map((trussSystem) =>
             trussSystem.floorId === action.floor.id
-              ? {
-                  ...trussSystem,
-                  baseElevation: (trussSystem.baseElevation ?? 0) + elevationDelta,
-                }
+              ? { ...trussSystem, baseElevation: (trussSystem.baseElevation ?? 0) + elevationDelta }
               : trussSystem,
           );
 
@@ -545,7 +359,6 @@ function projectReducer(state, action) {
 
       const shiftedFloors = state.project.floors.map((floor) => {
         if (getFloorLevelIndex(floor) < insertionLevelIndex) return floor;
-
         const previousLevelIndex = getFloorLevelIndex(floor);
         return shiftFloorElevationData(
           {
@@ -565,19 +378,15 @@ function projectReducer(state, action) {
 
     case 'FLOOR_DELETE': {
       if (state.project.floors.length <= 1) return state;
-
       const nextProject = replaceDeletedFloorReferences(
         {
           ...state.project,
           floors: state.project.floors.filter((floor) => floor.id !== action.floorId),
-          trussSystems: (state.project.trussSystems || []).filter(
-            (trussSystem) => trussSystem.floorId !== action.floorId,
-          ),
+          trussSystems: (state.project.trussSystems || []).filter((ts) => ts.floorId !== action.floorId),
         },
         action.floorId,
         action.fallbackFloorId,
       );
-
       return applyProjectUpdate(state, {
         ...nextProject,
         updatedAt: new Date().toISOString(),
@@ -585,67 +394,65 @@ function projectReducer(state, action) {
       });
     }
 
+    case 'FLOOR_REPLACE':
+      return updateFloor(state, action.floorId, () => ({ ...action.floor }), true, { sort: true });
+
+    // --- Sheets ---
+
     case 'SHEET_ADD':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
         sheets: [...(state.project.sheets || []), action.sheet],
       });
-
     case 'SHEET_UPDATE':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
-        sheets: (state.project.sheets || []).map((sheet) =>
-          sheet.id === action.sheet.id ? { ...sheet, ...action.sheet } : sheet,
-        ),
+        sheets: (state.project.sheets || []).map((s) => (s.id === action.sheet.id ? { ...s, ...action.sheet } : s)),
       });
-
     case 'SHEET_DELETE':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
-        sheets: (state.project.sheets || []).filter((sheet) => sheet.id !== action.sheetId),
+        sheets: (state.project.sheets || []).filter((s) => s.id !== action.sheetId),
       });
 
     case 'SHEET_VIEWPORT_ADD':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
-        sheets: (state.project.sheets || []).map((sheet) =>
-          sheet.id === action.sheetId ? { ...sheet, viewports: [...(sheet.viewports || []), action.viewport] } : sheet,
+        sheets: (state.project.sheets || []).map((s) =>
+          s.id === action.sheetId ? { ...s, viewports: [...(s.viewports || []), action.viewport] } : s,
         ),
       });
-
     case 'SHEET_VIEWPORT_UPDATE':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
-        sheets: (state.project.sheets || []).map((sheet) =>
-          sheet.id === action.sheetId
+        sheets: (state.project.sheets || []).map((s) =>
+          s.id === action.sheetId
             ? {
-                ...sheet,
-                viewports: (sheet.viewports || []).map((viewport) =>
-                  viewport.id === action.viewport.id ? { ...viewport, ...action.viewport } : viewport,
+                ...s,
+                viewports: (s.viewports || []).map((v) =>
+                  v.id === action.viewport.id ? { ...v, ...action.viewport } : v,
                 ),
               }
-            : sheet,
+            : s,
         ),
       });
-
     case 'SHEET_VIEWPORT_DELETE':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
-        sheets: (state.project.sheets || []).map((sheet) =>
-          sheet.id === action.sheetId
-            ? {
-                ...sheet,
-                viewports: (sheet.viewports || []).filter((viewport) => viewport.id !== action.viewportId),
-              }
-            : sheet,
+        sheets: (state.project.sheets || []).map((s) =>
+          s.id === action.sheetId
+            ? { ...s, viewports: (s.viewports || []).filter((v) => v.id !== action.viewportId) }
+            : s,
         ),
       });
+
+    // --- Walls ---
 
     case 'WALL_ADD':
       return updateFloor(state, action.floorId, (f) => ({
@@ -654,28 +461,7 @@ function projectReducer(state, action) {
       }));
 
     case 'WALL_UPDATE':
-      return updateFloor(state, action.floorId, (f) => {
-        let updatedWall = null;
-        const walls = f.walls.map((wall) => {
-          if (wall.id !== action.wall.id) return wall;
-
-          updatedWall = mergeWallUpdate(wall, action.wall, f.columns || []);
-          return updatedWall;
-        });
-
-        if (!updatedWall) {
-          return f;
-        }
-
-        const nextWallLength = wallLength(updatedWall);
-
-        return {
-          ...f,
-          walls,
-          doors: clampWallMountedOpenings(f.doors, updatedWall.id, nextWallLength),
-          windows: clampWallMountedOpenings(f.windows, updatedWall.id, nextWallLength),
-        };
-      });
+      return updateFloor(state, action.floorId, (f) => applyWallUpdate(f, action.wall, f.columns || []));
 
     case 'WALL_DELETE': {
       const wallId = action.wallId;
@@ -690,12 +476,8 @@ function projectReducer(state, action) {
     case 'FILLET_APPLY':
       return updateFloor(state, action.floorId, (f) => {
         const walls = f.walls.map((w) => {
-          if (w.id === action.wall1Id) {
-            return { ...w, [action.wall1Endpoint]: { ...action.tangentPoint1 } };
-          }
-          if (w.id === action.wall2Id) {
-            return { ...w, [action.wall2Endpoint]: { ...action.tangentPoint2 } };
-          }
+          if (w.id === action.wall1Id) return { ...w, [action.wall1Endpoint]: { ...action.tangentPoint1 } };
+          if (w.id === action.wall2Id) return { ...w, [action.wall2Endpoint]: { ...action.tangentPoint2 } };
           return w;
         });
         return { ...f, walls: [...walls, action.arcWall] };
@@ -709,29 +491,22 @@ function projectReducer(state, action) {
         const walls = f.walls
           .filter((w) => w.id !== action.arcWallId)
           .map((w) => {
-            if (w.id === action.wall1Id) {
-              return { ...w, [action.wall1Endpoint]: { ...originalCorner } };
-            }
-            if (w.id === action.wall2Id) {
-              return { ...w, [action.wall2Endpoint]: { ...originalCorner } };
-            }
+            if (w.id === action.wall1Id) return { ...w, [action.wall1Endpoint]: { ...originalCorner } };
+            if (w.id === action.wall2Id) return { ...w, [action.wall2Endpoint]: { ...originalCorner } };
             return w;
           });
         return { ...f, walls };
       });
 
-    case 'DOOR_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        doors: [...f.doors, action.door],
-      }));
+    // --- Simple entity CRUD (doors, windows, beams, stairs, rooms, etc.) ---
 
+    case 'DOOR_ADD':
+      return updateFloor(state, action.floorId, (f) => ({ ...f, doors: [...f.doors, action.door] }));
     case 'DOOR_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         doors: f.doors.map((d) => (d.id === action.door.id ? { ...d, ...action.door } : d)),
       }));
-
     case 'DOOR_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -739,17 +514,12 @@ function projectReducer(state, action) {
       }));
 
     case 'WINDOW_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        windows: [...f.windows, action.window],
-      }));
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, windows: [...f.windows, action.window] }));
     case 'WINDOW_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         windows: f.windows.map((w) => (w.id === action.window.id ? { ...w, ...action.window } : w)),
       }));
-
     case 'WINDOW_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -757,120 +527,77 @@ function projectReducer(state, action) {
       }));
 
     case 'BEAM_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        beams: [...(f.beams || []), action.beam],
-      }));
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, beams: [...(f.beams || []), action.beam] }));
     case 'BEAM_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        beams: (f.beams || []).map((beam) => (beam.id === action.beam.id ? { ...beam, ...action.beam } : beam)),
+        beams: (f.beams || []).map((b) => (b.id === action.beam.id ? { ...b, ...action.beam } : b)),
       }));
-
     case 'BEAM_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        beams: (f.beams || []).filter((beam) => beam.id !== action.beamId),
+        beams: (f.beams || []).filter((b) => b.id !== action.beamId),
       }));
 
     case 'STAIR_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        stairs: [...(f.stairs || []), action.stair],
-      }));
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, stairs: [...(f.stairs || []), action.stair] }));
     case 'STAIR_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        stairs: (f.stairs || []).map((stair) => (stair.id === action.stair.id ? { ...stair, ...action.stair } : stair)),
+        stairs: (f.stairs || []).map((s) => (s.id === action.stair.id ? { ...s, ...action.stair } : s)),
       }));
-
     case 'STAIR_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        stairs: (f.stairs || []).filter((stair) => stair.id !== action.stairId),
+        stairs: (f.stairs || []).filter((s) => s.id !== action.stairId),
       }));
 
     case 'LANDING_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        landings: [...(f.landings || []), action.landing],
-      }));
-
-    case 'LANDING_UPDATE': {
-      return updateFloor(state, action.floorId, (f) => {
-        const nextLandings = (f.landings || []).map((l) =>
-          l.id === action.landing.id ? { ...l, ...action.landing } : l,
-        );
-        // Cascade: sync all stairs attached to this landing
-        const nextStairs = (f.stairs || []).map((stair) => {
-          const attachedToStart = stair.startLandingAttachment?.landingId === action.landing.id;
-          const attachedToEnd = stair.endLandingAttachment?.landingId === action.landing.id;
-          if (!attachedToStart && !attachedToEnd) return stair;
-          return syncStairLandingAttachment(stair, nextLandings);
-        });
-        return { ...f, landings: nextLandings, stairs: nextStairs };
-      });
-    }
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, landings: [...(f.landings || []), action.landing] }));
+    case 'LANDING_UPDATE':
+      return updateFloor(state, action.floorId, (f) => applyLandingUpdate(f, action.landing));
     case 'LANDING_DELETE':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        landings: (f.landings || []).filter((l) => l.id !== action.landingId),
-        stairs: (f.stairs || []).map((stair) => {
-          let next = stair;
-          if (stair.startLandingAttachment?.landingId === action.landingId) {
-            next = { ...next, startLandingAttachment: null };
-          }
-          if (stair.endLandingAttachment?.landingId === action.landingId) {
-            next = { ...next, endLandingAttachment: null };
-          }
-          return next;
-        }),
-      }));
+      return updateFloor(state, action.floorId, (f) => applyLandingDelete(f, action.landingId));
+
+    case 'COLUMN_ADD':
+      return updateFloor(state, action.floorId, (f) => ({ ...f, columns: [...(f.columns || []), action.column] }));
+    case 'COLUMN_DUPLICATE':
+      return updateFloor(state, action.floorId, (f) => ({ ...f, columns: [...(f.columns || []), action.column] }));
+    case 'COLUMN_UPDATE':
+      return updateFloor(state, action.floorId, (f) => applyColumnUpdate(f, action.column));
+    case 'COLUMN_DELETE':
+      return updateFloor(state, action.floorId, (f) => applyColumnDelete(f, action.columnId));
 
     case 'ANNOTATION_ADD':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         annotations: [...(f.annotations || []), action.annotation],
       }));
-
     case 'ANNOTATION_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        annotations: (f.annotations || []).map((annotation) =>
-          annotation.id === action.annotation.id ? { ...annotation, ...action.annotation } : annotation,
+        annotations: (f.annotations || []).map((a) =>
+          a.id === action.annotation.id ? { ...a, ...action.annotation } : a,
         ),
       }));
-
     case 'ANNOTATION_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        annotations: (f.annotations || []).filter((annotation) => annotation.id !== action.annotationId),
+        annotations: (f.annotations || []).filter((a) => a.id !== action.annotationId),
       }));
-
     case 'ANNOTATION_SETTINGS_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
-        annotationSettings: {
-          ...(f.annotationSettings || {}),
-          ...action.settings,
-        },
+        annotationSettings: { ...(f.annotationSettings || {}), ...action.settings },
       }));
 
     case 'SLAB_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        slabs: [...(f.slabs || []), action.slab],
-      }));
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, slabs: [...(f.slabs || []), action.slab] }));
     case 'SLAB_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         slabs: (f.slabs || []).map((s) => (s.id === action.slab.id ? { ...s, ...action.slab } : s)),
       }));
-
     case 'SLAB_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -878,17 +605,12 @@ function projectReducer(state, action) {
       }));
 
     case 'RAILING_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        railings: [...(f.railings || []), action.railing],
-      }));
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, railings: [...(f.railings || []), action.railing] }));
     case 'RAILING_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         railings: (f.railings || []).map((r) => (r.id === action.railing.id ? { ...r, ...action.railing } : r)),
       }));
-
     case 'RAILING_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -900,7 +622,6 @@ function projectReducer(state, action) {
         ...f,
         sectionCuts: [...(f.sectionCuts || []), action.sectionCut],
       }));
-
     case 'SECTION_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -908,7 +629,6 @@ function projectReducer(state, action) {
           s.id === action.sectionCut.id ? { ...s, ...action.sectionCut } : s,
         ),
       }));
-
     case 'SECTION_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -916,45 +636,22 @@ function projectReducer(state, action) {
       }));
 
     case 'ROOM_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        rooms: [...f.rooms, action.room],
-      }));
-
+      return updateFloor(state, action.floorId, (f) => ({ ...f, rooms: [...f.rooms, action.room] }));
     case 'ROOM_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         rooms: f.rooms.map((r) => (r.id === action.room.id ? { ...r, ...action.room } : r)),
       }));
-
     case 'ROOM_DELETE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
         rooms: f.rooms.filter((r) => r.id !== action.roomId),
       }));
-
     case 'ROOMS_SET':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        rooms: action.rooms,
-      }));
-
-    case 'FLOOR_REPLACE':
-      return updateFloor(
-        state,
-        action.floorId,
-        () => ({
-          ...action.floor,
-        }),
-        true,
-        { sort: true },
-      );
+      return updateFloor(state, action.floorId, (f) => ({ ...f, rooms: action.rooms }));
 
     case 'FIXTURE_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        fixtures: [...(f.fixtures || []), action.fixture],
-      }));
+      return updateFloor(state, action.floorId, (f) => ({ ...f, fixtures: [...(f.fixtures || []), action.fixture] }));
     case 'FIXTURE_UPDATE':
       return updateFloor(state, action.floorId, (f) => ({
         ...f,
@@ -966,42 +663,7 @@ function projectReducer(state, action) {
         fixtures: (f.fixtures || []).filter((fix) => fix.id !== action.fixtureId),
       }));
 
-    case 'COLUMN_ADD':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        columns: [...(f.columns || []), action.column],
-      }));
-    case 'COLUMN_DUPLICATE':
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        columns: [...(f.columns || []), action.column],
-      }));
-    case 'COLUMN_UPDATE':
-      return updateFloor(state, action.floorId, (f) => {
-        const nextColumns = (f.columns || []).map((c) => (c.id === action.column.id ? { ...c, ...action.column } : c));
-        return {
-          ...f,
-          columns: nextColumns,
-          walls: f.walls.map((w) => syncWallAttachmentPoints(w, nextColumns)),
-        };
-      });
-    case 'COLUMN_DELETE': {
-      const deletedCol = ((f) => (f.columns || []).find((c) => c.id === action.columnId))(
-        state.project.floors.find((fl) => fl.id === action.floorId) || {},
-      );
-      const colPoint = deletedCol ? { kind: 'point', x: deletedCol.x, y: deletedCol.y } : null;
-      return updateFloor(state, action.floorId, (f) => ({
-        ...f,
-        columns: (f.columns || []).filter((c) => c.id !== action.columnId),
-        walls: f.walls.map((w) => detachColumnAttachments(w, f.columns || [], action.columnId)),
-        beams: (f.beams || []).map((beam) => {
-          const newStart = beam.startRef?.id === action.columnId && colPoint ? { ...colPoint } : beam.startRef;
-          const newEnd = beam.endRef?.id === action.columnId && colPoint ? { ...colPoint } : beam.endRef;
-          if (newStart === beam.startRef && newEnd === beam.endRef) return beam;
-          return { ...beam, startRef: newStart, endRef: newEnd };
-        }),
-      }));
-    }
+    // --- Phases ---
 
     case 'PHASE_ADD':
       return applyProjectUpdate(state, {
@@ -1009,7 +671,6 @@ function projectReducer(state, action) {
         updatedAt: new Date().toISOString(),
         phases: sortPhases([...(state.project.phases || []), action.phase]),
       });
-
     case 'PHASE_UPDATE':
       return applyProjectUpdate(state, {
         ...state.project,
@@ -1018,22 +679,22 @@ function projectReducer(state, action) {
           (state.project.phases || []).map((p) => (p.id === action.phase.id ? { ...p, ...action.phase } : p)),
         ),
       });
-
     case 'PHASE_DELETE': {
       const nextProject = clearProjectPhaseReferences(state.project, action.phaseId);
       return applyProjectUpdate(state, {
         ...nextProject,
         updatedAt: new Date().toISOString(),
-        phases: (state.project.phases || []).filter((phase) => phase.id !== action.phaseId),
+        phases: (state.project.phases || []).filter((p) => p.id !== action.phaseId),
       });
     }
-
     case 'PHASE_REORDER':
       return applyProjectUpdate(state, {
         ...state.project,
         updatedAt: new Date().toISOString(),
         phases: action.phases,
       });
+
+    // --- Undo/Redo & lifecycle ---
 
     case 'MARK_SAVED':
       return {
