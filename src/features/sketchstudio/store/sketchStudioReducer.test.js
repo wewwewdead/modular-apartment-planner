@@ -320,6 +320,41 @@ describe('sketchStudioReducer history', () => {
     expect(undoneState.document.entities.map((entity) => entity.id)).toEqual(['line-1']);
   });
 
+  it('does not create an undo step when a transform ends without document changes', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [createLineEntity('line-1', 0, 0, 100, 0)],
+      },
+      selection: {
+        ...state.selection,
+        selectedIds: ['line-1'],
+      },
+    };
+
+    const startedState = sketchStudioReducer(
+      baseState,
+      startTransform({
+        type: 'move',
+        pointerId: 1,
+        startWorld: { x: 0, y: 0 },
+        startAngle: 0,
+        pivot: null,
+        entityIds: ['line-1'],
+        startEntities: baseState.document.entities,
+        copyMode: 'off',
+        copiedEntityIds: [],
+      }),
+    );
+
+    const endedState = sketchStudioReducer(startedState, endTransform());
+
+    expect(endedState.history.past).toHaveLength(0);
+    expect(endedState.document.entities).toEqual(baseState.document.entities);
+  });
+
   it('keeps mixed-shape copy-drag transforms as a single undo step', () => {
     const state = createState();
     const baseState = {

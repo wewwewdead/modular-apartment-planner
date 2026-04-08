@@ -10,6 +10,7 @@ import { expandGroupedSelection } from '../utils/groupUtils';
 import { applyOrthoPoint } from '../utils/canvasMath';
 import { rotateEntities, translateEntities } from '../utils/transformUtils';
 import { getEntityIdsInSelectionBox, normalizeSelectionBox } from '../utils/selectionUtils';
+import { resolveSelectPointerDownAction } from './selectPointerUtils';
 import {
   clearPointerDecorations,
   endAnchorDrag,
@@ -70,9 +71,23 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           worldPoint,
           pixelsToWorldUnits(HIT_TOLERANCE_PX, state.viewport.zoom),
         );
+        const expandedSelectionIds = hoveredEntity ? expandGroupedSelection(editableEntities, [hoveredEntity.id]) : [];
+        const selectAction = resolveSelectPointerDownAction({
+          hoveredEntityId: hoveredEntity?.id ?? null,
+          expandedSelectionIds,
+          selectedIds: state.selection.selectedIds,
+          shiftKey: event.shiftKey,
+        });
 
-        if (hoveredEntity && state.selection.selectedIds.includes(hoveredEntity.id)) {
+        if (
+          selectAction.intent === 'transform-current-selection' ||
+          selectAction.intent === 'transform-next-selection'
+        ) {
+          event.preventDefault();
           event.currentTarget.setPointerCapture(event.pointerId);
+          if (selectAction.intent === 'transform-next-selection') {
+            dispatch(setSelection(selectAction.selectionIds));
+          }
           dispatch(
             startTransform({
               type: 'move',
@@ -87,14 +102,15 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
                     y: (selectionBounds.minY + selectionBounds.maxY) / 2,
                   }
                 : null,
-              entityIds: state.selection.selectedIds,
+              entityIds: selectAction.selectionIds,
               startEntities: state.document.entities,
             }),
           );
           return;
         }
 
-        if (!hoveredEntity) {
+        if (selectAction.intent === 'selection-box') {
+          event.preventDefault();
           event.currentTarget.setPointerCapture(event.pointerId);
           dispatch(startSelectionBox(worldPoint));
           return;

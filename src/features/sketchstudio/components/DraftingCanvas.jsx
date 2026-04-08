@@ -220,6 +220,7 @@ export default function DraftingCanvas(props) {
             onPointerUp={onCanvasPointerUp}
             onPointerCancel={onCanvasPointerCancel}
             onPointerLeave={onCanvasPointerLeave}
+            onDragStart={(event) => event.preventDefault()}
             onContextMenu={(event) => event.preventDefault()}
           >
             <rect className="sketchStudioCanvasBackdrop" x="0" y="0" width="100%" height="100%" pointerEvents="none" />

@@ -2,8 +2,6 @@ import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useEditor } from '@/app/EditorProvider';
 import { useProject } from '@/app/ProjectProvider';
 import { usePlanClipboardController } from '@/clipboard/usePlanClipboardController';
-import { normalizeRectBounds } from '@/clipboard/planClipboard';
-import { getFloorElevation } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildProjectSectionScene } from '@/sections/scene';
@@ -14,44 +12,14 @@ import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
 import { TOOLS } from '@/editor/tools';
 import { isTypingTarget } from '@/utils/keyboard';
-import ClipboardPreviewLayer from './ClipboardPreviewLayer';
 import CompassOverlay from '@/ui/CompassOverlay';
+import FloorScene from './FloorScene';
 import GridRenderer from './GridRenderer';
-import SlabRenderer from './SlabRenderer';
-import WallRenderer from './WallRenderer';
-import BeamRenderer from './BeamRenderer';
-import StairRenderer from './StairRenderer';
-import DoorRenderer from './DoorRenderer';
-import WindowRenderer from './WindowRenderer';
-import RoomRenderer from './RoomRenderer';
-import AnnotationRenderer from './AnnotationRenderer';
-import ElevationRenderer from './ElevationRenderer';
-import SectionRenderer from './SectionRenderer';
-import SelectionOverlay from './SelectionOverlay';
-import DimensionPreview from './DimensionPreview';
-import WallPreview from './WallPreview';
-import LandingRenderer from './LandingRenderer';
-import LandingPreview from './LandingPreview';
-import ColumnRenderer from './ColumnRenderer';
-import ColumnPreview from './ColumnPreview';
-import FixtureDefs from './FixtureDefs';
-import FixtureRenderer from './FixtureRenderer';
-import FixturePreview from './FixturePreview';
-import BeamPreview from './BeamPreview';
-import StairPreview from './StairPreview';
-import SlabPreview from './SlabPreview';
-import DoorWindowPreview from './DoorWindowPreview';
-import RoomPreview from './RoomPreview';
-import SectionCutRenderer from './SectionCutRenderer';
-import SectionCutPreview from './SectionCutPreview';
-import RailingRenderer from './RailingRenderer';
-import RailingPreview from './RailingPreview';
-import FilletPreview from './FilletPreview';
-import RegionSelectionOverlay from './RegionSelectionOverlay';
 import RoofScene from './RoofScene';
 import TrussScene from './TrussScene';
 import CanvasOverlayControls from './CanvasOverlayControls';
 import CanvasStatusBar from './CanvasStatusBar';
+import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 import styles from './SvgCanvas.module.css';
 
 function screenToModel(screenX, screenY, viewport, svgRect) {
@@ -443,10 +411,6 @@ export default function SvgCanvas() {
   const zoomPercent = Math.round(viewport.zoom * 1000);
   const displayedTool = viewMode.startsWith('elevation_') ? 'select' : activeTool;
   const isCanvasMaximized = maximizedPanel === 'canvas';
-  const marqueeBounds =
-    toolState.dragType === 'marquee' && toolState.startPos && toolState.currentPos
-      ? normalizeRectBounds(toolState.startPos, toolState.currentPos)
-      : null;
   const selectionCount = regionSelection?.objectCount || 0;
   const liveWallBearing =
     modelTarget === 'floor' && activeTool === TOOLS.WALL && toolState.start && toolState.preview
@@ -454,6 +418,7 @@ export default function SvgCanvas() {
       : null;
   const hasRoofSectionCut = Boolean(resolveRoofSectionCut(project, activeFloorId, activeSectionCutId).sectionCut);
   const hasTrussSectionCut = Boolean((floor?.sectionCuts || []).length);
+  const floorSectionCutCount = (filteredFloor?.sectionCuts || []).length;
 
   // Section scene memos
   const roofSectionScene = useMemo(() => {
@@ -502,175 +467,136 @@ export default function SvgCanvas() {
       ? getSectionVisibilityMessage('railing', floorRailingSectionReason)
       : null;
 
+  useRenderProfile('SvgCanvas', {
+    cursorX: Math.round(cursorPos.x),
+    cursorY: Math.round(cursorPos.y),
+    viewMode,
+    modelTarget,
+    activeTool,
+    dragType: toolState.dragType || null,
+    pastePreviewActive: Boolean(pastePreview?.active),
+    zoom: viewport.zoom,
+    panX: viewport.panX,
+    panY: viewport.panY,
+    statusMessage,
+  });
+
   // --- Render ---
 
   return (
-    <div className={styles.canvasContainer}>
-      <CompassOverlay className={styles.compassDock} />
-      <svg
-        ref={svgRef}
-        className={styles.svg}
-        style={{ cursor }}
-        onPointerDown={handleMouseDown}
-        onPointerMove={handleMouseMove}
-        onPointerUp={handleMouseUp}
-        onDoubleClick={handleDoubleClick}
-      >
-        <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-          {viewMode === 'plan' && showGrid && <GridRenderer />}
-          {viewMode === 'plan' && showGrid && (
-            <rect
-              x={-100000}
-              y={-100000}
-              width={200000}
-              height={200000}
-              fill="url(#grid-major)"
-              style={{ pointerEvents: 'none' }}
-            />
-          )}
-          {modelTarget === 'roof' ? (
-            <RoofScene
-              roofSystem={roofSystem}
-              roofHiddenByPhase={roofHiddenByPhase}
-              viewMode={viewMode}
-              selectedId={selectedId}
-              selectedType={selectedType}
-              activeTool={activeTool}
-              toolState={toolState}
-              viewport={viewport}
-              filteredProject={filteredProject}
-              activeFloorId={activeFloorId}
-              activeSectionCutId={activeSectionCutId}
-            />
-          ) : modelTarget === 'truss' ? (
-            <TrussScene
-              filteredFloor={filteredFloor}
-              floorTrussSystems={floorTrussSystems}
-              hasProjectTrusses={hasProjectTrusses}
-              trussesHiddenByPhase={trussesHiddenByPhase}
-              viewMode={viewMode}
-              selectedId={selectedId}
-              selectedType={selectedType}
-              activeTool={activeTool}
-              toolState={toolState}
-              viewport={viewport}
-              activeTrussContext={activeTrussContext}
-              filteredProject={filteredProject}
-              activeSectionCutId={activeSectionCutId}
-            />
-          ) : (
-            floor && (
-              <>
-                {viewMode === 'plan' ? (
-                  <>
-                    <FixtureDefs />
-                    {(filteredFloor.slabs || []).map((slab) => (
-                      <SlabRenderer key={slab.id} slab={slab} selectedId={selectedId} />
-                    ))}
-                    <RoomRenderer rooms={filteredFloor.rooms} selectedId={selectedId} />
-                    <RoomPreview toolState={toolState} activeTool={activeTool} />
-                    <WallRenderer walls={filteredFloor.walls} columns={filteredFloor.columns || []} />
-                    <BeamRenderer beams={filteredFloor.beams || []} columns={filteredFloor.columns || []} />
-                    <StairRenderer stairs={filteredFloor.stairs || []} />
-                    <LandingRenderer landings={filteredFloor.landings || []} />
-                    <RailingRenderer railings={filteredFloor.railings || []} />
-                    <ColumnRenderer columns={filteredFloor.columns || []} />
-                    <FixtureRenderer fixtures={filteredFloor.fixtures || []} />
-                    <DoorRenderer doors={filteredFloor.doors} walls={filteredFloor.walls} />
-                    <WindowRenderer windows={filteredFloor.windows} walls={filteredFloor.walls} />
-                    {(floor.sectionCuts || []).map((sc) => (
-                      <SectionCutRenderer key={sc.id} sectionCut={sc} selectedId={selectedId} />
-                    ))}
-                    <AnnotationRenderer floor={floor} />
-                    <ClipboardPreviewLayer content={previewContent} />
-                    <RegionSelectionOverlay
-                      marqueeBounds={marqueeBounds}
-                      selectionBounds={regionSelection?.bounds || null}
-                    />
-                    <SelectionOverlay
-                      selectedId={selectedId}
-                      selectedType={selectedType}
-                      floor={floor}
-                      zoom={viewport.zoom}
-                    />
-                    <DimensionPreview toolState={toolState} activeTool={activeTool} />
-                    <WallPreview toolState={toolState} activeTool={activeTool} />
-                    <SlabPreview toolState={toolState} activeTool={activeTool} />
-                    <BeamPreview
-                      toolState={toolState}
-                      activeTool={activeTool}
-                      columns={floor.columns || []}
-                      floorLevel={getFloorElevation(floor)}
-                    />
-                    <StairPreview toolState={toolState} activeTool={activeTool} floorId={floor.id} />
-                    <DoorWindowPreview toolState={toolState} activeTool={activeTool} walls={floor.walls} />
-                    <SectionCutPreview toolState={toolState} activeTool={activeTool} />
-                    <RailingPreview toolState={toolState} activeTool={activeTool} />
-                    <ColumnPreview toolState={toolState} activeTool={activeTool} />
-                    <LandingPreview toolState={toolState} activeTool={activeTool} />
-                    <FixturePreview toolState={toolState} activeTool={activeTool} />
-                    <FilletPreview toolState={toolState} activeTool={activeTool} />
-                  </>
-                ) : viewMode === 'section_view' ? (
-                  <SectionRenderer
-                    project={filteredProject}
-                    floor={filteredFloor}
-                    activeSectionCutId={activeSectionCutId}
-                    roofHiddenByPhase={roofHiddenByPhase}
-                    hasProjectRoof={hasProjectRoof}
-                    railingsHiddenByPhase={railingsHiddenByPhase}
-                    hasProjectRailings={hasProjectRailings}
-                  />
-                ) : (
-                  <ElevationRenderer
-                    project={filteredProject}
-                    floor={filteredFloor}
-                    viewMode={viewMode}
-                    selectedId={selectedId}
-                    selectedType={selectedType}
-                  />
-                )}
-              </>
-            )
-          )}
-        </g>
-      </svg>
-      <CanvasOverlayControls
-        onResetCenter={handleResetCenterPoint}
-        onToggleMaximize={handleToggleMaximize}
-        isMaximized={isCanvasMaximized}
-      />
-      <CanvasStatusBar
-        cursorPos={cursorPos}
-        zoomPercent={zoomPercent}
-        viewMode={viewMode}
-        modelTarget={modelTarget}
-        displayedTool={displayedTool}
-        activePhaseId={activePhaseId}
-        phaseViewMode={phaseViewMode}
-        phases={project.phases}
-        roofHiddenByPhase={roofHiddenByPhase}
-        floorTrussSystems={floorTrussSystems}
-        trussesHiddenByPhase={trussesHiddenByPhase}
-        activeTool={activeTool}
-        TOOLS={TOOLS}
-        liveWallBearing={liveWallBearing}
-        selectionCount={selectionCount}
-        hasRoofSectionCut={hasRoofSectionCut}
-        hasTrussSectionCut={hasTrussSectionCut}
-        filteredFloor={filteredFloor}
-        roofSectionMessage={roofSectionMessage}
-        trussSectionMessage={trussSectionMessage}
-        floorRoofSectionMessage={floorRoofSectionMessage}
-        floorRailingSectionMessage={floorRailingSectionMessage}
-        pastePreview={pastePreview}
-      />
-      {statusMessage && (
-        <div className={styles.toast}>
-          {statusMessage}
-          <div className={styles.toastProgress} />
-        </div>
-      )}
-    </div>
+    <RenderProfilerScope name="SvgCanvas">
+      <div className={styles.canvasContainer}>
+        <CompassOverlay className={styles.compassDock} />
+        <svg
+          ref={svgRef}
+          className={styles.svg}
+          style={{ cursor }}
+          onPointerDown={handleMouseDown}
+          onPointerMove={handleMouseMove}
+          onPointerUp={handleMouseUp}
+          onDoubleClick={handleDoubleClick}
+        >
+          <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
+            {viewMode === 'plan' && showGrid && <GridRenderer />}
+            {viewMode === 'plan' && showGrid && (
+              <rect
+                x={-100000}
+                y={-100000}
+                width={200000}
+                height={200000}
+                fill="url(#grid-major)"
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
+            {modelTarget === 'roof' ? (
+              <RoofScene
+                roofSystem={roofSystem}
+                roofHiddenByPhase={roofHiddenByPhase}
+                viewMode={viewMode}
+                selectedId={selectedId}
+                selectedType={selectedType}
+                activeTool={activeTool}
+                toolState={toolState}
+                viewport={viewport}
+                filteredProject={filteredProject}
+                activeFloorId={activeFloorId}
+                activeSectionCutId={activeSectionCutId}
+              />
+            ) : modelTarget === 'truss' ? (
+              <TrussScene
+                filteredFloor={filteredFloor}
+                floorTrussSystems={floorTrussSystems}
+                hasProjectTrusses={hasProjectTrusses}
+                trussesHiddenByPhase={trussesHiddenByPhase}
+                viewMode={viewMode}
+                selectedId={selectedId}
+                selectedType={selectedType}
+                activeTool={activeTool}
+                toolState={toolState}
+                viewport={viewport}
+                activeTrussContext={activeTrussContext}
+                filteredProject={filteredProject}
+                activeSectionCutId={activeSectionCutId}
+              />
+            ) : (
+              <FloorScene
+                floor={floor}
+                filteredFloor={filteredFloor}
+                filteredProject={filteredProject}
+                viewMode={viewMode}
+                selectedId={selectedId}
+                selectedType={selectedType}
+                activeTool={activeTool}
+                toolState={toolState}
+                zoom={viewport.zoom}
+                previewContent={previewContent}
+                regionSelection={regionSelection}
+                activeSectionCutId={activeSectionCutId}
+                roofHiddenByPhase={roofHiddenByPhase}
+                hasProjectRoof={hasProjectRoof}
+                railingsHiddenByPhase={railingsHiddenByPhase}
+                hasProjectRailings={hasProjectRailings}
+              />
+            )}
+          </g>
+        </svg>
+        <CanvasOverlayControls
+          onResetCenter={handleResetCenterPoint}
+          onToggleMaximize={handleToggleMaximize}
+          isMaximized={isCanvasMaximized}
+        />
+        <CanvasStatusBar
+          cursorPos={cursorPos}
+          zoomPercent={zoomPercent}
+          viewMode={viewMode}
+          modelTarget={modelTarget}
+          displayedTool={displayedTool}
+          activePhaseId={activePhaseId}
+          phaseViewMode={phaseViewMode}
+          phases={project.phases}
+          roofHiddenByPhase={roofHiddenByPhase}
+          floorTrussSystems={floorTrussSystems}
+          trussesHiddenByPhase={trussesHiddenByPhase}
+          activeTool={activeTool}
+          TOOLS={TOOLS}
+          liveWallBearing={liveWallBearing}
+          selectionCount={selectionCount}
+          hasRoofSectionCut={hasRoofSectionCut}
+          hasTrussSectionCut={hasTrussSectionCut}
+          floorSectionCutCount={floorSectionCutCount}
+          roofSectionMessage={roofSectionMessage}
+          trussSectionMessage={trussSectionMessage}
+          floorRoofSectionMessage={floorRoofSectionMessage}
+          floorRailingSectionMessage={floorRailingSectionMessage}
+          pastePreview={pastePreview}
+        />
+        {statusMessage && (
+          <div className={styles.toast}>
+            {statusMessage}
+            <div className={styles.toastProgress} />
+          </div>
+        )}
+      </div>
+    </RenderProfilerScope>
   );
 }

@@ -3,12 +3,16 @@ import useSketchStudio from '@/features/sketchstudio/hooks/useSketchStudio';
 import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
 import '@/features/sketchstudio/styles/sketchstudio.css';
 
-export default function SketchStudio() {
+function SketchStudioContent() {
   const sketchStudio = useSketchStudio();
 
+  return <SketchStudioLayout {...sketchStudio} />;
+}
+
+export default function SketchStudio() {
   return (
     <ConfirmDialogProvider>
-      <SketchStudioLayout {...sketchStudio} />
+      <SketchStudioContent />
     </ConfirmDialogProvider>
   );
 }
