@@ -23,6 +23,7 @@ import {
 import { roundWorldValue } from '../utils/canvasMath';
 import { duplicateEntitiesByIds, updateEntityFromNumericField, updateEntityInList } from '../utils/entityUtils';
 import { getPrecisionHudData } from '../utils/draftPrecisionUtils';
+import { buildGroupIndex } from '../utils/groupUtils';
 import { getEditableEntities, getNextActiveLayer, getVisibleEntities } from '../utils/layerUtils';
 import { getDraftPreviewEntity, TOOL_DEFINITIONS } from './sketchConstants';
 import useSketchSelection from './useSketchSelection';
@@ -39,17 +40,32 @@ import useSketchToolClick from './useSketchToolClick';
 // Re-export for consumers that import TOOL_DEFINITIONS from this file
 export { TOOL_DEFINITIONS } from './sketchConstants';
 
+function initializeSketchStudioState(initialState) {
+  if (initialState.document?.groupIndex instanceof Map) {
+    return initialState;
+  }
+
+  return {
+    ...initialState,
+    document: {
+      ...initialState.document,
+      groupIndex: buildGroupIndex(initialState.document?.entities || []),
+    },
+  };
+}
+
 export default function useSketchStudio() {
-  const [state, dispatch] = useReducer(sketchStudioReducer, sketchStudioInitialState);
+  const [state, dispatch] = useReducer(sketchStudioReducer, sketchStudioInitialState, initializeSketchStudioState);
   const canvasRef = useRef(null);
   const isSpacePanActiveRef = useRef(false);
 
   const activeTool = state.ui.activeTool;
+  const groupIndex = state.document.groupIndex;
   const visibleEntities = useMemo(() => getVisibleEntities(state.document), [state.document]);
   const editableEntities = useMemo(() => getEditableEntities(state.document), [state.document]);
 
   // --- Sub-hooks ---
-  const selection = useSketchSelection(state);
+  const selection = useSketchSelection(state, groupIndex);
   const viewport = useSketchViewport(state, dispatch, canvasRef, { visibleEntities, editableEntities });
   const layers = useSketchLayers(state, dispatch);
   const history = useSketchHistory(state, dispatch);

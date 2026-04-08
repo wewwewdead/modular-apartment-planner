@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { duplicateEntitiesByIds } from './entityUtils';
 import {
   assignEntitiesToGroup,
   buildGroupIndex,
@@ -110,6 +111,29 @@ describe('groupUtils', () => {
     expect(getEntityGroupId(pop2[2])).toBeNull();
   });
 
+  it('group -> duplicate -> degroup preserves correct index', () => {
+    const grouped = assignEntitiesToGroup([createEntity('rect-1'), createEntity('rect-2')], ['rect-1', 'rect-2']);
+    const originalGroupId = getEntityGroupId(grouped[0]);
+
+    const duplicated = duplicateEntitiesByIds(grouped, ['rect-1', 'rect-2']);
+    const duplicatedGroupId = getEntityGroupId(duplicated.duplicatedEntities[0]);
+    const duplicatedIndex = buildGroupIndex(duplicated.entities);
+
+    expect(duplicatedIndex.get(originalGroupId)).toEqual(new Set(['rect-1', 'rect-2']));
+    expect(duplicatedIndex.get(duplicatedGroupId)).toEqual(new Set(duplicated.duplicatedIds));
+
+    const degrouped = removeEntitiesFromGroups(duplicated.entities, duplicated.duplicatedIds);
+    const degroupedIndex = buildGroupIndex(degrouped);
+
+    expect(degroupedIndex.get(originalGroupId)).toEqual(new Set(['rect-1', 'rect-2']));
+    expect(degroupedIndex.has(duplicatedGroupId)).toBe(false);
+    expect(
+      degrouped
+        .filter((entity) => duplicated.duplicatedIds.includes(entity.id))
+        .every((entity) => !entity.meta?.groupId),
+    ).toBe(true);
+  });
+
   describe('buildGroupIndex', () => {
     it('returns an empty map for empty entities', () => {
       expect(buildGroupIndex([]).size).toBe(0);
@@ -172,6 +196,24 @@ describe('groupUtils', () => {
       const result = expandGroupedSelection(entities, ['a', 'c'], index);
       expect(result).toEqual(expect.arrayContaining(['a', 'c', 'b', 'd']));
       expect(result).not.toContain('e');
+    });
+
+    it('large document (1000 entities) - expandGroupedSelection stays under 1ms', () => {
+      const entities = Array.from({ length: 1000 }, (_, index) =>
+        createEntity(`rect-${index + 1}`, `group-${Math.floor(index / 2) + 1}`),
+      );
+      const groupIndex = buildGroupIndex(entities);
+
+      for (let iteration = 0; iteration < 5; iteration += 1) {
+        expandGroupedSelection(entities, ['rect-501'], groupIndex);
+      }
+
+      const start = performance.now();
+      const result = expandGroupedSelection(entities, ['rect-501'], groupIndex);
+      const durationMs = performance.now() - start;
+
+      expect(result).toEqual(['rect-501', 'rect-502']);
+      expect(durationMs).toBeLessThan(1);
     });
   });
 

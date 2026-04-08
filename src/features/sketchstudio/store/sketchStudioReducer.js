@@ -11,7 +11,7 @@ import {
 } from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { resolveSketchDocument, resolveSketchDocumentLightweight } from '../utils/sketchDocumentResolver';
-import { assignEntitiesToGroup, removeEntitiesFromGroups } from '../utils/groupUtils';
+import { assignEntitiesToGroup, buildGroupIndex, removeEntitiesFromGroups } from '../utils/groupUtils';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
 
 function emptySnap() {
@@ -68,13 +68,44 @@ function buildResolvedDocumentState(document) {
   return resolveSketchDocument(document);
 }
 
+function withRuntimeGroupIndex(document, previousDocument = null, options = {}) {
+  if (!document || typeof document !== 'object') {
+    return document;
+  }
+
+  const reusableGroupIndex = previousDocument?.groupIndex instanceof Map ? previousDocument.groupIndex : null;
+  const shouldReuseGroupIndex =
+    options.reuseGroupIndex === true || (reusableGroupIndex && document.entities === previousDocument.entities);
+  const nextGroupIndex =
+    shouldReuseGroupIndex && reusableGroupIndex ? reusableGroupIndex : buildGroupIndex(document.entities);
+
+  if (document.groupIndex === nextGroupIndex) {
+    return document;
+  }
+
+  const { groupIndex: _staleGroupIndex, ...documentWithoutGroupIndex } = document;
+  return {
+    ...documentWithoutGroupIndex,
+    groupIndex: nextGroupIndex,
+  };
+}
+
+function withResolvedDocumentState(resolvedDocumentState, previousDocument = null, options = {}) {
+  return {
+    ...resolvedDocumentState,
+    document: withRuntimeGroupIndex(resolvedDocumentState.document, previousDocument, options),
+  };
+}
+
 /**
  * Run deferred full resolution if lightweight resolution was used during drag.
  * Returns a state patch with resolved document, diagnostics, and joint data.
  */
 function resolveDeferredIfNeeded(state) {
   if (!state._needsFullResolution) return state;
-  const resolved = buildResolvedDocumentState(state.document);
+  const resolved = withResolvedDocumentState(buildResolvedDocumentState(state.document), state.document, {
+    reuseGroupIndex: true,
+  });
   return {
     ...state,
     document: resolved.document,
@@ -98,7 +129,7 @@ function restoreUndoableSnapshot(state, snapshot) {
   }
 
   const nextDocument = snapshot.document ?? state.document;
-  const resolvedDocumentState = buildResolvedDocumentState(nextDocument);
+  const resolvedDocumentState = withResolvedDocumentState(buildResolvedDocumentState(nextDocument));
 
   return {
     ...state,
@@ -398,10 +429,12 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.COMMIT_ENTITY: {
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        entities: [...state.document.entities, action.payload],
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          entities: [...state.document.entities, action.payload],
+        }),
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -424,7 +457,7 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT: {
-      const resolvedDocumentState = buildResolvedDocumentState(action.payload);
+      const resolvedDocumentState = withResolvedDocumentState(buildResolvedDocumentState(action.payload));
 
       return finalizeUndoableState(
         state,
@@ -445,6 +478,10 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT_ENTITIES: {
+      if (action.payload === state.document.entities) {
+        return state;
+      }
+
       const isDragging =
         state.interaction.mode === 'handle-drag' ||
         state.interaction.mode === 'transform' ||
@@ -452,10 +489,14 @@ export default function sketchStudioReducer(state, action) {
 
       // During drags, only resolve parametric expressions (skip constraint solver + joinery)
       if (isDragging) {
-        const lightDocument = resolveSketchDocumentLightweight({
-          ...state.document,
-          entities: action.payload,
-        });
+        const lightDocument = withRuntimeGroupIndex(
+          resolveSketchDocumentLightweight({
+            ...state.document,
+            entities: action.payload,
+          }),
+          state.document,
+          { reuseGroupIndex: true },
+        );
         return {
           ...state,
           document: lightDocument,
@@ -463,10 +504,13 @@ export default function sketchStudioReducer(state, action) {
         };
       }
 
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        entities: action.payload,
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          entities: action.payload,
+        }),
+        state.document,
+      );
 
       return finalizeUndoableState(
         state,
@@ -498,12 +542,13 @@ export default function sketchStudioReducer(state, action) {
         ...state.document,
         entities: nextEntities,
       });
+      const nextResolvedDocumentState = withResolvedDocumentState(resolvedDocumentState);
 
       return finalizeUndoableState(state, {
         ...state,
-        document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
-        ...getJointStatePatch(resolvedDocumentState),
+        document: nextResolvedDocumentState.document,
+        constraintDiagnostics: nextResolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(nextResolvedDocumentState),
       });
     }
 
@@ -522,12 +567,13 @@ export default function sketchStudioReducer(state, action) {
         ...state.document,
         entities: nextEntities,
       });
+      const nextResolvedDocumentState = withResolvedDocumentState(resolvedDocumentState);
 
       return finalizeUndoableState(state, {
         ...state,
-        document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
-        ...getJointStatePatch(resolvedDocumentState),
+        document: nextResolvedDocumentState.document,
+        constraintDiagnostics: nextResolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(nextResolvedDocumentState),
       });
     }
 
@@ -664,7 +710,7 @@ export default function sketchStudioReducer(state, action) {
         },
         state.selection.selectedIds,
       );
-      const resolvedDocumentState = buildResolvedDocumentState(nextDocument);
+      const resolvedDocumentState = withResolvedDocumentState(buildResolvedDocumentState(nextDocument));
 
       return finalizeUndoableState(state, {
         ...state,
@@ -691,7 +737,7 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.LOAD_WORKSPACE_SNAPSHOT: {
-      const resolvedDocumentState = buildResolvedDocumentState(action.payload.document);
+      const resolvedDocumentState = withResolvedDocumentState(buildResolvedDocumentState(action.payload.document));
       const nextDocument = resolvedDocumentState.document;
       const nextViewport = action.payload.viewport || state.viewport;
       const nextUi = action.payload.ui || {};
@@ -781,10 +827,14 @@ export default function sketchStudioReducer(state, action) {
         if (!idSet.has(entity.id)) return entity;
         return { ...entity, materialId: materialId || null };
       });
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        entities: nextEntities,
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          entities: nextEntities,
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
@@ -804,10 +854,14 @@ export default function sketchStudioReducer(state, action) {
           thickness: Number.isFinite(parsedThickness) && parsedThickness > 0 ? parsedThickness : null,
         };
       });
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        entities: nextEntities,
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          entities: nextEntities,
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
@@ -823,10 +877,14 @@ export default function sketchStudioReducer(state, action) {
       };
 
     case SKETCH_STUDIO_ACTIONS.SET_VARIABLES: {
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        variables: action.payload ?? [],
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          variables: action.payload ?? [],
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -837,10 +895,14 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.ADD_CONSTRAINT: {
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        constraints: [...(state.document.constraints || []), action.payload],
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          constraints: [...(state.document.constraints || []), action.payload],
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -852,12 +914,16 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.UPDATE_CONSTRAINT: {
       const { constraintId, patch } = action.payload;
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        constraints: (state.document.constraints || []).map((constraint) =>
-          constraint.id === constraintId ? { ...constraint, ...patch } : constraint,
-        ),
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          constraints: (state.document.constraints || []).map((constraint) =>
+            constraint.id === constraintId ? { ...constraint, ...patch } : constraint,
+          ),
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -868,10 +934,14 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.REMOVE_CONSTRAINT: {
-      const resolvedDocumentState = buildResolvedDocumentState({
-        ...state.document,
-        constraints: (state.document.constraints || []).filter((constraint) => constraint.id !== action.payload),
-      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          constraints: (state.document.constraints || []).filter((constraint) => constraint.id !== action.payload),
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -882,7 +952,11 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.ADD_JOINT: {
-      const resolvedDocumentState = buildResolvedDocumentState(addJointToDocument(state.document, action.payload));
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState(addJointToDocument(state.document, action.payload)),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -894,7 +968,11 @@ export default function sketchStudioReducer(state, action) {
 
     case SKETCH_STUDIO_ACTIONS.UPDATE_JOINT: {
       const { jointId, patch } = action.payload;
-      const resolvedDocumentState = buildResolvedDocumentState(updateJointInDocument(state.document, jointId, patch));
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState(updateJointInDocument(state.document, jointId, patch)),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,
@@ -905,7 +983,11 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.REMOVE_JOINT: {
-      const resolvedDocumentState = buildResolvedDocumentState(removeJointFromDocument(state.document, action.payload));
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState(removeJointFromDocument(state.document, action.payload)),
+        state.document,
+        { reuseGroupIndex: true },
+      );
 
       return finalizeUndoableState(state, {
         ...state,

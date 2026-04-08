@@ -2,10 +2,11 @@ import { useMemo } from 'react';
 import { getEntityHandles } from '../utils/handleUtils';
 import { getEntityMeasurementRows, resolveSourceReferenceFromEntities } from '../utils/entityUtils';
 import { formatDimensionText, measureDistance } from '../utils/dimensionUtils';
+import { hasGroupedSelection as hasGroupedSelectionFromIndex } from '../utils/groupUtils';
 import { getSelectedProfileInfo } from '../utils/objectUtils';
 import { computeSelectionBounds } from '../utils/transformUtils';
 
-export default function useSketchSelection(state) {
+export default function useSketchSelection(state, groupIndex = state.document.groupIndex) {
   const selectedIds = state.selection.selectedIds;
 
   const selectedEntities = useMemo(
@@ -54,8 +55,8 @@ export default function useSketchSelection(state) {
   );
 
   const hasGroupedSelection = useMemo(
-    () => selectedEntities.some((entity) => Boolean(entity.meta?.groupId)),
-    [selectedEntities],
+    () => hasGroupedSelectionFromIndex(selectedEntities, groupIndex),
+    [groupIndex, selectedEntities],
   );
 
   const groupSelectionSummary = useMemo(() => {

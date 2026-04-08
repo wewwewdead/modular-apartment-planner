@@ -14,7 +14,12 @@ export function validateBasicDocumentShape(document) {
 }
 
 export function serializeDocument(document) {
-  return JSON.stringify(document, null, 2);
+  if (!document || typeof document !== 'object') {
+    return JSON.stringify(document, null, 2);
+  }
+
+  const { groupIndex: _runtimeGroupIndex, ...serializableDocument } = document;
+  return JSON.stringify(serializableDocument, null, 2);
 }
 
 export function deserializeDocument(serialized) {

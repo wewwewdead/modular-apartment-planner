@@ -1,6 +1,6 @@
 import sampleDocument from '../data/sampleDocument';
 import { cloneJoint as cloneJoineryJoint } from '../joinery';
-import { normalizeEntityGroupMemberships, buildGroupIndex } from './groupUtils';
+import { normalizeEntityGroupMemberships } from './groupUtils';
 
 export function normalizeCommittedSketchName(name) {
   return String(name || '').trim() || 'Untitled Sketch';
@@ -42,32 +42,41 @@ function cloneJoint(joint) {
 
 export function normalizeSketchDocument(document) {
   const source = document && typeof document === 'object' ? document : {};
-  const sourceEntities = Array.isArray(source.entities) ? [...source.entities] : [];
+  const { groupIndex: _runtimeGroupIndex, ...sourceWithoutRuntimeFields } = source;
+  const sourceEntities = Array.isArray(sourceWithoutRuntimeFields.entities)
+    ? [...sourceWithoutRuntimeFields.entities]
+    : [];
   const normalizedEntities = normalizeEntityGroupMemberships(sourceEntities);
 
   return {
     ...sampleDocument,
-    ...source,
-    id: typeof source.id === 'string' && source.id ? source.id : sampleDocument.id,
-    name: normalizeCommittedSketchName(source.name || sampleDocument.name),
-    units: source.units || sampleDocument.units || 'mm',
+    ...sourceWithoutRuntimeFields,
+    id:
+      typeof sourceWithoutRuntimeFields.id === 'string' && sourceWithoutRuntimeFields.id
+        ? sourceWithoutRuntimeFields.id
+        : sampleDocument.id,
+    name: normalizeCommittedSketchName(sourceWithoutRuntimeFields.name || sampleDocument.name),
+    units: sourceWithoutRuntimeFields.units || sampleDocument.units || 'mm',
     metadata: {
       ...(sampleDocument.metadata || {}),
-      ...(source.metadata || {}),
+      ...(sourceWithoutRuntimeFields.metadata || {}),
     },
     objectDefinition: {
       ...(sampleDocument.objectDefinition || {}),
-      ...(source.objectDefinition || {}),
+      ...(sourceWithoutRuntimeFields.objectDefinition || {}),
     },
-    variables: Array.isArray(source.variables) ? source.variables.map(cloneVariable) : [],
-    constraints: Array.isArray(source.constraints) ? source.constraints.map(cloneConstraint) : [],
-    joints: Array.isArray(source.joints) ? source.joints.map(cloneJoint) : [],
+    variables: Array.isArray(sourceWithoutRuntimeFields.variables)
+      ? sourceWithoutRuntimeFields.variables.map(cloneVariable)
+      : [],
+    constraints: Array.isArray(sourceWithoutRuntimeFields.constraints)
+      ? sourceWithoutRuntimeFields.constraints.map(cloneConstraint)
+      : [],
+    joints: Array.isArray(sourceWithoutRuntimeFields.joints) ? sourceWithoutRuntimeFields.joints.map(cloneJoint) : [],
     layers:
-      Array.isArray(source.layers) && source.layers.length
-        ? source.layers.map(cloneLayer)
+      Array.isArray(sourceWithoutRuntimeFields.layers) && sourceWithoutRuntimeFields.layers.length
+        ? sourceWithoutRuntimeFields.layers.map(cloneLayer)
         : (sampleDocument.layers || []).map(cloneLayer),
     entities: normalizedEntities,
-    groupIndex: buildGroupIndex(normalizedEntities),
   };
 }
 

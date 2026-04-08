@@ -11,19 +11,13 @@ function getEntityMeta(entity) {
   return entity?.meta && typeof entity.meta === 'object' ? entity.meta : {};
 }
 
-function buildGroupCounts(entities = []) {
-  return entities.reduce((counts, entity) => {
-    const groupId = normalizeGroupId(entity?.meta?.groupId);
-
-    if (!groupId) {
-      return counts;
-    }
-
-    counts.set(groupId, (counts.get(groupId) ?? 0) + 1);
-    return counts;
-  }, new Map());
-}
-
+/**
+ * Build a runtime-only group membership index.
+ *
+ * Rebuilding the index is O(n), so the reducer should only do it after real
+ * entity mutations. Once built, group member lookups are constant-time via
+ * Map/Set access instead of rescanning the full entity array.
+ */
 export function buildGroupIndex(entities = []) {
   const index = new Map();
   for (const entity of entities) {
@@ -121,17 +115,17 @@ export function getEntityGroupId(entity) {
 }
 
 export function createGroupId(entities = []) {
-  return createUniqueGroupId(new Set(buildGroupCounts(entities).keys()));
+  return createUniqueGroupId(new Set(buildGroupIndex(entities).keys()));
 }
 
 export function normalizeEntityGroupMemberships(entities = []) {
-  const counts = buildGroupCounts(entities);
+  const groupIndex = buildGroupIndex(entities);
   let didChange = false;
 
   const normalizedEntities = entities.map((entity) => {
     const rawGroupId = entity?.meta?.groupId;
     const groupId = normalizeGroupId(rawGroupId);
-    const shouldKeepGroupId = groupId && (counts.get(groupId) ?? 0) > 1;
+    const shouldKeepGroupId = groupId && (groupIndex.get(groupId)?.size ?? 0) > 1;
 
     if (shouldKeepGroupId && rawGroupId === groupId) {
       return entity;
@@ -149,41 +143,77 @@ export function normalizeEntityGroupMemberships(entities = []) {
 }
 
 export function expandGroupedSelection(entities = [], selectedIds = [], groupIndex = null) {
-  const entitiesById = new Map(entities.map((entity) => [entity.id, entity]));
-  const uniqueSelectedIds = Array.from(new Set(selectedIds)).filter((entityId) => entitiesById.has(entityId));
+  const uniqueSelectedIds = Array.from(new Set(selectedIds));
 
   if (!uniqueSelectedIds.length) {
     return [];
   }
 
-  const selectedIdSet = new Set(uniqueSelectedIds);
-  const selectedGroupIds = new Set(
-    uniqueSelectedIds.map((entityId) => getEntityGroupId(entitiesById.get(entityId))).filter(Boolean),
-  );
+  const pendingSelectedIds = new Set(uniqueSelectedIds);
+  const availableEntityIds = new Set();
+  const availableSelectedIds = [];
+  const selectedGroupIds = new Set();
+
+  for (const entity of entities) {
+    availableEntityIds.add(entity.id);
+
+    if (!pendingSelectedIds.has(entity.id)) {
+      continue;
+    }
+
+    pendingSelectedIds.delete(entity.id);
+    availableSelectedIds.push(entity.id);
+
+    const groupId = getEntityGroupId(entity);
+    if (groupId) {
+      selectedGroupIds.add(groupId);
+    }
+  }
+
+  if (!availableSelectedIds.length) {
+    return [];
+  }
 
   if (!selectedGroupIds.size) {
-    return uniqueSelectedIds;
+    return availableSelectedIds;
   }
 
   if (groupIndex) {
+    const selectedIdSet = new Set(availableSelectedIds);
     const groupedIds = [];
     for (const gid of selectedGroupIds) {
       const members = groupIndex.get(gid);
       if (!members) continue;
       for (const memberId of members) {
-        if (!selectedIdSet.has(memberId) && entitiesById.has(memberId)) {
+        if (!selectedIdSet.has(memberId) && availableEntityIds.has(memberId)) {
           groupedIds.push(memberId);
         }
       }
     }
-    return [...uniqueSelectedIds, ...groupedIds];
+    return [...availableSelectedIds, ...groupedIds];
   }
 
+  const selectedIdSet = new Set(availableSelectedIds);
   const groupedIds = entities
     .filter((entity) => selectedGroupIds.has(getEntityGroupId(entity)) && !selectedIdSet.has(entity.id))
     .map((entity) => entity.id);
 
-  return [...uniqueSelectedIds, ...groupedIds];
+  return [...availableSelectedIds, ...groupedIds];
+}
+
+export function hasGroupedSelection(entities = [], groupIndex = null) {
+  if (!entities.length) {
+    return false;
+  }
+
+  if (!groupIndex) {
+    return entities.some((entity) => Boolean(getEntityGroupId(entity)));
+  }
+
+  return entities.some((entity) => {
+    const groupId = getEntityGroupId(entity);
+    return groupId && (groupIndex.get(groupId)?.size ?? 0) > 1;
+  });
 }
 
 export function assignEntitiesToGroup(entities = [], entityIds = []) {
@@ -225,7 +255,7 @@ export function remapDuplicateEntityGroups(sourceEntities = [], duplicatedEntiti
   }
 
   const entitiesById = new Map(sourceEntities.map((entity) => [entity.id, entity]));
-  const totalCountByGroup = buildGroupCounts(sourceEntities);
+  const sourceGroupIndex = buildGroupIndex(sourceEntities);
   const duplicatedCountByGroup = new Map();
 
   duplicatedIdMap.forEach((_, originalId) => {
@@ -238,11 +268,11 @@ export function remapDuplicateEntityGroups(sourceEntities = [], duplicatedEntiti
     duplicatedCountByGroup.set(groupId, (duplicatedCountByGroup.get(groupId) ?? 0) + 1);
   });
 
-  const reservedGroupIds = new Set(totalCountByGroup.keys());
+  const reservedGroupIds = new Set(sourceGroupIndex.keys());
   const remappedGroupIds = new Map();
 
   duplicatedCountByGroup.forEach((count, groupId) => {
-    if (count >= 2 && count === totalCountByGroup.get(groupId)) {
+    if (count >= 2 && count === (sourceGroupIndex.get(groupId)?.size ?? 0)) {
       remappedGroupIds.set(groupId, createUniqueGroupId(reservedGroupIds));
     }
   });

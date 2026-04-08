@@ -85,15 +85,19 @@ describe('workspaceSerializationUtils', () => {
       ],
     });
 
-    const serialized = serializeSketchWorkspace({
-      document,
-      viewport: { zoom: 1.5, panX: 25, panY: -10 },
-      ui: { activeLayerId: 'default', craftsmanMode: true },
-    }, {
-      savedAt: '2026-04-05T00:00:00.000Z',
-    });
+    const serialized = serializeSketchWorkspace(
+      {
+        document,
+        viewport: { zoom: 1.5, panX: 25, panY: -10 },
+        ui: { activeLayerId: 'default', craftsmanMode: true },
+      },
+      {
+        savedAt: '2026-04-05T00:00:00.000Z',
+      },
+    );
     const deserialized = deserializeSketchWorkspace(serialized);
 
+    expect(serialized).not.toContain('"groupIndex"');
     expect(deserialized.document.joints).toHaveLength(1);
     expect(deserialized.document.joints[0]).toMatchObject({
       id: 'joint-dado',
