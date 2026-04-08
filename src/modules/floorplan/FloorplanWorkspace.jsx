@@ -21,6 +21,7 @@ import {
 } from '@/persistence/fileTransfer';
 import { useAutosave } from '@/persistence/useAutosave';
 import { isTypingTarget } from '@/utils/keyboard';
+import { ConfirmDialogProvider, useConfirmDialog } from '@/ui/ConfirmDialog';
 import styles from '@/app/App.module.css';
 import modalStyles from '@/ui/Modal.module.css';
 
@@ -36,13 +37,7 @@ function EditorShell({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const {
-    workspaceMode,
-    activeSheetId,
-    activeFloorId,
-    maximizedPanel,
-    dispatch: editorDispatch,
-  } = useEditor();
+  const { workspaceMode, activeSheetId, activeFloorId, maximizedPanel, dispatch: editorDispatch } = useEditor();
 
   useEffect(() => {
     const sheets = project.sheets || [];
@@ -117,6 +112,7 @@ function EditorShell({
 
 function FloorplanInner({ isPlayground }) {
   const { project, isDirty, dispatch } = useProject();
+  const confirm = useConfirmDialog();
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
   const availableFloorIds = useMemo(() => orderedFloors.map((floor) => floor.id), [orderedFloors]);
   const availablePhaseIds = useMemo(() => (project.phases || []).map((p) => p.id), [project.phases]);
@@ -132,17 +128,20 @@ function FloorplanInner({ isPlayground }) {
   useAutosave(project, isDirty && !isPlayground, dispatch);
   useUnsavedChangesGuard(isDirty && !isPlayground);
 
-  const handleNew = useCallback(() => {
-    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
+  const handleNew = useCallback(async () => {
+    if (isDirty && !(await confirm('Unsaved changes will be lost. Continue?'))) return;
     setShowNewProjectModal(true);
-  }, [isDirty]);
+  }, [isDirty, confirm]);
 
-  const handleCreateProject = useCallback(({ name }) => {
-    const newProject = createProject(name);
-    setProjectFileHandle(null);
-    dispatch({ type: 'PROJECT_NEW', project: newProject });
-    setShowNewProjectModal(false);
-  }, [dispatch]);
+  const handleCreateProject = useCallback(
+    ({ name }) => {
+      const newProject = createProject(name);
+      setProjectFileHandle(null);
+      dispatch({ type: 'PROJECT_NEW', project: newProject });
+      setShowNewProjectModal(false);
+    },
+    [dispatch],
+  );
 
   const handleSave = useCallback(async () => {
     try {
@@ -156,7 +155,7 @@ function FloorplanInner({ isPlayground }) {
       dispatch({ type: 'MARK_SAVED' });
     } catch (err) {
       if (isFilePickerAbortError(err)) return;
-      alert('Failed to save project file: ' + err.message);
+      console.warn('[save] Failed to save project file:', err);
     }
   }, [project, projectFileHandle, dispatch]);
 
@@ -184,7 +183,7 @@ function FloorplanInner({ isPlayground }) {
       return;
     }
 
-    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) {
+    if (isDirty && !(await confirm('Unsaved changes will be lost. Continue?'))) {
       return;
     }
 
@@ -195,52 +194,60 @@ function FloorplanInner({ isPlayground }) {
       setShowLoadModal(false);
     } catch (err) {
       if (isFilePickerAbortError(err)) return;
-      alert('Failed to import project file: ' + err.message);
+      console.warn('[open] Failed to import project file:', err);
     }
-  }, [isDirty, dispatch]);
+  }, [isDirty, dispatch, confirm]);
 
-  const handleImportFile = useCallback(async (e) => {
-    const file = e.target.files?.[0] || null;
-    e.target.value = '';
-    if (!file) return;
+  const handleImportFile = useCallback(
+    async (e) => {
+      const file = e.target.files?.[0] || null;
+      e.target.value = '';
+      if (!file) return;
 
-    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) {
-      return;
-    }
+      if (isDirty && !(await confirm('Unsaved changes will be lost. Continue?'))) {
+        return;
+      }
 
-    try {
-      const { project: loaded, savedAt } = await importProjectFile(file);
-      dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
-      setProjectFileHandle(null);
-      setShowLoadModal(false);
-    } catch (err) {
-      alert('Failed to import project file: ' + err.message);
-    }
-  }, [isDirty, dispatch]);
+      try {
+        const { project: loaded, savedAt } = await importProjectFile(file);
+        dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
+        setProjectFileHandle(null);
+        setShowLoadModal(false);
+      } catch (err) {
+        console.warn('[import] Failed to import project file:', err);
+      }
+    },
+    [isDirty, dispatch, confirm],
+  );
 
-  const handleLoad = useCallback(async (id) => {
-    if (isDirty && !window.confirm('Unsaved changes will be lost. Continue?')) return;
-    try {
-      const { project: loaded, savedAt } = await loadProject(id);
-      dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
-      setProjectFileHandle(null);
-      setShowLoadModal(false);
-    } catch (err) {
-      alert('Failed to load project: ' + err.message);
-    }
-  }, [isDirty, dispatch]);
+  const handleLoad = useCallback(
+    async (id) => {
+      if (isDirty && !(await confirm('Unsaved changes will be lost. Continue?'))) return;
+      try {
+        const { project: loaded, savedAt } = await loadProject(id);
+        dispatch({ type: 'PROJECT_LOAD', project: loaded, savedAt });
+        setProjectFileHandle(null);
+        setShowLoadModal(false);
+      } catch (err) {
+        console.warn('[load] Failed to load project:', err);
+      }
+    },
+    [isDirty, dispatch, confirm],
+  );
 
-  const handleDelete = useCallback(async (id, name) => {
-    const confirmed = window.confirm(`Delete "${name}"? This cannot be undone.`);
-    if (!confirmed) return;
+  const handleDelete = useCallback(
+    async (id, name) => {
+      if (!(await confirm(`Delete "${name}"? This cannot be undone.`))) return;
 
-    try {
-      await deleteProject(id);
-      setSavedProjects(projects => projects.filter(project => project.id !== id));
-    } catch (err) {
-      alert('Failed to delete project: ' + err.message);
-    }
-  }, []);
+      try {
+        await deleteProject(id);
+        setSavedProjects((projects) => projects.filter((project) => project.id !== id));
+      } catch (err) {
+        console.warn('[delete] Failed to delete project:', err);
+      }
+    },
+    [confirm],
+  );
 
   return (
     <EditorProvider
@@ -263,15 +270,12 @@ function FloorplanInner({ isPlayground }) {
         handleLoadClick={handleLoadClick}
         isSidebarCollapsed={isSidebarCollapsed}
         isPropertiesCollapsed={isPropertiesCollapsed}
-        onToggleSidebar={() => setIsSidebarCollapsed(value => !value)}
-        onToggleProperties={() => setIsPropertiesCollapsed(value => !value)}
+        onToggleSidebar={() => setIsSidebarCollapsed((value) => !value)}
+        onToggleProperties={() => setIsPropertiesCollapsed((value) => !value)}
       />
 
       {showNewProjectModal && (
-        <NewProjectModal
-          onConfirm={handleCreateProject}
-          onClose={() => setShowNewProjectModal(false)}
-        />
+        <NewProjectModal onConfirm={handleCreateProject} onClose={() => setShowNewProjectModal(false)} />
       )}
 
       {showLoadModal && (
@@ -280,11 +284,13 @@ function FloorplanInner({ isPlayground }) {
             <div className={modalStyles.modalCard}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className={modalStyles.modalCardTitle}>Project File</span>
-                <span className={modalStyles.modalCardDesc}>
-                  Open a JSON file previously saved to your computer.
-                </span>
+                <span className={modalStyles.modalCardDesc}>Open a JSON file previously saved to your computer.</span>
               </div>
-              <button className={modalStyles.modalBtn} onClick={handleOpenProjectFile} style={{ alignSelf: 'flex-start' }}>
+              <button
+                className={modalStyles.modalBtn}
+                onClick={handleOpenProjectFile}
+                style={{ alignSelf: 'flex-start' }}
+              >
                 Open Project File
               </button>
             </div>
@@ -302,8 +308,12 @@ function FloorplanInner({ isPlayground }) {
                 </p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {savedProjects.map(p => (
-                    <div key={p.id} className={modalStyles.modalCard} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  {savedProjects.map((p) => (
+                    <div
+                      key={p.id}
+                      className={modalStyles.modalCard}
+                      style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <span style={{ fontWeight: 500, fontSize: '13px' }}>{p.name}</span>
                         <span style={{ color: 'var(--color-text-secondary)', fontSize: '11px' }}>
@@ -311,8 +321,12 @@ function FloorplanInner({ isPlayground }) {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className={modalStyles.modalBtn} onClick={() => handleLoad(p.id)}>Load</button>
-                        <button className={modalStyles.modalBtnDanger} onClick={() => handleDelete(p.id, p.name)}>Delete</button>
+                        <button className={modalStyles.modalBtn} onClick={() => handleLoad(p.id)}>
+                          Load
+                        </button>
+                        <button className={modalStyles.modalBtnDanger} onClick={() => handleDelete(p.id, p.name)}>
+                          Delete
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -320,7 +334,11 @@ function FloorplanInner({ isPlayground }) {
               )}
             </div>
           </div>
-          <button className={modalStyles.modalBtn} onClick={() => setShowLoadModal(false)} style={{ marginTop: '16px' }}>
+          <button
+            className={modalStyles.modalBtn}
+            onClick={() => setShowLoadModal(false)}
+            style={{ marginTop: '16px' }}
+          >
             Cancel
           </button>
         </Modal>
@@ -334,7 +352,9 @@ export default function FloorplanWorkspace({ initialProject, isPlayground = fals
     <div className="editorRoot">
       <ProjectProvider initialProject={initialProject}>
         <ClipboardProvider>
-          <FloorplanInner isPlayground={isPlayground} />
+          <ConfirmDialogProvider>
+            <FloorplanInner isPlayground={isPlayground} />
+          </ConfirmDialogProvider>
         </ClipboardProvider>
       </ProjectProvider>
     </div>

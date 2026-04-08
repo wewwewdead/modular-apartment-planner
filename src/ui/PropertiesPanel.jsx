@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProject } from '@/app/ProjectProvider';
 import { useEditor } from '@/app/EditorProvider';
+import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { formatMeasurement, getAnnotationDisplayLabel } from '@/annotations/format';
 import { MIN_WALL_LENGTH, FILLET_DEFAULT_RADIUS, FILLET_MIN_RADIUS, FILLET_MAX_RADIUS } from '@/domain/defaults';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { countObjectsInProjectPhase } from '@/domain/phaseAssignments';
-import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getOrderedFloors } from '@/domain/floorModels';
+import {
+  getDefaultActiveFloorId,
+  getFloorElevation,
+  getFloorLevelIndex,
+  getFloorToFloorHeight,
+  getOrderedFloors,
+} from '@/domain/floorModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { resolveRoofSectionFloor } from '@/domain/roofModels';
 import { findTrussInstance, getProjectTrussSystems } from '@/domain/trussModels';
@@ -37,7 +44,12 @@ import { listPaperPresets } from '@/sheets/paper';
 import { getViewportSourceLabel, resolveSheetViewportSource } from '@/sheets/sources';
 import { FIXTURE_TYPES, TOOLS } from '@/editor/tools';
 import { createWall } from '@/domain/models';
-import { formatSurveyorBearing, pointsToSurveyorBearing, surveyorBearingToSvgAngle, endpointFromBearing } from '@/geometry/bearing';
+import {
+  formatSurveyorBearing,
+  pointsToSurveyorBearing,
+  surveyorBearingToSvgAngle,
+  endpointFromBearing,
+} from '@/geometry/bearing';
 import { getOrderedPhases } from '@/domain/phaseModels';
 import InputField from './InputField';
 import {
@@ -49,11 +61,7 @@ import {
   RoofPlaneProperties,
   RoofSystemProperties,
 } from './RoofProperties';
-import {
-  TrussEmptyState,
-  TrussInstanceProperties,
-  TrussSystemProperties,
-} from './TrussProperties';
+import { TrussEmptyState, TrussInstanceProperties, TrussSystemProperties } from './TrussProperties';
 import PhaseSelector from './PhaseSelector';
 import styles from './PropertiesPanel.module.css';
 
@@ -64,9 +72,9 @@ function useUnits() {
     unit,
     setUnit,
     suffix: isMm ? 'mm' : 'm',
-    toDisplay: (mm) => isMm ? +mm.toFixed(1) : +(mm / 1000).toFixed(4),
-    fromDisplay: (v) => isMm ? v : v * 1000,
-    step: (mmStep) => isMm ? mmStep : mmStep / 1000,
+    toDisplay: (mm) => (isMm ? +mm.toFixed(1) : +(mm / 1000).toFixed(4)),
+    fromDisplay: (v) => (isMm ? v : v * 1000),
+    step: (mmStep) => (isMm ? mmStep : mmStep / 1000),
   };
 }
 
@@ -130,9 +138,7 @@ function WallDrawingInput({ start, preview, dispatch, editorDispatch, activeFloo
           Cursor: {livePreviewLength} · {livePreviewBearing}
         </div>
       )}
-      <div className={styles.drawingHint}>
-        Hold Shift while drawing to snap the wall bearing to 45° increments.
-      </div>
+      <div className={styles.drawingHint}>Hold Shift while drawing to snap the wall bearing to 45° increments.</div>
 
       <div className={styles.subtitle}>Bearing</div>
       <div className={styles.bearingRow}>
@@ -215,16 +221,10 @@ function SheetExportMenu({ sheet, editorDispatch }) {
     if (!sheet) return;
     try {
       if (kind === 'pdf') {
-        await exportActiveSheetAsPdf(
-          sheet.title || sheet.drawingName || 'sheet',
-          sheet.paperSize
-        );
+        await exportActiveSheetAsPdf(sheet.title || sheet.drawingName || 'sheet', sheet.paperSize);
         editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Exported sheet as PDF.' });
       } else {
-        await exportActiveSheetAsPng(
-          sheet.title || sheet.drawingName || 'sheet',
-          options
-        );
+        await exportActiveSheetAsPng(sheet.title || sheet.drawingName || 'sheet', options);
         const dpiLabel = options.dpi ? ` (${options.dpi} DPI)` : '';
         editorDispatch({ type: 'SET_STATUS_MESSAGE', message: `Exported sheet as PNG${dpiLabel}.` });
       }
@@ -240,21 +240,13 @@ function SheetExportMenu({ sheet, editorDispatch }) {
 
   return (
     <div className={styles.exportMenu} ref={rootRef}>
-      <button
-        className={styles.exportMenuTrigger}
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-      >
+      <button className={styles.exportMenuTrigger} type="button" onClick={() => setOpen((value) => !value)}>
         Export sheet
         <span className={styles.exportMenuChevron}>{open ? '▴' : '▾'}</span>
       </button>
       {open && (
         <div className={styles.exportMenuList}>
-          <button
-            className={styles.exportMenuItem}
-            type="button"
-            onClick={() => handleExport('pdf')}
-          >
+          <button className={styles.exportMenuItem} type="button" onClick={() => handleExport('pdf')}>
             PDF
           </button>
           {pngOptions.map((option) => (
@@ -281,11 +273,7 @@ function PhaseProperties({ phase, project, dispatch }) {
   return (
     <div>
       <div className={styles.title}>Phase</div>
-      <InputField
-        label="Name"
-        value={phase.name}
-        onChange={(value) => updatePhase({ name: value })}
-      />
+      <InputField label="Name" value={phase.name} onChange={(value) => updatePhase({ name: value })} />
       <div className={styles.colorField}>
         <label className={styles.colorLabel}>Color</label>
         <div className={styles.colorControls}>
@@ -338,20 +326,22 @@ function WallProperties({ wall, dispatch, editorDispatch, floorId, u, phases }) 
         <PhaseSelector phaseId={wall.phaseId} phases={phases} onChange={(v) => updateWall({ phaseId: v })} />
         <div className={styles.subtitle}>Properties</div>
         <InputField
-          label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+          label="Thickness"
+          type="number"
+          suffix={u.suffix}
+          step={u.step(10)}
           value={u.toDisplay(wall.thickness)}
           onChange={(v) => updateWall({ thickness: Math.max(50, u.fromDisplay(v)) })}
         />
         <InputField
-          label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+          label="Height"
+          type="number"
+          suffix={u.suffix}
+          step={u.step(100)}
           value={u.toDisplay(wall.height)}
           onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
         />
-        <InputField
-          label="Arc Length" type="number" suffix={u.suffix}
-          value={u.toDisplay(len)}
-          readOnly
-        />
+        <InputField label="Arc Length" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
       </div>
     );
   }
@@ -362,39 +352,56 @@ function WallProperties({ wall, dispatch, editorDispatch, floorId, u, phases }) 
       <PhaseSelector phaseId={wall.phaseId} phases={phases} onChange={(v) => updateWall({ phaseId: v })} />
       <div className={styles.subtitle}>Start Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(wall.start.x)}
         onChange={(v) => updateWall({ start: { ...wall.start, x: u.fromDisplay(v) } })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(wall.start.y)}
         onChange={(v) => updateWall({ start: { ...wall.start, y: u.fromDisplay(v) } })}
       />
       <div className={styles.subtitle}>End Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(wall.end.x)}
         onChange={(v) => updateWall({ end: { ...wall.end, x: u.fromDisplay(v) } })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(wall.end.y)}
         onChange={(v) => updateWall({ end: { ...wall.end, y: u.fromDisplay(v) } })}
       />
       <div className={styles.subtitle}>Properties</div>
       <InputField
-        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Thickness"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(wall.thickness)}
         onChange={(v) => updateWall({ thickness: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Height"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(wall.height)}
         onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Length" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Length"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(len)}
         onChange={updateWallLength}
       />
@@ -424,31 +431,52 @@ function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u, phas
       <PhaseSelector phaseId={door.phaseId} phases={phases} onChange={(v) => updateDoor({ phaseId: v })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
-        <select value={doorType} onChange={(e) => updateDoor({ type: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
-                   borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}>
+        <select
+          value={doorType}
+          onChange={(e) => updateDoor({ type: e.target.value })}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+            background: 'var(--color-surface-elevated)',
+          }}
+        >
           <option value="swing">Swing</option>
           <option value="double">Double</option>
           <option value="sliding">Sliding</option>
         </select>
       </div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(50)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(50)}
         value={u.toDisplay(door.width)}
         onChange={(v) => updateDoor({ width: Math.max(400, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Height" type="number" suffix={u.suffix} step={u.step(50)}
+        label="Height"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(50)}
         value={u.toDisplay(door.height)}
         onChange={(v) => updateDoor({ height: Math.max(300, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Sill" type="number" suffix={u.suffix} step={u.step(50)}
+        label="Sill"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(50)}
         value={u.toDisplay(door.sillHeight)}
         onChange={(v) => updateDoor({ sillHeight: u.fromDisplay(v) })}
       />
       <InputField
-        label="Offset" type="number" suffix={u.suffix}
+        label="Offset"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(door.offset)}
         onChange={(v) => updateDoor({ offset: Math.max(0, u.fromDisplay(v)) })}
       />
@@ -458,23 +486,25 @@ function DoorProperties({ door, wall, dispatch, floorId, editorDispatch, u, phas
             label={doorType === 'sliding' ? 'Slide Dir' : 'Swing'}
             value={door.openDirection}
             readOnly={false}
-            onChange={() => updateDoor({
-              openDirection: door.openDirection === 'left' ? 'right' : 'left',
-            })}
+            onChange={() =>
+              updateDoor({
+                openDirection: door.openDirection === 'left' ? 'right' : 'left',
+              })
+            }
           />
           <button
             className={styles.actionBtn}
-            onClick={() => updateDoor({
-              openDirection: door.openDirection === 'left' ? 'right' : 'left',
-            })}
+            onClick={() =>
+              updateDoor({
+                openDirection: door.openDirection === 'left' ? 'right' : 'left',
+              })
+            }
           >
             {doorType === 'sliding' ? 'Toggle Slide Direction' : 'Toggle Swing Direction'}
           </button>
         </>
       )}
-      {wall && (
-        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
-      )}
+      {wall && <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />}
     </div>
   );
 }
@@ -489,43 +519,28 @@ function SlabProperties({ slab, floor, dispatch, floorId, u, phases }) {
     <div>
       <div className={styles.title}>Slab</div>
       <PhaseSelector phaseId={slab.phaseId} phases={phases} onChange={(v) => updateSlab({ phaseId: v })} />
-      <InputField
-        label="Name"
-        value={slab.name}
-        onChange={(value) => updateSlab({ name: value })}
-      />
-      <InputField
-        label="Type"
-        value={slab.type}
-        onChange={(value) => updateSlab({ type: value })}
-      />
-      <InputField
-        label="Floor"
-        value={floor.name}
-        readOnly
-      />
+      <InputField label="Name" value={slab.name} onChange={(value) => updateSlab({ name: value })} />
+      <InputField label="Type" value={slab.type} onChange={(value) => updateSlab({ type: value })} />
+      <InputField label="Floor" value={floor.name} readOnly />
       <div className={styles.subtitle}>Properties</div>
       <InputField
-        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Thickness"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(slab.thickness)}
         onChange={(value) => updateSlab({ thickness: Math.max(50, u.fromDisplay(value)) })}
       />
       <InputField
-        label="Elevation" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Elevation"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(slab.elevation)}
         onChange={(value) => updateSlab({ elevation: u.fromDisplay(value) })}
       />
-      <InputField
-        label="Area"
-        suffix="m²"
-        value={areaM2}
-        readOnly
-      />
-      <InputField
-        label="Label"
-        value={getSlabDisplayLabel(slab)}
-        readOnly
-      />
+      <InputField label="Area" suffix="m²" value={areaM2} readOnly />
+      <InputField label="Label" value={getSlabDisplayLabel(slab)} readOnly />
     </div>
   );
 }
@@ -556,25 +571,30 @@ function BeamProperties({ beam, floor, dispatch, floorId, u, phases }) {
       />
       <div className={styles.subtitle}>Properties</div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(beam.width)}
         onChange={(v) => updateBeam({ width: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Depth"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(beam.depth)}
         onChange={(v) => updateBeam({ depth: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Floor Level" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Floor Level"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(beam.floorLevel)}
         onChange={(v) => updateBeam({ floorLevel: u.fromDisplay(v) })}
       />
-      <InputField
-        label="Span" type="number" suffix={u.suffix}
-        value={u.toDisplay(len)}
-        readOnly
-      />
+      <InputField label="Span" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
     </div>
   );
 }
@@ -596,7 +616,14 @@ function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
         <select
           value={annotation.mode}
           onChange={(e) => updateAnnotation({ mode: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="aligned">Aligned</option>
           <option value="horizontal">Horizontal</option>
@@ -605,29 +632,40 @@ function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
       </div>
       <div className={styles.subtitle}>Start Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(annotation.startPoint.x)}
         onChange={(value) => updateAnnotation({ startPoint: { ...annotation.startPoint, x: u.fromDisplay(value) } })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(annotation.startPoint.y)}
         onChange={(value) => updateAnnotation({ startPoint: { ...annotation.startPoint, y: u.fromDisplay(value) } })}
       />
       <div className={styles.subtitle}>End Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(annotation.endPoint.x)}
         onChange={(value) => updateAnnotation({ endPoint: { ...annotation.endPoint, x: u.fromDisplay(value) } })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(annotation.endPoint.y)}
         onChange={(value) => updateAnnotation({ endPoint: { ...annotation.endPoint, y: u.fromDisplay(value) } })}
       />
       <div className={styles.subtitle}>Properties</div>
       <InputField
-        label="Offset" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Offset"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(annotation.offset)}
         onChange={(value) => updateAnnotation({ offset: u.fromDisplay(value) })}
       />
@@ -637,7 +675,10 @@ function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
         onChange={(value) => updateAnnotation({ textOverride: value })}
       />
       <InputField
-        label="Measured" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Measured"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(measuredValue)}
         onChange={(value) => {
           const newLen = u.fromDisplay(value);
@@ -685,38 +726,56 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
       <InputField label="Label" value={getStairDisplayLabel(stair)} readOnly />
       <div className={styles.subtitle}>Start Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(stair.startPoint.x)}
         onChange={(v) => updateStair({ startPoint: { ...stair.startPoint, x: u.fromDisplay(v) } })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(stair.startPoint.y)}
         onChange={(v) => updateStair({ startPoint: { ...stair.startPoint, y: u.fromDisplay(v) } })}
       />
       <div className={styles.subtitle}>Geometry</div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(stair.width)}
         onChange={(v) => updateStair({ width: Math.max(300, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Risers" type="number" step={1}
+        label="Risers"
+        type="number"
+        step={1}
         value={stair.numberOfRisers}
         onChange={(v) => updateStair({ numberOfRisers: Math.max(1, Math.round(v)) })}
       />
       <InputField
-        label="Riser H" type="number" suffix={u.suffix} step={u.step(5)}
+        label="Riser H"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(5)}
         value={u.toDisplay(stair.riserHeight)}
         onChange={(v) => updateStair({ riserHeight: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Tread D" type="number" suffix={u.suffix} step={u.step(5)}
+        label="Tread D"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(5)}
         value={u.toDisplay(stair.treadDepth)}
         onChange={(v) => updateStair({ treadDepth: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Direction" type="number" suffix="deg" step={1}
+        label="Direction"
+        type="number"
+        suffix="deg"
+        step={1}
         value={+directionAngle.toFixed(1)}
         onChange={(v) => updateStair({ direction: { angle: v } })}
       />
@@ -725,16 +784,27 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>From</label>
         <select
           value={stair.floorRelation?.fromFloorId || floorId}
-          onChange={(e) => updateStair({
-            floorRelation: {
-              ...(stair.floorRelation || {}),
-              fromFloorId: e.target.value,
-            },
-          })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          onChange={(e) =>
+            updateStair({
+              floorRelation: {
+                ...(stair.floorRelation || {}),
+                fromFloorId: e.target.value,
+              },
+            })
+          }
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           {floorOptions.map((floor) => (
-            <option key={floor.id} value={floor.id}>{floor.name}</option>
+            <option key={floor.id} value={floor.id}>
+              {floor.name}
+            </option>
           ))}
         </select>
       </div>
@@ -742,16 +812,27 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>To</label>
         <select
           value={stair.floorRelation?.toFloorId || floorId}
-          onChange={(e) => updateStair({
-            floorRelation: {
-              ...(stair.floorRelation || {}),
-              toFloorId: e.target.value,
-            },
-          })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          onChange={(e) =>
+            updateStair({
+              floorRelation: {
+                ...(stair.floorRelation || {}),
+                toFloorId: e.target.value,
+              },
+            })
+          }
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           {floorOptions.map((floor) => (
-            <option key={floor.id} value={floor.id}>{floor.name}</option>
+            <option key={floor.id} value={floor.id}>
+              {floor.name}
+            </option>
           ))}
         </select>
       </div>
@@ -763,7 +844,14 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
             <select
               value={stair.roofAccess?.roofOpeningId || ''}
               onChange={(e) => updateStair({ roofAccess: e.target.value ? { roofOpeningId: e.target.value } : null })}
-              style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+              style={{
+                flex: 1,
+                height: '28px',
+                padding: '0 4px',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+              }}
             >
               <option value="">None</option>
               {roofOpenings.map((opening) => (
@@ -779,23 +867,26 @@ function StairProperties({ stair, project, dispatch, floorId, u, phases }) {
             </div>
           ) : stair.roofAccess?.roofOpeningId ? (
             <div className={styles.drawingHint}>
-              The linked roof opening will be used as the stair's roof-access target in sections. Hatch-type openings are recommended for access.
+              The linked roof opening will be used as the stair&apos;s roof-access target in sections. Hatch-type
+              openings are recommended for access.
             </div>
           ) : (
             <div className={styles.drawingHint}>
               Select a roof opening if this stair should terminate at a roof hatch or access opening.
             </div>
           )}
-          {stair.roofAccess?.roofOpeningId && !roofOpenings.some((opening) => opening.id === stair.roofAccess.roofOpeningId) && (
-            <div className={styles.drawingHint}>
-              This stair references a roof opening that is no longer available.
-            </div>
-          )}
-          {roofOpenings.some((opening) => isRoofAccessOpening(opening.type || 'opening')) && !stair.roofAccess?.roofOpeningId && (
-            <div className={styles.drawingHint}>
-              Hatch-type roof openings are available and can be linked here for roof access.
-            </div>
-          )}
+          {stair.roofAccess?.roofOpeningId &&
+            !roofOpenings.some((opening) => opening.id === stair.roofAccess.roofOpeningId) && (
+              <div className={styles.drawingHint}>
+                This stair references a roof opening that is no longer available.
+              </div>
+            )}
+          {roofOpenings.some((opening) => isRoofAccessOpening(opening.type || 'opening')) &&
+            !stair.roofAccess?.roofOpeningId && (
+              <div className={styles.drawingHint}>
+                Hatch-type roof openings are available and can be linked here for roof access.
+              </div>
+            )}
         </>
       )}
       <div className={styles.subtitle}>Derived</div>
@@ -812,9 +903,8 @@ function LandingProperties({ landing, floor, dispatch, floorId, u, phases }) {
 
   const stairs = floor?.stairs || [];
   const autoElevation = computeLandingElevation(landing, stairs, 0);
-  const connectedStairs = stairs.filter(s =>
-    s.startLandingAttachment?.landingId === landing.id ||
-    s.endLandingAttachment?.landingId === landing.id
+  const connectedStairs = stairs.filter(
+    (s) => s.startLandingAttachment?.landingId === landing.id || s.endLandingAttachment?.landingId === landing.id,
   );
 
   return (
@@ -824,39 +914,57 @@ function LandingProperties({ landing, floor, dispatch, floorId, u, phases }) {
       <InputField label="Label" value={getLandingDisplayLabel(landing)} readOnly />
       <div className={styles.subtitle}>Position</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(landing.position.x)}
         onChange={(v) => updateLanding({ position: { ...landing.position, x: u.fromDisplay(v) } })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(landing.position.y)}
         onChange={(v) => updateLanding({ position: { ...landing.position, y: u.fromDisplay(v) } })}
       />
       <div className={styles.subtitle}>Geometry</div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(landing.width)}
         onChange={(v) => updateLanding({ width: Math.max(200, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Depth"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(landing.depth)}
         onChange={(v) => updateLanding({ depth: Math.max(200, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Thickness" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Thickness"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(landing.thickness)}
         onChange={(v) => updateLanding({ thickness: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Rotation" type="number" suffix="deg" step={1}
+        label="Rotation"
+        type="number"
+        suffix="deg"
+        step={1}
         value={+(landing.rotation || 0).toFixed(1)}
         onChange={(v) => updateLanding({ rotation: v })}
       />
       <div className={styles.subtitle}>Elevation</div>
       <InputField
-        label="Elevation" type="number" suffix={u.suffix}
+        label="Elevation"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(landing.elevation || autoElevation)}
         onChange={(v) => updateLanding({ elevation: u.fromDisplay(v) })}
       />
@@ -864,7 +972,7 @@ function LandingProperties({ landing, floor, dispatch, floorId, u, phases }) {
       {connectedStairs.length > 0 && (
         <>
           <div className={styles.subtitle}>Connected Stairs</div>
-          {connectedStairs.map(s => (
+          {connectedStairs.map((s) => (
             <InputField key={s.id} label="Stair" value={s.id.split('_').pop()} readOnly />
           ))}
         </>
@@ -882,52 +990,63 @@ function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u
   return (
     <div>
       <div className={styles.title}>Section Cut</div>
-      <InputField
-        label="Label"
-        value={sectionCut.label}
-        onChange={(value) => updateSectionCut({ label: value })}
-      />
+      <InputField label="Label" value={sectionCut.label} onChange={(value) => updateSectionCut({ label: value })} />
       <div className={styles.subtitle}>Start Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(sectionCut.startPoint.x)}
-        onChange={(value) => updateSectionCut({
-          startPoint: { ...sectionCut.startPoint, x: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateSectionCut({
+            startPoint: { ...sectionCut.startPoint, x: u.fromDisplay(value) },
+          })
+        }
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(sectionCut.startPoint.y)}
-        onChange={(value) => updateSectionCut({
-          startPoint: { ...sectionCut.startPoint, y: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateSectionCut({
+            startPoint: { ...sectionCut.startPoint, y: u.fromDisplay(value) },
+          })
+        }
       />
       <div className={styles.subtitle}>End Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(sectionCut.endPoint.x)}
-        onChange={(value) => updateSectionCut({
-          endPoint: { ...sectionCut.endPoint, x: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateSectionCut({
+            endPoint: { ...sectionCut.endPoint, x: u.fromDisplay(value) },
+          })
+        }
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(sectionCut.endPoint.y)}
-        onChange={(value) => updateSectionCut({
-          endPoint: { ...sectionCut.endPoint, y: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateSectionCut({
+            endPoint: { ...sectionCut.endPoint, y: u.fromDisplay(value) },
+          })
+        }
       />
       <div className={styles.subtitle}>Properties</div>
       <InputField
-        label="Depth" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Depth"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(sectionCut.depth)}
         onChange={(value) => updateSectionCut({ depth: Math.max(100, u.fromDisplay(value)) })}
       />
-      <InputField
-        label="Length" type="number" suffix={u.suffix}
-        value={u.toDisplay(len)}
-        readOnly
-      />
+      <InputField label="Length" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
       <button
         className={styles.actionBtn}
         onClick={() => updateSectionCut({ direction: sectionCut.direction === -1 ? 1 : -1 })}
@@ -956,9 +1075,19 @@ function RailingProperties({ railing, dispatch, floorId, u, phases }) {
       <PhaseSelector phaseId={railing.phaseId} phases={phases} onChange={(v) => updateRailing({ phaseId: v })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
-        <select value={railing.type} onChange={(e) => updateRailing({ type: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
-                   borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}>
+        <select
+          value={railing.type}
+          onChange={(e) => updateRailing({ type: e.target.value })}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+            background: 'var(--color-surface-elevated)',
+          }}
+        >
           <option value={RAILING_TYPES.GLASS}>Glass</option>
           <option value={RAILING_TYPES.HANDRAIL}>Handrail</option>
           <option value={RAILING_TYPES.GUARDRAIL}>Guardrail</option>
@@ -966,50 +1095,68 @@ function RailingProperties({ railing, dispatch, floorId, u, phases }) {
       </div>
       <div className={styles.subtitle}>Start Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(railing.startPoint.x)}
-        onChange={(value) => updateRailing({
-          startPoint: { ...railing.startPoint, x: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateRailing({
+            startPoint: { ...railing.startPoint, x: u.fromDisplay(value) },
+          })
+        }
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(railing.startPoint.y)}
-        onChange={(value) => updateRailing({
-          startPoint: { ...railing.startPoint, y: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateRailing({
+            startPoint: { ...railing.startPoint, y: u.fromDisplay(value) },
+          })
+        }
       />
       <div className={styles.subtitle}>End Point</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(railing.endPoint.x)}
-        onChange={(value) => updateRailing({
-          endPoint: { ...railing.endPoint, x: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateRailing({
+            endPoint: { ...railing.endPoint, x: u.fromDisplay(value) },
+          })
+        }
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(railing.endPoint.y)}
-        onChange={(value) => updateRailing({
-          endPoint: { ...railing.endPoint, y: u.fromDisplay(value) },
-        })}
+        onChange={(value) =>
+          updateRailing({
+            endPoint: { ...railing.endPoint, y: u.fromDisplay(value) },
+          })
+        }
       />
       <div className={styles.subtitle}>Properties</div>
       <InputField
-        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Height"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(railing.height)}
         onChange={(value) => updateRailing({ height: Math.max(100, u.fromDisplay(value)) })}
       />
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(railing.width)}
         onChange={(value) => updateRailing({ width: Math.max(10, u.fromDisplay(value)) })}
       />
-      <InputField
-        label="Length" type="number" suffix={u.suffix}
-        value={u.toDisplay(len)}
-        readOnly
-      />
+      <InputField label="Length" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
     </div>
   );
 }
@@ -1027,9 +1174,19 @@ function WindowProperties({ window: win, wall, dispatch, floorId, u, phases }) {
       <PhaseSelector phaseId={win.phaseId} phases={phases} onChange={(v) => updateWindow({ phaseId: v })} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
-        <select value={winType} onChange={(e) => updateWindow({ type: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)',
-                   borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface-elevated)' }}>
+        <select
+          value={winType}
+          onChange={(e) => updateWindow({ type: e.target.value })}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+            background: 'var(--color-surface-elevated)',
+          }}
+        >
           <option value="standard">Standard</option>
           <option value="casement">Casement</option>
           <option value="awning">Awning</option>
@@ -1038,38 +1195,49 @@ function WindowProperties({ window: win, wall, dispatch, floorId, u, phases }) {
         </select>
       </div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(50)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(50)}
         value={u.toDisplay(win.width)}
         onChange={(v) => updateWindow({ width: Math.max(300, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Height" type="number" suffix={u.suffix} step={u.step(50)}
+        label="Height"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(50)}
         value={u.toDisplay(win.height)}
         onChange={(v) => updateWindow({ height: Math.max(300, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Sill Height" type="number" suffix={u.suffix} step={u.step(50)}
+        label="Sill Height"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(50)}
         value={u.toDisplay(win.sillHeight)}
         onChange={(v) => updateWindow({ sillHeight: u.fromDisplay(v) })}
       />
       <InputField
-        label="Wall Offset" type="number" suffix={u.suffix}
+        label="Wall Offset"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(win.offset)}
         onChange={(v) => updateWindow({ offset: Math.max(0, u.fromDisplay(v)) })}
       />
       {(winType === 'casement' || winType === 'awning') && (
         <button
           className={styles.actionBtn}
-          onClick={() => updateWindow({
-            openDirection: win.openDirection === 'left' ? 'right' : 'left',
-          })}
+          onClick={() =>
+            updateWindow({
+              openDirection: win.openDirection === 'left' ? 'right' : 'left',
+            })
+          }
         >
           Toggle Open Side
         </button>
       )}
-      {wall && (
-        <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />
-      )}
+      {wall && <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />}
     </div>
   );
 }
@@ -1127,13 +1295,12 @@ function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u,
       <div className={styles.title}>Column</div>
       <PhaseSelector phaseId={column.phaseId} phases={phases} onChange={(v) => updateColumn({ phaseId: v })} />
       <InputField
-        label="Name" value={column.name}
+        label="Name"
+        value={column.name}
         onChange={(v) => updateColumn({ name: v, showLabel: v ? true : column.showLabel })}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-          Label
-        </label>
+        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Label</label>
         <input
           type="checkbox"
           checked={Boolean(column.showLabel)}
@@ -1145,33 +1312,49 @@ function ColumnProperties({ column, floor, dispatch, floorId, editorDispatch, u,
       </div>
       <div className={styles.subtitle}>Position</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(column.x)}
         onChange={(v) => updateColumn({ x: u.fromDisplay(v) })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(column.y)}
         onChange={(v) => updateColumn({ y: u.fromDisplay(v) })}
       />
       <div className={styles.subtitle}>Dimensions</div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(column.width)}
         onChange={(v) => updateColumn({ width: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Depth"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(column.depth)}
         onChange={(v) => updateColumn({ depth: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Height" type="number" suffix={u.suffix} step={u.step(100)}
+        label="Height"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(100)}
         value={u.toDisplay(column.height)}
         onChange={(v) => updateColumn({ height: Math.max(100, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Rotation" type="number" suffix="°" step={1}
+        label="Rotation"
+        type="number"
+        suffix="°"
+        step={1}
         value={normalizedRotation}
         onChange={(v) => updateColumn({ rotation: ((+v % 360) + 360) % 360 })}
       />
@@ -1207,39 +1390,45 @@ function FixtureProperties({ fixture, dispatch, floorId, u, phases }) {
     <div>
       <div className={styles.title}>Fixture</div>
       <PhaseSelector phaseId={fixture.phaseId} phases={phases} onChange={(v) => updateFixture({ phaseId: v })} />
-      <InputField
-        label="Name" value={fixture.name}
-        onChange={(v) => updateFixture({ name: v })}
-      />
-      <InputField
-        label="Type"
-        value={fixtureTypeLabels[fixture.fixtureType] || fixture.fixtureType}
-        readOnly
-      />
+      <InputField label="Name" value={fixture.name} onChange={(v) => updateFixture({ name: v })} />
+      <InputField label="Type" value={fixtureTypeLabels[fixture.fixtureType] || fixture.fixtureType} readOnly />
       <div className={styles.subtitle}>Position</div>
       <InputField
-        label="X" type="number" suffix={u.suffix}
+        label="X"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(fixture.x)}
         onChange={(v) => updateFixture({ x: u.fromDisplay(v) })}
       />
       <InputField
-        label="Y" type="number" suffix={u.suffix}
+        label="Y"
+        type="number"
+        suffix={u.suffix}
         value={u.toDisplay(fixture.y)}
         onChange={(v) => updateFixture({ y: u.fromDisplay(v) })}
       />
       <div className={styles.subtitle}>Dimensions</div>
       <InputField
-        label="Width" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(fixture.width)}
         onChange={(v) => updateFixture({ width: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Depth" type="number" suffix={u.suffix} step={u.step(10)}
+        label="Depth"
+        type="number"
+        suffix={u.suffix}
+        step={u.step(10)}
         value={u.toDisplay(fixture.depth)}
         onChange={(v) => updateFixture({ depth: Math.max(50, u.fromDisplay(v)) })}
       />
       <InputField
-        label="Rotation" type="number" suffix="°" step={15}
+        label="Rotation"
+        type="number"
+        suffix="°"
+        step={15}
         value={fixture.rotation}
         onChange={(v) => updateFixture({ rotation: ((+v % 360) + 360) % 360 })}
       />
@@ -1280,7 +1469,7 @@ function AnnotationSettingsProperties({ floor, dispatch }) {
   );
 }
 
-function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloorId, modelTarget, u }) {
+function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloorId, modelTarget, viewMode, u }) {
   const updateSheet = (updates) => {
     dispatch({ type: 'SHEET_UPDATE', sheet: { id: sheet.id, ...updates } });
   };
@@ -1320,14 +1509,20 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
 
   const addViewport = () => {
     try {
-      const sourceFloorId = modelTarget === 'roof'
-        ? (resolveRoofSectionFloor(project, activeFloorId)?.id || getDefaultActiveFloorId(project, activeFloorId))
-        : getDefaultActiveFloorId(project, activeFloorId);
-      const sourceView = modelTarget === 'roof'
-        ? (viewMode === 'section_view'
-          ? 'roof_section'
-          : (viewMode.startsWith('elevation_') ? `roof_${viewMode}` : 'roof_plan'))
-        : (modelTarget === 'truss' ? 'truss_plan' : 'plan');
+      const sourceFloorId =
+        modelTarget === 'roof'
+          ? resolveRoofSectionFloor(project, activeFloorId)?.id || getDefaultActiveFloorId(project, activeFloorId)
+          : getDefaultActiveFloorId(project, activeFloorId);
+      const sourceView =
+        modelTarget === 'roof'
+          ? viewMode === 'section_view'
+            ? 'roof_section'
+            : viewMode.startsWith('elevation_')
+              ? `roof_${viewMode}`
+              : 'roof_plan'
+          : modelTarget === 'truss'
+            ? 'truss_plan'
+            : 'plan';
       const viewportBase = createSheetViewport(sourceView, sourceFloorId, {
         scale: 100,
         lockAutoLayout: sheet.layoutTemplate !== 'auto',
@@ -1357,9 +1552,9 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
   };
 
   const updateRevision = (revisionId, updates) => {
-    updateRevisions((sheet.revisions || []).map((revision) => (
-      revision.id === revisionId ? { ...revision, ...updates } : revision
-    )));
+    updateRevisions(
+      (sheet.revisions || []).map((revision) => (revision.id === revisionId ? { ...revision, ...updates } : revision)),
+    );
   };
 
   const removeRevision = (revisionId) => {
@@ -1376,18 +1571,24 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
       <InputField label="Title" value={sheet.title} onChange={(value) => updateSheet({ title: value })} />
       <InputField label="Number" value={sheet.number || ''} onChange={(value) => updateSheet({ number: value })} />
       <InputField label="Drawing" value={sheet.drawingName} onChange={(value) => updateSheet({ drawingName: value })} />
-      <InputField label="Issue Date" value={sheet.issueDate || ''} onChange={(value) => updateSheet({ issueDate: value })} />
+      <InputField
+        label="Issue Date"
+        value={sheet.issueDate || ''}
+        onChange={(value) => updateSheet({ issueDate: value })}
+      />
       <InputField label="Scale" value={sheet.scaleLabel} onChange={(value) => updateSheet({ scaleLabel: value })} />
       <InputField
         label="Project Title"
         value={projectTitleValue}
-        onChange={(value) => updateSheet({
-          projectNameOverride: value,
-          titleBlock: {
-            ...(sheet.titleBlock || {}),
-            projectTitleOverride: value,
-          },
-        })}
+        onChange={(value) =>
+          updateSheet({
+            projectNameOverride: value,
+            titleBlock: {
+              ...(sheet.titleBlock || {}),
+              projectTitleOverride: value,
+            },
+          })
+        }
       />
       <InputField
         label="Address"
@@ -1409,7 +1610,14 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
         <select
           value={sheet.scaleMode}
           onChange={(e) => updateSheet({ scaleMode: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="custom">Custom</option>
           <option value="per_viewport">Per viewport</option>
@@ -1421,7 +1629,14 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
         <select
           value={sheet.layoutTemplate}
           onChange={(e) => updateLayoutTemplate(e.target.value)}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="auto">Hybrid Auto</option>
           <option value="manual">Manual Frames</option>
@@ -1432,18 +1647,24 @@ function SheetProperties({ sheet, project, dispatch, editorDispatch, activeFloor
         <select
           value={sheet.paperSize}
           onChange={(e) => updateSheet({ paperSize: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           {listPaperPresets().map((preset) => (
-            <option key={preset.key} value={preset.key}>{preset.label}</option>
+            <option key={preset.key} value={preset.key}>
+              {preset.label}
+            </option>
           ))}
         </select>
       </div>
       <InputField label="Viewports" value={(sheet.viewports || []).length} readOnly />
-      <button
-        className={styles.actionBtn}
-        onClick={addViewport}
-      >
+      <button className={styles.actionBtn} onClick={addViewport}>
         Add viewport
       </button>
       <InputField label="Width" suffix={u.suffix} value={u.toDisplay(paperPreset?.width || 0)} readOnly />
@@ -1496,41 +1717,51 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
           rotation: sceneViewport.rotation,
         }
       : viewport;
-    const nextViewport = fitViewportToSheet({
-      ...baseViewport,
-      ...updates,
-      lockAutoLayout: 'lockAutoLayout' in updates
-        ? updates.lockAutoLayout
-        : (isManualEdit ? true : baseViewport.lockAutoLayout),
-    }, sheet);
+    const nextViewport = fitViewportToSheet(
+      {
+        ...baseViewport,
+        ...updates,
+        lockAutoLayout:
+          'lockAutoLayout' in updates ? updates.lockAutoLayout : isManualEdit ? true : baseViewport.lockAutoLayout,
+      },
+      sheet,
+    );
     dispatch({ type: 'SHEET_VIEWPORT_UPDATE', sheetId: sheet.id, viewport: nextViewport });
   };
 
   const floorOptions = getOrderedFloors(project);
-  const trussInstanceOptions = getProjectTrussSystems(project, viewport.sourceFloorId)
-    .flatMap((trussSystem) => (trussSystem.trussInstances || []).map((trussInstance, index) => ({
+  const trussInstanceOptions = getProjectTrussSystems(project, viewport.sourceFloorId).flatMap((trussSystem) =>
+    (trussSystem.trussInstances || []).map((trussInstance, index) => ({
       id: trussInstance.id,
       label: `${trussSystem.name || 'Truss System'} · Instance ${index + 1}`,
-    })));
+    })),
+  );
   const updateSource = (nextSourceView, nextFloorId = viewport.sourceFloorId, nextRefId) => {
     const floor = floorOptions.find((entry) => entry.id === nextFloorId) || null;
-    const refId = nextRefId !== undefined
-      ? nextRefId
-      : (nextSourceView === 'section' || nextSourceView === 'roof_section')
-        ? (floor?.sectionCuts || [])[0]?.id || null
-        : (nextSourceView === 'truss_detail'
-          ? (getProjectTrussSystems(project, nextFloorId)
-            .flatMap((trussSystem) => trussSystem.trussInstances || [])[0]?.id || null)
-          : null);
+    const refId =
+      nextRefId !== undefined
+        ? nextRefId
+        : nextSourceView === 'section' || nextSourceView === 'roof_section'
+          ? (floor?.sectionCuts || [])[0]?.id || null
+          : nextSourceView === 'truss_detail'
+            ? getProjectTrussSystems(project, nextFloorId).flatMap((trussSystem) => trussSystem.trussInstances || [])[0]
+                ?.id || null
+            : null;
     updateViewport({
       sourceView: nextSourceView,
       sourceFloorId: nextFloorId,
       sourceRefId: refId,
-      role: nextSourceView === '3d_preview'
-        ? 'supplemental'
-        : ((nextSourceView === 'plan' || nextSourceView === 'roof_plan' || nextSourceView === 'roof_drainage' || nextSourceView === 'truss_plan')
-          ? 'primary'
-          : (nextSourceView === 'truss_detail' ? 'detail' : 'secondary')),
+      role:
+        nextSourceView === '3d_preview'
+          ? 'supplemental'
+          : nextSourceView === 'plan' ||
+              nextSourceView === 'roof_plan' ||
+              nextSourceView === 'roof_drainage' ||
+              nextSourceView === 'truss_plan'
+            ? 'primary'
+            : nextSourceView === 'truss_detail'
+              ? 'detail'
+              : 'secondary',
     });
   };
 
@@ -1564,7 +1795,14 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         <select
           value={viewport.sourceView}
           onChange={(e) => updateSource(e.target.value)}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="plan">Plan</option>
           <option value="roof_plan">Roof Plan</option>
@@ -1590,37 +1828,67 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         <select
           value={viewport.sourceFloorId || ''}
           onChange={(e) => updateSource(viewport.sourceView, e.target.value)}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           {floorOptions.map((floor) => (
-            <option key={floor.id} value={floor.id}>{floor.name}</option>
+            <option key={floor.id} value={floor.id}>
+              {floor.name}
+            </option>
           ))}
         </select>
       </div>
-      {(viewport.sourceView === 'section' || viewport.sourceView === 'roof_section') && sectionCutOptions.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Section Cut</label>
-          <select
-            value={viewport.sourceRefId || ''}
-            onChange={(e) => updateSource(viewport.sourceView, viewport.sourceFloorId, e.target.value || null)}
-            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
-          >
-            {sectionCutOptions.map((sc) => (
-              <option key={sc.id} value={sc.id}>{sc.label || sc.id}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {(viewport.sourceView === 'section' || viewport.sourceView === 'roof_section') &&
+        sectionCutOptions.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+              Section Cut
+            </label>
+            <select
+              value={viewport.sourceRefId || ''}
+              onChange={(e) => updateSource(viewport.sourceView, viewport.sourceFloorId, e.target.value || null)}
+              style={{
+                flex: 1,
+                height: '28px',
+                padding: '0 4px',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+              }}
+            >
+              {sectionCutOptions.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  {sc.label || sc.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       {viewport.sourceView === 'truss_detail' && trussInstanceOptions.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
           <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Truss</label>
           <select
             value={viewport.sourceRefId || ''}
             onChange={(e) => updateSource(viewport.sourceView, viewport.sourceFloorId, e.target.value || null)}
-            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+            style={{
+              flex: 1,
+              height: '28px',
+              padding: '0 4px',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '12px',
+            }}
           >
             {trussInstanceOptions.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
             ))}
           </select>
         </div>
@@ -1631,7 +1899,14 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         <select
           value={viewport.role}
           onChange={(e) => updateViewport({ role: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="primary">Primary</option>
           <option value="secondary">Secondary</option>
@@ -1644,13 +1919,24 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         <select
           value={viewport.captionPosition}
           onChange={(e) => updateViewport({ captionPosition: e.target.value })}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="below">Below</option>
           <option value="above">Above</option>
         </select>
       </div>
-      <InputField label="Reference" value={viewport.referenceNote || ''} onChange={(value) => updateViewport({ referenceNote: value })} />
+      <InputField
+        label="Reference"
+        value={viewport.referenceNote || ''}
+        onChange={(value) => updateViewport({ referenceNote: value })}
+      />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Phase</label>
         <select
@@ -1666,11 +1952,20 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
               });
             }
           }}
-          style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+          style={{
+            flex: 1,
+            height: '28px',
+            padding: '0 4px',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '12px',
+          }}
         >
           <option value="">All Phases</option>
           {(project.phases || []).map((phase) => (
-            <option key={phase.id} value={phase.id}>{phase.name}</option>
+            <option key={phase.id} value={phase.id}>
+              {phase.name}
+            </option>
           ))}
         </select>
       </div>
@@ -1680,7 +1975,14 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
           <select
             value={viewport.phaseViewMode || 'all'}
             onChange={(e) => updateViewport({ phaseViewMode: e.target.value })}
-            style={{ flex: 1, height: '28px', padding: '0 4px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px' }}
+            style={{
+              flex: 1,
+              height: '28px',
+              padding: '0 4px',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '12px',
+            }}
           >
             <option value="all">All</option>
             <option value="single">Single</option>
@@ -1699,12 +2001,48 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         </button>
       )}
       <div className={styles.subtitle}>Frame</div>
-      <InputField label="X" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.x)} onChange={(value) => updateViewport({ x: u.fromDisplay(value) })} />
-      <InputField label="Y" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.y)} onChange={(value) => updateViewport({ y: u.fromDisplay(value) })} />
-      <InputField label="Width" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.width)} onChange={(value) => updateViewport({ width: Math.max(20, u.fromDisplay(value)) })} />
-      <InputField label="Height" type="number" suffix={u.suffix} value={u.toDisplay(displayedViewport.height)} onChange={(value) => updateViewport({ height: Math.max(20, u.fromDisplay(value)) })} />
-      <InputField label="Scale 1:" type="number" value={Math.round(viewport.scale)} onChange={(value) => updateViewport({ scale: Math.max(1, Math.round(value)) })} />
-      <InputField label="Rotation" type="number" suffix="°" step={1} value={displayedViewport.rotation || 0} onChange={(value) => updateViewport({ rotation: ((value % 360) + 360) % 360 })} />
+      <InputField
+        label="X"
+        type="number"
+        suffix={u.suffix}
+        value={u.toDisplay(displayedViewport.x)}
+        onChange={(value) => updateViewport({ x: u.fromDisplay(value) })}
+      />
+      <InputField
+        label="Y"
+        type="number"
+        suffix={u.suffix}
+        value={u.toDisplay(displayedViewport.y)}
+        onChange={(value) => updateViewport({ y: u.fromDisplay(value) })}
+      />
+      <InputField
+        label="Width"
+        type="number"
+        suffix={u.suffix}
+        value={u.toDisplay(displayedViewport.width)}
+        onChange={(value) => updateViewport({ width: Math.max(20, u.fromDisplay(value)) })}
+      />
+      <InputField
+        label="Height"
+        type="number"
+        suffix={u.suffix}
+        value={u.toDisplay(displayedViewport.height)}
+        onChange={(value) => updateViewport({ height: Math.max(20, u.fromDisplay(value)) })}
+      />
+      <InputField
+        label="Scale 1:"
+        type="number"
+        value={Math.round(viewport.scale)}
+        onChange={(value) => updateViewport({ scale: Math.max(1, Math.round(value)) })}
+      />
+      <InputField
+        label="Rotation"
+        type="number"
+        suffix="°"
+        step={1}
+        value={displayedViewport.rotation || 0}
+        onChange={(value) => updateViewport({ rotation: ((value % 360) + 360) % 360 })}
+      />
     </div>
   );
 }
@@ -1717,11 +2055,7 @@ function FloorProperties({ floor, dispatch, onDuplicate, onDelete, canDelete, u 
   return (
     <div>
       <div className={styles.title}>Floor</div>
-      <InputField
-        label="Name"
-        value={floor.name}
-        onChange={(value) => updateFloor({ name: value })}
-      />
+      <InputField label="Name" value={floor.name} onChange={(value) => updateFloor({ name: value })} />
       <InputField
         label="Level Index"
         type="number"
@@ -1754,17 +2088,10 @@ function FloorProperties({ floor, dispatch, onDuplicate, onDelete, canDelete, u 
       <InputField label="Beams" value={(floor.beams || []).length} readOnly />
       <InputField label="Stairs" value={(floor.stairs || []).length} readOnly />
       <InputField label="Slabs" value={(floor.slabs || []).length} readOnly />
-      <button
-        className={styles.actionBtn}
-        onClick={() => onDuplicate(floor)}
-      >
+      <button className={styles.actionBtn} onClick={() => onDuplicate(floor)}>
         Duplicate floor
       </button>
-      <button
-        className={styles.deleteBtn}
-        onClick={() => onDelete(floor)}
-        disabled={!canDelete}
-      >
+      <button className={styles.deleteBtn} onClick={() => onDelete(floor)} disabled={!canDelete}>
         Delete floor
       </button>
     </div>
@@ -1788,28 +2115,32 @@ function ProjectSummary({ project, floor, dispatch }) {
       <InputField
         label="Drawn By"
         value={project.documentDefaults?.drawnBy || ''}
-        onChange={(value) => dispatch({
-          type: 'PROJECT_UPDATE',
-          updates: {
-            documentDefaults: {
-              ...(project.documentDefaults || {}),
-              drawnBy: value,
+        onChange={(value) =>
+          dispatch({
+            type: 'PROJECT_UPDATE',
+            updates: {
+              documentDefaults: {
+                ...(project.documentDefaults || {}),
+                drawnBy: value,
+              },
             },
-          },
-        })}
+          })
+        }
       />
       <InputField
         label="Checked"
         value={project.documentDefaults?.checkedBy || ''}
-        onChange={(value) => dispatch({
-          type: 'PROJECT_UPDATE',
-          updates: {
-            documentDefaults: {
-              ...(project.documentDefaults || {}),
-              checkedBy: value,
+        onChange={(value) =>
+          dispatch({
+            type: 'PROJECT_UPDATE',
+            updates: {
+              documentDefaults: {
+                ...(project.documentDefaults || {}),
+                checkedBy: value,
+              },
             },
-          },
-        })}
+          })
+        }
       />
       <div className={styles.summary}>
         <p>Name: {project.name}</p>
@@ -1844,6 +2175,7 @@ export default function PropertiesPanel() {
     activeSheetId,
     workspaceMode,
     modelTarget,
+    viewMode,
     activeTool,
     toolState,
     activePhaseId,
@@ -1851,10 +2183,11 @@ export default function PropertiesPanel() {
     dispatch: editorDispatch,
   } = useEditor();
   const orderedFloors = getOrderedFloors(project);
+  const confirm = useConfirmDialog();
   const phases = getOrderedPhases(project);
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
-    [project, activePhaseId, phaseViewMode]
+    [project, activePhaseId, phaseViewMode],
   );
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const roofSystem = project.roofSystem || null;
@@ -1866,12 +2199,15 @@ export default function PropertiesPanel() {
   const activePhaseName = phases.find((phase) => phase.id === activePhaseId)?.name || null;
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
   const u = useUnits();
-  const { trussSystem: selectedTrussParent } = selectedType === 'trussInstance'
-    ? findTrussInstance(project, selectedId)
-    : { trussSystem: null };
-  const activeTrussSystem = selectedType === 'trussSystem'
-    ? (project.trussSystems || []).find((entry) => entry.id === selectedId) || visibleFloorTrussSystems[0] || floorTrussSystems[0] || null
-    : (selectedTrussParent || visibleFloorTrussSystems[0] || floorTrussSystems[0] || null);
+  const { trussSystem: selectedTrussParent } =
+    selectedType === 'trussInstance' ? findTrussInstance(project, selectedId) : { trussSystem: null };
+  const activeTrussSystem =
+    selectedType === 'trussSystem'
+      ? (project.trussSystems || []).find((entry) => entry.id === selectedId) ||
+        visibleFloorTrussSystems[0] ||
+        floorTrussSystems[0] ||
+        null
+      : selectedTrussParent || visibleFloorTrussSystems[0] || floorTrussSystems[0] || null;
   const isActiveTrussHiddenByPhase = Boolean(activeTrussSystem && !visibleTrussIds.has(activeTrussSystem.id));
 
   const selectFloor = (floorId) => {
@@ -1888,10 +2224,9 @@ export default function PropertiesPanel() {
     selectFloor(duplicatedFloor.id);
   };
 
-  const handleDeleteFloor = (floorToDelete) => {
+  const handleDeleteFloor = async (floorToDelete) => {
     if (orderedFloors.length <= 1) return;
-    const confirmed = window.confirm(`Delete "${floorToDelete.name}"?`);
-    if (!confirmed) return;
+    if (!(await confirm(`Delete "${floorToDelete.name}"?`))) return;
 
     const remainingFloors = orderedFloors.filter((entry) => entry.id !== floorToDelete.id);
     const fallbackFloor = remainingFloors[0] || null;
@@ -1909,11 +2244,11 @@ export default function PropertiesPanel() {
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!selectedId) return;
     if (selectedType === 'phase') {
-      const phase = (project.phases || []).find(p => p.id === selectedId);
-      if (phase && window.confirm(`Delete phase "${phase.name}"?`)) {
+      const phase = (project.phases || []).find((p) => p.id === selectedId);
+      if (phase && (await confirm(`Delete phase "${phase.name}"?`))) {
         dispatch({ type: 'PHASE_DELETE', phaseId: selectedId });
       }
       editorDispatch({ type: 'DESELECT' });
@@ -1978,75 +2313,93 @@ export default function PropertiesPanel() {
     editorDispatch({ type: 'DESELECT' });
   };
 
-  let content = workspaceMode === 'sheet' && sheet
-    ? <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} modelTarget={modelTarget} u={u} />
-    : modelTarget === 'roof'
-      ? (
-        roofSystem
-          ? (
-            <RoofSystemProperties
-              project={project}
-              roofSystem={roofSystem}
-              dispatch={dispatch}
-              editorDispatch={editorDispatch}
-              u={u}
-              phases={phases}
-              isHiddenByPhase={isRoofHiddenByPhase}
-              activePhaseName={activePhaseName}
-              phaseViewMode={phaseViewMode}
-            />
-          )
-          : <RoofEmptyState project={project} dispatch={dispatch} editorDispatch={editorDispatch} activePhaseId={activePhaseId} />
+  let content =
+    workspaceMode === 'sheet' && sheet ? (
+      <SheetProperties
+        sheet={sheet}
+        project={project}
+        dispatch={dispatch}
+        editorDispatch={editorDispatch}
+        activeFloorId={activeFloorId}
+        modelTarget={modelTarget}
+        viewMode={viewMode}
+        u={u}
+      />
+    ) : modelTarget === 'roof' ? (
+      roofSystem ? (
+        <RoofSystemProperties
+          project={project}
+          roofSystem={roofSystem}
+          dispatch={dispatch}
+          editorDispatch={editorDispatch}
+          u={u}
+          phases={phases}
+          isHiddenByPhase={isRoofHiddenByPhase}
+          activePhaseName={activePhaseName}
+          phaseViewMode={phaseViewMode}
+        />
+      ) : (
+        <RoofEmptyState
+          project={project}
+          dispatch={dispatch}
+          editorDispatch={editorDispatch}
+          activePhaseId={activePhaseId}
+        />
       )
-      : modelTarget === 'truss'
-        ? (
-          activeTrussSystem
-            ? (
-              <TrussSystemProperties
-                project={project}
-                trussSystem={activeTrussSystem}
-                dispatch={dispatch}
-                editorDispatch={editorDispatch}
-                u={u}
-                phases={phases}
-                isHiddenByPhase={isActiveTrussHiddenByPhase}
-                activePhaseName={activePhaseName}
-                phaseViewMode={phaseViewMode}
-              />
-            )
-            : (
-              <TrussEmptyState
-                project={project}
-                activeFloorId={activeFloorId}
-                editorDispatch={editorDispatch}
-              />
-            )
-        )
-      : (
-        <>
-          {floor && (
-            <FloorProperties
-              floor={floor}
-              dispatch={dispatch}
-              onDuplicate={handleDuplicateFloor}
-              onDelete={handleDeleteFloor}
-              canDelete={orderedFloors.length > 1}
-              u={u}
-            />
-          )}
-          <ProjectSummary project={project} floor={floor} dispatch={dispatch} />
-        </>
-      );
+    ) : modelTarget === 'truss' ? (
+      activeTrussSystem ? (
+        <TrussSystemProperties
+          project={project}
+          trussSystem={activeTrussSystem}
+          dispatch={dispatch}
+          editorDispatch={editorDispatch}
+          u={u}
+          phases={phases}
+          isHiddenByPhase={isActiveTrussHiddenByPhase}
+          activePhaseName={activePhaseName}
+          phaseViewMode={phaseViewMode}
+        />
+      ) : (
+        <TrussEmptyState project={project} activeFloorId={activeFloorId} editorDispatch={editorDispatch} />
+      )
+    ) : (
+      <>
+        {floor && (
+          <FloorProperties
+            floor={floor}
+            dispatch={dispatch}
+            onDuplicate={handleDuplicateFloor}
+            onDelete={handleDeleteFloor}
+            canDelete={orderedFloors.length > 1}
+            u={u}
+          />
+        )}
+        <ProjectSummary project={project} floor={floor} dispatch={dispatch} />
+      </>
+    );
 
   if (selectedId && workspaceMode === 'sheet' && sheet) {
     if (selectedType === 'sheet') {
       if (sheet.id === selectedId) {
-        content = <SheetProperties sheet={sheet} project={project} dispatch={dispatch} editorDispatch={editorDispatch} activeFloorId={activeFloorId} modelTarget={modelTarget} u={u} />;
+        content = (
+          <SheetProperties
+            sheet={sheet}
+            project={project}
+            dispatch={dispatch}
+            editorDispatch={editorDispatch}
+            activeFloorId={activeFloorId}
+            modelTarget={modelTarget}
+            viewMode={viewMode}
+            u={u}
+          />
+        );
       }
     } else if (selectedType === 'sheetViewport') {
       const viewport = (sheet.viewports || []).find((entry) => entry.id === selectedId);
       if (viewport) {
-        content = <SheetViewportProperties sheet={sheet} viewport={viewport} project={project} dispatch={dispatch} u={u} />;
+        content = (
+          <SheetViewportProperties sheet={sheet} viewport={viewport} project={project} dispatch={dispatch} u={u} />
+        );
       }
     }
   } else if (selectedId && modelTarget === 'roof' && roofSystem) {
@@ -2137,74 +2490,154 @@ export default function PropertiesPanel() {
         />
       );
     } else if (selectedType === 'phase') {
-      const phase = (project.phases || []).find(p => p.id === selectedId);
+      const phase = (project.phases || []).find((p) => p.id === selectedId);
       if (phase) {
         content = <PhaseProperties phase={phase} project={project} dispatch={dispatch} />;
       }
     } else if (selectedType === 'slab') {
-      const slab = (floor.slabs || []).find(s => s.id === selectedId) || null;
+      const slab = (floor.slabs || []).find((s) => s.id === selectedId) || null;
       if (slab) {
-        content = <SlabProperties slab={slab} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <SlabProperties slab={slab} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />
+        );
       }
     } else if (selectedType === 'wall') {
-      const wall = floor.walls.find(w => w.id === selectedId);
+      const wall = floor.walls.find((w) => w.id === selectedId);
       if (wall) {
-        content = <WallProperties wall={wall} dispatch={dispatch} editorDispatch={editorDispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <WallProperties
+            wall={wall}
+            dispatch={dispatch}
+            editorDispatch={editorDispatch}
+            floorId={activeFloorId}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     } else if (selectedType === 'beam') {
-      const beam = (floor.beams || []).find(b => b.id === selectedId);
+      const beam = (floor.beams || []).find((b) => b.id === selectedId);
       if (beam) {
-        content = <BeamProperties beam={beam} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <BeamProperties beam={beam} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />
+        );
       }
     } else if (selectedType === 'sectionCut') {
-      const sectionCut = (floor.sectionCuts || []).find(s => s.id === selectedId) || null;
+      const sectionCut = (floor.sectionCuts || []).find((s) => s.id === selectedId) || null;
       if (sectionCut) {
-        content = <SectionCutProperties sectionCut={sectionCut} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} />;
+        content = (
+          <SectionCutProperties
+            sectionCut={sectionCut}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            editorDispatch={editorDispatch}
+            u={u}
+          />
+        );
       }
     } else if (selectedType === 'annotation') {
       const annotation = (floor.annotations || []).find((entry) => entry.id === selectedId);
       if (annotation) {
-        content = <AnnotationProperties annotation={annotation} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} />;
+        content = (
+          <AnnotationProperties
+            annotation={annotation}
+            floor={floor}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            u={u}
+          />
+        );
       }
     } else if (selectedType === 'stair') {
-      const stair = (floor.stairs || []).find(entry => entry.id === selectedId);
+      const stair = (floor.stairs || []).find((entry) => entry.id === selectedId);
       if (stair) {
-        content = <StairProperties stair={stair} project={project} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <StairProperties
+            stair={stair}
+            project={project}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     } else if (selectedType === 'landing') {
-      const landing = (floor.landings || []).find(l => l.id === selectedId);
+      const landing = (floor.landings || []).find((l) => l.id === selectedId);
       if (landing) {
-        content = <LandingProperties landing={landing} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <LandingProperties
+            landing={landing}
+            floor={floor}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     } else if (selectedType === 'door') {
-      const door = floor.doors.find(d => d.id === selectedId);
-      const wall = door ? floor.walls.find(w => w.id === door.wallId) : null;
+      const door = floor.doors.find((d) => d.id === selectedId);
+      const wall = door ? floor.walls.find((w) => w.id === door.wallId) : null;
       if (door) {
-        content = <DoorProperties door={door} wall={wall} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} phases={phases} />;
+        content = (
+          <DoorProperties
+            door={door}
+            wall={wall}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            editorDispatch={editorDispatch}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     } else if (selectedType === 'window') {
-      const win = floor.windows.find(w => w.id === selectedId);
-      const wall = win ? floor.walls.find(w => w.id === win.wallId) : null;
+      const win = floor.windows.find((w) => w.id === selectedId);
+      const wall = win ? floor.walls.find((w) => w.id === win.wallId) : null;
       if (win) {
-        content = <WindowProperties window={win} wall={wall} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <WindowProperties
+            window={win}
+            wall={wall}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     } else if (selectedType === 'column') {
-      const column = (floor.columns || []).find(c => c.id === selectedId);
+      const column = (floor.columns || []).find((c) => c.id === selectedId);
       if (column) {
-        content = <ColumnProperties column={column} floor={floor} dispatch={dispatch} floorId={activeFloorId} editorDispatch={editorDispatch} u={u} phases={phases} />;
+        content = (
+          <ColumnProperties
+            column={column}
+            floor={floor}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            editorDispatch={editorDispatch}
+            u={u}
+            phases={phases}
+          />
+        );
       }
     } else if (selectedType === 'fixture') {
-      const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+      const fixture = (floor.fixtures || []).find((f) => f.id === selectedId);
       if (fixture) {
-        content = <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <FixtureProperties fixture={fixture} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />
+        );
       }
     } else if (selectedType === 'railing') {
-      const railing = (floor.railings || []).find(r => r.id === selectedId);
+      const railing = (floor.railings || []).find((r) => r.id === selectedId);
       if (railing) {
-        content = <RailingProperties railing={railing} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />;
+        content = (
+          <RailingProperties railing={railing} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />
+        );
       }
     } else if (selectedType === 'room') {
-      const room = floor.rooms.find(r => r.id === selectedId);
+      const room = floor.rooms.find((r) => r.id === selectedId);
       if (room) {
         content = <RoomProperties room={room} dispatch={dispatch} floorId={activeFloorId} phases={phases} />;
       }
@@ -2217,21 +2650,23 @@ export default function PropertiesPanel() {
         <button
           className={u.unit === 'mm' ? styles.segmentBtnActive : styles.segmentBtn}
           onClick={() => u.setUnit('mm')}
-        >mm</button>
-        <button
-          className={u.unit === 'm' ? styles.segmentBtnActive : styles.segmentBtn}
-          onClick={() => u.setUnit('m')}
-        >m</button>
+        >
+          mm
+        </button>
+        <button className={u.unit === 'm' ? styles.segmentBtnActive : styles.segmentBtn} onClick={() => u.setUnit('m')}>
+          m
+        </button>
       </div>
-      {workspaceMode === 'sheet' && sheet && (
-        <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />
-      )}
+      {workspaceMode === 'sheet' && sheet && <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />}
       {activeTool === TOOLS.FILLET && modelTarget === 'floor' && workspaceMode === 'model' && (
         <div>
           <div className={styles.title}>Fillet Tool</div>
           <div className={styles.subtitle}>Settings</div>
           <InputField
-            label="Radius" type="number" suffix={u.suffix} step={u.step(FILLET_DEFAULT_RADIUS / 4)}
+            label="Radius"
+            type="number"
+            suffix={u.suffix}
+            step={u.step(FILLET_DEFAULT_RADIUS / 4)}
             value={u.toDisplay(toolState.radius ?? FILLET_DEFAULT_RADIUS)}
             onChange={(v) => {
               const mm = u.fromDisplay(v);

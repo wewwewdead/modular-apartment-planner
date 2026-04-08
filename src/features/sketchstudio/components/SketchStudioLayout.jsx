@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
 import RightPanel from './RightPanel';
@@ -92,6 +93,7 @@ export default function SketchStudioLayout(props) {
     duplicateEntities,
   } = props;
 
+  const confirm = useConfirmDialog();
   const [showGallery, setShowGallery] = useState(false);
 
   useEffect(() => {
@@ -102,10 +104,10 @@ export default function SketchStudioLayout(props) {
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(bomEntities);
 
   const handleLoadTemplate = useCallback(
-    (workspace) => {
+    async (workspace) => {
       if (
         document.entities.length > 0 &&
-        !window.confirm('Loading a template will replace your current sketch. Continue?')
+        !(await confirm('Loading a template will replace your current sketch. Continue?'))
       )
         return;
       if (workspace?.document) {
@@ -113,7 +115,7 @@ export default function SketchStudioLayout(props) {
       }
       setShowGallery(false);
     },
-    [document.entities.length, loadTemplate],
+    [document.entities.length, loadTemplate, confirm],
   );
 
   const handleOpenSketch = useCallback(async () => {

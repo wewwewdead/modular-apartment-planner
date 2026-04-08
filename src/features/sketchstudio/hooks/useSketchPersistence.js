@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { loadWorkspaceSnapshot } from '../store/sketchStudioActions';
 import sketchStudioInitialState from '../store/sketchStudioInitialState';
 import {
@@ -18,6 +19,7 @@ import { clearSketchRecovery, loadSketchRecovery, saveSketchRecovery } from '../
 import { isEditableTarget } from './sketchConstants';
 
 export default function useSketchPersistence(state, dispatch) {
+  const confirm = useConfirmDialog();
   const [documentFileHandle, setDocumentFileHandle] = useState(null);
   const [documentPersistenceMeta, setDocumentPersistenceMeta] = useState({
     savedAt: null,
@@ -99,7 +101,7 @@ export default function useSketchPersistence(state, dispatch) {
     } catch {
       persistedWorkspaceSnapshotRef.current = comparableWorkspaceSnapshot;
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount-only recovery load
 
   // Track persisted snapshot
   useEffect(() => {
@@ -165,16 +167,13 @@ export default function useSketchPersistence(state, dispatch) {
     [dispatch],
   );
 
-  const shouldConfirmWorkspaceReplacement = useCallback(() => {
-    if (!documentIsDirty) {
-      return true;
-    }
+  const shouldConfirmWorkspaceReplacement = useCallback(async () => {
+    if (!documentIsDirty) return true;
+    return confirm('Unsaved sketch changes will be lost. Continue?');
+  }, [documentIsDirty, confirm]);
 
-    return window.confirm('Unsaved sketch changes will be lost. Continue?');
-  }, [documentIsDirty]);
-
-  const handleNewSketch = useCallback(() => {
-    if (!shouldConfirmWorkspaceReplacement()) {
+  const handleNewSketch = useCallback(async () => {
+    if (!(await shouldConfirmWorkspaceReplacement())) {
       return;
     }
 
@@ -210,7 +209,7 @@ export default function useSketchPersistence(state, dispatch) {
         return;
       }
 
-      if (!shouldConfirmWorkspaceReplacement()) {
+      if (!(await shouldConfirmWorkspaceReplacement())) {
         return;
       }
 
@@ -233,7 +232,7 @@ export default function useSketchPersistence(state, dispatch) {
   );
 
   const handleOpenSketch = useCallback(async () => {
-    if (!shouldConfirmWorkspaceReplacement()) {
+    if (!(await shouldConfirmWorkspaceReplacement())) {
       return;
     }
 
