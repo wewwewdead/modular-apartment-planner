@@ -8,20 +8,72 @@ const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'));
 const FloorplanWorkspace = lazy(() => import('./modules/floorplan'));
 const SketchStudioPage = lazy(() => import('./pages/SketchStudio'));
 
+function RouteFallback() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        fontFamily: 'system-ui, sans-serif',
+        color: '#666',
+      }}
+    >
+      Loading...
+    </div>
+  );
+}
+
 function RouteErrorBoundary({ children }) {
   return (
     <ErrorBoundary>
-      <Suspense>{children}</Suspense>
+      <Suspense fallback={<RouteFallback />}>{children}</Suspense>
     </ErrorBoundary>
   );
 }
 
 export const router = createBrowserRouter([
-  { path: '/', element: <RouteErrorBoundary><HomePage /></RouteErrorBoundary> },
-  { path: '/floorplan', element: <RouteErrorBoundary><FloorplanWorkspace /></RouteErrorBoundary> },
-  { path: '/sketch', element: <RouteErrorBoundary><SketchStudioPage /></RouteErrorBoundary> },
-  { path: '/playground', element: <RouteErrorBoundary><PlaygroundPage /></RouteErrorBoundary> },
-  { path: '/docs', element: <RouteErrorBoundary><DocsPage /></RouteErrorBoundary> },
+  {
+    path: '/',
+    element: (
+      <RouteErrorBoundary>
+        <HomePage />
+      </RouteErrorBoundary>
+    ),
+  },
+  {
+    path: '/floorplan',
+    element: (
+      <RouteErrorBoundary>
+        <FloorplanWorkspace />
+      </RouteErrorBoundary>
+    ),
+  },
+  {
+    path: '/sketch',
+    element: (
+      <RouteErrorBoundary>
+        <SketchStudioPage />
+      </RouteErrorBoundary>
+    ),
+  },
+  {
+    path: '/playground',
+    element: (
+      <RouteErrorBoundary>
+        <PlaygroundPage />
+      </RouteErrorBoundary>
+    ),
+  },
+  {
+    path: '/docs',
+    element: (
+      <RouteErrorBoundary>
+        <DocsPage />
+      </RouteErrorBoundary>
+    ),
+  },
 ]);
 
 export function AppRouter() {

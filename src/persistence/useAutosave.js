@@ -3,7 +3,7 @@ import { saveProject } from './storage';
 
 const AUTOSAVE_DELAY = 5000;
 
-export function useAutosave(project, isDirty, dispatch) {
+export function useAutosave(project, isDirty, dispatch, onError) {
   useEffect(() => {
     if (!isDirty) return;
 
@@ -11,11 +11,12 @@ export function useAutosave(project, isDirty, dispatch) {
       try {
         await saveProject(project);
         dispatch({ type: 'MARK_SAVED' });
-      } catch {
-        // Autosave failed silently — user can still manual save
+      } catch (err) {
+        console.warn('[autosave] Failed to save project:', err);
+        if (onError) onError(err);
       }
     }, AUTOSAVE_DELAY);
 
     return () => clearTimeout(timer);
-  }, [project, isDirty, dispatch]);
+  }, [project, isDirty, dispatch, onError]);
 }

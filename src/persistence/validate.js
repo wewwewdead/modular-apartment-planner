@@ -27,14 +27,15 @@ export function validateProjectStructure(project) {
       errors.push({ path: `floors[${fi}].walls`, message: 'Floor must have a walls array' });
     }
 
-    for (const door of (floor.doors || [])) {
+    for (const door of floor.doors || []) {
       if (!door.id) errors.push({ path: `floors[${fi}].doors`, message: 'Door missing id' });
       if (!door.wallId) errors.push({ path: `floors[${fi}].doors`, message: `Door ${door.id || '?'} missing wallId` });
     }
 
-    for (const win of (floor.windows || [])) {
+    for (const win of floor.windows || []) {
       if (!win.id) errors.push({ path: `floors[${fi}].windows`, message: 'Window missing id' });
-      if (!win.wallId) errors.push({ path: `floors[${fi}].windows`, message: `Window ${win.id || '?'} missing wallId` });
+      if (!win.wallId)
+        errors.push({ path: `floors[${fi}].windows`, message: `Window ${win.id || '?'} missing wallId` });
     }
   });
 
@@ -52,53 +53,83 @@ export function validateProjectReferences(project) {
     const landingIds = new Set((floor.landings || []).map((l) => l.id));
     const columnIds = new Set((floor.columns || []).map((c) => c.id));
 
-    for (const door of (floor.doors || [])) {
+    for (const door of floor.doors || []) {
       if (door.wallId && !wallIds.has(door.wallId)) {
-        warnings.push({ path: `floor ${floor.id} door ${door.id}`, message: `References non-existent wall ${door.wallId}` });
+        warnings.push({
+          path: `floor ${floor.id} door ${door.id}`,
+          message: `References non-existent wall ${door.wallId}`,
+        });
       }
     }
 
-    for (const win of (floor.windows || [])) {
+    for (const win of floor.windows || []) {
       if (win.wallId && !wallIds.has(win.wallId)) {
-        warnings.push({ path: `floor ${floor.id} window ${win.id}`, message: `References non-existent wall ${win.wallId}` });
+        warnings.push({
+          path: `floor ${floor.id} window ${win.id}`,
+          message: `References non-existent wall ${win.wallId}`,
+        });
       }
     }
 
-    for (const beam of (floor.beams || [])) {
+    for (const beam of floor.beams || []) {
       if (beam.startRef?.columnId && !columnIds.has(beam.startRef.columnId)) {
-        warnings.push({ path: `floor ${floor.id} beam ${beam.id}`, message: `startRef references non-existent column ${beam.startRef.columnId}` });
+        warnings.push({
+          path: `floor ${floor.id} beam ${beam.id}`,
+          message: `startRef references non-existent column ${beam.startRef.columnId}`,
+        });
       }
       if (beam.endRef?.columnId && !columnIds.has(beam.endRef.columnId)) {
-        warnings.push({ path: `floor ${floor.id} beam ${beam.id}`, message: `endRef references non-existent column ${beam.endRef.columnId}` });
+        warnings.push({
+          path: `floor ${floor.id} beam ${beam.id}`,
+          message: `endRef references non-existent column ${beam.endRef.columnId}`,
+        });
       }
     }
 
-    for (const stair of (floor.stairs || [])) {
+    for (const stair of floor.stairs || []) {
       if (stair.floorRelation?.fromFloorId && !floorIds.has(stair.floorRelation.fromFloorId)) {
-        warnings.push({ path: `floor ${floor.id} stair ${stair.id}`, message: `fromFloorId references non-existent floor ${stair.floorRelation.fromFloorId}` });
+        warnings.push({
+          path: `floor ${floor.id} stair ${stair.id}`,
+          message: `fromFloorId references non-existent floor ${stair.floorRelation.fromFloorId}`,
+        });
       }
       if (stair.floorRelation?.toFloorId && !floorIds.has(stair.floorRelation.toFloorId)) {
-        warnings.push({ path: `floor ${floor.id} stair ${stair.id}`, message: `toFloorId references non-existent floor ${stair.floorRelation.toFloorId}` });
+        warnings.push({
+          path: `floor ${floor.id} stair ${stair.id}`,
+          message: `toFloorId references non-existent floor ${stair.floorRelation.toFloorId}`,
+        });
       }
       if (stair.startLandingAttachment?.landingId && !landingIds.has(stair.startLandingAttachment.landingId)) {
-        warnings.push({ path: `floor ${floor.id} stair ${stair.id}`, message: `startLandingAttachment references non-existent landing ${stair.startLandingAttachment.landingId}` });
+        warnings.push({
+          path: `floor ${floor.id} stair ${stair.id}`,
+          message: `startLandingAttachment references non-existent landing ${stair.startLandingAttachment.landingId}`,
+        });
       }
       if (stair.endLandingAttachment?.landingId && !landingIds.has(stair.endLandingAttachment.landingId)) {
-        warnings.push({ path: `floor ${floor.id} stair ${stair.id}`, message: `endLandingAttachment references non-existent landing ${stair.endLandingAttachment.landingId}` });
+        warnings.push({
+          path: `floor ${floor.id} stair ${stair.id}`,
+          message: `endLandingAttachment references non-existent landing ${stair.endLandingAttachment.landingId}`,
+        });
       }
     }
 
-    for (const slab of (floor.slabs || [])) {
+    for (const slab of floor.slabs || []) {
       if (slab.floorId && !floorIds.has(slab.floorId)) {
-        warnings.push({ path: `floor ${floor.id} slab ${slab.id}`, message: `floorId references non-existent floor ${slab.floorId}` });
+        warnings.push({
+          path: `floor ${floor.id} slab ${slab.id}`,
+          message: `floorId references non-existent floor ${slab.floorId}`,
+        });
       }
     }
 
     // Check phaseId references on all phase-assignable objects
     for (const key of PHASE_ASSIGNABLE_KEYS) {
-      for (const obj of (floor[key] || [])) {
+      for (const obj of floor[key] || []) {
         if (obj.phaseId && !phaseIds.has(obj.phaseId)) {
-          warnings.push({ path: `floor ${floor.id} ${key} ${obj.id}`, message: `phaseId references non-existent phase ${obj.phaseId}` });
+          warnings.push({
+            path: `floor ${floor.id} ${key} ${obj.id}`,
+            message: `phaseId references non-existent phase ${obj.phaseId}`,
+          });
         }
       }
     }
@@ -106,19 +137,25 @@ export function validateProjectReferences(project) {
 
   // Check phaseId on roof system and truss systems
   if (project.roofSystem?.phaseId && !phaseIds.has(project.roofSystem.phaseId)) {
-    warnings.push({ path: 'roofSystem', message: `phaseId references non-existent phase ${project.roofSystem.phaseId}` });
+    warnings.push({
+      path: 'roofSystem',
+      message: `phaseId references non-existent phase ${project.roofSystem.phaseId}`,
+    });
   }
-  for (const ts of (project.trussSystems || [])) {
+  for (const ts of project.trussSystems || []) {
     if (ts.phaseId && !phaseIds.has(ts.phaseId)) {
       warnings.push({ path: `trussSystem ${ts.id}`, message: `phaseId references non-existent phase ${ts.phaseId}` });
     }
   }
 
   // Check viewport phaseId references
-  for (const sheet of (project.sheets || [])) {
-    for (const vp of (sheet.viewports || [])) {
+  for (const sheet of project.sheets || []) {
+    for (const vp of sheet.viewports || []) {
       if (vp.phaseId && !phaseIds.has(vp.phaseId)) {
-        warnings.push({ path: `sheet ${sheet.id} viewport ${vp.id}`, message: `phaseId references non-existent phase ${vp.phaseId}` });
+        warnings.push({
+          path: `sheet ${sheet.id} viewport ${vp.id}`,
+          message: `phaseId references non-existent phase ${vp.phaseId}`,
+        });
       }
     }
   }
@@ -127,7 +164,7 @@ export function validateProjectReferences(project) {
 }
 
 export function repairBrokenReferences(project) {
-  const floorIds = new Set(project.floors.map((f) => f.id));
+  const _floorIds = new Set(project.floors.map((f) => f.id));
   const phaseIds = new Set((project.phases || []).map((p) => p.id));
 
   const repairedFloors = project.floors.map((floor) => {
@@ -155,15 +192,16 @@ export function repairBrokenReferences(project) {
       return changed ? { ...stair, startLandingAttachment, endLandingAttachment } : stair;
     });
 
+    // Strip vestigial placedSketchAssets from floors (legacy field, no longer used)
+    const { placedSketchAssets: _placedSketchAssets, ...floorWithoutSketchAssets } = floor;
+
     // Nullify invalid phaseId references on floor objects
-    const repairedFloor = { ...floor, doors, windows, stairs };
+    const repairedFloor = { ...floorWithoutSketchAssets, doors, windows, stairs };
     for (const key of PHASE_ASSIGNABLE_KEYS) {
       const arr = repairedFloor[key];
       if (!Array.isArray(arr)) continue;
       repairedFloor[key] = arr.map((obj) =>
-        obj.phaseId && !phaseIds.has(obj.phaseId)
-          ? { ...obj, phaseId: null }
-          : obj,
+        obj.phaseId && !phaseIds.has(obj.phaseId) ? { ...obj, phaseId: null } : obj,
       );
     }
 
@@ -178,18 +216,14 @@ export function repairBrokenReferences(project) {
 
   // Nullify invalid phaseId on truss systems
   const trussSystems = (project.trussSystems || []).map((ts) =>
-    ts.phaseId && !phaseIds.has(ts.phaseId)
-      ? { ...ts, phaseId: null }
-      : ts,
+    ts.phaseId && !phaseIds.has(ts.phaseId) ? { ...ts, phaseId: null } : ts,
   );
 
   // Nullify invalid viewport phaseId references
   const sheets = (project.sheets || []).map((sheet) => ({
     ...sheet,
     viewports: (sheet.viewports || []).map((vp) =>
-      vp.phaseId && !phaseIds.has(vp.phaseId)
-        ? { ...vp, phaseId: null, phaseViewMode: 'all' }
-        : vp,
+      vp.phaseId && !phaseIds.has(vp.phaseId) ? { ...vp, phaseId: null, phaseViewMode: 'all' } : vp,
     ),
   }));
 
