@@ -1,6 +1,6 @@
 import sampleDocument from '../data/sampleDocument';
 import { cloneJoint as cloneJoineryJoint } from '../joinery';
-import { normalizeEntityGroupMemberships } from './groupUtils';
+import { normalizeEntityGroupMemberships, buildGroupIndex } from './groupUtils';
 
 export function normalizeCommittedSketchName(name) {
   return String(name || '').trim() || 'Untitled Sketch';
@@ -43,6 +43,7 @@ function cloneJoint(joint) {
 export function normalizeSketchDocument(document) {
   const source = document && typeof document === 'object' ? document : {};
   const sourceEntities = Array.isArray(source.entities) ? [...source.entities] : [];
+  const normalizedEntities = normalizeEntityGroupMemberships(sourceEntities);
 
   return {
     ...sampleDocument,
@@ -65,7 +66,8 @@ export function normalizeSketchDocument(document) {
       Array.isArray(source.layers) && source.layers.length
         ? source.layers.map(cloneLayer)
         : (sampleDocument.layers || []).map(cloneLayer),
-    entities: normalizeEntityGroupMemberships(sourceEntities),
+    entities: normalizedEntities,
+    groupIndex: buildGroupIndex(normalizedEntities),
   };
 }
 

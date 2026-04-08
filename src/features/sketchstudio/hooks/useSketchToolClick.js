@@ -64,7 +64,11 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
       const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
 
       if (activeTool === 'select') {
-        const nextSelectionIds = expandGroupedSelection(editableEntities, hoveredEntity ? [hoveredEntity.id] : []);
+        const nextSelectionIds = expandGroupedSelection(
+          editableEntities,
+          hoveredEntity ? [hoveredEntity.id] : [],
+          state.document.groupIndex,
+        );
 
         dispatch(setSelection(mergeSelection(state.selection.selectedIds, nextSelectionIds, event.shiftKey)));
         return;

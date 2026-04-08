@@ -24,6 +24,21 @@ function buildGroupCounts(entities = []) {
   }, new Map());
 }
 
+export function buildGroupIndex(entities = []) {
+  const index = new Map();
+  for (const entity of entities) {
+    const groupId = normalizeGroupId(entity?.meta?.groupId);
+    if (!groupId) continue;
+    let members = index.get(groupId);
+    if (!members) {
+      members = new Set();
+      index.set(groupId, members);
+    }
+    members.add(entity.id);
+  }
+  return index;
+}
+
 function createGroupIdCandidate() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `group-${crypto.randomUUID()}`;
@@ -133,7 +148,7 @@ export function normalizeEntityGroupMemberships(entities = []) {
   return didChange ? normalizedEntities : entities;
 }
 
-export function expandGroupedSelection(entities = [], selectedIds = []) {
+export function expandGroupedSelection(entities = [], selectedIds = [], groupIndex = null) {
   const entitiesById = new Map(entities.map((entity) => [entity.id, entity]));
   const uniqueSelectedIds = Array.from(new Set(selectedIds)).filter((entityId) => entitiesById.has(entityId));
 
@@ -148,6 +163,20 @@ export function expandGroupedSelection(entities = [], selectedIds = []) {
 
   if (!selectedGroupIds.size) {
     return uniqueSelectedIds;
+  }
+
+  if (groupIndex) {
+    const groupedIds = [];
+    for (const gid of selectedGroupIds) {
+      const members = groupIndex.get(gid);
+      if (!members) continue;
+      for (const memberId of members) {
+        if (!selectedIdSet.has(memberId) && entitiesById.has(memberId)) {
+          groupedIds.push(memberId);
+        }
+      }
+    }
+    return [...uniqueSelectedIds, ...groupedIds];
   }
 
   const groupedIds = entities

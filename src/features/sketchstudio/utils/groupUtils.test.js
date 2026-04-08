@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assignEntitiesToGroup,
+  buildGroupIndex,
   expandGroupedSelection,
   getEntityGroupId,
   normalizeEntityGroupMemberships,
@@ -107,6 +108,71 @@ describe('groupUtils', () => {
     expect(getEntityGroupId(pop2[0])).toBe(g1);
     expect(getEntityGroupId(pop2[1])).toBe(g1);
     expect(getEntityGroupId(pop2[2])).toBeNull();
+  });
+
+  describe('buildGroupIndex', () => {
+    it('returns an empty map for empty entities', () => {
+      expect(buildGroupIndex([]).size).toBe(0);
+    });
+
+    it('returns an empty map when no entities have groups', () => {
+      const entities = [createEntity('a'), createEntity('b')];
+      expect(buildGroupIndex(entities).size).toBe(0);
+    });
+
+    it('maps each groupId to its member entity ids', () => {
+      const entities = [createEntity('a', 'g1'), createEntity('b', 'g1'), createEntity('c', 'g2'), createEntity('d')];
+      const index = buildGroupIndex(entities);
+      expect(index.size).toBe(2);
+      expect(index.get('g1')).toEqual(new Set(['a', 'b']));
+      expect(index.get('g2')).toEqual(new Set(['c']));
+    });
+
+    it('normalizes whitespace-padded groupIds', () => {
+      const entities = [createEntity('a', ' g1 '), createEntity('b', 'g1')];
+      const index = buildGroupIndex(entities);
+      expect(index.size).toBe(1);
+      expect(index.get('g1')).toEqual(new Set(['a', 'b']));
+    });
+  });
+
+  describe('expandGroupedSelection with groupIndex', () => {
+    it('produces the same result as the non-indexed path', () => {
+      const entities = [createEntity('rect-1', 'group-a'), createEntity('rect-2', 'group-a'), createEntity('rect-3')];
+      const index = buildGroupIndex(entities);
+
+      const withoutIndex = expandGroupedSelection(entities, ['rect-2']);
+      const withIndex = expandGroupedSelection(entities, ['rect-2'], index);
+
+      expect(withIndex).toEqual(withoutIndex);
+    });
+
+    it('filters out entity ids not in the provided entities array', () => {
+      const allEntities = [createEntity('a', 'g1'), createEntity('b', 'g1'), createEntity('c', 'g1')];
+      const index = buildGroupIndex(allEntities);
+
+      // Only pass a subset as "editable" entities
+      const editableEntities = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      const result = expandGroupedSelection(editableEntities, ['a'], index);
+
+      expect(result).toEqual(['a', 'b']);
+      expect(result).not.toContain('c');
+    });
+
+    it('handles selection of multiple groups via index', () => {
+      const entities = [
+        createEntity('a', 'g1'),
+        createEntity('b', 'g1'),
+        createEntity('c', 'g2'),
+        createEntity('d', 'g2'),
+        createEntity('e'),
+      ];
+      const index = buildGroupIndex(entities);
+
+      const result = expandGroupedSelection(entities, ['a', 'c'], index);
+      expect(result).toEqual(expect.arrayContaining(['a', 'c', 'b', 'd']));
+      expect(result).not.toContain('e');
+    });
   });
 
   it('drops invalid and singleton group ids during normalization', () => {

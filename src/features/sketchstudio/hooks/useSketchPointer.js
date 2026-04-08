@@ -71,7 +71,9 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           worldPoint,
           pixelsToWorldUnits(HIT_TOLERANCE_PX, state.viewport.zoom),
         );
-        const expandedSelectionIds = hoveredEntity ? expandGroupedSelection(editableEntities, [hoveredEntity.id]) : [];
+        const expandedSelectionIds = hoveredEntity
+          ? expandGroupedSelection(editableEntities, [hoveredEntity.id], state.document.groupIndex)
+          : [];
         const selectAction = resolveSelectPointerDownAction({
           hoveredEntityId: hoveredEntity?.id ?? null,
           expandedSelectionIds,
@@ -128,6 +130,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       readWorldPoint,
       selectionBounds,
       state.document.entities,
+      state.document.groupIndex,
       state.selection.selectedIds,
       state.viewport,
     ],
@@ -374,6 +377,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
               editableEntities,
               normalizeSelectionBox(selectionBox.start, selectionBox.current),
             ),
+            state.document.groupIndex,
           );
           dispatch(setSelection(mergeSelection(state.selection.selectedIds, nextIds, event.shiftKey)));
           dispatch(setSuppressNextClick(true));
@@ -411,6 +415,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       editableEntities,
       readCanvasPoint,
       readWorldPoint,
+      state.document.groupIndex,
       state.interaction,
       state.selection,
       state.viewport.zoom,
