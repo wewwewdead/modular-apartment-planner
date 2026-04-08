@@ -10,7 +10,7 @@ import {
   updateJointInDocument,
 } from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
-import { resolveSketchDocument } from '../utils/sketchDocumentResolver';
+import { resolveSketchDocument, resolveSketchDocumentLightweight } from '../utils/sketchDocumentResolver';
 import { assignEntitiesToGroup, removeEntitiesFromGroups } from '../utils/groupUtils';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
 
@@ -66,6 +66,22 @@ function getIdleMode(draftType) {
 
 function buildResolvedDocumentState(document) {
   return resolveSketchDocument(document);
+}
+
+/**
+ * Run deferred full resolution if lightweight resolution was used during drag.
+ * Returns a state patch with resolved document, diagnostics, and joint data.
+ */
+function resolveDeferredIfNeeded(state) {
+  if (!state._needsFullResolution) return state;
+  const resolved = buildResolvedDocumentState(state.document);
+  return {
+    ...state,
+    document: resolved.document,
+    constraintDiagnostics: resolved.constraintDiagnostics,
+    ...getJointStatePatch(resolved),
+    _needsFullResolution: false,
+  };
 }
 
 function getJointStatePatch(resolvedDocumentState) {
@@ -429,6 +445,24 @@ export default function sketchStudioReducer(state, action) {
     }
 
     case SKETCH_STUDIO_ACTIONS.SET_DOCUMENT_ENTITIES: {
+      const isDragging =
+        state.interaction.mode === 'handle-drag' ||
+        state.interaction.mode === 'transform' ||
+        state.interaction.mode === 'anchor-drag';
+
+      // During drags, only resolve parametric expressions (skip constraint solver + joinery)
+      if (isDragging) {
+        const lightDocument = resolveSketchDocumentLightweight({
+          ...state.document,
+          entities: action.payload,
+        });
+        return {
+          ...state,
+          document: lightDocument,
+          _needsFullResolution: true,
+        };
+      }
+
       const resolvedDocumentState = buildResolvedDocumentState({
         ...state.document,
         entities: action.payload,
@@ -441,12 +475,10 @@ export default function sketchStudioReducer(state, action) {
           document: resolvedDocumentState.document,
           constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
           ...getJointStatePatch(resolvedDocumentState),
+          _needsFullResolution: false,
         },
         {
-          skipHistory:
-            action.meta?.skipHistory ||
-            state.interaction.mode === 'handle-drag' ||
-            state.interaction.mode === 'transform',
+          skipHistory: action.meta?.skipHistory,
         },
       );
     }
@@ -513,13 +545,14 @@ export default function sketchStudioReducer(state, action) {
         },
       };
 
-    case SKETCH_STUDIO_ACTIONS.END_HANDLE_DRAG:
+    case SKETCH_STUDIO_ACTIONS.END_HANDLE_DRAG: {
+      const resolvedState = resolveDeferredIfNeeded(state);
       return finalizeUndoableState(
-        state,
+        resolvedState,
         {
-          ...state,
+          ...resolvedState,
           interaction: {
-            ...state.interaction,
+            ...resolvedState.interaction,
             mode: 'idle',
             handleDrag: null,
             isPointerDown: false,
@@ -529,6 +562,7 @@ export default function sketchStudioReducer(state, action) {
           previousSnapshot: state.interaction.handleDrag?.historySnapshot,
         },
       );
+    }
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_HANDLE_DRAG:
       return restoreUndoableSnapshot(state, state.interaction.handleDrag?.historySnapshot);
@@ -547,13 +581,14 @@ export default function sketchStudioReducer(state, action) {
         },
       };
 
-    case SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG:
+    case SKETCH_STUDIO_ACTIONS.END_ANCHOR_DRAG: {
+      const resolvedState = resolveDeferredIfNeeded(state);
       return finalizeUndoableState(
-        state,
+        resolvedState,
         {
-          ...state,
+          ...resolvedState,
           interaction: {
-            ...state.interaction,
+            ...resolvedState.interaction,
             mode: 'idle',
             anchorDrag: null,
             isPointerDown: false,
@@ -563,6 +598,7 @@ export default function sketchStudioReducer(state, action) {
           previousSnapshot: state.interaction.anchorDrag?.historySnapshot,
         },
       );
+    }
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_ANCHOR_DRAG:
       return restoreUndoableSnapshot(state, state.interaction.anchorDrag?.historySnapshot);
@@ -597,13 +633,14 @@ export default function sketchStudioReducer(state, action) {
         },
       };
 
-    case SKETCH_STUDIO_ACTIONS.END_TRANSFORM:
+    case SKETCH_STUDIO_ACTIONS.END_TRANSFORM: {
+      const resolvedState = resolveDeferredIfNeeded(state);
       return finalizeUndoableState(
-        state,
+        resolvedState,
         {
-          ...state,
+          ...resolvedState,
           interaction: {
-            ...state.interaction,
+            ...resolvedState.interaction,
             mode: 'idle',
             transform: null,
             isPointerDown: false,
@@ -613,6 +650,7 @@ export default function sketchStudioReducer(state, action) {
           previousSnapshot: state.interaction.transform?.historySnapshot,
         },
       );
+    }
 
     case SKETCH_STUDIO_ACTIONS.CANCEL_TRANSFORM:
       return restoreUndoableSnapshot(state, state.interaction.transform?.historySnapshot);
