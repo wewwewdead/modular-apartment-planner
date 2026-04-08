@@ -15,7 +15,6 @@ import { getRoofAttachmentElevation } from '@/domain/roofModels';
 import { syncWallAttachmentPoints } from '@/geometry/wallColumnGeometry';
 import {
   HISTORY_LIMIT,
-  snapshotProject,
   syncProjectStructures,
   applyProjectUpdate,
   updateFloor,
@@ -46,7 +45,8 @@ function projectReducer(state, action) {
         project: newProject,
         isDirty: false,
         lastSavedAt: null,
-        savedSnapshot: snapshotProject(newProject),
+        changeVersion: 0,
+        savedVersion: 0,
         history: [],
         future: [],
       };
@@ -61,7 +61,8 @@ function projectReducer(state, action) {
         project: loadedProject,
         isDirty: false,
         lastSavedAt: action.savedAt || null,
-        savedSnapshot: snapshotProject(loadedProject),
+        changeVersion: 0,
+        savedVersion: 0,
         history: [],
         future: [],
       };
@@ -701,30 +702,34 @@ function projectReducer(state, action) {
         ...state,
         isDirty: false,
         lastSavedAt: new Date().toISOString(),
-        savedSnapshot: snapshotProject(state.project),
+        savedVersion: state.changeVersion,
       };
 
     case 'UNDO': {
       if (state.history.length === 0) return state;
       const previousProject = state.history[state.history.length - 1];
+      const nextVersion = state.changeVersion + 1;
       return {
         ...state,
         project: previousProject,
         history: state.history.slice(0, -1),
         future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
-        isDirty: snapshotProject(previousProject) !== state.savedSnapshot,
+        changeVersion: nextVersion,
+        isDirty: nextVersion !== state.savedVersion,
       };
     }
 
     case 'REDO': {
       if (state.future.length === 0) return state;
       const nextProject = state.future[0];
+      const nextVersion = state.changeVersion + 1;
       return {
         ...state,
         project: nextProject,
         history: [...state.history, state.project].slice(-HISTORY_LIMIT),
         future: state.future.slice(1),
-        isDirty: snapshotProject(nextProject) !== state.savedSnapshot,
+        changeVersion: nextVersion,
+        isDirty: nextVersion !== state.savedVersion,
       };
     }
 
@@ -742,7 +747,8 @@ function createInitialState(project) {
     project: synced,
     isDirty: false,
     lastSavedAt: null,
-    savedSnapshot: snapshotProject(synced),
+    changeVersion: 0,
+    savedVersion: 0,
     history: [],
     future: [],
   };

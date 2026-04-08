@@ -4,17 +4,12 @@ import { syncProjectTrussSystems } from '@/domain/trussModels';
 
 export const HISTORY_LIMIT = 100;
 
-export function snapshotProject(project) {
-  return JSON.stringify(project);
-}
-
 export function syncProjectStructures(project) {
   return syncProjectRoofSystem(syncProjectTrussSystems(project));
 }
 
 export function applyProjectUpdate(state, nextProject, recordHistory = true) {
   const syncedProject = syncProjectStructures(nextProject);
-  const nextSnapshot = snapshotProject(syncedProject);
   const history = recordHistory ? [...state.history, state.project].slice(-HISTORY_LIMIT) : state.history;
 
   return {
@@ -22,7 +17,8 @@ export function applyProjectUpdate(state, nextProject, recordHistory = true) {
     history,
     future: recordHistory ? [] : state.future,
     project: syncedProject,
-    isDirty: nextSnapshot !== state.savedSnapshot,
+    changeVersion: state.changeVersion + 1,
+    isDirty: state.changeVersion + 1 !== state.savedVersion,
   };
 }
 
