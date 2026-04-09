@@ -1,19 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppRouter } from './routes';
+import './styles/fonts.css';
 import './styles/global.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AppRouter />
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 
-// Register service worker for offline workshop use
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Service worker registration failed — app works fine without it
-    });
-  });
-}
+// PWA service worker auto-registered by vite-plugin-pwa

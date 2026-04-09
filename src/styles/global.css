@@ -1,7 +1,9 @@
 @import './reset.css';
 @import './variables.css';
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
 }
@@ -45,10 +47,34 @@ body {
   background: rgba(26, 122, 104, 0.15);
 }
 
-/* Focus ring */
+/* Focus ring — light theme */
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
+}
+
+/* Focus ring — override for elements on dark backgrounds.
+   Components in Sketch Studio / Craftsman set --focus-ring-color
+   on their root to override the default teal which is invisible on dark navy. */
+:focus-visible {
+  outline-color: var(--focus-ring-color, var(--color-accent));
+}
+
+/* Skip to main content link — visible only on focus */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 10000;
+  padding: 8px 16px;
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  text-decoration: none;
+}
+.skip-link:focus {
+  top: 8px;
 }
 
 /* Global input focus */
@@ -61,8 +87,12 @@ select:focus {
 
 /* Modal animations */
 @keyframes modalOverlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes modalDialogIn {
@@ -88,16 +118,22 @@ select:focus {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes warmPulse {
-  0%, 100% {
-    box-shadow: 0 0 6px rgba(45, 95, 142, 0.40);
+  0%,
+  100% {
+    box-shadow: 0 0 6px rgba(45, 95, 142, 0.4);
   }
   50% {
-    box-shadow: 0 0 12px rgba(45, 95, 142, 0.60);
+    box-shadow: 0 0 12px rgba(45, 95, 142, 0.6);
   }
 }
 
@@ -113,13 +149,19 @@ select:focus {
 }
 
 @keyframes toastCountdown {
-  from { width: 100%; }
-  to { width: 0%; }
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
 }
 
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
