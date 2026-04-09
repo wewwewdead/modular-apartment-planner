@@ -3,7 +3,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@floorplan/*": ["src/modules/floorplan/*"]
+      "@floorplan": ["src/features/floorplan/index.js"],
+      "@floorplan/*": ["src/features/floorplan/*"]
     }
   }
 }

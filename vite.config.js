@@ -22,7 +22,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@floorplan': fileURLToPath(new URL('./src/modules/floorplan', import.meta.url)),
+      '@floorplan': fileURLToPath(new URL('./src/features/floorplan', import.meta.url)),
     },
   },
 });

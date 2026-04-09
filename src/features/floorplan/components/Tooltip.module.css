@@ -1,0 +1,74 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltipAbove,
+.tooltipBelow {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+
+  background: rgba(30, 36, 51, 0.94);
+  color: #f4f3f0;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tooltipAbove {
+  transform: translateX(-50%) translateY(-100%);
+  animation: fadeInAbove 0.15s ease 0.4s both;
+}
+
+.tooltipBelow {
+  transform: translateX(-50%);
+  animation: fadeInBelow 0.15s ease 0.4s both;
+}
+
+@keyframes fadeInAbove {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-100%) scale(1);
+  }
+}
+
+@keyframes fadeInBelow {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1;
+}

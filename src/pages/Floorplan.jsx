@@ -1,5 +1,5 @@
 import FloorplanWorkspace from '@floorplan';
 
-export default function App() {
+export default function FloorplanPage() {
   return <FloorplanWorkspace />;
 }

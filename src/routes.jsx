@@ -5,7 +5,7 @@ import ErrorBoundary from '@/app/ErrorBoundary';
 const HomePage = lazy(() => import('./pages/HomePage'));
 const DocsPage = lazy(() => import('./pages/DocsPage'));
 const PlaygroundPage = lazy(() => import('./pages/PlaygroundPage'));
-const FloorplanWorkspace = lazy(() => import('./modules/floorplan'));
+const FloorplanWorkspace = lazy(() => import('./pages/Floorplan'));
 const SketchStudioPage = lazy(() => import('./pages/SketchStudio'));
 
 function RouteFallback() {

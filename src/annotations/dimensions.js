@@ -3,7 +3,6 @@ import { distanceToSegment } from '@/geometry/line';
 import { add, distance, midpoint, normalize, perpendicular, scale, subtract } from '@/geometry/point';
 import { pointInPolygon } from '@/geometry/polygon';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
-import { formatMeasurement } from './format';
 import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS, createMeasurementMetadata } from './policy';
 
 const EPSILON = 1e-6;
@@ -247,15 +246,13 @@ export function buildRoomDimensionFigures(rooms = []) {
 
 function uniqueSortedValues(values = []) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted.filter((value, index) => (
-    index === 0 || Math.abs(value - sorted[index - 1]) > VALUE_MERGE_TOLERANCE
-  ));
+  return sorted.filter((value, index) => index === 0 || Math.abs(value - sorted[index - 1]) > VALUE_MERGE_TOLERANCE);
 }
 
 export function buildOverallDimensionFigures(walls = [], columns = []) {
-  const renderWalls = walls
-    .map((wall) => getWallRenderData(wall, columns || []).renderWall)
-    .filter(Boolean);
+  const renderWalls = walls.map((wall) => getWallRenderData(wall, columns || []).renderWall).filter(Boolean);
+
+  if (renderWalls.length <= 1) return [];
 
   const points = renderWalls.flatMap((wall) => [wall.start, wall.end]);
   if (points.length < 2) return [];
@@ -325,17 +322,19 @@ export function buildOverallDimensionFigures(walls = [], columns = []) {
 export function buildManualDimensionFigures(annotations = []) {
   return annotations
     .filter((annotation) => annotation.type === 'dimension')
-    .map((annotation) => createDimensionFigure({
-      id: annotation.id,
-      startPoint: annotation.startPoint,
-      endPoint: annotation.endPoint,
-      mode: annotation.mode,
-      offset: annotation.offset,
-      label: annotation.textOverride?.trim() || undefined,
-      source: 'manual',
-      sourceType: 'annotation',
-      sourceId: annotation.id,
-    }))
+    .map((annotation) =>
+      createDimensionFigure({
+        id: annotation.id,
+        startPoint: annotation.startPoint,
+        endPoint: annotation.endPoint,
+        mode: annotation.mode,
+        offset: annotation.offset,
+        label: annotation.textOverride?.trim() || undefined,
+        source: 'manual',
+        sourceType: 'annotation',
+        sourceId: annotation.id,
+      }),
+    )
     .filter(Boolean);
 }
 

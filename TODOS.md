@@ -269,3 +269,26 @@ Proper polygon offsetting would require intersecting offset edges.
 #### Joinery Module Splits — DEFERRED
 jointGeometryUtils.js is 770 lines. jointResolvers.js is 652 lines. Consider splitting
 before adding new joint types. Pipeline seam tests now cover public APIs.
+
+## 3D Preview Pipeline — Phase 2 (only if Phase 1 doesn't hit 60fps)
+
+### Geometry Merging — Transparent Material Exclusion
+**What:** When adding BufferGeometryUtils.mergeGeometries by material key, transparent
+materials (window, roofOpening, railing_glass) must be excluded from merging and rendered
+as individual meshes.
+**Why:** Three.js sorts transparent objects per-mesh for correct alpha blending. Merging
+transparent meshes into one large mesh breaks this sort order, causing visual artifacts
+(objects behind glass rendering in front, or glass rendering opaque).
+**Context:** Phase 1 shipped shared materials + render-on-demand + selection separation.
+Phase 2 adds geometry merging. The merge loop should check `material.transparent` and skip
+those groups. Transparent objects stay as individual meshes with proper sort order.
+
+### Geometry Merging — renderToImage API Boundary
+**What:** `buildPreviewObjectRoot()` is also used by `renderToImage.js` for screenshot
+export. If Phase 2 changes buildPreviewObjectRoot to return merged geometry + pick scene,
+renderToImage needs updating or a separate non-merged code path.
+**Why:** renderToImage doesn't need a pick scene or selection overlays. Coupling it to
+viewport-only concerns (merged geometry, pick scene) would be unnecessary complexity.
+**Context:** Options: (A) Add an `options.merge` flag to buildPreviewObjectRoot that
+renderToImage passes as false. (B) Extract a separate `buildPreviewObjectsForExport()`
+that skips merging. (C) Have renderToImage call the unmerged builder directly.

@@ -1,0 +1,214 @@
+import { useEffect, useState } from 'react';
+import AnnotationRenderer from './AnnotationRenderer';
+import BeamRenderer from './BeamRenderer';
+import ColumnRenderer from './ColumnRenderer';
+import DoorRenderer from './DoorRenderer';
+import FixtureDefs from './FixtureDefs';
+import FixtureRenderer from './FixtureRenderer';
+import ElevationSceneLayer from './ElevationSceneLayer';
+import LandingRenderer from './LandingRenderer';
+import RoomRenderer from './RoomRenderer';
+import RoofRenderer from './RoofRenderer';
+import RoofDrainageRenderer from './RoofDrainageRenderer';
+import RoofScheduleRenderer from './RoofScheduleRenderer';
+import SectionCutRenderer from './SectionCutRenderer';
+import SectionSceneLayer from './SectionSceneLayer';
+import SlabRenderer from './SlabRenderer';
+import StairRenderer from './StairRenderer';
+import TrussDetailRenderer from './TrussDetailRenderer';
+import TrussRenderer from './TrussRenderer';
+import WallRenderer from './WallRenderer';
+import WindowRenderer from './WindowRenderer';
+
+const SHEET_PREVIEW_OPTIONS = {
+  width: 1600,
+  height: 1000,
+  preset: 'iso_northeast',
+};
+const sheetPreviewCache = new Map();
+
+function getSheetPreviewCacheKey(source) {
+  return [
+    source?.project?.id || 'project',
+    source?.project?.updatedAt || 'snapshot',
+    source?.activeFloorId || 'all',
+    SHEET_PREVIEW_OPTIONS.width,
+    SHEET_PREVIEW_OPTIONS.height,
+    SHEET_PREVIEW_OPTIONS.preset,
+  ].join(':');
+}
+
+function renderSheetPreviewImage(source) {
+  const cacheKey = getSheetPreviewCacheKey(source);
+  if (!sheetPreviewCache.has(cacheKey)) {
+    sheetPreviewCache.set(
+      cacheKey,
+      import('@/features/floorplan/components/preview/renderToImage')
+        .then(({ renderSceneToImage }) => {
+          const imageUrl = renderSceneToImage(source.project, {
+            activeFloorId: source.activeFloorId,
+            width: SHEET_PREVIEW_OPTIONS.width,
+            height: SHEET_PREVIEW_OPTIONS.height,
+            preset: SHEET_PREVIEW_OPTIONS.preset,
+          });
+
+          return imageUrl ? { status: 'ready', imageUrl } : { status: 'empty', imageUrl: null };
+        })
+        .catch((error) => {
+          sheetPreviewCache.delete(cacheKey);
+          throw error;
+        }),
+    );
+  }
+
+  return sheetPreviewCache.get(cacheKey);
+}
+
+function PlanViewportContent({ floor }) {
+  return (
+    <>
+      {(floor.slabs || []).map((slab) => (
+        <SlabRenderer key={slab.id} slab={slab} selectedId={null} />
+      ))}
+      <RoomRenderer rooms={floor.rooms} selectedId={null} interactive={false} />
+      <WallRenderer walls={floor.walls} columns={floor.columns || []} />
+      <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
+      <StairRenderer stairs={floor.stairs || []} />
+      <LandingRenderer landings={floor.landings || []} />
+      <ColumnRenderer columns={floor.columns || []} />
+      <FixtureDefs />
+      <FixtureRenderer fixtures={floor.fixtures || []} />
+      <DoorRenderer doors={floor.doors} walls={floor.walls} />
+      <WindowRenderer windows={floor.windows} walls={floor.walls} />
+      {(floor.sectionCuts || []).map((sc) => (
+        <SectionCutRenderer key={sc.id} sectionCut={sc} selectedId={null} />
+      ))}
+      <AnnotationRenderer floor={floor} />
+    </>
+  );
+}
+
+function ThreePreviewViewportContent({ source }) {
+  const previewKey = source?.project ? getSheetPreviewCacheKey(source) : null;
+  const [renderedPreview, setRenderedPreview] = useState({
+    key: null,
+    status: 'loading',
+    imageUrl: null,
+  });
+
+  useEffect(() => {
+    if (!previewKey || !source?.project) return undefined;
+
+    let cancelled = false;
+
+    renderSheetPreviewImage(source)
+      .then((result) => {
+        if (cancelled) return;
+        setRenderedPreview({
+          key: previewKey,
+          ...result,
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('Failed to render sheet 3D preview:', error);
+        setRenderedPreview({
+          key: previewKey,
+          status: 'error',
+          imageUrl: null,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewKey, source]);
+
+  const previewState = !previewKey
+    ? { status: 'empty', imageUrl: null }
+    : renderedPreview.key === previewKey
+      ? renderedPreview
+      : { status: 'loading', imageUrl: null };
+
+  const { bounds } = source;
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+
+  if (previewState.status !== 'ready' || !previewState.imageUrl) {
+    const messages = {
+      loading: 'Rendering 3D preview...',
+      empty: 'No 3D geometry available.',
+      error: '3D preview failed to render.',
+    };
+
+    return (
+      <text x={centerX} y={centerY} textAnchor="middle" fontSize={400} fill="#8899aa" pointerEvents="none">
+        {messages[previewState.status] || messages.loading}
+      </text>
+    );
+  }
+
+  return (
+    <image
+      href={previewState.imageUrl}
+      x={bounds.minX}
+      y={bounds.minY}
+      width={bounds.maxX - bounds.minX}
+      height={bounds.maxY - bounds.minY}
+      preserveAspectRatio="xMidYMid meet"
+      pointerEvents="none"
+    />
+  );
+}
+
+export default function SheetViewportContent({ source }) {
+  if (!source || source.kind === 'empty') return null;
+
+  if (source.kind === 'plan') {
+    return <PlanViewportContent floor={source.floor} />;
+  }
+
+  if (source.kind === 'roof_plan') {
+    return <RoofRenderer roofSystem={source.roofSystem} interactive={false} />;
+  }
+
+  if (source.kind === 'truss_plan') {
+    return <TrussRenderer floor={source.floor} trussSystems={source.trussSystems} />;
+  }
+
+  if (source.kind === 'truss_detail') {
+    return (
+      <TrussDetailRenderer
+        trussSystem={source.trussSystem}
+        trussInstanceId={source.trussInstanceId}
+        showTitle={false}
+      />
+    );
+  }
+
+  if (source.kind === 'roof_drainage') {
+    return <RoofDrainageRenderer roofSystem={source.roofSystem} interactive={false} />;
+  }
+
+  if (source.kind === 'roof_schedule') {
+    return <RoofScheduleRenderer schedule={source.schedule} showTitle={false} />;
+  }
+
+  if (source.kind === '3d_preview') {
+    return <ThreePreviewViewportContent source={source} />;
+  }
+
+  if (source.kind === 'section' || source.kind === 'roof_section') {
+    return <SectionSceneLayer scene={source.scene} showTitle={false} />;
+  }
+
+  if (source.kind === 'elevation') {
+    return <ElevationSceneLayer scene={source.scene} annotationScene={source.annotationScene} showTitle={false} />;
+  }
+
+  if (source.kind === 'roof_elevation') {
+    return <ElevationSceneLayer scene={source.scene} annotationScene={null} showTitle={false} />;
+  }
+
+  return null;
+}

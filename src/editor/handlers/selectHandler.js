@@ -1,5 +1,11 @@
 import { distance } from '@/geometry/point';
-import { clampWallOpeningOffset, doorOutlineOnWall, windowOutlineOnWall, wallLength, projectPointOnWall } from '@/geometry/wallGeometry';
+import {
+  clampWallOpeningOffset,
+  doorOutlineOnWall,
+  windowOutlineOnWall,
+  wallLength,
+  projectPointOnWall,
+} from '@/geometry/wallGeometry';
 import { pointInPolygon } from '@/geometry/polygon';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
@@ -13,12 +19,12 @@ import { getWallRenderData, resolveWallEndpoints, snapWallEndpoint } from '@/geo
 import { duplicateColumn } from '@/domain/columnModels';
 import { hitTestSectionCut } from '@/geometry/sectionCutGeometry';
 import { railingContainsPoint } from '@/geometry/railingGeometry';
-import { collectPlanRegionSelection, normalizeRectBounds, rectSize } from '@/clipboard/planClipboard';
+import { collectPlanRegionSelection, normalizeRectBounds, rectSize } from '@/features/floorplan/utils/planClipboard';
 
 function hitTest(modelPos, floor, annotationTolerance) {
   // Hit test doors first (smaller targets, higher priority)
   for (const door of floor.doors) {
-    const wall = floor.walls.find(w => w.id === door.wallId);
+    const wall = floor.walls.find((w) => w.id === door.wallId);
     if (!wall) continue;
     const info = doorOutlineOnWall(wall, door);
     const poly = [info.p1, info.p2, info.p3, info.p4];
@@ -29,7 +35,7 @@ function hitTest(modelPos, floor, annotationTolerance) {
 
   // Hit test windows
   for (const win of floor.windows) {
-    const wall = floor.walls.find(w => w.id === win.wallId);
+    const wall = floor.walls.find((w) => w.id === win.wallId);
     if (!wall) continue;
     const info = windowOutlineOnWall(wall, win);
     const poly = [info.p1, info.p2, info.p3, info.p4];
@@ -40,13 +46,13 @@ function hitTest(modelPos, floor, annotationTolerance) {
 
   // Hit test walls
   // Hit test columns
-  for (const sc of (floor.sectionCuts || [])) {
+  for (const sc of floor.sectionCuts || []) {
     if (hitTestSectionCut(modelPos, sc, annotationTolerance)) {
       return { id: sc.id, type: 'sectionCut' };
     }
   }
 
-  for (const column of (floor.columns || [])) {
+  for (const column of floor.columns || []) {
     const outline = columnOutline(column);
     if (pointInPolygon(modelPos, outline)) {
       return { id: column.id, type: 'column' };
@@ -54,21 +60,21 @@ function hitTest(modelPos, floor, annotationTolerance) {
   }
 
   // Hit test fixtures
-  for (const fixture of (floor.fixtures || [])) {
+  for (const fixture of floor.fixtures || []) {
     if (fixtureContainsPoint(fixture, modelPos)) {
       return { id: fixture.id, type: 'fixture' };
     }
   }
 
   // Hit test railings
-  for (const railing of (floor.railings || [])) {
+  for (const railing of floor.railings || []) {
     if (railingContainsPoint(railing, modelPos)) {
       return { id: railing.id, type: 'railing' };
     }
   }
 
   // Hit test beams
-  for (const beam of (floor.beams || [])) {
+  for (const beam of floor.beams || []) {
     const renderData = getBeamRenderData(beam, floor.columns || []);
     if (!renderData) continue;
     if (pointInPolygon(modelPos, renderData.outline)) {
@@ -85,7 +91,7 @@ function hitTest(modelPos, floor, annotationTolerance) {
   }
 
   // Hit test stairs after walls/beams/columns so current editing priority stays intact.
-  for (const stair of (floor.stairs || [])) {
+  for (const stair of floor.stairs || []) {
     const renderData = getStairRenderData(stair);
     if (!renderData) continue;
     if (pointInPolygon(modelPos, renderData.outline)) {
@@ -94,7 +100,7 @@ function hitTest(modelPos, floor, annotationTolerance) {
   }
 
   // Hit test landings
-  for (const landing of (floor.landings || [])) {
+  for (const landing of floor.landings || []) {
     if (landingContainsPoint(landing, modelPos)) {
       return { id: landing.id, type: 'landing' };
     }
@@ -107,7 +113,7 @@ function hitTest(modelPos, floor, annotationTolerance) {
     }
   }
 
-  for (const slab of (floor.slabs || [])) {
+  for (const slab of floor.slabs || []) {
     if (slabContainsPoint(slab, modelPos)) {
       return { id: slab.id, type: 'slab' };
     }
@@ -123,7 +129,7 @@ function hitTest(modelPos, floor, annotationTolerance) {
 
 export function createSelectHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
   return {
-    onMouseDown(modelPos, e, toolState) {
+    onMouseDown(modelPos, e, _toolState) {
       if (e.button !== 0) return;
 
       const floor = getFloor(activeFloorId);
@@ -145,10 +151,20 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         return;
       }
 
-      const hit = hitTest(modelPos, floor, SNAP_DISTANCE_PX / viewport.zoom * 2.5);
+      const hit = hitTest(modelPos, floor, (SNAP_DISTANCE_PX / viewport.zoom) * 2.5);
       if (hit) {
         editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
-        const draggableTypes = new Set(['wall', 'column', 'fixture', 'door', 'window', 'stair', 'sectionCut', 'landing', 'railing']);
+        const draggableTypes = new Set([
+          'wall',
+          'column',
+          'fixture',
+          'door',
+          'window',
+          'stair',
+          'sectionCut',
+          'landing',
+          'railing',
+        ]);
         if (!draggableTypes.has(hit.type)) return;
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -204,7 +220,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
       const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
 
       if (selectedType === 'wall') {
-        const wall = floor.walls.find(w => w.id === selectedId);
+        const wall = floor.walls.find((w) => w.id === selectedId);
         if (!wall) return;
         const resolved = resolveWallEndpoints(wall, floor.columns || []);
 
@@ -285,11 +301,11 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           if (distance(nextStart, nextEnd) < MIN_WALL_LENGTH) return;
 
           const wallUpdate = {
-              id: wall.id,
-              start: nextStart,
-              end: nextEnd,
-              startAttachment,
-              endAttachment,
+            id: wall.id,
+            start: nextStart,
+            end: nextEnd,
+            startAttachment,
+            endAttachment,
           };
           if (wall.controlPoint) {
             wallUpdate.controlPoint = {
@@ -308,7 +324,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           payload: { startPos: modelPos },
         });
       } else if (selectedType === 'column') {
-        const col = (floor.columns || []).find(c => c.id === selectedId);
+        const col = (floor.columns || []).find((c) => c.id === selectedId);
         if (!col) return;
         dispatch({
           type: 'COLUMN_UPDATE',
@@ -320,7 +336,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           payload: { startPos: modelPos },
         });
       } else if (selectedType === 'fixture') {
-        const fixture = (floor.fixtures || []).find(f => f.id === selectedId);
+        const fixture = (floor.fixtures || []).find((f) => f.id === selectedId);
         if (!fixture) return;
         dispatch({
           type: 'FIXTURE_UPDATE',
@@ -332,14 +348,13 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           payload: { startPos: modelPos },
         });
       } else if (selectedType === 'sectionCut') {
-        const sectionCut = (floor.sectionCuts || []).find(s => s.id === selectedId);
+        const sectionCut = (floor.sectionCuts || []).find((s) => s.id === selectedId);
         if (!sectionCut) return;
 
         if (toolState.dragType === 'handle') {
           const handle = toolState.handle;
-          const nextSectionCut = handle === 'start'
-            ? { ...sectionCut, startPoint: modelPos }
-            : { ...sectionCut, endPoint: modelPos };
+          const nextSectionCut =
+            handle === 'start' ? { ...sectionCut, startPoint: modelPos } : { ...sectionCut, endPoint: modelPos };
 
           if (distance(nextSectionCut.startPoint, nextSectionCut.endPoint) < MIN_WALL_LENGTH) return;
 
@@ -370,14 +385,13 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           });
         }
       } else if (selectedType === 'railing') {
-        const railing = (floor.railings || []).find(r => r.id === selectedId);
+        const railing = (floor.railings || []).find((r) => r.id === selectedId);
         if (!railing) return;
 
         if (toolState.dragType === 'handle') {
           const handle = toolState.handle;
-          const nextRailing = handle === 'start'
-            ? { ...railing, startPoint: modelPos }
-            : { ...railing, endPoint: modelPos };
+          const nextRailing =
+            handle === 'start' ? { ...railing, startPoint: modelPos } : { ...railing, endPoint: modelPos };
 
           if (distance(nextRailing.startPoint, nextRailing.endPoint) < MIN_WALL_LENGTH) return;
 
@@ -410,7 +424,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
       } else if (selectedType === 'beam') {
         return;
       } else if (selectedType === 'stair') {
-        const stair = (floor.stairs || []).find(entry => entry.id === selectedId);
+        const stair = (floor.stairs || []).find((entry) => entry.id === selectedId);
         if (!stair) return;
         dispatch({
           type: 'STAIR_UPDATE',
@@ -428,7 +442,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           payload: { startPos: modelPos },
         });
       } else if (selectedType === 'landing') {
-        const landing = (floor.landings || []).find(l => l.id === selectedId);
+        const landing = (floor.landings || []).find((l) => l.id === selectedId);
         if (!landing) return;
         dispatch({
           type: 'LANDING_UPDATE',
@@ -449,12 +463,12 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         if (toolState.dragType !== 'handle' || toolState.handle !== 'slab-vertex' || toolState.handleIndex == null) {
           return;
         }
-        const slab = (floor.slabs || []).find(s => s.id === selectedId);
+        const slab = (floor.slabs || []).find((s) => s.id === selectedId);
         if (!slab) return;
 
-        const boundaryPoints = slab.boundaryPoints.map((point, index) => (
-          index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point
-        ));
+        const boundaryPoints = slab.boundaryPoints.map((point, index) =>
+          index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point,
+        );
 
         dispatch({
           type: 'SLAB_UPDATE',
@@ -471,10 +485,10 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
       } else if (selectedType === 'door' || selectedType === 'window') {
         // Slide along parent wall
         const items = selectedType === 'door' ? floor.doors : floor.windows;
-        const item = items.find(i => i.id === selectedId);
+        const item = items.find((i) => i.id === selectedId);
         if (!item) return;
 
-        const wall = floor.walls.find(w => w.id === item.wallId);
+        const wall = floor.walls.find((w) => w.id === item.wallId);
         if (!wall) return;
 
         const newOffset = projectPointOnWall(wall, modelPos);
@@ -552,7 +566,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         e.preventDefault();
         const floor = getFloor(activeFloorId);
         if (!floor) return;
-        const column = (floor.columns || []).find(c => c.id === selectedId);
+        const column = (floor.columns || []).find((c) => c.id === selectedId);
         if (!column) return;
         const duplicate = duplicateColumn(column);
         dispatch({ type: 'COLUMN_DUPLICATE', floorId: activeFloorId, column: duplicate });
