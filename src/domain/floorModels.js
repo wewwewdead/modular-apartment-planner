@@ -23,7 +23,7 @@ function cloneAttachment(attachment, columnIdMap) {
 
   return {
     ...attachment,
-    columnId: attachment.columnId ? (columnIdMap.get(attachment.columnId) || attachment.columnId) : attachment.columnId,
+    columnId: attachment.columnId ? columnIdMap.get(attachment.columnId) || attachment.columnId : attachment.columnId,
   };
 }
 
@@ -74,12 +74,8 @@ function cloneBeam(beam, columnIdMap, elevationDelta) {
   return {
     ...beam,
     id: generateId('beam'),
-    startRef: beam.startRef
-      ? { ...beam.startRef, id: columnIdMap.get(beam.startRef.id) || beam.startRef.id }
-      : null,
-    endRef: beam.endRef
-      ? { ...beam.endRef, id: columnIdMap.get(beam.endRef.id) || beam.endRef.id }
-      : null,
+    startRef: beam.startRef ? { ...beam.startRef, id: columnIdMap.get(beam.startRef.id) || beam.startRef.id } : null,
+    endRef: beam.endRef ? { ...beam.endRef, id: columnIdMap.get(beam.endRef.id) || beam.endRef.id } : null,
     floorLevel: (beam.floorLevel ?? 0) + elevationDelta,
   };
 }
@@ -99,14 +95,26 @@ function cloneStair(stair, sourceFloorId, duplicatedFloorId, landingIdMap) {
     startPoint: clonePoint(stair.startPoint),
     direction: stair.direction ? { ...stair.direction } : { angle: 0 },
     floorRelation: {
-      fromFloorId: stair.floorRelation?.fromFloorId === sourceFloorId ? duplicatedFloorId : (stair.floorRelation?.fromFloorId ?? duplicatedFloorId),
-      toFloorId: stair.floorRelation?.toFloorId === sourceFloorId ? duplicatedFloorId : (stair.floorRelation?.toFloorId ?? duplicatedFloorId),
+      fromFloorId:
+        stair.floorRelation?.fromFloorId === sourceFloorId
+          ? duplicatedFloorId
+          : (stair.floorRelation?.fromFloorId ?? duplicatedFloorId),
+      toFloorId:
+        stair.floorRelation?.toFloorId === sourceFloorId
+          ? duplicatedFloorId
+          : (stair.floorRelation?.toFloorId ?? duplicatedFloorId),
     },
     startLandingAttachment: stair.startLandingAttachment
-      ? { ...stair.startLandingAttachment, landingId: landingIdMap.get(stair.startLandingAttachment.landingId) || stair.startLandingAttachment.landingId }
+      ? {
+          ...stair.startLandingAttachment,
+          landingId: landingIdMap.get(stair.startLandingAttachment.landingId) || stair.startLandingAttachment.landingId,
+        }
       : null,
     endLandingAttachment: stair.endLandingAttachment
-      ? { ...stair.endLandingAttachment, landingId: landingIdMap.get(stair.endLandingAttachment.landingId) || stair.endLandingAttachment.landingId }
+      ? {
+          ...stair.endLandingAttachment,
+          landingId: landingIdMap.get(stair.endLandingAttachment.landingId) || stair.endLandingAttachment.landingId,
+        }
       : null,
     roofAccess: stair.roofAccess ? { ...stair.roofAccess } : null,
   };
@@ -173,9 +181,7 @@ export function sortFloors(floors = []) {
 }
 
 export function getOrderedFloors(projectOrFloors) {
-  const floors = Array.isArray(projectOrFloors)
-    ? projectOrFloors
-    : (projectOrFloors?.floors || []);
+  const floors = Array.isArray(projectOrFloors) ? projectOrFloors : projectOrFloors?.floors || [];
   return sortFloors(floors);
 }
 
@@ -242,9 +248,7 @@ export function createFloorAboveHighest(existingFloors = []) {
   const topFloor = orderedFloors[orderedFloors.length - 1] || null;
   const levelIndex = topFloor ? getFloorLevelIndex(topFloor) + 1 : 0;
   const floorToFloorHeight = topFloor ? getFloorToFloorHeight(topFloor) : DEFAULT_FLOOR_TO_FLOOR_HEIGHT;
-  const elevation = topFloor
-    ? getFloorElevation(topFloor) + getFloorToFloorHeight(topFloor)
-    : 0;
+  const elevation = topFloor ? getFloorElevation(topFloor) + getFloorToFloorHeight(topFloor) : 0;
 
   return createFloor(getDefaultFloorName(levelIndex), levelIndex, {
     elevation,
@@ -284,7 +288,9 @@ export function createDuplicatedFloor(sourceFloor) {
     windows: (sourceFloor.windows || []).map((windowItem) => cloneWindow(windowItem, wallIdMap)),
     columns,
     beams: (sourceFloor.beams || []).map((beam) => cloneBeam(beam, columnIdMap, elevationDelta)),
-    stairs: (sourceFloor.stairs || []).map((stair) => cloneStair(stair, sourceFloorId, duplicatedFloorId, landingIdMap)),
+    stairs: (sourceFloor.stairs || []).map((stair) =>
+      cloneStair(stair, sourceFloorId, duplicatedFloorId, landingIdMap),
+    ),
     landings,
     annotations: (sourceFloor.annotations || []).map(cloneAnnotation),
     annotationSettings: createAnnotationSettings(sourceFloor.annotationSettings || {}),

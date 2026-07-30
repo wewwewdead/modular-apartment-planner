@@ -43,8 +43,8 @@ export function generateCabinetBoxObjectParts(params = {}) {
     return generateCabinetInternalsParts(normalized).map(normalizePartTransforms);
   }
 
-  const innerWidth = Math.max(0, normalized.width - (normalized.thickness * 2));
-  const innerHeight = Math.max(0, normalized.height - (normalized.thickness * 2));
+  const innerWidth = Math.max(0, normalized.width - normalized.thickness * 2);
+  const innerHeight = Math.max(0, normalized.height - normalized.thickness * 2);
   const parts = [
     createPanelPart({
       name: 'Left Side Panel',
@@ -56,7 +56,10 @@ export function generateCabinetBoxObjectParts(params = {}) {
       layerId: normalized.layerId,
       origin: { x: 0, y: 0, z: 0 },
       extents: { width: normalized.thickness, depth: normalized.depth, height: normalized.height },
-      metadata: buildGeneratedMetadata({ x: 0, y: 0, z: 0 }, { width: normalized.thickness, depth: normalized.depth, height: normalized.height }),
+      metadata: buildGeneratedMetadata(
+        { x: 0, y: 0, z: 0 },
+        { width: normalized.thickness, depth: normalized.depth, height: normalized.height },
+      ),
       generated: true,
     }),
     createPanelPart({
@@ -69,7 +72,10 @@ export function generateCabinetBoxObjectParts(params = {}) {
       layerId: normalized.layerId,
       origin: { x: normalized.width - normalized.thickness, y: 0, z: 0 },
       extents: { width: normalized.thickness, depth: normalized.depth, height: normalized.height },
-      metadata: buildGeneratedMetadata({ x: normalized.width - normalized.thickness, y: 0, z: 0 }, { width: normalized.thickness, depth: normalized.depth, height: normalized.height }),
+      metadata: buildGeneratedMetadata(
+        { x: normalized.width - normalized.thickness, y: 0, z: 0 },
+        { width: normalized.thickness, depth: normalized.depth, height: normalized.height },
+      ),
       generated: true,
     }),
     createPanelPart({
@@ -82,7 +88,10 @@ export function generateCabinetBoxObjectParts(params = {}) {
       layerId: normalized.layerId,
       origin: { x: normalized.thickness, y: 0, z: normalized.height - normalized.thickness },
       extents: { width: innerWidth, depth: normalized.depth, height: normalized.thickness },
-      metadata: buildGeneratedMetadata({ x: normalized.thickness, y: 0, z: normalized.height - normalized.thickness }, { width: innerWidth, depth: normalized.depth, height: normalized.thickness }),
+      metadata: buildGeneratedMetadata(
+        { x: normalized.thickness, y: 0, z: normalized.height - normalized.thickness },
+        { width: innerWidth, depth: normalized.depth, height: normalized.thickness },
+      ),
       generated: true,
     }),
     createPanelPart({
@@ -95,7 +104,10 @@ export function generateCabinetBoxObjectParts(params = {}) {
       layerId: normalized.layerId,
       origin: { x: normalized.thickness, y: 0, z: 0 },
       extents: { width: innerWidth, depth: normalized.depth, height: normalized.thickness },
-      metadata: buildGeneratedMetadata({ x: normalized.thickness, y: 0, z: 0 }, { width: innerWidth, depth: normalized.depth, height: normalized.thickness }),
+      metadata: buildGeneratedMetadata(
+        { x: normalized.thickness, y: 0, z: 0 },
+        { width: innerWidth, depth: normalized.depth, height: normalized.thickness },
+      ),
       generated: true,
     }),
     createPanelPart({
@@ -108,7 +120,10 @@ export function generateCabinetBoxObjectParts(params = {}) {
       layerId: normalized.layerId,
       origin: { x: normalized.thickness, y: normalized.depth - normalized.thickness, z: normalized.thickness },
       extents: { width: innerWidth, depth: normalized.thickness, height: innerHeight },
-      metadata: buildGeneratedMetadata({ x: normalized.thickness, y: normalized.depth - normalized.thickness, z: normalized.thickness }, { width: innerWidth, depth: normalized.thickness, height: innerHeight }),
+      metadata: buildGeneratedMetadata(
+        { x: normalized.thickness, y: normalized.depth - normalized.thickness, z: normalized.thickness },
+        { width: innerWidth, depth: normalized.thickness, height: innerHeight },
+      ),
       generated: true,
     }),
   ];
@@ -116,23 +131,27 @@ export function generateCabinetBoxObjectParts(params = {}) {
   if (normalized.shelfCount > 0) {
     const verticalGap = innerHeight / (normalized.shelfCount + 1);
     for (let index = 0; index < normalized.shelfCount; index += 1) {
-      const z = normalized.thickness + (verticalGap * (index + 1)) - (normalized.thickness / 2);
-      parts.push(createShelfPart({
-        name: `Shelf ${index + 1}`,
-        role: 'shelf',
-        width: innerWidth,
-        height: normalized.depth - normalized.thickness,
-        thickness: normalized.thickness,
-        material: normalized.material,
-        layerId: normalized.layerId,
-        origin: { x: normalized.thickness, y: 0, z },
-        extents: { width: innerWidth, depth: normalized.depth - normalized.thickness, height: normalized.thickness },
-        metadata: buildGeneratedMetadata({ x: normalized.thickness, y: 0, z }, { width: innerWidth, depth: normalized.depth - normalized.thickness, height: normalized.thickness }),
-        generated: true,
-      }));
+      const z = normalized.thickness + verticalGap * (index + 1) - normalized.thickness / 2;
+      parts.push(
+        createShelfPart({
+          name: `Shelf ${index + 1}`,
+          role: 'shelf',
+          width: innerWidth,
+          height: normalized.depth - normalized.thickness,
+          thickness: normalized.thickness,
+          material: normalized.material,
+          layerId: normalized.layerId,
+          origin: { x: normalized.thickness, y: 0, z },
+          extents: { width: innerWidth, depth: normalized.depth - normalized.thickness, height: normalized.thickness },
+          metadata: buildGeneratedMetadata(
+            { x: normalized.thickness, y: 0, z },
+            { width: innerWidth, depth: normalized.depth - normalized.thickness, height: normalized.thickness },
+          ),
+          generated: true,
+        }),
+      );
     }
   }
 
   return parts.map(normalizePartTransforms);
 }
-

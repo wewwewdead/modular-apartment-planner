@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { buildFloorTrussGeometry } from '@/geometry/trussGeometry';
 import { TRUSS_SUPPORT_MODES } from '@/domain/trussModels';
 import { deriveBeamSupportedInstanceGeometry } from '@/truss/beamSupports';
@@ -179,7 +180,7 @@ function renderResizeHandles(systemGeometry, zoom) {
   ));
 }
 
-export default function TrussSelectionOverlay({
+function TrussSelectionOverlay({
   floor = null,
   trussSystems = [],
   selectedId,
@@ -294,3 +295,5 @@ export default function TrussSelectionOverlay({
 
   return null;
 }
+
+export default memo(TrussSelectionOverlay);

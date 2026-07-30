@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function StairRenderer({ stairs }) {
+function StairRenderer({ stairs }) {
   return (
     <g className="stairs">
       {(stairs || []).map((stair) => {
@@ -69,3 +70,5 @@ export default function StairRenderer({ stairs }) {
     </g>
   );
 }
+
+export default memo(StairRenderer);

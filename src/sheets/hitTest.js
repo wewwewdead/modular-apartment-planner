@@ -1,10 +1,5 @@
 function pointInRect(point, rect) {
-  return (
-    point.x >= rect.x
-    && point.x <= rect.x + rect.width
-    && point.y >= rect.y
-    && point.y <= rect.y + rect.height
-  );
+  return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
 }
 
 export function getViewportHandleRects(viewport, handleSize) {
@@ -16,7 +11,12 @@ export function getViewportHandleRects(viewport, handleSize) {
     n: { x: midX - size / 2, y: viewport.y - size / 2, width: size, height: size },
     ne: { x: viewport.x + viewport.width - size / 2, y: viewport.y - size / 2, width: size, height: size },
     e: { x: viewport.x + viewport.width - size / 2, y: midY - size / 2, width: size, height: size },
-    se: { x: viewport.x + viewport.width - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
+    se: {
+      x: viewport.x + viewport.width - size / 2,
+      y: viewport.y + viewport.height - size / 2,
+      width: size,
+      height: size,
+    },
     s: { x: midX - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
     sw: { x: viewport.x - size / 2, y: viewport.y + viewport.height - size / 2, width: size, height: size },
     w: { x: viewport.x - size / 2, y: midY - size / 2, width: size, height: size },

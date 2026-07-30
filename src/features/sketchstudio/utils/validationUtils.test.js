@@ -5,7 +5,11 @@ const validDraft = {
   name: 'Cabinet',
   footprint: {
     type: 'profile',
-    points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }],
+    points: [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+    ],
   },
   bounds: { width: 100, depth: 50, height: 900 },
   anchors: [{ id: 'anchor-origin', name: 'origin', x: 0, y: 0, kind: 'primary' }],

@@ -1,5 +1,11 @@
 import { createAnnotationSettings } from '@/domain/models';
-import { buildManualDimensionFigures, buildOverallDimensionFigures, buildRoomDimensionFigures, buildWallDimensionFigures, hitTestDimensionFigure } from './dimensions';
+import {
+  buildManualDimensionFigures,
+  buildOverallDimensionFigures,
+  buildRoomDimensionFigures,
+  buildWallDimensionFigures,
+  hitTestDimensionFigure,
+} from './dimensions';
 import { buildAnnotationTags } from './tags';
 
 export function resolveAnnotationSettings(floor) {

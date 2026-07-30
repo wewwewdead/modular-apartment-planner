@@ -16,60 +16,78 @@ export default function useSketchLayers(state, dispatch) {
     [state.document.layers, state.ui.activeLayerId],
   );
 
-  const updateDocumentState = useCallback((updater) => {
-    dispatch(setDocument(updater(state.document)));
-  }, [state.document, dispatch]);
-
-  const handleActiveLayerChange = useCallback(
-    (layerId) => dispatch(setActiveLayer(layerId)),
-    [dispatch],
+  const updateDocumentState = useCallback(
+    (updater) => {
+      dispatch(setDocument(updater(state.document)));
+    },
+    [state.document, dispatch],
   );
 
-  const handleLayerCreate = useCallback((name) => {
-    updateDocumentState((document) => ({
-      ...document,
-      layers: [...document.layers, createLayer(document.layers, name)],
-    }));
-  }, [updateDocumentState]);
+  const handleActiveLayerChange = useCallback((layerId) => dispatch(setActiveLayer(layerId)), [dispatch]);
 
-  const handleLayerRename = useCallback((layerId, name) => {
-    updateDocumentState((document) => ({
-      ...document,
-      layers: renameLayer(document.layers, layerId, name),
-    }));
-  }, [updateDocumentState]);
+  const handleLayerCreate = useCallback(
+    (name) => {
+      updateDocumentState((document) => ({
+        ...document,
+        layers: [...document.layers, createLayer(document.layers, name)],
+      }));
+    },
+    [updateDocumentState],
+  );
 
-  const handleDocumentNameCommit = useCallback((name) => {
-    updateDocumentState((document) => ({
-      ...document,
-      name: normalizeCommittedSketchName(name),
-    }));
-  }, [updateDocumentState]);
+  const handleLayerRename = useCallback(
+    (layerId, name) => {
+      updateDocumentState((document) => ({
+        ...document,
+        layers: renameLayer(document.layers, layerId, name),
+      }));
+    },
+    [updateDocumentState],
+  );
 
-  const handleLayerVisibilityToggle = useCallback((layerId) => {
-    updateDocumentState((document) => ({
-      ...document,
-      layers: toggleLayerVisibility(document.layers, layerId),
-    }));
-  }, [updateDocumentState]);
+  const handleDocumentNameCommit = useCallback(
+    (name) => {
+      updateDocumentState((document) => ({
+        ...document,
+        name: normalizeCommittedSketchName(name),
+      }));
+    },
+    [updateDocumentState],
+  );
 
-  const handleLayerLockToggle = useCallback((layerId) => {
-    updateDocumentState((document) => ({
-      ...document,
-      layers: toggleLayerLock(document.layers, layerId),
-    }));
-  }, [updateDocumentState]);
+  const handleLayerVisibilityToggle = useCallback(
+    (layerId) => {
+      updateDocumentState((document) => ({
+        ...document,
+        layers: toggleLayerVisibility(document.layers, layerId),
+      }));
+    },
+    [updateDocumentState],
+  );
 
-  const handleMoveSelectionToLayer = useCallback((layerId) => {
-    if (!state.selection.selectedIds.length) {
-      return;
-    }
+  const handleLayerLockToggle = useCallback(
+    (layerId) => {
+      updateDocumentState((document) => ({
+        ...document,
+        layers: toggleLayerLock(document.layers, layerId),
+      }));
+    },
+    [updateDocumentState],
+  );
 
-    updateDocumentState((document) => ({
-      ...document,
-      entities: moveEntitiesToLayer(document.entities, state.selection.selectedIds, layerId),
-    }));
-  }, [state.selection.selectedIds, updateDocumentState]);
+  const handleMoveSelectionToLayer = useCallback(
+    (layerId) => {
+      if (!state.selection.selectedIds.length) {
+        return;
+      }
+
+      updateDocumentState((document) => ({
+        ...document,
+        entities: moveEntitiesToLayer(document.entities, state.selection.selectedIds, layerId),
+      }));
+    },
+    [state.selection.selectedIds, updateDocumentState],
+  );
 
   return {
     activeLayer,

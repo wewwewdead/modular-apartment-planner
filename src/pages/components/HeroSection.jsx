@@ -37,7 +37,10 @@ function DecorativeLines() {
     >
       {/* Diagonal construction line — top-left to center */}
       <line
-        x1="80" y1="60" x2="400" y2="300"
+        x1="80"
+        y1="60"
+        x2="400"
+        y2="300"
         className={styles.drawLine}
         stroke="var(--color-arch-line)"
         strokeWidth="0.5"
@@ -46,7 +49,10 @@ function DecorativeLines() {
       />
       {/* Diagonal construction line — top-right to center */}
       <line
-        x1="720" y1="80" x2="400" y2="300"
+        x1="720"
+        y1="80"
+        x2="400"
+        y2="300"
         className={styles.drawLine}
         stroke="var(--color-arch-line)"
         strokeWidth="0.5"
@@ -100,8 +106,8 @@ export default function HeroSection() {
           <span className={styles.titleStructural}>with precision</span>
         </h1>
         <p className={styles.tagline}>
-          From concept to construction, iterate on floorplans, sketch technical
-          details, and generate documentation with millimeter accuracy.
+          From concept to construction, iterate on floorplans, sketch technical details, and generate documentation with
+          millimeter accuracy.
         </p>
         <div className={styles.ctas}>
           <Link to="/floorplan" className={styles.primaryCta}>

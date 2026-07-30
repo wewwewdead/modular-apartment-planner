@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 
 function previewPoints(toolState) {
@@ -7,7 +8,7 @@ function previewPoints(toolState) {
   return [...points, toolState.slabPreviewPoint];
 }
 
-export default function SlabPreview({ toolState, activeTool }) {
+function SlabPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.SLAB) return null;
 
   const points = previewPoints(toolState);
@@ -39,3 +40,5 @@ export default function SlabPreview({ toolState, activeTool }) {
     </g>
   );
 }
+
+export default memo(SlabPreview);

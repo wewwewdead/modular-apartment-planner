@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { toggleBrokenLineForEntities } from '../utils/entityUtils';
+import { duplicateEntitiesByIds, toggleBrokenLineForEntities } from '../utils/entityUtils';
+import { buildGroupIndex } from '../utils/groupUtils';
+import { HISTORY_LIMIT } from '../utils/historyUtils';
 import sketchStudioInitialState from './sketchStudioInitialState';
 import sketchStudioReducer from './sketchStudioReducer';
 import {
   addJoint,
+  closeShortcutOverlay,
   commitEntity,
   degroupSelection,
   deleteSelected,
@@ -20,6 +23,7 @@ import {
   setViewport,
   startHandleDrag,
   startTransform,
+  toggleShortcutOverlay,
   undo,
   updateJoint,
 } from './sketchStudioActions';
@@ -505,6 +509,65 @@ describe('sketchStudioReducer history', () => {
     expect(deletedState.manufacturingPreviewEntities).toEqual([]);
   });
 
+  it('shares the unchanged document reference between the history snapshot and prior state', () => {
+    const baseState = createState();
+    const documentBeforeEdit = baseState.document;
+
+    const createdState = sketchStudioReducer(baseState, commitEntity(createLineEntity('line-1', 0, 0, 120, 0)));
+
+    // The edit produced a brand-new document object (immutability), and the single
+    // history snapshot references the PRE-edit document by identity, not a clone.
+    expect(createdState.document).not.toBe(documentBeforeEdit);
+    expect(createdState.history.past).toHaveLength(1);
+    expect(createdState.history.past[0].document).toBe(documentBeforeEdit);
+  });
+
+  it('caps the past stack and drops the oldest entry once the limit is exceeded', () => {
+    let state = createState();
+    const totalEdits = HISTORY_LIMIT + 5;
+
+    for (let index = 0; index < totalEdits; index += 1) {
+      state = sketchStudioReducer(state, commitEntity(createLineEntity(`line-${index}`, index, 0, index + 10, 0)));
+    }
+
+    expect(state.history.past).toHaveLength(HISTORY_LIMIT);
+    // The oldest snapshot (empty document) must have been evicted: the earliest
+    // retained snapshot should already contain the first few entities.
+    expect(state.history.past[0].document.entities.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the past stack capped while cycling redo repeatedly', () => {
+    let state = createState();
+
+    for (let index = 0; index < HISTORY_LIMIT + 3; index += 1) {
+      state = sketchStudioReducer(state, commitEntity(createLineEntity(`line-${index}`, index, 0, index + 10, 0)));
+    }
+
+    expect(state.history.past).toHaveLength(HISTORY_LIMIT);
+
+    // Undo once, then redo: the redo must not push past beyond the cap.
+    const undoneState = sketchStudioReducer(state, undo());
+    const redoneState = sketchStudioReducer(undoneState, redo());
+
+    expect(redoneState.history.past.length).toBeLessThanOrEqual(HISTORY_LIMIT);
+  });
+
+  it('round-trips exact prior document state through undo', () => {
+    const baseState = createState();
+    const createdState = sketchStudioReducer(baseState, commitEntity(createLineEntity('line-1', 0, 0, 120, 0)));
+    const documentAfterCreate = createdState.document;
+
+    const undoneState = sketchStudioReducer(createdState, undo());
+    expect(undoneState.document.entities).toHaveLength(0);
+
+    const redoneState = sketchStudioReducer(undoneState, redo());
+    // Redo restores the same entity set; the future snapshot referenced the
+    // post-create document by identity.
+    expect(redoneState.document.entities.map((entity) => entity.id)).toEqual(
+      documentAfterCreate.entities.map((entity) => entity.id),
+    );
+  });
+
   it('applies one material change across multiple selected entities', () => {
     const state = createState();
     const baseState = {
@@ -530,5 +593,156 @@ describe('sketchStudioReducer history', () => {
       expect.objectContaining({ id: 'panel-top' }),
     ]);
     expect(nextState.document.entities.find((entity) => entity.id === 'panel-top')).not.toHaveProperty('materialId');
+  });
+
+  it('toggles and closes the shortcut overlay without touching history', () => {
+    const state = createState();
+
+    expect(state.ui.shortcutOverlayOpen).toBe(false);
+
+    const openedState = sketchStudioReducer(state, toggleShortcutOverlay());
+    expect(openedState.ui.shortcutOverlayOpen).toBe(true);
+    expect(openedState.history).toBe(state.history);
+    expect(openedState.document).toBe(state.document);
+
+    const closedState = sketchStudioReducer(openedState, closeShortcutOverlay());
+    expect(closedState.ui.shortcutOverlayOpen).toBe(false);
+
+    expect(sketchStudioReducer(closedState, closeShortcutOverlay())).toBe(closedState);
+    expect(sketchStudioReducer(closedState, toggleShortcutOverlay()).ui.shortcutOverlayOpen).toBe(true);
+  });
+});
+
+// Serialize a group index (groupId -> Set of ids) into a plain, order-independent
+// structure so it can be deep-compared against a from-scratch rebuild.
+function snapshotGroupIndex(groupIndex) {
+  if (!(groupIndex instanceof Map)) {
+    return null;
+  }
+  return Object.fromEntries(
+    Array.from(groupIndex.entries())
+      .map(([groupId, members]) => [groupId, Array.from(members).sort()])
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function expectIndexMatchesRebuild(state) {
+  expect(snapshotGroupIndex(state.document.groupIndex)).toEqual(
+    snapshotGroupIndex(buildGroupIndex(state.document.entities)),
+  );
+}
+
+function createGroupedBaseState() {
+  const state = createState();
+  const entities = [
+    createRectEntity('panel-left', 0, 0, 200, 120, 18),
+    createRectEntity('panel-right', 220, 0, 200, 120, 18),
+    createRectEntity('spacer', 0, 200, 60, 60, 18),
+  ];
+  return {
+    ...state,
+    document: {
+      ...state.document,
+      entities,
+      // Seed the runtime index exactly as the hook's initializer would.
+      groupIndex: buildGroupIndex(entities),
+    },
+  };
+}
+
+describe('sketchStudioReducer groupIndex reuse', () => {
+  it('never rebuilds the index on a geometry-only move but stays consistent through a full lifecycle', () => {
+    // add (via commit) -> group -> move -> duplicate -> degroup -> delete -> undo -> redo
+    const baseState = createGroupedBaseState();
+    expectIndexMatchesRebuild(baseState);
+
+    // add: commit a new entity (membership set grows -> rebuild is expected)
+    const committedState = sketchStudioReducer(
+      baseState,
+      commitEntity(createRectEntity('panel-back', 0, 300, 200, 18, 6)),
+    );
+    expectIndexMatchesRebuild(committedState);
+
+    // group: two panels into a shared group (membership changes -> rebuild)
+    const selectedState = sketchStudioReducer(committedState, setSelection(['panel-left', 'panel-right']));
+    const groupedState = sketchStudioReducer(selectedState, groupSelection());
+    const groupId = groupedState.document.entities.find((entity) => entity.id === 'panel-left').meta.groupId;
+    expect(groupId).toBeTruthy();
+    expect(groupedState.document.entities.find((entity) => entity.id === 'panel-right').meta.groupId).toBe(groupId);
+    expectIndexMatchesRebuild(groupedState);
+    expect(groupedState.document.groupIndex.get(groupId)).toEqual(new Set(['panel-left', 'panel-right']));
+
+    // move: translate the grouped panels. Membership is unchanged, so the index
+    // MUST be reused by reference (the O(1) win on the hot path).
+    const indexBeforeMove = groupedState.document.groupIndex;
+    const movedEntities = groupedState.document.entities.map((entity) =>
+      entity.meta?.groupId === groupId ? { ...entity, x: entity.x + 500 } : entity,
+    );
+    const movedState = sketchStudioReducer(groupedState, setDocumentEntities(movedEntities));
+    expect(movedState.document.entities.find((entity) => entity.id === 'panel-left').x).toBe(500);
+    expect(movedState.document.groupIndex).toBe(indexBeforeMove);
+    expectIndexMatchesRebuild(movedState);
+
+    // duplicate grouped entities: membership grows (new ids + new group) -> rebuild,
+    // and the index must reflect BOTH the original and the duplicated group.
+    const duplication = duplicateEntitiesByIds(movedState.document.entities, ['panel-left', 'panel-right']);
+    const duplicatedState = sketchStudioReducer(movedState, setDocumentEntities(duplication.entities));
+    expect(duplicatedState.document.groupIndex).not.toBe(indexBeforeMove);
+    expectIndexMatchesRebuild(duplicatedState);
+    const duplicatedGroupId = duplicatedState.document.entities.find(
+      (entity) => duplication.duplicatedIdSet.has(entity.id) && entity.meta?.groupId,
+    ).meta.groupId;
+    expect(duplicatedGroupId).not.toBe(groupId);
+    expect(duplicatedState.document.groupIndex.get(groupId)).toEqual(new Set(['panel-left', 'panel-right']));
+    expect(duplicatedState.document.groupIndex.get(duplicatedGroupId)).toEqual(new Set(duplication.duplicatedIds));
+
+    // degroup: remove the original group membership (membership changes -> rebuild)
+    const degroupSelectedState = sketchStudioReducer(duplicatedState, setSelection(['panel-left', 'panel-right']));
+    const degroupedState = sketchStudioReducer(degroupSelectedState, degroupSelection());
+    expect(degroupedState.document.entities.find((entity) => entity.id === 'panel-left').meta.groupId).toBeUndefined();
+    expectIndexMatchesRebuild(degroupedState);
+    expect(degroupedState.document.groupIndex.has(groupId)).toBe(false);
+    // The duplicated group is untouched by the degroup.
+    expect(degroupedState.document.groupIndex.get(duplicatedGroupId)).toEqual(new Set(duplication.duplicatedIds));
+
+    // delete: remove a duplicated group member (membership shrinks -> rebuild)
+    const deleteSelectedState = sketchStudioReducer(degroupedState, setSelection([...duplication.duplicatedIds]));
+    const deletedState = sketchStudioReducer(deleteSelectedState, deleteSelected());
+    expectIndexMatchesRebuild(deletedState);
+    expect(deletedState.document.groupIndex.has(duplicatedGroupId)).toBe(false);
+
+    // undo: restore the pre-delete document. The index must be recomputed to
+    // match the restored entities.
+    const undoneState = sketchStudioReducer(deletedState, undo());
+    expectIndexMatchesRebuild(undoneState);
+    expect(undoneState.document.groupIndex.get(duplicatedGroupId)).toEqual(new Set(duplication.duplicatedIds));
+
+    // redo: re-apply the delete. The index must be recomputed again.
+    const redoneState = sketchStudioReducer(undoneState, redo());
+    expectIndexMatchesRebuild(redoneState);
+    expect(redoneState.document.groupIndex.has(duplicatedGroupId)).toBe(false);
+  });
+
+  it('reuses the index reference across a property edit that does not touch group membership', () => {
+    const baseState = createGroupedBaseState();
+    const groupedState = sketchStudioReducer(
+      sketchStudioReducer(baseState, setSelection(['panel-left', 'panel-right'])),
+      groupSelection(),
+    );
+    const indexBeforeEdit = groupedState.document.groupIndex;
+
+    // A material change is membership-invariant and already passes reuseGroupIndex.
+    const materialState = sketchStudioReducer(groupedState, setEntityMaterial(['panel-left'], 'plywood-birch-18'));
+    expect(materialState.document.groupIndex).toBe(indexBeforeEdit);
+    expectIndexMatchesRebuild(materialState);
+
+    // A broken-line toggle flows through SET_DOCUMENT_ENTITIES and only edits
+    // meta.lineStyle, so the index reference must be preserved too.
+    const toggledState = sketchStudioReducer(
+      materialState,
+      setDocumentEntities(toggleBrokenLineForEntities(materialState.document.entities, ['panel-left'])),
+    );
+    expect(toggledState.document.groupIndex).toBe(indexBeforeEdit);
+    expectIndexMatchesRebuild(toggledState);
   });
 });

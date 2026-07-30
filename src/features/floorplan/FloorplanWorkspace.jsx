@@ -18,6 +18,7 @@ function EditorShell({
   project,
   onNew,
   onSave,
+  onShare,
   onLoad,
   isSidebarCollapsed,
   isPropertiesCollapsed,
@@ -38,6 +39,7 @@ function EditorShell({
         <Toolbar
           onNew={onNew}
           onSave={onSave}
+          onShare={onShare}
           onLoad={onLoad}
           isSidebarCollapsed={isSidebarCollapsed}
           isPropertiesCollapsed={isPropertiesCollapsed}
@@ -91,7 +93,7 @@ function FloorplanShell() {
       <input
         ref={importInputRef}
         type="file"
-        accept=".json,application/json"
+        accept=".json,.apz,.zip,application/json,application/zip"
         onChange={actions.project.importProjectFile}
         style={{ display: 'none' }}
       />
@@ -100,6 +102,7 @@ function FloorplanShell() {
         project={state.project}
         onNew={actions.project.newProject}
         onSave={actions.project.saveProject}
+        onShare={actions.project.shareProject}
         onLoad={actions.workspace.openLoadModal}
         isSidebarCollapsed={isSidebarCollapsed}
         isPropertiesCollapsed={isPropertiesCollapsed}
@@ -117,7 +120,9 @@ function FloorplanShell() {
             <div className={modalStyles.modalCard}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span className={modalStyles.modalCardTitle}>Project File</span>
-                <span className={modalStyles.modalCardDesc}>Open a JSON file previously saved to your computer.</span>
+                <span className={modalStyles.modalCardDesc}>
+                  Open a saved .json project or a shared .apz archive from your computer.
+                </span>
               </div>
               <button
                 className={modalStyles.modalBtn}

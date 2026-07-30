@@ -20,9 +20,7 @@ function sceneHasGeometry(scene) {
 
 function uniqueSortedValues(values = []) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted.filter((value, index) => (
-    index === 0 || Math.abs(value - sorted[index - 1]) > EPSILON
-  ));
+  return sorted.filter((value, index) => index === 0 || Math.abs(value - sorted[index - 1]) > EPSILON);
 }
 
 function createVerticalDimension(id, x, startZ, endZ, offset, sourceType, sourceId) {
@@ -58,7 +56,7 @@ function buildOverallDimensions(scene) {
     scene.bounds.maxZ,
     OVERALL_HEIGHT_OFFSET,
     'elevation-overall',
-    null
+    null,
   );
 
   return [overallWidth, overallHeight].filter(Boolean);
@@ -76,15 +74,17 @@ function buildLevelDimensions(scene) {
 
   return uniqueSortedValues(levelValues)
     .filter((value) => Math.abs(value - scene.groundLevel) > EPSILON)
-    .map((value, index) => createVerticalDimension(
-      `${scene.viewKey}-level-${index}`,
-      scene.bounds.minX,
-      scene.groundLevel,
-      value,
-      LEVEL_OFFSET_START + (LEVEL_OFFSET_STEP * index),
-      'elevation-level',
-      null
-    ))
+    .map((value, index) =>
+      createVerticalDimension(
+        `${scene.viewKey}-level-${index}`,
+        scene.bounds.minX,
+        scene.groundLevel,
+        value,
+        LEVEL_OFFSET_START + LEVEL_OFFSET_STEP * index,
+        'elevation-level',
+        null,
+      ),
+    )
     .filter(Boolean);
 }
 
@@ -92,9 +92,7 @@ function buildOpeningDimensions(scene) {
   if (!scene?.elements?.length) return [];
 
   const figures = [];
-  const openings = scene.elements.filter((element) => (
-    element.category === 'door' || element.category === 'window'
-  ));
+  const openings = scene.elements.filter((element) => element.category === 'door' || element.category === 'window');
 
   for (const opening of openings) {
     const idPrefix = `${scene.viewKey}-${opening.category}-${opening.sourceId || opening.id}`;
@@ -106,7 +104,7 @@ function buildOpeningDimensions(scene) {
       opening.top,
       OPENING_HEIGHT_OFFSET,
       'elevation-opening-height',
-      opening.sourceId
+      opening.sourceId,
     );
     if (heightFigure) figures.push(heightFigure);
 
@@ -118,7 +116,7 @@ function buildOpeningDimensions(scene) {
         opening.bottom,
         OPENING_SILL_OFFSET,
         'elevation-opening-sill',
-        opening.sourceId
+        opening.sourceId,
       );
       if (sillFigure) figures.push(sillFigure);
 
@@ -129,7 +127,7 @@ function buildOpeningDimensions(scene) {
         opening.top,
         OPENING_HEAD_OFFSET,
         'elevation-opening-head',
-        opening.sourceId
+        opening.sourceId,
       );
       if (headFigure) figures.push(headFigure);
     }

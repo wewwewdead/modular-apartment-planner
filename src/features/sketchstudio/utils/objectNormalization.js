@@ -4,9 +4,7 @@ import { migrateLegacyObjectDraft } from './genericObjectUtils';
 const VALID_OBJECT_TYPES = new Set(Object.values(OBJECT_TYPES));
 const VALID_CATEGORIES = new Set(Object.values(OBJECT_CATEGORIES));
 
-const PANEL_ROLES = new Set([
-  'panel', 'shelf', 'top', 'bottom', 'side', 'back', 'front', 'divider', 'generic',
-]);
+const PANEL_ROLES = new Set(['panel', 'shelf', 'top', 'bottom', 'side', 'back', 'front', 'divider', 'generic']);
 const RAIL_ROLES = new Set(['leg', 'support', 'brace', 'rail']);
 const PROFILE_ROLES = new Set(['door', 'drawer-front', 'custom-profile']);
 

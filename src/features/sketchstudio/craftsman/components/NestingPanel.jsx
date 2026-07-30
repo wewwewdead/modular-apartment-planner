@@ -1,10 +1,5 @@
 import { useMemo, useState } from 'react';
-import {
-  optimizeCutList,
-  DEFAULT_SHEET,
-  DEFAULT_LINEAR_STOCK,
-  DEFAULT_BLADE_KERF,
-} from '../utils/nestingOptimizer';
+import { optimizeCutList, DEFAULT_SHEET, DEFAULT_LINEAR_STOCK, DEFAULT_BLADE_KERF } from '../utils/nestingOptimizer';
 import styles from '../styles/craftsman.module.css';
 
 const COLORS = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#f06595'];
@@ -17,7 +12,10 @@ function formatValue(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return '0';
   if (Math.abs(numeric - Math.round(numeric)) < 0.001) return String(Math.round(numeric));
-  return numeric.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  return numeric
+    .toFixed(2)
+    .replace(/\.00$/, '')
+    .replace(/(\.\d)0$/, '$1');
 }
 
 function buildTopLevelStats(summary) {
@@ -91,12 +89,7 @@ function SheetDiagram({ sheet, index }) {
       <div className={styles.nestingSheetLabel}>
         Sheet {index + 1} {sheet.oversized ? '— oversized' : `— ${sheet.wastePercent}% waste`}
       </div>
-      <svg
-        width={width}
-        height={height}
-        viewBox={`0 0 ${sheet.width} ${sheet.height}`}
-        className={styles.nestingSvg}
-      >
+      <svg width={width} height={height} viewBox={`0 0 ${sheet.width} ${sheet.height}`} className={styles.nestingSvg}>
         <rect x="0" y="0" width={sheet.width} height={sheet.height} fill="#2a2a3e" stroke="#555" strokeWidth="2" />
         {sheet.placements.map((placement, placementIndex) => (
           <g key={placement.id || placementIndex}>
@@ -143,12 +136,7 @@ function LinearDiagram({ unit, index }) {
           ? `Stick ${index + 1} — oversized by ${formatValue(unit.oversizeBy * 0.001)} m`
           : `Stick ${index + 1} — ${formatValue(unit.cutLengthUsed * 0.001)} m used · ${formatValue(unit.remainingLength * 0.001)} m leftover`}
       </div>
-      <svg
-        width={width}
-        height="46"
-        viewBox={`0 0 ${viewWidth} 34`}
-        className={styles.nestingSvg}
-      >
+      <svg width={width} height="46" viewBox={`0 0 ${viewWidth} 34`} className={styles.nestingSvg}>
         {viewWidth > unit.length && (
           <rect
             x={unit.length}
@@ -215,18 +203,19 @@ function MaterialGroup({ group }) {
 
       {group.summary.oversizedCount > 0 && (
         <div className={styles.nestingWarning}>
-          {group.summary.oversizedCount} cut{group.summary.oversizedCount === 1 ? '' : 's'} exceed the available stock size.
+          {group.summary.oversizedCount} cut{group.summary.oversizedCount === 1 ? '' : 's'} exceed the available stock
+          size.
         </div>
       )}
 
       <div className={styles.nestingSheets}>
         {group.stockKind === 'linear'
           ? group.units.map((unit, index) => (
-            <LinearDiagram key={`${group.material}-${index}`} unit={unit} index={index} />
-          ))
+              <LinearDiagram key={`${group.material}-${index}`} unit={unit} index={index} />
+            ))
           : group.units.map((sheet, index) => (
-            <SheetDiagram key={`${group.material}-${index}`} sheet={sheet} index={index} />
-          ))}
+              <SheetDiagram key={`${group.material}-${index}`} sheet={sheet} index={index} />
+            ))}
       </div>
     </section>
   );
@@ -238,10 +227,7 @@ export default function NestingPanel({ bomRows }) {
   const [bladeKerf, setBladeKerf] = useState(DEFAULT_BLADE_KERF);
   const [linearStockLengths, setLinearStockLengths] = useState({});
 
-  const hasSheetRows = useMemo(
-    () => bomRows.some((row) => getRowStockKind(row) === 'sheet'),
-    [bomRows],
-  );
+  const hasSheetRows = useMemo(() => bomRows.some((row) => getRowStockKind(row) === 'sheet'), [bomRows]);
 
   const linearMaterials = useMemo(() => {
     const materials = new Map();
@@ -262,11 +248,12 @@ export default function NestingPanel({ bomRows }) {
   }, [bomRows]);
 
   const result = useMemo(
-    () => optimizeCutList(bomRows, {
-      sheetSize: { width: sheetWidth, height: sheetHeight },
-      bladeKerf,
-      linearStockLengths,
-    }),
+    () =>
+      optimizeCutList(bomRows, {
+        sheetSize: { width: sheetWidth, height: sheetHeight },
+        bladeKerf,
+        linearStockLengths,
+      }),
     [bomRows, sheetWidth, sheetHeight, bladeKerf, linearStockLengths],
   );
 

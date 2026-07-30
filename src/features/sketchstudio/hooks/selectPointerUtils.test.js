@@ -28,7 +28,7 @@ describe('resolveSelectPointerDownAction', () => {
     });
   });
 
-  it('selects an unselected entity before starting a transform', () => {
+  it('returns select-only when hovering an unselected entity', () => {
     expect(
       resolveSelectPointerDownAction({
         hoveredEntityId: 'entity-b',
@@ -36,12 +36,12 @@ describe('resolveSelectPointerDownAction', () => {
         selectedIds: ['entity-a'],
       }),
     ).toEqual({
-      intent: 'transform-next-selection',
+      intent: 'select-only',
       selectionIds: ['entity-b'],
     });
   });
 
-  it('expands grouped targets before starting a transform', () => {
+  it('expands grouped targets when selecting an unselected group', () => {
     expect(
       resolveSelectPointerDownAction({
         hoveredEntityId: 'group-a-1',
@@ -49,7 +49,7 @@ describe('resolveSelectPointerDownAction', () => {
         selectedIds: [],
       }),
     ).toEqual({
-      intent: 'transform-next-selection',
+      intent: 'select-only',
       selectionIds: ['group-a-1', 'group-a-2'],
     });
   });
@@ -63,7 +63,7 @@ describe('resolveSelectPointerDownAction', () => {
         shiftKey: true,
       }),
     ).toEqual({
-      intent: 'transform-next-selection',
+      intent: 'select-only',
       selectionIds: ['entity-a', 'entity-b'],
     });
   });

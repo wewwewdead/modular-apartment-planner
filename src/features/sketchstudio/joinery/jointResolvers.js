@@ -26,9 +26,7 @@ export function isJoineryRectEntity(entity) {
 }
 
 export function isJoineryRectGenerationSupported(entity) {
-  return isJoineryRectEntity(entity)
-    && toPositiveNumber(entity.width)
-    && toPositiveNumber(entity.height);
+  return isJoineryRectEntity(entity) && toPositiveNumber(entity.width) && toPositiveNumber(entity.height);
 }
 
 export function getRectPartBounds(entity) {
@@ -70,11 +68,11 @@ function scaleVector(vector, scalar) {
 }
 
 function dotVectors(left, right) {
-  return (left.x * right.x) + (left.y * right.y);
+  return left.x * right.x + left.y * right.y;
 }
 
 function crossVectors(left, right) {
-  return (left.x * right.y) - (left.y * right.x);
+  return left.x * right.y - left.y * right.x;
 }
 
 function vectorLength(vector) {
@@ -99,10 +97,7 @@ function canonicalizeTangent(vector) {
     return null;
   }
 
-  if (
-    normalized.x < -VECTOR_TOLERANCE
-    || (Math.abs(normalized.x) <= VECTOR_TOLERANCE && normalized.y < 0)
-  ) {
+  if (normalized.x < -VECTOR_TOLERANCE || (Math.abs(normalized.x) <= VECTOR_TOLERANCE && normalized.y < 0)) {
     return {
       x: -normalized.x,
       y: -normalized.y,
@@ -113,7 +108,7 @@ function canonicalizeTangent(vector) {
 }
 
 function projectPointOntoTangent(point, tangent) {
-  return (point.x * tangent.x) + (point.y * tangent.y);
+  return point.x * tangent.x + point.y * tangent.y;
 }
 
 function projectEdgeOntoTangent(edge, tangent) {
@@ -131,15 +126,14 @@ function isParallelDirection(first, second) {
 }
 
 function edgesFaceEachOther(firstEdge, secondEdge) {
-  return isParallelDirection(firstEdge.tangent, secondEdge.tangent)
-    && dotVectors(firstEdge.outwardNormal, secondEdge.outwardNormal) <= -(1 - OPPOSING_NORMAL_TOLERANCE);
+  return (
+    isParallelDirection(firstEdge.tangent, secondEdge.tangent) &&
+    dotVectors(firstEdge.outwardNormal, secondEdge.outwardNormal) <= -(1 - OPPOSING_NORMAL_TOLERANCE)
+  );
 }
 
 function getEdgeLineSeparation(firstEdge, secondEdge) {
-  return dotVectors(
-    subtractPoints(secondEdge.startPoint, firstEdge.startPoint),
-    firstEdge.outwardNormal,
-  );
+  return dotVectors(subtractPoints(secondEdge.startPoint, firstEdge.startPoint), firstEdge.outwardNormal);
 }
 
 function getProjectedOverlap(firstEdge, secondEdge, tolerance = JOINERY_TOUCH_TOLERANCE) {
@@ -342,8 +336,8 @@ export function buildRepeatedEdgeIntervals(overlap, { count, width, spacing = 0,
     return { error: 'A repeated joint requires a positive feature width.' };
   }
 
-  const usableLength = overlap.length - (safeEdgeOffset * 2);
-  const requiredLength = (safeCount * safeWidth) + (Math.max(0, safeCount - 1) * safeSpacing);
+  const usableLength = overlap.length - safeEdgeOffset * 2;
+  const requiredLength = safeCount * safeWidth + Math.max(0, safeCount - 1) * safeSpacing;
 
   if (usableLength <= 0 || requiredLength > usableLength + JOINERY_TOUCH_TOLERANCE) {
     return { error: 'The requested repeated pattern does not fit inside the available overlap.' };
@@ -378,8 +372,8 @@ export function getPointAlongEdge(edge, position, normalDistance = 0, normalKind
   const basePoint = addPoints(edge.startPoint, scaleVector(edge.tangent, alongDistance));
 
   return {
-    x: roundJoineryValue(basePoint.x + (normal.x * offset)),
-    y: roundJoineryValue(basePoint.y + (normal.y * offset)),
+    x: roundJoineryValue(basePoint.x + normal.x * offset),
+    y: roundJoineryValue(basePoint.y + normal.y * offset),
   };
 }
 
@@ -420,24 +414,28 @@ function buildTouchContactCandidates(sourcePart, targetPart) {
     .map((edgeKey) => getRectEdgeData(targetPart, edgeKey))
     .filter(Boolean);
 
-  return sourceEdges.flatMap((sourceEdge) => targetEdges.flatMap((targetEdge) => {
-    if (!edgesFaceEachOther(sourceEdge, targetEdge)) {
-      return [];
-    }
+  return sourceEdges.flatMap((sourceEdge) =>
+    targetEdges.flatMap((targetEdge) => {
+      if (!edgesFaceEachOther(sourceEdge, targetEdge)) {
+        return [];
+      }
 
-    const overlap = computeEdgeOverlap(sourceEdge, targetEdge);
-    if (!overlap) {
-      return [];
-    }
+      const overlap = computeEdgeOverlap(sourceEdge, targetEdge);
+      if (!overlap) {
+        return [];
+      }
 
-    return [{
-      kind: 'touch',
-      overlap,
-      penetrationDepth: null,
-      sourceEdge,
-      targetEdge,
-    }];
-  }));
+      return [
+        {
+          kind: 'touch',
+          overlap,
+          penetrationDepth: null,
+          sourceEdge,
+          targetEdge,
+        },
+      ];
+    }),
+  );
 }
 
 function buildPenetrationContactCandidates(sourcePart, targetPart) {
@@ -455,40 +453,41 @@ function buildPenetrationContactCandidates(sourcePart, targetPart) {
     left: 'right',
   };
 
-  return sourceEdges.flatMap((sourceEdge) => targetEdges.flatMap((targetEdge) => {
-    const overlap = getProjectedOverlap(sourceEdge, targetEdge);
-    if (!overlap) {
-      return [];
-    }
+  return sourceEdges.flatMap((sourceEdge) =>
+    targetEdges.flatMap((targetEdge) => {
+      const overlap = getProjectedOverlap(sourceEdge, targetEdge);
+      if (!overlap) {
+        return [];
+      }
 
-    const penetrationDepth = dotVectors(
-      subtractPoints(sourceEdge.midpoint, targetEdge.midpoint),
-      targetEdge.inwardNormal,
-    );
-    const oppositeSourceEdge = sourceEdgesByKey.get(oppositeEdgeByKey[sourceEdge.edgeKey]);
-    const oppositeDepth = oppositeSourceEdge
-      ? dotVectors(
-          subtractPoints(oppositeSourceEdge.midpoint, targetEdge.midpoint),
-          targetEdge.inwardNormal,
-        )
-      : null;
+      const penetrationDepth = dotVectors(
+        subtractPoints(sourceEdge.midpoint, targetEdge.midpoint),
+        targetEdge.inwardNormal,
+      );
+      const oppositeSourceEdge = sourceEdgesByKey.get(oppositeEdgeByKey[sourceEdge.edgeKey]);
+      const oppositeDepth = oppositeSourceEdge
+        ? dotVectors(subtractPoints(oppositeSourceEdge.midpoint, targetEdge.midpoint), targetEdge.inwardNormal)
+        : null;
 
-    if (
-      penetrationDepth <= JOINERY_TOUCH_TOLERANCE
-      || oppositeDepth == null
-      || oppositeDepth >= -JOINERY_TOUCH_TOLERANCE
-    ) {
-      return [];
-    }
+      if (
+        penetrationDepth <= JOINERY_TOUCH_TOLERANCE ||
+        oppositeDepth == null ||
+        oppositeDepth >= -JOINERY_TOUCH_TOLERANCE
+      ) {
+        return [];
+      }
 
-    return [{
-      kind: 'penetration',
-      overlap,
-      penetrationDepth: roundJoineryValue(penetrationDepth),
-      sourceEdge,
-      targetEdge,
-    }];
-  }));
+      return [
+        {
+          kind: 'penetration',
+          overlap,
+          penetrationDepth: roundJoineryValue(penetrationDepth),
+          sourceEdge,
+          targetEdge,
+        },
+      ];
+    }),
+  );
 }
 
 function getAutoContactKindForJointType(type) {
@@ -509,7 +508,8 @@ function resolveAutoContactCandidate(joint, sourcePart, targetPart) {
 
     if (touchEvaluation.status === 'ambiguous') {
       return {
-        error: 'Multiple valid contact regions were detected between the selected parts. Adjust the geometry so only one contact remains.',
+        error:
+          'Multiple valid contact regions were detected between the selected parts. Adjust the geometry so only one contact remains.',
         code: 'ambiguous_contact',
       };
     }
@@ -550,7 +550,8 @@ function resolveAutoContactCandidate(joint, sourcePart, targetPart) {
 
   if (validDirections.length > 1) {
     return {
-      error: 'Both source/target directions are valid. Automatic placement cannot decide which part should drive the joint.',
+      error:
+        'Both source/target directions are valid. Automatic placement cannot decide which part should drive the joint.',
       code: 'ambiguous_direction',
     };
   }
@@ -611,9 +612,10 @@ export function resolveJoineryContext(joint, entitiesOrMap) {
     };
   }
 
-  const contactContext = joint.placementMode === JOINT_PLACEMENT_MODES.AUTO_CONTACT
-    ? resolveAutoContactCandidate(joint, initialSourcePart, initialTargetPart)
-    : resolveManualJoineryContext(joint, initialSourcePart, initialTargetPart);
+  const contactContext =
+    joint.placementMode === JOINT_PLACEMENT_MODES.AUTO_CONTACT
+      ? resolveAutoContactCandidate(joint, initialSourcePart, initialTargetPart)
+      : resolveManualJoineryContext(joint, initialSourcePart, initialTargetPart);
 
   if (contactContext?.error) {
     return contactContext;
@@ -637,9 +639,7 @@ export function resolveJoineryContext(joint, entitiesOrMap) {
     sourceThickness,
     targetThickness,
     minThickness:
-      sourceThickness != null && targetThickness != null
-        ? Math.min(sourceThickness, targetThickness)
-        : null,
+      sourceThickness != null && targetThickness != null ? Math.min(sourceThickness, targetThickness) : null,
     contactKind: contactContext.contactKind || contactContext.kind,
     penetrationDepth: contactContext.penetrationDepth,
     autoFlipped: Boolean(contactContext.autoFlipped),

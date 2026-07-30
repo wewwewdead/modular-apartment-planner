@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeJoint,
-  parseSerializedJointReference,
-  serializeJointReference,
-} from './jointSerializationUtils';
+import { normalizeJoint, parseSerializedJointReference, serializeJointReference } from './jointSerializationUtils';
 
 describe('jointSerializationUtils', () => {
   it('migrates legacy dado host/source fields into the new source-target schema', () => {

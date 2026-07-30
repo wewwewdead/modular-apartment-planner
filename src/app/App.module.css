@@ -6,8 +6,8 @@
     1fr
     var(--layout-properties-width, var(--properties-width));
   grid-template-areas:
-    "toolbar toolbar toolbar"
-    "sidebar canvas properties";
+    'toolbar toolbar toolbar'
+    'sidebar canvas properties';
   height: 100%;
   width: 100%;
 }
@@ -29,7 +29,9 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.04), inset -1px 0 3px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    inset 1px 0 3px rgba(0, 0, 0, 0.04),
+    inset -1px 0 3px rgba(0, 0, 0, 0.04);
 }
 
 .properties {
@@ -87,8 +89,12 @@
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .panelHidden {
@@ -96,8 +102,9 @@
   overflow: hidden;
   padding: 0;
   border: none;
-  transition: width var(--duration-layout) var(--ease-in-out-soft),
-              padding var(--duration-layout) var(--ease-in-out-soft);
+  transition:
+    width var(--duration-layout) var(--ease-in-out-soft),
+    padding var(--duration-layout) var(--ease-in-out-soft);
 }
 
 .workspaceMaximized {
@@ -128,7 +135,8 @@
   .layout {
     grid-template-columns: 0px 1fr 0px;
   }
-  .sidebar, .properties {
+  .sidebar,
+  .properties {
     position: fixed;
     top: var(--toolbar-height);
     bottom: 0;

@@ -53,12 +53,7 @@ export function landingEdges(landing) {
     };
   }
 
-  return [
-    makeEdge('top', tl, tr),
-    makeEdge('right', tr, br),
-    makeEdge('bottom', br, bl),
-    makeEdge('left', bl, tl),
-  ];
+  return [makeEdge('top', tl, tr), makeEdge('right', tr, br), makeEdge('bottom', br, bl), makeEdge('left', bl, tl)];
 }
 
 export function landingContainsPoint(landing, point) {
@@ -101,7 +96,7 @@ export function snapToLandingEdge(point, landings, snapDist) {
   let best = null;
   let bestDist = snapDist;
 
-  for (const landing of (landings || [])) {
+  for (const landing of landings || []) {
     const edges = landingEdges(landing);
     for (const edge of edges) {
       const d = distance(point, edge.midpoint);
@@ -168,7 +163,7 @@ export function syncStairLandingAttachment(stair, landings) {
  * Falls back to 0.
  */
 export function computeLandingElevation(landing, stairs, floorLevel = 0) {
-  for (const stair of (stairs || [])) {
+  for (const stair of stairs || []) {
     if (stair.endLandingAttachment?.landingId === landing.id) {
       const totalRise = Math.max(0, (stair.numberOfRisers || 0) * (stair.riserHeight || 0));
       return floorLevel + totalRise;

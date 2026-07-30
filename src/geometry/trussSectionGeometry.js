@@ -58,14 +58,13 @@ export function buildTrussSectionElements(trussSystems = [], sectionCut) {
             continue;
           }
 
-          const renderMode = (
-            Math.abs(projectedStart.offset) <= EPSILON
-            || Math.abs(projectedEnd.offset) <= EPSILON
-            || (projectedStart.offset < 0 && projectedEnd.offset > 0)
-            || (projectedStart.offset > 0 && projectedEnd.offset < 0)
-          )
-            ? 'cut'
-            : 'projection';
+          const renderMode =
+            Math.abs(projectedStart.offset) <= EPSILON ||
+            Math.abs(projectedEnd.offset) <= EPSILON ||
+            (projectedStart.offset < 0 && projectedEnd.offset > 0) ||
+            (projectedStart.offset > 0 && projectedEnd.offset < 0)
+              ? 'cut'
+              : 'projection';
 
           lineElements.push({
             id: `section-truss-${copy.id}-${member.id}`,
@@ -96,14 +95,13 @@ export function buildTrussSectionElements(trussSystems = [], sectionCut) {
           continue;
         }
 
-        const renderMode = (
-          Math.abs(projectedStart.offset) <= EPSILON
-          || Math.abs(projectedEnd.offset) <= EPSILON
-          || (projectedStart.offset < 0 && projectedEnd.offset > 0)
-          || (projectedStart.offset > 0 && projectedEnd.offset < 0)
-        )
-          ? 'cut'
-          : 'projection';
+        const renderMode =
+          Math.abs(projectedStart.offset) <= EPSILON ||
+          Math.abs(projectedEnd.offset) <= EPSILON ||
+          (projectedStart.offset < 0 && projectedEnd.offset > 0) ||
+          (projectedStart.offset > 0 && projectedEnd.offset < 0)
+            ? 'cut'
+            : 'projection';
 
         lineElements.push({
           id: `section-purlin-${segment.id}`,

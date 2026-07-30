@@ -7,10 +7,12 @@ export function ConfirmDialogProvider({ children }) {
   const [dialog, setDialog] = useState(null);
   const resolveRef = useRef(null);
 
-  const confirm = useCallback((message, { title = 'Confirm' } = {}) => {
+  // `variant: 'alert'` drops the Cancel button for acknowledge-only messages (e.g. an
+  // import failure), where offering a choice would be meaningless.
+  const confirm = useCallback((message, { title = 'Confirm', variant = 'confirm' } = {}) => {
     return new Promise((resolve) => {
       resolveRef.current = resolve;
-      setDialog({ title, message });
+      setDialog({ title, message, variant });
     });
   }, []);
 
@@ -33,19 +35,21 @@ export function ConfirmDialogProvider({ children }) {
         <Modal title={dialog.title} onClose={handleCancel}>
           <p style={{ margin: '0 0 16px', lineHeight: 1.5 }}>{dialog.message}</p>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={handleCancel}
-              style={{
-                padding: '6px 16px',
-                border: '1px solid var(--color-border, #ccc)',
-                borderRadius: 4,
-                background: 'var(--color-surface, #fff)',
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
+            {dialog.variant !== 'alert' && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                style={{
+                  padding: '6px 16px',
+                  border: '1px solid var(--color-border, #ccc)',
+                  borderRadius: 4,
+                  background: 'var(--color-surface, #fff)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="button"
               onClick={handleConfirm}

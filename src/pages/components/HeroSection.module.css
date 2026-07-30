@@ -80,7 +80,7 @@
   font-style: italic;
   font-size: 72px;
   font-weight: 400;
-  line-height: 1.0;
+  line-height: 1;
   letter-spacing: -0.02em;
   color: var(--color-text-primary);
   opacity: 0;
@@ -191,7 +191,9 @@
   text-decoration: none;
   margin-top: 20px;
   padding: 6px 4px;
-  transition: color 0.2s ease, transform 0.15s ease;
+  transition:
+    color 0.2s ease,
+    transform 0.15s ease;
   opacity: 0;
   transform: translateY(12px);
   animation: heroEntrance 0.8s var(--ease-dramatic) 0.7s forwards;

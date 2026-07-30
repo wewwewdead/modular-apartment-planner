@@ -43,12 +43,7 @@ export function buildBomExportRows(groupedRows, costSummary = null) {
     }));
   }
 
-  const costMap = new Map(
-    (costSummary.rows || []).map((r) => [
-      getBomRowGroupKey(r),
-      r,
-    ]),
-  );
+  const costMap = new Map((costSummary.rows || []).map((r) => [getBomRowGroupKey(r), r]));
 
   return groupedRows.map((row) => {
     const key = getBomRowGroupKey(row);
@@ -93,14 +88,24 @@ export function exportBomWithCost(rows, format = 'json', costSummary = null) {
     const headers = hasCost
       ? [...baseHeaders, 'area', 'unitCost', 'totalCost', 'costBasis', 'costAccuracy', 'costNote']
       : baseHeaders;
-    const lines = enriched.map((row) => headers.map((h) => {
-      const val = row[h];
-      return typeof val === 'number' ? val.toFixed(4) : (val ?? '');
-    }).join(','));
+    const lines = enriched.map((row) =>
+      headers
+        .map((h) => {
+          const val = row[h];
+          return typeof val === 'number' ? val.toFixed(4) : (val ?? '');
+        })
+        .join(','),
+    );
     return [headers.join(','), ...lines].join('\n');
   }
 
-  return JSON.stringify(costSummary ? { rows: enriched, totalCost: costSummary.totalCost, costByMaterial: costSummary.costByMaterial } : enriched, null, 2);
+  return JSON.stringify(
+    costSummary
+      ? { rows: enriched, totalCost: costSummary.totalCost, costByMaterial: costSummary.costByMaterial }
+      : enriched,
+    null,
+    2,
+  );
 }
 
 export function downloadAsFile(content, filename, mimeType = 'text/plain') {

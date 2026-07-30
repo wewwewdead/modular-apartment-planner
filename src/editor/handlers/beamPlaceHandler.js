@@ -62,7 +62,7 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
         { kind: 'column', id: column.id },
         BEAM_WIDTH,
         BEAM_DEPTH,
-        getFloorElevation(floor)
+        getFloorElevation(floor),
       );
 
       beam.phaseId = activePhaseId || null;

@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateExpression, createVariable, findVariableReferences } from './parametricEngine';
 
-const vars = [
-  createVariable('width', 1200),
-  createVariable('height', 800),
-  createVariable('shelfCount', 4),
-];
+const vars = [createVariable('width', 1200), createVariable('height', 800), createVariable('shelfCount', 4)];
 // Override IDs for stable tests
-vars[0].id = 'v1'; vars[1].id = 'v2'; vars[2].id = 'v3';
+vars[0].id = 'v1';
+vars[1].id = 'v2';
+vars[2].id = 'v3';
 
 describe('parametricEngine', () => {
   describe('evaluateExpression', () => {

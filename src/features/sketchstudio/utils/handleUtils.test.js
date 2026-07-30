@@ -9,15 +9,17 @@ describe('handleUtils', () => {
     expect(getEntityHandles({ type: 'text', x: 20, y: 30, text: 'Desk', fontSize: 100, rotation: 0 })).toEqual([
       expect.objectContaining({ id: 'size', x: 260, y: 150 }),
     ]);
-    expect(getEntityHandles({
-      type: 'text',
-      x: 20,
-      y: 30,
-      text: 'Desk',
-      fontSize: 100,
-      rotation: 0,
-      leader: { target: { x: -40, y: 120 } },
-    })).toEqual([
+    expect(
+      getEntityHandles({
+        type: 'text',
+        x: 20,
+        y: 30,
+        text: 'Desk',
+        fontSize: 100,
+        rotation: 0,
+        leader: { target: { x: -40, y: 120 } },
+      }),
+    ).toEqual([
       expect.objectContaining({ id: 'size', x: 260, y: 150 }),
       expect.objectContaining({ id: 'leaderTarget', x: -40, y: 120 }),
     ]);

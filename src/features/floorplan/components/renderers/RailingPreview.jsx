@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { getRailingRenderData } from '@/geometry/railingGeometry';
 import { RAILING_WIDTH } from '@/domain/defaults';
 
-export default function RailingPreview({ toolState, activeTool }) {
+function RailingPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.RAILING) return null;
   if (!toolState.railingStartPoint || !toolState.railingPreviewPoint) return null;
 
@@ -30,3 +31,5 @@ export default function RailingPreview({ toolState, activeTool }) {
     </g>
   );
 }
+
+export default memo(RailingPreview);

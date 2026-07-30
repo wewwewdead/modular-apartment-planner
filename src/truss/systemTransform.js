@@ -1,12 +1,4 @@
-import {
-  add,
-  dot,
-  normalize,
-  perpendicular,
-  rotate as rotatePoint,
-  scale,
-  subtract,
-} from '@/geometry/point';
+import { add, dot, normalize, perpendicular, rotate as rotatePoint, scale, subtract } from '@/geometry/point';
 
 export const MIN_TRUSS_SYSTEM_LENGTH = 1000;
 
@@ -82,7 +74,7 @@ export function transformPlanPoint(point, transform = {}) {
     point,
     rawPivot,
     safeAxis,
-    normalizePlanLengthScale(transform.lengthScale)
+    normalizePlanLengthScale(transform.lengthScale),
   );
   const rotatedPoint = rotatePlanPoint(scaledPoint, rawPivot, transform.rotationDegrees || 0);
   return translatePlanPoint(rotatedPoint, transform.translation);

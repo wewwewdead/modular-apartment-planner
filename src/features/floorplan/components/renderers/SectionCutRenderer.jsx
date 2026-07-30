@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
@@ -5,7 +6,7 @@ function estimateLabelWidth(value = '') {
   return Math.max(300, String(value).length * 96);
 }
 
-export default function SectionCutRenderer({ sectionCut, selectedId }) {
+function SectionCutRenderer({ sectionCut, selectedId }) {
   const renderData = getSectionCutRenderData(sectionCut);
   if (!renderData) return null;
 
@@ -91,3 +92,5 @@ export default function SectionCutRenderer({ sectionCut, selectedId }) {
     </g>
   );
 }
+
+export default memo(SectionCutRenderer);

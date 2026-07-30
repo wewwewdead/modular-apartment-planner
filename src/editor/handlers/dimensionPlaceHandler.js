@@ -1,18 +1,7 @@
 import { DIMENSION_DEFAULT_OFFSET, GRID_MINOR } from '@/domain/defaults';
 import { createLinearDimensionAnnotation } from '@/domain/models';
 import { distance } from '@/geometry/point';
-
-function snapToGrid(value) {
-  return Math.round(value / GRID_MINOR) * GRID_MINOR;
-}
-
-function resolvePoint(modelPos, snapEnabled) {
-  if (!snapEnabled) return { x: modelPos.x, y: modelPos.y };
-  return {
-    x: snapToGrid(modelPos.x),
-    y: snapToGrid(modelPos.y),
-  };
-}
+import { resolvePoint } from './handlerSnapUtils';
 
 function resetDimensionTool(editorDispatch) {
   editorDispatch({
@@ -49,14 +38,10 @@ export function createDimensionPlaceHandler({ dispatch, editorDispatch, activeFl
         return;
       }
 
-      const annotation = createLinearDimensionAnnotation(
-        toolState.dimensionStartPoint,
-        point,
-        {
-          mode: 'aligned',
-          offset: toolState.dimensionPreviewOffset ?? DIMENSION_DEFAULT_OFFSET,
-        }
-      );
+      const annotation = createLinearDimensionAnnotation(toolState.dimensionStartPoint, point, {
+        mode: 'aligned',
+        offset: toolState.dimensionPreviewOffset ?? DIMENSION_DEFAULT_OFFSET,
+      });
 
       dispatch({ type: 'ANNOTATION_ADD', floorId: activeFloorId, annotation });
       editorDispatch({ type: 'SELECT_OBJECT', id: annotation.id, objectType: 'annotation' });

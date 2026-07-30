@@ -10,11 +10,12 @@ export function generateBomHtml(bomRows, totalCost, projectName = 'Untitled') {
   const safeName = escapeHtml(projectName);
   const safeTotal = Number.isFinite(totalCost) ? totalCost.toFixed(2) : '0.00';
 
-  const rows = (bomRows || []).map((row) => {
-    const material = getMaterialById(row.material);
-    const color = /^#[0-9a-fA-F]{3,8}$/.test(material?.color) ? material.color : '#888';
-    const estimate = getBomEstimateSummary(row);
-    return `<tr>
+  const rows = (bomRows || [])
+    .map((row) => {
+      const material = getMaterialById(row.material);
+      const color = /^#[0-9a-fA-F]{3,8}$/.test(material?.color) ? material.color : '#888';
+      const estimate = getBomEstimateSummary(row);
+      return `<tr>
       <td>${escapeHtml(row.partName)}</td>
       <td><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:${color};margin-right:6px;vertical-align:middle;"></span>${escapeHtml(row.materialName || row.material || '-')}</td>
       <td>${Math.round(row.width || 0)}</td>
@@ -24,7 +25,8 @@ export function generateBomHtml(bomRows, totalCost, projectName = 'Untitled') {
       <td>${estimate.shortLabel ? `<strong>${escapeHtml(estimate.shortLabel)}</strong><br><span style="font-size:11px;color:#666;">${escapeHtml(estimate.estimateNote || '')}</span>` : 'Exact'}</td>
       <td>${row.totalCost > 0 ? '$' + row.totalCost.toFixed(2) : '-'}</td>
     </tr>`;
-  }).join('\n');
+    })
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">

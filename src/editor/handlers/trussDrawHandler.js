@@ -6,11 +6,7 @@ import {
   resolveTrussType,
   TRUSS_SUPPORT_MODES,
 } from '@/domain/trussModels';
-import {
-  findBeamSupportAtPoint,
-  getBeamSupportCountLimit,
-  resolveBeamPairSupport,
-} from '@/truss/beamSupports';
+import { findBeamSupportAtPoint, getBeamSupportCountLimit, resolveBeamPairSupport } from '@/truss/beamSupports';
 
 const ELEVATION_TOLERANCE = 10;
 
@@ -23,9 +19,11 @@ function getTargetTrussSystem(trussSystems, toolState, selectedId, selectedType)
     return trussSystems.find((trussSystem) => trussSystem.id === selectedId) || null;
   }
   if (selectedType === 'trussInstance') {
-    return trussSystems.find((trussSystem) => (
-      (trussSystem.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId)
-    )) || null;
+    return (
+      trussSystems.find((trussSystem) =>
+        (trussSystem.trussInstances || []).some((trussInstance) => trussInstance.id === selectedId),
+      ) || null
+    );
   }
   return null;
 }
@@ -105,15 +103,18 @@ export function createTrussDrawHandler({
 
       const support = resolveBeamPairSupport(floor, toolState.startTrussBeamId, hitBeam.beam.id);
       if (!support.valid) {
-        editorDispatch({ type: 'SET_STATUS_MESSAGE', message: support.message || 'Selected beams cannot support a truss.' });
+        editorDispatch({
+          type: 'SET_STATUS_MESSAGE',
+          message: support.message || 'Selected beams cannot support a truss.',
+        });
         return;
       }
 
       const targetSystem = getTargetTrussSystem(trussSystems, toolState, selectedId, selectedType);
       if (
-        targetSystem
-        && Number.isFinite(targetSystem.baseElevation)
-        && Math.abs((targetSystem.baseElevation || 0) - support.baseElevation) > ELEVATION_TOLERANCE
+        targetSystem &&
+        Number.isFinite(targetSystem.baseElevation) &&
+        Math.abs((targetSystem.baseElevation || 0) - support.baseElevation) > ELEVATION_TOLERANCE
       ) {
         editorDispatch({
           type: 'SET_STATUS_MESSAGE',
@@ -121,26 +122,22 @@ export function createTrussDrawHandler({
         });
         return;
       }
-      const templateInstance = targetSystem && (targetSystem.trussInstances || []).length
-        ? targetSystem.trussInstances[targetSystem.trussInstances.length - 1]
-        : null;
-      const trussTypeId = toolState.trussTypeId
-        || templateInstance?.trussTypeId
-        || catalog[0]?.id
-        || null;
+      const templateInstance =
+        targetSystem && (targetSystem.trussInstances || []).length
+          ? targetSystem.trussInstances[targetSystem.trussInstances.length - 1]
+          : null;
+      const trussTypeId = toolState.trussTypeId || templateInstance?.trussTypeId || catalog[0]?.id || null;
       const trussType = resolveTrussType(trussTypeId, catalog);
-      const trussMaterial = toolState.trussMaterial
-        || templateInstance?.material
-        || trussType.material;
+      const trussMaterial = toolState.trussMaterial || templateInstance?.material || trussType.material;
       const spacing = Number.isFinite(toolState.trussSpacing)
         ? Math.max(300, toolState.trussSpacing)
-        : (Number.isFinite(templateInstance?.spacing)
+        : Number.isFinite(templateInstance?.spacing)
           ? Math.max(300, templateInstance.spacing)
-          : 1200);
+          : 1200;
       const countLimit = getBeamSupportCountLimit(support.supportLength, spacing);
       const nextCount = clampCount(
         Number.isFinite(toolState.trussCount) ? toolState.trussCount : templateInstance?.count,
-        countLimit
+        countLimit,
       );
       const nextInstance = createTrussInstance({
         trussTypeId: trussType.id,
@@ -148,15 +145,15 @@ export function createTrussDrawHandler({
         floorId: floor.id,
         startPoint: support.startPoint,
         endPoint: support.endPoint,
-        span: Number.isFinite(templateInstance?.span)
-          ? Math.max(1000, templateInstance.span)
-          : support.span,
-        rise: templateInstance && templateInstance.trussTypeId === trussType.id
-          ? templateInstance.rise
-          : trussType.defaultRise,
-        pitch: templateInstance && templateInstance.trussTypeId === trussType.id
-          ? templateInstance.pitch
-          : trussType.defaultPitch,
+        span: Number.isFinite(templateInstance?.span) ? Math.max(1000, templateInstance.span) : support.span,
+        rise:
+          templateInstance && templateInstance.trussTypeId === trussType.id
+            ? templateInstance.rise
+            : trussType.defaultRise,
+        pitch:
+          templateInstance && templateInstance.trussTypeId === trussType.id
+            ? templateInstance.pitch
+            : trussType.defaultPitch,
         spacing,
         count: nextCount,
         bearingOffsets: templateInstance?.bearingOffsets,

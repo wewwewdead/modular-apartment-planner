@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import { buildRoofDrainagePlanGeometry } from '@/geometry/roofDrainageGeometry';
 
@@ -5,7 +6,7 @@ function slopeArrowPoints(arrow) {
   return `${arrow.headA.x},${arrow.headA.y} ${arrow.shaftEnd.x},${arrow.shaftEnd.y} ${arrow.headB.x},${arrow.headB.y}`;
 }
 
-export default function RoofDrainageRenderer({ roofSystem, interactive = false }) {
+function RoofDrainageRenderer({ roofSystem, interactive = false }) {
   if (!roofSystem) return null;
 
   const drainage = buildRoofDrainagePlanGeometry(roofSystem);
@@ -152,3 +153,5 @@ export default function RoofDrainageRenderer({ roofSystem, interactive = false }
     </g>
   );
 }
+
+export default memo(RoofDrainageRenderer);

@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function BeamRenderer({ beams, columns }) {
+function BeamRenderer({ beams, columns }) {
   return (
     <g className="beams">
       {(beams || []).map((beam) => {
@@ -27,3 +28,5 @@ export default function BeamRenderer({ beams, columns }) {
     </g>
   );
 }
+
+export default memo(BeamRenderer);

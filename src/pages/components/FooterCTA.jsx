@@ -28,9 +28,7 @@ export default function FooterCTA() {
         <Link to="/floorplan" className={styles.ctaButton}>
           Get Started
         </Link>
-        <p className={styles.copyright}>
-          &copy; {new Date().getFullYear()} Modular Apartment Planner
-        </p>
+        <p className={styles.copyright}>&copy; {new Date().getFullYear()} Modular Apartment Planner</p>
       </div>
     </footer>
   );

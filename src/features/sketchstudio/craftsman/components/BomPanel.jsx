@@ -13,15 +13,21 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveR
     downloadAsFile(content, 'cutting-list.json', 'application/json');
   }, [bomRows, totalCost, costByMaterial]);
 
-  const handleRemove = useCallback((row) => {
-    if (!onRemoveRow || !row.entityIds?.length) return;
-    onRemoveRow(row.entityIds, null);
-  }, [onRemoveRow]);
+  const handleRemove = useCallback(
+    (row) => {
+      if (!onRemoveRow || !row.entityIds?.length) return;
+      onRemoveRow(row.entityIds, null);
+    },
+    [onRemoveRow],
+  );
 
-  const handleDuplicate = useCallback((row) => {
-    if (!onDuplicateRow || !row.entityIds?.length) return;
-    onDuplicateRow(row.entityIds);
-  }, [onDuplicateRow]);
+  const handleDuplicate = useCallback(
+    (row) => {
+      if (!onDuplicateRow || !row.entityIds?.length) return;
+      onDuplicateRow(row.entityIds);
+    },
+    [onDuplicateRow],
+  );
 
   if (!bomRows.length) {
     return (
@@ -83,9 +89,7 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveR
                   <td>
                     <div className={styles.bomCostCell}>
                       <span>{row.totalCost > 0 ? `$${row.totalCost.toFixed(2)}` : '-'}</span>
-                      {estimate.costApproximate && (
-                        <span className={styles.bomEstimateNote}>Approximate cost</span>
-                      )}
+                      {estimate.costApproximate && <span className={styles.bomEstimateNote}>Approximate cost</span>}
                     </div>
                   </td>
                   <td className={styles.bomActions}>
@@ -133,8 +137,12 @@ export default function BomPanel({ bomRows, totalCost, costByMaterial, onRemoveR
           </div>
         )}
         <div className={styles.exportButtons}>
-          <button type="button" onClick={handleExportCSV} className={styles.exportBtn}>Export CSV</button>
-          <button type="button" onClick={handleExportJSON} className={styles.exportBtn}>Export JSON</button>
+          <button type="button" onClick={handleExportCSV} className={styles.exportBtn}>
+            Export CSV
+          </button>
+          <button type="button" onClick={handleExportJSON} className={styles.exportBtn}>
+            Export JSON
+          </button>
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { getDimensionGeometry, measureDistance, formatDimensionText } from '../.
 import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
 import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
+import { offsetPolygon } from '../utils/polygonOffset';
 import { createDxfWriter } from './dxfWriter';
 
 const DEFAULT_EXTENTS = {
@@ -21,6 +22,7 @@ const DXF_LAYERS = [
   { name: '0', color: 7 },
   { name: 'DIMENSIONS', color: 8 },
   { name: 'TEXT', color: 7 },
+  { name: 'SHEET', color: 8 },
 ];
 
 const EXPORTABLE_TYPES = new Set([
@@ -35,6 +37,12 @@ const EXPORTABLE_TYPES = new Set([
   'angle-dimension',
   'text',
 ]);
+
+/**
+ * Geometry a cutter actually follows. Annotation types (dimensions, text) are
+ * deliberately excluded: nested sheet files are cut files, not drawings.
+ */
+const CUTTABLE_TYPES = new Set(['line', 'rect', 'circle', 'arc', 'polyline', 'ellipse', 'feature']);
 
 function toNumber(value, fallback = 0) {
   const numeric = Number(value);
@@ -53,6 +61,12 @@ function toDxfPoint(point) {
 }
 
 function getEntityLayer(entity) {
+  // Synthetic export geometry (e.g. the stock outline on a nested sheet) can pin
+  // itself to a layer instead of being classified by entity type.
+  if (entity.meta?.dxfLayer) {
+    return entity.meta.dxfLayer;
+  }
+
   if (entity.type === 'dimension' || entity.type === 'angle-dimension') {
     return 'DIMENSIONS';
   }
@@ -247,11 +261,15 @@ function writeEllipseEntity(writer, entity, layer = '0') {
 
 function writeFeatureEntity(writer, entity, layer = '0') {
   if (entity.shape === 'circle') {
-    writeCircleEntity(writer, {
-      cx: entity.cx,
-      cy: entity.cy,
-      r: toNumber(entity.diameter) / 2,
-    }, layer);
+    writeCircleEntity(
+      writer,
+      {
+        cx: entity.cx,
+        cy: entity.cy,
+        r: toNumber(entity.diameter) / 2,
+      },
+      layer,
+    );
     return;
   }
 
@@ -269,12 +287,17 @@ function writeFeatureEntity(writer, entity, layer = '0') {
   const y = toNumber(entity.y);
   const width = toNumber(entity.width);
   const height = toNumber(entity.height);
-  writePolylineEntity(writer, [
-    { x, y },
-    { x: x + width, y },
-    { x: x + width, y: y + height },
-    { x, y: y + height },
-  ], true, layer);
+  writePolylineEntity(
+    writer,
+    [
+      { x, y },
+      { x: x + width, y },
+      { x: x + width, y: y + height },
+      { x, y: y + height },
+    ],
+    true,
+    layer,
+  );
 }
 
 function writeDimensionEntity(writer, entity, allEntities) {
@@ -293,18 +316,47 @@ function writeDimensionEntity(writer, entity, allEntities) {
   });
   const text = formatDimensionText(measureDistance(p1, p2, entity.subtype), entity.units);
 
-  writeLineEntity(writer, { x: geometry.ext1.x1, y: geometry.ext1.y1 }, { x: geometry.ext1.x2, y: geometry.ext1.y2 }, 'DIMENSIONS');
-  writeLineEntity(writer, { x: geometry.ext2.x1, y: geometry.ext2.y1 }, { x: geometry.ext2.x2, y: geometry.ext2.y2 }, 'DIMENSIONS');
-  writeLineEntity(writer, { x: geometry.dimLine.x1, y: geometry.dimLine.y1 }, { x: geometry.dimLine.x2, y: geometry.dimLine.y2 }, 'DIMENSIONS');
-  writeLineEntity(writer, { x: geometry.tick1.x1, y: geometry.tick1.y1 }, { x: geometry.tick1.x2, y: geometry.tick1.y2 }, 'DIMENSIONS');
-  writeLineEntity(writer, { x: geometry.tick2.x1, y: geometry.tick2.y1 }, { x: geometry.tick2.x2, y: geometry.tick2.y2 }, 'DIMENSIONS');
-  writeTextEntity(writer, {
-    x: geometry.textPoint.x,
-    y: geometry.textPoint.y,
-    fontSize: 8,
-    text,
-    rotation: geometry.textAngle,
-  }, 'DIMENSIONS');
+  writeLineEntity(
+    writer,
+    { x: geometry.ext1.x1, y: geometry.ext1.y1 },
+    { x: geometry.ext1.x2, y: geometry.ext1.y2 },
+    'DIMENSIONS',
+  );
+  writeLineEntity(
+    writer,
+    { x: geometry.ext2.x1, y: geometry.ext2.y1 },
+    { x: geometry.ext2.x2, y: geometry.ext2.y2 },
+    'DIMENSIONS',
+  );
+  writeLineEntity(
+    writer,
+    { x: geometry.dimLine.x1, y: geometry.dimLine.y1 },
+    { x: geometry.dimLine.x2, y: geometry.dimLine.y2 },
+    'DIMENSIONS',
+  );
+  writeLineEntity(
+    writer,
+    { x: geometry.tick1.x1, y: geometry.tick1.y1 },
+    { x: geometry.tick1.x2, y: geometry.tick1.y2 },
+    'DIMENSIONS',
+  );
+  writeLineEntity(
+    writer,
+    { x: geometry.tick2.x1, y: geometry.tick2.y1 },
+    { x: geometry.tick2.x2, y: geometry.tick2.y2 },
+    'DIMENSIONS',
+  );
+  writeTextEntity(
+    writer,
+    {
+      x: geometry.textPoint.x,
+      y: geometry.textPoint.y,
+      fontSize: 8,
+      text,
+      rotation: geometry.textAngle,
+    },
+    'DIMENSIONS',
+  );
 }
 
 function writeAngleDimensionEntity(writer, entity, allEntities) {
@@ -325,20 +377,34 @@ function writeAngleDimensionEntity(writer, entity, allEntities) {
   });
   const text = formatAngleText(geometry.angleDeg);
 
-  writeLineEntity(writer, { x: geometry.ray1.x1, y: geometry.ray1.y1 }, { x: geometry.ray1.x2, y: geometry.ray1.y2 }, 'DIMENSIONS');
-  writeLineEntity(writer, { x: geometry.ray2.x1, y: geometry.ray2.y1 }, { x: geometry.ray2.x2, y: geometry.ray2.y2 }, 'DIMENSIONS');
+  writeLineEntity(
+    writer,
+    { x: geometry.ray1.x1, y: geometry.ray1.y1 },
+    { x: geometry.ray1.x2, y: geometry.ray1.y2 },
+    'DIMENSIONS',
+  );
+  writeLineEntity(
+    writer,
+    { x: geometry.ray2.x1, y: geometry.ray2.y1 },
+    { x: geometry.ray2.x2, y: geometry.ray2.y2 },
+    'DIMENSIONS',
+  );
 
   const samples = geometry.arcSamples ?? [];
   for (let index = 0; index < samples.length - 1; index += 1) {
     writeLineEntity(writer, samples[index], samples[index + 1], 'DIMENSIONS');
   }
 
-  writeTextEntity(writer, {
-    x: geometry.textPoint.x,
-    y: geometry.textPoint.y,
-    fontSize: 8,
-    text,
-  }, 'DIMENSIONS');
+  writeTextEntity(
+    writer,
+    {
+      x: geometry.textPoint.x,
+      y: geometry.textPoint.y,
+      fontSize: 8,
+      text,
+    },
+    'DIMENSIONS',
+  );
 }
 
 function writeTextEntity(writer, entity, layer = 'TEXT') {
@@ -363,25 +429,36 @@ function writeTextEntity(writer, entity, layer = 'TEXT') {
 function writeRectEntity(writer, entity, layer = '0') {
   if (entity.rotation) {
     const corners = getRectCorners(entity);
-    writePolylineEntity(writer, [
-      corners.topLeft,
-      corners.topRight,
-      corners.bottomRight,
-      corners.bottomLeft,
-    ], true, layer);
+    writePolylineEntity(
+      writer,
+      [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft],
+      true,
+      layer,
+    );
     return;
   }
 
-  const x = Math.min(toNumber(entity.x1 ?? entity.x), toNumber(entity.x2 ?? (toNumber(entity.x) + toNumber(entity.width))));
-  const y = Math.min(toNumber(entity.y1 ?? entity.y), toNumber(entity.y2 ?? (toNumber(entity.y) + toNumber(entity.height))));
-  const width = Math.abs(toNumber(entity.width ?? (toNumber(entity.x2) - toNumber(entity.x1))));
-  const height = Math.abs(toNumber(entity.height ?? (toNumber(entity.y2) - toNumber(entity.y1))));
-  writePolylineEntity(writer, [
-    { x, y },
-    { x: x + width, y },
-    { x: x + width, y: y + height },
-    { x, y: y + height },
-  ], true, layer);
+  const x = Math.min(
+    toNumber(entity.x1 ?? entity.x),
+    toNumber(entity.x2 ?? toNumber(entity.x) + toNumber(entity.width)),
+  );
+  const y = Math.min(
+    toNumber(entity.y1 ?? entity.y),
+    toNumber(entity.y2 ?? toNumber(entity.y) + toNumber(entity.height)),
+  );
+  const width = Math.abs(toNumber(entity.width ?? toNumber(entity.x2) - toNumber(entity.x1)));
+  const height = Math.abs(toNumber(entity.height ?? toNumber(entity.y2) - toNumber(entity.y1)));
+  writePolylineEntity(
+    writer,
+    [
+      { x, y },
+      { x: x + width, y },
+      { x: x + width, y: y + height },
+      { x, y: y + height },
+    ],
+    true,
+    layer,
+  );
 }
 
 function writeEntity(writer, entity, allEntities) {
@@ -424,9 +501,7 @@ function writeEntity(writer, entity, allEntities) {
 }
 
 function computeExtents(entities) {
-  const boxes = entities
-    .map((entity) => computeEntityBoundingBox(entity, entities))
-    .filter(Boolean);
+  const boxes = entities.map((entity) => computeEntityBoundingBox(entity, entities)).filter(Boolean);
 
   if (!boxes.length) {
     return DEFAULT_EXTENTS;
@@ -454,8 +529,8 @@ function applyKerfToEntity(entity, kerf) {
     case 'rect': {
       const x = toNumber(entity.x1 ?? entity.x);
       const y = toNumber(entity.y1 ?? entity.y);
-      const width = Math.abs(toNumber(entity.width ?? (toNumber(entity.x2) - toNumber(entity.x1))));
-      const height = Math.abs(toNumber(entity.height ?? (toNumber(entity.y2) - toNumber(entity.y1))));
+      const width = Math.abs(toNumber(entity.width ?? toNumber(entity.x2) - toNumber(entity.x1)));
+      const height = Math.abs(toNumber(entity.height ?? toNumber(entity.y2) - toNumber(entity.y1)));
       return {
         ...entity,
         x1: x - halfKerf,
@@ -479,41 +554,131 @@ function applyKerfToEntity(entity, kerf) {
         return entity;
       }
 
-      // Kerf expansion must move vertices OUTWARD from the polygon. The normal
-      // formula (-dy, dx) is 90-deg left-rotation, which yields outward normals
-      // only for a specific winding direction. Detect winding via the signed
-      // shoelace area: positive in screen coords (y-down) means CW-visually,
-      // and for that winding the formula happens to yield INWARD normals, so
-      // we flip the sign. This keeps both user-drawn polylines and joinery-
-      // generated profiles correct regardless of their traversal order.
-      let signedAreaX2 = 0;
-      for (let i = 0; i < entity.points.length; i += 1) {
-        const p = entity.points[i];
-        const q = entity.points[(i + 1) % entity.points.length];
-        signedAreaX2 += p.x * q.y - q.x * p.y;
-      }
-      const outwardSign = signedAreaX2 < 0 ? 1 : -1;
-
-      const expandedPoints = entity.points.map((point, index, points) => {
-        const previous = points[(index - 1 + points.length) % points.length];
-        const next = points[(index + 1) % points.length];
-        const normalX = -(next.y - previous.y) * outwardSign;
-        const normalY = (next.x - previous.x) * outwardSign;
-        const length = Math.hypot(normalX, normalY) || 1;
-        return {
-          x: point.x + (normalX / length) * halfKerf,
-          y: point.y + (normalY / length) * halfKerf,
-        };
-      });
-
+      // True parallel-edge offsetting: displace every edge outward by halfKerf
+      // along its normal and set each vertex to the intersection of adjacent
+      // offset edges (miter join). This yields exactly halfKerf of clearance on
+      // every edge regardless of corner angle, so 90-deg corners are no longer
+      // undersized the way the old bisector displacement made them. Winding is
+      // detected inside offsetPolygon, so user-drawn and joinery-generated
+      // profiles are both handled correctly.
       return {
         ...entity,
-        points: expandedPoints,
+        points: offsetPolygon(entity.points, halfKerf),
       };
     }
+    case 'feature':
+      return applyKerfToFeature(entity, kerf, halfKerf);
     default:
       return entity;
   }
+}
+
+/**
+ * Detect whether an inward polygon offset over-shrank into a self-inverted or
+ * collapsed shape. An edge that flips direction (its offset vector points
+ * opposite the original edge) is the signature of the polygon turning inside
+ * out. Assumes both arrays describe the same vertex ordering (same length).
+ */
+function isPolygonOffsetInverted(original, offset) {
+  const count = original.length;
+  for (let i = 0; i < count; i += 1) {
+    const a = original[i];
+    const b = original[(i + 1) % count];
+    const oa = offset[i];
+    const ob = offset[(i + 1) % count];
+    const originalDx = b.x - a.x;
+    const originalDy = b.y - a.y;
+    const offsetDx = ob.x - oa.x;
+    const offsetDy = ob.y - oa.y;
+    if (originalDx * offsetDx + originalDy * offsetDy < 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Inward kerf compensation for interior cut features (holes, cutouts, joinery
+ * pockets/slots).
+ *
+ * The cutter removes kerf/2 of material on each side of the toolpath, so a hole
+ * comes out LARGER than the programmed path. To land the finished opening at
+ * design size we shrink the feature geometry INWARD by halfKerf — the mirror of
+ * the outward expansion applied to outer contours.
+ *
+ * Which features are compensated: only material-removal cuts, identified by
+ * `operation === 'subtract'` (the only operation the model currently emits; a
+ * hypothetical additive/engrave op would be left alone). We do NOT gate on the
+ * `through` flag — a blind pocket still has its walls cut by the same kerf, and
+ * the flat DXF encodes only the 2D toolpath, not the Z depth. `depth` is a Z-only
+ * concern and is irrelevant to in-plane kerf.
+ *
+ * Degenerate guard: if shrinking would drive any dimension to <= 0 (a hole
+ * narrower than the kerf itself), we leave that feature UNCOMPENSATED and export
+ * its original geometry rather than emit inverted/negative geometry. A hole that
+ * small cannot be cut at design size with this kerf anyway; emitting a mirrored
+ * or zero-area shape would produce a garbage toolpath, so preserving the design
+ * intent (and letting the operator see the real, too-small hole) is the safe
+ * policy.
+ */
+function applyKerfToFeature(entity, kerf, halfKerf) {
+  if (entity.operation && entity.operation !== 'subtract') {
+    return entity;
+  }
+
+  if (entity.shape === 'circle') {
+    const diameter = toNumber(entity.diameter) - kerf;
+    if (diameter <= 0) {
+      return entity;
+    }
+    return { ...entity, diameter };
+  }
+
+  if (entity.shape === 'ellipse') {
+    // No exact parallel offset of an ellipse is itself an ellipse, so shrink
+    // each semi-axis by halfKerf. This is the standard small-kerf approximation
+    // (error is second order in halfKerf / radius); acceptable for the sub-mm
+    // kerfs used in practice.
+    const rx = toNumber(entity.rx) - halfKerf;
+    const ry = toNumber(entity.ry) - halfKerf;
+    if (rx <= 0 || ry <= 0) {
+      return entity;
+    }
+    return { ...entity, rx, ry };
+  }
+
+  if (entity.shape === 'polygon') {
+    if (!entity.points?.length) {
+      return entity;
+    }
+    const shrunk = offsetPolygon(entity.points, -halfKerf);
+    // Guard against self-inversion: a polygon narrower than the kerf collapses
+    // through itself. A signed-area sign check alone is NOT sufficient — a
+    // symmetric over-shrink (e.g. a 4mm square offset by -3) mirrors into a
+    // valid, same-winding-sign polygon of the wrong orientation. Instead detect
+    // any edge whose direction reversed relative to the original (dot product of
+    // corresponding edge vectors < 0), which reliably flags inversion/collapse.
+    // On any such feature we fall back to the original geometry rather than emit
+    // a garbage toolpath (see applyKerfToFeature doc comment for the rationale).
+    if (shrunk.length !== entity.points.length || isPolygonOffsetInverted(entity.points, shrunk)) {
+      return entity;
+    }
+    return { ...entity, points: shrunk };
+  }
+
+  // rect shape: shrink each side inward by halfKerf.
+  const width = toNumber(entity.width) - kerf;
+  const height = toNumber(entity.height) - kerf;
+  if (width <= 0 || height <= 0) {
+    return entity;
+  }
+  return {
+    ...entity,
+    x: toNumber(entity.x) + halfKerf,
+    y: toNumber(entity.y) + halfKerf,
+    width,
+    height,
+  };
 }
 
 function getExportEntities(entities, options = {}) {
@@ -524,7 +689,32 @@ function getExportEntities(entities, options = {}) {
     ? exportable.filter((entity) => isEntitySelectedForExport(entity, options.selectedIds || []))
     : exportable;
   const kerf = toNumber(options.kerf);
-  return kerf > 0 ? filtered.map((entity) => applyKerfToEntity(entity, kerf)) : filtered;
+  if (kerf <= 0) {
+    return filtered;
+  }
+
+  // Reference geometry (stock outlines) is not a toolpath, so it must never be
+  // grown or shrunk by kerf compensation.
+  return filtered.map((entity) => (entity.meta?.dxfKerfExempt ? entity : applyKerfToEntity(entity, kerf)));
+}
+
+/**
+ * All manufacturing geometry belonging to a single part: the part's own entity
+ * plus every joinery-generated profile, hole and cutout that references it,
+ * minus outlines the joinery resolver replaced. This is the same ownership rule
+ * the "selected only" DXF export uses, narrowed to cuttable geometry.
+ */
+export function selectPartCutEntities(entities, partId) {
+  if (!partId) {
+    return [];
+  }
+
+  return (entities || []).filter(
+    (entity) =>
+      CUTTABLE_TYPES.has(entity?.type) &&
+      !isEntityHiddenFromManufacturing(entity) &&
+      isEntitySelectedForExport(entity, [partId]),
+  );
 }
 
 export function exportEntitiesToDxf(entities, options = {}) {

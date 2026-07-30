@@ -21,10 +21,7 @@ function getCopyDepth(view, copy) {
 }
 
 function getSegmentDepth(view, startWorld, endWorld) {
-  return average([
-    projectElevationDepth(view, startWorld),
-    projectElevationDepth(view, endWorld),
-  ]);
+  return average([projectElevationDepth(view, startWorld), projectElevationDepth(view, endWorld)]);
 }
 
 function pickRepresentativeCopy(instanceGeometry, view) {

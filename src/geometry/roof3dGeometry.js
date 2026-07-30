@@ -63,10 +63,7 @@ function createPrismDescriptor(id, kind, outline, baseElevation, height, metadat
 }
 
 function createRoofMeshDescriptor(id, kind, surfaces, outerBoundary, metadata = {}) {
-  const meshPoints = [
-    ...outerBoundary,
-    ...surfaces.flatMap((surface) => surface.outline || []),
-  ];
+  const meshPoints = [...outerBoundary, ...surfaces.flatMap((surface) => surface.outline || [])];
 
   return {
     id,
@@ -144,41 +141,42 @@ export function buildRoofPreviewObjects(roofSystem) {
 
   const roofGeometry = buildRoofPlaneGeometry(roofSystem);
   const roofOutline = roofGeometry.roofOutlineWithElevations || [];
-  const slab = (roofSystem.roofType || 'flat') === 'flat'
-    ? createPrismDescriptor(
-        roofSystem.id,
-        'roofSystem',
-        roofSystem.boundaryPolygon,
-        roofSystem.baseElevation ?? 0,
-        roofSystem.slabThickness ?? 0,
-        {
-          sourceId: roofSystem.id,
-          materialKey: 'roof',
-          holes: (roofSystem.roofOpenings || []).map((opening) => opening.boundaryPoints || []),
-        }
-      )
-    : createRoofMeshDescriptor(
-        roofSystem.id,
-        'roofSystem',
-        (roofGeometry.planes || []).map((plane) => ({
-          id: plane.id,
-          outline: (plane.outline || []).map((point) => ({
-            x: point.x,
-            y: point.y,
-            topElevation: plane.getSurfaceElevation
-              ? plane.getSurfaceElevation(point, 'top')
-              : roofGeometry.getSurfaceElevation(point, 'top'),
-            bottomElevation: plane.getSurfaceElevation
-              ? plane.getSurfaceElevation(point, 'bottom')
-              : roofGeometry.getSurfaceElevation(point, 'bottom'),
+  const slab =
+    (roofSystem.roofType || 'flat') === 'flat'
+      ? createPrismDescriptor(
+          roofSystem.id,
+          'roofSystem',
+          roofSystem.boundaryPolygon,
+          roofSystem.baseElevation ?? 0,
+          roofSystem.slabThickness ?? 0,
+          {
+            sourceId: roofSystem.id,
+            materialKey: 'roof',
+            holes: (roofSystem.roofOpenings || []).map((opening) => opening.boundaryPoints || []),
+          },
+        )
+      : createRoofMeshDescriptor(
+          roofSystem.id,
+          'roofSystem',
+          (roofGeometry.planes || []).map((plane) => ({
+            id: plane.id,
+            outline: (plane.outline || []).map((point) => ({
+              x: point.x,
+              y: point.y,
+              topElevation: plane.getSurfaceElevation
+                ? plane.getSurfaceElevation(point, 'top')
+                : roofGeometry.getSurfaceElevation(point, 'top'),
+              bottomElevation: plane.getSurfaceElevation
+                ? plane.getSurfaceElevation(point, 'bottom')
+                : roofGeometry.getSurfaceElevation(point, 'bottom'),
+            })),
           })),
-        })),
-        roofOutline,
-        {
-          sourceId: roofSystem.id,
-          materialKey: 'roof',
-        }
-      );
+          roofOutline,
+          {
+            sourceId: roofSystem.id,
+            materialKey: 'roof',
+          },
+        );
 
   const parapets = (roofSystem.parapets || [])
     .map((parapet) => {
@@ -193,71 +191,69 @@ export function buildRoofPreviewObjects(roofSystem) {
         parapet.thickness ?? 0,
         (roofSystem.roofType || 'flat') === 'flat'
           ? (roofSystem.baseElevation ?? 0) + (roofSystem.slabThickness ?? 0)
-          : (
-              (
-                roofGeometry.getSurfaceElevation(resolved.startPoint, 'top')
-                + roofGeometry.getSurfaceElevation(resolved.endPoint, 'top')
-              ) / 2
-            ),
+          : (roofGeometry.getSurfaceElevation(resolved.startPoint, 'top') +
+              roofGeometry.getSurfaceElevation(resolved.endPoint, 'top')) /
+              2,
         parapet.height ?? 0,
         {
           sourceId: parapet.id,
           materialKey: 'parapet',
-        }
+        },
       );
     })
     .filter(Boolean);
 
-  const drains = (roofSystem.drains || []).map((drain) => createBoxDescriptor(
-    drain.id,
-    'drain',
-    drain.position,
-    {
-      x: drain.diameter ?? 120,
-      y: Math.max(
-        (
-          (roofSystem.roofType || 'flat') === 'flat'
+  const drains = (roofSystem.drains || []).map((drain) =>
+    createBoxDescriptor(
+      drain.id,
+      'drain',
+      drain.position,
+      {
+        x: drain.diameter ?? 120,
+        y: Math.max(
+          ((roofSystem.roofType || 'flat') === 'flat'
             ? (roofSystem.slabThickness ?? 0)
-            : (
-                roofGeometry.getSurfaceElevation(drain.position, 'top')
-                - roofGeometry.getSurfaceElevation(drain.position, 'bottom')
-              )
-        ) * 0.6,
-        80
-      ),
-      z: drain.diameter ?? 120,
-    },
-    (roofSystem.roofType || 'flat') === 'flat'
-      ? (roofSystem.baseElevation ?? 0)
-      : roofGeometry.getSurfaceElevation(drain.position, 'bottom'),
-    0,
-    {
-      sourceId: drain.id,
-      materialKey: 'drain',
-    }
-  ));
+            : roofGeometry.getSurfaceElevation(drain.position, 'top') -
+              roofGeometry.getSurfaceElevation(drain.position, 'bottom')) * 0.6,
+          80,
+        ),
+        z: drain.diameter ?? 120,
+      },
+      (roofSystem.roofType || 'flat') === 'flat'
+        ? (roofSystem.baseElevation ?? 0)
+        : roofGeometry.getSurfaceElevation(drain.position, 'bottom'),
+      0,
+      {
+        sourceId: drain.id,
+        materialKey: 'drain',
+      },
+    ),
+  );
 
   const openings = (roofSystem.roofOpenings || [])
     .filter((opening) => (opening.boundaryPoints || []).length >= 3)
-    .map((opening) => createPrismDescriptor(
-      `roof-opening-${opening.id}`,
-      'roofOpening',
-      opening.boundaryPoints,
-      (
-        (opening.boundaryPoints || []).reduce((sum, point) => (
-          sum + (
-            (roofSystem.roofType || 'flat') === 'flat'
-              ? ((roofSystem.baseElevation ?? 0) + (roofSystem.slabThickness ?? 0))
-              : roofGeometry.getSurfaceElevation(point, 'top')
-          )
-        ), 0) / Math.max(1, (opening.boundaryPoints || []).length)
-      ) - 4,
-      8,
-      {
-        sourceId: opening.id,
-        materialKey: 'roofOpening',
-      }
-    ));
+    .map((opening) =>
+      createPrismDescriptor(
+        `roof-opening-${opening.id}`,
+        'roofOpening',
+        opening.boundaryPoints,
+        (opening.boundaryPoints || []).reduce(
+          (sum, point) =>
+            sum +
+            ((roofSystem.roofType || 'flat') === 'flat'
+              ? (roofSystem.baseElevation ?? 0) + (roofSystem.slabThickness ?? 0)
+              : roofGeometry.getSurfaceElevation(point, 'top')),
+          0,
+        ) /
+          Math.max(1, (opening.boundaryPoints || []).length) -
+          4,
+        8,
+        {
+          sourceId: opening.id,
+          materialKey: 'roofOpening',
+        },
+      ),
+    );
 
   return [slab, ...parapets, ...drains, ...openings];
 }

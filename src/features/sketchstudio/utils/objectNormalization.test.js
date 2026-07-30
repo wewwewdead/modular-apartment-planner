@@ -152,7 +152,15 @@ describe('normalizeObjectDraft', () => {
       ],
       features: [],
       anchors: [],
-      footprint: { type: 'profile', points: [{ x: 0, y: 0 }, { x: 1200, y: 0 }, { x: 1200, y: 450 }, { x: 0, y: 450 }] },
+      footprint: {
+        type: 'profile',
+        points: [
+          { x: 0, y: 0 },
+          { x: 1200, y: 0 },
+          { x: 1200, y: 450 },
+          { x: 0, y: 450 },
+        ],
+      },
     };
 
     const result = normalizeObjectDraft(legacy);

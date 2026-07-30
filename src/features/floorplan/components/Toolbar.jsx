@@ -4,12 +4,12 @@ import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { TOOLS } from '@/editor/tools';
-import { detectRooms } from '@/geometry/roomDetection';
-import { createRoom } from '@/domain/models';
+import { reconcileFloorRooms } from '@/domain/roomReconcile';
 import { isTypingTarget } from '@/utils/keyboard';
 import {
   NewIcon,
   SaveIcon,
+  ShareIcon,
   LoadIcon,
   UndoIcon,
   RedoIcon,
@@ -80,6 +80,7 @@ const toolItems = [
 export default function Toolbar({
   onNew,
   onSave,
+  onShare,
   onLoad,
   isSidebarCollapsed,
   isPropertiesCollapsed,
@@ -186,12 +187,11 @@ export default function Toolbar({
       editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Draw at least 3 walls first.' });
       return;
     }
-    const detected = detectRooms(floor.walls, floor.columns || []);
-    const rooms = detected.map((d, i) => {
-      const room = createRoom(`Room ${i + 1}`, d.points);
-      room.phaseId = activePhaseId || null;
-      return room;
-    });
+    // Full-floor reconcile through the same identity-preserving path as the
+    // live-model pipeline: existing room names/colors/phases survive; only
+    // genuinely new loops become new rooms, and dead loops are removed.
+    const reconciled = reconcileFloorRooms(floor, { phaseId: activePhaseId || null });
+    const rooms = reconciled.rooms || [];
     dispatch({ type: 'ROOMS_SET', floorId: activeFloorId, rooms });
     editorDispatch({ type: 'DESELECT' });
     editorDispatch({
@@ -281,6 +281,11 @@ export default function Toolbar({
         <Tooltip label="Save" shortcut="Ctrl+S">
           <button className={styles.saveBtn} onClick={onSave} data-dirty={isDirty} aria-label="Save">
             <SaveIcon className={styles.icon} />
+          </button>
+        </Tooltip>
+        <Tooltip label="Share Project">
+          <button className={styles.btn} onClick={onShare} aria-label="Share Project">
+            <ShareIcon className={styles.icon} />
           </button>
         </Tooltip>
         <div className={styles.divider} />

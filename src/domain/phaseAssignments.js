@@ -1,6 +1,15 @@
 export const PHASE_ASSIGNABLE_KEYS = [
-  'walls', 'doors', 'windows', 'columns', 'beams', 'slabs',
-  'stairs', 'landings', 'fixtures', 'rooms', 'railings',
+  'walls',
+  'doors',
+  'windows',
+  'columns',
+  'beams',
+  'slabs',
+  'stairs',
+  'landings',
+  'fixtures',
+  'rooms',
+  'railings',
 ];
 
 export function mapPhaseAssignableFloorObjects(floor, mapper) {
@@ -39,26 +48,18 @@ export function countObjectsInProjectPhase(project, phaseId) {
 export function clearProjectPhaseReferences(project, phaseId) {
   return {
     ...project,
-    floors: (project.floors || []).map((floor) => (
-      mapPhaseAssignableFloorObjects(floor, (obj) => (
-        obj.phaseId === phaseId ? { ...obj, phaseId: null } : obj
-      ))
-    )),
-    roofSystem: project.roofSystem?.phaseId === phaseId
-      ? { ...project.roofSystem, phaseId: null }
-      : project.roofSystem,
-    trussSystems: (project.trussSystems || []).map((trussSystem) => (
-      trussSystem.phaseId === phaseId
-        ? { ...trussSystem, phaseId: null }
-        : trussSystem
-    )),
+    floors: (project.floors || []).map((floor) =>
+      mapPhaseAssignableFloorObjects(floor, (obj) => (obj.phaseId === phaseId ? { ...obj, phaseId: null } : obj)),
+    ),
+    roofSystem: project.roofSystem?.phaseId === phaseId ? { ...project.roofSystem, phaseId: null } : project.roofSystem,
+    trussSystems: (project.trussSystems || []).map((trussSystem) =>
+      trussSystem.phaseId === phaseId ? { ...trussSystem, phaseId: null } : trussSystem,
+    ),
     sheets: (project.sheets || []).map((sheet) => ({
       ...sheet,
-      viewports: (sheet.viewports || []).map((viewport) => (
-        viewport.phaseId === phaseId
-          ? { ...viewport, phaseId: null, phaseViewMode: 'all' }
-          : viewport
-      )),
+      viewports: (sheet.viewports || []).map((viewport) =>
+        viewport.phaseId === phaseId ? { ...viewport, phaseId: null, phaseViewMode: 'all' } : viewport,
+      ),
     })),
   };
 }
@@ -66,28 +67,27 @@ export function clearProjectPhaseReferences(project, phaseId) {
 export function sanitizeProjectPhaseReferences(project, validPhaseIds) {
   return {
     ...project,
-    floors: (project.floors || []).map((floor) => (
-      mapPhaseAssignableFloorObjects(floor, (obj) => (
-        obj.phaseId == null || validPhaseIds.has(obj.phaseId)
-          ? obj
-          : { ...obj, phaseId: null }
-      ))
-    )),
-    roofSystem: project.roofSystem?.phaseId == null || validPhaseIds.has(project.roofSystem.phaseId)
-      ? project.roofSystem
-      : { ...project.roofSystem, phaseId: null },
-    trussSystems: (project.trussSystems || []).map((trussSystem) => (
+    floors: (project.floors || []).map((floor) =>
+      mapPhaseAssignableFloorObjects(floor, (obj) =>
+        obj.phaseId == null || validPhaseIds.has(obj.phaseId) ? obj : { ...obj, phaseId: null },
+      ),
+    ),
+    roofSystem:
+      project.roofSystem?.phaseId == null || validPhaseIds.has(project.roofSystem.phaseId)
+        ? project.roofSystem
+        : { ...project.roofSystem, phaseId: null },
+    trussSystems: (project.trussSystems || []).map((trussSystem) =>
       trussSystem.phaseId == null || validPhaseIds.has(trussSystem.phaseId)
         ? trussSystem
-        : { ...trussSystem, phaseId: null }
-    )),
+        : { ...trussSystem, phaseId: null },
+    ),
     sheets: (project.sheets || []).map((sheet) => ({
       ...sheet,
-      viewports: (sheet.viewports || []).map((viewport) => (
+      viewports: (sheet.viewports || []).map((viewport) =>
         viewport.phaseId == null || validPhaseIds.has(viewport.phaseId)
           ? viewport
-          : { ...viewport, phaseId: null, phaseViewMode: 'all' }
-      )),
+          : { ...viewport, phaseId: null, phaseViewMode: 'all' },
+      ),
     })),
   };
 }

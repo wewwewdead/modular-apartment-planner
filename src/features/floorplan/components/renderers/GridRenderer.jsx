@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { GRID_MINOR, GRID_MAJOR } from '@/domain/defaults';
 
-export default function GridRenderer() {
+function GridRenderer() {
   return (
     <defs>
       <pattern id="grid-minor" width={GRID_MINOR} height={GRID_MINOR} patternUnits="userSpaceOnUse">
@@ -25,3 +26,5 @@ export default function GridRenderer() {
     </defs>
   );
 }
+
+export default memo(GridRenderer);

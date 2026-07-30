@@ -1,7 +1,9 @@
 import { polygonCentroid } from '@/geometry/polygon';
 
 export function normalizeRoofOpeningType(type = 'opening') {
-  return String(type || 'opening').trim().toLowerCase();
+  return String(type || 'opening')
+    .trim()
+    .toLowerCase();
 }
 
 export function isSkylightRoofOpening(type = 'opening') {

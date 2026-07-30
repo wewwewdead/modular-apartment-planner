@@ -7,12 +7,15 @@ const DEFAULT_PNG_DPI = 300;
 const JPEG_QUALITY = 0.92;
 
 function sanitizeFileName(name = 'sheet') {
-  return name
-    .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
-    .replace(/\s+/g, ' ')
-    .slice(0, 120)
-    || 'sheet';
+  return (
+    name
+      .trim()
+      // Strip filesystem-illegal characters and C0 control chars (U+0000-U+001F) from file names.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+      .replace(/\s+/g, ' ')
+      .slice(0, 120) || 'sheet'
+  );
 }
 
 function downloadBlob(blob, fileName) {
@@ -201,7 +204,9 @@ function parseTransform(transform = '') {
         break;
       case 'rotate':
         if (args.length >= 3) {
-          matrix = matrix.multiply(new DOMMatrix().translate(args[1], args[2]).rotate(args[0]).translate(-args[1], -args[2]));
+          matrix = matrix.multiply(
+            new DOMMatrix().translate(args[1], args[2]).rotate(args[0]).translate(-args[1], -args[2]),
+          );
         } else {
           matrix = matrix.multiply(new DOMMatrix().rotate(args[0] || 0));
         }
@@ -221,12 +226,12 @@ function parseTransform(transform = '') {
 
 function matrixIsIdentity(matrix) {
   return (
-    Math.abs(matrix.a - 1) < 1e-8
-    && Math.abs(matrix.b) < 1e-8
-    && Math.abs(matrix.c) < 1e-8
-    && Math.abs(matrix.d - 1) < 1e-8
-    && Math.abs(matrix.e) < 1e-8
-    && Math.abs(matrix.f) < 1e-8
+    Math.abs(matrix.a - 1) < 1e-8 &&
+    Math.abs(matrix.b) < 1e-8 &&
+    Math.abs(matrix.c) < 1e-8 &&
+    Math.abs(matrix.d - 1) < 1e-8 &&
+    Math.abs(matrix.e) < 1e-8 &&
+    Math.abs(matrix.f) < 1e-8
   );
 }
 
@@ -279,9 +284,10 @@ function parseColor(styleValue) {
 
   if (normalized.startsWith('#')) {
     const hex = normalized.slice(1);
-    const chunks = hex.length === 3
-      ? hex.split('').map((value) => value + value)
-      : [hex.slice(0, 2), hex.slice(2, 4), hex.slice(4, 6)];
+    const chunks =
+      hex.length === 3
+        ? hex.split('').map((value) => value + value)
+        : [hex.slice(0, 2), hex.slice(2, 4), hex.slice(4, 6)];
     return chunks.map((value) => parseInt(value, 16) / 255);
   }
 
@@ -408,9 +414,7 @@ function parsePathData(pathData = '') {
         while (hasNumber()) {
           const x = nextNumber();
           const y = nextNumber();
-          current = command === 'm'
-            ? { x: current.x + x, y: current.y + y }
-            : { x, y };
+          current = command === 'm' ? { x: current.x + x, y: current.y + y } : { x, y };
           commands.push({ type: 'M', x: current.x, y: current.y });
           subpathStart = { ...current };
           command = command === 'm' ? 'l' : 'L';
@@ -422,9 +426,7 @@ function parsePathData(pathData = '') {
         while (hasNumber()) {
           const x = nextNumber();
           const y = nextNumber();
-          current = command === 'l'
-            ? { x: current.x + x, y: current.y + y }
-            : { x, y };
+          current = command === 'l' ? { x: current.x + x, y: current.y + y } : { x, y };
           commands.push({ type: 'L', x: current.x, y: current.y });
         }
         break;
@@ -432,9 +434,7 @@ function parsePathData(pathData = '') {
       case 'h':
         while (hasNumber()) {
           const x = nextNumber();
-          current = command === 'h'
-            ? { x: current.x + x, y: current.y }
-            : { x, y: current.y };
+          current = command === 'h' ? { x: current.x + x, y: current.y } : { x, y: current.y };
           commands.push({ type: 'L', x: current.x, y: current.y });
         }
         break;
@@ -442,9 +442,7 @@ function parsePathData(pathData = '') {
       case 'v':
         while (hasNumber()) {
           const y = nextNumber();
-          current = command === 'v'
-            ? { x: current.x, y: current.y + y }
-            : { x: current.x, y };
+          current = command === 'v' ? { x: current.x, y: current.y + y } : { x: current.x, y };
           commands.push({ type: 'L', x: current.x, y: current.y });
         }
         break;
@@ -458,9 +456,7 @@ function parsePathData(pathData = '') {
           const sweepFlag = nextNumber();
           const xValue = nextNumber();
           const yValue = nextNumber();
-          const end = command === 'a'
-            ? { x: current.x + xValue, y: current.y + yValue }
-            : { x: xValue, y: yValue };
+          const end = command === 'a' ? { x: current.x + xValue, y: current.y + yValue } : { x: xValue, y: yValue };
           const arcPoints = buildArcPoints(current, rx, ry, rotation, largeArcFlag, sweepFlag, end);
           for (const point of arcPoints) {
             commands.push({ type: 'L', x: point.x, y: point.y });
@@ -536,10 +532,7 @@ class PdfBuilder {
       this.write(`${fmt(style.fill[0])} ${fmt(style.fill[1])} ${fmt(style.fill[2])} rg`);
     }
 
-    const alphaName = this.alphaName(
-      fillAllowed ? style.fillOpacity : 1,
-      strokeAllowed ? style.strokeOpacity : 1
-    );
+    const alphaName = this.alphaName(fillAllowed ? style.fillOpacity : 1, strokeAllowed ? style.strokeOpacity : 1);
     if (alphaName) {
       this.write(`/${alphaName} gs`);
     }
@@ -578,20 +571,20 @@ class PdfBuilder {
     if (xObjectEntries) resources += ` /XObject << ${xObjectEntries} >>`;
 
     objects[3] = encoder.encode(
-      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(this.pageWidthPt)} ${fmt(this.pageHeightPt)}] /Resources << ${resources} >> /Contents ${contentObjectNumber} 0 R >>\nendobj\n`
+      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(this.pageWidthPt)} ${fmt(this.pageHeightPt)}] /Resources << ${resources} >> /Contents ${contentObjectNumber} 0 R >>\nendobj\n`,
     );
     objects[4] = encoder.encode('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
 
     alphaObjects.forEach((entry, index) => {
       objects[firstAlphaObjectNumber + index] = encoder.encode(
-        `${firstAlphaObjectNumber + index} 0 obj\n<< /Type /ExtGState /ca ${fmt(entry.fill)} /CA ${fmt(entry.stroke)} >>\nendobj\n`
+        `${firstAlphaObjectNumber + index} 0 obj\n<< /Type /ExtGState /ca ${fmt(entry.fill)} /CA ${fmt(entry.stroke)} >>\nendobj\n`,
       );
     });
 
     this.images.forEach((entry, index) => {
       const objNum = firstImageObjectNumber + index;
       const headerBytes = encoder.encode(
-        `${objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${entry.pixelWidth} /Height ${entry.pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${entry.jpegBytes.length} >>\nstream\n`
+        `${objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${entry.pixelWidth} /Height ${entry.pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${entry.jpegBytes.length} >>\nstream\n`,
       );
       const footerBytes = encoder.encode('\nendstream\nendobj\n');
       const combined = new Uint8Array(headerBytes.length + entry.jpegBytes.length + footerBytes.length);
@@ -602,7 +595,7 @@ class PdfBuilder {
     });
 
     const contentHeader = encoder.encode(
-      `${contentObjectNumber} 0 obj\n<< /Length ${contentStream.length} >>\nstream\n`
+      `${contentObjectNumber} 0 obj\n<< /Length ${contentStream.length} >>\nstream\n`,
     );
     const contentFooter = encoder.encode('endstream\nendobj\n');
     objects[contentObjectNumber] = new Uint8Array(contentHeader.length + contentStream.length + contentFooter.length);
@@ -627,10 +620,9 @@ class PdfBuilder {
     }
     const trailer = `trailer\n<< /Size ${totalObjects + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
 
-    return new Blob(
-      [header, binaryComment, ...objects.slice(1), encoder.encode(xref), encoder.encode(trailer)],
-      { type: 'application/pdf' }
-    );
+    return new Blob([header, binaryComment, ...objects.slice(1), encoder.encode(xref), encoder.encode(trailer)], {
+      type: 'application/pdf',
+    });
   }
 }
 
@@ -644,7 +636,9 @@ function beginNode(builder, element) {
 
   builder.write('q');
   if (!matrixIsIdentity(localMatrix)) {
-    builder.write(`${fmt(localMatrix.a)} ${fmt(localMatrix.b)} ${fmt(localMatrix.c)} ${fmt(localMatrix.d)} ${fmt(localMatrix.e)} ${fmt(localMatrix.f)} cm`);
+    builder.write(
+      `${fmt(localMatrix.a)} ${fmt(localMatrix.b)} ${fmt(localMatrix.c)} ${fmt(localMatrix.d)} ${fmt(localMatrix.e)} ${fmt(localMatrix.f)} cm`,
+    );
   }
 
   if (needsClip) {
@@ -669,14 +663,7 @@ function beginCanvasNode(context, element) {
 
   context.save();
   if (!matrixIsIdentity(localMatrix)) {
-    context.transform(
-      localMatrix.a,
-      localMatrix.b,
-      localMatrix.c,
-      localMatrix.d,
-      localMatrix.e,
-      localMatrix.f
-    );
+    context.transform(localMatrix.a, localMatrix.b, localMatrix.c, localMatrix.d, localMatrix.e, localMatrix.f);
   }
 
   if (needsClip) {

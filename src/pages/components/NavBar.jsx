@@ -24,16 +24,7 @@ export default function NavBar() {
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"
           >
-            <rect
-              x="2"
-              y="2"
-              width="24"
-              height="24"
-              rx="4"
-              stroke="var(--color-accent)"
-              strokeWidth="2"
-              fill="none"
-            />
+            <rect x="2" y="2" width="24" height="24" rx="4" stroke="var(--color-accent)" strokeWidth="2" fill="none" />
             <rect x="6" y="6" width="7" height="7" rx="1" fill="var(--color-accent)" opacity="0.8" />
             <rect x="15" y="6" width="7" height="7" rx="1" fill="var(--color-accent)" opacity="0.4" />
             <rect x="6" y="15" width="7" height="7" rx="1" fill="var(--color-accent)" opacity="0.4" />
@@ -72,9 +63,7 @@ export default function NavBar() {
         </button>
       </nav>
 
-      <div
-        className={`${styles.mobileMenu} ${mobileOpen ? styles.mobileMenuOpen : ''}`}
-      >
+      <div className={`${styles.mobileMenu} ${mobileOpen ? styles.mobileMenuOpen : ''}`}>
         <Link to="/floorplan" className={styles.mobileLink} onClick={closeMobile}>
           Floorplan
         </Link>

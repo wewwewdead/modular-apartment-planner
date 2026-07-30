@@ -1,4 +1,7 @@
-import materials, { MATERIAL_CATEGORIES, getMaterialById } from '../data/materials';
+import { getAllMaterials, getMaterialById, getMergedMaterialCategories } from '../data/materials';
+import { duplicateMaterialAsCustom } from '../data/customMaterials';
+import { useCustomMaterialList } from '../hooks/useCustomMaterials';
+import { formatMaterialPrice, groupMaterialsByCategory } from './customMaterialFormHelpers';
 import styles from '../styles/craftsman.module.css';
 
 const MIXED_SELECT_VALUE = '__mixed__';
@@ -12,16 +15,29 @@ export default function MaterialPicker({
   isMixedMaterial = false,
   isMixedThickness = false,
 }) {
+  // Subscribing keeps the option list in sync with the custom material editor.
+  useCustomMaterialList();
+
   const currentMaterial = !isMixedMaterial && selectedMaterialId ? getMaterialById(selectedMaterialId) : null;
-  const selectedValue = isMixedMaterial ? MIXED_SELECT_VALUE : (selectedMaterialId || '');
+  const selectedValue = isMixedMaterial ? MIXED_SELECT_VALUE : selectedMaterialId || '';
   const thicknessValue = isMixedThickness ? '' : (thickness ?? '');
   const thicknessPlaceholder = isMixedThickness ? 'Mixed' : (currentMaterial?.thickness ?? '');
+  const groups = groupMaterialsByCategory(getAllMaterials(), getMergedMaterialCategories());
+
+  // A material id with no catalog entry (e.g. a deleted custom material) still
+  // needs an option so the select keeps showing what the part is assigned to.
+  const hasUnknownMaterial = !isMixedMaterial && Boolean(selectedMaterialId) && !currentMaterial;
+
+  const handleDuplicateAsCustom = () => {
+    const outcome = duplicateMaterialAsCustom(currentMaterial);
+    if (outcome.valid) {
+      onMaterialChange(outcome.material.id);
+    }
+  };
 
   return (
     <div className={styles.materialPicker}>
-      {selectionCount > 1 && (
-        <p className={styles.hint}>Apply changes to all {selectionCount} selected entities.</p>
-      )}
+      {selectionCount > 1 && <p className={styles.hint}>Apply changes to all {selectionCount} selected entities.</p>}
 
       <label className={styles.fieldLabel}>Material</label>
       <select
@@ -35,20 +51,24 @@ export default function MaterialPicker({
           </option>
         )}
         <option value="">None</option>
-        {MATERIAL_CATEGORIES.map((cat) => {
-          const catMaterials = materials.filter((m) => m.category === cat.id);
-          if (!catMaterials.length) return null;
-          return (
-            <optgroup key={cat.id} label={cat.label}>
-              {catMaterials.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} — ${m.pricePerM2}/{m.costBasis === 'perLinearMeter' ? 'lm' : m.costBasis === 'perPiece' ? 'pc' : 'm\u00B2'}
-                </option>
-              ))}
-            </optgroup>
-          );
-        })}
+        {hasUnknownMaterial && <option value={selectedMaterialId}>{selectedMaterialId} (unavailable)</option>}
+        {groups.map((group) => (
+          <optgroup key={group.id} label={group.label}>
+            {group.materials.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.isCustom ? '★ ' : ''}
+                {m.name} — {formatMaterialPrice(m)}
+              </option>
+            ))}
+          </optgroup>
+        ))}
       </select>
+
+      {hasUnknownMaterial && (
+        <p className={styles.materialFormError}>
+          This material is no longer in the catalog. It is costed at $0 until you pick a replacement.
+        </p>
+      )}
 
       <label className={styles.fieldLabel}>
         Thickness (mm)
@@ -68,15 +88,26 @@ export default function MaterialPicker({
       />
 
       {currentMaterial && (
-        <div className={styles.materialPreview}>
-          <span
-            className={styles.materialSwatch}
-            style={{ backgroundColor: currentMaterial.color }}
-          />
-          <span className={styles.materialInfo}>
-            {currentMaterial.thickness}mm · {currentMaterial.density} kg/m3
-          </span>
-        </div>
+        <>
+          <div className={styles.materialPreview}>
+            <span className={styles.materialSwatch} style={{ backgroundColor: currentMaterial.color }} />
+            <span className={styles.materialInfo}>
+              {currentMaterial.thickness}mm · {currentMaterial.density} kg/m3
+            </span>
+            {currentMaterial.isCustom && <span className={styles.customMaterialBadge}>Custom</span>}
+          </div>
+
+          {!currentMaterial.isCustom && (
+            <button
+              type="button"
+              className={styles.exportBtn}
+              onClick={handleDuplicateAsCustom}
+              title="Copy this catalog material so you can set your own local price"
+            >
+              Duplicate As Custom
+            </button>
+          )}
+        </>
       )}
     </div>
   );

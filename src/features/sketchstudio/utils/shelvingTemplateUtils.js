@@ -23,15 +23,16 @@ export function generateShelvingUnitObjectParts(params = {}) {
     shelfCount: Math.max(1, Math.round(Number(params.shelfCount) || 3)),
   }).filter((part) => part.name !== 'Back Panel');
 
-  return parts.map((part) => normalizePartTransforms(
-    part.name === 'Top Panel'
-      ? {
-          ...part,
-          name: 'Top Shelf',
-          role: 'shelf',
-          parametric: { ...part.parametric, template: 'shelf' },
-        }
-      : part,
-  ));
+  return parts.map((part) =>
+    normalizePartTransforms(
+      part.name === 'Top Panel'
+        ? {
+            ...part,
+            name: 'Top Shelf',
+            role: 'shelf',
+            parametric: { ...part.parametric, template: 'shelf' },
+          }
+        : part,
+    ),
+  );
 }
-

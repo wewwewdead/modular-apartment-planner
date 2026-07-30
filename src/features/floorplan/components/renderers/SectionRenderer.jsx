@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { buildProjectSectionScene } from '@/sections/scene';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import SectionSceneLayer from './SectionSceneLayer';
@@ -26,7 +27,7 @@ function SectionDiagnosticMessages({ scene, messages = [] }) {
   );
 }
 
-export default function SectionRenderer({
+function SectionRenderer({
   project,
   floor,
   activeSectionCutId,
@@ -75,3 +76,5 @@ export default function SectionRenderer({
     </g>
   );
 }
+
+export default memo(SectionRenderer);

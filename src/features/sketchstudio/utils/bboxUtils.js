@@ -24,8 +24,8 @@ function getEllipseBoundingBox(entity) {
   const radians = ((entity.rotation ?? 0) * Math.PI) / 180;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
-  const xRadius = Math.sqrt(((entity.rx * cos) ** 2) + ((entity.ry * sin) ** 2));
-  const yRadius = Math.sqrt(((entity.rx * sin) ** 2) + ((entity.ry * cos) ** 2));
+  const xRadius = Math.sqrt((entity.rx * cos) ** 2 + (entity.ry * sin) ** 2);
+  const yRadius = Math.sqrt((entity.rx * sin) ** 2 + (entity.ry * cos) ** 2);
 
   return {
     minX: entity.cx - xRadius,
@@ -78,8 +78,8 @@ export function computeEntityBoundingBox(entity, _entities = []) {
       const dx = point.x - center.x;
       const dy = point.y - center.y;
       return {
-        x: center.x + (dx * cos) - (dy * sin),
-        y: center.y + (dx * sin) + (dy * cos),
+        x: center.x + dx * cos - dy * sin,
+        y: center.y + dx * sin + dy * cos,
       };
     });
     return getPointsBoundingBox(corners);
@@ -194,7 +194,9 @@ export function computeDocumentBoundingBox(document, options = {}) {
 }
 
 export function computeFootprintFromEntities(entities) {
-  const geometryEntities = entities.filter((entity) => entity.type !== 'dimension' && entity.type !== 'feature' && entity.type !== 'text');
+  const geometryEntities = entities.filter(
+    (entity) => entity.type !== 'dimension' && entity.type !== 'feature' && entity.type !== 'text',
+  );
   const boxes = geometryEntities.map((entity) => computeEntityBoundingBox(entity, entities)).filter(Boolean);
 
   if (!boxes.length) {

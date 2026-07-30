@@ -12,14 +12,17 @@ export function columnAxes(column) {
 }
 
 export function columnOutline(column) {
-  const hw = column.width / 2, hd = column.depth / 2;
+  const hw = column.width / 2,
+    hd = column.depth / 2;
   const { x: cx, y: cy } = column;
   const corners = [
-    { x: cx - hw, y: cy - hd }, { x: cx + hw, y: cy - hd },
-    { x: cx + hw, y: cy + hd }, { x: cx - hw, y: cy + hd },
+    { x: cx - hw, y: cy - hd },
+    { x: cx + hw, y: cy - hd },
+    { x: cx + hw, y: cy + hd },
+    { x: cx - hw, y: cy + hd },
   ];
   if (!column.rotation) return corners;
-  return corners.map(p => rotate(p, { x: cx, y: cy }, column.rotation));
+  return corners.map((p) => rotate(p, { x: cx, y: cy }, column.rotation));
 }
 
 export function columnEdgeMidpoints(column) {
@@ -78,16 +81,9 @@ export function columnCenterlines(column) {
 }
 
 export function columnSnapPoints(column) {
-  return [
-    { x: column.x, y: column.y },
-    ...columnOutline(column),
-    ...columnEdgeMidpoints(column),
-  ];
+  return [{ x: column.x, y: column.y }, ...columnOutline(column), ...columnEdgeMidpoints(column)];
 }
 
 export function columnWallSnapPoints(column) {
-  return [
-    ...columnOutline(column),
-    ...columnEdgeMidpoints(column),
-  ];
+  return [...columnOutline(column), ...columnEdgeMidpoints(column)];
 }

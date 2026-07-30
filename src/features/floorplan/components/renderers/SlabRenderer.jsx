@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { getSlabRenderData } from '@/geometry/slabGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function SlabRenderer({ slab, selectedId }) {
+function SlabRenderer({ slab, selectedId }) {
   const renderData = getSlabRenderData(slab);
   if (!renderData) return null;
 
@@ -18,3 +19,5 @@ export default function SlabRenderer({ slab, selectedId }) {
     />
   );
 }
+
+export default memo(SlabRenderer);

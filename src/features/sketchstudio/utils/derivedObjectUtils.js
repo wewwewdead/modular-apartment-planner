@@ -1,4 +1,9 @@
-import { buildExportAnchorPayload, computeAnchorFromBounds, createDefaultAnchor, setPrimaryAnchor } from './anchorUtils';
+import {
+  buildExportAnchorPayload,
+  computeAnchorFromBounds,
+  createDefaultAnchor,
+  setPrimaryAnchor,
+} from './anchorUtils';
 import { buildObjectBom, groupBomRows } from './bomUtils';
 import { applyConstraints } from './constraintUtils';
 import { computeGenericObjectBounds, computeGenericObjectFootprint } from './genericObjectUtils';
@@ -11,17 +16,20 @@ function buildBoundsFromFootprint(footprint) {
     return null;
   }
 
-  const bounds = footprint.points.reduce((accumulator, point) => ({
-    minX: Math.min(accumulator.minX, point.x),
-    minY: Math.min(accumulator.minY, point.y),
-    maxX: Math.max(accumulator.maxX, point.x),
-    maxY: Math.max(accumulator.maxY, point.y),
-  }), {
-    minX: footprint.points[0].x,
-    minY: footprint.points[0].y,
-    maxX: footprint.points[0].x,
-    maxY: footprint.points[0].y,
-  });
+  const bounds = footprint.points.reduce(
+    (accumulator, point) => ({
+      minX: Math.min(accumulator.minX, point.x),
+      minY: Math.min(accumulator.minY, point.y),
+      maxX: Math.max(accumulator.maxX, point.x),
+      maxY: Math.max(accumulator.maxY, point.y),
+    }),
+    {
+      minX: footprint.points[0].x,
+      minY: footprint.points[0].y,
+      maxX: footprint.points[0].x,
+      maxY: footprint.points[0].y,
+    },
+  );
 
   return {
     ...bounds,
@@ -47,17 +55,21 @@ function computePartPlanBounds(part, entities = []) {
 }
 
 export function recomputeObjectBoundsFromParts(objectDraft, entities = []) {
-  return computeGenericObjectBounds(objectDraft, entities)
-    || computeObjectBounds(entities, objectDraft?.bounds?.height || 900)
-    || objectDraft?.bounds
-    || null;
+  return (
+    computeGenericObjectBounds(objectDraft, entities) ||
+    computeObjectBounds(entities, objectDraft?.bounds?.height || 900) ||
+    objectDraft?.bounds ||
+    null
+  );
 }
 
 export function recomputeObjectFootprintFromParts(objectDraft, entities = []) {
-  return computeGenericObjectFootprint(objectDraft, entities)
-    || computeObjectFootprint(entities)
-    || objectDraft?.footprint
-    || null;
+  return (
+    computeGenericObjectFootprint(objectDraft, entities) ||
+    computeObjectFootprint(entities) ||
+    objectDraft?.footprint ||
+    null
+  );
 }
 
 export function suggestPrimaryAnchorFromObject(objectDraft) {
@@ -91,9 +103,7 @@ function reconcileAnchors(objectDraft) {
 
   return existingAnchors.map((anchor) => {
     const suggestion = suggestedByName.get(anchor.name);
-    return suggestion
-      ? { ...anchor, x: suggestion.x, y: suggestion.y }
-      : anchor;
+    return suggestion ? { ...anchor, x: suggestion.x, y: suggestion.y } : anchor;
   });
 }
 
@@ -121,7 +131,11 @@ export function recomputeObjectDraftDerivedData(objectDraft, entities = []) {
   return {
     ...patterned,
     anchors: nextAnchors,
-    activeAnchorId: nextDraft.activeAnchorId || nextAnchors.find((anchor) => anchor.kind === 'primary')?.id || nextAnchors[0]?.id || null,
+    activeAnchorId:
+      nextDraft.activeAnchorId ||
+      nextAnchors.find((anchor) => anchor.kind === 'primary')?.id ||
+      nextAnchors[0]?.id ||
+      null,
     anchor: buildExportAnchorPayload({ anchors: nextAnchors }),
     bom: {
       rows: bomRows,

@@ -15,12 +15,7 @@ function makeOutline(start, end, thickness, controlPoint = null) {
   const halfThick = thickness / 2;
   const offset = scale(perp, halfThick);
 
-  return [
-    add(start, offset),
-    add(end, offset),
-    subtract(end, offset),
-    subtract(start, offset),
-  ];
+  return [add(start, offset), add(end, offset), subtract(end, offset), subtract(start, offset)];
 }
 
 function findColumn(columns, columnId) {
@@ -210,18 +205,13 @@ export function getWallRenderData(wall, columns = []) {
   };
 }
 
-export function snapWallEndpoint(modelPos, {
-  walls = [],
-  columns = [],
-  snapDist,
-  chainStart = null,
-  otherPoint = null,
-  ignoreWallId = null,
-} = {}) {
+export function snapWallEndpoint(
+  modelPos,
+  { walls = [], columns = [], snapDist, chainStart = null, otherPoint = null, ignoreWallId = null } = {},
+) {
   let best = null;
-  const directionHint = otherPoint && distance(otherPoint, modelPos) > EPSILON
-    ? normalize(subtract(modelPos, otherPoint))
-    : null;
+  const directionHint =
+    otherPoint && distance(otherPoint, modelPos) > EPSILON ? normalize(subtract(modelPos, otherPoint)) : null;
 
   const consider = (point, priority, attachment = null) => {
     const candidateDistance = distance(modelPos, point);

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createDoorPart,
-  createPanelPart,
-  createShelfPart,
-} from './partTemplateUtils';
+import { createDoorPart, createPanelPart, createShelfPart } from './partTemplateUtils';
 
 describe('partTemplateUtils', () => {
   it('creates panel and shelf parts with parametric metadata', () => {

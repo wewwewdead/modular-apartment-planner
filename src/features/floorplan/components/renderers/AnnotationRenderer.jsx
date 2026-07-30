@@ -1,8 +1,11 @@
+import { memo } from 'react';
 import { buildAnnotationScene } from '@/annotations/scene';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
 
-export default function AnnotationRenderer({ floor }) {
+function AnnotationRenderer({ floor }) {
   const scene = buildAnnotationScene(floor);
 
   return <BlueprintAnnotationLayer dimensions={scene.dimensions} tags={scene.tags} />;
 }
+
+export default memo(AnnotationRenderer);

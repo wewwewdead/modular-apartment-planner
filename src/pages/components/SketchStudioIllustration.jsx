@@ -1,12 +1,6 @@
 export default function SketchStudioIllustration({ className }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 180 135"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 180 135" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <rect x="10" y="12" width="160" height="111" rx="16" fill="#101722" />
       <rect x="10" y="12" width="160" height="111" rx="16" stroke="#2B4368" />
       <path d="M34 26V109" stroke="#223449" strokeWidth="1" />

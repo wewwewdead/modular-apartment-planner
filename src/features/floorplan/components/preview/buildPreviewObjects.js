@@ -585,40 +585,58 @@ function assignPreviewMetadata(object, descriptor, floor) {
   });
 }
 
+/**
+ * Build the THREE group + local meshMap for a single floor descriptor.
+ * Extracted so an incremental cache can rebuild individual floors while
+ * reusing groups whose source geometry is unchanged. Returns the floor's
+ * meshMap entries keyed by descriptor id (floor-local, no visibility applied
+ * beyond the group flag — visibility is a per-entry concern applied by the
+ * caller/cache).
+ */
+export function buildFloorObjectGroup(floor, materialPalette) {
+  const floorGroup = new THREE.Group();
+  floorGroup.name = `floor-${floor.floorId}`;
+  floorGroup.visible = floor.visible;
+  floorGroup.userData = {
+    floorId: floor.floorId,
+    floorName: floor.name,
+    elevation: floor.elevation,
+  };
+
+  const entries = new Map();
+
+  for (const descriptor of floor.objects) {
+    const object = createObjectForDescriptor(descriptor, materialPalette);
+    object.name = descriptor.id;
+    object.userData = {
+      id: descriptor.id,
+      kind: descriptor.kind,
+      metadata: descriptor.metadata,
+    };
+    assignPreviewMetadata(object, descriptor, floor);
+    floorGroup.add(object);
+
+    entries.set(descriptor.id, {
+      object,
+      descriptor,
+      materialKey: descriptor.materialKey,
+      floorVisible: floor.visible,
+    });
+  }
+
+  return { floorGroup, entries };
+}
+
 export function buildPreviewObjectRoot(sceneDescriptor, materialPalette) {
   const root = new THREE.Group();
   root.name = 'preview-root';
   const meshMap = new Map();
 
   for (const floor of sceneDescriptor.floors) {
-    const floorGroup = new THREE.Group();
-    floorGroup.name = `floor-${floor.floorId}`;
-    floorGroup.visible = floor.visible;
-    floorGroup.userData = {
-      floorId: floor.floorId,
-      floorName: floor.name,
-      elevation: floor.elevation,
-    };
-
-    for (const descriptor of floor.objects) {
-      const object = createObjectForDescriptor(descriptor, materialPalette);
-      object.name = descriptor.id;
-      object.userData = {
-        id: descriptor.id,
-        kind: descriptor.kind,
-        metadata: descriptor.metadata,
-      };
-      assignPreviewMetadata(object, descriptor, floor);
-      floorGroup.add(object);
-
-      meshMap.set(descriptor.id, {
-        object,
-        descriptor,
-        materialKey: descriptor.materialKey,
-        floorVisible: floor.visible,
-      });
+    const { floorGroup, entries } = buildFloorObjectGroup(floor, materialPalette);
+    for (const [id, entry] of entries) {
+      meshMap.set(id, entry);
     }
-
     root.add(floorGroup);
   }
 

@@ -1,4 +1,16 @@
-import { DOOR_HEIGHT, DOOR_SILL_HEIGHT, SLAB_ELEVATION, SLAB_THICKNESS, STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, STAIR_WIDTH, WALL_HEIGHT, WINDOW_HEIGHT, WINDOW_SILL_HEIGHT } from '@/domain/defaults';
+import {
+  DOOR_HEIGHT,
+  DOOR_SILL_HEIGHT,
+  SLAB_ELEVATION,
+  SLAB_THICKNESS,
+  STAIR_RISERS,
+  STAIR_RISER_HEIGHT,
+  STAIR_TREAD_DEPTH,
+  STAIR_WIDTH,
+  WALL_HEIGHT,
+  WINDOW_HEIGHT,
+  WINDOW_SILL_HEIGHT,
+} from '@/domain/defaults';
 import { createFloor } from '@/domain/models';
 import { createAnnotationSettings } from '@/domain/models';
 import { CURRENT_PROJECT_VERSION } from '@/domain/projectVersion';
@@ -12,13 +24,16 @@ import {
   syncProjectTrussSystems,
   TRUSS_SUPPORT_MODES,
 } from '@/domain/trussModels';
-import { getDefaultActiveFloorId, getFloorElevation, getFloorLevelIndex, getFloorToFloorHeight, getFloorTopElevation, sortFloors } from '@/domain/floorModels';
-import { createSheetRevision } from '@/domain/sheetModels';
 import {
-  normalizePlanLengthScale,
-  normalizePlanOffset,
-  normalizeRotationDegrees,
-} from '@/truss/systemTransform';
+  getDefaultActiveFloorId,
+  getFloorElevation,
+  getFloorLevelIndex,
+  getFloorToFloorHeight,
+  getFloorTopElevation,
+  sortFloors,
+} from '@/domain/floorModels';
+import { createSheetRevision } from '@/domain/sheetModels';
+import { normalizePlanLengthScale, normalizePlanOffset, normalizeRotationDegrees } from '@/truss/systemTransform';
 import { registerMigration } from './index';
 
 function migrateV14toV15(project) {
@@ -52,7 +67,7 @@ function migrateV14toV15(project) {
       floor.floorToFloorHeight = WALL_HEIGHT;
     }
     if (floor.elevation === undefined) {
-      floor.elevation = floor.level ?? (floor.levelIndex * floor.floorToFloorHeight);
+      floor.elevation = floor.level ?? floor.levelIndex * floor.floorToFloorHeight;
     }
     delete floor.level;
 
@@ -118,7 +133,7 @@ function migrateV14toV15(project) {
       if (fixture.name === undefined) fixture.name = '';
     }
     for (const beam of floor.beams) {
-      if (beam.floorLevel === undefined) beam.floorLevel = getFloorElevation(floor, index);
+      if (beam.floorLevel === undefined) beam.floorLevel = getFloorElevation(floor, project.floors.indexOf(floor));
     }
     for (const stair of floor.stairs) {
       if (!stair.startPoint) stair.startPoint = { x: 0, y: 0 };
@@ -190,10 +205,11 @@ function migrateV14toV15(project) {
   }));
 
   project.trussSystems = (project.trussSystems || []).map((trussSystem) => {
-    const floor = project.floors.find((entry) => entry.id === trussSystem.floorId)
-      || project.floors.find((entry) => entry.id === getDefaultActiveFloorId(project))
-      || project.floors[0]
-      || null;
+    const floor =
+      project.floors.find((entry) => entry.id === trussSystem.floorId) ||
+      project.floors.find((entry) => entry.id === getDefaultActiveFloorId(project)) ||
+      project.floors[0] ||
+      null;
     const floorId = floor?.id || null;
 
     return {
@@ -213,8 +229,12 @@ function migrateV14toV15(project) {
         id: trussInstance?.id || `truss_instance_${Math.random().toString(36).slice(2, 8)}`,
         floorId: trussInstance?.floorId || floorId,
         material: normalizeTrussMaterial(trussInstance?.material),
-        startPoint: trussInstance?.startPoint ? { x: trussInstance.startPoint.x, y: trussInstance.startPoint.y } : { x: -6000, y: 0 },
-        endPoint: trussInstance?.endPoint ? { x: trussInstance.endPoint.x, y: trussInstance.endPoint.y } : { x: 6000, y: 0 },
+        startPoint: trussInstance?.startPoint
+          ? { x: trussInstance.startPoint.x, y: trussInstance.startPoint.y }
+          : { x: -6000, y: 0 },
+        endPoint: trussInstance?.endPoint
+          ? { x: trussInstance.endPoint.x, y: trussInstance.endPoint.y }
+          : { x: 6000, y: 0 },
         bearingOffsets: {
           start: Number.isFinite(trussInstance?.bearingOffsets?.start) ? trussInstance.bearingOffsets.start : 0,
           end: Number.isFinite(trussInstance?.bearingOffsets?.end) ? trussInstance.bearingOffsets.end : 0,
@@ -223,9 +243,8 @@ function migrateV14toV15(project) {
           start: Number.isFinite(trussInstance?.overhangs?.start) ? trussInstance.overhangs.start : 300,
           end: Number.isFinite(trussInstance?.overhangs?.end) ? trussInstance.overhangs.end : 300,
         },
-        supportMode: trussInstance?.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR
-          ? TRUSS_SUPPORT_MODES.BEAM_PAIR
-          : null,
+        supportMode:
+          trussInstance?.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR ? TRUSS_SUPPORT_MODES.BEAM_PAIR : null,
         supportBeamIds: {
           start: typeof trussInstance?.supportBeamIds?.start === 'string' ? trussInstance.supportBeamIds.start : null,
           end: typeof trussInstance?.supportBeamIds?.end === 'string' ? trussInstance.supportBeamIds.end : null,
@@ -350,11 +369,18 @@ function migrateV14toV15(project) {
       if (viewport.scale === undefined) viewport.scale = 100;
       if (viewport.title === undefined) viewport.title = '';
       if (viewport.rotation === undefined) viewport.rotation = 0;
-      if (viewport.role === undefined) viewport.role = viewport.sourceView === '3d_preview'
-        ? 'supplemental'
-        : ((viewport.sourceView === 'plan' || viewport.sourceView === 'roof_plan' || viewport.sourceView === 'roof_drainage' || viewport.sourceView === 'truss_plan')
-          ? 'primary'
-          : (viewport.sourceView === 'truss_detail' ? 'detail' : 'secondary'));
+      if (viewport.role === undefined)
+        viewport.role =
+          viewport.sourceView === '3d_preview'
+            ? 'supplemental'
+            : viewport.sourceView === 'plan' ||
+                viewport.sourceView === 'roof_plan' ||
+                viewport.sourceView === 'roof_drainage' ||
+                viewport.sourceView === 'truss_plan'
+              ? 'primary'
+              : viewport.sourceView === 'truss_detail'
+                ? 'detail'
+                : 'secondary';
       if (viewport.captionPosition === undefined) viewport.captionPosition = 'below';
       if (viewport.referenceNote === undefined) viewport.referenceNote = '';
       if (viewport.lockAutoLayout === undefined) viewport.lockAutoLayout = false;

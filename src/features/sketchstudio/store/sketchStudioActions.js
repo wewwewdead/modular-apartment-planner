@@ -42,6 +42,8 @@ export const SKETCH_STUDIO_ACTIONS = {
   SET_ENTITY_MATERIAL: 'SET_ENTITY_MATERIAL',
   SET_ENTITY_THICKNESS: 'SET_ENTITY_THICKNESS',
   TOGGLE_CRAFTSMAN_MODE: 'TOGGLE_CRAFTSMAN_MODE',
+  TOGGLE_SHORTCUT_OVERLAY: 'TOGGLE_SHORTCUT_OVERLAY',
+  CLOSE_SHORTCUT_OVERLAY: 'CLOSE_SHORTCUT_OVERLAY',
   SET_VARIABLES: 'SET_VARIABLES',
   ADD_CONSTRAINT: 'ADD_CONSTRAINT',
   UPDATE_CONSTRAINT: 'UPDATE_CONSTRAINT',
@@ -250,6 +252,14 @@ export const setEntityThickness = (entityIds, thickness) => ({
 
 export const toggleCraftsmanMode = () => ({
   type: SKETCH_STUDIO_ACTIONS.TOGGLE_CRAFTSMAN_MODE,
+});
+
+export const toggleShortcutOverlay = () => ({
+  type: SKETCH_STUDIO_ACTIONS.TOGGLE_SHORTCUT_OVERLAY,
+});
+
+export const closeShortcutOverlay = () => ({
+  type: SKETCH_STUDIO_ACTIONS.CLOSE_SHORTCUT_OVERLAY,
 });
 
 export const setVariables = (variables) => ({

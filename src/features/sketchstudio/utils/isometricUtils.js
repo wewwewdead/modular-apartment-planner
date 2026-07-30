@@ -41,7 +41,7 @@ function getFamilyNormal(direction) {
 }
 
 function dotProduct(left, right) {
-  return (left.x * right.x) + (left.y * right.y);
+  return left.x * right.x + left.y * right.y;
 }
 
 function subtractPoints(left, right) {
@@ -114,14 +114,14 @@ function getLineSegmentForBounds(normal, constant, bounds) {
 
   edges.forEach((edge) => {
     if (edge.axis === 'x' && Math.abs(normal.y) > 1e-6) {
-      const y = (constant - (normal.x * edge.value)) / normal.y;
+      const y = (constant - normal.x * edge.value) / normal.y;
       if (y >= bounds.minY - 1e-6 && y <= bounds.maxY + 1e-6) {
         candidates.push({ x: edge.value, y });
       }
     }
 
     if (edge.axis === 'y' && Math.abs(normal.x) > 1e-6) {
-      const x = (constant - (normal.y * edge.value)) / normal.x;
+      const x = (constant - normal.y * edge.value) / normal.x;
       if (x >= bounds.minX - 1e-6 && x <= bounds.maxX + 1e-6) {
         candidates.push({ x, y: edge.value });
       }
@@ -160,28 +160,28 @@ function getLineSegmentForBounds(normal, constant, bounds) {
 }
 
 function solveIntersection(normalA, constantA, normalB, constantB) {
-  const determinant = (normalA.x * normalB.y) - (normalA.y * normalB.x);
+  const determinant = normalA.x * normalB.y - normalA.y * normalB.x;
 
   if (Math.abs(determinant) < 1e-6) {
     return null;
   }
 
   return {
-    x: ((constantA * normalB.y) - (normalA.y * constantB)) / determinant,
-    y: ((normalA.x * constantB) - (constantA * normalB.x)) / determinant,
+    x: (constantA * normalB.y - normalA.y * constantB) / determinant,
+    y: (normalA.x * constantB - constantA * normalB.x) / determinant,
   };
 }
 
 function solveBasisValues(vector, axisA, axisB) {
-  const determinant = (axisA.x * axisB.y) - (axisA.y * axisB.x);
+  const determinant = axisA.x * axisB.y - axisA.y * axisB.x;
 
   if (Math.abs(determinant) < 1e-6) {
     return { a: 0, b: 0 };
   }
 
   return {
-    a: ((vector.x * axisB.y) - (vector.y * axisB.x)) / determinant,
-    b: ((axisA.x * vector.y) - (axisA.y * vector.x)) / determinant,
+    a: (vector.x * axisB.y - vector.y * axisB.x) / determinant,
+    b: (axisA.x * vector.y - axisA.y * vector.x) / determinant,
   };
 }
 
@@ -192,20 +192,20 @@ function getEllipseExtrema(center, rx, ry, rotation = 0) {
 
   return {
     east: {
-      x: center.x + (rx * cos),
-      y: center.y + (rx * sin),
+      x: center.x + rx * cos,
+      y: center.y + rx * sin,
     },
     west: {
-      x: center.x - (rx * cos),
-      y: center.y - (rx * sin),
+      x: center.x - rx * cos,
+      y: center.y - rx * sin,
     },
     north: {
-      x: center.x - (ry * sin),
-      y: center.y + (ry * cos),
+      x: center.x - ry * sin,
+      y: center.y + ry * cos,
     },
     south: {
-      x: center.x + (ry * sin),
-      y: center.y - (ry * cos),
+      x: center.x + ry * sin,
+      y: center.y - ry * cos,
     },
   };
 }
@@ -293,15 +293,15 @@ export function buildIsometricEllipse(centerPoint, radiusPoint, plane = 'top', o
 
   const { axisA, axisB } = getIsometricPlaneAxes(plane);
   const matrix = {
-    xx: (radius * radius) * ((axisA.x * axisA.x) + (axisB.x * axisB.x)),
-    xy: (radius * radius) * ((axisA.x * axisA.y) + (axisB.x * axisB.y)),
-    yy: (radius * radius) * ((axisA.y * axisA.y) + (axisB.y * axisB.y)),
+    xx: radius * radius * (axisA.x * axisA.x + axisB.x * axisB.x),
+    xy: radius * radius * (axisA.x * axisA.y + axisB.x * axisB.y),
+    yy: radius * radius * (axisA.y * axisA.y + axisB.y * axisB.y),
   };
   const trace = matrix.xx + matrix.yy;
-  const determinant = (matrix.xx * matrix.yy) - (matrix.xy * matrix.xy);
-  const discriminant = Math.sqrt(Math.max(0, ((trace * trace) / 4) - determinant));
-  const lambdaA = (trace / 2) + discriminant;
-  const lambdaB = (trace / 2) - discriminant;
+  const determinant = matrix.xx * matrix.yy - matrix.xy * matrix.xy;
+  const discriminant = Math.sqrt(Math.max(0, (trace * trace) / 4 - determinant));
+  const lambdaA = trace / 2 + discriminant;
+  const lambdaB = trace / 2 - discriminant;
   const rotation = 0.5 * Math.atan2(2 * matrix.xy, matrix.xx - matrix.yy);
 
   return {

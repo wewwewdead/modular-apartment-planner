@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { STAIR_RISERS, STAIR_RISER_HEIGHT, STAIR_TREAD_DEPTH, STAIR_WIDTH } from '@/domain/defaults';
 import { TOOLS } from '@/editor/tools';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 
-export default function StairPreview({ toolState, activeTool, floorId }) {
+function StairPreview({ toolState, activeTool, floorId }) {
   if (activeTool !== TOOLS.STAIR) return null;
   if (!toolState.stairStartPoint || toolState.stairPreviewAngle == null) return null;
 
@@ -78,3 +79,5 @@ export default function StairPreview({ toolState, activeTool, floorId }) {
     </g>
   );
 }
+
+export default memo(StairPreview);

@@ -53,11 +53,15 @@ describe('deserializeProject', () => {
 
   describe('error handling', () => {
     it('throws CorruptedDataError for null input', () => {
-      expect(() => deserializeProject(null)).toThrow('Invalid project data');
+      expect(() => deserializeProject(null)).toThrow('not an Apartment Planner project file');
     });
 
-    it('throws CorruptedDataError for missing data field', () => {
-      expect(() => deserializeProject({ version: 14 })).toThrow('Invalid project data');
+    it('throws CorruptedDataError for an object that is not a project at all', () => {
+      expect(() => deserializeProject({ version: 14 })).toThrow('not an Apartment Planner project file');
+    });
+
+    it('throws CorruptedDataError for an envelope with an empty data payload', () => {
+      expect(() => deserializeProject({ version: 14, data: null })).toThrow('Invalid project data');
     });
 
     it('throws UnsupportedVersionError for unknown version', () => {
@@ -140,27 +144,29 @@ describe('deserializeProject', () => {
           documentDefaults: { drawnBy: 'JM', checkedBy: 'AB' },
           phases: [],
           version: 14,
-          floors: [{
-            id: 'floor_1',
-            name: 'Ground Floor',
-            levelIndex: 0,
-            elevation: 0,
-            floorToFloorHeight: 2700,
-            walls: [],
-            rooms: [],
-            doors: [],
-            windows: [],
-            columns: [],
-            beams: [],
-            stairs: [],
-            landings: [],
-            fixtures: [],
-            annotations: [],
-            slabs: [],
-            sectionCuts: [],
-            railings: [],
-            annotationSettings: {},
-          }],
+          floors: [
+            {
+              id: 'floor_1',
+              name: 'Ground Floor',
+              levelIndex: 0,
+              elevation: 0,
+              floorToFloorHeight: 2700,
+              walls: [],
+              rooms: [],
+              doors: [],
+              windows: [],
+              columns: [],
+              beams: [],
+              stairs: [],
+              landings: [],
+              fixtures: [],
+              annotations: [],
+              slabs: [],
+              sectionCuts: [],
+              railings: [],
+              annotationSettings: {},
+            },
+          ],
         },
         { schemaVersion: 15 },
       );
@@ -179,11 +185,13 @@ describe('deserializeProject', () => {
   describe('backfill (migration 14→15)', () => {
     it('backfills empty floor arrays', () => {
       const input = makeEnvelope({
-        floors: [{
-          id: 'floor_1',
-          name: 'Floor',
-          walls: [],
-        }],
+        floors: [
+          {
+            id: 'floor_1',
+            name: 'Floor',
+            walls: [],
+          },
+        ],
       });
       const { project } = deserializeProject(input);
       const floor = project.floors[0];
@@ -202,12 +210,14 @@ describe('deserializeProject', () => {
 
     it('backfills door defaults', () => {
       const input = makeEnvelope({
-        floors: [{
-          id: 'floor_1',
-          name: 'Floor',
-          walls: [{ id: 'w1', height: 2700, startAttachment: null, endAttachment: null }],
-          doors: [{ id: 'd1', wallId: 'w1', position: 0.5 }],
-        }],
+        floors: [
+          {
+            id: 'floor_1',
+            name: 'Floor',
+            walls: [{ id: 'w1', height: 2700, startAttachment: null, endAttachment: null }],
+            doors: [{ id: 'd1', wallId: 'w1', position: 0.5 }],
+          },
+        ],
       });
       const { project } = deserializeProject(input);
       const door = project.floors[0].doors[0];
@@ -218,12 +228,14 @@ describe('deserializeProject', () => {
 
     it('backfills window defaults', () => {
       const input = makeEnvelope({
-        floors: [{
-          id: 'floor_1',
-          name: 'Floor',
-          walls: [{ id: 'w1', height: 2700, startAttachment: null, endAttachment: null }],
-          windows: [{ id: 'win1', wallId: 'w1', position: 0.5 }],
-        }],
+        floors: [
+          {
+            id: 'floor_1',
+            name: 'Floor',
+            walls: [{ id: 'w1', height: 2700, startAttachment: null, endAttachment: null }],
+            windows: [{ id: 'win1', wallId: 'w1', position: 0.5 }],
+          },
+        ],
       });
       const { project } = deserializeProject(input);
       const win = project.floors[0].windows[0];
@@ -236,12 +248,14 @@ describe('deserializeProject', () => {
     it('migrates single slab to slabs array', () => {
       const slab = { id: 'slab_1', boundaryPoints: [], thickness: 200, elevation: 0 };
       const input = makeEnvelope({
-        floors: [{
-          id: 'floor_1',
-          name: 'Floor',
-          walls: [],
-          slab,
-        }],
+        floors: [
+          {
+            id: 'floor_1',
+            name: 'Floor',
+            walls: [],
+            slab,
+          },
+        ],
       });
       const { project } = deserializeProject(input);
       const floor = project.floors[0];
@@ -253,12 +267,14 @@ describe('deserializeProject', () => {
     it('migrates single sectionCut to sectionCuts array', () => {
       const sectionCut = { id: 'sc_1', startPoint: { x: 0, y: 0 }, endPoint: { x: 1000, y: 0 } };
       const input = makeEnvelope({
-        floors: [{
-          id: 'floor_1',
-          name: 'Floor',
-          walls: [],
-          sectionCut,
-        }],
+        floors: [
+          {
+            id: 'floor_1',
+            name: 'Floor',
+            walls: [],
+            sectionCut,
+          },
+        ],
       });
       const { project } = deserializeProject(input);
       const floor = project.floors[0];

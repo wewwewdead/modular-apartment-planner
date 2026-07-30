@@ -37,8 +37,8 @@ function buildLinearAnnotation({ id, start, end, text, zoom }) {
   return {
     id,
     text,
-    x: midpoint.x + (normal.x * offset),
-    y: midpoint.y + (normal.y * offset),
+    x: midpoint.x + normal.x * offset,
+    y: midpoint.y + normal.y * offset,
     angle: getAngleDegrees(start, end),
     textAnchor: 'middle',
   };
@@ -128,7 +128,10 @@ export function buildDraftMeasurementAnnotations({ draft, draftPreview, units, z
         id: 'line-length',
         start: { x: draftPreview.x1, y: draftPreview.y1 },
         end: { x: draftPreview.x2, y: draftPreview.y2 },
-        text: formatDimensionText(calculateDistance({ x: draftPreview.x1, y: draftPreview.y1 }, { x: draftPreview.x2, y: draftPreview.y2 }), units),
+        text: formatDimensionText(
+          calculateDistance({ x: draftPreview.x1, y: draftPreview.y1 }, { x: draftPreview.x2, y: draftPreview.y2 }),
+          units,
+        ),
         zoom,
       }),
     ].filter(Boolean);
@@ -184,9 +187,10 @@ export function buildDraftMeasurementAnnotations({ draft, draftPreview, units, z
   }
 
   if (draft.type === 'holeCircle' && draftPreview.type === 'feature') {
-    const displayRadius = draftPreview.shape === 'circle'
-      ? draftPreview.diameter / 2
-      : Math.max(draftPreview.rx || 0, draftPreview.ry || 0);
+    const displayRadius =
+      draftPreview.shape === 'circle'
+        ? draftPreview.diameter / 2
+        : Math.max(draftPreview.rx || 0, draftPreview.ry || 0);
 
     return [
       buildRadiusAnnotation({

@@ -4,7 +4,13 @@ function NumberField({ label, value, onChange, step = '1' }) {
   return (
     <label className="sketchStudioEditableRow">
       <span className="sketchStudioPropertyKey">{label}</span>
-      <input className="sketchStudioPropertyInput" type="number" step={step} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input
+        className="sketchStudioPropertyInput"
+        type="number"
+        step={step}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </label>
   );
 }

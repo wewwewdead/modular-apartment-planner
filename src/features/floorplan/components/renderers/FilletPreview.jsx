@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { FILLET_DEFAULT_RADIUS } from '@/domain/defaults';
 
-export default function FilletPreview({ toolState, activeTool }) {
+function FilletPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.FILLET) return null;
 
   const corner = toolState.hoveredCorner;
@@ -115,3 +116,5 @@ export default function FilletPreview({ toolState, activeTool }) {
 
   return <g className="fillet-preview">{elements}</g>;
 }
+
+export default memo(FilletPreview);

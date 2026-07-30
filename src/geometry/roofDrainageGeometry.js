@@ -20,7 +20,7 @@ function planeArrow(plane, label) {
 
   const centroid = polygonCentroid(outline);
   const rawDirection = plane.slopeDirection || fallbackDirection();
-  const direction = normalize((rawDirection.x === 0 && rawDirection.y === 0) ? fallbackDirection() : rawDirection);
+  const direction = normalize(rawDirection.x === 0 && rawDirection.y === 0 ? fallbackDirection() : rawDirection);
   const shaftLength = 1400;
   const shaftStart = add(centroid, scale(direction, -shaftLength * 0.35));
   const shaftEnd = add(centroid, scale(direction, shaftLength * 0.35));
@@ -60,7 +60,7 @@ export function buildRoofSlopeArrows(roofSystem) {
   return drains.map((drain) => {
     const end = drain.position;
     const rawDirection = subtract(end, centroid);
-    const direction = normalize((rawDirection.x === 0 && rawDirection.y === 0) ? fallbackDirection() : rawDirection);
+    const direction = normalize(rawDirection.x === 0 && rawDirection.y === 0 ? fallbackDirection() : rawDirection);
     const shaftLength = 1200;
     const shaftEnd = add(end, scale(direction, -Math.max((drain.diameter ?? 120) * 0.65, 120)));
     const shaftStart = add(shaftEnd, scale(direction, -shaftLength));

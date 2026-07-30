@@ -3,7 +3,9 @@ import { nestPartsOnSheets, optimizeCutList } from './nestingOptimizer';
 
 describe('nestingOptimizer', () => {
   it('nests a single part on one sheet', () => {
-    const rows = [{ partName: 'Panel', material: 'ply', materialName: 'Plywood', width: 500, height: 300, quantity: 1 }];
+    const rows = [
+      { partName: 'Panel', material: 'ply', materialName: 'Plywood', width: 500, height: 300, quantity: 1 },
+    ];
     const result = nestPartsOnSheets(rows);
     expect(result.totalSheets).toBe(1);
     expect(result.totalParts).toBe(1);
@@ -12,7 +14,9 @@ describe('nestingOptimizer', () => {
   });
 
   it('nests multiple identical parts on one sheet', () => {
-    const rows = [{ partName: 'Shelf', material: 'ply', materialName: 'Plywood', width: 600, height: 300, quantity: 4 }];
+    const rows = [
+      { partName: 'Shelf', material: 'ply', materialName: 'Plywood', width: 600, height: 300, quantity: 4 },
+    ];
     const result = nestPartsOnSheets(rows);
     expect(result.totalParts).toBe(4);
     expect(result.totalSheets).toBeGreaterThanOrEqual(1);
@@ -42,20 +46,26 @@ describe('nestingOptimizer', () => {
   });
 
   it('handles oversized parts', () => {
-    const rows = [{ partName: 'Huge', material: 'ply', materialName: 'Plywood', width: 5000, height: 3000, quantity: 1 }];
+    const rows = [
+      { partName: 'Huge', material: 'ply', materialName: 'Plywood', width: 5000, height: 3000, quantity: 1 },
+    ];
     const result = nestPartsOnSheets(rows);
     expect(result.totalSheets).toBe(1);
     expect(result.sheets[0].oversized).toBe(true);
   });
 
   it('respects custom sheet size', () => {
-    const rows = [{ partName: 'Panel', material: 'ply', materialName: 'Plywood', width: 500, height: 500, quantity: 1 }];
+    const rows = [
+      { partName: 'Panel', material: 'ply', materialName: 'Plywood', width: 500, height: 500, quantity: 1 },
+    ];
     const result = nestPartsOnSheets(rows, { sheetSize: { width: 1000, height: 1000 } });
     expect(result.summary.sheetSize).toBe('1000 x 1000mm');
   });
 
   it('produces valid summary statistics', () => {
-    const rows = [{ partName: 'Panel', material: 'ply', materialName: 'Plywood', width: 1000, height: 500, quantity: 2 }];
+    const rows = [
+      { partName: 'Panel', material: 'ply', materialName: 'Plywood', width: 1000, height: 500, quantity: 2 },
+    ];
     const result = nestPartsOnSheets(rows);
     expect(result.summary.sheetsNeeded).toBeGreaterThanOrEqual(1);
     expect(result.summary.efficiency).toBeGreaterThan(0);
@@ -117,18 +127,20 @@ describe('optimizeCutList', () => {
   });
 
   it('flags oversized linear cuts', () => {
-    const rows = [{
-      partName: 'Long Rail',
-      material: 'steel-sq-25',
-      materialName: 'Steel SQ Tube 25x25x1.5mm',
-      width: 6500,
-      height: 25,
-      quantity: 1,
-      costBasis: 'perLinearMeter',
-      stockKind: 'linear',
-      defaultStockWidth: 25,
-      defaultStockLength: 6000,
-    }];
+    const rows = [
+      {
+        partName: 'Long Rail',
+        material: 'steel-sq-25',
+        materialName: 'Steel SQ Tube 25x25x1.5mm',
+        width: 6500,
+        height: 25,
+        quantity: 1,
+        costBasis: 'perLinearMeter',
+        stockKind: 'linear',
+        defaultStockWidth: 25,
+        defaultStockLength: 6000,
+      },
+    ];
 
     const result = optimizeCutList(rows);
     const group = result.groups[0];
@@ -139,18 +151,20 @@ describe('optimizeCutList', () => {
   });
 
   it('respects per-material stock length overrides for linear stock', () => {
-    const rows = [{
-      partName: 'Rail',
-      material: 'steel-sq-25',
-      materialName: 'Steel SQ Tube 25x25x1.5mm',
-      width: 1200,
-      height: 25,
-      quantity: 6,
-      costBasis: 'perLinearMeter',
-      stockKind: 'linear',
-      defaultStockWidth: 25,
-      defaultStockLength: 6000,
-    }];
+    const rows = [
+      {
+        partName: 'Rail',
+        material: 'steel-sq-25',
+        materialName: 'Steel SQ Tube 25x25x1.5mm',
+        width: 1200,
+        height: 25,
+        quantity: 6,
+        costBasis: 'perLinearMeter',
+        stockKind: 'linear',
+        defaultStockWidth: 25,
+        defaultStockLength: 6000,
+      },
+    ];
 
     const result = optimizeCutList(rows, {
       linearStockLengths: { 'steel-sq-25': 3000 },
@@ -203,8 +217,22 @@ describe('optimizeCutList', () => {
     // birch-plywood-3 with different dimensions. Prior to the fix both got
     // id 'Small B-birch-plywood-3-0' and React complained about colliding keys.
     const rows = [
-      { partName: 'Small B', material: 'birch-plywood-3', materialName: 'Birch 3mm', width: 100, height: 100, quantity: 1 },
-      { partName: 'Small B', material: 'birch-plywood-3', materialName: 'Birch 3mm', width: 200, height: 100, quantity: 1 },
+      {
+        partName: 'Small B',
+        material: 'birch-plywood-3',
+        materialName: 'Birch 3mm',
+        width: 100,
+        height: 100,
+        quantity: 1,
+      },
+      {
+        partName: 'Small B',
+        material: 'birch-plywood-3',
+        materialName: 'Birch 3mm',
+        width: 200,
+        height: 100,
+        quantity: 1,
+      },
     ];
     const result = nestPartsOnSheets(rows);
     const ids = result.sheets.flatMap((sheet) => sheet.placements.map((p) => p.id));

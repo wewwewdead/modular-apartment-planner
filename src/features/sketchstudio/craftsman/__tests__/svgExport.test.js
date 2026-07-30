@@ -15,26 +15,30 @@ describe('SVG export', () => {
   });
 
   it('exports arc entities with the exact quadratic path geometry', () => {
-    const svg = exportEntitiesToSvg([{
-      id: 'a1',
-      type: 'arc',
-      start: { x: 0, y: 0 },
-      end: { x: 100, y: 0 },
-      control: { x: 50, y: 50 },
-    }]);
+    const svg = exportEntitiesToSvg([
+      {
+        id: 'a1',
+        type: 'arc',
+        start: { x: 0, y: 0 },
+        end: { x: 100, y: 0 },
+        control: { x: 50, y: 50 },
+      },
+    ]);
 
     expect(svg).toContain('<path d="M 0 0 Q 50 50 100 0"');
     expect(svg).not.toContain('A 50 50');
   });
 
   it('computes bounds from exported geometry without DOM helpers', () => {
-    const document = buildSvgExportDocument([{
-      id: 'a1',
-      type: 'arc',
-      start: { x: 0, y: 0 },
-      end: { x: 100, y: 0 },
-      control: { x: 50, y: 100 },
-    }]);
+    const document = buildSvgExportDocument([
+      {
+        id: 'a1',
+        type: 'arc',
+        start: { x: 0, y: 0 },
+        end: { x: 100, y: 0 },
+        control: { x: 50, y: 100 },
+      },
+    ]);
 
     expect(document.bounds.width).toBeGreaterThan(100);
     expect(document.bounds.height).toBeGreaterThan(40);
@@ -42,21 +46,46 @@ describe('SVG export', () => {
   });
 
   it('filters by selection when requested', () => {
-    const svg = exportEntitiesToSvg([
-      { id: 'r1', type: 'rect', x: 0, y: 0, width: 100, height: 100 },
-      { id: 'r2', type: 'rect', x: 200, y: 0, width: 100, height: 100 },
-    ], {
-      selectedOnly: true,
-      selectedIds: ['r1'],
-    });
+    const svg = exportEntitiesToSvg(
+      [
+        { id: 'r1', type: 'rect', x: 0, y: 0, width: 100, height: 100 },
+        { id: 'r2', type: 'rect', x: 200, y: 0, width: 100, height: 100 },
+      ],
+      {
+        selectedOnly: true,
+        selectedIds: ['r1'],
+      },
+    );
 
     expect((svg.match(/<rect /g) || []).length).toBe(1);
   });
 
   it('includes generated joinery geometry for selected source parts and omits hidden base outlines', () => {
     const baseEntities = [
-      { id: 'panel', type: 'rect', x: 0, y: 0, width: 200, height: 120, rotation: 0, thickness: 18, layerId: 'default', meta: {} },
-      { id: 'back', type: 'rect', x: 50, y: -18, width: 100, height: 18, rotation: 0, thickness: 6, layerId: 'default', meta: {} },
+      {
+        id: 'panel',
+        type: 'rect',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 120,
+        rotation: 0,
+        thickness: 18,
+        layerId: 'default',
+        meta: {},
+      },
+      {
+        id: 'back',
+        type: 'rect',
+        x: 50,
+        y: -18,
+        width: 100,
+        height: 18,
+        rotation: 0,
+        thickness: 6,
+        layerId: 'default',
+        meta: {},
+      },
     ];
     const joint = createSketchJoint({
       id: 'joint-rabbet',

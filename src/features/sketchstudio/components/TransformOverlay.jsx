@@ -61,7 +61,12 @@ export default function TransformOverlay({ bounds, onTransformPointerDown, selec
         pointerEvents="none"
       />
       {selectedCount > 1 ? (
-        <text className="sketchStudioSelectionLabel" x={displayMinX} y={displayMinY - 10 * s} style={{ fontSize: `${12 * s}px` }}>
+        <text
+          className="sketchStudioSelectionLabel"
+          x={displayMinX}
+          y={displayMinY - 10 * s}
+          style={{ fontSize: `${12 * s}px` }}
+        >
           {selectedCount} selected
         </text>
       ) : null}

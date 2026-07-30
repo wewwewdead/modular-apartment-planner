@@ -60,16 +60,10 @@ export function buildRailingElevationElements(floor, view) {
     const topElevation = floorElevation + Math.max(0, railing.height ?? 0);
 
     if (railing.type === 'handrail') {
-      const line = createSceneLine(
-        `railing-elev-${railing.id}`,
-        'railing',
-        projection,
-        topElevation,
-        {
-          style: 'railingHandrail',
-          sourceId: railing.id,
-        }
-      );
+      const line = createSceneLine(`railing-elev-${railing.id}`, 'railing', projection, topElevation, {
+        style: 'railingHandrail',
+        sourceId: railing.id,
+      });
       if (line) lineElements.push(line);
 
       const band = createSceneRect(
@@ -81,23 +75,16 @@ export function buildRailingElevationElements(floor, view) {
         {
           style: 'railingHandrailBand',
           sourceId: railing.id,
-        }
+        },
       );
       if (band) elements.push(band);
       continue;
     }
 
-    const element = createSceneRect(
-      `railing-elev-${railing.id}`,
-      'railing',
-      projection,
-      floorElevation,
-      topElevation,
-      {
-        style: railing.type === 'glass' ? 'railingGlass' : 'railingGuardrail',
-        sourceId: railing.id,
-      }
-    );
+    const element = createSceneRect(`railing-elev-${railing.id}`, 'railing', projection, floorElevation, topElevation, {
+      style: railing.type === 'glass' ? 'railingGlass' : 'railingGuardrail',
+      sourceId: railing.id,
+    });
     if (element) elements.push(element);
   }
 

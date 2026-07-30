@@ -5,8 +5,8 @@ import styles from '../styles/craftsman.module.css';
 
 const STEP_ICONS = {
   preparation: '\u2702', // scissors
-  assembly: '\u2692',    // hammer and pick
-  finishing: '\u2728',    // sparkles
+  assembly: '\u2692', // hammer and pick
+  finishing: '\u2728', // sparkles
 };
 
 export default function AssemblyPanel({ entities }) {

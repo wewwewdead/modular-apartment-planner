@@ -16,7 +16,15 @@ function constrainAngle(start, end, shiftHeld) {
   };
 }
 
-export function createWallDrawHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, activePhaseId }) {
+export function createWallDrawHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  viewport,
+  snapEnabled,
+  activePhaseId,
+}) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;

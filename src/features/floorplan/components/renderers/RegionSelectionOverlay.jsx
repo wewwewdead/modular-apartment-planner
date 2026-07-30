@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 function rectShape(bounds) {
   return {
     x: bounds.minX,
@@ -28,7 +30,7 @@ function RegionRect({ bounds, committed }) {
   );
 }
 
-export default function RegionSelectionOverlay({ marqueeBounds, selectionBounds }) {
+function RegionSelectionOverlay({ marqueeBounds, selectionBounds }) {
   if (!marqueeBounds && !selectionBounds) return null;
 
   return (
@@ -38,3 +40,5 @@ export default function RegionSelectionOverlay({ marqueeBounds, selectionBounds 
     </g>
   );
 }
+
+export default memo(RegionSelectionOverlay);

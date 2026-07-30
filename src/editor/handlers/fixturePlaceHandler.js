@@ -1,12 +1,15 @@
 import { createFixture } from '@/domain/models';
-import { GRID_MINOR } from '@/domain/defaults';
 import { FIXTURE_TYPES } from '@/editor/tools';
+import { snapToGrid } from './handlerSnapUtils';
 
-function snapToGrid(value) {
-  return Math.round(value / GRID_MINOR) * GRID_MINOR;
-}
-
-export function createFixturePlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, snapEnabled, activePhaseId }) {
+export function createFixturePlaceHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  snapEnabled,
+  activePhaseId,
+}) {
   return {
     onMouseMove(modelPos) {
       let x = modelPos.x;

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { formatDrawingArea, formatDrawingMeasurement } from '@/sheets/standards';
 import { buildRoofScheduleLayout } from '@/roof/roofScheduleLayout';
 
@@ -19,7 +20,7 @@ function formatOpeningSize(row) {
   return `${formatDrawingMeasurement(row.length)} x ${formatDrawingMeasurement(row.width)}`;
 }
 
-export default function RoofScheduleRenderer({ schedule, showTitle = true }) {
+function RoofScheduleRenderer({ schedule, showTitle = true }) {
   if (!schedule) return null;
 
   const layout = buildRoofScheduleLayout(schedule, { showTitle });
@@ -197,3 +198,5 @@ export default function RoofScheduleRenderer({ schedule, showTitle = true }) {
     </g>
   );
 }
+
+export default memo(RoofScheduleRenderer);

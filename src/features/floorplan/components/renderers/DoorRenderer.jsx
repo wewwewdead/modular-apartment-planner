@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { doorOutlineOnWall } from '@/geometry/wallGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
@@ -115,7 +116,7 @@ function SlidingDoor({ door, info }) {
   );
 }
 
-export default function DoorRenderer({ doors, walls }) {
+function DoorRenderer({ doors, walls }) {
   return (
     <g className="doors">
       {doors.map((door) => {
@@ -142,3 +143,5 @@ export default function DoorRenderer({ doors, walls }) {
     </g>
   );
 }
+
+export default memo(DoorRenderer);

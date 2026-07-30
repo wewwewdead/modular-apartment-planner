@@ -11,29 +11,22 @@ export default function WorkspaceCards() {
   return (
     <section className={styles.section}>
       <div className={styles.grid}>
-        <Link
-          to="/floorplan"
-          className={`${styles.card} ${styles.cardFloorplan}`}
-          ref={floorplanRef}
-        >
+        <Link to="/floorplan" className={`${styles.card} ${styles.cardFloorplan}`} ref={floorplanRef}>
           <div className={styles.cardBody}>
             <span className={styles.cardLabel}>01 / Floorplan</span>
             <h2 className={styles.cardTitle}>Floorplan Editor</h2>
             <p className={styles.cardDesc}>
-              Draw walls, place doors and windows, define rooms, and generate
-              construction-ready documentation with millimeter precision and
-              phase-based planning.
+              Draw walls, place doors and windows, define rooms, and generate construction-ready documentation with
+              millimeter precision and phase-based planning.
             </p>
           </div>
           <FloorplanIllustration className={styles.cardIllustration} />
-          <span className={styles.cardArrow} aria-hidden="true">&rarr;</span>
+          <span className={styles.cardArrow} aria-hidden="true">
+            &rarr;
+          </span>
         </Link>
 
-        <Link
-          to="/sketch"
-          className={`${styles.card} ${styles.cardSketch}`}
-          ref={sketchRef}
-        >
+        <Link to="/sketch" className={`${styles.card} ${styles.cardSketch}`} ref={sketchRef}>
           <div className={styles.cardBody}>
             <span className={styles.cardLabel}>02 / Sketch Studio</span>
             <h2 className={styles.cardTitle}>SketchStudio</h2>
@@ -43,7 +36,9 @@ export default function WorkspaceCards() {
             </p>
           </div>
           <SketchStudioIllustration className={styles.cardIllustration} />
-          <span className={styles.cardArrow} aria-hidden="true">&rarr;</span>
+          <span className={styles.cardArrow} aria-hidden="true">
+            &rarr;
+          </span>
         </Link>
       </div>
     </section>

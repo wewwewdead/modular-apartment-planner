@@ -13,7 +13,7 @@ function slopeRatio(roofSystem) {
 
 function surfaceAreaFactorFromSlope(slope = 0) {
   const ratio = Math.max(0, Number(slope || 0)) / 100;
-  return Math.sqrt(1 + (ratio * ratio));
+  return Math.sqrt(1 + ratio * ratio);
 }
 
 function firstNonZeroEdge(points = []) {
@@ -35,9 +35,7 @@ function measureOpeningPlanSize(points = []) {
   if (!points.length) return { length: 0, width: 0 };
 
   const basisEdge = firstNonZeroEdge(points);
-  const axisX = basisEdge
-    ? normalize(basisEdge.vector)
-    : { x: 1, y: 0 };
+  const axisX = basisEdge ? normalize(basisEdge.vector) : { x: 1, y: 0 };
   const axisY = perpendicular(axisX);
   const origin = polygonCentroid(points);
   const xValues = points.map((point) => dot(subtract(point, origin), axisX));
@@ -59,7 +57,8 @@ function buildParapetRows(roofSystem) {
 
       return {
         id: parapet.id,
-        name: parapet.name || `Parapet ${(roofSystem?.parapets || []).findIndex((entry) => entry.id === parapet.id) + 1}`,
+        name:
+          parapet.name || `Parapet ${(roofSystem?.parapets || []).findIndex((entry) => entry.id === parapet.id) + 1}`,
         length: renderData.length,
       };
     })
@@ -74,14 +73,12 @@ function buildOpeningRows(roofSystem, roofGeometry) {
       const centroid = boundaryPoints.length >= 3 ? polygonCentroid(boundaryPoints) : { x: 0, y: 0 };
       const hostPlane = roofGeometry?.findPlaneAtPoint?.(centroid) || null;
       const surfaceFactor = hostPlane
-        ? (hostPlane.surfaceFactor || surfaceAreaFactorFromSlope(hostPlane.slope))
+        ? hostPlane.surfaceFactor || surfaceAreaFactorFromSlope(hostPlane.slope)
         : surfaceAreaFactorFromSlope(roofSystem?.pitch?.slope || 0);
       const surfaceArea = planArea * surfaceFactor;
       const dimensions = measureOpeningPlanSize(boundaryPoints);
       const type = normalizeRoofOpeningType(opening.type);
-      const category = isSkylightRoofOpening(type)
-        ? 'skylight'
-        : (isRoofAccessOpening(type) ? 'access' : 'opening');
+      const category = isSkylightRoofOpening(type) ? 'skylight' : isRoofAccessOpening(type) ? 'access' : 'opening';
 
       return {
         id: opening.id,
@@ -134,10 +131,12 @@ export function buildRoofScheduleSummary(roofSystem) {
   const roofOutline = roofGeometry.roofOutline || roofSystem.boundaryPolygon || [];
   const grossPlanArea = polygonArea(roofOutline);
   const grossSurfaceArea = (roofGeometry.planes || []).length
-    ? (roofGeometry.planes || []).reduce((sum, plane) => (
-        sum + (polygonArea(plane.outline || []) * (plane.surfaceFactor || surfaceAreaFactorFromSlope(plane.slope)))
-      ), 0)
-    : (grossPlanArea * surfaceAreaFactorFromSlope(roofSystem?.pitch?.slope || 0));
+    ? (roofGeometry.planes || []).reduce(
+        (sum, plane) =>
+          sum + polygonArea(plane.outline || []) * (plane.surfaceFactor || surfaceAreaFactorFromSlope(plane.slope)),
+        0,
+      )
+    : grossPlanArea * surfaceAreaFactorFromSlope(roofSystem?.pitch?.slope || 0);
   const parapets = buildParapetRows(roofSystem);
   const { gutters, downspouts } = buildDerivedRoofDrainage(roofSystem);
   const openings = buildOpeningRows(roofSystem, roofGeometry);
@@ -154,14 +153,24 @@ export function buildRoofScheduleSummary(roofSystem) {
     notes.push('Gutter lengths and downspout counts are derived from eave edges for the current roof type.');
   }
   if ((roofSystem?.trussAttachmentId || null) && roofSystem?.attachedShapeProfile?.points?.length >= 2) {
-    notes.push('Attached roof surface area is derived from the truss-driven roof shape profile, not a single generic pitch factor.');
+    notes.push(
+      'Attached roof surface area is derived from the truss-driven roof shape profile, not a single generic pitch factor.',
+    );
   }
 
-  if ((roofSystem?.roofOpenings || []).some((opening) => !opening.type || normalizeRoofOpeningType(opening.type) === 'opening')) {
-    notes.push('Roof openings with type "skylight" are counted as skylights; all other roof openings remain general openings.');
+  if (
+    (roofSystem?.roofOpenings || []).some(
+      (opening) => !opening.type || normalizeRoofOpeningType(opening.type) === 'opening',
+    )
+  ) {
+    notes.push(
+      'Roof openings with type "skylight" are counted as skylights; all other roof openings remain general openings.',
+    );
   }
   if (accessOpeningCount > 0) {
-    notes.push('Roof openings with type "hatch" or "access" remain part of the opening schedule and can be linked to top-level stairs.');
+    notes.push(
+      'Roof openings with type "hatch" or "access" remain part of the opening schedule and can be linked to top-level stairs.',
+    );
   }
 
   return {

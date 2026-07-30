@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  createConstraint,
-  evaluateExpression,
-  applyConstraints,
-  validateConstraint,
-} from './constraintUtils';
+import { createConstraint, evaluateExpression, applyConstraints, validateConstraint } from './constraintUtils';
 
 describe('evaluateExpression', () => {
   it('evaluates simple arithmetic', () => {
@@ -74,7 +69,11 @@ describe('applyConstraints', () => {
       parts: [{ id: 'part-1', width: 500, height: 300, parametric: { width: 500, height: 300 } }],
     };
     const constraints = [
-      createConstraint({ targetPartId: 'part-1', targetField: 'width', expression: 'object.width - 2 * object.thickness' }),
+      createConstraint({
+        targetPartId: 'part-1',
+        targetField: 'width',
+        expression: 'object.width - 2 * object.thickness',
+      }),
     ];
 
     const { draft: result, errors } = applyConstraints(draft, constraints);
@@ -89,9 +88,7 @@ describe('applyConstraints', () => {
       defaults: {},
       parts: [],
     };
-    const constraints = [
-      createConstraint({ expression: 'nonexistent.field' }),
-    ];
+    const constraints = [createConstraint({ expression: 'nonexistent.field' })];
     const { errors } = applyConstraints(draft, constraints);
     expect(errors.length).toBeGreaterThan(0);
   });

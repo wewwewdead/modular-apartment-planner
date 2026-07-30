@@ -12,15 +12,13 @@ function average(values = []) {
 
 function uniqueSortedValues(values = []) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted.filter((value, index) => (
-    index === 0 || Math.abs(value - sorted[index - 1]) > 1e-4
-  ));
+  return sorted.filter((value, index) => index === 0 || Math.abs(value - sorted[index - 1]) > 1e-4);
 }
 
 function interpolatePoint(start, end, t) {
   return {
-    x: start.x + ((end.x - start.x) * t),
-    y: start.y + ((end.y - start.y) * t),
+    x: start.x + (end.x - start.x) * t,
+    y: start.y + (end.y - start.y) * t,
   };
 }
 
@@ -56,7 +54,7 @@ function simplifyProfile(points = []) {
     const dz1 = current.z - previous.z;
     const dx2 = next.x - current.x;
     const dz2 = next.z - current.z;
-    const cross = (dx1 * dz2) - (dz1 * dx2);
+    const cross = dx1 * dz2 - dz1 * dx2;
 
     if (Math.abs(cross) > 1e-4) {
       simplified.push(current);
@@ -122,7 +120,7 @@ function buildSampleHorizontals(points = []) {
 
 function sampleProjectedEnvelope(polygons = [], view, getBottomAtPoint, getTopAtPoint) {
   const horizontals = buildSampleHorizontals(
-    polygons.flatMap((polygon) => polygon.map((point) => projectHorizontal(view, point)))
+    polygons.flatMap((polygon) => polygon.map((point) => projectHorizontal(view, point))),
   );
 
   const slices = horizontals
@@ -137,16 +135,13 @@ function sampleProjectedEnvelope(polygons = [], view, getBottomAtPoint, getTopAt
         depth: average(slicePoints.map((point) => projectDepth(view, point))),
       };
     })
-    .filter((slice) => slice && (slice.top - slice.bottom) > EPSILON);
+    .filter((slice) => slice && slice.top - slice.bottom > EPSILON);
 
   if (slices.length < 2) return null;
 
   const upperProfile = simplifyProfile(slices.map((slice) => ({ x: slice.horizontal, z: slice.top })));
   const lowerProfile = simplifyProfile(slices.map((slice) => ({ x: slice.horizontal, z: slice.bottom })));
-  const polygonPoints = [
-    ...upperProfile,
-    ...[...lowerProfile].reverse(),
-  ];
+  const polygonPoints = [...upperProfile, ...[...lowerProfile].reverse()];
 
   if (polygonPoints.length < 3) return null;
 
@@ -193,15 +188,7 @@ function createSceneLinesFromProfile(idPrefix, category, style, points = [], dep
   for (let index = 0; index < points.length - 1; index += 1) {
     const start = points[index];
     const end = points[index + 1];
-    const line = createSceneLine(
-      `${idPrefix}-${index + 1}`,
-      category,
-      style,
-      start,
-      end,
-      depth,
-      sourceId
-    );
+    const line = createSceneLine(`${idPrefix}-${index + 1}`, category, style, start, end, depth, sourceId);
     if (line) lines.push(line);
   }
 
@@ -223,11 +210,8 @@ function createProjectedRoofLine(id, style, pointA, pointB, view, roofGeometry, 
       x: projectHorizontal(view, pointB),
       z: roofGeometry.getSurfaceElevation(pointB, 'top'),
     },
-    average([
-      projectDepth(view, pointA),
-      projectDepth(view, pointB),
-    ]),
-    sourceId
+    average([projectDepth(view, pointA), projectDepth(view, pointB)]),
+    sourceId,
   );
 }
 
@@ -241,7 +225,7 @@ function buildRoofSilhouettePolygon(roofSystem, roofGeometry, view) {
     polygons,
     view,
     (point) => roofGeometry.getSurfaceElevation(point, 'bottom'),
-    (point) => roofGeometry.getSurfaceElevation(point, 'top')
+    (point) => roofGeometry.getSurfaceElevation(point, 'top'),
   );
 
   return createScenePolygon(
@@ -249,7 +233,7 @@ function buildRoofSilhouettePolygon(roofSystem, roofGeometry, view) {
     'roofSystem',
     'roof',
     silhouette,
-    roofSystem.id
+    roofSystem.id,
   );
 }
 
@@ -263,7 +247,7 @@ function buildRoofSilhouetteLines(roofSystem, roofGeometry, view) {
     polygons,
     view,
     (point) => roofGeometry.getSurfaceElevation(point, 'bottom'),
-    (point) => roofGeometry.getSurfaceElevation(point, 'top')
+    (point) => roofGeometry.getSurfaceElevation(point, 'top'),
   );
   if (!silhouette) return [];
 
@@ -273,7 +257,7 @@ function buildRoofSilhouetteLines(roofSystem, roofGeometry, view) {
     'roofEdge',
     silhouette.topProfile || [],
     silhouette.depth,
-    roofSystem.id
+    roofSystem.id,
   );
 }
 
@@ -286,7 +270,7 @@ function buildParapetSilhouette(parapet, roofGeometry, roofSystem, view) {
     [outline],
     view,
     (point) => roofGeometry.getSurfaceElevation(point, 'top'),
-    (point) => roofGeometry.getSurfaceElevation(point, 'top') + (parapet.height ?? 0)
+    (point) => roofGeometry.getSurfaceElevation(point, 'top') + (parapet.height ?? 0),
   );
 
   return createScenePolygon(
@@ -294,7 +278,7 @@ function buildParapetSilhouette(parapet, roofGeometry, roofSystem, view) {
     'parapet',
     'wall',
     silhouette,
-    parapet.id
+    parapet.id,
   );
 }
 
@@ -303,16 +287,19 @@ function buildRoofOpeningSilhouette(opening, roofGeometry, view) {
   if (outline.length < 3) return null;
 
   const curbHeight = Math.max(0, Number(opening?.curbHeight) || 0);
-  const displayHeight = curbHeight > EPSILON
-    ? curbHeight
-    : ((isRoofAccessOpening(opening?.type) || isSkylightRoofOpening(opening?.type)) ? 120 : 0);
+  const displayHeight =
+    curbHeight > EPSILON
+      ? curbHeight
+      : isRoofAccessOpening(opening?.type) || isSkylightRoofOpening(opening?.type)
+        ? 120
+        : 0;
   if (displayHeight <= EPSILON) return null;
 
   const silhouette = sampleProjectedEnvelope(
     [outline],
     view,
     (point) => roofGeometry.getSurfaceElevation(point, 'top'),
-    (point) => roofGeometry.getSurfaceElevation(point, 'top') + displayHeight
+    (point) => roofGeometry.getSurfaceElevation(point, 'top') + displayHeight,
   );
 
   return createScenePolygon(
@@ -320,7 +307,7 @@ function buildRoofOpeningSilhouette(opening, roofGeometry, view) {
     'roofOpening',
     'roofOpening',
     silhouette,
-    opening.id
+    opening.id,
   );
 }
 
@@ -343,33 +330,39 @@ export function buildRoofElevationElements(roofSystem, view) {
     .map((opening) => buildRoofOpeningSilhouette(opening, roofGeometry, view))
     .filter(Boolean);
   const roofRelationshipLines = [
-    ...(roofGeometry.ridges || []).map((ridge) => createProjectedRoofLine(
-      `roof-ridge-elevation-${ridge.id}-${view.key}`,
-      'roofRidge',
-      ridge.startPoint,
-      ridge.endPoint,
-      view,
-      roofGeometry,
-      roofSystem.id
-    )),
-    ...(roofGeometry.hips || []).map((hip) => createProjectedRoofLine(
-      `roof-hip-elevation-${hip.id}-${view.key}`,
-      'roofHip',
-      hip.startPoint,
-      hip.endPoint,
-      view,
-      roofGeometry,
-      roofSystem.id
-    )),
-    ...(roofGeometry.valleys || []).map((valley) => createProjectedRoofLine(
-      `roof-valley-elevation-${valley.id}-${view.key}`,
-      'roofValley',
-      valley.startPoint,
-      valley.endPoint,
-      view,
-      roofGeometry,
-      roofSystem.id
-    )),
+    ...(roofGeometry.ridges || []).map((ridge) =>
+      createProjectedRoofLine(
+        `roof-ridge-elevation-${ridge.id}-${view.key}`,
+        'roofRidge',
+        ridge.startPoint,
+        ridge.endPoint,
+        view,
+        roofGeometry,
+        roofSystem.id,
+      ),
+    ),
+    ...(roofGeometry.hips || []).map((hip) =>
+      createProjectedRoofLine(
+        `roof-hip-elevation-${hip.id}-${view.key}`,
+        'roofHip',
+        hip.startPoint,
+        hip.endPoint,
+        view,
+        roofGeometry,
+        roofSystem.id,
+      ),
+    ),
+    ...(roofGeometry.valleys || []).map((valley) =>
+      createProjectedRoofLine(
+        `roof-valley-elevation-${valley.id}-${view.key}`,
+        'roofValley',
+        valley.startPoint,
+        valley.endPoint,
+        view,
+        roofGeometry,
+        roofSystem.id,
+      ),
+    ),
   ].filter(Boolean);
 
   return {

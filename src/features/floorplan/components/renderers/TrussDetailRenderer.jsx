@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import { buildTrussDetailScene } from '@/geometry/trussGeometry';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
@@ -6,7 +7,7 @@ function pointString(point) {
   return `${point.x},${-point.z}`;
 }
 
-export default function TrussDetailRenderer({ trussSystem, trussInstanceId = null, showTitle = true }) {
+function TrussDetailRenderer({ trussSystem, trussInstanceId = null, showTitle = true }) {
   const scene = buildTrussDetailScene(trussSystem, trussInstanceId);
   if (!scene) {
     return (
@@ -105,3 +106,5 @@ export default function TrussDetailRenderer({ trussSystem, trussInstanceId = nul
     </g>
   );
 }
+
+export default memo(TrussDetailRenderer);

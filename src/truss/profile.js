@@ -1,24 +1,34 @@
-import { createTrussMember, createTrussNode, resolveTrussType } from '@/domain/trussModels';
+import {
+  createTrussMember,
+  createTrussNode,
+  deriveTrussPitchFromRise,
+  deriveTrussRiseFromPitch,
+  resolveTrussType,
+} from '@/domain/trussModels';
 
 const EPSILON = 1e-6;
 
 function lerp(a, b, t) {
-  return a + ((b - a) * t);
+  return a + (b - a) * t;
 }
 
 function createLocalNodeMap(points, prefix) {
-  return points.map((point, index) => createTrussNode(point.x, point.z, {
-    id: `${prefix}_${index}`,
-    kind: point.kind,
-  }));
+  return points.map((point, index) =>
+    createTrussNode(point.x, point.z, {
+      id: `${prefix}_${index}`,
+      kind: point.kind,
+    }),
+  );
 }
 
 function addMember(members, startNodeId, endNodeId, memberType, index) {
   if (!startNodeId || !endNodeId || startNodeId === endNodeId) return;
-  members.push(createTrussMember(startNodeId, endNodeId, {
-    id: `${memberType}_${index}`,
-    memberType,
-  }));
+  members.push(
+    createTrussMember(startNodeId, endNodeId, {
+      id: `${memberType}_${index}`,
+      memberType,
+    }),
+  );
 }
 
 function distance2d(start, end) {
@@ -81,15 +91,22 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
     return {
       x: point.x,
       z: sampled.z,
-      kind: sampled.z >= Math.max(...structuralOutline.map((entry) => entry.z)) - EPSILON
-        ? (metrics.family === 'gable' ? 'ridge' : 'top_chord')
-        : 'top_chord',
+      kind:
+        sampled.z >= Math.max(...structuralOutline.map((entry) => entry.z)) - EPSILON
+          ? metrics.family === 'gable'
+            ? 'ridge'
+            : 'top_chord'
+          : 'top_chord',
     };
   });
 
   const overhangPoints = [
     { x: -metrics.overhangStart, z: structuralOutline[0]?.z || 0, kind: 'overhang' },
-    { x: metrics.span + metrics.overhangEnd, z: structuralOutline[structuralOutline.length - 1]?.z || 0, kind: 'overhang' },
+    {
+      x: metrics.span + metrics.overhangEnd,
+      z: structuralOutline[structuralOutline.length - 1]?.z || 0,
+      kind: 'overhang',
+    },
   ];
 
   const topNodes = createLocalNodeMap(topPoints, 'top');
@@ -140,11 +157,13 @@ function buildProfileFromStructuralOutline(metrics, structuralOutline, options =
       { x: metrics.span + metrics.overhangEnd, z: structuralOutline[structuralOutline.length - 1]?.z || 0 },
     ],
     bottomOutline: bottomPoints,
-    topChordRuns: options.topChordRuns || [{
-      id: 'main',
-      side: 'main',
-      points: structuralOutline,
-    }],
+    topChordRuns: options.topChordRuns || [
+      {
+        id: 'main',
+        side: 'main',
+        points: structuralOutline,
+      },
+    ],
   };
 }
 
@@ -152,8 +171,6 @@ export function resolveTrussMetrics(instance, trussType = resolveTrussType(insta
   const family = trussType.family;
   const shape = trussType.shape || family;
   const span = Math.max(Number(instance?.span || trussType.defaultSpan || 0), 1000);
-  const run = family === 'gable' ? span / 2 : span;
-  const defaultPitch = Number(trussType.defaultPitch || 0);
   const defaultRise = Number(trussType.defaultRise || 0);
   const explicitRise = Number(instance?.rise);
   const explicitPitch = Number(instance?.pitch);
@@ -174,11 +191,19 @@ export function resolveTrussMetrics(instance, trussType = resolveTrussType(insta
     };
   }
 
-  const riseFromPitch = ((Number.isFinite(explicitPitch) ? explicitPitch : defaultPitch) / 100) * Math.max(run, 1);
-  const rise = Number.isFinite(explicitRise) ? Math.max(0, explicitRise) : Math.max(0, riseFromPitch || defaultRise);
-  const pitch = Number.isFinite(explicitPitch)
-    ? Math.max(0, explicitPitch)
-    : ((rise / Math.max(run, 1)) * 100);
+  // RISE is the single geometric source of truth (all profile builders draw
+  // from rise). Precedence: an explicit rise ALWAYS wins and pitch is derived
+  // from it -- even when both are present but inconsistent (this is the
+  // legacy-save case). Pitch only drives rise when no explicit rise was given.
+  let rise;
+  if (Number.isFinite(explicitRise)) {
+    rise = Math.max(0, explicitRise);
+  } else if (Number.isFinite(explicitPitch)) {
+    rise = deriveTrussRiseFromPitch(explicitPitch, span, family);
+  } else {
+    rise = Math.max(0, defaultRise);
+  }
+  const pitch = deriveTrussPitchFromRise(rise, span, family);
 
   return {
     family,
@@ -199,9 +224,7 @@ function buildGableProfile(metrics) {
   for (let index = 0; index <= metrics.panelCount; index += 1) {
     const ratio = index / metrics.panelCount;
     const x = metrics.span * ratio;
-    const z = ratio <= 0.5
-      ? lerp(0, metrics.rise, ratio / 0.5)
-      : lerp(metrics.rise, 0, (ratio - 0.5) / 0.5);
+    const z = ratio <= 0.5 ? lerp(0, metrics.rise, ratio / 0.5) : lerp(metrics.rise, 0, (ratio - 0.5) / 0.5);
     topPoints.push({ x, z, kind: index === Math.floor(metrics.panelCount / 2) ? 'ridge' : 'top_chord' });
   }
 
@@ -242,11 +265,7 @@ function buildGableProfile(metrics) {
   return {
     nodes: [...overhangNodes, ...topNodes, ...bottomNodes],
     members,
-    roofOutline: [
-      { x: -metrics.overhangStart, z: 0 },
-      ...topPoints,
-      { x: metrics.span + metrics.overhangEnd, z: 0 },
-    ],
+    roofOutline: [{ x: -metrics.overhangStart, z: 0 }, ...topPoints, { x: metrics.span + metrics.overhangEnd, z: 0 }],
     bottomOutline: bottomPoints,
     topChordRuns: [
       { id: 'left', side: 'left', points: topPoints.slice(0, midpoint + 1) },
@@ -352,9 +371,8 @@ function buildHipSliceProfile(metrics, options = {}) {
   const supportLength = Math.max(Number(options.supportLength || 0), 0);
   const layoutOffset = Math.max(Number(options.layoutOffset || 0), 0);
   const halfSpan = Math.max(metrics.span / 2, EPSILON);
-  const endDistance = supportLength > EPSILON
-    ? Math.max(0, Math.min(layoutOffset, supportLength - layoutOffset))
-    : halfSpan;
+  const endDistance =
+    supportLength > EPSILON ? Math.max(0, Math.min(layoutOffset, supportLength - layoutOffset)) : halfSpan;
   const clippedRun = Math.max(0, Math.min(halfSpan, endDistance));
   const localRise = metrics.rise * (clippedRun / halfSpan);
 
@@ -437,29 +455,33 @@ function buildPyramidHippedProfile(metrics) {
 
 function buildDomedProfile(metrics) {
   const segments = Math.max(metrics.panelCount * 6, 48);
-  const structuralOutline = uniqueOutlinePoints(Array.from({ length: segments + 1 }, (_, index) => {
-    const ratio = index / segments;
-    const x = metrics.span * ratio;
-    const z = metrics.rise * Math.sin(Math.PI * ratio);
-    return {
-      x,
-      z: Math.max(0, z),
-    };
-  }));
+  const structuralOutline = uniqueOutlinePoints(
+    Array.from({ length: segments + 1 }, (_, index) => {
+      const ratio = index / segments;
+      const x = metrics.span * ratio;
+      const z = metrics.rise * Math.sin(Math.PI * ratio);
+      return {
+        x,
+        z: Math.max(0, z),
+      };
+    }),
+  );
 
   return buildProfileFromStructuralOutline(metrics, structuralOutline, {
     webMode: 'gable',
-    topChordRuns: [{
-      id: 'main',
-      side: 'main',
-      points: structuralOutline,
-      measurementCurve: {
-        kind: 'sine_arch',
-        startX: 0,
-        endX: metrics.span,
-        rise: metrics.rise,
+    topChordRuns: [
+      {
+        id: 'main',
+        side: 'main',
+        points: structuralOutline,
+        measurementCurve: {
+          kind: 'sine_arch',
+          startX: 0,
+          endX: metrics.span,
+          rise: metrics.rise,
+        },
       },
-    }],
+    ],
   });
 }
 
@@ -474,9 +496,10 @@ export function buildTrussProfile(instance, catalog, options = {}) {
       profile = buildFlatProfile(metrics);
       break;
     case 'hip':
-      profile = Number.isFinite(options?.layoutOffset) && Number.isFinite(options?.supportLength)
-        ? buildHipSliceProfile(metrics, options)
-        : buildHipProfile(metrics);
+      profile =
+        Number.isFinite(options?.layoutOffset) && Number.isFinite(options?.supportLength)
+          ? buildHipSliceProfile(metrics, options)
+          : buildHipProfile(metrics);
       break;
     case 'box_gable':
       profile = buildBoxGableProfile(metrics);

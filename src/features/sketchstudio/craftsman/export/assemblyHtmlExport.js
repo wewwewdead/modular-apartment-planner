@@ -8,14 +8,18 @@ export function generateAssemblyHtml(assembly, projectName = 'Untitled') {
   if (!assembly?.steps?.length) return '<html><body><p>No assembly steps.</p></body></html>';
 
   const safeName = escapeHtml(projectName);
-  const steps = assembly.steps.map((step) => `
+  const steps = assembly.steps
+    .map(
+      (step) => `
     <div class="step">
       <div class="step-num">${Number(step.number) || 0}</div>
       <div class="step-content">
         <h3>${escapeHtml(step.title)}</h3>
         <p>${escapeHtml(step.description)}</p>
       </div>
-    </div>`).join('\n');
+    </div>`,
+    )
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="en">

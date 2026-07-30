@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  assignFeatureToPart,
-  createCutoutFeature,
-  createHoleFeature,
-  getFeatureTargetSummary,
-} from './featureUtils';
+import { assignFeatureToPart, createCutoutFeature, createHoleFeature, getFeatureTargetSummary } from './featureUtils';
 
 describe('featureUtils', () => {
   describe('createHoleFeature', () => {

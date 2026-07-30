@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { COLUMN_WIDTH, COLUMN_DEPTH } from '@/domain/defaults';
 import { columnOutline } from '@/geometry/columnGeometry';
 
-export default function ColumnPreview({ toolState, activeTool }) {
+function ColumnPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.COLUMN) return null;
   if (toolState.previewX == null || toolState.previewY == null) return null;
 
@@ -29,3 +30,5 @@ export default function ColumnPreview({ toolState, activeTool }) {
     />
   );
 }
+
+export default memo(ColumnPreview);

@@ -63,30 +63,38 @@ describe('validateProjectStructure', () => {
   });
 
   it('returns errors for floor without id', () => {
-    const errors = validateProjectStructure(makeProject({
-      floors: [{ walls: [] }],
-    }));
+    const errors = validateProjectStructure(
+      makeProject({
+        floors: [{ walls: [] }],
+      }),
+    );
     expect(errors.some((e) => e.path.includes('floors[0]'))).toBe(true);
   });
 
   it('returns errors for floor without walls array', () => {
-    const errors = validateProjectStructure(makeProject({
-      floors: [{ id: 'f1' }],
-    }));
+    const errors = validateProjectStructure(
+      makeProject({
+        floors: [{ id: 'f1' }],
+      }),
+    );
     expect(errors.some((e) => e.path.includes('floors[0]'))).toBe(true);
   });
 
   it('returns errors for door without id', () => {
-    const errors = validateProjectStructure(makeProject({
-      floors: [{ id: 'f1', walls: [], doors: [{ wallId: 'w1' }] }],
-    }));
+    const errors = validateProjectStructure(
+      makeProject({
+        floors: [{ id: 'f1', walls: [], doors: [{ wallId: 'w1' }] }],
+      }),
+    );
     expect(errors.some((e) => e.message.includes('Door missing id'))).toBe(true);
   });
 
   it('returns errors for door without wallId', () => {
-    const errors = validateProjectStructure(makeProject({
-      floors: [{ id: 'f1', walls: [], doors: [{ id: 'd1' }] }],
-    }));
+    const errors = validateProjectStructure(
+      makeProject({
+        floors: [{ id: 'f1', walls: [], doors: [{ id: 'd1' }] }],
+      }),
+    );
     expect(errors.some((e) => e.message.includes('missing wallId'))).toBe(true);
   });
 });
@@ -99,22 +107,24 @@ describe('validateProjectReferences', () => {
 
   it('flags doors referencing non-existent walls', () => {
     const project = makeProject({
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1' }],
-        doors: [{ id: 'd1', wallId: 'w_nonexistent' }],
-        windows: [],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1' }],
+          doors: [{ id: 'd1', wallId: 'w_nonexistent' }],
+          windows: [],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const warnings = validateProjectReferences(project);
     expect(warnings.some((w) => w.message.includes('non-existent wall'))).toBe(true);
@@ -122,22 +132,24 @@ describe('validateProjectReferences', () => {
 
   it('flags windows referencing non-existent walls', () => {
     const project = makeProject({
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1' }],
-        doors: [],
-        windows: [{ id: 'win1', wallId: 'w_nonexistent' }],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1' }],
+          doors: [],
+          windows: [{ id: 'win1', wallId: 'w_nonexistent' }],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const warnings = validateProjectReferences(project);
     expect(warnings.some((w) => w.message.includes('non-existent wall'))).toBe(true);
@@ -146,22 +158,24 @@ describe('validateProjectReferences', () => {
   it('flags objects with non-existent phaseId', () => {
     const project = makeProject({
       phases: [{ id: 'phase_1' }],
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1', phaseId: 'phase_nonexistent' }],
-        doors: [],
-        windows: [],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1', phaseId: 'phase_nonexistent' }],
+          doors: [],
+          windows: [],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const warnings = validateProjectReferences(project);
     expect(warnings.some((w) => w.message.includes('non-existent phase'))).toBe(true);
@@ -171,25 +185,27 @@ describe('validateProjectReferences', () => {
 describe('repairBrokenReferences', () => {
   it('removes doors referencing non-existent walls', () => {
     const project = makeProject({
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1' }],
-        doors: [
-          { id: 'd1', wallId: 'w1' },
-          { id: 'd2', wallId: 'w_gone' },
-        ],
-        windows: [],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1' }],
+          doors: [
+            { id: 'd1', wallId: 'w1' },
+            { id: 'd2', wallId: 'w_gone' },
+          ],
+          windows: [],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const repaired = repairBrokenReferences(project);
     expect(repaired.floors[0].doors).toHaveLength(1);
@@ -199,22 +215,24 @@ describe('repairBrokenReferences', () => {
   it('nullifies invalid phaseId on walls', () => {
     const project = makeProject({
       phases: [{ id: 'phase_1' }],
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1', phaseId: 'phase_gone' }],
-        doors: [],
-        windows: [],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1', phaseId: 'phase_gone' }],
+          doors: [],
+          windows: [],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const repaired = repairBrokenReferences(project);
     expect(repaired.floors[0].walls[0].phaseId).toBeNull();
@@ -223,22 +241,24 @@ describe('repairBrokenReferences', () => {
   it('does not modify valid references', () => {
     const project = makeProject({
       phases: [{ id: 'phase_1' }],
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1', phaseId: 'phase_1' }],
-        doors: [{ id: 'd1', wallId: 'w1', phaseId: 'phase_1' }],
-        windows: [],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1', phaseId: 'phase_1' }],
+          doors: [{ id: 'd1', wallId: 'w1', phaseId: 'phase_1' }],
+          windows: [],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const repaired = repairBrokenReferences(project);
     expect(repaired.floors[0].walls[0].phaseId).toBe('phase_1');
@@ -260,22 +280,24 @@ describe('validateAndRepair', () => {
 
   it('auto-repairs broken references and returns fixed project', () => {
     const project = makeProject({
-      floors: [{
-        id: 'f1',
-        walls: [{ id: 'w1' }],
-        doors: [{ id: 'd1', wallId: 'w_broken' }],
-        windows: [],
-        columns: [],
-        beams: [],
-        stairs: [],
-        landings: [],
-        fixtures: [],
-        annotations: [],
-        slabs: [],
-        sectionCuts: [],
-        rooms: [],
-        railings: [],
-      }],
+      floors: [
+        {
+          id: 'f1',
+          walls: [{ id: 'w1' }],
+          doors: [{ id: 'd1', wallId: 'w_broken' }],
+          windows: [],
+          columns: [],
+          beams: [],
+          stairs: [],
+          landings: [],
+          fixtures: [],
+          annotations: [],
+          slabs: [],
+          sectionCuts: [],
+          rooms: [],
+          railings: [],
+        },
+      ],
     });
     const result = validateAndRepair(project);
     // Broken door should be removed

@@ -34,7 +34,9 @@ describe('bboxUtils and serializationUtils', () => {
   });
 
   it('computes ellipse bounds', () => {
-    expect(computeEntityBoundingBox({ id: 'ellipse-1', type: 'ellipse', cx: 0, cy: 0, rx: 40, ry: 20, rotation: 30 })).toMatchObject({
+    expect(
+      computeEntityBoundingBox({ id: 'ellipse-1', type: 'ellipse', cx: 0, cy: 0, rx: 40, ry: 20, rotation: 30 }),
+    ).toMatchObject({
       minX: expect.any(Number),
       minY: expect.any(Number),
       maxX: expect.any(Number),

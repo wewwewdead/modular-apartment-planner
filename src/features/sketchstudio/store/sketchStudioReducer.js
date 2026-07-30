@@ -1,5 +1,7 @@
 import {
+  HISTORY_LIMIT,
   buildUndoableSketchStateSnapshot,
+  capHistoryStack,
   createEmptyHistoryState,
   pushUndoableHistorySnapshot,
 } from '../utils/historyUtils';
@@ -11,7 +13,12 @@ import {
 } from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { resolveSketchDocument, resolveSketchDocumentLightweight } from '../utils/sketchDocumentResolver';
-import { assignEntitiesToGroup, buildGroupIndex, removeEntitiesFromGroups } from '../utils/groupUtils';
+import {
+  assignEntitiesToGroup,
+  buildGroupIndex,
+  groupMembershipUnchanged,
+  removeEntitiesFromGroups,
+} from '../utils/groupUtils';
 import { SKETCH_STUDIO_ACTIONS } from './sketchStudioActions';
 
 function emptySnap() {
@@ -74,10 +81,19 @@ function withRuntimeGroupIndex(document, previousDocument = null, options = {}) 
   }
 
   const reusableGroupIndex = previousDocument?.groupIndex instanceof Map ? previousDocument.groupIndex : null;
+  // Reuse the prior index (by reference — critical for the by-reference undo
+  // snapshots) when the caller guarantees membership is unchanged, or when the
+  // resolved entities preserve the exact same group membership as the previous
+  // document. The constraint solver rebuilds the entities array on every
+  // resolution, so an entity-array identity check alone would never match for
+  // any non-drag path; the membership comparison is what makes geometry-only
+  // updates (move/resize/rotate/property edits) skip the O(n) rebuild.
   const shouldReuseGroupIndex =
-    options.reuseGroupIndex === true || (reusableGroupIndex && document.entities === previousDocument.entities);
-  const nextGroupIndex =
-    shouldReuseGroupIndex && reusableGroupIndex ? reusableGroupIndex : buildGroupIndex(document.entities);
+    Boolean(reusableGroupIndex) &&
+    (options.reuseGroupIndex === true ||
+      document.entities === previousDocument.entities ||
+      groupMembershipUnchanged(previousDocument.entities, document.entities));
+  const nextGroupIndex = shouldReuseGroupIndex ? reusableGroupIndex : buildGroupIndex(document.entities);
 
   if (document.groupIndex === nextGroupIndex) {
     return document;
@@ -793,11 +809,14 @@ export default function sketchStudioReducer(state, action) {
       const currentSnapshot = buildUndoableSketchStateSnapshot(state);
       const restoredState = restoreUndoableSnapshot(state, previousSnapshot);
 
+      // Snapshots are reference-based (structural sharing); cap the future stack
+      // so repeated undo/redo cycling can't grow it past the limit. future is
+      // newest-first, so drop the oldest redo from the tail (keepEnd: false).
       return {
         ...restoredState,
         history: {
           past: state.history.past.slice(0, -1),
-          future: [currentSnapshot, ...state.history.future],
+          future: capHistoryStack([currentSnapshot, ...state.history.future], HISTORY_LIMIT, { keepEnd: false }),
         },
       };
     }
@@ -811,10 +830,12 @@ export default function sketchStudioReducer(state, action) {
       const currentSnapshot = buildUndoableSketchStateSnapshot(state);
       const restoredState = restoreUndoableSnapshot(state, nextSnapshot);
 
+      // Cap the past stack so repeated redo can't grow it past the limit.
+      // past is oldest-first, so drop the oldest entries from the head.
       return {
         ...restoredState,
         history: {
-          past: [...state.history.past, currentSnapshot],
+          past: capHistoryStack([...state.history.past, currentSnapshot], HISTORY_LIMIT),
           future: state.history.future.slice(1),
         },
       };
@@ -874,6 +895,22 @@ export default function sketchStudioReducer(state, action) {
       return {
         ...state,
         ui: { ...state.ui, craftsmanMode: !state.ui.craftsmanMode },
+      };
+
+    case SKETCH_STUDIO_ACTIONS.TOGGLE_SHORTCUT_OVERLAY:
+      return {
+        ...state,
+        ui: { ...state.ui, shortcutOverlayOpen: !state.ui.shortcutOverlayOpen },
+      };
+
+    case SKETCH_STUDIO_ACTIONS.CLOSE_SHORTCUT_OVERLAY:
+      if (!state.ui.shortcutOverlayOpen) {
+        return state;
+      }
+
+      return {
+        ...state,
+        ui: { ...state.ui, shortcutOverlayOpen: false },
       };
 
     case SKETCH_STUDIO_ACTIONS.SET_VARIABLES: {

@@ -83,14 +83,14 @@ export function createManualPart({
 
 export function assignSelectionToPart(parts, partId, selectedIds = []) {
   const entityIds = Array.from(new Set(selectedIds));
-  return (parts || []).map((part) => (
+  return (parts || []).map((part) =>
     part.id === partId
       ? normalizePartTransforms({
           ...part,
           profileEntityIds: entityIds,
         })
-      : part
-  ));
+      : part,
+  );
 }
 
 export function updatePartTransform(parts, partId, updates = {}) {
@@ -118,7 +118,7 @@ export function duplicatePart(partsOrDraft, sourcePartId, offset = { x: 50, y: 0
 }
 
 export function duplicatePartWithOffset(partsOrDraft, sourcePartId, offset = { x: 50, y: 0, z: 0 }) {
-  const parts = Array.isArray(partsOrDraft) ? partsOrDraft : (partsOrDraft?.parts || []);
+  const parts = Array.isArray(partsOrDraft) ? partsOrDraft : partsOrDraft?.parts || [];
   const source = parts.find((part) => part.id === sourcePartId);
   if (!source) {
     return parts;
@@ -144,7 +144,7 @@ export function duplicatePartWithOffset(partsOrDraft, sourcePartId, offset = { x
 }
 
 export function mirrorPartAcrossAxis(partsOrDraft, sourcePartId, axis = 'x', objectBounds = null) {
-  const parts = Array.isArray(partsOrDraft) ? partsOrDraft : (partsOrDraft?.parts || []);
+  const parts = Array.isArray(partsOrDraft) ? partsOrDraft : partsOrDraft?.parts || [];
   const bounds = objectBounds || partsOrDraft?.bounds || { width: 0, depth: 0, height: 0 };
   const source = parts.find((part) => part.id === sourcePartId);
   if (!source) {
@@ -175,12 +175,8 @@ export function mirrorPartAcrossAxis(partsOrDraft, sourcePartId, axis = 'x', obj
   return [...parts, normalizePartTransforms(cloned)];
 }
 
-export function clonePartArray(partsOrDraft, sourcePartId, {
-  axis = 'x',
-  count = 2,
-  spacing = 100,
-} = {}) {
-  const parts = Array.isArray(partsOrDraft) ? partsOrDraft : (partsOrDraft?.parts || []);
+export function clonePartArray(partsOrDraft, sourcePartId, { axis = 'x', count = 2, spacing = 100 } = {}) {
+  const parts = Array.isArray(partsOrDraft) ? partsOrDraft : partsOrDraft?.parts || [];
   const source = parts.find((part) => part.id === sourcePartId);
   if (!source) {
     return parts;
@@ -191,9 +187,7 @@ export function clonePartArray(partsOrDraft, sourcePartId, {
   const nextParts = [...parts];
 
   for (let index = 1; index < safeCount; index += 1) {
-    const offset = axis === 'y'
-      ? { x: 0, y: safeSpacing * index, z: 0 }
-      : { x: safeSpacing * index, y: 0, z: 0 };
+    const offset = axis === 'y' ? { x: 0, y: safeSpacing * index, z: 0 } : { x: safeSpacing * index, y: 0, z: 0 };
     const cloned = duplicatePartWithOffset(nextParts, sourcePartId, offset);
     nextParts.splice(0, nextParts.length, ...cloned);
   }

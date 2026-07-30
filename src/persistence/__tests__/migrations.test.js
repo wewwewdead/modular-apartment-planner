@@ -51,3 +51,62 @@ describe('migration auto-discovery smoke test', () => {
     expect(() => runMigrations(project, 14, 15)).not.toThrow();
   });
 });
+
+describe('migration_14_to_15 beam floorLevel backfill (regression)', () => {
+  // Regression for a `no-undef` bug at migration_14_to_15 line 121: the beam backfill
+  // loop referenced an out-of-scope `index` variable inside a `for...of floor` loop.
+  // For an old v14 save containing a beam WITHOUT `floorLevel`, this branch executed and
+  // threw `ReferenceError: index is not defined`, so the project failed to load.
+  async function migrate(project) {
+    await import('../deserialize.js');
+    const { runMigrations } = await import('../migrations/index.js');
+    return runMigrations(project, 14, 15);
+  }
+
+  it('backfills floorLevel from the floor elevation for a beam missing it', async () => {
+    const project = {
+      id: 'beam_backfill',
+      name: 'Beam Backfill',
+      floors: [
+        {
+          id: 'f1',
+          name: 'Ground Floor',
+          levelIndex: 0,
+          elevation: 3000,
+          floorToFloorHeight: 2700,
+          walls: [],
+          // Beam intentionally has NO floorLevel -> exercises the previously broken branch.
+          beams: [{ id: 'beam1', startRef: null, endRef: null }],
+        },
+      ],
+    };
+
+    // Before the fix this threw ReferenceError: index is not defined.
+    const result = await migrate(project);
+
+    const migratedBeam = result.floors[0].beams[0];
+    expect(migratedBeam.floorLevel).toBe(3000);
+  });
+
+  it('leaves an existing beam floorLevel untouched', async () => {
+    const project = {
+      id: 'beam_keep',
+      name: 'Beam Keep',
+      floors: [
+        {
+          id: 'f1',
+          name: 'Ground Floor',
+          levelIndex: 0,
+          elevation: 0,
+          floorToFloorHeight: 2700,
+          walls: [],
+          beams: [{ id: 'beam1', startRef: null, endRef: null, floorLevel: 1234 }],
+        },
+      ],
+    };
+
+    const result = await migrate(project);
+
+    expect(result.floors[0].beams[0].floorLevel).toBe(1234);
+  });
+});

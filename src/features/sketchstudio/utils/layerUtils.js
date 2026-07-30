@@ -35,7 +35,11 @@ export function getEditableEntities(document) {
 export function createLayer(layers, name = '') {
   const nextIndex = layers.length + 1;
   const safeName = name.trim() || fallbackLayerName(nextIndex);
-  const safeId = safeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `layer-${nextIndex}`;
+  const safeId =
+    safeName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || `layer-${nextIndex}`;
   let suffix = 1;
   let uniqueId = safeId;
 
@@ -55,36 +59,20 @@ export function createLayer(layers, name = '') {
 export function renameLayer(layers, layerId, nextName) {
   const safeName = nextName.trim();
 
-  return layers.map((layer) => (
-    layer.id === layerId
-      ? { ...layer, name: safeName || layer.name }
-      : layer
-  ));
+  return layers.map((layer) => (layer.id === layerId ? { ...layer, name: safeName || layer.name } : layer));
 }
 
 export function toggleLayerVisibility(layers, layerId) {
-  return layers.map((layer) => (
-    layer.id === layerId
-      ? { ...layer, visible: !layer.visible }
-      : layer
-  ));
+  return layers.map((layer) => (layer.id === layerId ? { ...layer, visible: !layer.visible } : layer));
 }
 
 export function toggleLayerLock(layers, layerId) {
-  return layers.map((layer) => (
-    layer.id === layerId
-      ? { ...layer, locked: !layer.locked }
-      : layer
-  ));
+  return layers.map((layer) => (layer.id === layerId ? { ...layer, locked: !layer.locked } : layer));
 }
 
 export function moveEntitiesToLayer(entities, entityIds, layerId) {
   const idSet = new Set(entityIds);
-  return entities.map((entity) => (
-    idSet.has(entity.id)
-      ? { ...entity, layerId }
-      : entity
-  ));
+  return entities.map((entity) => (idSet.has(entity.id) ? { ...entity, layerId } : entity));
 }
 
 export function getNextActiveLayer(document, preferredLayerId = null) {

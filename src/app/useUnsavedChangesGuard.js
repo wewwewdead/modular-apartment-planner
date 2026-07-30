@@ -9,7 +9,8 @@ export function useUnsavedChangesGuard(isDirty) {
   // Guard against React Router navigation (in-app links, back button within SPA)
   useBlocker(
     ({ currentLocation, nextLocation }) =>
-      isDirty && currentLocation.pathname !== nextLocation.pathname &&
+      isDirty &&
+      currentLocation.pathname !== nextLocation.pathname &&
       !window.confirm('You have unsaved changes. Leave this page?'),
   );
 

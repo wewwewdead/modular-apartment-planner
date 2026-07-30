@@ -37,6 +37,7 @@ const sketchStudioInitialState = {
     isometricPlane: 'top',
     activeLayerId: 'default',
     craftsmanMode: false,
+    shortcutOverlayOpen: false,
     focusedJointId: null,
     editingJointId: null,
   },

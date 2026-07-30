@@ -7,7 +7,7 @@ function clamp(value, min, max) {
 }
 
 function normalize2d(vector) {
-  const length = Math.sqrt((vector.x * vector.x) + (vector.z * vector.z));
+  const length = Math.sqrt(vector.x * vector.x + vector.z * vector.z);
   if (length <= EPSILON) {
     return { x: 1, z: 0 };
   }
@@ -21,7 +21,7 @@ function normalize2d(vector) {
 function distance2d(start, end) {
   const dx = end.x - start.x;
   const dz = end.z - start.z;
-  return Math.sqrt((dx * dx) + (dz * dz));
+  return Math.sqrt(dx * dx + dz * dz);
 }
 
 export function polylineLength(points = []) {
@@ -55,8 +55,8 @@ export function samplePolyline(points = [], distanceAlong = 0) {
       const ratio = clamp(remaining / segmentLength, 0, 1);
       return {
         point: {
-          x: start.x + ((end.x - start.x) * ratio),
-          z: start.z + ((end.z - start.z) * ratio),
+          x: start.x + (end.x - start.x) * ratio,
+          z: start.z + (end.z - start.z) * ratio,
         },
         tangent: normalize2d({
           x: end.x - start.x,
@@ -98,7 +98,7 @@ function evaluateSineArchDerivative(curve, x) {
   const rise = Number(curve?.rise || 0);
   const startX = Number(curve?.startX || 0);
   const ratio = (x - startX) / span;
-  return (rise * Math.PI / span) * Math.cos(Math.PI * clamp(ratio, 0, 1));
+  return ((rise * Math.PI) / span) * Math.cos(Math.PI * clamp(ratio, 0, 1));
 }
 
 function integrateSimpson(fn, start, end, steps = SINE_ARCH_INTEGRATION_STEPS) {
@@ -107,7 +107,7 @@ function integrateSimpson(fn, start, end, steps = SINE_ARCH_INTEGRATION_STEPS) {
   let sum = fn(start) + fn(end);
 
   for (let index = 1; index < evenSteps; index += 1) {
-    const x = start + (index * h);
+    const x = start + index * h;
     sum += fn(x) * (index % 2 === 0 ? 2 : 4);
   }
 
@@ -120,10 +120,14 @@ function getSineArchLengthAtX(curve, x) {
   const clampedX = clamp(x, startX, endX);
   if (clampedX <= startX + EPSILON) return 0;
 
-  return integrateSimpson((value) => {
-    const dzdx = evaluateSineArchDerivative(curve, value);
-    return Math.sqrt(1 + (dzdx * dzdx));
-  }, startX, clampedX);
+  return integrateSimpson(
+    (value) => {
+      const dzdx = evaluateSineArchDerivative(curve, value);
+      return Math.sqrt(1 + dzdx * dzdx);
+    },
+    startX,
+    clampedX,
+  );
 }
 
 export function getMeasurementCurveLength(curve = null) {

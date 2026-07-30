@@ -45,9 +45,7 @@ const JOINT_TYPE_DEFINITIONS = [
     id: JOINT_TYPES.BUTT,
     label: 'Butt Joint',
     description: 'Face-to-edge or edge-to-edge assembly metadata with no additional cut geometry.',
-    parameterFields: [
-      createNumberField('offset', 'Offset (mm)', { min: -1000 }),
-    ],
+    parameterFields: [createNumberField('offset', 'Offset (mm)', { min: -1000 })],
   },
   {
     id: JOINT_TYPES.DADO,
@@ -126,9 +124,7 @@ const JOINT_TYPE_MAP = new Map(JOINT_TYPE_DEFINITIONS.map((definition) => [defin
 
 export function resolveJointType(type) {
   const normalized = typeof type === 'string' ? type.trim() : '';
-  return JOINT_TYPE_MAP.has(normalized)
-    ? normalized
-    : (LEGACY_JOINT_TYPE_ALIASES[normalized] || JOINT_TYPES.BUTT);
+  return JOINT_TYPE_MAP.has(normalized) ? normalized : LEGACY_JOINT_TYPE_ALIASES[normalized] || JOINT_TYPES.BUTT;
 }
 
 export function isSupportedJointType(type) {

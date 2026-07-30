@@ -1,6 +1,8 @@
 import { screenToWorld } from './canvasMath';
 
-const GRID_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
+const GRID_STEPS = [
+  0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000,
+];
 
 function buildLinePositions(min, max, step) {
   const positions = [];

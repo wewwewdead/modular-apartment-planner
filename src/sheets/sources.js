@@ -66,15 +66,20 @@ function collectPlanPoints(floor) {
   for (const column of floor.columns || []) {
     points.push(...columnOutline(column));
   }
-  for (const slab of (floor.slabs || [])) {
+  for (const slab of floor.slabs || []) {
     const rd = getSlabRenderData(slab);
     if (rd?.boundaryPoints) points.push(...rd.boundaryPoints);
   }
-  for (const sc of (floor.sectionCuts || [])) {
+  for (const sc of floor.sectionCuts || []) {
     points.push(sc.startPoint, sc.endPoint);
     const renderData = getSectionCutRenderData(sc);
     if (renderData?.arrow) {
-      points.push(renderData.arrow.shaftStart, renderData.arrow.shaftEnd, renderData.arrow.headA, renderData.arrow.headB);
+      points.push(
+        renderData.arrow.shaftStart,
+        renderData.arrow.shaftEnd,
+        renderData.arrow.headA,
+        renderData.arrow.headB,
+      );
     }
   }
 
@@ -130,9 +135,7 @@ function sceneBoundsToRenderBounds(scene) {
 
 function buildSectionSource(project, floor, sourceRefId) {
   const cuts = floor?.sectionCuts || [];
-  const sectionCut = sourceRefId
-    ? cuts.find(s => s.id === sourceRefId)
-    : cuts[0] || null;
+  const sectionCut = sourceRefId ? cuts.find((s) => s.id === sourceRefId) : cuts[0] || null;
 
   if (!sectionCut) {
     return {
@@ -305,13 +308,11 @@ function buildTrussPlanSource(project, sourceFloorId) {
 function buildTrussDetailSource(project, sourceFloorId, sourceRefId = null) {
   const trussSystems = getProjectTrussSystems(project, sourceFloorId);
   const trussDetailRef = sourceRefId
-    ? trussSystems.find((trussSystem) => (
-        (trussSystem.trussInstances || []).some((trussInstance) => trussInstance.id === sourceRefId)
-      )) || null
+    ? trussSystems.find((trussSystem) =>
+        (trussSystem.trussInstances || []).some((trussInstance) => trussInstance.id === sourceRefId),
+      ) || null
     : trussSystems[0] || null;
-  const trussInstanceId = sourceRefId
-    || trussDetailRef?.trussInstances?.[0]?.id
-    || null;
+  const trussInstanceId = sourceRefId || trussDetailRef?.trussInstances?.[0]?.id || null;
   if (!trussDetailRef || !trussInstanceId) {
     return {
       kind: 'empty',

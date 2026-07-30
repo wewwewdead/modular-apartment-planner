@@ -1,12 +1,17 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { downloadDxf } from '../export/dxfExport';
 import { downloadSvg } from '../export/svgExport';
 import { printEntities } from '../export/pdfExport';
 import { generateWorkshopZip } from '../export/workshopExport';
+import { DEFAULT_BLADE_KERF, DEFAULT_SHEET } from '../utils/nestingOptimizer';
 import Toast from '../../components/Toast';
 import styles from '../styles/craftsman.module.css';
 
 const DEFAULT_KERF = 0.2; // mm, typical laser kerf
+
+function isSheetStockRow(row) {
+  return row?.stockKind !== 'linear' && row?.costBasis !== 'perLinearMeter';
+}
 
 export default function ExportBar({
   entities,
@@ -19,10 +24,18 @@ export default function ExportBar({
 }) {
   const [kerfEnabled, setKerfEnabled] = useState(false);
   const [kerfWidth, setKerfWidth] = useState(DEFAULT_KERF);
+  const [sheetWidth, setSheetWidth] = useState(DEFAULT_SHEET.width);
+  const [sheetHeight, setSheetHeight] = useState(DEFAULT_SHEET.height);
+  const [bladeKerf, setBladeKerf] = useState(DEFAULT_BLADE_KERF);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState(null);
 
   const kerfOption = kerfEnabled ? { kerf: kerfWidth } : {};
+
+  // The cut-list optimizer's own sheet size / blade gap live in NestingPanel's
+  // local state, which the export bar cannot read, so the workshop package
+  // carries its own copy of the two values the per-sheet DXFs need.
+  const hasSheetStock = useMemo(() => (bomRows || []).some(isSheetStockRow), [bomRows]);
 
   const showToast = useCallback((message, type = 'error') => {
     setToast({ message, type });
@@ -85,7 +98,12 @@ export default function ExportBar({
         totalCost || 0,
         costByMaterial || {},
         projectName || 'Untitled Sketch',
-        { ...kerfOption, referenceEntities },
+        {
+          ...kerfOption,
+          referenceEntities,
+          sheetSize: { width: sheetWidth, height: sheetHeight },
+          bladeKerf,
+        },
       );
       if (result.errors.length) {
         showToast(`Workshop package exported with warnings:\n${result.errors.join(', ')}`, 'warning');
@@ -95,7 +113,20 @@ export default function ExportBar({
     } finally {
       setExporting(false);
     }
-  }, [entities, bomRows, totalCost, costByMaterial, projectName, kerfOption, exporting, referenceEntities, showToast]);
+  }, [
+    entities,
+    bomRows,
+    totalCost,
+    costByMaterial,
+    projectName,
+    kerfOption,
+    exporting,
+    referenceEntities,
+    sheetWidth,
+    sheetHeight,
+    bladeKerf,
+    showToast,
+  ]);
 
   const hasSelection = selectedIds?.length > 0;
 
@@ -145,6 +176,47 @@ export default function ExportBar({
           onChange={(e) => setKerfWidth(Number(e.target.value) || DEFAULT_KERF)}
           title="Kerf width in mm"
         />
+      )}
+
+      {hasSheetStock && (
+        <>
+          <span className={styles.exportDivider} />
+
+          <span className={styles.exportLabel} title="Stock sheet for the nested sheet DXFs in the workshop package">
+            Sheet:
+          </span>
+          <input
+            type="number"
+            className={styles.kerfInput}
+            value={sheetWidth}
+            min="1"
+            step="1"
+            onChange={(e) => setSheetWidth(Number(e.target.value) || DEFAULT_SHEET.width)}
+            title="Nesting sheet width in mm"
+          />
+          <span className={styles.nestingSizeX}>x</span>
+          <input
+            type="number"
+            className={styles.kerfInput}
+            value={sheetHeight}
+            min="1"
+            step="1"
+            onChange={(e) => setSheetHeight(Number(e.target.value) || DEFAULT_SHEET.height)}
+            title="Nesting sheet height in mm"
+          />
+          <span className={styles.exportLabel} title="Blade gap left between nested parts">
+            Gap:
+          </span>
+          <input
+            type="number"
+            className={styles.kerfInput}
+            value={bladeKerf}
+            min="0"
+            step="0.5"
+            onChange={(e) => setBladeKerf(Number(e.target.value) || DEFAULT_BLADE_KERF)}
+            title="Blade gap left between nested parts in mm"
+          />
+        </>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={clearToast} />}

@@ -25,18 +25,12 @@ function roundToPrecision(value, precision) {
 }
 
 export function resolveMeasurementPolicy(projectOrPolicy = null, overrides = {}) {
-  const source = projectOrPolicy?.documentDefaults?.measurementPolicy
-    || projectOrPolicy?.measurementPolicy
-    || projectOrPolicy
-    || {};
+  const source =
+    projectOrPolicy?.documentDefaults?.measurementPolicy || projectOrPolicy?.measurementPolicy || projectOrPolicy || {};
 
   return {
-    unitSystem: source.unitSystem === 'metric'
-      ? 'metric'
-      : DEFAULT_MEASUREMENT_POLICY.unitSystem,
-    lengthUnit: source.lengthUnit === 'mm'
-      ? 'mm'
-      : DEFAULT_MEASUREMENT_POLICY.lengthUnit,
+    unitSystem: source.unitSystem === 'metric' ? 'metric' : DEFAULT_MEASUREMENT_POLICY.unitSystem,
+    lengthUnit: source.lengthUnit === 'mm' ? 'mm' : DEFAULT_MEASUREMENT_POLICY.lengthUnit,
     lengthPrecision: clampPrecision(source.lengthPrecision ?? source.precision),
     roundingMode: DEFAULT_MEASUREMENT_POLICY.roundingMode,
     ...overrides,
@@ -54,9 +48,8 @@ export function roundMeasurementValue(mm, projectOrPolicy = null, options = {}) 
 export function formatMeasurementValue(mm, projectOrPolicy = null, options = {}) {
   const policy = resolveMeasurementPolicy(projectOrPolicy, options.policy);
   const roundedValue = roundMeasurementValue(mm, policy, options);
-  const valueText = policy.lengthPrecision > 0
-    ? roundedValue.toFixed(policy.lengthPrecision)
-    : String(Math.round(roundedValue));
+  const valueText =
+    policy.lengthPrecision > 0 ? roundedValue.toFixed(policy.lengthPrecision) : String(Math.round(roundedValue));
 
   return `${valueText} ${policy.lengthUnit}`;
 }

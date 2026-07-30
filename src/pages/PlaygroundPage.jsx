@@ -9,7 +9,5 @@ export default function PlaygroundPage() {
     return project;
   }, []);
 
-  return (
-    <FloorplanWorkspace initialProject={demoProject} isPlayground={true} />
-  );
+  return <FloorplanWorkspace initialProject={demoProject} isPlayground={true} />;
 }

@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function ColumnRenderer({ columns }) {
+function ColumnRenderer({ columns }) {
   return (
     <g className="columns">
       {columns.map((column) => {
@@ -24,3 +25,5 @@ export default function ColumnRenderer({ columns }) {
     </g>
   );
 }
+
+export default memo(ColumnRenderer);

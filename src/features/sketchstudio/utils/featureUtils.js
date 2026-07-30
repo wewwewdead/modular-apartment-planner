@@ -30,14 +30,14 @@ export function createCutoutFeature(feature = {}) {
 }
 
 export function assignFeatureToPart(features, featureId, targetPartId) {
-  return features.map((feature) => (
+  return features.map((feature) =>
     feature.id === featureId
       ? {
           ...feature,
           targetPartId: targetPartId || null,
         }
-      : feature
-  ));
+      : feature,
+  );
 }
 
 export function getFeatureTargetSummary(feature, parts = []) {

@@ -130,7 +130,15 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
         dispatch(cancelDraft());
       }
     }
-  }, [dispatch, draftPreview, state.document, state.draft, state.ui.activeLayerId, state.ui.isometricPlane, state.ui.viewMode]);
+  }, [
+    dispatch,
+    draftPreview,
+    state.document,
+    state.draft,
+    state.ui.activeLayerId,
+    state.ui.isometricPlane,
+    state.ui.viewMode,
+  ]);
 
   return { commitPrecisionDraft };
 }

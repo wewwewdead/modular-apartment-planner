@@ -99,7 +99,7 @@ function buildContentTransform(viewport, source, contentRect) {
   const sourceHeight = Math.max(1, bounds.maxY - bounds.minY);
   const scale = sourceFitsFrame(source)
     ? Math.min(contentRect.width / sourceWidth, contentRect.height / sourceHeight)
-    : (1 / resolveViewportScale(viewport));
+    : 1 / resolveViewportScale(viewport);
 
   const drawnWidth = sourceWidth * scale;
   const drawnHeight = sourceHeight * scale;
@@ -124,9 +124,10 @@ function buildViewportScene(viewport, source, sheet, rect) {
 
   const captionGap = SHEET_TOKENS.viewportCaptionGap;
   const captionHeight = SHEET_TOKENS.viewportCaptionHeight;
-  const captionY = viewport.captionPosition === 'above'
-    ? frameRect.y - captionGap
-    : frameRect.y + frameRect.height + captionGap + captionHeight;
+  const captionY =
+    viewport.captionPosition === 'above'
+      ? frameRect.y - captionGap
+      : frameRect.y + frameRect.height + captionGap + captionHeight;
 
   const caption = {
     position: viewport.captionPosition || 'below',
@@ -263,8 +264,9 @@ function partitionByRole(entries) {
   const supplemental = [];
 
   entries.forEach((entry, index) => {
-    const role = entry.viewport.role
-      || (entry.source.kind === '3d_preview' ? 'supplemental' : (index === 0 ? 'primary' : 'secondary'));
+    const role =
+      entry.viewport.role ||
+      (entry.source.kind === '3d_preview' ? 'supplemental' : index === 0 ? 'primary' : 'secondary');
 
     if (role === 'supplemental' || entry.source.kind === '3d_preview') {
       supplemental.push(entry);
@@ -321,8 +323,8 @@ function layoutAutoViewports(entries, area) {
 
   if (!primaryEntry) return result;
 
-  const onlySupplemental = primaryEntry.source.kind === '3d_preview'
-    && secondaryEntries.every((entry) => entry.source.kind === '3d_preview');
+  const onlySupplemental =
+    primaryEntry.source.kind === '3d_preview' && secondaryEntries.every((entry) => entry.source.kind === '3d_preview');
 
   if (!secondaryEntries.length) {
     result.set(primaryEntry.viewport.id, rectFromArea(area));
@@ -362,10 +364,13 @@ function layoutAutoViewports(entries, area) {
 export function buildSheetScene(project, sheet, options = {}) {
   if (!sheet) return null;
 
-  const resolveSource = options.resolveSource || ((proj, vp) => resolveSheetViewportSource(proj, vp, {
-    activePhaseId: vp.phaseId,
-    phaseViewMode: vp.phaseViewMode || 'all',
-  }));
+  const resolveSource =
+    options.resolveSource ||
+    ((proj, vp) =>
+      resolveSheetViewportSource(proj, vp, {
+        activePhaseId: vp.phaseId,
+        phaseViewMode: vp.phaseViewMode || 'all',
+      }));
 
   const paper = getPaperPreset(sheet.paperSize);
   const zones = buildSheetZones(paper);
@@ -374,15 +379,12 @@ export function buildSheetScene(project, sheet, options = {}) {
     source: resolveSource(project, viewport),
   }));
   const allowAutoLayout = sheet.layoutTemplate !== 'manual';
-  const autoEntries = allowAutoLayout
-    ? sourceEntries.filter((entry) => !entry.viewport.lockAutoLayout)
-    : [];
+  const autoEntries = allowAutoLayout ? sourceEntries.filter((entry) => !entry.viewport.lockAutoLayout) : [];
   const manualEntries = sourceEntries.filter((entry) => entry.viewport.lockAutoLayout);
   const autoRects = layoutAutoViewports(autoEntries, zones.contentArea);
 
   const sceneViewports = sourceEntries.map((entry) => {
-    const rect = autoRects.get(entry.viewport.id)
-      || fitViewportToSheet(entry.viewport, sheet);
+    const rect = autoRects.get(entry.viewport.id) || fitViewportToSheet(entry.viewport, sheet);
     return buildViewportScene(entry.viewport, entry.source, sheet, rect);
   });
 
@@ -449,16 +451,8 @@ export function fitViewportToSheet(viewport, sheet) {
   const captionClearance = getCaptionClearance(viewport);
   const captionAbove = viewport.captionPosition === 'above' ? captionClearance : 0;
   const captionBelow = viewport.captionPosition === 'below' ? captionClearance : 0;
-  const width = clamp(
-    viewport.width,
-    SHEET_TOKENS.viewportMinWidth,
-    zones.contentArea.width
-  );
-  const height = clamp(
-    viewport.height,
-    SHEET_TOKENS.viewportMinHeight,
-    zones.contentArea.height - captionClearance
-  );
+  const width = clamp(viewport.width, SHEET_TOKENS.viewportMinWidth, zones.contentArea.width);
+  const height = clamp(viewport.height, SHEET_TOKENS.viewportMinHeight, zones.contentArea.height - captionClearance);
   const maxX = zones.contentArea.x + zones.contentArea.width - width;
   const minY = zones.contentArea.y + captionAbove;
   const maxY = zones.contentArea.y + zones.contentArea.height - height - captionBelow;
@@ -487,18 +481,26 @@ export function getDefaultViewportRect(sheet, source, scale = 100, options = {})
       ? zones.contentArea.width * 0.72
       : source.kind === 'roof_schedule'
         ? zones.contentArea.width * 0.58
-      : (sourceWidth / baseScale) + SHEET_TOKENS.viewportPadding * 2,
+        : sourceWidth / baseScale + SHEET_TOKENS.viewportPadding * 2,
     role === 'primary' ? 120 : 84,
-    role === 'primary' ? zones.contentArea.width * 0.72 : (source.kind === 'roof_schedule' ? zones.contentArea.width * 0.58 : zones.contentArea.width * 0.44)
+    role === 'primary'
+      ? zones.contentArea.width * 0.72
+      : source.kind === 'roof_schedule'
+        ? zones.contentArea.width * 0.58
+        : zones.contentArea.width * 0.44,
   );
   const height = clamp(
     source.kind === '3d_preview'
       ? zones.contentArea.height * 0.54
       : source.kind === 'roof_schedule'
         ? zones.contentArea.height * 0.48
-      : (sourceHeight / baseScale) + SHEET_TOKENS.viewportPadding * 2,
+        : sourceHeight / baseScale + SHEET_TOKENS.viewportPadding * 2,
     role === 'primary' ? 96 : 72,
-    role === 'primary' ? zones.contentArea.height * 0.78 : (source.kind === 'roof_schedule' ? zones.contentArea.height * 0.56 : zones.contentArea.height * 0.42)
+    role === 'primary'
+      ? zones.contentArea.height * 0.78
+      : source.kind === 'roof_schedule'
+        ? zones.contentArea.height * 0.56
+        : zones.contentArea.height * 0.42,
   );
 
   return snapRectToGrid({

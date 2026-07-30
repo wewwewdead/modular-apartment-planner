@@ -6,6 +6,7 @@ import { createDuplicatedFloor, getOrderedFloors } from '@/domain/floorModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { deleteProject, listProjects, loadProject, saveProject } from '@/persistence/storage';
 import {
+  exportProjectArchive,
   exportProjectFile,
   importProjectFile,
   isFilePickerAbortError,
@@ -13,6 +14,11 @@ import {
 } from '@/persistence/fileTransfer';
 import { useAutosave } from '@/persistence/useAutosave';
 import floorplanReducer, { initializeFloorplanState } from '../store/floorplanReducer';
+
+function getImportErrorMessage(err) {
+  const message = typeof err?.message === 'string' ? err.message.trim() : '';
+  return message || 'The selected file could not be opened as an Apartment Planner project.';
+}
 
 export default function useFloorplan({ initialProject, isPlayground = false } = {}) {
   const confirm = useConfirmDialog();
@@ -99,6 +105,16 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     }
   }, [project, projectFileHandle]);
 
+  // Sharing writes a standalone copy: it never adopts a file handle or clears the dirty flag.
+  const handleShareProject = useCallback(async () => {
+    try {
+      await exportProjectArchive(project);
+    } catch (err) {
+      if (isFilePickerAbortError(err)) return;
+      console.warn('[share] Failed to export shared project archive:', err);
+    }
+  }, [project]);
+
   useEffect(() => {
     const handler = (event) => {
       const target = event.target;
@@ -144,6 +160,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     } catch (err) {
       if (isFilePickerAbortError(err)) return;
       console.warn('[open] Failed to import project file:', err);
+      await confirm(getImportErrorMessage(err), { title: 'Could not open project', variant: 'alert' });
     }
   }, [confirm, state.isDirty]);
 
@@ -164,6 +181,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         setShowLoadModal(false);
       } catch (err) {
         console.warn('[import] Failed to import project file:', err);
+        await confirm(getImportErrorMessage(err), { title: 'Could not open project', variant: 'alert' });
       }
     },
     [confirm, state.isDirty],
@@ -327,6 +345,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         newProject: handleNew,
         createProject: handleCreateProject,
         saveProject: handleSave,
+        shareProject: handleShareProject,
         openProjectFile: handleOpenProjectFile,
         importProjectFile: handleImportFile,
         loadDraft: handleLoadDraft,
@@ -351,6 +370,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       handleNew,
       handleOpenProjectFile,
       handleSave,
+      handleShareProject,
     ],
   );
 

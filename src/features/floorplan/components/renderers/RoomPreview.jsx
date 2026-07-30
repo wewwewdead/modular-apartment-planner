@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 
-export default function RoomPreview({ toolState, activeTool }) {
+function RoomPreview({ toolState, activeTool }) {
   const previewPoints = toolState.previewPoints;
   if (activeTool !== TOOLS.ROOM || !previewPoints?.length) return null;
 
@@ -16,3 +17,5 @@ export default function RoomPreview({ toolState, activeTool }) {
     />
   );
 }
+
+export default memo(RoomPreview);

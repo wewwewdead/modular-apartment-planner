@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 
-export default function SectionCutPreview({ toolState, activeTool }) {
+function SectionCutPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.SECTION) return null;
   if (!toolState.sectionStartPoint || !toolState.sectionPreviewPoint) return null;
 
@@ -49,3 +50,5 @@ export default function SectionCutPreview({ toolState, activeTool }) {
     </g>
   );
 }
+
+export default memo(SectionCutPreview);

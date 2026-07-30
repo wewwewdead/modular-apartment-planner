@@ -308,14 +308,17 @@ function rectToLines(rect, entities, layerId) {
   let allEntities = entities;
 
   for (const edge of edges) {
-    const line = createBaseEntity({
-      id: createEntityId('line', allEntities),
-      type: 'line',
-      x1: edge.from.x,
-      y1: edge.from.y,
-      x2: edge.to.x,
-      y2: edge.to.y,
-    }, layerId);
+    const line = createBaseEntity(
+      {
+        id: createEntityId('line', allEntities),
+        type: 'line',
+        x1: edge.from.x,
+        y1: edge.from.y,
+        x2: edge.to.x,
+        y2: edge.to.y,
+      },
+      layerId,
+    );
     lines.push(line);
     allEntities = [...allEntities, line];
   }
@@ -371,7 +374,14 @@ export function applyFillet(entities, corner, geometry, layerId) {
     // Replace rect with lines + arc
     const withoutRect = entities.filter((entity) => entity.id !== rect.id);
     const allEntities = [...withoutRect, ...lines];
-    const arcEntity = createArcEntity(tangentPoint1, tangentPoint2, controlPoint, allEntities, rect.layerId || layerId, filletMeta);
+    const arcEntity = createArcEntity(
+      tangentPoint1,
+      tangentPoint2,
+      controlPoint,
+      allEntities,
+      rect.layerId || layerId,
+      filletMeta,
+    );
 
     return [...allEntities, arcEntity];
   }

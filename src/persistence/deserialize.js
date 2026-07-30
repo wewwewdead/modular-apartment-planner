@@ -1,6 +1,7 @@
 import { CURRENT_SCHEMA_VERSION, isSupportedSchemaVersion } from '@/domain/projectVersion';
 import { CorruptedDataError, UnsupportedVersionError } from './errors';
 import { runMigrations } from './migrations/index';
+import { normalizeProjectEnvelope } from './projectEnvelope';
 import { validateAndRepair } from './validate';
 
 // Auto-discover and register all migration files.
@@ -8,18 +9,19 @@ import { validateAndRepair } from './validate';
 import.meta.glob('./migrations/migration_*.js', { eager: true });
 
 export function deserializeProject(json) {
-  if (!json || typeof json !== 'object' || !json.data) {
-    throw new CorruptedDataError('Invalid project data: missing envelope or data field');
-  }
+  // Accepts every historical on-disk shape and normalizes it to the current envelope.
+  // Single choke point: file import, archive import and the localStorage backend all
+  // reach the migration pipeline through here, so nothing is normalized twice.
+  const envelope = normalizeProjectEnvelope(json);
 
   // Detect schema version: prefer schemaVersion, fall back to version
-  const schemaVersion = Number(json.schemaVersion || json.version);
+  const schemaVersion = Number(envelope.schemaVersion || envelope.version);
 
   if (!schemaVersion || !isSupportedSchemaVersion(schemaVersion)) {
     throw new UnsupportedVersionError(schemaVersion);
   }
 
-  let project = json.data;
+  let project = envelope.data;
 
   // Basic pre-migration check
   if (!project.id || !project.name || !Array.isArray(project.floors)) {
@@ -45,6 +47,6 @@ export function deserializeProject(json) {
 
   return {
     project,
-    savedAt: json.savedAt,
+    savedAt: envelope.savedAt,
   };
 }

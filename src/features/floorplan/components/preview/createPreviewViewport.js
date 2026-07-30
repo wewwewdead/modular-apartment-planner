@@ -327,8 +327,13 @@ export function createPreviewViewport(container) {
     setWorld(nextRoot, bounds, groundLevel = 0) {
       const hadWorld = !!worldRoot;
       const walkPose = navigationMode === 'walk' ? walkNavigation.capturePose() : null;
+      // When the incremental scene cache is used it hands back the SAME
+      // persistent root each build, having already disposed only the floor
+      // groups it rebuilt. Disposing/removing the root in that case would
+      // destroy the reused geometries, so skip teardown on identity reuse.
+      const isSameRoot = worldRoot && worldRoot === nextRoot;
 
-      if (worldRoot) {
+      if (worldRoot && !isSameRoot) {
         scene.remove(worldRoot);
         // disposeMaterials: false — shared materials are owned by the palette,
         // disposed via disposeMaterialPalette() in viewport.dispose().

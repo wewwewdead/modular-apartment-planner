@@ -3,11 +3,13 @@ import { getRectDraftPreviewPolygonPoints } from './draftPreviewUtils';
 
 describe('draftPreviewUtils', () => {
   it('builds polygon points from draw-preview rects', () => {
-    expect(getRectDraftPreviewPolygonPoints({
-      type: 'rect',
-      startPoint: { x: 100, y: 120 },
-      endPoint: { x: 200, y: 180 },
-    })).toEqual([
+    expect(
+      getRectDraftPreviewPolygonPoints({
+        type: 'rect',
+        startPoint: { x: 100, y: 120 },
+        endPoint: { x: 200, y: 180 },
+      }),
+    ).toEqual([
       { x: 100, y: 120 },
       { x: 200, y: 120 },
       { x: 200, y: 180 },
@@ -16,14 +18,16 @@ describe('draftPreviewUtils', () => {
   });
 
   it('builds polygon points from resolved rect entities', () => {
-    expect(getRectDraftPreviewPolygonPoints({
-      type: 'rect',
-      x: 40,
-      y: 60,
-      width: 80,
-      height: 30,
-      rotation: 0,
-    })).toEqual([
+    expect(
+      getRectDraftPreviewPolygonPoints({
+        type: 'rect',
+        x: 40,
+        y: 60,
+        width: 80,
+        height: 30,
+        rotation: 0,
+      }),
+    ).toEqual([
       { x: 40, y: 60 },
       { x: 120, y: 60 },
       { x: 120, y: 90 },

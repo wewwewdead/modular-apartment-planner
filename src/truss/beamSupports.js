@@ -9,7 +9,7 @@ const MIN_SUPPORT_LENGTH = 1000;
 const MIN_TRUSS_SPAN = 300;
 
 function cross(a, b) {
-  return (a.x * b.y) - (a.y * b.x);
+  return a.x * b.y - a.y * b.x;
 }
 
 function projectPointOntoAxis(point, axis) {
@@ -87,9 +87,7 @@ export function getBeamSupportCountLimit(supportLength, spacing) {
 }
 
 export function getFloorBeamSupportData(floor) {
-  return (floor?.beams || [])
-    .map((beam) => buildBeamData(floor, beam))
-    .filter(Boolean);
+  return (floor?.beams || []).map((beam) => buildBeamData(floor, beam)).filter(Boolean);
 }
 
 export function findBeamSupportAtPoint(floor, point, tolerance = 0) {
@@ -190,7 +188,7 @@ export function deriveBeamSupportedInstanceGeometry(instance, floor) {
   const support = resolveBeamPairSupport(
     floor,
     instance?.supportBeamIds?.start || null,
-    instance?.supportBeamIds?.end || null
+    instance?.supportBeamIds?.end || null,
   );
   if (!support.valid) return support;
 
@@ -201,9 +199,7 @@ export function deriveBeamSupportedInstanceGeometry(instance, floor) {
     : countLimit;
   const occupiedRunLength = spacing * Math.max(count - 1, 0);
   const maxOffset = Math.max(0, support.supportLength - occupiedRunLength);
-  const requestedOffset = Number.isFinite(instance?.supportOffsetAlongAxis)
-    ? instance.supportOffsetAlongAxis
-    : 0;
+  const requestedOffset = Number.isFinite(instance?.supportOffsetAlongAxis) ? instance.supportOffsetAlongAxis : 0;
   const effectiveOffset = clamp(requestedOffset, 0, maxOffset);
   const placementStartPoint = add(support.startPoint, scale(support.axis, effectiveOffset));
   const placementEndPoint = add(placementStartPoint, scale(support.axis, occupiedRunLength));

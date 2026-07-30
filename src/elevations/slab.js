@@ -24,10 +24,7 @@ function projectEdge(view, edge) {
   return {
     left,
     right,
-    depth: (
-      projectElevationDepth(view, edge.start) +
-      projectElevationDepth(view, edge.end)
-    ) / 2,
+    depth: (projectElevationDepth(view, edge.start) + projectElevationDepth(view, edge.end)) / 2,
     edgeIndex: edge.index,
   };
 }

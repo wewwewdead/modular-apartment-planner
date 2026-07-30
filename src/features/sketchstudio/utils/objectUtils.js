@@ -1,5 +1,10 @@
 import { computeEntityBoundingBox, computeFootprintFromEntities } from './bboxUtils';
-import { buildExportAnchorPayload, computeAnchorFromBounds, createDefaultAnchor, setPrimaryAnchor } from './anchorUtils';
+import {
+  buildExportAnchorPayload,
+  computeAnchorFromBounds,
+  createDefaultAnchor,
+  setPrimaryAnchor,
+} from './anchorUtils';
 import { filterNonIsometricEntities } from './isometricUtils';
 import { extractClosedLoopsFromEntities, isPolylineClosed, loopToFootprintPayload } from './profileUtils';
 import { DEFAULT_CATEGORY, DEFAULT_OBJECT_TYPE } from './objectTypeConstants';
@@ -21,17 +26,15 @@ export function createPartId(parts = []) {
 }
 
 function isProfileEntity(entity) {
-  return entity?.type === 'rect'
-    || entity?.type === 'circle'
-    || (entity?.type === 'polyline' && isPolylineClosed(entity));
+  return (
+    entity?.type === 'rect' || entity?.type === 'circle' || (entity?.type === 'polyline' && isPolylineClosed(entity))
+  );
 }
 
 export function applyObjectDefaultsToPart(objectDraft, part) {
   return {
     ...part,
-    thickness: Number(part?.thickness) > 0
-      ? Number(part.thickness)
-      : Number(objectDraft?.defaults?.thickness) || 18,
+    thickness: Number(part?.thickness) > 0 ? Number(part.thickness) : Number(objectDraft?.defaults?.thickness) || 18,
     material: part?.material || objectDraft?.defaults?.material || 'plywood',
     role: part?.role || 'generic',
     width: Number(part?.width) > 0 ? Number(part.width) : Number(part?.parametric?.width) || 0,
@@ -80,16 +83,17 @@ export function computePartBounds(entities, profileEntityIds = []) {
 }
 
 export function computePartSummary(part, entities, objectDraft = null) {
-  const parametricBounds = part?.parametric?.origin && part?.parametric?.extents
-    ? {
-        minX: part.parametric.origin.x,
-        minY: part.parametric.origin.y,
-        maxX: part.parametric.origin.x + (Number(part.parametric.extents.width) || 0),
-        maxY: part.parametric.origin.y + (Number(part.parametric.extents.depth) || 0),
-        width: Number(part.parametric.extents.width) || 0,
-        depth: Number(part.parametric.extents.depth) || 0,
-      }
-    : null;
+  const parametricBounds =
+    part?.parametric?.origin && part?.parametric?.extents
+      ? {
+          minX: part.parametric.origin.x,
+          minY: part.parametric.origin.y,
+          maxX: part.parametric.origin.x + (Number(part.parametric.extents.width) || 0),
+          maxY: part.parametric.origin.y + (Number(part.parametric.extents.depth) || 0),
+          width: Number(part.parametric.extents.width) || 0,
+          depth: Number(part.parametric.extents.depth) || 0,
+        }
+      : null;
   const bounds = parametricBounds || computePartBounds(entities, part.profileEntityIds);
   const resolvedPart = objectDraft ? applyObjectDefaultsToPart(objectDraft, part) : part;
 
@@ -98,7 +102,9 @@ export function computePartSummary(part, entities, objectDraft = null) {
     bounds,
     sizeLabel: bounds
       ? `${Math.round(bounds.width)} x ${Math.round(bounds.depth)} mm`
-      : (resolvedPart.width && resolvedPart.height ? `${Math.round(resolvedPart.width)} x ${Math.round(resolvedPart.height)} mm` : 'Unresolved'),
+      : resolvedPart.width && resolvedPart.height
+        ? `${Math.round(resolvedPart.width)} x ${Math.round(resolvedPart.height)} mm`
+        : 'Unresolved',
   };
 }
 
@@ -115,7 +121,9 @@ export function buildObjectFeatureList(entities) {
       depth: entity.depth ?? null,
       through: entity.through !== false,
       ...('cx' in entity ? { cx: entity.cx, cy: entity.cy, diameter: entity.diameter } : {}),
-      ...('rx' in entity ? { cx: entity.cx, cy: entity.cy, rx: entity.rx, ry: entity.ry, rotation: entity.rotation ?? 0 } : {}),
+      ...('rx' in entity
+        ? { cx: entity.cx, cy: entity.cy, rx: entity.rx, ry: entity.ry, rotation: entity.rotation ?? 0 }
+        : {}),
       ...('x' in entity ? { x: entity.x, y: entity.y, width: entity.width, height: entity.height } : {}),
       ...(entity.points ? { points: entity.points.map((point) => ({ ...point })) } : {}),
       metadata: {
@@ -128,43 +136,48 @@ function buildDefaultPartsFromEntities(geometryEntities, loops, objectDefaults) 
   const explicitProfileEntities = geometryEntities.filter(isProfileEntity);
 
   if (explicitProfileEntities.length) {
-    return explicitProfileEntities.map((entity, index) => applyObjectDefaultsToPart({
-      defaults: objectDefaults,
-    }, {
-      id: `part-${index + 1}`,
-      name: index === 0 ? 'Main Part' : `Part ${index + 1}`,
-      role: index === 0 ? 'panel' : 'generic',
-      thickness: objectDefaults.thickness,
-      material: objectDefaults.material,
-      profileEntityIds: [entity.id],
-      featureIds: [],
-      layerId: entity.layerId || 'default',
-      metadata: {},
-    }));
+    return explicitProfileEntities.map((entity, index) =>
+      applyObjectDefaultsToPart(
+        {
+          defaults: objectDefaults,
+        },
+        {
+          id: `part-${index + 1}`,
+          name: index === 0 ? 'Main Part' : `Part ${index + 1}`,
+          role: index === 0 ? 'panel' : 'generic',
+          thickness: objectDefaults.thickness,
+          material: objectDefaults.material,
+          profileEntityIds: [entity.id],
+          featureIds: [],
+          layerId: entity.layerId || 'default',
+          metadata: {},
+        },
+      ),
+    );
   }
 
-  return loops.map((loop, index) => applyObjectDefaultsToPart({
-    defaults: objectDefaults,
-  }, {
-    id: `part-${index + 1}`,
-    name: index === 0 ? 'Main Part' : `Loop Part ${index + 1}`,
-    role: index === 0 ? 'panel' : 'generic',
-    thickness: objectDefaults.thickness,
-    material: objectDefaults.material,
-    profileEntityIds: loop.sourceEntityIds || [],
-    featureIds: [],
-    layerId: geometryEntities.find((entity) => (loop.sourceEntityIds || []).includes(entity.id))?.layerId || 'default',
-    metadata: {},
-  }));
+  return loops.map((loop, index) =>
+    applyObjectDefaultsToPart(
+      {
+        defaults: objectDefaults,
+      },
+      {
+        id: `part-${index + 1}`,
+        name: index === 0 ? 'Main Part' : `Loop Part ${index + 1}`,
+        role: index === 0 ? 'panel' : 'generic',
+        thickness: objectDefaults.thickness,
+        material: objectDefaults.material,
+        profileEntityIds: loop.sourceEntityIds || [],
+        featureIds: [],
+        layerId:
+          geometryEntities.find((entity) => (loop.sourceEntityIds || []).includes(entity.id))?.layerId || 'default',
+        metadata: {},
+      },
+    ),
+  );
 }
 
-export function createPartFromSelection({
-  objectDraft,
-  entities,
-  selectedIds,
-  name,
-  role = 'generic',
-}) {
+export function createPartFromSelection({ objectDraft, entities, selectedIds, name, role = 'generic' }) {
   const nextPart = {
     id: createPartId(objectDraft?.parts || []),
     name: name || `Part ${(objectDraft?.parts || []).length + 1}`,
@@ -181,25 +194,25 @@ export function createPartFromSelection({
 }
 
 export function assignEntitiesToPart(parts, partId, entityIds) {
-  return parts.map((part) => (
+  return parts.map((part) =>
     part.id === partId
       ? {
           ...part,
           profileEntityIds: Array.from(new Set(entityIds)),
         }
-      : part
-  ));
+      : part,
+  );
 }
 
 export function assignFeaturesToPart(parts, partId, featureIds) {
-  return parts.map((part) => (
+  return parts.map((part) =>
     part.id === partId
       ? {
           ...part,
           featureIds: Array.from(new Set(featureIds)),
         }
-      : part
-  ));
+      : part,
+  );
 }
 
 export function computeObjectFootprint(entities) {
@@ -228,7 +241,9 @@ export function createObjectDraftFromSelection({
   existingObjects = [],
   nextName = 'Custom Object',
 }) {
-  const geometryEntities = filterNonIsometricEntities(selectedEntities).filter((entity) => entity.type !== 'dimension' && entity.type !== 'text');
+  const geometryEntities = filterNonIsometricEntities(selectedEntities).filter(
+    (entity) => entity.type !== 'dimension' && entity.type !== 'text',
+  );
   const features = buildObjectFeatureList(geometryEntities);
   const featureIds = features.map((feature) => feature.id);
   const objectDefaults = {
@@ -239,17 +254,20 @@ export function createObjectDraftFromSelection({
   const footprint = computeObjectFootprint(geometryEntities);
   const bounds = computeObjectBounds(geometryEntities) ?? { width: 0, depth: 0, height: 900 };
   const footprintBounds = footprint?.points?.length
-    ? footprint.points.reduce((accumulator, point) => ({
-        minX: Math.min(accumulator.minX, point.x),
-        minY: Math.min(accumulator.minY, point.y),
-        maxX: Math.max(accumulator.maxX, point.x),
-        maxY: Math.max(accumulator.maxY, point.y),
-      }), {
-        minX: footprint.points[0].x,
-        minY: footprint.points[0].y,
-        maxX: footprint.points[0].x,
-        maxY: footprint.points[0].y,
-      })
+    ? footprint.points.reduce(
+        (accumulator, point) => ({
+          minX: Math.min(accumulator.minX, point.x),
+          minY: Math.min(accumulator.minY, point.y),
+          maxX: Math.max(accumulator.maxX, point.x),
+          maxY: Math.max(accumulator.maxY, point.y),
+        }),
+        {
+          minX: footprint.points[0].x,
+          minY: footprint.points[0].y,
+          maxX: footprint.points[0].x,
+          maxY: footprint.points[0].y,
+        },
+      )
     : null;
   const originAnchor = createDefaultAnchor(footprintBounds);
   const centerAnchor = computeAnchorFromBounds(footprintBounds, 'center');

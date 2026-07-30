@@ -44,7 +44,12 @@ describe('evaluateSketchExpression', () => {
   });
 
   it('substitutes variables', () => {
-    const options = { variables: [{ name: 'W', value: 1200 }, { name: 'H', value: 800 }] };
+    const options = {
+      variables: [
+        { name: 'W', value: 1200 },
+        { name: 'H', value: 800 },
+      ],
+    };
     expect(evaluateSketchExpression('W + 100', options)).toEqual({ value: 1300, error: null });
     expect(evaluateSketchExpression('W * 2 + H', options)).toEqual({ value: 3200, error: null });
   });

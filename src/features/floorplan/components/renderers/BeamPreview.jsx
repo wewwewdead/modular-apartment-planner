@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { BEAM_WIDTH, BEAM_DEPTH } from '@/domain/defaults';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 
-export default function BeamPreview({ toolState, activeTool, columns, floorLevel }) {
+function BeamPreview({ toolState, activeTool, columns, floorLevel }) {
   if (activeTool !== TOOLS.BEAM) return null;
   if (!toolState.startColumnId || !toolState.previewColumnId || toolState.startColumnId === toolState.previewColumnId) {
     return null;
@@ -34,3 +35,5 @@ export default function BeamPreview({ toolState, activeTool, columns, floorLevel
     />
   );
 }
+
+export default memo(BeamPreview);

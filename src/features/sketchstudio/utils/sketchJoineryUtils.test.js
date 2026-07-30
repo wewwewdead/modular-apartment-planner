@@ -34,15 +34,15 @@ function createEdgeRef(entityId, sourceKey) {
 function rotateRectEntityAroundPivot(entity, pivot, angleDegrees) {
   const angleRadians = (angleDegrees * Math.PI) / 180;
   const center = {
-    x: entity.x + (entity.width / 2),
-    y: entity.y + (entity.height / 2),
+    x: entity.x + entity.width / 2,
+    y: entity.y + entity.height / 2,
   };
   const rotatedCenter = rotatePointAroundPivot(center, pivot, angleRadians);
 
   return {
     ...entity,
-    x: rotatedCenter.x - (entity.width / 2),
-    y: rotatedCenter.y - (entity.height / 2),
+    x: rotatedCenter.x - entity.width / 2,
+    y: rotatedCenter.y - entity.height / 2,
     rotation: (entity.rotation ?? 0) + angleDegrees,
   };
 }
@@ -52,25 +52,25 @@ function rotateAllEntities(entities, pivot, angleDegrees) {
 }
 
 function getPolylineBounds(entity) {
-  return entity.points.reduce((bounds, point) => ({
-    minX: Math.min(bounds.minX, point.x),
-    minY: Math.min(bounds.minY, point.y),
-    maxX: Math.max(bounds.maxX, point.x),
-    maxY: Math.max(bounds.maxY, point.y),
-  }), {
-    minX: Number.POSITIVE_INFINITY,
-    minY: Number.POSITIVE_INFINITY,
-    maxX: Number.NEGATIVE_INFINITY,
-    maxY: Number.NEGATIVE_INFINITY,
-  });
+  return entity.points.reduce(
+    (bounds, point) => ({
+      minX: Math.min(bounds.minX, point.x),
+      minY: Math.min(bounds.minY, point.y),
+      maxX: Math.max(bounds.maxX, point.x),
+      maxY: Math.max(bounds.maxY, point.y),
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+    },
+  );
 }
 
 describe('sketchJoineryUtils', () => {
   it('computes stable default tab-and-slot parameters from thickness and overlap', () => {
-    const entities = [
-      createRectEntity('side-a', 0, 0, 100, 120, 18),
-      createRectEntity('side-b', 100, 0, 100, 120, 18),
-    ];
+    const entities = [createRectEntity('side-a', 0, 0, 100, 120, 18), createRectEntity('side-b', 100, 0, 100, 120, 18)];
     const joint = createSketchJoint({
       type: 'tab_slot',
       sourcePartId: 'side-a',
@@ -87,19 +87,17 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('treats rotated rectangular pairs as supported joinery parts', () => {
-    const entities = rotateAllEntities([
-      createRectEntity('side-a', 0, 0, 100, 120, 18),
-      createRectEntity('side-b', 100, 0, 100, 120, 18),
-    ], { x: 100, y: 60 }, 30);
+    const entities = rotateAllEntities(
+      [createRectEntity('side-a', 0, 0, 100, 120, 18), createRectEntity('side-b', 100, 0, 100, 120, 18)],
+      { x: 100, y: 60 },
+      30,
+    );
 
     expect(isSketchJointPairSupported(entities)).toBe(true);
   });
 
   it('auto-detects penetration contact for dado joints and derives depth from overlap', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('shelf', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-auto-dado',
       type: 'dado',
@@ -141,10 +139,11 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('auto-detects penetration contact for rotated dado joints and emits rotated cut geometry', () => {
-    const entities = rotateAllEntities([
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('shelf', 40, -13, 60, 18, 18),
-    ], { x: 100, y: 60 }, 30);
+    const entities = rotateAllEntities(
+      [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -13, 60, 18, 18)],
+      { x: 100, y: 60 },
+      30,
+    );
     const joint = createSketchJoint({
       id: 'joint-rotated-dado',
       type: 'dado',
@@ -217,7 +216,9 @@ describe('sketchJoineryUtils', () => {
     });
     expect(exportFeature).toBeUndefined();
     expect(resolution.exportEntities).toHaveLength(2);
-    expect(resolution.exportEntities.find((entity) => entity.id === 'panel')?.meta?.joineryConnections?.[0]).toMatchObject({
+    expect(
+      resolution.exportEntities.find((entity) => entity.id === 'panel')?.meta?.joineryConnections?.[0],
+    ).toMatchObject({
       jointId: 'joint-draft-dado',
       fabricationReady: false,
       previewOnly: true,
@@ -225,10 +226,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('auto-detects penetration contact for mortise-and-tenon joints and derives depth from overlap', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('rail', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('rail', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-auto-mortise-tenon',
       type: 'mortise_tenon',
@@ -265,10 +263,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('auto-detects penetration contact for tab-slot joints and derives depth from overlap', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('divider', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('divider', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-auto-tab-slot',
       type: 'tab_slot',
@@ -307,10 +302,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('auto-flips overlap-driven joints when the reverse direction yields the only valid penetration', () => {
-    const entities = [
-      createRectEntity('upright', 0, 0, 18, 200, 18),
-      createRectEntity('shelf', 9, 40, 120, 60, 18),
-    ];
+    const entities = [createRectEntity('upright', 0, 0, 18, 200, 18), createRectEntity('shelf', 9, 40, 120, 60, 18)];
     const joint = createSketchJoint({
       id: 'joint-front-view',
       type: 'tab_slot',
@@ -345,10 +337,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('does not generate a redundant source profile when an overlap-driven mortise fills the full overlap width', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('rail', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('rail', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-full-width-mortise-tenon',
       type: 'mortise_tenon',
@@ -370,10 +359,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('generates dado slot geometry on the target host part', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('shelf', 40, -18, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -18, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-dado',
       type: 'dado',
@@ -401,16 +387,11 @@ describe('sketchJoineryUtils', () => {
       depth: 6,
       targetPartId: 'panel',
     });
-    expect(resolution.exportEntities.find((entity) => entity.id === 'panel').meta?.manufacturingHidden).not.toBe(
-      true,
-    );
+    expect(resolution.exportEntities.find((entity) => entity.id === 'panel').meta?.manufacturingHidden).not.toBe(true);
   });
 
   it('clips a dado slot to the inset overlap so inset stays visible on the drawing', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('shelf', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-dado-inset',
       type: 'dado',
@@ -441,10 +422,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('widens a dado slot symmetrically when width offset is applied', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('shelf', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-dado-width-offset',
       type: 'dado',
@@ -476,10 +454,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('applies width offset after inset so the dado widens on both sides equally', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('shelf', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('shelf', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-dado-offset-with-inset',
       type: 'dado',
@@ -537,10 +512,12 @@ describe('sketchJoineryUtils', () => {
       status: 'applied',
     });
     expect(getSketchJointSummary(resolution.joints[0])).toBe('source-side → target-side · 60.5mm × 12mm');
-    expect(targetProfile?.points).toEqual(expect.arrayContaining([
-      { x: 112, y: 90.25 },
-      { x: 112, y: 29.75 },
-    ]));
+    expect(targetProfile?.points).toEqual(
+      expect.arrayContaining([
+        { x: 112, y: 90.25 },
+        { x: 112, y: 29.75 },
+      ]),
+    );
   });
 
   it('widens only the receiving mortise when width offset is applied', () => {
@@ -574,14 +551,18 @@ describe('sketchJoineryUtils', () => {
       status: 'applied',
     });
     expect(getSketchJointSummary(resolution.joints[0])).toBe('tenon-part → mortise-part · 60.5mm × 18mm');
-    expect(sourceProfile?.points).toEqual(expect.arrayContaining([
-      { x: 118, y: 30 },
-      { x: 118, y: 90 },
-    ]));
-    expect(targetProfile?.points).toEqual(expect.arrayContaining([
-      { x: 118, y: 90.25 },
-      { x: 118, y: 29.75 },
-    ]));
+    expect(sourceProfile?.points).toEqual(
+      expect.arrayContaining([
+        { x: 118, y: 30 },
+        { x: 118, y: 90 },
+      ]),
+    );
+    expect(targetProfile?.points).toEqual(
+      expect.arrayContaining([
+        { x: 118, y: 90.25 },
+        { x: 118, y: 29.75 },
+      ]),
+    );
   });
 
   it('generates complementary mortise and tenon replacement profiles', () => {
@@ -615,10 +596,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('generates paired dowel drilling features on both parts', () => {
-    const entities = [
-      createRectEntity('side-a', 0, 0, 100, 120, 18),
-      createRectEntity('side-b', 100, 0, 100, 120, 18),
-    ];
+    const entities = [createRectEntity('side-a', 0, 0, 100, 120, 18), createRectEntity('side-b', 100, 0, 100, 120, 18)];
     const joint = createSketchJoint({
       id: 'joint-dowels',
       type: 'dowel',
@@ -692,10 +670,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('auto-detects touching edges for non-penetrating joints', () => {
-    const entities = [
-      createRectEntity('side-a', 0, 0, 100, 120, 18),
-      createRectEntity('side-b', 100, 0, 100, 120, 18),
-    ];
+    const entities = [createRectEntity('side-a', 0, 0, 100, 120, 18), createRectEntity('side-b', 100, 0, 100, 120, 18)];
     const joint = createSketchJoint({
       id: 'joint-auto-dowels',
       type: 'dowel',
@@ -725,10 +700,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('keeps hardware joints touch-driven even when the parts overlap', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 200, 120, 18),
-      createRectEntity('rail', 40, -13, 60, 18, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 200, 120, 18), createRectEntity('rail', 40, -13, 60, 18, 18)];
     const joint = createSketchJoint({
       id: 'joint-overlap-dowels',
       type: 'dowel',
@@ -753,10 +725,7 @@ describe('sketchJoineryUtils', () => {
   });
 
   it('rejects automatic joints when multiple penetration contacts are possible', () => {
-    const entities = [
-      createRectEntity('panel', 0, 0, 80, 80, 18),
-      createRectEntity('insert', -20, -20, 60, 60, 18),
-    ];
+    const entities = [createRectEntity('panel', 0, 0, 80, 80, 18), createRectEntity('insert', -20, -20, 60, 60, 18)];
     const joint = createSketchJoint({
       id: 'joint-ambiguous',
       type: 'dado',

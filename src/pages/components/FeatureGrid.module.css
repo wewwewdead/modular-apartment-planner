@@ -48,7 +48,9 @@
   /* scroll-reveal initial state */
   opacity: 0;
   transform: translateY(16px);
-  transition: opacity 0.5s var(--ease-out), transform 0.5s var(--ease-out);
+  transition:
+    opacity 0.5s var(--ease-out),
+    transform 0.5s var(--ease-out);
   transition-delay: calc(var(--item-index, 0) * 60ms);
 }
 

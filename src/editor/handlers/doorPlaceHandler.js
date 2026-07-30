@@ -64,7 +64,12 @@ export function createDoorPlaceHandler({ dispatch, editorDispatch, getFloor, act
       } else {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { previewWallId: null, previewOffset: null, previewBlocked: false, openDirection: toolState.openDirection || 'left' },
+          payload: {
+            previewWallId: null,
+            previewOffset: null,
+            previewBlocked: false,
+            openDirection: toolState.openDirection || 'left',
+          },
         });
       }
     },

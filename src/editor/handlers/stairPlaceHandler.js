@@ -3,21 +3,10 @@ import { createStair } from '@/domain/models';
 import { add, distance, scale } from '@/geometry/point';
 import { snapToLandingEdge } from '@/geometry/landingGeometry';
 import { stairRun, stairDirectionVector } from '@/geometry/stairGeometry';
-
-function snapToGrid(value) {
-  return Math.round(value / GRID_MINOR) * GRID_MINOR;
-}
+import { resolvePoint } from './handlerSnapUtils';
 
 function getAngleDegrees(startPoint, endPoint) {
   return (Math.atan2(endPoint.y - startPoint.y, endPoint.x - startPoint.x) * 180) / Math.PI;
-}
-
-function resolvePoint(modelPos, snapEnabled) {
-  if (!snapEnabled) return { x: modelPos.x, y: modelPos.y };
-  return {
-    x: snapToGrid(modelPos.x),
-    y: snapToGrid(modelPos.y),
-  };
 }
 
 function resetStairTool(editorDispatch) {
@@ -32,7 +21,15 @@ function resetStairTool(editorDispatch) {
   });
 }
 
-export function createStairPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled, activePhaseId }) {
+export function createStairPlaceHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  viewport,
+  snapEnabled,
+  activePhaseId,
+}) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -99,7 +96,7 @@ export function createStairPlaceHandler({ dispatch, editorDispatch, getFloor, ac
         {
           startLandingAttachment: toolState.startLandingAttachment || null,
           endLandingAttachment,
-        }
+        },
       );
 
       stair.phaseId = activePhaseId || null;

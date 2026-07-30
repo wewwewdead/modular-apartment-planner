@@ -14,7 +14,17 @@ describe('objectUtils', () => {
   it('creates an object draft from selection', () => {
     const selectedEntities = [
       { id: 'rect-1', type: 'rect', x: 0, y: 0, width: 1200, height: 450, layerId: 'default', rotation: 0 },
-      { id: 'feature-1', type: 'feature', featureType: 'hole', shape: 'circle', cx: 120, cy: 80, diameter: 20, layerId: 'default', meta: {} },
+      {
+        id: 'feature-1',
+        type: 'feature',
+        featureType: 'hole',
+        shape: 'circle',
+        cx: 120,
+        cy: 80,
+        diameter: 20,
+        layerId: 'default',
+        meta: {},
+      },
     ];
     const draft = createObjectDraftFromSelection({ document, selectedEntities });
 
@@ -31,7 +41,11 @@ describe('objectUtils', () => {
       {
         id: 'polyline-1',
         type: 'polyline',
-        points: [{ x: 0, y: 0 }, { x: 100, y: 50 }, { x: 0, y: 100 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 50 },
+          { x: 0, y: 100 },
+        ],
         closed: true,
         meta: { projectionMode: 'isometric', isometricPlane: 'top' },
       },
@@ -44,15 +58,18 @@ describe('objectUtils', () => {
   });
 
   it('applies object defaults to parts', () => {
-    const part = applyObjectDefaultsToPart({
-      defaults: { thickness: 21, material: 'oak' },
-    }, {
-      id: 'part-1',
-      name: 'Shelf',
-      role: 'shelf',
-      thickness: 0,
-      material: '',
-    });
+    const part = applyObjectDefaultsToPart(
+      {
+        defaults: { thickness: 21, material: 'oak' },
+      },
+      {
+        id: 'part-1',
+        name: 'Shelf',
+        role: 'shelf',
+        thickness: 0,
+        material: '',
+      },
+    );
 
     expect(part.thickness).toBe(21);
     expect(part.material).toBe('oak');
@@ -63,10 +80,29 @@ describe('objectUtils', () => {
       id: 'object-1',
       name: 'Cabinet',
       category: 'furniture',
-      footprint: { type: 'profile', points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] },
+      footprint: {
+        type: 'profile',
+        points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+          { x: 1, y: 1 },
+        ],
+      },
       bounds: { width: 1200, depth: 450, height: 900 },
       defaults: { thickness: 18, material: 'plywood' },
-      parts: [{ id: 'part-1', name: 'Body', role: 'panel', thickness: 18, material: 'plywood', profileEntityIds: ['rect-1'], featureIds: [], layerId: 'default', metadata: {} }],
+      parts: [
+        {
+          id: 'part-1',
+          name: 'Body',
+          role: 'panel',
+          thickness: 18,
+          material: 'plywood',
+          profileEntityIds: ['rect-1'],
+          featureIds: [],
+          layerId: 'default',
+          metadata: {},
+        },
+      ],
       features: [],
       anchors: [{ id: 'anchor-origin', name: 'origin', x: 0, y: 0, kind: 'primary' }],
       anchor: { x: 0, y: 0, name: 'origin', kind: 'primary' },

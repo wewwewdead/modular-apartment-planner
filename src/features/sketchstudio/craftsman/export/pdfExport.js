@@ -13,7 +13,8 @@ function buildRulerSvg(x, y) {
     ruler += `<line x1="${index}" y1="0" x2="${index}" y2="${-height}" />`;
     ruler += `<text x="${index}" y="-10" font-size="3" text-anchor="middle" fill="black" font-family="sans-serif">${index}</text>`;
   }
-  ruler += '<text x="50" y="6" font-size="2.5" text-anchor="middle" fill="black" font-family="sans-serif">100mm ruler - verify with a physical ruler</text>';
+  ruler +=
+    '<text x="50" y="6" font-size="2.5" text-anchor="middle" fill="black" font-family="sans-serif">100mm ruler - verify with a physical ruler</text>';
   ruler += '</g>';
   return ruler;
 }

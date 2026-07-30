@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { TOOLS, FIXTURE_DEFAULTS, FIXTURE_TYPES } from '@/editor/tools';
 import { fixtureOutline } from '@/geometry/fixtureGeometry';
 
-export default function FixturePreview({ toolState, activeTool }) {
+function FixturePreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.FIXTURE) return null;
   if (toolState.previewX == null || toolState.previewY == null) return null;
 
@@ -41,3 +42,5 @@ export default function FixturePreview({ toolState, activeTool }) {
     />
   );
 }
+
+export default memo(FixturePreview);

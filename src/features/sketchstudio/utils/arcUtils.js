@@ -6,13 +6,13 @@ const AXIS_EPSILON = 1e-9;
 export function getQuadraticPoint(p0, p1, p2, t) {
   const mt = 1 - t;
   return {
-    x: (mt * mt * p0.x) + (2 * mt * t * p1.x) + (t * t * p2.x),
-    y: (mt * mt * p0.y) + (2 * mt * t * p1.y) + (t * t * p2.y),
+    x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+    y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
   };
 }
 
 function getQuadraticExtremaT(p0, p1, p2) {
-  const denominator = p0 - (2 * p1) + p2;
+  const denominator = p0 - 2 * p1 + p2;
   if (Math.abs(denominator) <= AXIS_EPSILON) {
     return null;
   }
@@ -26,18 +26,18 @@ function getQuadraticExtremaT(p0, p1, p2) {
 }
 
 export function solveThreePointCircle(p1, p2, p3) {
-  const determinant = (2 * ((p1.x * (p2.y - p3.y)) + (p2.x * (p3.y - p1.y)) + (p3.x * (p1.y - p2.y))));
+  const determinant = 2 * (p1.x * (p2.y - p3.y) + p2.x * (p3.y - p1.y) + p3.x * (p1.y - p2.y));
   if (Math.abs(determinant) <= AXIS_EPSILON) {
     return null;
   }
 
-  const p1Sq = (p1.x * p1.x) + (p1.y * p1.y);
-  const p2Sq = (p2.x * p2.x) + (p2.y * p2.y);
-  const p3Sq = (p3.x * p3.x) + (p3.y * p3.y);
+  const p1Sq = p1.x * p1.x + p1.y * p1.y;
+  const p2Sq = p2.x * p2.x + p2.y * p2.y;
+  const p3Sq = p3.x * p3.x + p3.y * p3.y;
 
   const center = {
-    x: ((p1Sq * (p2.y - p3.y)) + (p2Sq * (p3.y - p1.y)) + (p3Sq * (p1.y - p2.y))) / determinant,
-    y: ((p1Sq * (p3.x - p2.x)) + (p2Sq * (p1.x - p3.x)) + (p3Sq * (p2.x - p1.x))) / determinant,
+    x: (p1Sq * (p2.y - p3.y) + p2Sq * (p3.y - p1.y) + p3Sq * (p1.y - p2.y)) / determinant,
+    y: (p1Sq * (p3.x - p2.x) + p2Sq * (p1.x - p3.x) + p3Sq * (p2.x - p1.x)) / determinant,
   };
 
   const radius = Math.hypot(p1.x - center.x, p1.y - center.y);

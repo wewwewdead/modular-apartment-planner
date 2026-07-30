@@ -20,7 +20,10 @@ describe('draftPrecisionUtils', () => {
     const secondStep = getPrecisionHudData(
       {
         type: 'arc',
-        points: [{ x: 0, y: 0 }, { x: 80, y: 60 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 80, y: 60 },
+        ],
         precisionInput: {},
       },
       {

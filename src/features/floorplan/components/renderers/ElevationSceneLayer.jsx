@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
 
@@ -121,13 +122,7 @@ function linePoints(element) {
   return `${element.start.x},${-element.start.z} ${element.end.x},${-element.end.z}`;
 }
 
-export default function ElevationSceneLayer({
-  scene,
-  annotationScene,
-  showTitle = true,
-  selectedId = null,
-  selectedType = null,
-}) {
+function ElevationSceneLayer({ scene, annotationScene, showTitle = true, selectedId = null, selectedType = null }) {
   if (!scene) return null;
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
@@ -210,3 +205,5 @@ export default function ElevationSceneLayer({
     </g>
   );
 }
+
+export default memo(ElevationSceneLayer);

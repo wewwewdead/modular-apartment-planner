@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { LANDING_WIDTH, LANDING_DEPTH } from '@/domain/defaults';
 import { TOOLS } from '@/editor/tools';
 import { landingOutline } from '@/geometry/landingGeometry';
 
-export default function LandingPreview({ toolState, activeTool }) {
+function LandingPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.LANDING) return null;
   if (toolState.previewX == null || toolState.previewY == null) return null;
 
@@ -31,3 +32,5 @@ export default function LandingPreview({ toolState, activeTool }) {
     </g>
   );
 }
+
+export default memo(LandingPreview);

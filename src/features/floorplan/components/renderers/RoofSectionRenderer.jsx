@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { buildProjectSectionScene } from '@/sections/scene';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import SectionSceneLayer from './SectionSceneLayer';
@@ -40,12 +41,7 @@ function SectionDiagnosticMessage({ scene, message }) {
   );
 }
 
-export default function RoofSectionRenderer({
-  project,
-  preferredFloorId,
-  activeSectionCutId,
-  roofHiddenByPhase = false,
-}) {
+function RoofSectionRenderer({ project, preferredFloorId, activeSectionCutId, roofHiddenByPhase = false }) {
   const { floor, sectionCut } = resolveRoofSectionCut(project, preferredFloorId, activeSectionCutId);
 
   if (!sectionCut || !floor) {
@@ -64,3 +60,5 @@ export default function RoofSectionRenderer({
     </g>
   );
 }
+
+export default memo(RoofSectionRenderer);

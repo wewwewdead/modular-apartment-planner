@@ -103,10 +103,10 @@ function hitTestTrusses(modelPos, trussSystems, viewport) {
   for (const systemGeometry of floorGeometry.systems) {
     const bounds = systemGeometry.planBounds;
     if (
-      modelPos.x >= bounds.minX - tolerance
-      && modelPos.x <= bounds.maxX + tolerance
-      && modelPos.y >= bounds.minY - tolerance
-      && modelPos.y <= bounds.maxY + tolerance
+      modelPos.x >= bounds.minX - tolerance &&
+      modelPos.x <= bounds.maxX + tolerance &&
+      modelPos.y >= bounds.minY - tolerance &&
+      modelPos.y <= bounds.maxY + tolerance
     ) {
       return {
         id: systemGeometry.trussSystem.id,
@@ -118,7 +118,14 @@ function hitTestTrusses(modelPos, trussSystems, viewport) {
   return null;
 }
 
-export function createTrussSelectHandler({ dispatch, editorDispatch, getFloor, activeFloorId, trussSystems, viewport }) {
+export function createTrussSelectHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  trussSystems,
+  viewport,
+}) {
   return {
     onMouseDown(modelPos, e) {
       if (e.button !== 0) return;
@@ -271,8 +278,8 @@ export function createTrussSelectHandler({ dispatch, editorDispatch, getFloor, a
 
         const currentAngle = angleFromPivot(toolState.trussRotatePivot, modelPos);
         const nextRotation = normalizeRotationDegrees(
-          (Number(toolState.trussRotateBaseOffsetDegrees) || 0)
-          + deltaAngleDegrees(toolState.trussRotateStartAngle, currentAngle)
+          (Number(toolState.trussRotateBaseOffsetDegrees) || 0) +
+            deltaAngleDegrees(toolState.trussRotateStartAngle, currentAngle),
         );
 
         editorDispatch({
@@ -292,7 +299,7 @@ export function createTrussSelectHandler({ dispatch, editorDispatch, getFloor, a
           payload: {
             trussMoveCurrentOffset: add(
               normalizePlanOffset(toolState.trussMoveBaseOffset),
-              subtract(modelPos, toolState.startPos)
+              subtract(modelPos, toolState.startPos),
             ),
           },
         });
@@ -310,27 +317,20 @@ export function createTrussSelectHandler({ dispatch, editorDispatch, getFloor, a
         const delta = dot(subtract(modelPos, toolState.startPos), toolState.trussResizeDisplayAxis);
         const nextLength = Math.max(
           MIN_TRUSS_SYSTEM_LENGTH,
-          toolState.trussResizeHandleSide === 'start'
-            ? baseLength - delta
-            : baseLength + delta
+          toolState.trussResizeHandleSide === 'start' ? baseLength - delta : baseLength + delta,
         );
         const nextScale = normalizePlanLengthScale(nextLength / rawLength);
-        const anchorAlong = toolState.trussResizeHandleSide === 'start'
-          ? Number(toolState.trussResizeEndAlong) || 0
-          : Number(toolState.trussResizeStartAlong) || 0;
-        const offsetAdjustment = scale(
-          toolState.trussResizeDisplayAxis,
-          -anchorAlong * (nextScale - baseScale)
-        );
+        const anchorAlong =
+          toolState.trussResizeHandleSide === 'start'
+            ? Number(toolState.trussResizeEndAlong) || 0
+            : Number(toolState.trussResizeStartAlong) || 0;
+        const offsetAdjustment = scale(toolState.trussResizeDisplayAxis, -anchorAlong * (nextScale - baseScale));
 
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {
             trussResizeCurrentLengthScale: nextScale,
-            trussResizeCurrentOffset: add(
-              normalizePlanOffset(toolState.trussResizeBaseOffset),
-              offsetAdjustment
-            ),
+            trussResizeCurrentOffset: add(normalizePlanOffset(toolState.trussResizeBaseOffset), offsetAdjustment),
           },
         });
         return;
@@ -365,11 +365,7 @@ export function createTrussSelectHandler({ dispatch, editorDispatch, getFloor, a
 
       const displayedAxis = getDisplayedLayoutAxis(trussSystem, trussInstance.id) || derived.axis;
       const axisDelta = dot(subtract(modelPos, toolState.startPos), displayedAxis);
-      const nextOffset = clamp(
-        (Number(toolState.trussDragBaseOffset) || 0) + axisDelta,
-        0,
-        derived.maxOffset
-      );
+      const nextOffset = clamp((Number(toolState.trussDragBaseOffset) || 0) + axisDelta, 0, derived.maxOffset);
 
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',

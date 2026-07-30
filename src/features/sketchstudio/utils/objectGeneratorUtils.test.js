@@ -41,18 +41,22 @@ describe('objectGeneratorUtils', () => {
   });
 
   it('applies generated parts into an object draft', () => {
-    const result = applyGeneratedPartsToObjectDraft({
-      id: 'object-1',
-      defaults: { thickness: 18, material: 'plywood' },
-      bounds: { width: 0, depth: 0, height: 0 },
-      parts: [],
-    }, 'cabinetBox', {
-      width: 800,
-      height: 900,
-      depth: 400,
-      thickness: 18,
-      shelfCount: 1,
-    });
+    const result = applyGeneratedPartsToObjectDraft(
+      {
+        id: 'object-1',
+        defaults: { thickness: 18, material: 'plywood' },
+        bounds: { width: 0, depth: 0, height: 0 },
+        parts: [],
+      },
+      'cabinetBox',
+      {
+        width: 800,
+        height: 900,
+        depth: 400,
+        thickness: 18,
+        shelfCount: 1,
+      },
+    );
 
     expect(result.generator.type).toBe('cabinetBox');
     expect(result.parts.length).toBe(6);

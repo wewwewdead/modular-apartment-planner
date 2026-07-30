@@ -17,8 +17,8 @@ export function computeAnchorFromBounds(bounds, kind = 'origin') {
     return {
       id: 'anchor-center',
       name: 'center',
-      x: bounds.minX + ((bounds.maxX - bounds.minX) / 2),
-      y: bounds.minY + ((bounds.maxY - bounds.minY) / 2),
+      x: bounds.minX + (bounds.maxX - bounds.minX) / 2,
+      y: bounds.minY + (bounds.maxY - bounds.minY) / 2,
       kind: 'secondary',
     };
   }
@@ -44,15 +44,15 @@ export function setPrimaryAnchor(anchors = [], anchorId) {
 }
 
 export function moveAnchor(anchors = [], anchorId, point) {
-  return anchors.map((anchor) => (
+  return anchors.map((anchor) =>
     anchor.id === anchorId
       ? {
           ...anchor,
           x: point.x,
           y: point.y,
         }
-      : anchor
-  ));
+      : anchor,
+  );
 }
 
 export function buildExportAnchorPayload(objectDraft) {

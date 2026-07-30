@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { getFloorBeamSupportData, resolveBeamPairSupport } from '@/truss/beamSupports';
 
@@ -5,7 +6,7 @@ function beamPoints(entry) {
   return entry.renderData.outline.map((point) => `${point.x},${point.y}`).join(' ');
 }
 
-export default function TrussDrawOverlay({ floor = null, activeTool, toolState = {} }) {
+function TrussDrawOverlay({ floor = null, activeTool, toolState = {} }) {
   if (activeTool !== TOOLS.TRUSS_DRAW || !floor) return null;
 
   const beamData = getFloorBeamSupportData(floor);
@@ -70,3 +71,5 @@ export default function TrussDrawOverlay({ floor = null, activeTool, toolState =
     </g>
   );
 }
+
+export default memo(TrussDrawOverlay);

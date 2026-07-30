@@ -7,9 +7,7 @@ export default function useScrollReveal(options = {}) {
     const el = ref.current;
     if (!el) return;
 
-    const prefersReducedMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)'
-    ).matches;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReducedMotion) {
       el.setAttribute('data-visible', 'true');
@@ -26,7 +24,7 @@ export default function useScrollReveal(options = {}) {
       {
         threshold: options.threshold ?? 0.15,
         rootMargin: options.rootMargin ?? '0px 0px -40px 0px',
-      }
+      },
     );
 
     observer.observe(el);

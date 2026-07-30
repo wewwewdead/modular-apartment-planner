@@ -1,4 +1,6 @@
 import { memo } from 'react';
+import styles from './StatusBar.module.css';
+import { SHORTCUT_OVERLAY_TOGGLE_KEY } from '../utils/shortcutManifest';
 
 function getToolLabel(activeTool, tools) {
   return tools.find((tool) => tool.id === activeTool)?.label ?? activeTool;
@@ -19,6 +21,7 @@ function StatusBar({
   documentStatus,
   viewMode,
   isometricPlane,
+  onShowShortcuts,
 }) {
   return (
     <footer className="sketchStudioStatusBar">
@@ -42,9 +45,18 @@ function StatusBar({
         <span className="sketchStudioStatusItem">Profiles {selectedProfileCount}</span>
         <span className="sketchStudioStatusItem">Object {activeObjectName ?? '-'}</span>
         <span className="sketchStudioStatusItem">Sketch {documentStatus ?? 'idle'}</span>
-        <span className="sketchStudioStatusHint">
-          Esc cancels, Enter commits exact input, Ctrl+S saves the current sketch file
-        </span>
+        <span className="sketchStudioStatusHint">Esc cancels, Enter commits exact input</span>
+        {onShowShortcuts && (
+          <button
+            type="button"
+            className={styles.shortcutHintBtn}
+            onClick={onShowShortcuts}
+            title="Show keyboard shortcuts"
+          >
+            <kbd className={styles.shortcutHintKbd}>{SHORTCUT_OVERLAY_TOGGLE_KEY}</kbd>
+            shortcuts
+          </button>
+        )}
       </div>
     </footer>
   );

@@ -10,9 +10,7 @@ export function addJointToDocument(document, joint) {
 export function updateJointInDocument(document, jointId, patch) {
   return {
     ...document,
-    joints: (document.joints || []).map((joint) => (
-      joint.id === jointId ? patchJoint(joint, patch) : joint
-    )),
+    joints: (document.joints || []).map((joint) => (joint.id === jointId ? patchJoint(joint, patch) : joint)),
   };
 }
 
@@ -28,8 +26,8 @@ export function pruneDocumentJointsByEntityIds(document, removedEntityIds = []) 
 
   return {
     ...document,
-    joints: (document.joints || []).filter((joint) => (
-      !listJointEntityIds(joint).some((entityId) => removedIdSet.has(entityId))
-    )),
+    joints: (document.joints || []).filter(
+      (joint) => !listJointEntityIds(joint).some((entityId) => removedIdSet.has(entityId)),
+    ),
   };
 }

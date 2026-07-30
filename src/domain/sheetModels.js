@@ -37,11 +37,17 @@ export function createSheet(title = 'Sheet 1', options = {}) {
 }
 
 export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, options = {}) {
-  const defaultRole = sourceView === '3d_preview'
-    ? 'supplemental'
-    : ((sourceView === 'plan' || sourceView === 'roof_plan' || sourceView === 'roof_drainage' || sourceView === 'truss_plan')
-      ? 'primary'
-      : (sourceView === 'truss_detail' ? 'detail' : 'secondary'));
+  const defaultRole =
+    sourceView === '3d_preview'
+      ? 'supplemental'
+      : sourceView === 'plan' ||
+          sourceView === 'roof_plan' ||
+          sourceView === 'roof_drainage' ||
+          sourceView === 'truss_plan'
+        ? 'primary'
+        : sourceView === 'truss_detail'
+          ? 'detail'
+          : 'secondary';
 
   return {
     id: generateId('viewport'),

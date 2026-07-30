@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
 const SECTION_STYLE_MAP = {
@@ -120,7 +121,7 @@ function sceneLinePoints(element) {
   return element.points.map((point) => `${point.x},${-point.z}`).join(' ');
 }
 
-export default function SectionSceneLayer({ scene, showTitle = true }) {
+function SectionSceneLayer({ scene, showTitle = true }) {
   if (!scene) return null;
 
   const titleX = (scene.bounds.minX + scene.bounds.maxX) / 2;
@@ -218,3 +219,5 @@ export default function SectionSceneLayer({ scene, showTitle = true }) {
     </g>
   );
 }
+
+export default memo(SectionSceneLayer);

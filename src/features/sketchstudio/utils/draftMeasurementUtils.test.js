@@ -36,7 +36,11 @@ describe('draftMeasurementUtils', () => {
       draft: { type: 'polyline' },
       draftPreview: {
         type: 'polyline',
-        points: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 30 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 40, y: 0 },
+          { x: 40, y: 30 },
+        ],
         closed: false,
       },
       units: 'mm',
@@ -52,7 +56,12 @@ describe('draftMeasurementUtils', () => {
       draft: { type: 'rect' },
       draftPreview: {
         type: 'polyline',
-        points: [{ x: 0, y: 0 }, { x: 80, y: 40 }, { x: 40, y: 80 }, { x: -40, y: 40 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 80, y: 40 },
+          { x: 40, y: 80 },
+          { x: -40, y: 40 },
+        ],
         closed: true,
         width: 92,
         height: 56,

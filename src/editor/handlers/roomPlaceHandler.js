@@ -3,7 +3,7 @@ import { findRoomFaceAtPoint, roomPolygonKey } from '@/geometry/roomDetection';
 
 function findExistingRoomForFace(rooms, face) {
   if (!face) return null;
-  return rooms.find(room => roomPolygonKey(room.points) === face.key) || null;
+  return rooms.find((room) => roomPolygonKey(room.points) === face.key) || null;
 }
 
 export function createRoomPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, activePhaseId }) {
@@ -41,9 +41,7 @@ export function createRoomPlaceHandler({ dispatch, editorDispatch, getFloor, act
       if (!floor) return;
 
       const face = findRoomFaceAtPoint(floor.walls, floor.columns || [], modelPos);
-      const previewPoints = face && !findExistingRoomForFace(floor.rooms, face)
-        ? face.points
-        : null;
+      const previewPoints = face && !findExistingRoomForFace(floor.rooms, face) ? face.points : null;
 
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',

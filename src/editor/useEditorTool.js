@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { TOOLS } from './tools';
 import { createWallDrawHandler } from './handlers/wallDrawHandler';
 import { createSelectHandler } from './handlers/selectHandler';
@@ -36,10 +36,46 @@ function createReadOnlyHandler() {
   };
 }
 
-export function useEditorTool({ activeTool, dispatch, editorDispatch, project, getFloor, activeFloorId, roofSystem, trussSystems, modelTarget, viewport, snapEnabled, selectedId, selectedType, toolState, viewMode, activePhaseId }) {
+export function useEditorTool({
+  activeTool,
+  dispatch,
+  editorDispatch,
+  project,
+  getFloor,
+  activeFloorId,
+  roofSystem,
+  trussSystems,
+  modelTarget,
+  viewport,
+  snapEnabled,
+  selectedId,
+  selectedType,
+  toolState,
+  viewMode,
+  activePhaseId,
+}) {
   const getFloorRef = useRef(getFloor);
-  getFloorRef.current = getFloor;
+  // Keep the ref pointing at the latest getFloor without reading/writing it during
+  // render. Handlers are intentionally memoized without getFloor in their deps and
+  // call getFloorRef.current(...) lazily at event time, so they always see fresh
+  // floor data while staying referentially stable across renders.
+  useEffect(() => {
+    getFloorRef.current = getFloor;
+  });
 
+  const callGetFloor = useMemo(
+    () =>
+      (...args) =>
+        getFloorRef.current(...args),
+    [],
+  );
+
+  // eslint-disable react-hooks/refs -- callGetFloor is a stable wrapper that reads
+  // getFloorRef.current lazily. The tool handlers below only STORE it in their ctx and
+  // invoke it later inside event callbacks (onMouseDown/Move/Up), never during render.
+  // The rule cannot prove this deferral, so passing callGetFloor into the handler
+  // factories is flagged as a false positive. Behavior is unchanged.
+  /* eslint-disable react-hooks/refs */
   const handler = useMemo(() => {
     if (modelTarget === 'truss') {
       if (viewMode !== 'plan') {
@@ -49,7 +85,7 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
       const trussCtx = {
         dispatch,
         editorDispatch,
-        getFloor: (...args) => getFloorRef.current(...args),
+        getFloor: callGetFloor,
         activeFloorId,
         trussSystems,
         viewport,
@@ -98,7 +134,7 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
         dispatch,
         editorDispatch,
         project,
-        getFloor: (...args) => getFloorRef.current(...args),
+        getFloor: callGetFloor,
         activeFloorId,
         viewport,
         snapEnabled,
@@ -111,9 +147,13 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
     }
 
     const ctx = {
-      dispatch, editorDispatch,
+      dispatch,
+      editorDispatch,
       getFloor: (...args) => getFloorRef.current(...args),
-      activeFloorId, viewport, snapEnabled, activePhaseId,
+      activeFloorId,
+      viewport,
+      snapEnabled,
+      activePhaseId,
     };
 
     switch (activeTool) {
@@ -150,7 +190,22 @@ export function useEditorTool({ activeTool, dispatch, editorDispatch, project, g
       default:
         return null;
     }
-  }, [activeTool, activeFloorId, project, roofSystem, trussSystems, modelTarget, viewport.zoom, snapEnabled, viewMode, activePhaseId, selectedId, selectedType]);
+  }, [
+    callGetFloor,
+    activeTool,
+    activeFloorId,
+    project,
+    roofSystem,
+    trussSystems,
+    modelTarget,
+    viewport.zoom,
+    snapEnabled,
+    viewMode,
+    activePhaseId,
+    selectedId,
+    selectedType,
+  ]);
+  /* eslint-enable react-hooks/refs */
 
   return {
     onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),

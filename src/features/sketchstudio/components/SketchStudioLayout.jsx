@@ -3,6 +3,7 @@ import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
 import RightPanel from './RightPanel';
+import ShortcutOverlay from './ShortcutOverlay';
 import StatusBar from './StatusBar';
 import Toast from './Toast';
 import TopBar from './TopBar';
@@ -78,6 +79,8 @@ export default function SketchStudioLayout(props) {
     setEntityMaterial,
     setEntityThickness,
     toggleCraftsmanMode,
+    toggleShortcutOverlay,
+    closeShortcutOverlay,
     setVariables,
     addConstraint,
     updateConstraint,
@@ -292,8 +295,10 @@ export default function SketchStudioLayout(props) {
           documentStatus={status.documentStatus}
           viewMode={ui.viewMode}
           isometricPlane={ui.isometricPlane}
+          onShowShortcuts={toggleShortcutOverlay}
         />
       </section>
+      {ui.shortcutOverlayOpen && <ShortcutOverlay onClose={closeShortcutOverlay} />}
       {documentPersistence.status === 'error' && documentPersistence.error && (
         <Toast message={documentPersistence.error} type="error" onDismiss={() => {}} />
       )}

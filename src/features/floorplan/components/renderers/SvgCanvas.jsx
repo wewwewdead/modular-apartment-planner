@@ -8,6 +8,8 @@ import { buildProjectSectionScene } from '@/sections/scene';
 import { getSectionVisibilityMessage, SECTION_VISIBILITY_REASONS } from '@/sections/diagnostics';
 import { usePhaseFilteredFloor } from '@/hooks/usePhaseFilteredFloor';
 import { useEditorTool } from '@/editor/useEditorTool';
+import { applyWallDragPreview } from '@/features/floorplan/utils/wallDragPreview';
+import { describeWallEditRejection } from '@/domain/modelGraph';
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/bearing';
 import { TOOLS } from '@/editor/tools';
@@ -57,10 +59,15 @@ export default function SvgCanvas() {
     modelTarget,
     activePhaseId,
     phaseViewMode,
+    lastRejection,
     dispatch: editorDispatch,
   } = editor;
 
-  const floor = getFloor(activeFloorId);
+  // During a wall drag the committed floor never changes; overlay the live
+  // preview geometry (dragged wall + healed neighbors) for everything below.
+  const committedFloor = getFloor(activeFloorId);
+  const wallDragPreview = toolState.wallDragPreview || null;
+  const floor = useMemo(() => applyWallDragPreview(committedFloor, wallDragPreview), [committedFloor, wallDragPreview]);
   const filteredFloor = usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode);
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
@@ -223,6 +230,13 @@ export default function SvgCanvas() {
     const timer = window.setTimeout(() => editorDispatch({ type: 'CLEAR_STATUS_MESSAGE' }), 2500);
     return () => window.clearTimeout(timer);
   }, [statusMessage, editorDispatch]);
+
+  // Authoritative reducer rejections (a dispatcher forgot to pre-validate, or
+  // raced a state change) surface through the same status-message toast.
+  useEffect(() => {
+    if (!lastRejection) return;
+    editorDispatch({ type: 'SET_STATUS_MESSAGE', message: describeWallEditRejection(lastRejection.reason) });
+  }, [lastRejection, editorDispatch]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {

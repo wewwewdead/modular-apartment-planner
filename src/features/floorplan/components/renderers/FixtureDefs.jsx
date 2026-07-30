@@ -2,7 +2,9 @@
  * Shared SVG <defs> for fixture gradients and drop shadow filter.
  * Rendered once inside SvgCanvas before FixtureRenderer.
  */
-export default function FixtureDefs() {
+import { memo } from 'react';
+
+function FixtureDefs() {
   return (
     <defs>
       {/* Fixture gradients */}
@@ -48,3 +50,5 @@ export default function FixtureDefs() {
     </defs>
   );
 }
+
+export default memo(FixtureDefs);

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { formatMeasurement } from '@/annotations/format';
 import { PREVIEW_LABEL_OFFSET } from '@/domain/defaults';
 import { TOOLS } from '@/editor/tools';
@@ -8,7 +9,7 @@ function pointsToString(points = []) {
   return points.map((point) => `${point.x},${point.y}`).join(' ');
 }
 
-export default function RoofPreviewLayer({ activeTool, toolState, roofSystem = null }) {
+function RoofPreviewLayer({ activeTool, toolState, roofSystem = null }) {
   if (activeTool === TOOLS.ROOF_PARAPET && roofSystem) {
     const candidateEdges = buildRoofParapetCandidateEdges(roofSystem);
 
@@ -114,3 +115,5 @@ export default function RoofPreviewLayer({ activeTool, toolState, roofSystem = n
 
   return null;
 }
+
+export default memo(RoofPreviewLayer);

@@ -111,7 +111,7 @@ export function findCorner(walls, clickPoint, tolerance) {
 
   for (const group of groups) {
     // Ensure exactly 2 distinct walls
-    const wallIds = new Set(group.map(ep => ep.wall.id));
+    const wallIds = new Set(group.map((ep) => ep.wall.id));
     if (wallIds.size !== 2) continue;
 
     const centroid = {

@@ -9,13 +9,9 @@ function normalizeThickness(thickness) {
 
 export function getMaterialSelectionState(entities = [], selectedIds = []) {
   const selectedEntityMap = new Map(
-    entities
-      .filter((entity) => selectedIds.includes(entity.id))
-      .map((entity) => [entity.id, entity]),
+    entities.filter((entity) => selectedIds.includes(entity.id)).map((entity) => [entity.id, entity]),
   );
-  const selectedEntities = selectedIds
-    .map((entityId) => selectedEntityMap.get(entityId))
-    .filter(Boolean);
+  const selectedEntities = selectedIds.map((entityId) => selectedEntityMap.get(entityId)).filter(Boolean);
 
   const materialValues = Array.from(new Set(selectedEntities.map((entity) => normalizeMaterialId(entity.materialId))));
   const thicknessValues = Array.from(new Set(selectedEntities.map((entity) => normalizeThickness(entity.thickness))));
@@ -28,4 +24,3 @@ export function getMaterialSelectionState(entities = [], selectedIds = []) {
     isMixedThickness: thicknessValues.length > 1,
   };
 }
-

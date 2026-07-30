@@ -22,7 +22,9 @@
   font-weight: 500;
   background: var(--color-surface-elevated);
   color: var(--color-text-primary);
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
 }
 
 .nameInput:focus {

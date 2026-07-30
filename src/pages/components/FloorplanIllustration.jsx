@@ -1,12 +1,6 @@
 export default function FloorplanIllustration({ className }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 200 150"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 200 150" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       {/* Outer walls */}
       <rect
         x="20"
@@ -20,24 +14,10 @@ export default function FloorplanIllustration({ className }) {
       />
 
       {/* Interior wall — horizontal divider */}
-      <line
-        x1="20"
-        y1="70"
-        x2="120"
-        y2="70"
-        stroke="var(--color-workspace-floorplan)"
-        strokeWidth="3"
-      />
+      <line x1="20" y1="70" x2="120" y2="70" stroke="var(--color-workspace-floorplan)" strokeWidth="3" />
 
       {/* Interior wall — vertical divider */}
-      <line
-        x1="120"
-        y1="15"
-        x2="120"
-        y2="135"
-        stroke="var(--color-workspace-floorplan)"
-        strokeWidth="3"
-      />
+      <line x1="120" y1="15" x2="120" y2="135" stroke="var(--color-workspace-floorplan)" strokeWidth="3" />
 
       {/* Door arc — bottom-left room */}
       <path
@@ -48,14 +28,7 @@ export default function FloorplanIllustration({ className }) {
         strokeDasharray="2 2"
       />
       {/* Door opening */}
-      <line
-        x1="60"
-        y1="135"
-        x2="60"
-        y2="113"
-        stroke="var(--color-workspace-floorplan)"
-        strokeWidth="1.5"
-      />
+      <line x1="60" y1="135" x2="60" y2="113" stroke="var(--color-workspace-floorplan)" strokeWidth="1.5" />
 
       {/* Window marks — right wall */}
       <line
@@ -67,32 +40,11 @@ export default function FloorplanIllustration({ className }) {
         strokeWidth="2"
         strokeDasharray="3 2"
       />
-      <line
-        x1="176"
-        y1="40"
-        x2="176"
-        y2="60"
-        stroke="var(--color-workspace-floorplan)"
-        strokeWidth="1"
-      />
-      <line
-        x1="184"
-        y1="40"
-        x2="184"
-        y2="60"
-        stroke="var(--color-workspace-floorplan)"
-        strokeWidth="1"
-      />
+      <line x1="176" y1="40" x2="176" y2="60" stroke="var(--color-workspace-floorplan)" strokeWidth="1" />
+      <line x1="184" y1="40" x2="184" y2="60" stroke="var(--color-workspace-floorplan)" strokeWidth="1" />
 
       {/* Dimension line — top */}
-      <line
-        x1="24"
-        y1="8"
-        x2="176"
-        y2="8"
-        stroke="var(--color-text-secondary)"
-        strokeWidth="0.5"
-      />
+      <line x1="24" y1="8" x2="176" y2="8" stroke="var(--color-text-secondary)" strokeWidth="0.5" />
       <line x1="24" y1="5" x2="24" y2="11" stroke="var(--color-text-secondary)" strokeWidth="0.5" />
       <line x1="176" y1="5" x2="176" y2="11" stroke="var(--color-text-secondary)" strokeWidth="0.5" />
       <text
@@ -144,15 +96,8 @@ export default function FloorplanIllustration({ className }) {
       {/* Grid dots for texture */}
       {[40, 60, 80, 100].map((x) =>
         [30, 50, 90, 110].map((y) => (
-          <circle
-            key={`${x}-${y}`}
-            cx={x}
-            cy={y}
-            r="0.6"
-            fill="var(--color-grid-major)"
-            opacity="0.5"
-          />
-        ))
+          <circle key={`${x}-${y}`} cx={x} cy={y} r="0.6" fill="var(--color-grid-major)" opacity="0.5" />
+        )),
       )}
     </svg>
   );

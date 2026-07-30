@@ -65,9 +65,7 @@ describe('filletUtils', () => {
     });
 
     it('finds a rect corner', () => {
-      const entities = [
-        { id: 'r1', type: 'rect', x: 0, y: 0, width: 100, height: 80, rotation: 0 },
-      ];
+      const entities = [{ id: 'r1', type: 'rect', x: 0, y: 0, width: 100, height: 80, rotation: 0 }];
       const corner = findFilletableCorner(entities, { x: 0, y: 0 }, 5);
       expect(corner).not.toBeNull();
       expect(corner.type).toBe('rect-corner');

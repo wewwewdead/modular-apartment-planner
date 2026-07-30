@@ -12,12 +12,7 @@ export function wallOutline(wall) {
   const halfThick = wall.thickness / 2;
   const offset = scale(perp, halfThick);
 
-  return [
-    add(wall.start, offset),
-    add(wall.end, offset),
-    subtract(wall.end, offset),
-    subtract(wall.start, offset),
-  ];
+  return [add(wall.start, offset), add(wall.end, offset), subtract(wall.end, offset), subtract(wall.start, offset)];
 }
 
 export function wallLength(wall) {
@@ -30,9 +25,7 @@ export function wallLength(wall) {
 export function resizeWallFromStart(wall, requestedLength, minLength = MIN_WALL_LENGTH) {
   const targetLength = Math.max(minLength, Number(requestedLength) || 0);
   const direction = normalize(subtract(wall.end, wall.start));
-  const safeDirection = (direction.x === 0 && direction.y === 0)
-    ? { x: 1, y: 0 }
-    : direction;
+  const safeDirection = direction.x === 0 && direction.y === 0 ? { x: 1, y: 0 } : direction;
 
   return {
     start: wall.start,

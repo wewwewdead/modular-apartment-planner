@@ -4,7 +4,7 @@ const EPSILON = 1e-6;
 const DETAIL_MARKER_LENGTH = 160;
 
 function normalize2d(vector) {
-  const length = Math.sqrt((vector.x * vector.x) + (vector.z * vector.z));
+  const length = Math.sqrt(vector.x * vector.x + vector.z * vector.z);
   if (length <= EPSILON) {
     return { x: 1, z: 0 };
   }
@@ -22,7 +22,11 @@ function buildChordAttachments(run, spacing, startOffset, endOffset, side) {
   if (limit < Math.max(startOffset, 0) - EPSILON) return [];
 
   const attachments = [];
-  for (let distanceAlong = Math.max(startOffset, 0), index = 0; distanceAlong <= limit + EPSILON; distanceAlong += spacing, index += 1) {
+  for (
+    let distanceAlong = Math.max(startOffset, 0), index = 0;
+    distanceAlong <= limit + EPSILON;
+    distanceAlong += spacing, index += 1
+  ) {
     const sample = sampleTopChordRun(run, distanceAlong);
     if (!sample) continue;
 
@@ -39,12 +43,14 @@ function buildChordAttachments(run, spacing, startOffset, endOffset, side) {
 }
 
 function dedupeAttachments(attachments = []) {
-  return attachments.filter((attachment, index) => (
-    attachments.findIndex((entry) => (
-      Math.abs(entry.localPoint.x - attachment.localPoint.x) <= EPSILON
-      && Math.abs(entry.localPoint.z - attachment.localPoint.z) <= EPSILON
-    )) === index
-  ));
+  return attachments.filter(
+    (attachment, index) =>
+      attachments.findIndex(
+        (entry) =>
+          Math.abs(entry.localPoint.x - attachment.localPoint.x) <= EPSILON &&
+          Math.abs(entry.localPoint.z - attachment.localPoint.z) <= EPSILON,
+      ) === index,
+  );
 }
 
 export function buildTrussPurlinAttachments(profile, purlinSystem = {}) {
@@ -55,8 +61,7 @@ export function buildTrussPurlinAttachments(profile, purlinSystem = {}) {
   const endOffset = Math.max(Number(purlinSystem.endOffset || 0), 0);
   if (spacing <= EPSILON) return [];
 
-  const topChordRuns = (profile?.topChordRuns || [])
-    .filter((run) => (run.points || []).length >= 2);
+  const topChordRuns = (profile?.topChordRuns || []).filter((run) => (run.points || []).length >= 2);
 
   if (!topChordRuns.length) {
     return buildChordAttachments(
@@ -68,19 +73,15 @@ export function buildTrussPurlinAttachments(profile, purlinSystem = {}) {
       spacing,
       startOffset,
       endOffset,
-      'main'
+      'main',
     );
   }
 
-  return dedupeAttachments(topChordRuns.flatMap((run, index) => (
-    buildChordAttachments(
-      run,
-      spacing,
-      startOffset,
-      endOffset,
-      run.side || run.id || `run_${index + 1}`
-    )
-  )));
+  return dedupeAttachments(
+    topChordRuns.flatMap((run, index) =>
+      buildChordAttachments(run, spacing, startOffset, endOffset, run.side || run.id || `run_${index + 1}`),
+    ),
+  );
 }
 
 export function createDetailPurlinMarker(attachment, markerLength = DETAIL_MARKER_LENGTH) {
@@ -93,12 +94,12 @@ export function createDetailPurlinMarker(attachment, markerLength = DETAIL_MARKE
   return {
     id: attachment.id,
     start: {
-      x: attachment.localPoint.x - (normal.x * halfLength),
-      z: attachment.localPoint.z - (normal.z * halfLength),
+      x: attachment.localPoint.x - normal.x * halfLength,
+      z: attachment.localPoint.z - normal.z * halfLength,
     },
     end: {
-      x: attachment.localPoint.x + (normal.x * halfLength),
-      z: attachment.localPoint.z + (normal.z * halfLength),
+      x: attachment.localPoint.x + normal.x * halfLength,
+      z: attachment.localPoint.z + normal.z * halfLength,
     },
   };
 }

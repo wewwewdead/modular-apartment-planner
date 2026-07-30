@@ -155,11 +155,7 @@ function createStairDescriptor(stair, floorLevel, floorId, landings, landingElev
       sourceId: stair.id,
       floorId,
     },
-    bounds: createBoundsFromPoints(
-      renderData.outline,
-      baseElevation,
-      baseElevation + renderData.totalRise
-    ),
+    bounds: createBoundsFromPoints(renderData.outline, baseElevation, baseElevation + renderData.totalRise),
   };
 }
 
@@ -174,18 +170,13 @@ function buildWallObjects(wallContexts) {
         controlPoint: context.wall.controlPoint,
         thickness: context.renderWall.thickness,
       });
-      return [createPrismDescriptor(
-        context.wall.id,
-        'wall',
-        outline,
-        context.wallBase,
-        context.wallTop - context.wallBase,
-        {
+      return [
+        createPrismDescriptor(context.wall.id, 'wall', outline, context.wallBase, context.wallTop - context.wallBase, {
           sourceId: context.wall.id,
           floorId: context.floorId,
           wallId: context.wall.id,
-        }
-      )];
+        }),
+      ];
     }
 
     return buildWallSolidSegments(context).map((segment) =>
@@ -201,45 +192,42 @@ function buildWallObjects(wallContexts) {
           sourceId: segment.wallId,
           floorId: segment.floorId,
           wallId: segment.wallId,
-        }
-      )
+        },
+      ),
     );
   });
 }
 
 function buildSlabObjects(floor) {
   return (floor.slabs || [])
-    .filter(slab => isValidSlabBoundary(slab.boundaryPoints))
-    .map(slab => createPrismDescriptor(
-      slab.id,
-      'slab',
-      slab.boundaryPoints,
-      getSlabBottomLevel(slab),
-      slab.thickness ?? 0,
-      {
+    .filter((slab) => isValidSlabBoundary(slab.boundaryPoints))
+    .map((slab) =>
+      createPrismDescriptor(slab.id, 'slab', slab.boundaryPoints, getSlabBottomLevel(slab), slab.thickness ?? 0, {
         sourceId: slab.id,
         floorId: floor.id,
-      }
-    ));
+      }),
+    );
 }
 
 function buildColumnObjects(floor, floorLevel) {
-  return (floor.columns || []).map((column) => createBoxDescriptor(
-    column.id,
-    'column',
-    { x: column.x, y: column.y },
-    {
-      x: column.width,
-      y: column.height,
-      z: column.depth,
-    },
-    floorLevel,
-    (column.rotation || 0) * Math.PI / 180,
-    {
-      sourceId: column.id,
-      floorId: floor.id,
-    }
-  ));
+  return (floor.columns || []).map((column) =>
+    createBoxDescriptor(
+      column.id,
+      'column',
+      { x: column.x, y: column.y },
+      {
+        x: column.width,
+        y: column.height,
+        z: column.depth,
+      },
+      floorLevel,
+      ((column.rotation || 0) * Math.PI) / 180,
+      {
+        sourceId: column.id,
+        floorId: floor.id,
+      },
+    ),
+  );
 }
 
 function buildBeamObjects(floor) {
@@ -259,7 +247,7 @@ function buildBeamObjects(floor) {
         {
           sourceId: beam.id,
           floorId: floor.id,
-        }
+        },
       );
     })
     .filter(Boolean);
@@ -267,16 +255,10 @@ function buildBeamObjects(floor) {
 
 function getInsertThickness(kind, wallThickness) {
   if (kind === 'door') {
-    return Math.max(
-      DOOR_INSERT_THICKNESS_MIN,
-      Math.min(wallThickness * 0.22, DOOR_INSERT_THICKNESS_MAX)
-    );
+    return Math.max(DOOR_INSERT_THICKNESS_MIN, Math.min(wallThickness * 0.22, DOOR_INSERT_THICKNESS_MAX));
   }
 
-  return Math.max(
-    WINDOW_INSERT_THICKNESS_MIN,
-    Math.min(wallThickness * 0.32, WINDOW_INSERT_THICKNESS_MAX)
-  );
+  return Math.max(WINDOW_INSERT_THICKNESS_MIN, Math.min(wallThickness * 0.32, WINDOW_INSERT_THICKNESS_MAX));
 }
 
 function createOpeningInsertDescriptor(opening) {
@@ -296,7 +278,7 @@ function createOpeningInsertDescriptor(opening) {
       floorId: opening.metadata.floorId,
       wallId: opening.wallId,
       openingKind: opening.kind,
-    }
+    },
   );
 }
 
@@ -327,31 +309,31 @@ function buildStairObjects(floor, floorLevel, landings, landingElevationMap) {
 }
 
 function buildLandingObjects(floor, floorLevel, landingElevationMap) {
-  return (floor.landings || []).map((landing) => createBoxDescriptor(
-    landing.id,
-    'landing',
-    { x: landing.position.x, y: landing.position.y },
-    {
-      x: landing.width,
-      y: landing.thickness ?? 200,
-      z: landing.depth,
-    },
-    floorLevel + (landingElevationMap.get(landing.id) || 0),
-    (landing.rotation || 0) * Math.PI / 180,
-    {
-      sourceId: landing.id,
-      floorId: floor.id,
-    }
-  ));
+  return (floor.landings || []).map((landing) =>
+    createBoxDescriptor(
+      landing.id,
+      'landing',
+      { x: landing.position.x, y: landing.position.y },
+      {
+        x: landing.width,
+        y: landing.thickness ?? 200,
+        z: landing.depth,
+      },
+      floorLevel + (landingElevationMap.get(landing.id) || 0),
+      ((landing.rotation || 0) * Math.PI) / 180,
+      {
+        sourceId: landing.id,
+        floorId: floor.id,
+      },
+    ),
+  );
 }
 
 function buildFixtureObjects(floor, floorLevel) {
   // Sit fixtures on top of the highest slab surface (or floorLevel if no slabs)
   // +1mm offset prevents z-fighting where fixture bottom meets slab top
   const slabs = floor.slabs || [];
-  const slabTop = slabs.length > 0
-    ? Math.max(...slabs.map(s => s.elevation ?? floorLevel))
-    : floorLevel;
+  const slabTop = slabs.length > 0 ? Math.max(...slabs.map((s) => s.elevation ?? floorLevel)) : floorLevel;
   const fixtureBase = Math.max(slabTop, floorLevel) + 1;
 
   return (floor.fixtures || []).map((fixture) => {
@@ -365,12 +347,12 @@ function buildFixtureObjects(floor, floorLevel) {
         z: fixture.depth,
       },
       fixtureBase,
-      (fixture.rotation || 0) * Math.PI / 180,
+      ((fixture.rotation || 0) * Math.PI) / 180,
       {
         sourceId: fixture.id,
         floorId: floor.id,
         materialKey: 'fixture_' + fixture.fixtureType,
-      }
+      },
     );
     descriptor.geometry = 'fixture';
     descriptor.fixtureType = fixture.fixtureType;
@@ -393,7 +375,7 @@ function buildRailingObjects(floor, floorLevel) {
         sourceId: railing.id,
         floorId: floor.id,
         materialKey: 'railing_' + type,
-      }
+      },
     );
     descriptor.geometry = 'railing';
     descriptor.railingType = type;
@@ -406,9 +388,7 @@ export function buildFloorPreviewObjects(floor) {
   const landings = floor.landings || [];
   const stairs = floor.stairs || [];
 
-  const landingElevationMap = new Map(
-    landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorLevel)])
-  );
+  const landingElevationMap = new Map(landings.map((l) => [l.id, resolveLandingElevation(l, stairs, floorLevel)]));
 
   const wallContexts = buildWallPreviewContexts(floor, floorLevel);
 

@@ -62,13 +62,20 @@ describe('useSketchBOM pipeline', () => {
   });
 
   it('keeps exact-area costing for irregular closed profiles', () => {
-    const { bomRows, totalCost } = runBomPipeline([{
-      id: 'p1',
-      type: 'polyline',
-      materialId: 'birch-plywood-18',
-      closed: true,
-      points: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
-    }]);
+    const { bomRows, totalCost } = runBomPipeline([
+      {
+        id: 'p1',
+        type: 'polyline',
+        materialId: 'birch-plywood-18',
+        closed: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 200, y: 0 },
+          { x: 200, y: 100 },
+          { x: 0, y: 100 },
+        ],
+      },
+    ]);
 
     expect(bomRows[0].area).toBeCloseTo(0.02, 4);
     expect(bomRows[0].costAccuracy).toBe('exact');
@@ -77,15 +84,17 @@ describe('useSketchBOM pipeline', () => {
   });
 
   it('keeps exact linear cost for path-based parts when stock length is known', () => {
-    const { bomRows } = runBomPipeline([{
-      id: 'l1',
-      type: 'line',
-      materialId: 'steel-sq-25',
-      x1: 0,
-      y1: 0,
-      x2: 1000,
-      y2: 0,
-    }]);
+    const { bomRows } = runBomPipeline([
+      {
+        id: 'l1',
+        type: 'line',
+        materialId: 'steel-sq-25',
+        x1: 0,
+        y1: 0,
+        x2: 1000,
+        y2: 0,
+      },
+    ]);
 
     expect(bomRows[0].stockLength).toBe(1000);
     expect(bomRows[0].costAccuracy).toBe('exact');

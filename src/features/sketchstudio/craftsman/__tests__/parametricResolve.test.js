@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createVariable,
-  resolveEntityDimensions,
-  resolveAllEntities,
-} from '../../utils/parametricEngine';
+import { createVariable, resolveEntityDimensions, resolveAllEntities } from '../../utils/parametricEngine';
 
 const vars = [
   { ...createVariable('W', 1200), id: 'v1' },

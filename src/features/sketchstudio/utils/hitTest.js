@@ -17,8 +17,7 @@ function pointInPolygon(point, polygon) {
     const yi = polygon[index].y;
     const xj = polygon[previous].x;
     const yj = polygon[previous].y;
-    const intersects = ((yi > point.y) !== (yj > point.y))
-      && (point.x < (((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-6)) + xi);
+    const intersects = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi || 1e-6) + xi;
 
     if (intersects) {
       inside = !inside;
@@ -45,14 +44,14 @@ export function distancePointToSegment(point, start, end) {
 }
 
 export function getSegmentIntersectionPoint(a1, a2, b1, b2) {
-  const denominator = ((a2.x - a1.x) * (b2.y - b1.y)) - ((a2.y - a1.y) * (b2.x - b1.x));
+  const denominator = (a2.x - a1.x) * (b2.y - b1.y) - (a2.y - a1.y) * (b2.x - b1.x);
 
   if (denominator === 0) {
     return null;
   }
 
-  const ua = (((b2.x - b1.x) * (a1.y - b1.y)) - ((b2.y - b1.y) * (a1.x - b1.x))) / denominator;
-  const ub = (((a2.x - a1.x) * (a1.y - b1.y)) - ((a2.y - a1.y) * (a1.x - b1.x))) / denominator;
+  const ua = ((b2.x - b1.x) * (a1.y - b1.y) - (b2.y - b1.y) * (a1.x - b1.x)) / denominator;
+  const ub = ((a2.x - a1.x) * (a1.y - b1.y) - (a2.y - a1.y) * (a1.x - b1.x)) / denominator;
 
   if (ua < 0 || ua > 1 || ub < 0 || ub > 1) {
     return null;
@@ -75,9 +74,9 @@ export function hitTestRect(entity, point, tolerance) {
     return true;
   }
 
-  return corners.some((corner, index) => (
-    distancePointToSegment(point, corner, corners[(index + 1) % corners.length]) <= tolerance
-  ));
+  return corners.some(
+    (corner, index) => distancePointToSegment(point, corner, corners[(index + 1) % corners.length]) <= tolerance,
+  );
 }
 
 export function hitTestCircle(entity, point, tolerance) {
@@ -91,22 +90,27 @@ export function hitTestEllipse(entity, point, tolerance) {
   const sin = Math.sin(-radians);
   const dx = point.x - entity.cx;
   const dy = point.y - entity.cy;
-  const localX = (dx * cos) - (dy * sin);
-  const localY = (dx * sin) + (dy * cos);
+  const localX = dx * cos - dy * sin;
+  const localY = dx * sin + dy * cos;
   const rx = Math.max(entity.rx, 1e-6);
   const ry = Math.max(entity.ry, 1e-6);
-  const normalized = ((localX * localX) / ((rx + tolerance) * (rx + tolerance)))
-    + ((localY * localY) / ((ry + tolerance) * (ry + tolerance)));
+  const normalized =
+    (localX * localX) / ((rx + tolerance) * (rx + tolerance)) +
+    (localY * localY) / ((ry + tolerance) * (ry + tolerance));
 
   return normalized <= 1;
 }
 
 export function hitTestPolyline(entity, point, tolerance) {
-  return getPolylineSegments(entity).some((segment) => distancePointToSegment(point, segment.start, segment.end) <= tolerance);
+  return getPolylineSegments(entity).some(
+    (segment) => distancePointToSegment(point, segment.start, segment.end) <= tolerance,
+  );
 }
 
 export function hitTestArc(entity, point, tolerance) {
-  return getArcSegments(entity).some((segment) => distancePointToSegment(point, segment.start, segment.end) <= tolerance);
+  return getArcSegments(entity).some(
+    (segment) => distancePointToSegment(point, segment.start, segment.end) <= tolerance,
+  );
 }
 
 export function hitTestDimension(entity, point, tolerance, entities) {
@@ -120,9 +124,23 @@ export function hitTestDimension(entity, point, tolerance, entities) {
     offset: entity.offset,
   });
 
-  return distancePointToSegment(point, { x: geometry.ext1.x1, y: geometry.ext1.y1 }, { x: geometry.ext1.x2, y: geometry.ext1.y2 }) <= tolerance
-    || distancePointToSegment(point, { x: geometry.ext2.x1, y: geometry.ext2.y1 }, { x: geometry.ext2.x2, y: geometry.ext2.y2 }) <= tolerance
-    || distancePointToSegment(point, { x: geometry.dimLine.x1, y: geometry.dimLine.y1 }, { x: geometry.dimLine.x2, y: geometry.dimLine.y2 }) <= tolerance;
+  return (
+    distancePointToSegment(
+      point,
+      { x: geometry.ext1.x1, y: geometry.ext1.y1 },
+      { x: geometry.ext1.x2, y: geometry.ext1.y2 },
+    ) <= tolerance ||
+    distancePointToSegment(
+      point,
+      { x: geometry.ext2.x1, y: geometry.ext2.y1 },
+      { x: geometry.ext2.x2, y: geometry.ext2.y2 },
+    ) <= tolerance ||
+    distancePointToSegment(
+      point,
+      { x: geometry.dimLine.x1, y: geometry.dimLine.y1 },
+      { x: geometry.dimLine.x2, y: geometry.dimLine.y2 },
+    ) <= tolerance
+  );
 }
 
 export function hitTestFeature(entity, point, tolerance) {
@@ -133,13 +151,17 @@ export function hitTestFeature(entity, point, tolerance) {
   }
 
   if (entity.shape === 'rect') {
-    return hitTestRect({
-      x: entity.x,
-      y: entity.y,
-      width: entity.width,
-      height: entity.height,
-      rotation: 0,
-    }, point, tolerance);
+    return hitTestRect(
+      {
+        x: entity.x,
+        y: entity.y,
+        width: entity.width,
+        height: entity.height,
+        rotation: 0,
+      },
+      point,
+      tolerance,
+    );
   }
 
   if (entity.shape === 'ellipse') {
@@ -157,9 +179,9 @@ export function hitTestFeature(entity, point, tolerance) {
       return true;
     }
 
-    return polygon.some((vertex, index) => (
-      distancePointToSegment(point, vertex, polygon[(index + 1) % polygon.length]) <= tolerance
-    ));
+    return polygon.some(
+      (vertex, index) => distancePointToSegment(point, vertex, polygon[(index + 1) % polygon.length]) <= tolerance,
+    );
   }
 
   return false;
@@ -182,20 +204,23 @@ export function hitTestText(entity, point, tolerance) {
       return true;
     }
 
-    if (leaderGeometry.arrowHead.some((arrowPoint, index) => (
-      distancePointToSegment(
-        point,
-        arrowPoint,
-        leaderGeometry.arrowHead[(index + 1) % leaderGeometry.arrowHead.length],
-      ) <= tolerance
-    ))) {
+    if (
+      leaderGeometry.arrowHead.some(
+        (arrowPoint, index) =>
+          distancePointToSegment(
+            point,
+            arrowPoint,
+            leaderGeometry.arrowHead[(index + 1) % leaderGeometry.arrowHead.length],
+          ) <= tolerance,
+      )
+    ) {
       return true;
     }
   }
 
-  return corners.some((corner, index) => (
-    distancePointToSegment(point, corner, corners[(index + 1) % corners.length]) <= tolerance
-  ));
+  return corners.some(
+    (corner, index) => distancePointToSegment(point, corner, corners[(index + 1) % corners.length]) <= tolerance,
+  );
 }
 
 export function hitTestAngleDimension(entity, point, tolerance, entities) {
@@ -206,10 +231,22 @@ export function hitTestAngleDimension(entity, point, tolerance, entities) {
   const geometry = getAngleDimensionGeometry({ vertex, p1, p2, arcRadius: entity.arcRadius });
 
   // Check rays
-  if (distancePointToSegment(point, { x: geometry.ray1.x1, y: geometry.ray1.y1 }, { x: geometry.ray1.x2, y: geometry.ray1.y2 }) <= tolerance) {
+  if (
+    distancePointToSegment(
+      point,
+      { x: geometry.ray1.x1, y: geometry.ray1.y1 },
+      { x: geometry.ray1.x2, y: geometry.ray1.y2 },
+    ) <= tolerance
+  ) {
     return true;
   }
-  if (distancePointToSegment(point, { x: geometry.ray2.x1, y: geometry.ray2.y1 }, { x: geometry.ray2.x2, y: geometry.ray2.y2 }) <= tolerance) {
+  if (
+    distancePointToSegment(
+      point,
+      { x: geometry.ray2.x1, y: geometry.ray2.y1 },
+      { x: geometry.ray2.x2, y: geometry.ray2.y2 },
+    ) <= tolerance
+  ) {
     return true;
   }
 

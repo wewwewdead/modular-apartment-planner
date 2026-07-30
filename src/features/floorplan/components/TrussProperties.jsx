@@ -8,6 +8,8 @@ import { distance } from '@/geometry/point';
 import { getFloorTopElevation, getOrderedFloors } from '@/domain/floorModels';
 import {
   detachBeamSupportedTrussInstances,
+  deriveTrussPitchFromRise,
+  deriveTrussRiseFromPitch,
   getDefaultTrussTypes,
   resolveTrussType,
   TRUSS_MATERIALS,
@@ -584,10 +586,14 @@ export function TrussInstanceProperties({ project, trussSystem, trussInstance, d
           value={trussInstance.trussTypeId}
           onChange={(e) => {
             const nextType = resolveTrussType(e.target.value, trussTypes);
+            // RISE is the source of truth: adopt the new type's default rise and
+            // derive a consistent pitch from it (the type's stored default pitch
+            // is not internally consistent with its default rise/span).
+            const nextRise = nextType.defaultRise;
             updateInstance({
               trussTypeId: nextType.id,
-              rise: nextType.defaultRise,
-              pitch: nextType.defaultPitch,
+              rise: nextRise,
+              pitch: deriveTrussPitchFromRise(nextRise, trussInstance.span, nextType.family),
             });
           }}
           style={{
@@ -693,7 +699,15 @@ export function TrussInstanceProperties({ project, trussSystem, trussInstance, d
         suffix={u.suffix}
         step={u.step(100)}
         value={u.toDisplay(trussInstance.span)}
-        onChange={(value) => updateInstance({ span: Math.max(1000, u.fromDisplay(value)) })}
+        onChange={(value) => {
+          // Rise is fixed as the source of truth; changing span changes the run,
+          // so pitch is recomputed to keep the stored pair consistent.
+          const nextSpan = Math.max(1000, u.fromDisplay(value));
+          updateInstance({
+            span: nextSpan,
+            pitch: deriveTrussPitchFromRise(trussInstance.rise, nextSpan, trussType.family),
+          });
+        }}
       />
       <InputField
         label={trussType.family === 'flat' ? 'Depth' : 'Rise'}
@@ -701,7 +715,14 @@ export function TrussInstanceProperties({ project, trussSystem, trussInstance, d
         suffix={u.suffix}
         step={u.step(50)}
         value={u.toDisplay(trussInstance.rise)}
-        onChange={(value) => updateInstance({ rise: Math.max(0, u.fromDisplay(value)) })}
+        onChange={(value) => {
+          // Editing rise recomputes pitch so the two never disagree.
+          const nextRise = Math.max(0, u.fromDisplay(value));
+          updateInstance({
+            rise: nextRise,
+            pitch: deriveTrussPitchFromRise(nextRise, trussInstance.span, trussType.family),
+          });
+        }}
       />
       <InputField
         label="Pitch"
@@ -710,7 +731,14 @@ export function TrussInstanceProperties({ project, trussSystem, trussInstance, d
         step={0.1}
         value={trussType.family === 'flat' ? 0 : trussInstance.pitch}
         readOnly={trussType.family === 'flat'}
-        onChange={(value) => updateInstance({ pitch: Math.max(0, value) })}
+        onChange={(value) => {
+          // Editing pitch recomputes rise (the geometric source of truth).
+          const nextPitch = Math.max(0, value);
+          updateInstance({
+            pitch: nextPitch,
+            rise: deriveTrussRiseFromPitch(nextPitch, trussInstance.span, trussType.family),
+          });
+        }}
       />
       <InputField
         label="Spacing"

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS, SHEET_COLORS } from '@/sheets/standards';
 import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS } from '@/annotations/policy';
 
@@ -203,7 +204,7 @@ function TagFigure({ tag }) {
   );
 }
 
-export default function BlueprintAnnotationLayer({ dimensions = [], tags = [], className = 'annotations' }) {
+function BlueprintAnnotationLayer({ dimensions = [], tags = [], className = 'annotations' }) {
   return (
     <g className={className}>
       {dimensions.map((figure) => (
@@ -215,3 +216,5 @@ export default function BlueprintAnnotationLayer({ dimensions = [], tags = [], c
     </g>
   );
 }
+
+export default memo(BlueprintAnnotationLayer);

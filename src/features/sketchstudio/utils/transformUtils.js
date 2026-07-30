@@ -16,8 +16,8 @@ export function rotatePointAroundPivot(point, pivot, angleRadians) {
   const dy = point.y - pivot.y;
 
   return {
-    x: pivot.x + (dx * cos) - (dy * sin),
-    y: pivot.y + (dx * sin) + (dy * cos),
+    x: pivot.x + dx * cos - dy * sin,
+    y: pivot.y + dx * sin + dy * cos,
   };
 }
 
@@ -25,25 +25,23 @@ export function mirrorPointAcrossAxis(point, pivot, direction = 'horizontal') {
   if (direction === 'vertical') {
     return {
       x: point.x,
-      y: (pivot.y * 2) - point.y,
+      y: pivot.y * 2 - point.y,
     };
   }
 
   return {
-    x: (pivot.x * 2) - point.x,
+    x: pivot.x * 2 - point.x,
     y: point.y,
   };
 }
 
 function normalizeAngleDegrees(angle) {
-  const normalized = ((Number(angle) || 0) % 360 + 360) % 360;
+  const normalized = (((Number(angle) || 0) % 360) + 360) % 360;
   return normalized > 180 ? normalized - 360 : normalized;
 }
 
 function mirrorRotationDegrees(angle, direction = 'horizontal') {
-  const nextAngle = direction === 'vertical'
-    ? -(Number(angle) || 0)
-    : 180 - (Number(angle) || 0);
+  const nextAngle = direction === 'vertical' ? -(Number(angle) || 0) : 180 - (Number(angle) || 0);
 
   return normalizeAngleDegrees(nextAngle);
 }
@@ -150,7 +148,7 @@ export function translateEntity(entity, delta) {
             ...entity.leader,
             target: translatePoint(entity.leader.target, delta),
           }
-        : entity.leader ?? null,
+        : (entity.leader ?? null),
     };
   }
 
@@ -190,11 +188,9 @@ function hasSourceRefIn(entity, idSet) {
 
 export function translateEntities(entities, entityIds, delta) {
   const idSet = new Set(entityIds);
-  return entities.map((entity) => (
-    idSet.has(entity.id) || hasSourceRefIn(entity, idSet)
-      ? translateEntity(entity, delta)
-      : entity
-  ));
+  return entities.map((entity) =>
+    idSet.has(entity.id) || hasSourceRefIn(entity, idSet) ? translateEntity(entity, delta) : entity,
+  );
 }
 
 export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
@@ -223,7 +219,7 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
       ...entity,
       cx: center.x,
       cy: center.y,
-      rotation: (entity.rotation ?? 0) + ((angleRadians * 180) / Math.PI),
+      rotation: (entity.rotation ?? 0) + (angleRadians * 180) / Math.PI,
     };
   }
 
@@ -246,7 +242,7 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
   if (entity.type === 'rect') {
     return {
       ...entity,
-      rotation: (entity.rotation ?? 0) + ((angleRadians * 180) / Math.PI),
+      rotation: (entity.rotation ?? 0) + (angleRadians * 180) / Math.PI,
       x: rotatePointAroundPivot({ x: entity.x, y: entity.y }, pivot, angleRadians).x,
       y: rotatePointAroundPivot({ x: entity.x, y: entity.y }, pivot, angleRadians).y,
     };
@@ -259,9 +255,7 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
         ...entity,
         cx: center.x,
         cy: center.y,
-        ...(entity.shape === 'ellipse'
-          ? { rotation: (entity.rotation ?? 0) + ((angleRadians * 180) / Math.PI) }
-          : {}),
+        ...(entity.shape === 'ellipse' ? { rotation: (entity.rotation ?? 0) + (angleRadians * 180) / Math.PI } : {}),
       };
     }
 
@@ -309,13 +303,13 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
       ...entity,
       x: anchor.x,
       y: anchor.y,
-      rotation: (entity.rotation ?? 0) + ((angleRadians * 180) / Math.PI),
+      rotation: (entity.rotation ?? 0) + (angleRadians * 180) / Math.PI,
       leader: entity.leader?.target
         ? {
             ...entity.leader,
             target: rotatePointAroundPivot(entity.leader.target, pivot, angleRadians),
           }
-        : entity.leader ?? null,
+        : (entity.leader ?? null),
     };
   }
 
@@ -324,11 +318,11 @@ export function rotateEntityAroundPivot(entity, pivot, angleRadians) {
 
 export function rotateEntities(entities, entityIds, pivot, angleRadians) {
   const idSet = new Set(entityIds);
-  return entities.map((entity) => (
+  return entities.map((entity) =>
     idSet.has(entity.id) || hasSourceRefIn(entity, idSet)
       ? rotateEntityAroundPivot(entity, pivot, angleRadians)
-      : entity
-  ));
+      : entity,
+  );
 }
 
 export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') {
@@ -402,10 +396,14 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
     }
 
     if (entity.shape === 'rect') {
-      const center = mirrorPointAcrossAxis({
-        x: entity.x + entity.width / 2,
-        y: entity.y + entity.height / 2,
-      }, pivot, direction);
+      const center = mirrorPointAcrossAxis(
+        {
+          x: entity.x + entity.width / 2,
+          y: entity.y + entity.height / 2,
+        },
+        pivot,
+        direction,
+      );
 
       return {
         ...entity,
@@ -456,7 +454,7 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
             ...entity.leader,
             target: mirrorPointAcrossAxis(entity.leader.target, pivot, direction),
           }
-        : entity.leader ?? null,
+        : (entity.leader ?? null),
     };
   }
 
@@ -465,11 +463,9 @@ export function mirrorEntityAcrossAxis(entity, pivot, direction = 'horizontal') 
 
 export function mirrorEntities(entities, entityIds, pivot, direction = 'horizontal') {
   const idSet = new Set(entityIds);
-  return entities.map((entity) => (
-    idSet.has(entity.id) || hasSourceRefIn(entity, idSet)
-      ? mirrorEntityAcrossAxis(entity, pivot, direction)
-      : entity
-  ));
+  return entities.map((entity) =>
+    idSet.has(entity.id) || hasSourceRefIn(entity, idSet) ? mirrorEntityAcrossAxis(entity, pivot, direction) : entity,
+  );
 }
 
 export function computeSelectionBounds(entities, allEntities) {
@@ -477,9 +473,7 @@ export function computeSelectionBounds(entities, allEntities) {
     return null;
   }
 
-  const boxes = entities
-    .map((entity) => computeEntityBoundingBox(entity, allEntities))
-    .filter(Boolean);
+  const boxes = entities.map((entity) => computeEntityBoundingBox(entity, allEntities)).filter(Boolean);
 
   if (!boxes.length) {
     return null;

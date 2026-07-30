@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createLayer, getEditableEntities, getVisibleEntities, moveEntitiesToLayer, toggleLayerLock, toggleLayerVisibility } from './layerUtils';
+import {
+  createLayer,
+  getEditableEntities,
+  getVisibleEntities,
+  moveEntitiesToLayer,
+  toggleLayerLock,
+  toggleLayerVisibility,
+} from './layerUtils';
 
 describe('layerUtils', () => {
   const document = {

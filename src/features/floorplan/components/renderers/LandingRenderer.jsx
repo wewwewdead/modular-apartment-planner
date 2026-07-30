@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { getLandingRenderData } from '@/geometry/landingGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function LandingRenderer({ landings }) {
+function LandingRenderer({ landings }) {
   return (
     <g className="landings">
       {(landings || []).map((landing) => {
@@ -26,3 +27,5 @@ export default function LandingRenderer({ landings }) {
     </g>
   );
 }
+
+export default memo(LandingRenderer);

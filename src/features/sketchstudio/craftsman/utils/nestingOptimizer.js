@@ -31,9 +31,7 @@ function firstPositive(...values) {
 }
 
 function minPositive(...values) {
-  const positives = values
-    .map((value) => toPositiveNumber(value))
-    .filter((value) => value > 0);
+  const positives = values.map((value) => toPositiveNumber(value)).filter((value) => value > 0);
   return positives.length ? Math.min(...positives) : 0;
 }
 
@@ -200,11 +198,13 @@ function nestOnSheets(parts, sheet, kerf) {
     }
 
     if (currentSheet.placements.length > 0) {
-      currentSheet.usedArea = currentSheet.placements.reduce((sum, placement) => sum + placement.placedWidth * placement.placedHeight, 0);
+      currentSheet.usedArea = currentSheet.placements.reduce(
+        (sum, placement) => sum + placement.placedWidth * placement.placedHeight,
+        0,
+      );
       currentSheet.totalArea = sheet.width * sheet.height;
-      currentSheet.wastePercent = currentSheet.totalArea > 0
-        ? Math.round((1 - currentSheet.usedArea / currentSheet.totalArea) * 100)
-        : 0;
+      currentSheet.wastePercent =
+        currentSheet.totalArea > 0 ? Math.round((1 - currentSheet.usedArea / currentSheet.totalArea) * 100) : 0;
       sheets.push(currentSheet);
     }
 
@@ -213,14 +213,16 @@ function nestOnSheets(parts, sheet, kerf) {
         sheets.push({
           width: sheet.width,
           height: sheet.height,
-          placements: [{
-            ...oversized,
-            x: 0,
-            y: 0,
-            placedWidth: oversized.width,
-            placedHeight: oversized.height,
-            oversized: true,
-          }],
+          placements: [
+            {
+              ...oversized,
+              x: 0,
+              y: 0,
+              placedWidth: oversized.width,
+              placedHeight: oversized.height,
+              oversized: true,
+            },
+          ],
           shelves: [],
           usedArea: oversized.width * oversized.height,
           totalArea: sheet.width * sheet.height,
@@ -303,9 +305,7 @@ function updateLinearUnitMetrics(unit, kerf) {
 }
 
 function appendLinearCut(unit, part, kerf) {
-  const start = unit.cuts.length === 0
-    ? 0
-    : unit.cuts[unit.cuts.length - 1].end + kerf;
+  const start = unit.cuts.length === 0 ? 0 : unit.cuts[unit.cuts.length - 1].end + kerf;
   const cut = buildLinearCut(part, start);
   unit.cuts.push(cut);
   unit.displayLength = Math.max(unit.displayLength, cut.end);
@@ -345,9 +345,7 @@ function nestLinearUnits(parts, stockLength, kerf) {
     for (const unit of units) {
       if (unit.oversized) continue;
 
-      const start = unit.cuts.length === 0
-        ? 0
-        : unit.cuts[unit.cuts.length - 1].end + kerf;
+      const start = unit.cuts.length === 0 ? 0 : unit.cuts[unit.cuts.length - 1].end + kerf;
       if (start + part.cutLength <= stockLength) {
         appendLinearCut(unit, part, kerf);
         placed = true;

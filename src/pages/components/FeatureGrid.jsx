@@ -6,7 +6,13 @@ const features = [
     label: 'Millimeter precision',
     icon: (
       <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M1 17V1h16" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M1 17V1h16"
+          stroke="var(--color-accent)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <line x1="5" y1="1" x2="5" y2="4" stroke="var(--color-accent)" strokeWidth="1" strokeLinecap="round" />
         <line x1="9" y1="1" x2="9" y2="6" stroke="var(--color-accent)" strokeWidth="1" strokeLinecap="round" />
         <line x1="13" y1="1" x2="13" y2="4" stroke="var(--color-accent)" strokeWidth="1" strokeLinecap="round" />
@@ -53,9 +59,21 @@ const features = [
     icon: (
       <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M9 2v9" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M5.5 8L9 11.5 12.5 8" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M5.5 8L9 11.5 12.5 8"
+          stroke="var(--color-accent)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
         <path d="M3 14h12" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M3 14v2h12v-2" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M3 14v2h12v-2"
+          stroke="var(--color-accent)"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },

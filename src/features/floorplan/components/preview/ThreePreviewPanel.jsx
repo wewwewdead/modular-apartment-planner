@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildPreviewScene } from '@/three/scene/buildPreviewScene';
-import { buildPreviewObjectRoot, buildSelectionOverlay } from './buildPreviewObjects';
+import { buildSelectionOverlay } from './buildPreviewObjects';
+import { createPreviewSceneCache } from './previewSceneCache';
 import { createPreviewViewport } from './createPreviewViewport';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
@@ -22,6 +23,7 @@ export default function ThreePreviewPanel({
   const containerRef = useRef(null);
   const resizeObserverRef = useRef(null);
   const compassNeedleRef = useRef(null);
+  const sceneCacheRef = useRef(null);
   const [previewScope, setPreviewScope] = useState('all');
   const [navigationMode, setNavigationMode] = useState('inspect');
   const [walkUiState, setWalkUiState] = useState({
@@ -103,6 +105,7 @@ export default function ThreePreviewPanel({
 
     const viewport = createPreviewViewport(containerRef.current);
     viewportRef.current = viewport;
+    sceneCacheRef.current = createPreviewSceneCache();
 
     if ('ResizeObserver' in window) {
       const observer = new ResizeObserver(() => {
@@ -117,8 +120,13 @@ export default function ThreePreviewPanel({
     return () => {
       resizeObserverRef.current?.disconnect?.();
       resizeObserverRef.current = null;
+      // Dispose viewport first (removes worldRoot from scene without disposing,
+      // since the cache owns those geometries), then let the cache dispose the
+      // per-floor groups it built.
       viewport.dispose();
       viewportRef.current = null;
+      sceneCacheRef.current?.dispose();
+      sceneCacheRef.current = null;
     };
   }, []);
 
@@ -153,14 +161,21 @@ export default function ThreePreviewPanel({
 
   useEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport) return;
+    const sceneCache = sceneCacheRef.current;
+    if (!viewport || !sceneCache) return;
 
-    const { root, meshMap } = buildPreviewObjectRoot(sceneDescriptor, viewport.materialPalette);
+    // Incremental build: reuse THREE groups for floors whose source geometry is
+    // unchanged (immutable reducer updates preserve floor object identity), and
+    // only rebuild floors that actually changed.
+    const { root, meshMap } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
     meshMapRef.current = meshMap;
     viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel);
   }, [sceneDescriptor]);
 
-  // Selection effect: swap overlay meshes without rebuilding the scene
+  // Selection effect: swap overlay meshes without rebuilding the scene.
+  // Re-runs when the selection changes OR when the scene was rebuilt
+  // (setWorld clears the overlay, and the meshMap identity changes), so a
+  // selected object stays highlighted after an unrelated geometry edit.
   useEffect(() => {
     const viewport = viewportRef.current;
     const meshMap = meshMapRef.current;
@@ -168,7 +183,7 @@ export default function ThreePreviewPanel({
 
     const overlay = buildSelectionOverlay(meshMap, { selectedId, selectedType }, viewport.materialPalette);
     viewport.setSelectionOverlay(overlay);
-  }, [selectedId, selectedType]);
+  }, [selectedId, selectedType, sceneDescriptor]);
 
   useEffect(() => {
     viewportRef.current?.setNavigationMode(navigationMode);

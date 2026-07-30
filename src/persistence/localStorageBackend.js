@@ -20,7 +20,7 @@ export const localStorageBackend = {
     localStorage.setItem(key, JSON.stringify(serialized));
 
     const index = getIndex();
-    const existing = index.findIndex(p => p.id === projectId);
+    const existing = index.findIndex((p) => p.id === projectId);
     const entry = { id: projectId, name, savedAt: serialized.savedAt };
 
     if (existing >= 0) {
@@ -44,7 +44,7 @@ export const localStorageBackend = {
   async delete(projectId) {
     const key = PROJECT_PREFIX + projectId;
     localStorage.removeItem(key);
-    const index = getIndex().filter(p => p.id !== projectId);
+    const index = getIndex().filter((p) => p.id !== projectId);
     saveIndex(index);
   },
 };

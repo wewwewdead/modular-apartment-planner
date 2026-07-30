@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { buildProjectElevationScene } from '@/elevations/scene';
 import { buildElevationAnnotationScene } from '@/elevations/annotations';
 import ElevationSceneLayer from './ElevationSceneLayer';
 
-export default function ElevationRenderer({ project, floor, viewMode, selectedId, selectedType }) {
+function ElevationRenderer({ project, floor, viewMode, selectedId, selectedType }) {
   const scene = buildProjectElevationScene(project, floor?.id, viewMode);
   if (!scene) return null;
   const annotationScene = buildElevationAnnotationScene(floor, scene);
@@ -16,3 +17,5 @@ export default function ElevationRenderer({ project, floor, viewMode, selectedId
     />
   );
 }
+
+export default memo(ElevationRenderer);

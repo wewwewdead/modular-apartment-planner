@@ -1,0 +1,46 @@
+.shortcutHintBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px 6px 2px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font-family: var(--font-blueprint);
+  font-size: 11px;
+  color: var(--dark-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.shortcutHintBtn:hover {
+  background: var(--dark-ss-bg-hover);
+  border-color: var(--dark-ss-border-hover);
+  color: var(--dark-ss-text-bright);
+}
+
+.shortcutHintBtn:focus-visible {
+  outline: 2px solid var(--dark-accent-blue);
+  outline-offset: 1px;
+}
+
+.shortcutHintKbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border: 1px solid var(--dark-ss-border-hover);
+  border-radius: var(--radius-xs);
+  background: var(--dark-ss-bg-hover);
+  font-family: var(--font-blueprint);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--dark-ss-text-body);
+}

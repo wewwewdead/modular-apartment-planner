@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { buildProjectSectionScene } from '@/sections/scene';
 import { getSectionVisibilityMessage } from '@/sections/diagnostics';
 import SectionSceneLayer from './SectionSceneLayer';
@@ -39,7 +40,7 @@ function SectionDiagnosticMessage({ scene, message }) {
   );
 }
 
-export default function TrussSectionRenderer({ project, floor, activeSectionCutId }) {
+function TrussSectionRenderer({ project, floor, activeSectionCutId }) {
   const cuts = floor?.sectionCuts || [];
   const sectionCut = (activeSectionCutId && cuts.find((entry) => entry.id === activeSectionCutId)) || cuts[0] || null;
 
@@ -58,3 +59,5 @@ export default function TrussSectionRenderer({ project, floor, activeSectionCutI
     </g>
   );
 }
+
+export default memo(TrussSectionRenderer);

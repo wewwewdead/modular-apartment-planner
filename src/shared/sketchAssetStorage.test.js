@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  loadSketchRecovery,
-  saveSketchRecovery,
-} from './sketchAssetStorage';
+import { loadSketchRecovery, saveSketchRecovery } from './sketchAssetStorage';
 
 function createMemoryStorage() {
   const store = new Map();
@@ -53,17 +50,20 @@ describe('sketchAssetStorage', () => {
   });
 
   it('falls back to the legacy last sketch document when no recovery snapshot exists', () => {
-    globalThis.localStorage.setItem('apartment-planner-sketch-documents', JSON.stringify([
-      {
-        id: 'doc-legacy',
-        version: 1,
-        name: 'Legacy Sketch',
-        units: 'mm',
-        layers: [],
-        entities: [],
-        constraints: [],
-      },
-    ]));
+    globalThis.localStorage.setItem(
+      'apartment-planner-sketch-documents',
+      JSON.stringify([
+        {
+          id: 'doc-legacy',
+          version: 1,
+          name: 'Legacy Sketch',
+          units: 'mm',
+          layers: [],
+          entities: [],
+          constraints: [],
+        },
+      ]),
+    );
     globalThis.localStorage.setItem('apartment-planner-sketch-last-document-id', JSON.stringify('doc-legacy'));
 
     expect(loadSketchRecovery()?.name).toBe('Legacy Sketch');

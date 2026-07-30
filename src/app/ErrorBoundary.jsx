@@ -39,45 +39,52 @@ export default class ErrorBoundary extends Component {
     }
 
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: '32px',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        color: '#e0e0e0',
-        background: '#1a1a2e',
-      }}>
-        <div style={{
-          maxWidth: '480px',
-          width: '100%',
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
           padding: '32px',
-          borderRadius: '12px',
-          background: '#16213e',
-          border: '1px solid #2a2a4a',
-        }}>
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          color: '#e0e0e0',
+          background: '#1a1a2e',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '480px',
+            width: '100%',
+            padding: '32px',
+            borderRadius: '12px',
+            background: '#16213e',
+            border: '1px solid #2a2a4a',
+          }}
+        >
           <h2 style={{ margin: '0 0 12px', fontSize: '18px', fontWeight: 600, color: '#ff6b6b' }}>
-            {errorName === 'UnsupportedVersionError' ? 'Unsupported Version' :
-             errorName === 'CorruptedDataError' ? 'Corrupted Data' :
-             errorName === 'ProjectValidationError' ? 'Validation Error' :
-             'Something Went Wrong'}
+            {errorName === 'UnsupportedVersionError'
+              ? 'Unsupported Version'
+              : errorName === 'CorruptedDataError'
+                ? 'Corrupted Data'
+                : errorName === 'ProjectValidationError'
+                  ? 'Validation Error'
+                  : 'Something Went Wrong'}
           </h2>
-          <p style={{ margin: '0 0 16px', fontSize: '14px', lineHeight: 1.5, color: '#b0b0c0' }}>
-            {userMessage}
-          </p>
+          <p style={{ margin: '0 0 16px', fontSize: '14px', lineHeight: 1.5, color: '#b0b0c0' }}>{userMessage}</p>
           <details style={{ marginBottom: '20px', fontSize: '12px', color: '#808090' }}>
             <summary style={{ cursor: 'pointer', marginBottom: '8px' }}>Technical details</summary>
-            <pre style={{
-              padding: '12px',
-              borderRadius: '6px',
-              background: '#0f0f23',
-              overflow: 'auto',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              fontSize: '11px',
-            }}>
+            <pre
+              style={{
+                padding: '12px',
+                borderRadius: '6px',
+                background: '#0f0f23',
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontSize: '11px',
+              }}
+            >
               {errorMessage}
             </pre>
           </details>

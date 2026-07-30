@@ -29,7 +29,10 @@ describe('entityBomAdapter', () => {
 
   describe('entityToBomRow', () => {
     it('converts rect entities to exact BOM rows', () => {
-      const row = entityToBomRow({ id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 600, height: 400 }, catalog);
+      const row = entityToBomRow(
+        { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 600, height: 400 },
+        catalog,
+      );
 
       expect(row).toMatchObject({
         partName: 'Panel',
@@ -44,7 +47,10 @@ describe('entityBomAdapter', () => {
     });
 
     it('supports real sketch circle entities that store radius as "r"', () => {
-      const row = entityToBomRow({ id: 'c1', type: 'circle', materialId: 'birch-plywood-18', cx: 0, cy: 0, r: 50 }, catalog);
+      const row = entityToBomRow(
+        { id: 'c1', type: 'circle', materialId: 'birch-plywood-18', cx: 0, cy: 0, r: 50 },
+        catalog,
+      );
 
       expect(row.width).toBe(100);
       expect(row.height).toBe(100);
@@ -54,7 +60,10 @@ describe('entityBomAdapter', () => {
     });
 
     it('keeps exact stock length metadata for linear line entities', () => {
-      const row = entityToBomRow({ id: 'l1', type: 'line', materialId: 'steel-sq-25', x1: 0, y1: 0, x2: 300, y2: 400 }, catalog);
+      const row = entityToBomRow(
+        { id: 'l1', type: 'line', materialId: 'steel-sq-25', x1: 0, y1: 0, x2: 300, y2: 400 },
+        catalog,
+      );
 
       expect(row).toMatchObject({
         width: 500,
@@ -68,13 +77,21 @@ describe('entityBomAdapter', () => {
     });
 
     it('marks closed polyline dimensions as approximate while preserving exact area/length', () => {
-      const row = entityToBomRow({
-        id: 'p1',
-        type: 'polyline',
-        materialId: 'birch-plywood-18',
-        closed: true,
-        points: [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 }],
-      }, catalog);
+      const row = entityToBomRow(
+        {
+          id: 'p1',
+          type: 'polyline',
+          materialId: 'birch-plywood-18',
+          closed: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 200, y: 0 },
+            { x: 200, y: 100 },
+            { x: 0, y: 100 },
+          ],
+        },
+        catalog,
+      );
 
       expect(row.width).toBe(200);
       expect(row.height).toBe(100);
@@ -91,11 +108,14 @@ describe('entityBomAdapter', () => {
 
   describe('entitiesToBomRows', () => {
     it('filters out non-eligible entities', () => {
-      const rows = entitiesToBomRows([
-        { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 100, height: 100 },
-        { id: 'd1', type: 'dimension' },
-        { id: 'r2', type: 'rect', materialId: 'birch-plywood-18', width: 200, height: 200 },
-      ], catalog);
+      const rows = entitiesToBomRows(
+        [
+          { id: 'r1', type: 'rect', materialId: 'birch-plywood-18', width: 100, height: 100 },
+          { id: 'd1', type: 'dimension' },
+          { id: 'r2', type: 'rect', materialId: 'birch-plywood-18', width: 200, height: 200 },
+        ],
+        catalog,
+      );
 
       expect(rows).toHaveLength(2);
     });

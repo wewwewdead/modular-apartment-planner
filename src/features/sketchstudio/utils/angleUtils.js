@@ -9,11 +9,11 @@ export function formatAngleText(angleDeg) {
 }
 
 function solveBasis(vector, axisA, axisB) {
-  const det = (axisA.x * axisB.y) - (axisA.y * axisB.x);
+  const det = axisA.x * axisB.y - axisA.y * axisB.x;
   if (Math.abs(det) < 1e-6) return { a: 0, b: 0 };
   return {
-    a: ((vector.x * axisB.y) - (vector.y * axisB.x)) / det,
-    b: ((axisA.x * vector.y) - (axisA.y * vector.x)) / det,
+    a: (vector.x * axisB.y - vector.y * axisB.x) / det,
+    b: (axisA.x * vector.y - axisA.y * vector.x) / det,
   };
 }
 
@@ -77,9 +77,7 @@ export function getAngleDimensionGeometry({ vertex, p1, p2, arcRadius, isometric
 
   // If directions are opposite, bisector is zero — use perpendicular
   const bisectorLen = Math.hypot(dir1.x + dir2.x, dir1.y + dir2.y);
-  const textDir = bisectorLen > 0.01
-    ? bisector
-    : { x: -dir1.y, y: dir1.x };
+  const textDir = bisectorLen > 0.01 ? bisector : { x: -dir1.y, y: dir1.x };
 
   const textPoint = {
     x: vertex.x + textDir.x * arcRadius * TEXT_OFFSET_FACTOR,

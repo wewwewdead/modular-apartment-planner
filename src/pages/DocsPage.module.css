@@ -75,7 +75,7 @@
   font-style: italic;
   font-size: 52px;
   font-weight: 400;
-  line-height: 1.0;
+  line-height: 1;
   letter-spacing: -0.02em;
   color: var(--color-text-primary);
 }
@@ -162,7 +162,9 @@
   color: var(--color-accent);
   text-decoration: none;
   border-bottom: 1px solid var(--color-arch-line-strong);
-  transition: border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+  transition:
+    border-color 0.15s var(--ease-out),
+    color 0.15s var(--ease-out);
 }
 
 .prose :global(a:hover) {

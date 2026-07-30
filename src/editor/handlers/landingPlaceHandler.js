@@ -1,9 +1,5 @@
 import { createLanding } from '@/domain/models';
-import { GRID_MINOR } from '@/domain/defaults';
-
-function snapToGrid(value) {
-  return Math.round(value / GRID_MINOR) * GRID_MINOR;
-}
+import { snapToGrid } from './handlerSnapUtils';
 
 export function createLandingPlaceHandler({ dispatch, editorDispatch, activeFloorId, snapEnabled, activePhaseId }) {
   return {

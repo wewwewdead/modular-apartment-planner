@@ -58,7 +58,7 @@ function outwardBoundaryNormal(direction, orientation) {
 
 function outwardInternalNormal(direction, midpointPoint, centroid) {
   const leftNormal = normalize(perpendicular(direction));
-  return ((leftNormal.x * (midpointPoint.x - centroid.x)) + (leftNormal.y * (midpointPoint.y - centroid.y))) >= 0
+  return leftNormal.x * (midpointPoint.x - centroid.x) + leftNormal.y * (midpointPoint.y - centroid.y) >= 0
     ? leftNormal
     : scale(leftNormal, -1);
 }
@@ -74,14 +74,20 @@ function estimateTagBounds(tag) {
   const maxLineLength = Math.max(...tag.textLines.map((line) => String(line || '').length), 1);
   const width = estimateTextWidth(maxLineLength ? 'X'.repeat(maxLineLength) : '', fontSize) + 60;
   const height = Math.max(TAG_LINE_HEIGHT, tag.textLines.length * TAG_LINE_HEIGHT);
-  const minX = tag.textAnchor === 'start'
-    ? tag.position.x
-    : (tag.textAnchor === 'end' ? tag.position.x - width : tag.position.x - (width / 2));
-  const maxX = tag.textAnchor === 'start'
-    ? tag.position.x + width
-    : (tag.textAnchor === 'end' ? tag.position.x : tag.position.x + (width / 2));
-  const minY = tag.position.y - (height / 2);
-  const maxY = tag.position.y + (height / 2);
+  const minX =
+    tag.textAnchor === 'start'
+      ? tag.position.x
+      : tag.textAnchor === 'end'
+        ? tag.position.x - width
+        : tag.position.x - width / 2;
+  const maxX =
+    tag.textAnchor === 'start'
+      ? tag.position.x + width
+      : tag.textAnchor === 'end'
+        ? tag.position.x
+        : tag.position.x + width / 2;
+  const minY = tag.position.y - height / 2;
+  const maxY = tag.position.y + height / 2;
   const angle = Number(tag.angle || 0);
   const corners = [
     { x: minX, y: minY },
@@ -156,9 +162,7 @@ function extendBoundsWithTags(bounds, tags = []) {
 }
 
 function buildPerimeterTags(plan) {
-  const outlinePoints = (plan.roofOutlinePoints || []).length >= 3
-    ? plan.roofOutlinePoints
-    : plan.boundaryPoints || [];
+  const outlinePoints = (plan.roofOutlinePoints || []).length >= 3 ? plan.roofOutlinePoints : plan.boundaryPoints || [];
   if (outlinePoints.length < 2) return [];
 
   const orientation = signedPolygonArea(outlinePoints) >= 0 ? 1 : -1;
@@ -185,7 +189,7 @@ function buildPerimeterTags(plan) {
           measurementValue: length,
           primaryVector: scale(normal, 200),
           secondaryVector: scale(direction, 180),
-        }
+        },
       );
     })
     .filter(Boolean);
@@ -216,7 +220,7 @@ function buildInternalEdgeTags(segments = [], label, centroid) {
           measurementValue: length,
           primaryVector: scale(normal, 160),
           secondaryVector: scale(direction, 160),
-        }
+        },
       );
     })
     .filter(Boolean);
@@ -229,18 +233,13 @@ function buildSlopeTags(arrows = []) {
       const direction = segmentDirection(arrow.shaftStart, arrow.shaftEnd);
       const normal = normalize(perpendicular(direction));
 
-      return createRoofPlanTag(
-        `${arrow.id}-label`,
-        [arrow.label],
-        arrow.labelPosition,
-        {
-          sourceType: 'roof_slope',
-          sourceId: arrow.id,
-          priority: 1,
-          primaryVector: scale(normal, SLOPE_TAG_OFFSET),
-          secondaryVector: scale(direction, SLOPE_TAG_OFFSET),
-        }
-      );
+      return createRoofPlanTag(`${arrow.id}-label`, [arrow.label], arrow.labelPosition, {
+        sourceType: 'roof_slope',
+        sourceId: arrow.id,
+        priority: 1,
+        primaryVector: scale(normal, SLOPE_TAG_OFFSET),
+        secondaryVector: scale(direction, SLOPE_TAG_OFFSET),
+      });
     })
     .filter(Boolean);
 }

@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { buildRoofPlanGeometry } from '@/geometry/roofPlanGeometry';
 
 const HANDLE_SIZE = 8;
 
-export default function RoofSelectionOverlay({ roofSystem, selectedId, selectedType, zoom }) {
+function RoofSelectionOverlay({ roofSystem, selectedId, selectedType, zoom }) {
   if (!roofSystem || !selectedId || !selectedType) return null;
 
   const handleR = HANDLE_SIZE / zoom;
@@ -204,3 +205,5 @@ export default function RoofSelectionOverlay({ roofSystem, selectedId, selectedT
 
   return null;
 }
+
+export default memo(RoofSelectionOverlay);

@@ -81,15 +81,9 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           shiftKey: event.shiftKey,
         });
 
-        if (
-          selectAction.intent === 'transform-current-selection' ||
-          selectAction.intent === 'transform-next-selection'
-        ) {
+        if (selectAction.intent === 'transform-current-selection') {
           event.preventDefault();
           event.currentTarget.setPointerCapture(event.pointerId);
-          if (selectAction.intent === 'transform-next-selection') {
-            dispatch(setSelection(selectAction.selectionIds));
-          }
           dispatch(
             startTransform({
               type: 'move',
@@ -108,6 +102,12 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
               startEntities: state.document.entities,
             }),
           );
+          return;
+        }
+
+        if (selectAction.intent === 'select-only') {
+          event.preventDefault();
+          dispatch(setSelection(selectAction.selectionIds));
           return;
         }
 

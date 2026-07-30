@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildExportAnchorPayload, computeAnchorFromBounds, createDefaultAnchor, setPrimaryAnchor } from './anchorUtils';
+import {
+  buildExportAnchorPayload,
+  computeAnchorFromBounds,
+  createDefaultAnchor,
+  setPrimaryAnchor,
+} from './anchorUtils';
 
 describe('anchorUtils', () => {
   it('creates anchors from bounds', () => {
@@ -9,10 +14,13 @@ describe('anchorUtils', () => {
   });
 
   it('builds export anchor payload from the primary anchor', () => {
-    const anchors = setPrimaryAnchor([
-      { id: 'a1', name: 'origin', x: 0, y: 0, kind: 'secondary' },
-      { id: 'a2', name: 'center', x: 50, y: 25, kind: 'custom' },
-    ], 'a2');
+    const anchors = setPrimaryAnchor(
+      [
+        { id: 'a1', name: 'origin', x: 0, y: 0, kind: 'secondary' },
+        { id: 'a2', name: 'center', x: 50, y: 25, kind: 'custom' },
+      ],
+      'a2',
+    );
 
     expect(buildExportAnchorPayload({ anchors })).toMatchObject({ x: 50, y: 25, name: 'center', kind: 'primary' });
   });

@@ -21,8 +21,7 @@ export function applyGeneratedPartsToObjectDraft(objectDraft, generatorType, par
     dividerCount: Math.max(0, Math.round(Number(params.dividerCount) || 0)),
     includeBackPanel: params.includeBackPanel !== false,
   };
-  const generatedParts = runGenerator(generatorType, normalized)
-    || generateCabinetBoxObjectParts(normalized);
+  const generatedParts = runGenerator(generatorType, normalized) || generateCabinetBoxObjectParts(normalized);
   const manualParts = (objectDraft?.parts || []).filter((part) => part.metadata?.generated !== true);
   const generator = getGenerator(generatorType);
 

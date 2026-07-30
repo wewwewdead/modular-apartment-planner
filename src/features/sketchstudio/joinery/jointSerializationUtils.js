@@ -30,7 +30,8 @@ function normalizeEdgeReference(reference, fallbackPartId = null) {
 
   const entityId = typeof reference.entityId === 'string' && reference.entityId ? reference.entityId : fallbackPartId;
   const partId = typeof reference.partId === 'string' && reference.partId ? reference.partId : entityId;
-  const sourceType = typeof reference.sourceType === 'string' && reference.sourceType ? reference.sourceType : 'segment';
+  const sourceType =
+    typeof reference.sourceType === 'string' && reference.sourceType ? reference.sourceType : 'segment';
   const sourceKey = reference.sourceKey == null ? null : String(reference.sourceKey);
 
   if (!entityId || !sourceKey || sourceType !== 'segment') {
@@ -50,10 +51,7 @@ function normalizeFaceReference(reference, fallbackPartId = null) {
     return null;
   }
 
-  return createDefaultFaceReference(
-    reference?.partId || fallbackPartId || null,
-    reference,
-  );
+  return createDefaultFaceReference(reference?.partId || fallbackPartId || null, reference);
 }
 
 function normalizeLegacyParameters(inputType, normalizedType, parameters = {}) {
@@ -122,8 +120,10 @@ function resolveLegacyPartIds(input, type) {
     };
   }
 
-  const primaryEntityId = typeof input?.primaryEntityId === 'string' && input.primaryEntityId ? input.primaryEntityId : null;
-  const secondaryEntityId = typeof input?.secondaryEntityId === 'string' && input.secondaryEntityId ? input.secondaryEntityId : null;
+  const primaryEntityId =
+    typeof input?.primaryEntityId === 'string' && input.primaryEntityId ? input.primaryEntityId : null;
+  const secondaryEntityId =
+    typeof input?.secondaryEntityId === 'string' && input.secondaryEntityId ? input.secondaryEntityId : null;
 
   if (!primaryEntityId && !secondaryEntityId) {
     return {
@@ -179,10 +179,7 @@ export function normalizeJoint(input = {}) {
   const type = resolveJointType(inputType);
   const legacyParts = resolveLegacyPartIds(input, type);
   const hasExplicitReferences = Boolean(
-    input?.sourceEdgeRef
-    || input?.targetEdgeRef
-    || input?.primaryEdgeRef
-    || input?.secondaryEdgeRef,
+    input?.sourceEdgeRef || input?.targetEdgeRef || input?.primaryEdgeRef || input?.secondaryEdgeRef,
   );
   const placementMode = normalizeJointPlacementMode(input?.placementMode, hasExplicitReferences);
   const sourcePartId = legacyParts.sourcePartId || input?.sourceEdgeRef?.entityId || null;
@@ -233,12 +230,13 @@ export function cloneJoint(joint) {
 }
 
 export function listJointEntityIds(joint) {
-  return Array.from(new Set([
-    joint?.sourcePartId,
-    joint?.targetPartId,
-    joint?.sourceEdgeRef?.entityId,
-    joint?.targetEdgeRef?.entityId,
-  ].filter(Boolean)));
+  return Array.from(
+    new Set(
+      [joint?.sourcePartId, joint?.targetPartId, joint?.sourceEdgeRef?.entityId, joint?.targetEdgeRef?.entityId].filter(
+        Boolean,
+      ),
+    ),
+  );
 }
 
 export function patchJoint(baseJoint, patch = {}) {
@@ -249,23 +247,25 @@ export function patchJoint(baseJoint, patch = {}) {
       ? normalizeJointPlacementMode(
           patch.placementMode,
           Boolean(
-            patch?.sourceEdgeRef
-            || patch?.targetEdgeRef
-            || normalizedBase.sourceEdgeRef
-            || normalizedBase.targetEdgeRef,
+            patch?.sourceEdgeRef ||
+            patch?.targetEdgeRef ||
+            normalizedBase.sourceEdgeRef ||
+            normalizedBase.targetEdgeRef,
           ),
         )
       : normalizedBase.placementMode;
   const nextParameters = patch?.parameters
-    ? mergeJointParameters(nextType, normalizedBase.parameters, normalizeLegacyParameters(nextType, nextType, patch.parameters))
+    ? mergeJointParameters(
+        nextType,
+        normalizedBase.parameters,
+        normalizeLegacyParameters(nextType, nextType, patch.parameters),
+      )
     : normalizeJointParameters(nextType, normalizedBase.parameters);
   const nextParameterModes = normalizeJointParameterModes(
     nextType,
     nextPlacementMode,
     patch?.parameterModes ?? normalizedBase.parameterModes,
-    patch?.parameters
-      ? { ...normalizedBase.parameters, ...patch.parameters }
-      : normalizedBase.parameters,
+    patch?.parameters ? { ...normalizedBase.parameters, ...patch.parameters } : normalizedBase.parameters,
   );
 
   return normalizeJoint({

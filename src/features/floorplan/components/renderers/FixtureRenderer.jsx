@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { fixtureOutline } from '@/geometry/fixtureGeometry';
 
 // Stroke hierarchy constants
@@ -372,7 +373,7 @@ function FixtureDetails({ fixture }) {
   }
 }
 
-export default function FixtureRenderer({ fixtures }) {
+function FixtureRenderer({ fixtures }) {
   return (
     <g className="fixtures">
       {fixtures.map((fixture) => {
@@ -397,3 +398,5 @@ export default function FixtureRenderer({ fixtures }) {
     </g>
   );
 }
+
+export default memo(FixtureRenderer);

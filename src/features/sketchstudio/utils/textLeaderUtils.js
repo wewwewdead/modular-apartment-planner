@@ -12,19 +12,19 @@ function projectPointToSegment(point, start, end) {
     return start;
   }
 
-  const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / ((dx * dx) + (dy * dy));
+  const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy);
   const t = clamp(projection, 0, 1);
 
   return {
-    x: start.x + (dx * t),
-    y: start.y + (dy * t),
+    x: start.x + dx * t,
+    y: start.y + dy * t,
   };
 }
 
 function getDistanceSquared(firstPoint, secondPoint) {
   const dx = secondPoint.x - firstPoint.x;
   const dy = secondPoint.y - firstPoint.y;
-  return (dx * dx) + (dy * dy);
+  return dx * dx + dy * dy;
 }
 
 export function getTextLeaderTarget(entity) {
@@ -36,9 +36,7 @@ export function getTextLeaderTarget(entity) {
   const x = Number(target.x);
   const y = Number(target.y);
 
-  return Number.isFinite(x) && Number.isFinite(y)
-    ? { x, y }
-    : null;
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
 export function getTextLeaderArrowSize(entity) {
@@ -66,9 +64,7 @@ export function getTextLeaderGeometry(entity) {
       return candidate;
     }
 
-    return getDistanceSquared(candidate, target) < getDistanceSquared(closestPoint, target)
-      ? candidate
-      : closestPoint;
+    return getDistanceSquared(candidate, target) < getDistanceSquared(closestPoint, target) ? candidate : closestPoint;
   }, null);
 
   if (!anchor) {
@@ -93,17 +89,17 @@ export function getTextLeaderGeometry(entity) {
     y: direction.x,
   };
   const baseCenter = {
-    x: target.x - (direction.x * arrowSize),
-    y: target.y - (direction.y * arrowSize),
+    x: target.x - direction.x * arrowSize,
+    y: target.y - direction.y * arrowSize,
   };
   const arrowWidth = arrowSize * 0.55;
   const leftPoint = {
-    x: baseCenter.x + (normal.x * arrowWidth),
-    y: baseCenter.y + (normal.y * arrowWidth),
+    x: baseCenter.x + normal.x * arrowWidth,
+    y: baseCenter.y + normal.y * arrowWidth,
   };
   const rightPoint = {
-    x: baseCenter.x - (normal.x * arrowWidth),
-    y: baseCenter.y - (normal.y * arrowWidth),
+    x: baseCenter.x - normal.x * arrowWidth,
+    y: baseCenter.y - normal.y * arrowWidth,
   };
 
   return {

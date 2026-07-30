@@ -1,5 +1,5 @@
 import { distanceToSegment } from './line';
-import { add, distance, midpoint, normalize, perpendicular, scale, subtract } from './point';
+import { add, distance, lerp, midpoint, normalize, perpendicular, scale, subtract } from './point';
 
 const EPSILON = 1e-6;
 
@@ -38,6 +38,23 @@ export function projectPointToSectionCut(sectionCut, point) {
     along: pointAlong - minAlong,
     offset: relative.x * normal.x + relative.y * normal.y,
   };
+}
+
+// Inverse of `projectPointToSectionCut(...).along`: maps a view-space distance back to the
+// plan point on the cut line. The view axis is the reverse of the start -> end axis whenever
+// direction is +1, so callers must never lerp start -> end with `along / length` directly.
+export function sectionCutPointAtAlong(sectionCut, along) {
+  const start = sectionCut?.startPoint || { x: 0, y: 0 };
+  const end = sectionCut?.endPoint || { x: 0, y: 0 };
+  if (sectionCutLength(sectionCut) < EPSILON) return { x: start.x, y: start.y };
+
+  const startAlong = projectPointToSectionCut(sectionCut, start).along;
+  const endAlong = projectPointToSectionCut(sectionCut, end).along;
+  const span = endAlong - startAlong;
+  if (Math.abs(span) < EPSILON) return { x: start.x, y: start.y };
+
+  const t = Math.max(0, Math.min(1, (along - startAlong) / span));
+  return lerp(start, end, t);
 }
 
 export function sectionCutArrow(sectionCut) {

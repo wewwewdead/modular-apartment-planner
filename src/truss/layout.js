@@ -5,16 +5,14 @@ function getSafeAxis(rawVector) {
 }
 
 function getSupportOffset(instance) {
-  return Number.isFinite(instance?.supportOffsetAlongAxis)
-    ? Math.max(0, instance.supportOffsetAlongAxis)
-    : 0;
+  return Number.isFinite(instance?.supportOffsetAlongAxis) ? Math.max(0, instance.supportOffsetAlongAxis) : 0;
 }
 
 export function getTrussSupportLength(instance) {
   return Math.max(
     distance(instance.startPoint, instance.endPoint),
     Number(instance.spacing || 0) * Math.max((instance.count || 1) - 1, 0),
-    1
+    1,
   );
 }
 

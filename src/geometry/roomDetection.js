@@ -47,7 +47,7 @@ function addUniqueEdge(edgeSet, edges, from, to) {
 
 function addUniqueEdgePoint(edgePoints, edgeIndex, vi, t) {
   const points = edgePoints[edgeIndex];
-  const existing = points.find(point => point.vi === vi);
+  const existing = points.find((point) => point.vi === vi);
   if (existing) {
     existing.t = Math.min(existing.t, Math.max(0, Math.min(1, t)));
     return;
@@ -74,16 +74,16 @@ function pointInsideOrOnColumn(point, column, tolerance) {
 function normalizeWallsForColumns(walls, columns, tolerance) {
   if (!columns.length) return walls;
 
-  return walls.map(wall => {
+  return walls.map((wall) => {
     let start = { ...wall.start };
     let end = { ...wall.end };
 
-    const startColumn = columns.find(column => pointInsideOrOnColumn(start, column, tolerance));
+    const startColumn = columns.find((column) => pointInsideOrOnColumn(start, column, tolerance));
     if (startColumn) {
       start = { x: startColumn.x, y: startColumn.y };
     }
 
-    const endColumn = columns.find(column => pointInsideOrOnColumn(end, column, tolerance));
+    const endColumn = columns.find((column) => pointInsideOrOnColumn(end, column, tolerance));
     if (endColumn) {
       end = { x: endColumn.x, y: endColumn.y };
     }
@@ -99,7 +99,7 @@ function normalizeWallsForColumns(walls, columns, tolerance) {
 function roomPolygonKey(points, precision = ENDPOINT_MERGE_TOLERANCE) {
   if (!points?.length) return '';
 
-  const labels = points.map(point => {
+  const labels = points.map((point) => {
     const x = Math.round(point.x / precision);
     const y = Math.round(point.y / precision);
     return `${x}:${y}`;
@@ -318,7 +318,7 @@ export function detectRoomFaces(walls, columns = [], mergeTolerance = ENDPOINT_M
   const seenKeys = new Set();
 
   for (const cycle of cycles) {
-    const points = cycle.map(index => vertices[index]);
+    const points = cycle.map((index) => vertices[index]);
     const signedArea = signedPolygonArea(points);
     const area = Math.abs(signedArea);
     if (signedArea <= 0 || area < MIN_ROOM_AREA) continue;
@@ -330,7 +330,7 @@ export function detectRoomFaces(walls, columns = [], mergeTolerance = ENDPOINT_M
     faces.push({
       key,
       area,
-      points: points.map(point => ({ x: point.x, y: point.y })),
+      points: points.map((point) => ({ x: point.x, y: point.y })),
     });
   }
 
@@ -338,7 +338,7 @@ export function detectRoomFaces(walls, columns = [], mergeTolerance = ENDPOINT_M
 }
 
 export function detectRooms(walls, columns = [], mergeTolerance = ENDPOINT_MERGE_TOLERANCE) {
-  return detectRoomFaces(walls, columns, mergeTolerance).map(face => ({
+  return detectRoomFaces(walls, columns, mergeTolerance).map((face) => ({
     points: face.points,
     area: face.area,
   }));
@@ -346,7 +346,7 @@ export function detectRooms(walls, columns = [], mergeTolerance = ENDPOINT_MERGE
 
 export function findRoomFaceAtPoint(walls, columns = [], point, mergeTolerance = ENDPOINT_MERGE_TOLERANCE) {
   const faces = detectRoomFaces(walls, columns, mergeTolerance);
-  const containingFaces = faces.filter(face => pointInPolygon(point, face.points));
+  const containingFaces = faces.filter((face) => pointInPolygon(point, face.points));
   if (containingFaces.length === 0) return null;
 
   containingFaces.sort((a, b) => a.area - b.area);

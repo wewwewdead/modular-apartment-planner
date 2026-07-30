@@ -29,10 +29,22 @@ function pointInBox(point, box) {
 
 function boxEdges(box) {
   return [
-    [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.minY }],
-    [{ x: box.maxX, y: box.minY }, { x: box.maxX, y: box.maxY }],
-    [{ x: box.maxX, y: box.maxY }, { x: box.minX, y: box.maxY }],
-    [{ x: box.minX, y: box.maxY }, { x: box.minX, y: box.minY }],
+    [
+      { x: box.minX, y: box.minY },
+      { x: box.maxX, y: box.minY },
+    ],
+    [
+      { x: box.maxX, y: box.minY },
+      { x: box.maxX, y: box.maxY },
+    ],
+    [
+      { x: box.maxX, y: box.maxY },
+      { x: box.minX, y: box.maxY },
+    ],
+    [
+      { x: box.minX, y: box.maxY },
+      { x: box.minX, y: box.minY },
+    ],
   ];
 }
 
@@ -41,7 +53,9 @@ function segmentIntersectsBox(start, end, box) {
     return true;
   }
 
-  return boxEdges(box).some(([edgeStart, edgeEnd]) => Boolean(getSegmentIntersectionPoint(start, end, edgeStart, edgeEnd)));
+  return boxEdges(box).some(([edgeStart, edgeEnd]) =>
+    Boolean(getSegmentIntersectionPoint(start, end, edgeStart, edgeEnd)),
+  );
 }
 
 export function entityIntersectsSelectionBox(entity, box, entities) {
@@ -51,10 +65,7 @@ export function entityIntersectsSelectionBox(entity, box, entities) {
     return false;
   }
 
-  const bboxOverlaps = !(bbox.maxX < box.minX
-    || bbox.minX > box.maxX
-    || bbox.maxY < box.minY
-    || bbox.minY > box.maxY);
+  const bboxOverlaps = !(bbox.maxX < box.minX || bbox.minX > box.maxX || bbox.maxY < box.minY || bbox.minY > box.maxY);
 
   if (!bboxOverlaps) {
     return false;
@@ -66,8 +77,10 @@ export function entityIntersectsSelectionBox(entity, box, entities) {
 
   if (entity.type === 'rect') {
     const corners = Object.values(getRectCorners(entity));
-    return corners.some((corner) => pointInBox(corner, box))
-      || corners.some((corner, index) => segmentIntersectsBox(corner, corners[(index + 1) % corners.length], box));
+    return (
+      corners.some((corner) => pointInBox(corner, box)) ||
+      corners.some((corner, index) => segmentIntersectsBox(corner, corners[(index + 1) % corners.length], box))
+    );
   }
 
   if (entity.type === 'circle') {
@@ -88,15 +101,31 @@ export function entityIntersectsSelectionBox(entity, box, entities) {
     const p2 = resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.p2);
     const geometry = getDimensionGeometry({ p1, p2, subtype: entity.subtype, offset: entity.offset });
 
-    return segmentIntersectsBox({ x: geometry.ext1.x1, y: geometry.ext1.y1 }, { x: geometry.ext1.x2, y: geometry.ext1.y2 }, box)
-      || segmentIntersectsBox({ x: geometry.ext2.x1, y: geometry.ext2.y1 }, { x: geometry.ext2.x2, y: geometry.ext2.y2 }, box)
-      || segmentIntersectsBox({ x: geometry.dimLine.x1, y: geometry.dimLine.y1 }, { x: geometry.dimLine.x2, y: geometry.dimLine.y2 }, box);
+    return (
+      segmentIntersectsBox(
+        { x: geometry.ext1.x1, y: geometry.ext1.y1 },
+        { x: geometry.ext1.x2, y: geometry.ext1.y2 },
+        box,
+      ) ||
+      segmentIntersectsBox(
+        { x: geometry.ext2.x1, y: geometry.ext2.y1 },
+        { x: geometry.ext2.x2, y: geometry.ext2.y2 },
+        box,
+      ) ||
+      segmentIntersectsBox(
+        { x: geometry.dimLine.x1, y: geometry.dimLine.y1 },
+        { x: geometry.dimLine.x2, y: geometry.dimLine.y2 },
+        box,
+      )
+    );
   }
 
   if (entity.type === 'angle-dimension') {
-    return pointInBox(entity.vertex, box)
-      || segmentIntersectsBox(entity.vertex, entity.p1, box)
-      || segmentIntersectsBox(entity.vertex, entity.p2, box);
+    return (
+      pointInBox(entity.vertex, box) ||
+      segmentIntersectsBox(entity.vertex, entity.p1, box) ||
+      segmentIntersectsBox(entity.vertex, entity.p2, box)
+    );
   }
 
   return false;

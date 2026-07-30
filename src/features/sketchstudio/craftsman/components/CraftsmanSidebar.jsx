@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
 import MaterialPicker from './MaterialPicker';
+import MaterialEditorPanel from './MaterialEditorPanel';
 import BomPanel from './BomPanel';
 import NestingPanel from './NestingPanel';
 import JointPanel from './JointPanel';
@@ -129,6 +130,10 @@ function CraftsmanSidebar({
       )}
 
       <LabelAnnotationSection entity={selectedEntity} onEntityFieldCommit={onEntityFieldCommit} styles={styles} />
+
+      <CollapsibleSection title="Custom Materials" defaultOpen={false}>
+        <MaterialEditorPanel />
+      </CollapsibleSection>
 
       {!hasEntities && onLoadTemplate && (
         <CollapsibleSection title="Quick Start" defaultOpen={true}>

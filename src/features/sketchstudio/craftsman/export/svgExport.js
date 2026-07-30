@@ -27,13 +27,18 @@ const EXPORTABLE_TYPES = new Set([
 const GEO_ATTRS = 'stroke="black" stroke-width="0.5" fill="none"';
 const DIM_ATTRS = 'stroke="#666" stroke-width="0.3" fill="none"';
 const DIM_FONT = 'font-size="10" font-family="sans-serif" fill="#666"';
+const BROKEN_LINE_DASH = '10 6';
+
+function geoAttrs(entity) {
+  return entity?.meta?.lineStyle === 'broken' ? `${GEO_ATTRS} stroke-dasharray="${BROKEN_LINE_DASH}"` : GEO_ATTRS;
+}
+
+function dimAttrs(entity) {
+  return entity?.meta?.lineStyle === 'broken' ? `${DIM_ATTRS} stroke-dasharray="${BROKEN_LINE_DASH}"` : DIM_ATTRS;
+}
 
 function escapeXml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function isEntityHiddenFromManufacturing(entity) {
@@ -140,9 +145,7 @@ function getEntityBounds(entity, allEntities) {
 }
 
 function computeBounds(entities, allEntities) {
-  const boxes = entities
-    .map((entity) => getEntityBounds(entity, allEntities))
-    .filter(Boolean);
+  const boxes = entities.map((entity) => getEntityBounds(entity, allEntities)).filter(Boolean);
 
   if (!boxes.length) {
     return { x: 0, y: 0, width: 100, height: 100 };
@@ -157,19 +160,21 @@ function computeBounds(entities, allEntities) {
   return {
     x: minX - margin,
     y: minY - margin,
-    width: (maxX - minX) + (margin * 2),
-    height: (maxY - minY) + (margin * 2),
+    width: maxX - minX + margin * 2,
+    height: maxY - minY + margin * 2,
   };
 }
 
 function featureToSvgElement(entity) {
+  const attrs = geoAttrs(entity);
+
   if (entity.shape === 'circle') {
-    return `  <circle cx="${entity.cx}" cy="${entity.cy}" r="${(entity.diameter ?? 0) / 2}" ${GEO_ATTRS} />`;
+    return `  <circle cx="${entity.cx}" cy="${entity.cy}" r="${(entity.diameter ?? 0) / 2}" ${attrs} />`;
   }
 
   if (entity.shape === 'ellipse') {
     const transform = entity.rotation ? ` transform="rotate(${entity.rotation} ${entity.cx} ${entity.cy})"` : '';
-    return `  <ellipse cx="${entity.cx}" cy="${entity.cy}" rx="${entity.rx}" ry="${entity.ry}"${transform} ${GEO_ATTRS} />`;
+    return `  <ellipse cx="${entity.cx}" cy="${entity.cy}" rx="${entity.rx}" ry="${entity.ry}"${transform} ${attrs} />`;
   }
 
   if (entity.shape === 'polygon') {
@@ -177,10 +182,10 @@ function featureToSvgElement(entity) {
       return '';
     }
 
-    return `  <polygon points="${entity.points.map((point) => `${point.x},${point.y}`).join(' ')}" ${GEO_ATTRS} />`;
+    return `  <polygon points="${entity.points.map((point) => `${point.x},${point.y}`).join(' ')}" ${attrs} />`;
   }
 
-  return `  <rect x="${entity.x ?? 0}" y="${entity.y ?? 0}" width="${entity.width ?? 0}" height="${entity.height ?? 0}" ${GEO_ATTRS} />`;
+  return `  <rect x="${entity.x ?? 0}" y="${entity.y ?? 0}" width="${entity.width ?? 0}" height="${entity.height ?? 0}" ${attrs} />`;
 }
 
 function dimensionToSvgElement(entity, allEntities) {
@@ -198,13 +203,14 @@ function dimensionToSvgElement(entity, allEntities) {
     offset: entity.offset,
   });
   const text = formatDimensionText(measureDistance(p1, p2, entity.subtype), entity.units);
+  const attrs = dimAttrs(entity);
 
   return `  <g>
-    <line x1="${geometry.ext1.x1}" y1="${geometry.ext1.y1}" x2="${geometry.ext1.x2}" y2="${geometry.ext1.y2}" ${DIM_ATTRS} />
-    <line x1="${geometry.ext2.x1}" y1="${geometry.ext2.y1}" x2="${geometry.ext2.x2}" y2="${geometry.ext2.y2}" ${DIM_ATTRS} />
-    <line x1="${geometry.dimLine.x1}" y1="${geometry.dimLine.y1}" x2="${geometry.dimLine.x2}" y2="${geometry.dimLine.y2}" ${DIM_ATTRS} />
-    <line x1="${geometry.tick1.x1}" y1="${geometry.tick1.y1}" x2="${geometry.tick1.x2}" y2="${geometry.tick1.y2}" ${DIM_ATTRS} />
-    <line x1="${geometry.tick2.x1}" y1="${geometry.tick2.y1}" x2="${geometry.tick2.x2}" y2="${geometry.tick2.y2}" ${DIM_ATTRS} />
+    <line x1="${geometry.ext1.x1}" y1="${geometry.ext1.y1}" x2="${geometry.ext1.x2}" y2="${geometry.ext1.y2}" ${attrs} />
+    <line x1="${geometry.ext2.x1}" y1="${geometry.ext2.y1}" x2="${geometry.ext2.x2}" y2="${geometry.ext2.y2}" ${attrs} />
+    <line x1="${geometry.dimLine.x1}" y1="${geometry.dimLine.y1}" x2="${geometry.dimLine.x2}" y2="${geometry.dimLine.y2}" ${attrs} />
+    <line x1="${geometry.tick1.x1}" y1="${geometry.tick1.y1}" x2="${geometry.tick1.x2}" y2="${geometry.tick1.y2}" ${attrs} />
+    <line x1="${geometry.tick2.x1}" y1="${geometry.tick2.y1}" x2="${geometry.tick2.x2}" y2="${geometry.tick2.y2}" ${attrs} />
     <text x="${geometry.textPoint.x}" y="${geometry.textPoint.y}" text-anchor="middle" dominant-baseline="middle" ${DIM_FONT} transform="rotate(${geometry.textAngle} ${geometry.textPoint.x} ${geometry.textPoint.y})">${escapeXml(text)}</text>
   </g>`;
 }
@@ -226,11 +232,12 @@ function angleDimensionToSvgElement(entity, allEntities) {
     isometricPlane: entity.isometricPlane,
   });
   const text = formatAngleText(geometry.angleDeg);
+  const attrs = dimAttrs(entity);
 
   return `  <g>
-    <line x1="${geometry.ray1.x1}" y1="${geometry.ray1.y1}" x2="${geometry.ray1.x2}" y2="${geometry.ray1.y2}" ${DIM_ATTRS} />
-    <line x1="${geometry.ray2.x1}" y1="${geometry.ray2.y1}" x2="${geometry.ray2.x2}" y2="${geometry.ray2.y2}" ${DIM_ATTRS} />
-    <path d="${geometry.arcPath}" ${DIM_ATTRS} />
+    <line x1="${geometry.ray1.x1}" y1="${geometry.ray1.y1}" x2="${geometry.ray1.x2}" y2="${geometry.ray1.y2}" ${attrs} />
+    <line x1="${geometry.ray2.x1}" y1="${geometry.ray2.y1}" x2="${geometry.ray2.x2}" y2="${geometry.ray2.y2}" ${attrs} />
+    <path d="${geometry.arcPath}" ${attrs} />
     <text x="${geometry.textPoint.x}" y="${geometry.textPoint.y}" text-anchor="middle" dominant-baseline="middle" ${DIM_FONT}>${escapeXml(text)}</text>
   </g>`;
 }
@@ -251,29 +258,30 @@ function textToSvgElement(entity) {
 }
 
 function entityToSvgElement(entity, allEntities) {
+  const attrs = geoAttrs(entity);
   switch (entity.type) {
     case 'line':
-      return `  <line x1="${entity.x1}" y1="${entity.y1}" x2="${entity.x2}" y2="${entity.y2}" ${GEO_ATTRS} />`;
+      return `  <line x1="${entity.x1}" y1="${entity.y1}" x2="${entity.x2}" y2="${entity.y2}" ${attrs} />`;
     case 'rect': {
       if (entity.rotation) {
         const corners = getRectCorners(entity);
         const points = [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft]
           .map((point) => `${point.x},${point.y}`)
           .join(' ');
-        return `  <polygon points="${points}" ${GEO_ATTRS} />`;
+        return `  <polygon points="${points}" ${attrs} />`;
       }
 
-      const x = Math.min(entity.x1 ?? entity.x ?? 0, entity.x2 ?? ((entity.x ?? 0) + (entity.width ?? 0)));
-      const y = Math.min(entity.y1 ?? entity.y ?? 0, entity.y2 ?? ((entity.y ?? 0) + (entity.height ?? 0)));
-      const width = Math.abs(entity.width ?? ((entity.x2 ?? 0) - (entity.x1 ?? 0)));
-      const height = Math.abs(entity.height ?? ((entity.y2 ?? 0) - (entity.y1 ?? 0)));
-      return `  <rect x="${x}" y="${y}" width="${width}" height="${height}" ${GEO_ATTRS} />`;
+      const x = Math.min(entity.x1 ?? entity.x ?? 0, entity.x2 ?? (entity.x ?? 0) + (entity.width ?? 0));
+      const y = Math.min(entity.y1 ?? entity.y ?? 0, entity.y2 ?? (entity.y ?? 0) + (entity.height ?? 0));
+      const width = Math.abs(entity.width ?? (entity.x2 ?? 0) - (entity.x1 ?? 0));
+      const height = Math.abs(entity.height ?? (entity.y2 ?? 0) - (entity.y1 ?? 0));
+      return `  <rect x="${x}" y="${y}" width="${width}" height="${height}" ${attrs} />`;
     }
     case 'circle':
-      return `  <circle cx="${entity.center?.x ?? entity.cx ?? 0}" cy="${entity.center?.y ?? entity.cy ?? 0}" r="${entity.r ?? entity.radius ?? 0}" ${GEO_ATTRS} />`;
+      return `  <circle cx="${entity.center?.x ?? entity.cx ?? 0}" cy="${entity.center?.y ?? entity.cy ?? 0}" r="${entity.r ?? entity.radius ?? 0}" ${attrs} />`;
     case 'ellipse': {
       const transform = entity.rotation ? ` transform="rotate(${entity.rotation} ${entity.cx} ${entity.cy})"` : '';
-      return `  <ellipse cx="${entity.cx ?? 0}" cy="${entity.cy ?? 0}" rx="${entity.rx ?? entity.radius ?? 0}" ry="${entity.ry ?? entity.radius ?? 0}"${transform} ${GEO_ATTRS} />`;
+      return `  <ellipse cx="${entity.cx ?? 0}" cy="${entity.cy ?? 0}" rx="${entity.rx ?? entity.radius ?? 0}" ry="${entity.ry ?? entity.radius ?? 0}"${transform} ${attrs} />`;
     }
     case 'polyline': {
       if (!entity.points?.length) {
@@ -282,12 +290,10 @@ function entityToSvgElement(entity, allEntities) {
 
       const tag = entity.closed ? 'polygon' : 'polyline';
       const points = entity.points.map((point) => `${point.x},${point.y}`).join(' ');
-      return `  <${tag} points="${points}" ${GEO_ATTRS} />`;
+      return `  <${tag} points="${points}" ${attrs} />`;
     }
     case 'arc':
-      return entity.start && entity.end && entity.control
-        ? `  <path d="${getArcPath(entity)}" ${GEO_ATTRS} />`
-        : '';
+      return entity.start && entity.end && entity.control ? `  <path d="${getArcPath(entity)}" ${attrs} />` : '';
     case 'feature':
       return featureToSvgElement(entity);
     case 'dimension':
@@ -305,9 +311,7 @@ export function buildSvgExportDocument(entities, options = {}) {
   const referenceEntities = options.referenceEntities || entities;
   const exportEntities = getExportEntities(entities, options);
   const bounds = computeBounds(exportEntities, referenceEntities);
-  const elements = exportEntities
-    .map((entity) => entityToSvgElement(entity, referenceEntities))
-    .filter(Boolean);
+  const elements = exportEntities.map((entity) => entityToSvgElement(entity, referenceEntities)).filter(Boolean);
 
   return {
     bounds,

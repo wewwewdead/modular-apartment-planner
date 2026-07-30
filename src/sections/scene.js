@@ -23,9 +23,7 @@ function clamp(value, min, max) {
 
 function uniqueSortedValues(values = []) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted.filter((value, index) => (
-    index === 0 || Math.abs(value - sorted[index - 1]) > 1e-4
-  ));
+  return sorted.filter((value, index) => index === 0 || Math.abs(value - sorted[index - 1]) > 1e-4);
 }
 
 function intervalFromValues(values, maxLength) {
@@ -58,8 +56,14 @@ function polygonCutInterval(sectionCut, polygon = []) {
     }
   }
 
-  if (pointInPolygon(sectionCut.startPoint, polygon)) values.push(0);
-  if (pointInPolygon(sectionCut.endPoint, polygon)) values.push(sectionCutLength(sectionCut));
+  // The cut endpoints are not at along 0 / length: the view axis is reversed relative to the
+  // start -> end axis when direction is +1, so project them instead of assuming an order.
+  if (pointInPolygon(sectionCut.startPoint, polygon)) {
+    values.push(projectPointToSectionCut(sectionCut, sectionCut.startPoint).along);
+  }
+  if (pointInPolygon(sectionCut.endPoint, polygon)) {
+    values.push(projectPointToSectionCut(sectionCut, sectionCut.endPoint).along);
+  }
 
   return intervalFromValues(uniqueSortedValues(values), sectionCutLength(sectionCut));
 }
@@ -124,7 +128,7 @@ function buildWallElements(floor, sectionCut) {
         outline,
         floorElevation,
         floorElevation + (wall.height ?? 0),
-        sectionCut.depth
+        sectionCut.depth,
       );
     })
     .filter(Boolean);
@@ -132,33 +136,37 @@ function buildWallElements(floor, sectionCut) {
 
 function buildSlabElements(floor, sectionCut) {
   return (floor.slabs || [])
-    .filter(slab => slab.boundaryPoints?.length)
-    .map(slab => createFootprintRect(
-      `section-slab-${slab.id}`,
-      'slab',
-      slab.id,
-      sectionCut,
-      slab.boundaryPoints,
-      getSlabBottomLevel(slab),
-      getSlabTopLevel(slab),
-      sectionCut.depth
-    ))
+    .filter((slab) => slab.boundaryPoints?.length)
+    .map((slab) =>
+      createFootprintRect(
+        `section-slab-${slab.id}`,
+        'slab',
+        slab.id,
+        sectionCut,
+        slab.boundaryPoints,
+        getSlabBottomLevel(slab),
+        getSlabTopLevel(slab),
+        sectionCut.depth,
+      ),
+    )
     .filter(Boolean);
 }
 
 function buildColumnElements(floor, sectionCut) {
   const floorElevation = getFloorElevation(floor);
   return (floor.columns || [])
-    .map((column) => createFootprintRect(
-      `section-column-${column.id}`,
-      'column',
-      column.id,
-      sectionCut,
-      columnOutline(column),
-      floorElevation,
-      floorElevation + column.height,
-      sectionCut.depth
-    ))
+    .map((column) =>
+      createFootprintRect(
+        `section-column-${column.id}`,
+        'column',
+        column.id,
+        sectionCut,
+        columnOutline(column),
+        floorElevation,
+        floorElevation + column.height,
+        sectionCut.depth,
+      ),
+    )
     .filter(Boolean);
 }
 
@@ -175,20 +183,28 @@ function buildBeamElements(floor, sectionCut) {
         renderData.outline,
         beam.floorLevel - beam.depth,
         beam.floorLevel,
-        sectionCut.depth
+        sectionCut.depth,
       );
     })
     .filter(Boolean);
 }
 
-function buildDoorElements(floor, sectionCut) {
+// An opening is coplanar with its host wall, so it has to keep the wall's sort depth: the
+// averaged depth of an opening can otherwise land behind its own wall and be painted over.
+function alignOpeningWithHostWall(element, hostElement) {
+  if (!element || !hostElement) return element;
+  if (element.renderMode !== hostElement.renderMode) return element;
+  return { ...element, depth: hostElement.depth };
+}
+
+function buildDoorElements(floor, sectionCut, wallElementsBySourceId) {
   const floorElevation = getFloorElevation(floor);
   return (floor.doors || [])
     .map((door) => {
       const wall = (floor.walls || []).find((entry) => entry.id === door.wallId);
       if (!wall) return null;
       const info = doorOutlineOnWall(wall, door);
-      return createFootprintRect(
+      const element = createFootprintRect(
         `section-door-${door.id}`,
         'door',
         door.id,
@@ -196,20 +212,21 @@ function buildDoorElements(floor, sectionCut) {
         [info.p1, info.p2, info.p3, info.p4],
         floorElevation + (door.sillHeight ?? 0),
         floorElevation + (door.sillHeight ?? 0) + (door.height ?? 0),
-        sectionCut.depth
+        sectionCut.depth,
       );
+      return alignOpeningWithHostWall(element, wallElementsBySourceId?.get(wall.id));
     })
     .filter(Boolean);
 }
 
-function buildWindowElements(floor, sectionCut) {
+function buildWindowElements(floor, sectionCut, wallElementsBySourceId) {
   const floorElevation = getFloorElevation(floor);
   return (floor.windows || [])
     .map((windowItem) => {
       const wall = (floor.walls || []).find((entry) => entry.id === windowItem.wallId);
       if (!wall) return null;
       const info = windowOutlineOnWall(wall, windowItem);
-      return createFootprintRect(
+      const element = createFootprintRect(
         `section-window-${windowItem.id}`,
         'window',
         windowItem.id,
@@ -217,8 +234,9 @@ function buildWindowElements(floor, sectionCut) {
         [info.p1, info.p2, info.p3, info.p4],
         floorElevation + (windowItem.sillHeight ?? 0),
         floorElevation + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
-        sectionCut.depth
+        sectionCut.depth,
       );
+      return alignOpeningWithHostWall(element, wallElementsBySourceId?.get(wall.id));
     })
     .filter(Boolean);
 }
@@ -315,19 +333,19 @@ function buildFloorSectionElements(floor, sectionCut, roofSystem = null) {
   const landings = floor.landings || [];
   const stairs = floor.stairs || [];
 
-  const landingElevationMap = new Map(
-    landings.map(l => [l.id, resolveLandingElevation(l, stairs, floorElevation)])
-  );
+  const landingElevationMap = new Map(landings.map((l) => [l.id, resolveLandingElevation(l, stairs, floorElevation)]));
   const railingElements = buildRailingSectionElements(floor, sectionCut);
+  const wallElements = buildWallElements(floor, sectionCut);
+  const wallElementsBySourceId = new Map(wallElements.map((element) => [element.sourceId, element]));
 
   return {
     rectElements: [
-      ...buildWallElements(floor, sectionCut),
+      ...wallElements,
       ...buildSlabElements(floor, sectionCut),
       ...buildColumnElements(floor, sectionCut),
       ...buildBeamElements(floor, sectionCut),
-      ...buildDoorElements(floor, sectionCut),
-      ...buildWindowElements(floor, sectionCut),
+      ...buildDoorElements(floor, sectionCut, wallElementsBySourceId),
+      ...buildWindowElements(floor, sectionCut, wallElementsBySourceId),
       ...(railingElements.rectElements || []),
     ],
     polygonElements: [],
@@ -336,14 +354,16 @@ function buildFloorSectionElements(floor, sectionCut, roofSystem = null) {
       ...buildStairElements(floor, sectionCut, landingElevationMap),
       ...(roofSystem
         ? stairs
-          .map((stair) => buildStairRoofAccessSectionElement({
-            stair,
-            floor,
-            roofSystem,
-            sectionCut,
-            landingElevationMap,
-          }))
-          .filter(Boolean)
+            .map((stair) =>
+              buildStairRoofAccessSectionElement({
+                stair,
+                floor,
+                roofSystem,
+                sectionCut,
+                landingElevationMap,
+              }),
+            )
+            .filter(Boolean)
         : []),
     ],
     diagnostics: {
@@ -407,10 +427,7 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
     polygonElements.push(...(floorElements.polygonElements || []));
     lineElements.push(...(floorElements.lineElements || []));
     stairElements.push(...floorElements.stairElements);
-    railingDiagnostics = mergeVisibilityDiagnostics(
-      railingDiagnostics,
-      floorElements.diagnostics?.railing
-    );
+    railingDiagnostics = mergeVisibilityDiagnostics(railingDiagnostics, floorElements.diagnostics?.railing);
   }
 
   if (roofSystem) {
@@ -451,7 +468,14 @@ function buildSectionSceneFromFloors(floors, sectionCut, title = null, roofSyste
     polygonElements: sortedPolygonElements,
     stairElements: sortedStairElements,
     lineElements: sortedLineElements,
-    bounds: computeSceneBounds(sortedRectElements, sortedStairElements, sectionCut, stackBounds.minElevation, sortedPolygonElements, sortedLineElements),
+    bounds: computeSceneBounds(
+      sortedRectElements,
+      sortedStairElements,
+      sectionCut,
+      stackBounds.minElevation,
+      sortedPolygonElements,
+      sortedLineElements,
+    ),
     groundLevel: stackBounds.minElevation,
     diagnostics: {
       roof: roofDiagnostics,
@@ -475,9 +499,7 @@ export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = 
   if (!sourceFloor) return null;
 
   const cuts = sourceFloor.sectionCuts || [];
-  const sectionCut = sectionCutId
-    ? cuts.find((entry) => entry.id === sectionCutId)
-    : cuts[0] || null;
+  const sectionCut = sectionCutId ? cuts.find((entry) => entry.id === sectionCutId) : cuts[0] || null;
   if (!sectionCut) return null;
 
   return buildSectionSceneFromFloors(
@@ -485,6 +507,6 @@ export function buildProjectSectionScene(project, sourceFloorId, sectionCutId = 
     sectionCut,
     sectionCut.label || 'Section',
     project.roofSystem || null,
-    project
+    project,
   );
 }

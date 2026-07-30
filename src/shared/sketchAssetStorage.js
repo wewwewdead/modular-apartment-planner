@@ -36,9 +36,11 @@ function writeJson(key, value) {
   try {
     storage.setItem(key, JSON.stringify(value));
     if (typeof globalThis.dispatchEvent === 'function' && typeof globalThis.CustomEvent === 'function') {
-      globalThis.dispatchEvent(new CustomEvent(SKETCH_STORAGE_CHANGED_EVENT, {
-        detail: { key },
-      }));
+      globalThis.dispatchEvent(
+        new CustomEvent(SKETCH_STORAGE_CHANGED_EVENT, {
+          detail: { key },
+        }),
+      );
     }
   } catch (err) {
     if (err?.name === 'QuotaExceededError') {

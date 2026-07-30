@@ -20,17 +20,20 @@ function buildFootprintBounds(points) {
     return null;
   }
 
-  return points.reduce((accumulator, point) => ({
-    minX: Math.min(accumulator.minX, point.x),
-    minY: Math.min(accumulator.minY, point.y),
-    maxX: Math.max(accumulator.maxX, point.x),
-    maxY: Math.max(accumulator.maxY, point.y),
-  }), {
-    minX: points[0].x,
-    minY: points[0].y,
-    maxX: points[0].x,
-    maxY: points[0].y,
-  });
+  return points.reduce(
+    (accumulator, point) => ({
+      minX: Math.min(accumulator.minX, point.x),
+      minY: Math.min(accumulator.minY, point.y),
+      maxX: Math.max(accumulator.maxX, point.x),
+      maxY: Math.max(accumulator.maxY, point.y),
+    }),
+    {
+      minX: points[0].x,
+      minY: points[0].y,
+      maxX: points[0].x,
+      maxY: points[0].y,
+    },
+  );
 }
 
 function buildBoundsFromFootprint(footprint, height = DEFAULT_BOUNDS.height) {
@@ -154,7 +157,9 @@ export function computeGenericPartPlanBounds(part, entities = []) {
 }
 
 export function computeGenericObjectBounds(objectDraft, entities = []) {
-  const normalizedEntities = filterNonIsometricEntities(entities).filter((entity) => entity.type !== 'text' && entity.type !== 'dimension');
+  const normalizedEntities = filterNonIsometricEntities(entities).filter(
+    (entity) => entity.type !== 'text' && entity.type !== 'dimension',
+  );
   const partBounds = (objectDraft?.parts || [])
     .map((part) => computeGenericPartPlanBounds(part, entities))
     .filter(Boolean);
@@ -183,18 +188,27 @@ export function computeGenericObjectBounds(objectDraft, entities = []) {
   const loops = extractClosedLoopsFromEntities(normalizedEntities);
   if (loops.length) {
     const primaryLoop = [...loops].sort((left, right) => right.area - left.area)[0];
-    return buildBoundsFromFootprint(loopToFootprintPayload(primaryLoop), Number(objectDraft?.bounds?.height) || DEFAULT_BOUNDS.height);
+    return buildBoundsFromFootprint(
+      loopToFootprintPayload(primaryLoop),
+      Number(objectDraft?.bounds?.height) || DEFAULT_BOUNDS.height,
+    );
   }
 
   const fallback = computeFootprintFromEntities(normalizedEntities);
-  return buildBoundsFromFootprint(
-    fallback?.points?.length ? { type: 'profile', points: fallback.points } : null,
-    Number(objectDraft?.bounds?.height) || DEFAULT_BOUNDS.height,
-  ) || objectDraft?.bounds || null;
+  return (
+    buildBoundsFromFootprint(
+      fallback?.points?.length ? { type: 'profile', points: fallback.points } : null,
+      Number(objectDraft?.bounds?.height) || DEFAULT_BOUNDS.height,
+    ) ||
+    objectDraft?.bounds ||
+    null
+  );
 }
 
 export function computeGenericObjectFootprint(objectDraft, entities = []) {
-  const normalizedEntities = filterNonIsometricEntities(entities).filter((entity) => entity.type !== 'text' && entity.type !== 'dimension');
+  const normalizedEntities = filterNonIsometricEntities(entities).filter(
+    (entity) => entity.type !== 'text' && entity.type !== 'dimension',
+  );
   const partBounds = (objectDraft?.parts || [])
     .map((part) => computeGenericPartPlanBounds(part, entities))
     .filter(Boolean);

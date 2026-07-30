@@ -120,7 +120,8 @@ export function formatDrawingArea(area) {
 }
 
 export function resolveViewportScaleLabel(viewport, source, sheet) {
-  if (source?.kind === '3d_preview' || source?.kind === 'roof_schedule' || source?.kind === 'sketch_part_list') return 'NTS';
+  if (source?.kind === '3d_preview' || source?.kind === 'roof_schedule' || source?.kind === 'sketch_part_list')
+    return 'NTS';
   if (sheet?.scaleMode === 'as_noted') return 'As noted';
   return `1:${Math.max(1, Math.round(Number(viewport?.scale) || 100))}`;
 }
@@ -152,9 +153,13 @@ export function resolveSheetScaleLabel(sheet, viewports = []) {
   const explicit = sheet?.scaleLabel?.trim();
   if (explicit) return explicit;
 
-  const scales = [...new Set(viewports
-    .filter((viewport) => viewport.source?.kind !== '3d_preview')
-    .map((viewport) => Math.max(1, Math.round(Number(viewport.scale) || 100))) )];
+  const scales = [
+    ...new Set(
+      viewports
+        .filter((viewport) => viewport.source?.kind !== '3d_preview')
+        .map((viewport) => Math.max(1, Math.round(Number(viewport.scale) || 100))),
+    ),
+  ];
 
   if (scales.length === 1) return `1:${scales[0]}`;
   return 'As noted';
@@ -162,23 +167,17 @@ export function resolveSheetScaleLabel(sheet, viewports = []) {
 
 export function resolveSheetMetadata(project, sheet, index = 0, viewports = []) {
   return {
-    projectTitle: sheet?.titleBlock?.projectTitleOverride?.trim()
-      || sheet?.projectNameOverride?.trim()
-      || project?.name?.trim()
-      || 'Untitled Project',
-    projectAddress: sheet?.titleBlock?.projectAddressOverride?.trim()
-      || project?.address?.trim()
-      || '',
-    drawingTitle: sheet?.drawingName?.trim()
-      || getSheetDisplayLabel(sheet, index),
+    projectTitle:
+      sheet?.titleBlock?.projectTitleOverride?.trim() ||
+      sheet?.projectNameOverride?.trim() ||
+      project?.name?.trim() ||
+      'Untitled Project',
+    projectAddress: sheet?.titleBlock?.projectAddressOverride?.trim() || project?.address?.trim() || '',
+    drawingTitle: sheet?.drawingName?.trim() || getSheetDisplayLabel(sheet, index),
     sheetNumber: getSheetNumberLabel(sheet, index),
     issueDate: formatSheetDate(sheet?.issueDate || new Date().toISOString()),
     scaleLabel: resolveSheetScaleLabel(sheet, viewports),
-    drawnBy: sheet?.titleBlock?.drawnBy?.trim()
-      || project?.documentDefaults?.drawnBy?.trim()
-      || '',
-    checkedBy: sheet?.titleBlock?.checkedBy?.trim()
-      || project?.documentDefaults?.checkedBy?.trim()
-      || '',
+    drawnBy: sheet?.titleBlock?.drawnBy?.trim() || project?.documentDefaults?.drawnBy?.trim() || '',
+    checkedBy: sheet?.titleBlock?.checkedBy?.trim() || project?.documentDefaults?.checkedBy?.trim() || '',
   };
 }

@@ -30,7 +30,14 @@ function renderLinearDimension(entity, allEntities, className) {
       <line className="sketchStudioDimensionLine" {...geometry.dimLine} vectorEffect="non-scaling-stroke" />
       <line className="sketchStudioDimensionTick" {...geometry.tick1} vectorEffect="non-scaling-stroke" />
       <line className="sketchStudioDimensionTick" {...geometry.tick2} vectorEffect="non-scaling-stroke" />
-      <text className="sketchStudioDimensionText" x={geometry.textPoint.x} y={geometry.textPoint.y} textAnchor="middle" dominantBaseline="middle" transform={`rotate(${geometry.textAngle} ${geometry.textPoint.x} ${geometry.textPoint.y})`}>
+      <text
+        className="sketchStudioDimensionText"
+        x={geometry.textPoint.x}
+        y={geometry.textPoint.y}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        transform={`rotate(${geometry.textAngle} ${geometry.textPoint.x} ${geometry.textPoint.y})`}
+      >
         {text}
       </text>
     </g>
@@ -42,7 +49,13 @@ function renderAngleDimension(entity, allEntities, className) {
   const vertex = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.vertex);
   const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
   const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[2], entity.p2);
-  const geometry = getAngleDimensionGeometry({ vertex, p1, p2, arcRadius: entity.arcRadius, isometricPlane: entity.isometricPlane });
+  const geometry = getAngleDimensionGeometry({
+    vertex,
+    p1,
+    p2,
+    arcRadius: entity.arcRadius,
+    isometricPlane: entity.isometricPlane,
+  });
   const text = formatAngleText(geometry.angleDeg);
 
   return (
@@ -50,7 +63,13 @@ function renderAngleDimension(entity, allEntities, className) {
       <line className="sketchStudioDimensionLine" {...geometry.ray1} vectorEffect="non-scaling-stroke" />
       <line className="sketchStudioDimensionLine" {...geometry.ray2} vectorEffect="non-scaling-stroke" />
       <path className="sketchStudioDimensionLine" d={geometry.arcPath} fill="none" vectorEffect="non-scaling-stroke" />
-      <text className="sketchStudioDimensionText" x={geometry.textPoint.x} y={geometry.textPoint.y} textAnchor="middle" dominantBaseline="middle">
+      <text
+        className="sketchStudioDimensionText"
+        x={geometry.textPoint.x}
+        y={geometry.textPoint.y}
+        textAnchor="middle"
+        dominantBaseline="middle"
+      >
         {text}
       </text>
     </g>
@@ -58,10 +77,11 @@ function renderAngleDimension(entity, allEntities, className) {
 }
 
 export default function DimensionRenderer({ entities, allEntities, hoveredId, selectedIds }) {
-  const dimensionEntities = entities.filter((entity) =>
-    entity.visible !== false
-    && (entity.type === 'dimension' || entity.type === 'angle-dimension')
-    && hasValidSourceRefs(entity, allEntities),
+  const dimensionEntities = entities.filter(
+    (entity) =>
+      entity.visible !== false &&
+      (entity.type === 'dimension' || entity.type === 'angle-dimension') &&
+      hasValidSourceRefs(entity, allEntities),
   );
 
   return (
@@ -72,7 +92,9 @@ export default function DimensionRenderer({ entities, allEntities, hoveredId, se
           entity.meta?.lineStyle === 'broken' ? 'is-broken-line' : '',
           selectedIds.includes(entity.id) ? 'is-selected' : '',
           hoveredId === entity.id ? 'is-hovered' : '',
-        ].filter(Boolean).join(' ');
+        ]
+          .filter(Boolean)
+          .join(' ');
 
         if (entity.type === 'angle-dimension') {
           return renderAngleDimension(entity, allEntities, className);

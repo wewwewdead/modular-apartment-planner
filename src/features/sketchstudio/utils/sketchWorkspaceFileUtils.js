@@ -10,13 +10,16 @@ export const SKETCH_WORKSPACE_FILE_TYPES = [
 ];
 
 function sanitizeFileNamePart(value) {
-  return String(value || 'untitled-sketch')
-    .trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    || 'untitled-sketch';
+  return (
+    String(value || 'untitled-sketch')
+      .trim()
+      // Strip filesystem-illegal characters and C0 control chars (U+0000-U+001F) from file names.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'untitled-sketch'
+  );
 }
 
 function downloadBlob(blob, fileName) {
@@ -71,7 +74,8 @@ export async function importSketchWorkspaceFile(file) {
   const workspace = deserializeSketchWorkspace(await file.text());
   return {
     workspace,
-    fileName: typeof file.name === 'string' && file.name ? file.name : getSketchWorkspaceFileName(workspace.document?.name),
+    fileName:
+      typeof file.name === 'string' && file.name ? file.name : getSketchWorkspaceFileName(workspace.document?.name),
   };
 }
 

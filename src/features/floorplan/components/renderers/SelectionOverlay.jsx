@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { fixtureOutline } from '@/geometry/fixtureGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
@@ -55,7 +56,7 @@ function WallSelection({ wall, columns, zoom }) {
   );
 }
 
-export default function SelectionOverlay({ selectedId, selectedType, floor, zoom }) {
+function SelectionOverlay({ selectedId, selectedType, floor, zoom }) {
   if (!selectedId || !floor) return null;
 
   if (selectedType === 'slab') {
@@ -386,3 +387,5 @@ export default function SelectionOverlay({ selectedId, selectedType, floor, zoom
 
   return null;
 }
+
+export default memo(SelectionOverlay);

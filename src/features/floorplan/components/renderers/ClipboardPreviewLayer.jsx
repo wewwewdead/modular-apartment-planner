@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { buildManualDimensionFigures } from '@/annotations/dimensions';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
 import BeamRenderer from './BeamRenderer';
@@ -10,7 +11,7 @@ import StairRenderer from './StairRenderer';
 import WallRenderer from './WallRenderer';
 import WindowRenderer from './WindowRenderer';
 
-export default function ClipboardPreviewLayer({ content }) {
+function ClipboardPreviewLayer({ content }) {
   if (!content) return null;
 
   const dimensions = buildManualDimensionFigures(content.annotations || []);
@@ -34,3 +35,5 @@ export default function ClipboardPreviewLayer({ content }) {
     </g>
   );
 }
+
+export default memo(ClipboardPreviewLayer);

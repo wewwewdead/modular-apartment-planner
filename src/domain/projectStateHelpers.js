@@ -10,6 +10,13 @@ export function syncProjectStructures(project) {
 
 export function applyProjectUpdate(state, nextProject, recordHistory = true) {
   const syncedProject = syncProjectStructures(nextProject);
+  // History stores the PREVIOUS project by reference, not a clone. Every reducer
+  // path builds `nextProject` immutably (object spread) and `syncProjectStructures`
+  // returns a fresh object, so entries that share unchanged floors/roof/truss
+  // sub-trees share the exact same objects — structural sharing keeps each history
+  // entry cheap. Never mutate a project (or its floors/entities) in place, or
+  // history entries would alias live state and undo would restore corrupted data.
+  // slice(-HISTORY_LIMIT) evicts the oldest snapshot once the cap is exceeded.
   const history = recordHistory ? [...state.history, state.project].slice(-HISTORY_LIMIT) : state.history;
 
   return {

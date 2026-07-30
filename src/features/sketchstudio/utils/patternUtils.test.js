@@ -64,7 +64,13 @@ describe('expandPartPattern', () => {
 describe('expandFeaturePattern', () => {
   it('offsets circle features', () => {
     const source = { id: 'f-1', shape: 'circle', cx: 50, cy: 100, diameter: 10 };
-    const pattern = createPatternDefinition({ sourceId: 'f-1', count: 3, spacing: 50, axis: 'x', sourceType: 'feature' });
+    const pattern = createPatternDefinition({
+      sourceId: 'f-1',
+      count: 3,
+      spacing: 50,
+      axis: 'x',
+      sourceType: 'feature',
+    });
     const copies = expandFeaturePattern(source, pattern);
     expect(copies).toHaveLength(2);
     expect(copies[0].cx).toBe(100);
@@ -74,7 +80,13 @@ describe('expandFeaturePattern', () => {
 
   it('offsets rect features', () => {
     const source = { id: 'f-2', shape: 'rect', x: 10, y: 20, width: 50, height: 30 };
-    const pattern = createPatternDefinition({ sourceId: 'f-2', count: 2, spacing: 80, axis: 'y', sourceType: 'feature' });
+    const pattern = createPatternDefinition({
+      sourceId: 'f-2',
+      count: 2,
+      spacing: 80,
+      axis: 'y',
+      sourceType: 'feature',
+    });
     const copies = expandFeaturePattern(source, pattern);
     expect(copies[0].y).toBe(100);
     expect(copies[0].x).toBe(10);
@@ -95,10 +107,7 @@ describe('applyPatterns', () => {
   it('removes old pattern instances on reapply', () => {
     const oldCopy = { id: 'old-copy', name: 'old', metadata: { patternGenerated: true, patternId: 'old-pat' } };
     const draft = {
-      parts: [
-        { id: 'part-1', name: 'Shelf', parametric: { origin: { x: 0, y: 0, z: 0 } }, metadata: {} },
-        oldCopy,
-      ],
+      parts: [{ id: 'part-1', name: 'Shelf', parametric: { origin: { x: 0, y: 0, z: 0 } }, metadata: {} }, oldCopy],
       features: [],
     };
     const patterns = [createPatternDefinition({ sourceId: 'part-1', count: 2, spacing: 100, axis: 'x' })];

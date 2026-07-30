@@ -1,6 +1,11 @@
 import { buildFloorPreviewObjects } from './objectBuilders';
 import { buildRoofPreviewObjects } from '@/geometry/roof3dGeometry';
-import { getDefaultActiveFloorId, getFloorElevation, getFloorStackBounds, getOrderedFloors } from '@/domain/floorModels';
+import {
+  getDefaultActiveFloorId,
+  getFloorElevation,
+  getFloorStackBounds,
+  getOrderedFloors,
+} from '@/domain/floorModels';
 import { buildTrussPreviewObjects } from '@/geometry/trussGeometry';
 
 function mergeBounds(current, next) {
@@ -18,14 +23,12 @@ function mergeBounds(current, next) {
 }
 
 function boundsFromObjects(objects = []) {
-  return objects.reduce((accumulator, objectDescriptor) => (
-    mergeBounds(accumulator, objectDescriptor.bounds)
-  ), null);
+  return objects.reduce((accumulator, objectDescriptor) => mergeBounds(accumulator, objectDescriptor.bounds), null);
 }
 
 function createFallbackBounds(stackBounds, activeFloor) {
   const level = stackBounds?.minElevation ?? getFloorElevation(activeFloor);
-  const top = stackBounds?.maxElevation ?? (level + 3000);
+  const top = stackBounds?.maxElevation ?? level + 3000;
   return {
     minX: -1500,
     maxX: 1500,
@@ -54,9 +57,8 @@ export function buildPreviewScene(project, options = {}) {
   const visibleFloorIds = new Set(resolvedVisibleFloorIds);
 
   const floorDescriptors = floors.map((floor) => {
-    const trussObjects = (project?.trussSystems || [])
-      .filter((trussSystem) => trussSystem.floorId === floor.id)
-      .flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
+    const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
+    const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
     const objects = [...buildFloorPreviewObjects(floor), ...trussObjects];
     return {
       floorId: floor.id,
@@ -65,18 +67,23 @@ export function buildPreviewScene(project, options = {}) {
       visible: visibleFloorIds.has(floor.id),
       objects,
       bounds: boundsFromObjects(objects),
+      // sourceKey: identity of the geometry inputs for this floor. Floors are
+      // updated immutably (reducers spread), so a changed floor gets a new
+      // object reference while untouched floors keep identity — this lets the
+      // preview object cache skip re-triangulating unchanged floors. Truss
+      // systems are separate source objects, so include their refs too.
+      sourceKey: { floor, trussSystems: floorTrussSystems },
     };
   });
 
   if (project?.roofSystem) {
-    const roofObjects = buildRoofPreviewObjects(project.roofSystem)
-      .map((descriptor) => ({
-        ...descriptor,
-        metadata: {
-          ...(descriptor.metadata || {}),
-          floorId: topFloor?.id || activeFloorId,
-        },
-      }));
+    const roofObjects = buildRoofPreviewObjects(project.roofSystem).map((descriptor) => ({
+      ...descriptor,
+      metadata: {
+        ...(descriptor.metadata || {}),
+        floorId: topFloor?.id || activeFloorId,
+      },
+    }));
 
     floorDescriptors.push({
       floorId: project.roofSystem.id,
@@ -85,12 +92,11 @@ export function buildPreviewScene(project, options = {}) {
       visible: !options.visibleFloorIds || (topFloor ? visibleFloorIds.has(topFloor.id) : true),
       objects: roofObjects,
       bounds: boundsFromObjects(roofObjects),
+      sourceKey: { roofSystem: project.roofSystem },
     });
   }
 
-  const visibleObjects = floorDescriptors
-    .filter((floor) => floor.visible)
-    .flatMap((floor) => floor.objects);
+  const visibleObjects = floorDescriptors.filter((floor) => floor.visible).flatMap((floor) => floor.objects);
   const bounds = boundsFromObjects(visibleObjects) || createFallbackBounds(stackBounds, activeFloor);
   const floorsWithNavigationTargets = floorDescriptors.map((floor) => ({
     ...floor,

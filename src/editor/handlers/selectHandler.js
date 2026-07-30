@@ -15,6 +15,7 @@ import { fixtureContainsPoint } from '@/geometry/fixtureGeometry';
 import { slabContainsPoint } from '@/geometry/slabGeometry';
 import { hitTestAnnotation } from '@/annotations/scene';
 import { MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
+import { describeWallEditRejection, propagateWallEdit } from '@/domain/modelGraph';
 import { getWallRenderData, resolveWallEndpoints, snapWallEndpoint } from '@/geometry/wallColumnGeometry';
 import { duplicateColumn } from '@/domain/columnModels';
 import { hitTestSectionCut } from '@/geometry/sectionCutGeometry';
@@ -127,7 +128,15 @@ function hitTest(modelPos, floor, annotationTolerance) {
   return null;
 }
 
-export function createSelectHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, snapEnabled }) {
+export function createSelectHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  viewport,
+  snapEnabled,
+  activePhaseId = null,
+}) {
   return {
     onMouseDown(modelPos, e, _toolState) {
       if (e.button !== 0) return;
@@ -174,6 +183,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
             dragType: 'move',
             startPos: modelPos,
             originalPos: modelPos,
+            wallDragPreview: null,
           },
         });
       } else {
@@ -220,9 +230,15 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
       const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
 
       if (selectedType === 'wall') {
+        // PREVIEW-THEN-COMMIT: no WALL_UPDATE is dispatched during the drag.
+        // The committed floor stays at its drag-start state, which makes snap
+        // targets pre-edit (stable) by construction, keeps the drag cumulative
+        // (no lost-update "gravity" trap), and floods no undo history. The
+        // single commit happens on mouseup; Escape cancels for free.
         const wall = floor.walls.find((w) => w.id === selectedId);
         if (!wall) return;
         const resolved = resolveWallEndpoints(wall, floor.columns || []);
+        let proposal = null;
 
         if (toolState.dragType === 'handle') {
           const handle = toolState.handle;
@@ -257,15 +273,11 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
 
           if (distance(nextPoint, oppositePoint) < MIN_WALL_LENGTH) return;
 
-          dispatch({
-            type: 'WALL_UPDATE',
-            floorId: activeFloorId,
-            wall: {
-              id: wall.id,
-              [handle]: nextPoint,
-              [`${handle}Attachment`]: nextAttachment,
-            },
-          });
+          proposal = {
+            id: wall.id,
+            [handle]: nextPoint,
+            [`${handle}Attachment`]: nextAttachment,
+          };
         } else {
           let nextStart = { x: resolved.start.x + dx, y: resolved.start.y + dy };
           let nextEnd = { x: resolved.end.x + dx, y: resolved.end.y + dy };
@@ -300,7 +312,7 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
 
           if (distance(nextStart, nextEnd) < MIN_WALL_LENGTH) return;
 
-          const wallUpdate = {
+          proposal = {
             id: wall.id,
             start: nextStart,
             end: nextEnd,
@@ -308,20 +320,43 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
             endAttachment,
           };
           if (wall.controlPoint) {
-            wallUpdate.controlPoint = {
+            proposal.controlPoint = {
               x: wall.controlPoint.x + dx,
               y: wall.controlPoint.y + dy,
             };
           }
-          dispatch({
-            type: 'WALL_UPDATE',
-            floorId: activeFloorId,
-            wall: wallUpdate,
-          });
         }
+
+        // One-hop heal preview so joins visibly hold DURING the drag.
+        const propagation = propagateWallEdit(floor, proposal);
+        const previewEdits = propagation.ok
+          ? [
+              {
+                id: wall.id,
+                start: propagation.primary.start,
+                end: propagation.primary.end,
+                ...(proposal.controlPoint ? { controlPoint: proposal.controlPoint } : {}),
+              },
+              ...propagation.secondary,
+            ]
+          : [
+              {
+                id: wall.id,
+                ...(proposal.start ? { start: proposal.start } : {}),
+                ...(proposal.end ? { end: proposal.end } : {}),
+                ...(proposal.controlPoint ? { controlPoint: proposal.controlPoint } : {}),
+              },
+            ];
+
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { startPos: modelPos },
+          payload: {
+            wallDragPreview: {
+              edits: previewEdits,
+              blocked: propagation.ok ? null : propagation.reason,
+              proposal,
+            },
+          },
         });
       } else if (selectedType === 'column') {
         const col = (floor.columns || []).find((c) => c.id === selectedId);
@@ -348,8 +383,17 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
           payload: { startPos: modelPos },
         });
       } else if (selectedType === 'sectionCut') {
+        // PREVIEW-THEN-COMMIT (same architecture as wall drags): no
+        // SECTION_UPDATE per mousemove. Per-event commits ran the full
+        // pipeline (history snapshot + roof/truss sync + full re-render)
+        // every few milliseconds — the "friction" — and the old incremental
+        // startPos-advancing scheme lost deltas whenever an event read a
+        // stale floor against a fresh startPos — the "gravity" slip.
+        // Cumulative-from-mousedown against the never-changing committed
+        // floor eliminates both. One dispatch on mouseup; Escape cancels.
         const sectionCut = (floor.sectionCuts || []).find((s) => s.id === selectedId);
         if (!sectionCut) return;
+        let proposal = null;
 
         if (toolState.dragType === 'handle') {
           const handle = toolState.handle;
@@ -358,32 +402,35 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
 
           if (distance(nextSectionCut.startPoint, nextSectionCut.endPoint) < MIN_WALL_LENGTH) return;
 
-          dispatch({
-            type: 'SECTION_UPDATE',
-            floorId: activeFloorId,
-            sectionCut: nextSectionCut,
-          });
+          proposal = {
+            id: sectionCut.id,
+            startPoint: { ...nextSectionCut.startPoint },
+            endPoint: { ...nextSectionCut.endPoint },
+          };
         } else {
-          dispatch({
-            type: 'SECTION_UPDATE',
-            floorId: activeFloorId,
-            sectionCut: {
-              id: sectionCut.id,
-              startPoint: {
-                x: sectionCut.startPoint.x + dx,
-                y: sectionCut.startPoint.y + dy,
-              },
-              endPoint: {
-                x: sectionCut.endPoint.x + dx,
-                y: sectionCut.endPoint.y + dy,
-              },
+          proposal = {
+            id: sectionCut.id,
+            startPoint: {
+              x: sectionCut.startPoint.x + dx,
+              y: sectionCut.startPoint.y + dy,
             },
-          });
-          editorDispatch({
-            type: 'UPDATE_TOOL_STATE',
-            payload: { startPos: modelPos },
-          });
+            endPoint: {
+              x: sectionCut.endPoint.x + dx,
+              y: sectionCut.endPoint.y + dy,
+            },
+          };
         }
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            wallDragPreview: {
+              sectionCutEdits: [proposal],
+              sectionProposal: proposal,
+              blocked: null,
+            },
+          },
+        });
       } else if (selectedType === 'railing') {
         const railing = (floor.railings || []).find((r) => r.id === selectedId);
         if (!railing) return;
@@ -544,6 +591,27 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
         return;
       }
 
+      // Preview-then-commit: the drag's single commit dispatch happens here.
+      if (toolState.dragging && toolState.wallDragPreview) {
+        const { proposal, sectionProposal, blocked } = toolState.wallDragPreview;
+        if (blocked) {
+          editorDispatch({ type: 'SET_STATUS_MESSAGE', message: describeWallEditRejection(blocked) });
+        } else if (proposal) {
+          dispatch({
+            type: 'WALL_UPDATE',
+            floorId: activeFloorId,
+            wall: proposal,
+            phaseId: activePhaseId ?? null,
+          });
+        } else if (sectionProposal) {
+          dispatch({
+            type: 'SECTION_UPDATE',
+            floorId: activeFloorId,
+            sectionCut: sectionProposal,
+          });
+        }
+      }
+
       if (toolState.dragging || toolState.pendingDrag) {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -556,12 +624,33 @@ export function createSelectHandler({ dispatch, editorDispatch, getFloor, active
             startPos: null,
             originalPos: null,
             currentPos: null,
+            wallDragPreview: null,
           },
         });
       }
     },
 
     onKeyDown(e, toolState, selectedId, selectedType) {
+      // Escape cancels an active drag: preview cleared, nothing dispatched,
+      // no history entry consumed — the wall stays exactly where it was.
+      if (e.key === 'Escape' && (toolState.dragging || toolState.pendingDrag)) {
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            dragging: false,
+            pendingDrag: false,
+            dragType: null,
+            handle: null,
+            handleIndex: null,
+            startPos: null,
+            originalPos: null,
+            currentPos: null,
+            wallDragPreview: null,
+          },
+        });
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selectedId && selectedType === 'column') {
         e.preventDefault();
         const floor = getFloor(activeFloorId);

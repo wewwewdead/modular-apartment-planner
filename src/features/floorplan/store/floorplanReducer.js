@@ -26,10 +26,41 @@ import {
   applyColumnUpdate,
   applyLandingDelete,
   applyLandingUpdate,
+  applyPropagatedWallEdits,
   applyWallUpdate,
   clearStairRoofAccessReferences,
   replaceDeletedFloorReferences,
 } from '@/domain/projectCommands';
+import { propagateWallEdit } from '@/domain/modelGraph';
+import { reconcileFloorRooms } from '@/domain/roomReconcile';
+
+/**
+ * Old + new segments of every wall a propagation touches — the locality scope
+ * for room reconciliation (rooms not touching these segments are left alone).
+ */
+function propagationChangedSegments(floor, propagation) {
+  const segments = [];
+  const pushWall = (wall) => {
+    if (wall) segments.push({ start: { ...wall.start }, end: { ...wall.end } });
+  };
+  for (const id of propagation.changedWallIds) {
+    pushWall(floor.walls.find((wall) => wall.id === id));
+  }
+  segments.push({ start: { ...propagation.primary.start }, end: { ...propagation.primary.end } });
+  for (const edit of propagation.secondary) {
+    const oldWall = floor.walls.find((wall) => wall.id === edit.id);
+    if (!oldWall) continue;
+    segments.push({
+      start: { ...(edit.start || oldWall.start) },
+      end: { ...(edit.end || oldWall.end) },
+    });
+  }
+  return segments;
+}
+
+function wallSegments(...walls) {
+  return walls.filter(Boolean).map((wall) => ({ start: { ...wall.start }, end: { ...wall.end } }));
+}
 
 function normalizeViewMode(viewMode) {
   if (viewMode === 'elevation_side') return 'elevation_left';
@@ -94,6 +125,7 @@ function createInitialEditorState(activeFloorId = null) {
     maximizedPanel: null,
     activePhaseId: null,
     phaseViewMode: 'all',
+    lastRejection: null,
   };
 }
 
@@ -571,7 +603,34 @@ function reduceProjectState(state, action) {
     }
 
     case 'FLOOR_REPLACE':
-      return updateFloor(state, action.floorId, () => ({ ...action.floor }), true, { sort: true });
+      return updateFloor(
+        state,
+        action.floorId,
+        (oldFloor) => {
+          // Clipboard cut/paste path: reconcile rooms for whatever walls the
+          // replace actually changed (no heal, no validation — pasted geometry
+          // is internally consistent and pastes must never block). Locality
+          // still protects distant legacy rooms.
+          const nextFloor = { ...action.floor };
+          const oldById = new Map((oldFloor.walls || []).map((wall) => [wall.id, wall]));
+          const changed = [];
+          const samePoint = (a, b) => a && b && a.x === b.x && a.y === b.y;
+
+          for (const wall of nextFloor.walls || []) {
+            const prev = oldById.get(wall.id);
+            if (!prev || !samePoint(prev.start, wall.start) || !samePoint(prev.end, wall.end)) {
+              changed.push(...wallSegments(prev, wall));
+            }
+            oldById.delete(wall.id);
+          }
+          for (const removed of oldById.values()) changed.push(...wallSegments(removed));
+
+          if (!changed.length) return nextFloor;
+          return reconcileFloorRooms(nextFloor, { changedWalls: changed, phaseId: action.phaseId ?? null });
+        },
+        true,
+        { sort: true },
+      );
 
     case 'SHEET_ADD':
       return applyProjectUpdate(state, {
@@ -636,31 +695,104 @@ function reduceProjectState(state, action) {
       });
 
     case 'WALL_ADD':
-      return updateFloor(state, action.floorId, (floor) => ({
-        ...floor,
-        walls: [...floor.walls, syncWallAttachmentPoints(action.wall, floor.columns || [])],
-      }));
+      return updateFloor(state, action.floorId, (floor) => {
+        const wall = syncWallAttachmentPoints(action.wall, floor.columns || []);
+        return reconcileFloorRooms(
+          { ...floor, walls: [...floor.walls, wall] },
+          { changedWalls: wallSegments(wall), phaseId: action.phaseId ?? null },
+        );
+      });
 
-    case 'WALL_UPDATE':
-      return updateFloor(state, action.floorId, (floor) => applyWallUpdate(floor, action.wall, floor.columns || []));
+    case 'WALL_UPDATE': {
+      const floor = state.project.floors.find((f) => f.id === action.floorId);
+      if (!floor) return state;
+
+      // Property-only edits (thickness, phase, ...) keep the legacy path.
+      const isGeometryEdit = 'start' in action.wall || 'end' in action.wall;
+      if (!isGeometryEdit) {
+        return updateFloor(state, action.floorId, (fl) => applyWallUpdate(fl, action.wall, fl.columns || []));
+      }
+
+      // Live-model pipeline: validate + propagate (authoritative — dispatchers
+      // pre-validate with the same pure function, but a dispatcher that forgot
+      // cannot commit corrupt geometry). A rejection is a TRUE no-op: no
+      // history entry, no isDirty, no changeVersion bump, no structure sync —
+      // only the transient editor-slice rejection signal the toast observes.
+      const propagation = propagateWallEdit(floor, action.wall);
+      if (!propagation.ok) {
+        return {
+          ...state,
+          editor: {
+            ...state.editor,
+            lastRejection: {
+              actionType: 'WALL_UPDATE',
+              reason: propagation.reason,
+              wallId: propagation.wallId || null,
+            },
+          },
+        };
+      }
+
+      const changedWalls = propagationChangedSegments(floor, propagation);
+      // Dev-only observability for the <100ms commit budget (approved 8A):
+      // watch real numbers while designing; CI enforces via the benchmark test.
+      const devTimeLabel = import.meta.env?.DEV ? 'live-model commit (propagate+reconcile)' : null;
+      // eslint-disable-next-line no-console
+      if (devTimeLabel) console.time(devTimeLabel);
+      const nextState = updateFloor(state, action.floorId, (fl) => {
+        const healed = applyPropagatedWallEdits(fl, propagation, fl.columns || []);
+        return reconcileFloorRooms(healed, { changedWalls, phaseId: action.phaseId ?? null });
+      });
+      // eslint-disable-next-line no-console
+      if (devTimeLabel) console.timeEnd(devTimeLabel);
+      return nextState;
+    }
 
     case 'WALL_DELETE':
-      return updateFloor(state, action.floorId, (floor) => ({
-        ...floor,
-        walls: floor.walls.filter((wall) => wall.id !== action.wallId),
-        doors: floor.doors.filter((door) => door.wallId !== action.wallId),
-        windows: floor.windows.filter((windowItem) => windowItem.wallId !== action.wallId),
-      }));
+      return updateFloor(state, action.floorId, (floor) => {
+        const deleted = floor.walls.find((wall) => wall.id === action.wallId);
+        const nextFloor = {
+          ...floor,
+          walls: floor.walls.filter((wall) => wall.id !== action.wallId),
+          doors: floor.doors.filter((door) => door.wallId !== action.wallId),
+          windows: floor.windows.filter((windowItem) => windowItem.wallId !== action.wallId),
+        };
+        if (!deleted) return nextFloor;
+        return reconcileFloorRooms(nextFloor, {
+          changedWalls: wallSegments(deleted),
+          phaseId: action.phaseId ?? null,
+        });
+      });
 
     case 'FILLET_APPLY':
       return updateFloor(state, action.floorId, (floor) => {
-        const walls = floor.walls.map((wall) => {
-          if (wall.id === action.wall1Id) return { ...wall, [action.wall1Endpoint]: { ...action.tangentPoint1 } };
-          if (wall.id === action.wall2Id) return { ...wall, [action.wall2Endpoint]: { ...action.tangentPoint2 } };
-          return wall;
-        });
+        const oldWall1 = floor.walls.find((wall) => wall.id === action.wall1Id);
+        const oldWall2 = floor.walls.find((wall) => wall.id === action.wall2Id);
 
-        return { ...floor, walls: [...walls, action.arcWall] };
+        // Route the two trims through the wall-update seam so hosted openings
+        // re-clamp and attachments sync — raw endpoint spreads bypassed both.
+        let nextFloor = applyWallUpdate(
+          floor,
+          { id: action.wall1Id, [action.wall1Endpoint]: { ...action.tangentPoint1 } },
+          floor.columns || [],
+        );
+        nextFloor = applyWallUpdate(
+          nextFloor,
+          { id: action.wall2Id, [action.wall2Endpoint]: { ...action.tangentPoint2 } },
+          nextFloor.columns || [],
+        );
+        nextFloor = { ...nextFloor, walls: [...nextFloor.walls, action.arcWall] };
+
+        return reconcileFloorRooms(nextFloor, {
+          changedWalls: wallSegments(
+            oldWall1,
+            oldWall2,
+            nextFloor.walls.find((wall) => wall.id === action.wall1Id),
+            nextFloor.walls.find((wall) => wall.id === action.wall2Id),
+            action.arcWall,
+          ),
+          phaseId: action.phaseId ?? null,
+        });
       });
 
     case 'FILLET_REMOVE':
@@ -1180,7 +1312,16 @@ function reduceEditorState(editorState, action) {
 export default function floorplanReducer(state, action) {
   const nextProjectState = reduceProjectState(state, action);
   if (nextProjectState !== state) {
-    return syncFloorplanState(nextProjectState);
+    // A successful project mutation (changeVersion bumped) clears any pending
+    // edit rejection; the rejection path itself never bumps changeVersion, so
+    // the signal survives exactly until the next real edit.
+    const shouldClearRejection =
+      nextProjectState.editor?.lastRejection && nextProjectState.changeVersion !== state.changeVersion;
+    return syncFloorplanState(
+      shouldClearRejection
+        ? { ...nextProjectState, editor: { ...nextProjectState.editor, lastRejection: null } }
+        : nextProjectState,
+    );
   }
 
   const nextEditorState = reduceEditorState(state.editor, action);

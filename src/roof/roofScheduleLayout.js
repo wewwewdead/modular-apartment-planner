@@ -14,7 +14,7 @@ const TABLE_HEADER_HEIGHT = 360;
 const TABLE_ROW_HEIGHT = 320;
 
 function metricCardsWidth() {
-  return PAGE_WIDTH - (PADDING_X * 2);
+  return PAGE_WIDTH - PADDING_X * 2;
 }
 
 function buildMetricCards(schedule) {
@@ -22,8 +22,20 @@ function buildMetricCards(schedule) {
     { key: 'net-surface-area', label: 'Net Roof Area', value: schedule.netSurfaceArea, kind: 'area', emphasis: true },
     { key: 'net-plan-area', label: 'Projected Area', value: schedule.netPlanArea, kind: 'area' },
     { key: 'parapet-length', label: 'Parapet Length', value: schedule.parapetLengthTotal, kind: 'length' },
-    { key: 'gutter-length', label: 'Gutter Length', value: schedule.gutterLengthTotal, kind: 'length', meta: schedule.gutterSource === 'derived_roof_edges' ? 'derived' : null },
-    { key: 'downspouts', label: 'Downspouts', value: schedule.downspoutCount, kind: 'count', meta: schedule.downspoutSource === 'derived_from_gutters' ? 'derived' : null },
+    {
+      key: 'gutter-length',
+      label: 'Gutter Length',
+      value: schedule.gutterLengthTotal,
+      kind: 'length',
+      meta: schedule.gutterSource === 'derived_roof_edges' ? 'derived' : null,
+    },
+    {
+      key: 'downspouts',
+      label: 'Downspouts',
+      value: schedule.downspoutCount,
+      kind: 'count',
+      meta: schedule.downspoutSource === 'derived_from_gutters' ? 'derived' : null,
+    },
     { key: 'drains', label: 'Drains', value: schedule.drainCount, kind: 'count' },
     { key: 'skylights', label: 'Skylights', value: schedule.skylightCount, kind: 'count' },
     { key: 'access-openings', label: 'Roof Hatches', value: schedule.accessOpeningCount || 0, kind: 'count' },
@@ -73,7 +85,7 @@ export function buildRoofScheduleLayout(schedule, options = {}) {
     };
   });
   const metricRows = Math.ceil(metrics.length / METRIC_COLUMNS);
-  cursorY += (metricRows * METRIC_HEIGHT) + (Math.max(0, metricRows - 1) * METRIC_GAP_Y);
+  cursorY += metricRows * METRIC_HEIGHT + Math.max(0, metricRows - 1) * METRIC_GAP_Y;
 
   const notesSection = {
     title: { x: PADDING_X, y: cursorY + SECTION_GAP, fontSize: 180 },
@@ -81,7 +93,7 @@ export function buildRoofScheduleLayout(schedule, options = {}) {
       id: `note-${index}`,
       text: note,
       x: PADDING_X,
-      y: cursorY + SECTION_GAP + NOTE_SECTION_PADDING + ((index + 1) * NOTE_LINE_HEIGHT),
+      y: cursorY + SECTION_GAP + NOTE_SECTION_PADDING + (index + 1) * NOTE_LINE_HEIGHT,
     })),
   };
   if (schedule.notes.length) {
@@ -99,20 +111,24 @@ export function buildRoofScheduleLayout(schedule, options = {}) {
     columnX += column.width;
     return nextColumn;
   });
-  const tableRows = (schedule.openings.length ? schedule.openings : [
-    {
-      id: 'no-openings',
-      name: 'No roof openings scheduled',
-      type: '-',
-      length: 0,
-      width: 0,
-      planArea: 0,
-      curbHeight: 0,
-      placeholder: true,
-    },
-  ]).map((row, index) => ({
+  const tableRows = (
+    schedule.openings.length
+      ? schedule.openings
+      : [
+          {
+            id: 'no-openings',
+            name: 'No roof openings scheduled',
+            type: '-',
+            length: 0,
+            width: 0,
+            planArea: 0,
+            curbHeight: 0,
+            placeholder: true,
+          },
+        ]
+  ).map((row, index) => ({
     ...row,
-    y: cursorY + TABLE_HEADER_HEIGHT + (index * TABLE_ROW_HEIGHT),
+    y: cursorY + TABLE_HEADER_HEIGHT + index * TABLE_ROW_HEIGHT,
     height: TABLE_ROW_HEIGHT,
   }));
 
@@ -127,7 +143,7 @@ export function buildRoofScheduleLayout(schedule, options = {}) {
     rows: tableRows,
   };
 
-  cursorY += TABLE_HEADER_HEIGHT + (tableRows.length * TABLE_ROW_HEIGHT);
+  cursorY += TABLE_HEADER_HEIGHT + tableRows.length * TABLE_ROW_HEIGHT;
 
   const bounds = {
     minX: 0,

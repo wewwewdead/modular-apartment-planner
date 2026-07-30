@@ -1,9 +1,10 @@
+import { memo } from 'react';
 import { TOOLS } from '@/editor/tools';
 import { positionOnWall, wallDirection, wallAngle } from '@/geometry/wallGeometry';
 import { perpendicular, scale, add } from '@/geometry/point';
 import { DOOR_WIDTH, WINDOW_WIDTH } from '@/domain/defaults';
 
-export default function DoorWindowPreview({ toolState, activeTool, walls }) {
+function DoorWindowPreview({ toolState, activeTool, walls }) {
   if (activeTool !== TOOLS.DOOR && activeTool !== TOOLS.WINDOW) return null;
   if (!toolState.previewWallId || toolState.previewOffset == null) return null;
 
@@ -70,3 +71,5 @@ export default function DoorWindowPreview({ toolState, activeTool, walls }) {
     </g>
   );
 }
+
+export default memo(DoorWindowPreview);

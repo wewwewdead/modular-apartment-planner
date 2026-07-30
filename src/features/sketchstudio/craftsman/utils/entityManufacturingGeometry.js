@@ -8,8 +8,8 @@ function toPositiveNumber(value) {
 
 function getRectDimensions(entity) {
   return {
-    width: Math.abs(entity.width ?? ((entity.x2 ?? 0) - (entity.x1 ?? 0))),
-    height: Math.abs(entity.height ?? ((entity.y2 ?? 0) - (entity.y1 ?? 0))),
+    width: Math.abs(entity.width ?? (entity.x2 ?? 0) - (entity.x1 ?? 0)),
+    height: Math.abs(entity.height ?? (entity.y2 ?? 0) - (entity.y1 ?? 0)),
   };
 }
 
@@ -62,7 +62,7 @@ export function getEntityManufacturingGeometry(entity, material = null) {
         width,
         height,
         areaMm2: width * height,
-        stockLength: (2 * width) + (2 * height),
+        stockLength: 2 * width + 2 * height,
         stockSectionWidth: defaultSectionWidth,
         dimensionAccuracy: 'exact',
         dimensionNote: '',
@@ -70,10 +70,7 @@ export function getEntityManufacturingGeometry(entity, material = null) {
     }
 
     case 'line': {
-      const length = calculateDistance(
-        { x: entity.x1, y: entity.y1 },
-        { x: entity.x2, y: entity.y2 },
-      );
+      const length = calculateDistance({ x: entity.x1, y: entity.y1 }, { x: entity.x2, y: entity.y2 });
       const inferredWidth = defaultSectionWidth || toPositiveNumber(entity.thickness);
       const dimensionsAreExact = stockKind === 'linear' && defaultSectionWidth > 0;
 

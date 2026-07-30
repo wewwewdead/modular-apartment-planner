@@ -61,7 +61,11 @@ function parseAddSub(tokens, pos, context) {
   let { value, pos: nextPos, error } = parseMulDiv(tokens, pos, context);
   if (error) return { value: null, pos: nextPos, error };
 
-  while (nextPos < tokens.length && tokens[nextPos].type === 'op' && (tokens[nextPos].value === '+' || tokens[nextPos].value === '-')) {
+  while (
+    nextPos < tokens.length &&
+    tokens[nextPos].type === 'op' &&
+    (tokens[nextPos].value === '+' || tokens[nextPos].value === '-')
+  ) {
     const op = tokens[nextPos].value;
     const right = parseMulDiv(tokens, nextPos + 1, context);
     if (right.error) return right;
@@ -76,7 +80,11 @@ function parseMulDiv(tokens, pos, context) {
   let { value, pos: nextPos, error } = parsePrimary(tokens, pos, context);
   if (error) return { value: null, pos: nextPos, error };
 
-  while (nextPos < tokens.length && tokens[nextPos].type === 'op' && (tokens[nextPos].value === '*' || tokens[nextPos].value === '/')) {
+  while (
+    nextPos < tokens.length &&
+    tokens[nextPos].type === 'op' &&
+    (tokens[nextPos].value === '*' || tokens[nextPos].value === '/')
+  ) {
     const op = tokens[nextPos].value;
     const right = parsePrimary(tokens, nextPos + 1, context);
     if (right.error) return right;

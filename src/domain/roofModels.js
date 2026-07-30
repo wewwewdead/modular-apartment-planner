@@ -142,9 +142,9 @@ export function normalizeRoofPitchDirection(direction = null) {
 }
 
 export function getAttachableRoofTrussSystems(project, catalog) {
-  return (project?.trussSystems || []).filter((trussSystem) => (
-    Boolean(resolveTrussSystemRoofAttachmentType(trussSystem, catalog))
-  ));
+  return (project?.trussSystems || []).filter((trussSystem) =>
+    Boolean(resolveTrussSystemRoofAttachmentType(trussSystem, catalog)),
+  );
 }
 
 function resolveCreateRoofAttachmentId(project, requestedTrussAttachmentId = null, catalog) {
@@ -182,7 +182,7 @@ function resolveAttachedRoofOverrides(roofSystemLike, attachmentContext) {
                 ? Math.max(0, roofSystemLike.pitch.slope)
                 : derivedRoofState.pitch?.slope,
             }
-          : attachedPitch
+          : attachedPitch,
       )
     : createRoofPitch(roofSystemLike?.pitch);
   const boundaryPolygon = followsAttachedTruss
@@ -289,9 +289,7 @@ export function resolveRoofSectionFloor(project, preferredFloorId = null) {
   const orderedFloors = getOrderedFloors(project);
   if (!orderedFloors.length) return null;
 
-  const preferredFloor = preferredFloorId
-    ? orderedFloors.find((floor) => floor.id === preferredFloorId)
-    : null;
+  const preferredFloor = preferredFloorId ? orderedFloors.find((floor) => floor.id === preferredFloorId) : null;
   if (preferredFloor && (preferredFloor.sectionCuts || []).length) return preferredFloor;
 
   for (let index = orderedFloors.length - 1; index >= 0; index -= 1) {
@@ -308,9 +306,7 @@ export function resolveRoofSectionCut(project, preferredFloorId = null, sectionC
   if (!floor) return { floor: null, sectionCut: null };
 
   const cuts = floor.sectionCuts || [];
-  const sectionCut = sectionCutId
-    ? cuts.find((entry) => entry.id === sectionCutId)
-    : (cuts[0] || null);
+  const sectionCut = sectionCutId ? cuts.find((entry) => entry.id === sectionCutId) : cuts[0] || null;
 
   return { floor, sectionCut };
 }
@@ -470,14 +466,12 @@ function normalizeRoofPlanes(roofPlanes = [], roofType, boundaryPolygon, baseEle
   const normalized = (roofPlanes || [])
     .map((plane, index) => ({
       ...createRoofPlane(
-        (plane?.boundaryPoints || []).length >= 3
-          ? plane.boundaryPoints
-          : (index === 0 ? boundaryPolygon : []),
+        (plane?.boundaryPoints || []).length >= 3 ? plane.boundaryPoints : index === 0 ? boundaryPolygon : [],
         {
           ...plane,
           id: plane?.id || generateId('roof_plane'),
           baseElevation: isFiniteNumber(plane?.baseElevation) ? plane.baseElevation : baseElevation,
-        }
+        },
       ),
       boundaryPoints: clonePoints(plane?.boundaryPoints || (index === 0 ? boundaryPolygon : [])),
     }))
@@ -522,7 +516,7 @@ function normalizeRoofSystemCollections(roofSystem) {
     roofSystem.roofPlanes || [],
     roofType,
     boundaryPolygon,
-    roofSystem.baseElevation ?? 0
+    roofSystem.baseElevation ?? 0,
   );
 
   if (roofType !== 'custom') {
@@ -587,9 +581,7 @@ function normalizeRoofSystemCollections(roofSystem) {
 export function createRoofSystem(name = 'Roof', options = {}) {
   const boundaryPolygon = clonePoints(options.boundaryPolygon || []);
   const trussAttachmentId = normalizeTrussAttachmentId(options.trussAttachmentId);
-  const attachmentOffset = isFiniteNumber(options.attachmentOffset)
-    ? options.attachmentOffset
-    : 0;
+  const attachmentOffset = isFiniteNumber(options.attachmentOffset) ? options.attachmentOffset : 0;
   const roofSystem = {
     id: options.id || generateId('roof'),
     roofType: normalizeRoofType(options.roofType ?? 'flat'),
@@ -611,7 +603,7 @@ export function createRoofSystem(name = 'Roof', options = {}) {
       options.roofPlanes || [],
       options.roofType ?? 'flat',
       boundaryPolygon.length ? boundaryPolygon : createDefaultBoundary(),
-      options.baseElevation ?? 0
+      options.baseElevation ?? 0,
     ),
     roofEdges: normalizeRoofEdges(options.roofEdges || []),
     ridges: normalizeRelationships(options.ridges || [], createRidge),
@@ -638,15 +630,13 @@ export function createRoofSystemForProject(project, options = {}) {
   };
   const attachmentContext = resolveRoofAttachmentContext(project, creationOptions, options.catalog);
   const attachmentElevation = attachmentContext.attachmentElevation;
-  const attachmentOffset = isFiniteNumber(options.attachmentOffset)
-    ? options.attachmentOffset
-    : 0;
+  const attachmentOffset = isFiniteNumber(options.attachmentOffset) ? options.attachmentOffset : 0;
   const attachedOverrides = resolveAttachedRoofOverrides(creationOptions, attachmentContext);
   if (!attachedOverrides.followsAttachedTruss) return null;
 
   return createRoofSystem(options.name ?? 'Roof', {
     ...creationOptions,
-    baseElevation: options.baseElevation ?? (attachmentElevation + attachmentOffset),
+    baseElevation: options.baseElevation ?? attachmentElevation + attachmentOffset,
     attachmentOffset,
     roofType: attachedOverrides.roofType,
     pitch: attachedOverrides.pitch,
@@ -668,7 +658,7 @@ export function syncRoofSystemAttachment(project, roofSystem) {
   const attachedOverrides = resolveAttachedRoofOverrides(roofSystem, attachmentContext);
   const attachmentOffset = isFiniteNumber(roofSystem.attachmentOffset)
     ? roofSystem.attachmentOffset
-    : ((roofSystem.baseElevation ?? attachmentElevation) - attachmentElevation);
+    : (roofSystem.baseElevation ?? attachmentElevation) - attachmentElevation;
   const normalizedBaseElevation = attachmentElevation + attachmentOffset;
   const normalizedRoofType = attachedOverrides.roofType;
   const normalizedPitch = attachedOverrides.pitch;
@@ -694,7 +684,7 @@ export function syncRoofSystemAttachment(project, roofSystem) {
       roofSystem.roofPlanes || [],
       normalizedRoofType,
       normalizedBoundaryPolygon,
-      normalizedBaseElevation
+      normalizedBaseElevation,
     ),
     roofEdges: normalizeRoofEdges(roofSystem.roofEdges || []),
     ridges: normalizeRelationships(roofSystem.ridges || [], createRidge),
@@ -711,9 +701,7 @@ export function syncRoofSystemAttachment(project, roofSystem) {
 export function syncProjectRoofSystem(project) {
   if (!project) return project;
 
-  const syncedRoofSystem = project.roofSystem
-    ? syncRoofSystemAttachment(project, project.roofSystem)
-    : null;
+  const syncedRoofSystem = project.roofSystem ? syncRoofSystemAttachment(project, project.roofSystem) : null;
 
   return {
     ...project,

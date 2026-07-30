@@ -2,7 +2,7 @@ import { getFloorStackBounds } from '@/domain/floorModels';
 import { getProjectTrussSystem, getTrussTypeAttachedRoofType, resolveTrussType } from '@/domain/trussModels';
 import { add, dot, perpendicular, scale, subtract } from '@/geometry/point';
 import { buildTrussSystemGeometry } from '@/geometry/trussGeometry';
-import { buildTrussProfile } from './profile';
+import { buildTrussProfile, resolveTrussMetrics } from './profile';
 
 const EPSILON = 1e-6;
 
@@ -29,29 +29,30 @@ function pointFromAxisCoordinates(origin, axisX, axisY, x, y) {
 }
 
 function collectSystemCopyPlanPoints(systemGeometry) {
-  return (systemGeometry?.instances || []).flatMap((instanceGeometry) => (
-    (instanceGeometry.copies || []).flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint])
-  ));
+  return (systemGeometry?.instances || []).flatMap((instanceGeometry) =>
+    (instanceGeometry.copies || []).flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint]),
+  );
 }
 
 function collectSystemLayoutGuidePoints(systemGeometry) {
-  return (systemGeometry?.instances || []).flatMap((instanceGeometry) => (
-    [instanceGeometry.layoutLineStartPoint, instanceGeometry.layoutLineEndPoint].filter(Boolean)
-  ));
+  return (systemGeometry?.instances || []).flatMap((instanceGeometry) =>
+    [instanceGeometry.layoutLineStartPoint, instanceGeometry.layoutLineEndPoint].filter(Boolean),
+  );
 }
 
 function resolveSystemPlanAxes(systemGeometry) {
-  const instanceGeometry = (systemGeometry?.instances || []).find((entry) => (
-    (entry.copies || []).length || (entry.layoutLineStartPoint && entry.layoutLineEndPoint)
-  )) || null;
+  const instanceGeometry =
+    (systemGeometry?.instances || []).find(
+      (entry) => (entry.copies || []).length || (entry.layoutLineStartPoint && entry.layoutLineEndPoint),
+    ) || null;
   if (!instanceGeometry) return null;
 
   const firstCopy = instanceGeometry.copies?.[0] || null;
   const layoutAxis = normalizePlanVector(
     subtract(
       instanceGeometry.layoutLineEndPoint || instanceGeometry.layoutLineStartPoint || { x: 1, y: 0 },
-      instanceGeometry.layoutLineStartPoint || { x: 0, y: 0 }
-    )
+      instanceGeometry.layoutLineStartPoint || { x: 0, y: 0 },
+    ),
   );
   let spanAxis = firstCopy
     ? normalizePlanVector(subtract(firstCopy.overallEndPoint, firstCopy.overallStartPoint), perpendicular(layoutAxis))
@@ -62,10 +63,9 @@ function resolveSystemPlanAxes(systemGeometry) {
   }
 
   return {
-    origin: systemGeometry.transform?.pivot
-      || instanceGeometry.layoutLineStartPoint
-      || firstCopy?.overallStartPoint
-      || { x: 0, y: 0 },
+    origin: systemGeometry.transform?.pivot ||
+      instanceGeometry.layoutLineStartPoint ||
+      firstCopy?.overallStartPoint || { x: 0, y: 0 },
     layoutAxis,
     spanAxis,
   };
@@ -105,9 +105,9 @@ function buildAttachedRoofShapeProfile(trussInstance, catalog) {
   if (!trussInstance) return null;
 
   const profile = buildTrussProfile(trussInstance, catalog);
-  const roofOutline = (profile?.roofOutline || []).filter((point) => (
-    Number.isFinite(point?.x) && Number.isFinite(point?.z)
-  ));
+  const roofOutline = (profile?.roofOutline || []).filter(
+    (point) => Number.isFinite(point?.x) && Number.isFinite(point?.z),
+  );
   if (roofOutline.length < 2) return null;
 
   const minX = Math.min(...roofOutline.map((point) => point.x));
@@ -130,9 +130,13 @@ export function resolveTrussSystemRoofAttachmentType(trussSystem, catalog) {
   const trussInstances = trussSystem?.trussInstances || [];
   if (!trussInstances.length) return null;
 
-  const attachmentTypes = [...new Set(trussInstances.map((instance) => (
-    getTrussTypeAttachedRoofType(resolveTrussType(instance.trussTypeId, catalog), catalog) || null
-  )))];
+  const attachmentTypes = [
+    ...new Set(
+      trussInstances.map(
+        (instance) => getTrussTypeAttachedRoofType(resolveTrussType(instance.trussTypeId, catalog), catalog) || null,
+      ),
+    ),
+  ];
 
   return attachmentTypes.length === 1 ? attachmentTypes[0] : null;
 }
@@ -150,7 +154,9 @@ export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeome
   if (layoutSpan <= EPSILON) {
     const layoutGuidePoints = collectSystemLayoutGuidePoints(systemGeometry);
     if (layoutGuidePoints.length) {
-      layoutValues = layoutGuidePoints.map((point) => projectPointOntoAxis(point, planAxes.origin, planAxes.layoutAxis));
+      layoutValues = layoutGuidePoints.map((point) =>
+        projectPointOntoAxis(point, planAxes.origin, planAxes.layoutAxis),
+      );
     }
   }
 
@@ -159,7 +165,7 @@ export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeome
   const minLayout = Math.min(...layoutValues);
   const maxLayout = Math.max(...layoutValues);
 
-  if ((maxSpan - minSpan) <= EPSILON || (maxLayout - minLayout) <= EPSILON) {
+  if (maxSpan - minSpan <= EPSILON || maxLayout - minLayout <= EPSILON) {
     return null;
   }
 
@@ -181,14 +187,16 @@ export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSyste
   const roofAttachmentType = resolveTrussSystemRoofAttachmentType(trussSystem, catalog);
   if (!roofAttachmentType) return null;
 
-  const run = ['gable', 'hip', 'box_gable', 'dropped_eaves', 'pyramid_hipped', 'domed'].includes(roofAttachmentType)
-    ? Math.max((trussInstance.span || trussType.defaultSpan || 0) / 2, 1)
-    : Math.max(trussInstance.span || trussType.defaultSpan || 0, 1);
-  const pitchSlope = Number.isFinite(trussInstance.pitch)
-    ? Math.max(0, roofAttachmentType === 'flat' ? 0 : trussInstance.pitch)
-    : ((Number(trussInstance.rise || 0) / run) * 100);
-  const layoutX = Number(instanceGeometry.layoutLineEndPoint?.x || 0) - Number(instanceGeometry.layoutLineStartPoint?.x || 0);
-  const layoutY = Number(instanceGeometry.layoutLineEndPoint?.y || 0) - Number(instanceGeometry.layoutLineStartPoint?.y || 0);
+  // Drive the roof slope from the same rise-based metrics the truss profile is
+  // built from, so the attached roof plane never disagrees with the rendered
+  // truss geometry (this is the failure mode for legacy saves whose stored
+  // rise and pitch were inconsistent).
+  const metrics = resolveTrussMetrics(trussInstance, trussType);
+  const pitchSlope = roofAttachmentType === 'flat' ? 0 : Math.max(0, metrics.pitch);
+  const layoutX =
+    Number(instanceGeometry.layoutLineEndPoint?.x || 0) - Number(instanceGeometry.layoutLineStartPoint?.x || 0);
+  const layoutY =
+    Number(instanceGeometry.layoutLineEndPoint?.y || 0) - Number(instanceGeometry.layoutLineStartPoint?.y || 0);
   const length = Math.hypot(-layoutY, layoutX) || 1;
 
   return {
@@ -201,9 +209,10 @@ export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSyste
         x: -layoutY / length,
         y: layoutX / length,
       },
-      ridgeOffset: roofAttachmentType === 'gable'
-        ? (((trussInstance.bearingOffsets?.start || 0) - (trussInstance.bearingOffsets?.end || 0)) / 2)
-        : 0,
+      ridgeOffset:
+        roofAttachmentType === 'gable'
+          ? ((trussInstance.bearingOffsets?.start || 0) - (trussInstance.bearingOffsets?.end || 0)) / 2
+          : 0,
       // Attached roof extents come from the truss outline, so roof overhang stays at zero.
       overhang: 0,
     },

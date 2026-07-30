@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { getSlabRenderData } from '@/geometry/slabGeometry';
@@ -57,7 +58,7 @@ function FloorBackdrop({ floor }) {
   );
 }
 
-export default function TrussRenderer({ floor = null, trussSystems = [], selectedId = null, selectedType = null }) {
+function TrussRenderer({ floor = null, trussSystems = [], selectedId = null, selectedType = null }) {
   const floorGeometry = buildFloorTrussGeometry(trussSystems);
 
   return (
@@ -133,3 +134,5 @@ export default function TrussRenderer({ floor = null, trussSystems = [], selecte
     </g>
   );
 }
+
+export default memo(TrussRenderer);

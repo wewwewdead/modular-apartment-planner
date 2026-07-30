@@ -1,8 +1,9 @@
+import { memo } from 'react';
 import { DIMENSION_DEFAULT_OFFSET } from '@/domain/defaults';
 import { TOOLS } from '@/editor/tools';
 import { createDimensionFigure } from '@/annotations/dimensions';
 
-export default function DimensionPreview({ toolState, activeTool }) {
+function DimensionPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.DIMENSION) return null;
   if (!toolState.dimensionStartPoint || !toolState.dimensionPreviewPoint) return null;
 
@@ -67,3 +68,5 @@ export default function DimensionPreview({ toolState, activeTool }) {
     </g>
   );
 }
+
+export default memo(DimensionPreview);

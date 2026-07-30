@@ -44,4 +44,3 @@ export function runTemplate(templateId, params = {}) {
 
 registerTemplate(getCabinetTemplateDefinition());
 registerTemplate(getShelvingTemplateDefinition());
-

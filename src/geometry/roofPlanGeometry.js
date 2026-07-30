@@ -16,7 +16,8 @@ function classifyParapetEdge(edge, roofGeometry, axisRange) {
   const midpointAxis = edge.axisValue;
   const nearLow = midpointAxis >= axisRange.max - axisTolerance;
   const nearHigh = midpointAxis <= axisRange.min + axisTolerance;
-  const alongSlope = Math.abs(dot(edge.direction, roofGeometry.direction || { x: 0, y: 1 })) >= PARAPET_ALIGNMENT_THRESHOLD;
+  const alongSlope =
+    Math.abs(dot(edge.direction, roofGeometry.direction || { x: 0, y: 1 })) >= PARAPET_ALIGNMENT_THRESHOLD;
 
   if (roofType === 'flat') {
     return { role: 'perimeter', label: 'Perimeter Edge', allowed: true };
@@ -40,9 +41,7 @@ function classifyParapetEdge(edge, roofGeometry, axisRange) {
 
 function classifyCustomBoundaryEdge(edge, roofGeometry, outlineOrientation) {
   const baseNormal = normalize(perpendicular(edge.direction));
-  const interiorNormal = outlineOrientation >= 0
-    ? baseNormal
-    : scale(baseNormal, -1);
+  const interiorNormal = outlineOrientation >= 0 ? baseNormal : scale(baseNormal, -1);
   const samplePoint = add(edge.midpoint, scale(interiorNormal, 40));
   const plane = roofGeometry.findPlaneAtPoint(samplePoint) || roofGeometry.findPlaneAtPoint(edge.midpoint);
   const slopeDirection = plane?.slopeDirection || { x: 0, y: 0 };
@@ -110,8 +109,8 @@ function clamp(value, min, max) {
 
 function pointAlongEdge(edge, offset) {
   return {
-    x: edge.start.x + (edge.direction.x * offset),
-    y: edge.start.y + (edge.direction.y * offset),
+    x: edge.start.x + edge.direction.x * offset,
+    y: edge.start.y + edge.direction.y * offset,
   };
 }
 
@@ -122,38 +121,49 @@ export function buildRoofBoundaryEdges(roofSystem) {
   const outlineOrientation = signedPolygonArea(outline) >= 0 ? 1 : -1;
   const axisRange = roofGeometry.roofOutline?.length
     ? {
-        min: Math.min(...roofGeometry.roofOutline.map((point) => dot(subtract(point, roofGeometry.centroid), roofGeometry.direction))),
-        max: Math.max(...roofGeometry.roofOutline.map((point) => dot(subtract(point, roofGeometry.centroid), roofGeometry.direction))),
+        min: Math.min(
+          ...roofGeometry.roofOutline.map((point) =>
+            dot(subtract(point, roofGeometry.centroid), roofGeometry.direction),
+          ),
+        ),
+        max: Math.max(
+          ...roofGeometry.roofOutline.map((point) =>
+            dot(subtract(point, roofGeometry.centroid), roofGeometry.direction),
+          ),
+        ),
       }
     : { min: 0, max: 0 };
 
-  return outline.map((start, index) => {
-    const end = outline[(index + 1) % outline.length];
-    const length = distance(start, end);
-    const vector = subtract(end, start);
-    const safeLength = length || 1;
-    const midpointPoint = midpoint(start, end);
-    const edge = {
-      index,
-      start,
-      end,
-      length,
-      direction: {
-        x: vector.x / safeLength,
-        y: vector.y / safeLength,
-      },
-      midpoint: midpointPoint,
-      axisValue: dot(subtract(midpointPoint, roofGeometry.centroid), roofGeometry.direction || { x: 0, y: 1 }),
-    };
-    const parapetPlacement = roofGeometry.roofType === 'custom'
-      ? classifyCustomBoundaryEdge(edge, roofGeometry, outlineOrientation)
-      : classifyParapetEdge(edge, roofGeometry, axisRange);
+  return outline
+    .map((start, index) => {
+      const end = outline[(index + 1) % outline.length];
+      const length = distance(start, end);
+      const vector = subtract(end, start);
+      const safeLength = length || 1;
+      const midpointPoint = midpoint(start, end);
+      const edge = {
+        index,
+        start,
+        end,
+        length,
+        direction: {
+          x: vector.x / safeLength,
+          y: vector.y / safeLength,
+        },
+        midpoint: midpointPoint,
+        axisValue: dot(subtract(midpointPoint, roofGeometry.centroid), roofGeometry.direction || { x: 0, y: 1 }),
+      };
+      const parapetPlacement =
+        roofGeometry.roofType === 'custom'
+          ? classifyCustomBoundaryEdge(edge, roofGeometry, outlineOrientation)
+          : classifyParapetEdge(edge, roofGeometry, axisRange);
 
-    return {
-      ...edge,
-      parapetPlacement,
-    };
-  }).filter((edge) => edge.length > EDGE_EPSILON);
+      return {
+        ...edge,
+        parapetPlacement,
+      };
+    })
+    .filter((edge) => edge.length > EDGE_EPSILON);
 }
 
 export function buildRoofParapetCandidateEdges(roofSystem) {
@@ -194,21 +204,17 @@ export function findNearestRoofEdgeMatching(roofSystem, point, maxDistance = Inf
 }
 
 export function findNearestParapetCandidateEdge(roofSystem, point, maxDistance = Infinity) {
-  return findNearestRoofEdgeMatching(
-    roofSystem,
-    point,
-    maxDistance,
-    (edge) => edge.parapetPlacement?.allowed
-  );
+  return findNearestRoofEdgeMatching(roofSystem, point, maxDistance, (edge) => edge.parapetPlacement?.allowed);
 }
 
 export function buildRoofEdgeAttachmentForPoints(roofSystem, startPoint, endPoint, preferredEdgeIndex = null) {
   const edges = buildRoofBoundaryEdges(roofSystem);
   if (!edges.length || !startPoint || !endPoint) return null;
 
-  const pickEdge = preferredEdgeIndex != null
-    ? edges.find((edge) => edge.index === preferredEdgeIndex)
-    : findNearestRoofEdge(roofSystem, midpoint(startPoint, endPoint))?.edge;
+  const pickEdge =
+    preferredEdgeIndex != null
+      ? edges.find((edge) => edge.index === preferredEdgeIndex)
+      : findNearestRoofEdge(roofSystem, midpoint(startPoint, endPoint))?.edge;
 
   if (!pickEdge) return null;
 
@@ -228,9 +234,10 @@ export function buildParapetEdgeAttachmentForPoints(roofSystem, startPoint, endP
   const edges = buildRoofParapetCandidateEdges(roofSystem);
   if (!edges.length || !startPoint || !endPoint) return null;
 
-  const pickEdge = preferredEdgeIndex != null
-    ? edges.find((edge) => edge.index === preferredEdgeIndex)
-    : findNearestParapetCandidateEdge(roofSystem, midpoint(startPoint, endPoint))?.edge;
+  const pickEdge =
+    preferredEdgeIndex != null
+      ? edges.find((edge) => edge.index === preferredEdgeIndex)
+      : findNearestParapetCandidateEdge(roofSystem, midpoint(startPoint, endPoint))?.edge;
 
   if (!pickEdge) return null;
 
@@ -254,11 +261,7 @@ export function resolveParapetLine(parapet, roofSystem = null) {
     const edge = buildRoofBoundaryEdges(roofSystem).find((entry) => entry.index === attachment.edgeIndex);
     if (edge) {
       const startOffset = clamp(Number(attachment.startOffset ?? 0), 0, edge.length);
-      const endOffset = clamp(
-        Number(attachment.endOffset ?? edge.length),
-        0,
-        edge.length
-      );
+      const endOffset = clamp(Number(attachment.endOffset ?? edge.length), 0, edge.length);
 
       return {
         startPoint: pointAlongEdge(edge, startOffset),
@@ -319,7 +322,7 @@ export function getDrainRenderData(drain) {
 
 export function drainContainsPoint(drain, point) {
   const renderData = getDrainRenderData(drain);
-  return distance(renderData.center, point) <= (renderData.radius + DRAIN_HIT_PADDING);
+  return distance(renderData.center, point) <= renderData.radius + DRAIN_HIT_PADDING;
 }
 
 export function getRoofOpeningRenderData(opening) {
@@ -373,10 +376,12 @@ export function buildRoofPlanGeometry(roofSystem) {
     ...opening,
     ...getRoofOpeningRenderData(opening),
   }));
-  const parapets = (roofSystem.parapets || []).map((parapet) => ({
-    ...parapet,
-    ...getParapetRenderData(parapet, roofSystem),
-  })).filter((parapet) => parapet.outline?.length);
+  const parapets = (roofSystem.parapets || [])
+    .map((parapet) => ({
+      ...parapet,
+      ...getParapetRenderData(parapet, roofSystem),
+    }))
+    .filter((parapet) => parapet.outline?.length);
   const drains = (roofSystem.drains || []).map((drain) => ({
     ...drain,
     ...getDrainRenderData(drain),
@@ -390,13 +395,18 @@ export function buildRoofPlanGeometry(roofSystem) {
       endPoint: ensurePoint(edge.endPoint),
       points: polygonPoints([ensurePoint(edge.startPoint), ensurePoint(edge.endPoint)]),
     }));
-  const ridgeSegments = roofGeometry.roofType === 'custom'
-    ? seamEdges.filter((edge) => edge.edgeRole === 'ridge').map((edge) => ({
-        id: edge.id,
-        start: edge.startPoint,
-        end: edge.endPoint,
-      }))
-    : (roofGeometry.ridgeSegment ? [roofGeometry.ridgeSegment] : []);
+  const ridgeSegments =
+    roofGeometry.roofType === 'custom'
+      ? seamEdges
+          .filter((edge) => edge.edgeRole === 'ridge')
+          .map((edge) => ({
+            id: edge.id,
+            start: edge.startPoint,
+            end: edge.endPoint,
+          }))
+      : roofGeometry.ridgeSegment
+        ? [roofGeometry.ridgeSegment]
+        : [];
   const valleySegments = seamEdges
     .filter((edge) => edge.edgeRole === 'valley')
     .map((edge) => ({
@@ -422,10 +432,10 @@ export function buildRoofPlanGeometry(roofSystem) {
     ...boundaryPoints,
     ...openings.flatMap((opening) => opening.boundaryPoints),
     ...parapets.flatMap((parapet) => parapet.outline || []),
-    ...drains.flatMap((drain) => ([
+    ...drains.flatMap((drain) => [
       { x: drain.center.x - drain.radius, y: drain.center.y - drain.radius },
       { x: drain.center.x + drain.radius, y: drain.center.y + drain.radius },
-    ])),
+    ]),
     ...ridgeSegments.flatMap((segment) => [segment.start, segment.end]),
     ...valleySegments.flatMap((segment) => [segment.start, segment.end]),
     ...hipSegments.flatMap((segment) => [segment.start, segment.end]),
@@ -437,7 +447,9 @@ export function buildRoofPlanGeometry(roofSystem) {
     ...openings
       .filter((opening) => opening.boundaryPoints.length >= 3)
       .map((opening) => polygonPath(opening.boundaryPoints)),
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const roofOutlinePath = polygonPath(roofOutlinePoints);
   const surfacePath = [
@@ -445,7 +457,9 @@ export function buildRoofPlanGeometry(roofSystem) {
     ...openings
       .filter((opening) => opening.boundaryPoints.length >= 3)
       .map((opening) => polygonPath(opening.boundaryPoints)),
-  ].filter(Boolean).join(' ');
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return {
     boundaryPoints,

@@ -51,7 +51,9 @@
   color: var(--color-text-secondary);
   padding: 10px 14px;
   border-radius: var(--radius-sm);
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .navLink:hover {
@@ -68,7 +70,9 @@
   padding: 10px 18px;
   border-radius: var(--radius-sm);
   text-decoration: none;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease;
 }
 
 .ctaButton:hover {
@@ -102,7 +106,9 @@
   height: 2px;
   background: var(--color-text-primary);
   border-radius: 1px;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .hamburgerOpen .hamburgerLine:nth-child(1) {
@@ -146,7 +152,9 @@
   padding: 12px 12px;
   min-height: 44px;
   border-radius: var(--radius-sm);
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 .mobileLink:hover {

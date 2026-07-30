@@ -2,11 +2,7 @@ import { generateId } from './ids';
 import { CURRENT_PROJECT_VERSION } from './projectVersion';
 import { getDefaultActiveFloorId, getFloorTopElevation, getProjectFloor } from './floorModels';
 import { deriveBeamSupportedInstanceGeometry } from '@/truss/beamSupports';
-import {
-  normalizePlanLengthScale,
-  normalizePlanOffset,
-  normalizeRotationDegrees,
-} from '@/truss/systemTransform';
+import { normalizePlanLengthScale, normalizePlanOffset, normalizeRotationDegrees } from '@/truss/systemTransform';
 
 const TRUSS_FAMILIES = new Set(['shed', 'gable', 'flat']);
 const TRUSS_SHAPES = new Set(['shed', 'gable', 'flat', 'hip', 'box_gable', 'pyramid_hipped', 'domed', 'dropped_eaves']);
@@ -42,6 +38,35 @@ export const TRUSS_SUPPORT_MODES = {
 
 function normalizePhaseId(phaseId = null) {
   return typeof phaseId === 'string' && phaseId ? phaseId : null;
+}
+
+// --- Rise/pitch coupling -------------------------------------------------
+// RISE is the single geometric source of truth: every profile builder in
+// truss/profile.js draws geometry from `rise`. `pitch` (percent) is a derived,
+// alternative INPUT. These helpers keep the two consistent everywhere they are
+// set (factory, UI, migrations) using the SAME `run` definition that
+// resolveTrussMetrics uses so a round-trip rise -> pitch -> rise is stable.
+//
+// run = horizontal distance the rise is measured over:
+//   - gable-family (gable/hip/box_gable/etc. all resolve to family 'gable')
+//     is symmetric, so run = span / 2
+//   - shed rises across the whole span, so run = span
+//   - flat has no slope, so pitch is always 0
+export function getTrussRun(span = 0, family = 'gable') {
+  const safeSpan = Math.max(Number(span) || 0, 1);
+  return family === 'gable' ? safeSpan / 2 : safeSpan;
+}
+
+export function deriveTrussRiseFromPitch(pitch, span, family = 'gable') {
+  if (family === 'flat') return 0;
+  const run = getTrussRun(span, family);
+  return Math.max(0, (Number(pitch) || 0) / 100) * run;
+}
+
+export function deriveTrussPitchFromRise(rise, span, family = 'gable') {
+  if (family === 'flat') return 0;
+  const run = getTrussRun(span, family);
+  return (Math.max(0, Number(rise) || 0) / Math.max(run, 1)) * 100;
 }
 
 const DEFAULT_TRUSS_TYPE_DEFS = [
@@ -248,7 +273,9 @@ export function createPurlinSystem(options = {}) {
     spacing: isFiniteNumber(options.spacing) ? Math.max(100, options.spacing) : DEFAULT_PURLIN_SPACING,
     startOffset: isFiniteNumber(options.startOffset) ? Math.max(0, options.startOffset) : DEFAULT_PURLIN_START_OFFSET,
     endOffset: isFiniteNumber(options.endOffset) ? Math.max(0, options.endOffset) : DEFAULT_PURLIN_END_OFFSET,
-    overhangStart: isFiniteNumber(options.overhangStart) ? Math.max(0, options.overhangStart) : DEFAULT_PURLIN_OVERHANG_START,
+    overhangStart: isFiniteNumber(options.overhangStart)
+      ? Math.max(0, options.overhangStart)
+      : DEFAULT_PURLIN_OVERHANG_START,
     overhangEnd: isFiniteNumber(options.overhangEnd) ? Math.max(0, options.overhangEnd) : DEFAULT_PURLIN_OVERHANG_END,
     width: isFiniteNumber(options.width) ? Math.max(25, options.width) : DEFAULT_PURLIN_WIDTH,
     depth: isFiniteNumber(options.depth) ? Math.max(25, options.depth) : DEFAULT_PURLIN_DEPTH,
@@ -307,15 +334,43 @@ export function resolveTrussType(trussTypeId, catalog = getDefaultTrussTypes()) 
 }
 
 export function getTrussTypeAttachedRoofType(trussTypeOrId, catalog = getDefaultTrussTypes()) {
-  const trussType = typeof trussTypeOrId === 'string'
-    ? resolveTrussType(trussTypeOrId, catalog)
-    : createTrussType(trussTypeOrId || {});
+  const trussType =
+    typeof trussTypeOrId === 'string' ? resolveTrussType(trussTypeOrId, catalog) : createTrussType(trussTypeOrId || {});
   return normalizeAttachedRoofType(trussType?.attachedRoofType);
+}
+
+// Resolve a mutually consistent { rise, pitch } pair from whatever the caller
+// supplied. RISE is authoritative: an explicit rise always wins and pitch is
+// refreshed from it. Pitch is only used to derive rise when no explicit rise
+// was given. When neither is given we fall back to the truss-type default rise
+// and derive pitch from it (the stored default pitch is NOT trusted because
+// legacy defaults were not internally consistent with the default rise/span).
+function resolveInstanceRisePitch(options, trussType, span) {
+  const family = trussType.family;
+  if (family === 'flat') {
+    const rise = isFiniteNumber(options.rise) ? Math.max(0, options.rise) : trussType.defaultRise;
+    return { rise, pitch: 0 };
+  }
+
+  if (isFiniteNumber(options.rise)) {
+    const rise = Math.max(0, options.rise);
+    return { rise, pitch: deriveTrussPitchFromRise(rise, span, family) };
+  }
+
+  if (isFiniteNumber(options.pitch)) {
+    const pitch = Math.max(0, options.pitch);
+    return { rise: deriveTrussRiseFromPitch(pitch, span, family), pitch };
+  }
+
+  const rise = trussType.defaultRise;
+  return { rise, pitch: deriveTrussPitchFromRise(rise, span, family) };
 }
 
 export function createTrussInstance(options = {}) {
   const catalog = options.catalog || getDefaultTrussTypes();
   const trussType = resolveTrussType(options.trussTypeId, catalog);
+  const span = isFiniteNumber(options.span) ? Math.max(1000, options.span) : trussType.defaultSpan;
+  const { rise, pitch } = resolveInstanceRisePitch(options, trussType, span);
 
   return {
     id: options.id || generateId('truss_instance'),
@@ -324,9 +379,9 @@ export function createTrussInstance(options = {}) {
     floorId: options.floorId ?? null,
     startPoint: clonePoint(options.startPoint) || { x: -DEFAULT_SUPPORT_LENGTH / 2, y: 0 },
     endPoint: clonePoint(options.endPoint) || { x: DEFAULT_SUPPORT_LENGTH / 2, y: 0 },
-    span: isFiniteNumber(options.span) ? Math.max(1000, options.span) : trussType.defaultSpan,
-    rise: isFiniteNumber(options.rise) ? Math.max(0, options.rise) : trussType.defaultRise,
-    pitch: isFiniteNumber(options.pitch) ? Math.max(0, options.pitch) : trussType.defaultPitch,
+    span,
+    rise,
+    pitch,
     spacing: isFiniteNumber(options.spacing) ? Math.max(300, options.spacing) : DEFAULT_SPACING,
     count: isFiniteNumber(options.count) ? Math.max(1, Math.round(options.count)) : DEFAULT_COUNT,
     bearingOffsets: {
@@ -340,24 +395,31 @@ export function createTrussInstance(options = {}) {
     supportMode: normalizeSupportMode(options.supportMode),
     supportBeamIds: normalizeSupportBeamIds(options.supportBeamIds),
     supportOffsetAlongAxis: normalizeSupportOffsetAlongAxis(options.supportOffsetAlongAxis),
-    roofAttachmentId: typeof options.roofAttachmentId === 'string' && options.roofAttachmentId
-      ? options.roofAttachmentId
-      : null,
+    roofAttachmentId:
+      typeof options.roofAttachmentId === 'string' && options.roofAttachmentId ? options.roofAttachmentId : null,
   };
 }
 
 export function normalizeTrussInstance(instance = {}, floorId = null, catalog = getDefaultTrussTypes()) {
+  const trussType = resolveTrussType(instance?.trussTypeId, catalog);
+  const span = isFiniteNumber(instance?.span) ? Math.max(1000, instance.span) : trussType.defaultSpan;
+  // RISE is the source of truth. A stored rise is trusted verbatim and pitch is
+  // refreshed from it so legacy saves with an inconsistent pair resolve
+  // deterministically (rise wins) instead of rendering geometry from rise while
+  // reporting a stale pitch.
+  const { rise, pitch } = resolveInstanceRisePitch(instance, trussType, span);
+
   return {
     ...createTrussInstance({ floorId, catalog }),
     ...instance,
     id: instance?.id || generateId('truss_instance'),
     floorId: instance?.floorId || floorId || null,
-    material: normalizeTrussMaterial(instance?.material ?? resolveTrussType(instance?.trussTypeId, catalog).material),
+    material: normalizeTrussMaterial(instance?.material ?? trussType.material),
     startPoint: clonePoint(instance?.startPoint) || { x: -DEFAULT_SUPPORT_LENGTH / 2, y: 0 },
     endPoint: clonePoint(instance?.endPoint) || { x: DEFAULT_SUPPORT_LENGTH / 2, y: 0 },
-    span: isFiniteNumber(instance?.span) ? Math.max(1000, instance.span) : resolveTrussType(instance?.trussTypeId, catalog).defaultSpan,
-    rise: isFiniteNumber(instance?.rise) ? Math.max(0, instance.rise) : resolveTrussType(instance?.trussTypeId, catalog).defaultRise,
-    pitch: isFiniteNumber(instance?.pitch) ? Math.max(0, instance.pitch) : resolveTrussType(instance?.trussTypeId, catalog).defaultPitch,
+    span,
+    rise,
+    pitch,
     spacing: isFiniteNumber(instance?.spacing) ? Math.max(300, instance.spacing) : DEFAULT_SPACING,
     count: isFiniteNumber(instance?.count) ? Math.max(1, Math.round(instance.count)) : DEFAULT_COUNT,
     bearingOffsets: {
@@ -371,15 +433,16 @@ export function normalizeTrussInstance(instance = {}, floorId = null, catalog = 
     supportMode: normalizeSupportMode(instance?.supportMode),
     supportBeamIds: normalizeSupportBeamIds(instance?.supportBeamIds),
     supportOffsetAlongAxis: normalizeSupportOffsetAlongAxis(instance?.supportOffsetAlongAxis),
-    roofAttachmentId: typeof instance?.roofAttachmentId === 'string' && instance.roofAttachmentId
-      ? instance.roofAttachmentId
-      : null,
+    roofAttachmentId:
+      typeof instance?.roofAttachmentId === 'string' && instance.roofAttachmentId ? instance.roofAttachmentId : null,
   };
 }
 
 export function createTrussSystem(name = 'Truss System', options = {}) {
   const catalog = options.catalog || getDefaultTrussTypes();
-  const trussInstances = (options.trussInstances || []).map((instance) => normalizeTrussInstance(instance, options.floorId, catalog));
+  const trussInstances = (options.trussInstances || []).map((instance) =>
+    normalizeTrussInstance(instance, options.floorId, catalog),
+  );
 
   return {
     id: options.id || generateId('truss_system'),
@@ -409,7 +472,9 @@ export function createTrussSystemForProject(project, floorId = null, options = {
     phaseId: normalizePhaseId(options.phaseId),
     baseElevation: isFiniteNumber(options.baseElevation)
       ? options.baseElevation
-      : (floor ? getFloorTopElevation(floor) : 0),
+      : floor
+        ? getFloorTopElevation(floor)
+        : 0,
     trussInstances,
     catalog,
   });
@@ -418,9 +483,7 @@ export function createTrussSystemForProject(project, floorId = null, options = {
 export function normalizeTrussSystem(trussSystem = {}, project = null, catalog = getDefaultTrussTypes()) {
   const floorId = trussSystem?.floorId || getDefaultActiveFloorId(project, trussSystem?.floorId);
   const floor = project ? getProjectFloor(project, floorId) : null;
-  const roofAttachmentId = project?.roofSystem?.trussAttachmentId === trussSystem?.id
-    ? project.roofSystem.id
-    : null;
+  const roofAttachmentId = project?.roofSystem?.trussAttachmentId === trussSystem?.id ? project.roofSystem.id : null;
 
   const trussInstances = (trussSystem?.trussInstances || []).map((instance) => ({
     ...normalizeTrussInstance(instance, floorId, catalog),
@@ -436,7 +499,9 @@ export function normalizeTrussSystem(trussSystem = {}, project = null, catalog =
     phaseId: normalizePhaseId(trussSystem?.phaseId),
     baseElevation: isFiniteNumber(trussSystem?.baseElevation)
       ? trussSystem.baseElevation
-      : (floor ? getFloorTopElevation(floor) : 0),
+      : floor
+        ? getFloorTopElevation(floor)
+        : 0,
     planRotationOffsetDegrees: normalizeRotationDegrees(trussSystem?.planRotationOffsetDegrees),
     planOffset: clonePlanOffset(trussSystem?.planOffset),
     planLengthScale: normalizePlanLengthScale(trussSystem?.planLengthScale),
@@ -466,13 +531,11 @@ export function findTrussInstance(project, trussInstanceId) {
 }
 
 export function hasBeamSupportedTrussInstances(trussSystem) {
-  return (trussSystem?.trussInstances || []).some((instance) => (
-    instance.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR
-  ));
+  return (trussSystem?.trussInstances || []).some((instance) => instance.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR);
 }
 
 export function detachBeamSupportedTrussInstances(trussInstances = []) {
-  return trussInstances.map((instance) => (
+  return trussInstances.map((instance) =>
     instance.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR
       ? {
           ...instance,
@@ -480,8 +543,8 @@ export function detachBeamSupportedTrussInstances(trussInstances = []) {
           supportBeamIds: { start: null, end: null },
           supportOffsetAlongAxis: 0,
         }
-      : instance
-  ));
+      : instance,
+  );
 }
 
 function syncBeamSupportedInstance(instance, floor, catalog, roofAttachmentId) {
@@ -515,9 +578,8 @@ function syncTrussSystemGeometry(trussSystem, project, catalog) {
   const floor = getProjectFloor(project, normalizedSystem.floorId);
   if (!floor) return null;
 
-  const roofAttachmentId = project?.roofSystem?.trussAttachmentId === normalizedSystem.id
-    ? project.roofSystem.id
-    : null;
+  const roofAttachmentId =
+    project?.roofSystem?.trussAttachmentId === normalizedSystem.id ? project.roofSystem.id : null;
   const syncedInstances = (normalizedSystem.trussInstances || [])
     .map((instance) => syncBeamSupportedInstance(instance, floor, catalog, roofAttachmentId))
     .filter(Boolean);
@@ -526,18 +588,15 @@ function syncTrussSystemGeometry(trussSystem, project, catalog) {
     return null;
   }
 
-  const beamSupportedInstance = syncedInstances.find((instance) => (
-    instance.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR
-  )) || null;
+  const beamSupportedInstance =
+    syncedInstances.find((instance) => instance.supportMode === TRUSS_SUPPORT_MODES.BEAM_PAIR) || null;
   const derivedBaseElevation = beamSupportedInstance
     ? deriveBeamSupportedInstanceGeometry(beamSupportedInstance, floor)
     : null;
 
   return {
     ...normalizedSystem,
-    baseElevation: derivedBaseElevation?.valid
-      ? derivedBaseElevation.baseElevation
-      : normalizedSystem.baseElevation,
+    baseElevation: derivedBaseElevation?.valid ? derivedBaseElevation.baseElevation : normalizedSystem.baseElevation,
     trussInstances: syncedInstances,
   };
 }
@@ -551,12 +610,15 @@ export function syncProjectTrussSystems(project) {
     .filter(Boolean);
 
   const validTrussIds = new Set(normalizedTrussSystems.map((entry) => entry.id));
-  const roofSystem = project.roofSystem && project.roofSystem.trussAttachmentId && !validTrussIds.has(project.roofSystem.trussAttachmentId)
-    ? {
-        ...project.roofSystem,
-        trussAttachmentId: null,
-      }
-    : project.roofSystem;
+  const roofSystem =
+    project.roofSystem &&
+    project.roofSystem.trussAttachmentId &&
+    !validTrussIds.has(project.roofSystem.trussAttachmentId)
+      ? {
+          ...project.roofSystem,
+          trussAttachmentId: null,
+        }
+      : project.roofSystem;
 
   return {
     ...project,
@@ -567,7 +629,7 @@ export function syncProjectTrussSystems(project) {
 }
 
 export function getAllTrussInstances(project, floorId = null) {
-  return getProjectTrussSystems(project, floorId).flatMap((trussSystem) => (
-    (trussSystem.trussInstances || []).map((trussInstance) => ({ trussSystem, trussInstance }))
-  ));
+  return getProjectTrussSystems(project, floorId).flatMap((trussSystem) =>
+    (trussSystem.trussInstances || []).map((trussInstance) => ({ trussSystem, trussInstance })),
+  );
 }

@@ -61,7 +61,9 @@ export function getBomRowGroupKey(row = {}) {
     row.stockSectionWidth,
     row.dimensionAccuracy,
     row.dimensionNote,
-  ].map(serializeBomKeyPart).join('|');
+  ]
+    .map(serializeBomKeyPart)
+    .join('|');
 }
 
 export function groupBomRows(rows = []) {

@@ -8,7 +8,7 @@ export const PHASE_VIEW = {
 
 export function isObjectVisibleInPhase(obj, phases, activePhaseId, phaseViewMode) {
   if (obj.phaseId) {
-    const objPhase = phases.find(p => p.id === obj.phaseId);
+    const objPhase = phases.find((p) => p.id === obj.phaseId);
     if (objPhase && objPhase.visible === false) return false;
   }
   if (phaseViewMode === PHASE_VIEW.ALL) return true;
@@ -20,8 +20,8 @@ export function isObjectVisibleInPhase(obj, phases, activePhaseId, phaseViewMode
   }
 
   if (phaseViewMode === PHASE_VIEW.CUMULATIVE) {
-    const activePhase = phases.find(p => p.id === activePhaseId);
-    const objPhase = phases.find(p => p.id === obj.phaseId);
+    const activePhase = phases.find((p) => p.id === activePhaseId);
+    const objPhase = phases.find((p) => p.id === obj.phaseId);
     if (!activePhase || !objPhase) return true;
     return objPhase.order <= activePhase.order;
   }
@@ -31,7 +31,7 @@ export function isObjectVisibleInPhase(obj, phases, activePhaseId, phaseViewMode
 
 export function filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode) {
   if (!floor) return floor;
-  const hasHiddenPhases = phases.some(p => p.visible === false);
+  const hasHiddenPhases = phases.some((p) => p.visible === false);
   if (phaseViewMode === PHASE_VIEW.ALL && !hasHiddenPhases) return floor;
   if (!activePhaseId && !hasHiddenPhases) return floor;
 
@@ -56,25 +56,21 @@ export function filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode) 
 export function filterProjectByPhase(project, activePhaseId, phaseViewMode) {
   if (!project) return project;
   const phases = project.phases || [];
-  const hasHiddenPhases = phases.some(p => p.visible === false);
+  const hasHiddenPhases = phases.some((p) => p.visible === false);
   if (phaseViewMode === PHASE_VIEW.ALL && !hasHiddenPhases) return project;
   if (!activePhaseId && !hasHiddenPhases) return project;
 
-  const roofSystem = project.roofSystem && isObjectVisibleInPhase(
-    project.roofSystem,
-    phases,
-    activePhaseId,
-    phaseViewMode
-  )
-    ? project.roofSystem
-    : null;
-  const trussSystems = (project.trussSystems || []).filter((trussSystem) => (
-    isObjectVisibleInPhase(trussSystem, phases, activePhaseId, phaseViewMode)
-  ));
+  const roofSystem =
+    project.roofSystem && isObjectVisibleInPhase(project.roofSystem, phases, activePhaseId, phaseViewMode)
+      ? project.roofSystem
+      : null;
+  const trussSystems = (project.trussSystems || []).filter((trussSystem) =>
+    isObjectVisibleInPhase(trussSystem, phases, activePhaseId, phaseViewMode),
+  );
 
   return {
     ...project,
-    floors: project.floors.map(floor => filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode)),
+    floors: project.floors.map((floor) => filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode)),
     roofSystem,
     trussSystems,
   };

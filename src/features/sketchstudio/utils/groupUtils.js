@@ -33,6 +33,52 @@ export function buildGroupIndex(entities = []) {
   return index;
 }
 
+/**
+ * Cheap membership-equality check between two entity arrays.
+ *
+ * Returns true when both arrays describe the exact same group membership —
+ * i.e. the same set of entity ids, each mapped to the same (normalized)
+ * groupId. Geometry-only updates (move/resize/rotate/property edits) preserve
+ * every `(id, groupId)` pairing, so this returns true and the reducer can reuse
+ * the previously built `groupIndex` by reference instead of rebuilding it.
+ *
+ * Membership-changing updates (add/delete/duplicate entities, group/degroup)
+ * alter the id set or a groupId, so this returns false and the caller rebuilds.
+ *
+ * Runs at most once per discrete committed action (never per drag frame — those
+ * reuse the index explicitly), so its O(n) cost is negligible.
+ */
+export function groupMembershipUnchanged(previousEntities = [], nextEntities = []) {
+  if (previousEntities === nextEntities) {
+    return true;
+  }
+
+  if (previousEntities.length !== nextEntities.length) {
+    return false;
+  }
+
+  const previousGroupById = new Map();
+  for (const entity of previousEntities) {
+    previousGroupById.set(entity.id, normalizeGroupId(entity?.meta?.groupId));
+  }
+
+  if (previousGroupById.size !== previousEntities.length) {
+    // Duplicate ids are unexpected; fall back to a rebuild to stay safe.
+    return false;
+  }
+
+  for (const entity of nextEntities) {
+    if (!previousGroupById.has(entity.id)) {
+      return false;
+    }
+    if (previousGroupById.get(entity.id) !== normalizeGroupId(entity?.meta?.groupId)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function createGroupIdCandidate() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `group-${crypto.randomUUID()}`;

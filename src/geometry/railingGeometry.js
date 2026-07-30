@@ -4,12 +4,7 @@ import { pointInPolygon } from './polygon';
 function makeOutline(start, end, width) {
   const direction = normalize(subtract(end, start));
   const offset = scale(perpendicular(direction), width / 2);
-  return [
-    add(start, offset),
-    add(end, offset),
-    subtract(end, offset),
-    subtract(start, offset),
-  ];
+  return [add(start, offset), add(end, offset), subtract(end, offset), subtract(start, offset)];
 }
 
 export function getRailingRenderData(railing) {

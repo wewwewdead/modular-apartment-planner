@@ -1,18 +1,7 @@
-import { GRID_MINOR, MIN_WALL_LENGTH } from '@/domain/defaults';
+import { MIN_WALL_LENGTH } from '@/domain/defaults';
 import { createSectionCut, nextSectionLabel } from '@/domain/models';
 import { distance } from '@/geometry/point';
-
-function snapToGrid(value) {
-  return Math.round(value / GRID_MINOR) * GRID_MINOR;
-}
-
-function resolvePoint(modelPos, snapEnabled) {
-  if (!snapEnabled) return { x: modelPos.x, y: modelPos.y };
-  return {
-    x: snapToGrid(modelPos.x),
-    y: snapToGrid(modelPos.y),
-  };
-}
+import { resolvePoint } from './handlerSnapUtils';
 
 function resetSectionTool(editorDispatch) {
   editorDispatch({

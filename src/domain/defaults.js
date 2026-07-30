@@ -16,22 +16,22 @@ export const MIN_ZOOM = 0.02;
 export const MAX_ZOOM = 2.0;
 export const ZOOM_FACTOR = 1.1;
 
-export const GRID_MINOR = 50;    // mm
-export const GRID_MAJOR = 1000;  // mm
+export const GRID_MINOR = 50; // mm
+export const GRID_MAJOR = 1000; // mm
 
 export const PREVIEW_LABEL_OFFSET = 150;
 export const DIMENSION_DEFAULT_OFFSET = 300;
 
-export const COLUMN_WIDTH = 300;  // mm
-export const COLUMN_DEPTH = 300;  // mm
-export const BEAM_WIDTH = 250;    // mm
-export const BEAM_DEPTH = 450;    // mm
-export const STAIR_WIDTH = 1000;  // mm
+export const COLUMN_WIDTH = 300; // mm
+export const COLUMN_DEPTH = 300; // mm
+export const BEAM_WIDTH = 250; // mm
+export const BEAM_DEPTH = 450; // mm
+export const STAIR_WIDTH = 1000; // mm
 export const STAIR_RISERS = 18;
 export const STAIR_RISER_HEIGHT = 175; // mm
-export const STAIR_TREAD_DEPTH = 280;  // mm
+export const STAIR_TREAD_DEPTH = 280; // mm
 export const SLAB_THICKNESS = 200; // mm
-export const SLAB_ELEVATION = 0;   // mm
+export const SLAB_ELEVATION = 0; // mm
 export const SECTION_DEPTH = 2000; // mm
 export const ROOF_SLAB_THICKNESS = 180; // mm
 export const ROOF_FINISH_SLOPE = 1.5; // percent
@@ -44,8 +44,8 @@ export const ROOF_PARAPET_THICKNESS = 180; // mm
 export const ROOF_DRAIN_DIAMETER = 120; // mm
 export const ROOF_OPENING_CURB_HEIGHT = 0; // mm
 
-export const LANDING_WIDTH = 1000;  // mm
-export const LANDING_DEPTH = 1000;  // mm
+export const LANDING_WIDTH = 1000; // mm
+export const LANDING_DEPTH = 1000; // mm
 export const LANDING_THICKNESS = 200; // mm
 
 export const FIXTURE_KITCHEN_TOP_WIDTH = 2400;
@@ -64,14 +64,14 @@ export const FIXTURE_BED_WIDTH = 1400;
 export const FIXTURE_BED_DEPTH = 2000;
 
 export const RAILING_HEIGHT = 1000; // mm
-export const RAILING_WIDTH = 50;    // mm
+export const RAILING_WIDTH = 50; // mm
 
 export const ROOM_COLOR = '#E8F0FE';
 
 export const ENDPOINT_MERGE_TOLERANCE = 1; // mm
 export const MIN_ROOM_AREA = 100000; // mm² (0.1 m²)
 
-export const FILLET_DEFAULT_RADIUS = 200;  // mm
-export const FILLET_MIN_RADIUS = 50;       // mm
-export const FILLET_MAX_RADIUS = 2000;     // mm
-export const FILLET_RADIUS_STEP = 50;      // mm
+export const FILLET_DEFAULT_RADIUS = 200; // mm
+export const FILLET_MIN_RADIUS = 50; // mm
+export const FILLET_MAX_RADIUS = 2000; // mm
+export const FILLET_RADIUS_STEP = 50; // mm

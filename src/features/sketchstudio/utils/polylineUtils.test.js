@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { appendPolylineVertex, getPolylineBoundingBox, getPolylineSegments, removeLastPolylineVertex } from './polylineUtils';
+import {
+  appendPolylineVertex,
+  getPolylineBoundingBox,
+  getPolylineSegments,
+  removeLastPolylineVertex,
+} from './polylineUtils';
 
 describe('polylineUtils', () => {
   it('appends and removes polyline vertices', () => {
@@ -11,7 +16,11 @@ describe('polylineUtils', () => {
   it('extracts polyline segments and bounding boxes', () => {
     const polyline = {
       type: 'polyline',
-      points: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 60 }],
+      points: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 60 },
+      ],
       closed: false,
     };
 

@@ -15,18 +15,10 @@ function resolveStairBaseElevation(stair, floor, landingElevationMap) {
   if (!stair.startLandingAttachment) return floorElevation;
 
   const landingElevation = landingElevationMap?.get(stair.startLandingAttachment.landingId);
-  return landingElevation != null
-    ? floorElevation + landingElevation
-    : floorElevation;
+  return landingElevation != null ? floorElevation + landingElevation : floorElevation;
 }
 
-export function buildStairRoofAccessSectionElement({
-  stair,
-  floor,
-  roofSystem,
-  sectionCut,
-  landingElevationMap,
-}) {
+export function buildStairRoofAccessSectionElement({ stair, floor, roofSystem, sectionCut, landingElevationMap }) {
   const roofOpeningId = stair?.roofAccess?.roofOpeningId || null;
   if (!roofSystem || !sectionCut || !roofOpeningId) return null;
 
@@ -46,8 +38,8 @@ export function buildStairRoofAccessSectionElement({
   if (roofOpeningProjection.offset < -EPSILON || roofOpeningProjection.offset > sectionCut.depth + EPSILON) return null;
 
   const stairTopElevation = resolveStairBaseElevation(stair, floor, landingElevationMap) + stairTotalRise(stair);
-  const accessTopElevation = roofGeometry.getSurfaceElevation(roofOpeningCenter, 'top')
-    + Math.max(0, Number(roofOpening.curbHeight) || 0);
+  const accessTopElevation =
+    roofGeometry.getSurfaceElevation(roofOpeningCenter, 'top') + Math.max(0, Number(roofOpening.curbHeight) || 0);
   const stairAlong = clamp(stairProjection.along, 0, sectionCutLength(sectionCut));
   const roofOpeningAlong = clamp(roofOpeningProjection.along, 0, sectionCutLength(sectionCut));
 
@@ -64,9 +56,10 @@ export function buildStairRoofAccessSectionElement({
   return {
     id: `roof-access-${stair.id}-${roofOpening.id}`,
     category: 'stair',
-    renderMode: (Math.abs(stairProjection.offset) < EPSILON && Math.abs(roofOpeningProjection.offset) < EPSILON)
-      ? 'cut'
-      : 'projection',
+    renderMode:
+      Math.abs(stairProjection.offset) < EPSILON && Math.abs(roofOpeningProjection.offset) < EPSILON
+        ? 'cut'
+        : 'projection',
     points,
     depth: Math.max(0, (Math.max(0, stairProjection.offset) + Math.max(0, roofOpeningProjection.offset)) / 2),
     sourceId: stair.id,

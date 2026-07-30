@@ -1,13 +1,8 @@
+import { memo } from 'react';
 import { buildRoofOnlyElevationScene } from '@/elevations/scene';
 import ElevationSceneLayer from './ElevationSceneLayer';
 
-export default function RoofElevationRenderer({
-  roofSystem,
-  viewMode,
-  selectedId = null,
-  selectedType = null,
-  showTitle = true,
-}) {
+function RoofElevationRenderer({ roofSystem, viewMode, selectedId = null, selectedType = null, showTitle = true }) {
   const scene = buildRoofOnlyElevationScene(roofSystem, viewMode);
   if (!scene) return null;
 
@@ -21,3 +16,5 @@ export default function RoofElevationRenderer({
     />
   );
 }
+
+export default memo(RoofElevationRenderer);

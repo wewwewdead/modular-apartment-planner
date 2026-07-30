@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { windowOutlineOnWall, wallDirection } from '@/geometry/wallGeometry';
 import { perpendicular, scale, add } from '@/geometry/point';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
@@ -207,7 +208,7 @@ function JalousieWindow({ win, info, wall }) {
   );
 }
 
-export default function WindowRenderer({ windows, walls }) {
+function WindowRenderer({ windows, walls }) {
   return (
     <g className="windows">
       {windows.map((win) => {
@@ -236,3 +237,5 @@ export default function WindowRenderer({ windows, walls }) {
     </g>
   );
 }
+
+export default memo(WindowRenderer);

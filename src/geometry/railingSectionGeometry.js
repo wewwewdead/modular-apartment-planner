@@ -13,9 +13,7 @@ function clamp(value, min, max) {
 
 function uniqueSortedValues(values = []) {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted.filter((value, index) => (
-    index === 0 || Math.abs(value - sorted[index - 1]) > 1e-4
-  ));
+  return sorted.filter((value, index) => index === 0 || Math.abs(value - sorted[index - 1]) > 1e-4);
 }
 
 function intervalFromValues(values, maxLength) {
@@ -48,8 +46,14 @@ function polygonCutInterval(sectionCut, polygon = []) {
     }
   }
 
-  if (pointInPolygon(sectionCut.startPoint, polygon)) values.push(0);
-  if (pointInPolygon(sectionCut.endPoint, polygon)) values.push(sectionCutLength(sectionCut));
+  // The cut endpoints are not at along 0 / length: the view axis is reversed relative to the
+  // start -> end axis when direction is +1, so project them instead of assuming an order.
+  if (pointInPolygon(sectionCut.startPoint, polygon)) {
+    values.push(projectPointToSectionCut(sectionCut, sectionCut.startPoint).along);
+  }
+  if (pointInPolygon(sectionCut.endPoint, polygon)) {
+    values.push(projectPointToSectionCut(sectionCut, sectionCut.endPoint).along);
+  }
 
   return intervalFromValues(uniqueSortedValues(values), sectionCutLength(sectionCut));
 }
@@ -177,9 +181,7 @@ export function buildRailingSectionElements(floor, sectionCut) {
     const interval = cutInterval || projection?.interval;
 
     if (!interval) {
-      hiddenReasons.push(
-        summarizePolygonSectionVisibility(sectionCut, renderData.outline, sectionCut.depth).reason
-      );
+      hiddenReasons.push(summarizePolygonSectionVisibility(sectionCut, renderData.outline, sectionCut.depth).reason);
       continue;
     }
 
@@ -194,7 +196,7 @@ export function buildRailingSectionElements(floor, sectionCut) {
         topElevation,
         renderMode,
         depth,
-        railing.id
+        railing.id,
       );
       if (line) lineElements.push(line);
       continue;
@@ -207,7 +209,7 @@ export function buildRailingSectionElements(floor, sectionCut) {
       topElevation,
       renderMode,
       depth,
-      railing.id
+      railing.id,
     );
     if (element) rectElements.push(element);
   }
@@ -217,8 +219,9 @@ export function buildRailingSectionElements(floor, sectionCut) {
   return {
     rectElements,
     lineElements,
-    diagnostics: elementCount > 0
-      ? createDiagnostics(true, SECTION_VISIBILITY_REASONS.OK, elementCount)
-      : createDiagnostics(false, aggregateDiagnostics(hiddenReasons), 0),
+    diagnostics:
+      elementCount > 0
+        ? createDiagnostics(true, SECTION_VISIBILITY_REASONS.OK, elementCount)
+        : createDiagnostics(false, aggregateDiagnostics(hiddenReasons), 0),
   };
 }

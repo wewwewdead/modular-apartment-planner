@@ -124,6 +124,136 @@
   color: var(--dark-text-helper);
 }
 
+.customMaterialBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--dark-bg-primary);
+  background: var(--dark-accent-craftsman);
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+/* Custom Material Editor */
+.materialEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.materialEditorList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.materialEditorRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--dark-bg-input);
+  border: 1px solid var(--dark-border-strong);
+  border-radius: 4px;
+}
+
+.materialEditorInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.materialEditorName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dark-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.materialEditorMeta {
+  font-size: 10px;
+  color: var(--dark-text-helper);
+}
+
+.materialEditorActions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.materialEditorDangerBtn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dark-accent-error);
+  background: var(--dark-accent-error-subtle);
+  border: 1px solid var(--dark-accent-error);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.materialEditorDangerBtn:hover {
+  color: var(--dark-text-primary);
+  background: var(--dark-accent-error);
+}
+
+.materialDuplicateRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.materialDuplicateRow .materialSelect {
+  flex: 1;
+  min-width: 0;
+}
+
+.materialColorInput {
+  width: 100%;
+  height: 32px;
+  padding: 2px;
+  background: var(--dark-bg-input);
+  border: 1px solid var(--dark-border);
+  border-radius: 4px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.materialFieldError {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--dark-accent-error);
+}
+
+.materialFormError {
+  margin: 6px 0 0 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--dark-accent-error);
+  background: var(--dark-accent-error-subtle);
+  border: 1px solid var(--dark-accent-error-border);
+  border-radius: 4px;
+}
+
 /* BOM Panel */
 .bomPanel {
   flex: 1;
@@ -1204,5 +1334,24 @@
   .templateBtn {
     min-height: 52px;
     font-size: 15px;
+  }
+
+  .thicknessInput {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .materialColorInput {
+    height: 44px;
+  }
+
+  .materialEditorRow {
+    padding: 10px;
+  }
+
+  .materialEditorDangerBtn {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 13px;
   }
 }

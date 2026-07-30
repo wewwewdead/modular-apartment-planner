@@ -8,7 +8,15 @@ import { getTextLeaderGeometry } from '../utils/textLeaderUtils';
 
 function renderFeaturePreview(draftPreview) {
   if (draftPreview.shape === 'circle') {
-    return <circle className="sketchStudioDraftEntity is-feature" cx={draftPreview.cx} cy={draftPreview.cy} r={draftPreview.diameter / 2} vectorEffect="non-scaling-stroke" />;
+    return (
+      <circle
+        className="sketchStudioDraftEntity is-feature"
+        cx={draftPreview.cx}
+        cy={draftPreview.cy}
+        r={draftPreview.diameter / 2}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
   }
 
   if (draftPreview.shape === 'ellipse') {
@@ -31,12 +39,31 @@ function renderFeaturePreview(draftPreview) {
   }
 
   const previewRect = normalizeRectFromPoints(draftPreview.startPoint, draftPreview.endPoint);
-  return <rect className="sketchStudioDraftEntity is-feature" x={previewRect.x} y={previewRect.y} width={previewRect.width} height={previewRect.height} vectorEffect="non-scaling-stroke" />;
+  return (
+    <rect
+      className="sketchStudioDraftEntity is-feature"
+      x={previewRect.x}
+      y={previewRect.y}
+      width={previewRect.width}
+      height={previewRect.height}
+      vectorEffect="non-scaling-stroke"
+    />
+  );
 }
 
 function renderGenericEntityPreview(draftPreview) {
   if (draftPreview.type === 'line') {
-    return <line className="sketchStudioDraftEntity" x1={draftPreview.x1} y1={draftPreview.y1} x2={draftPreview.x2} y2={draftPreview.y2} vectorEffect="non-scaling-stroke" strokeLinecap="round" />;
+    return (
+      <line
+        className="sketchStudioDraftEntity"
+        x1={draftPreview.x1}
+        y1={draftPreview.y1}
+        x2={draftPreview.x2}
+        y2={draftPreview.y2}
+        vectorEffect="non-scaling-stroke"
+        strokeLinecap="round"
+      />
+    );
   }
 
   if (draftPreview.type === 'rect') {
@@ -56,7 +83,15 @@ function renderGenericEntityPreview(draftPreview) {
   }
 
   if (draftPreview.type === 'circle') {
-    return <circle className="sketchStudioDraftEntity" cx={draftPreview.center.x} cy={draftPreview.center.y} r={draftPreview.radius} vectorEffect="non-scaling-stroke" />;
+    return (
+      <circle
+        className="sketchStudioDraftEntity"
+        cx={draftPreview.center.x}
+        cy={draftPreview.center.y}
+        r={draftPreview.radius}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
   }
 
   if (draftPreview.type === 'ellipse') {
@@ -76,14 +111,33 @@ function renderGenericEntityPreview(draftPreview) {
   if (draftPreview.type === 'polyline') {
     const points = draftPreview.points.map((point) => `${point.x},${point.y}`).join(' ');
     if (draftPreview.closed) {
-      return <polygon className="sketchStudioDraftEntity is-profile" points={points} vectorEffect="non-scaling-stroke" />;
+      return (
+        <polygon className="sketchStudioDraftEntity is-profile" points={points} vectorEffect="non-scaling-stroke" />
+      );
     }
 
-    return <polyline className="sketchStudioDraftEntity" points={points} vectorEffect="non-scaling-stroke" fill="none" strokeLinecap="round" strokeLinejoin="round" />;
+    return (
+      <polyline
+        className="sketchStudioDraftEntity"
+        points={points}
+        vectorEffect="non-scaling-stroke"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    );
   }
 
   if (draftPreview.type === 'arc') {
-    return <path className="sketchStudioDraftEntity" d={getArcPath(draftPreview)} vectorEffect="non-scaling-stroke" fill="none" strokeLinecap="round" />;
+    return (
+      <path
+        className="sketchStudioDraftEntity"
+        d={getArcPath(draftPreview)}
+        vectorEffect="non-scaling-stroke"
+        fill="none"
+        strokeLinecap="round"
+      />
+    );
   }
 
   if (draftPreview.type === 'fillet-preview') {
@@ -133,20 +187,38 @@ function renderGenericEntityPreview(draftPreview) {
           strokeLinecap="round"
           vectorEffect="non-scaling-stroke"
         />
-        <circle className="sketchStudioDraftEntity" cx={tangentPoint1.x} cy={tangentPoint1.y} r={4} vectorEffect="non-scaling-stroke" />
-        <circle className="sketchStudioDraftEntity" cx={tangentPoint2.x} cy={tangentPoint2.y} r={4} vectorEffect="non-scaling-stroke" />
+        <circle
+          className="sketchStudioDraftEntity"
+          cx={tangentPoint1.x}
+          cy={tangentPoint1.y}
+          r={4}
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle
+          className="sketchStudioDraftEntity"
+          cx={tangentPoint2.x}
+          cy={tangentPoint2.y}
+          r={4}
+          vectorEffect="non-scaling-stroke"
+        />
         {cornerPoint && (
           <>
             <line
               className="sketchStudioDraftEntity"
-              x1={tangentPoint1.x} y1={tangentPoint1.y} x2={cornerPoint.x} y2={cornerPoint.y}
+              x1={tangentPoint1.x}
+              y1={tangentPoint1.y}
+              x2={cornerPoint.x}
+              y2={cornerPoint.y}
               strokeDasharray="4 2"
               opacity={0.4}
               vectorEffect="non-scaling-stroke"
             />
             <line
               className="sketchStudioDraftEntity"
-              x1={tangentPoint2.x} y1={tangentPoint2.y} x2={cornerPoint.x} y2={cornerPoint.y}
+              x1={tangentPoint2.x}
+              y1={tangentPoint2.y}
+              x2={cornerPoint.x}
+              y2={cornerPoint.y}
               strokeDasharray="4 2"
               opacity={0.4}
               vectorEffect="non-scaling-stroke"
@@ -245,7 +317,15 @@ export default function DraftRenderer({ draft, draftPreview, units, zoom }) {
   if (draftPreview.type === 'dimension-guide' || draftPreview.type === 'angle-guide') {
     return (
       <g className="sketchStudioDraftLayer" pointerEvents="none">
-        <line className="sketchStudioDraftEntity" x1={draftPreview.p1.x} y1={draftPreview.p1.y} x2={draftPreview.p2.x} y2={draftPreview.p2.y} vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+        <line
+          className="sketchStudioDraftEntity"
+          x1={draftPreview.p1.x}
+          y1={draftPreview.p1.y}
+          x2={draftPreview.p2.x}
+          y2={draftPreview.p2.y}
+          vectorEffect="non-scaling-stroke"
+          strokeLinecap="round"
+        />
       </g>
     );
   }
@@ -264,8 +344,19 @@ export default function DraftRenderer({ draft, draftPreview, units, zoom }) {
       <g className="sketchStudioDimensionDraft" pointerEvents="none">
         <line className="sketchStudioDimensionDraftLine" {...geometry.ray1} vectorEffect="non-scaling-stroke" />
         <line className="sketchStudioDimensionDraftLine" {...geometry.ray2} vectorEffect="non-scaling-stroke" />
-        <path className="sketchStudioDimensionDraftLine" d={geometry.arcPath} fill="none" vectorEffect="non-scaling-stroke" />
-        <text className="sketchStudioDimensionDraftText" x={geometry.textPoint.x} y={geometry.textPoint.y} textAnchor="middle" dominantBaseline="middle">
+        <path
+          className="sketchStudioDimensionDraftLine"
+          d={geometry.arcPath}
+          fill="none"
+          vectorEffect="non-scaling-stroke"
+        />
+        <text
+          className="sketchStudioDimensionDraftText"
+          x={geometry.textPoint.x}
+          y={geometry.textPoint.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
           {text}
         </text>
       </g>
@@ -288,7 +379,14 @@ export default function DraftRenderer({ draft, draftPreview, units, zoom }) {
         <line className="sketchStudioDimensionDraftLine" {...geometry.dimLine} vectorEffect="non-scaling-stroke" />
         <line className="sketchStudioDimensionDraftTick" {...geometry.tick1} vectorEffect="non-scaling-stroke" />
         <line className="sketchStudioDimensionDraftTick" {...geometry.tick2} vectorEffect="non-scaling-stroke" />
-        <text className="sketchStudioDimensionDraftText" x={geometry.textPoint.x} y={geometry.textPoint.y} textAnchor="middle" dominantBaseline="middle" transform={`rotate(${geometry.textAngle} ${geometry.textPoint.x} ${geometry.textPoint.y})`}>
+        <text
+          className="sketchStudioDimensionDraftText"
+          x={geometry.textPoint.x}
+          y={geometry.textPoint.y}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          transform={`rotate(${geometry.textAngle} ${geometry.textPoint.x} ${geometry.textPoint.y})`}
+        >
           {text}
         </text>
       </g>

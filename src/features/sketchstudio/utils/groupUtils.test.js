@@ -5,6 +5,7 @@ import {
   buildGroupIndex,
   expandGroupedSelection,
   getEntityGroupId,
+  groupMembershipUnchanged,
   normalizeEntityGroupMemberships,
   removeEntitiesFromGroups,
 } from './groupUtils';
@@ -214,6 +215,50 @@ describe('groupUtils', () => {
 
       expect(result).toEqual(['rect-501', 'rect-502']);
       expect(durationMs).toBeLessThan(1);
+    });
+  });
+
+  describe('groupMembershipUnchanged', () => {
+    it('returns true for the same array reference', () => {
+      const entities = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      expect(groupMembershipUnchanged(entities, entities)).toBe(true);
+    });
+
+    it('returns true when a geometry-only edit preserves every (id, groupId) pair', () => {
+      const before = [createEntity('a', 'g1'), createEntity('b', 'g1'), createEntity('c')];
+      // Simulate a move: new objects, new array, same ids + group membership.
+      const after = before.map((entity) => ({ ...entity, x: entity.x + 50 }));
+      expect(groupMembershipUnchanged(before, after)).toBe(true);
+    });
+
+    it('ignores groupId whitespace differences via normalization', () => {
+      const before = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      const after = [createEntity('a', ' g1 '), createEntity('b', 'g1')];
+      expect(groupMembershipUnchanged(before, after)).toBe(true);
+    });
+
+    it('returns false when an entity is added (duplicate)', () => {
+      const before = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      const after = [...before, createEntity('c', 'g1')];
+      expect(groupMembershipUnchanged(before, after)).toBe(false);
+    });
+
+    it('returns false when an entity is removed (delete)', () => {
+      const before = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      const after = [createEntity('a', 'g1')];
+      expect(groupMembershipUnchanged(before, after)).toBe(false);
+    });
+
+    it('returns false when an entity changes group membership', () => {
+      const before = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      const after = [createEntity('a', 'g2'), createEntity('b', 'g1')];
+      expect(groupMembershipUnchanged(before, after)).toBe(false);
+    });
+
+    it('returns false when an entity is replaced by a different id at the same length', () => {
+      const before = [createEntity('a', 'g1'), createEntity('b', 'g1')];
+      const after = [createEntity('a', 'g1'), createEntity('c', 'g1')];
+      expect(groupMembershipUnchanged(before, after)).toBe(false);
     });
   });
 

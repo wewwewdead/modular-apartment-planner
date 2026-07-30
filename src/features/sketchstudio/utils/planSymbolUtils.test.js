@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildPlanSymbolFromParts,
-  buildPlanSymbolShapeFromGenericPart,
-} from './planSymbolUtils';
+import { buildPlanSymbolFromParts, buildPlanSymbolShapeFromGenericPart } from './planSymbolUtils';
 
 describe('planSymbolUtils', () => {
   it('builds polygon symbols for panel-like parts', () => {
@@ -34,20 +31,24 @@ describe('planSymbolUtils', () => {
   });
 
   it('adds template front-edge detail for cabinet helpers', () => {
-    const symbol = buildPlanSymbolFromParts([{
-      id: 'part-1',
-      role: 'panel',
-      parametric: {
-        origin: { x: 0, y: 0, z: 0 },
-        extents: { width: 600, depth: 400, height: 18 },
+    const symbol = buildPlanSymbolFromParts(
+      [
+        {
+          id: 'part-1',
+          role: 'panel',
+          parametric: {
+            origin: { x: 0, y: 0, z: 0 },
+            extents: { width: 600, depth: 400, height: 18 },
+          },
+        },
+      ],
+      {
+        objectLike: {
+          generator: { type: 'cabinetBox' },
+        },
       },
-    }], {
-      objectLike: {
-        generator: { type: 'cabinetBox' },
-      },
-    });
+    );
 
     expect(symbol.lines.some((line) => line.id === 'cabinetBox-front-edge')).toBe(true);
   });
 });
-

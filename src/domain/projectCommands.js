@@ -108,6 +108,46 @@ export function applyWallUpdate(floor, wallUpdate, columns = []) {
 }
 
 /**
+ * Apply a propagated wall edit (primary + healed neighbors) to a floor.
+ * Pure function: (floor, {primary, secondary}, columns) => nextFloor
+ *
+ * The primary edit is user-driven and keeps mergeWallUpdate semantics
+ * (endpoint change without an attachment field = deliberate detach).
+ * Secondary edits are HEAL-driven: the endpoints move because a joined wall
+ * moved, not because the user touched this wall — so existing attachments are
+ * carried through untouched and re-validated by syncWallAttachmentPoints.
+ * (modelGraph never heals column-pinned endpoints, so sync cannot fight the
+ * heal; it only re-pins the wall's other, untouched endpoint.)
+ */
+export function applyPropagatedWallEdits(floor, propagation, columns = []) {
+  const { primary, secondary = [] } = propagation;
+  let nextFloor = applyWallUpdate(floor, primary, columns);
+
+  for (const edit of secondary) {
+    let updatedWall = null;
+    const walls = nextFloor.walls.map((wall) => {
+      if (wall.id !== edit.id) return wall;
+      const moved = { ...wall };
+      if (edit.start) moved.start = { x: edit.start.x, y: edit.start.y };
+      if (edit.end) moved.end = { x: edit.end.x, y: edit.end.y };
+      updatedWall = syncWallAttachmentPoints(moved, columns);
+      return updatedWall;
+    });
+    if (!updatedWall) continue;
+
+    const nextLength = wallLength(updatedWall);
+    nextFloor = {
+      ...nextFloor,
+      walls,
+      doors: clampWallMountedOpenings(nextFloor.doors, updatedWall.id, nextLength),
+      windows: clampWallMountedOpenings(nextFloor.windows, updatedWall.id, nextLength),
+    };
+  }
+
+  return nextFloor;
+}
+
+/**
  * Apply a COLUMN_UPDATE action to a floor — update column and sync wall attachments.
  * Pure function: (floor, columnUpdate) => nextFloor
  */

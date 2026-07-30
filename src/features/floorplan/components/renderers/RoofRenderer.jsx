@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 import { buildRoofPlanScene } from '@/geometry/roofPlanScene';
 import BlueprintAnnotationLayer from './BlueprintAnnotationLayer';
@@ -6,7 +7,7 @@ function slopeArrowPoints(arrow) {
   return `${arrow.headA.x},${arrow.headA.y} ${arrow.shaftEnd.x},${arrow.shaftEnd.y} ${arrow.headB.x},${arrow.headB.y}`;
 }
 
-export default function RoofRenderer({ roofSystem, selectedId = null, selectedType = null, interactive = true }) {
+function RoofRenderer({ roofSystem, selectedId = null, selectedType = null, interactive = true }) {
   if (!roofSystem) return null;
 
   const scene = buildRoofPlanScene(roofSystem);
@@ -228,3 +229,5 @@ export default function RoofRenderer({ roofSystem, selectedId = null, selectedTy
     </g>
   );
 }
+
+export default memo(RoofRenderer);

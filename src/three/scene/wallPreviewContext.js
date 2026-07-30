@@ -1,4 +1,12 @@
-import { doorOutlineOnWall, positionOnWall, projectPointOnWall, wallAngle, wallLength, wallOutline, windowOutlineOnWall } from '@/geometry/wallGeometry';
+import {
+  doorOutlineOnWall,
+  positionOnWall,
+  projectPointOnWall,
+  wallAngle,
+  wallLength,
+  wallOutline,
+  windowOutlineOnWall,
+} from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 
 const EPSILON = 1e-6;
@@ -8,9 +16,8 @@ function clamp(value, min, max) {
 }
 
 function buildOpeningDescriptor(kind, source, context) {
-  const outlineInfo = kind === 'door'
-    ? doorOutlineOnWall(context.sourceWall, source)
-    : windowOutlineOnWall(context.sourceWall, source);
+  const outlineInfo =
+    kind === 'door' ? doorOutlineOnWall(context.sourceWall, source) : windowOutlineOnWall(context.sourceWall, source);
 
   const sourceCenterAlong = projectPointOnWall(context.sourceWall, outlineInfo.center);
   const sourceStartAlong = sourceCenterAlong - source.width / 2;
@@ -94,12 +101,12 @@ export function buildWallPreviewContext(floor, wall, floorLevel) {
   };
 
   const openings = [
-    ...(floor.doors || []).filter((item) => item.wallId === wall.id).map((door) => (
-      buildOpeningDescriptor('door', door, context)
-    )),
-    ...(floor.windows || []).filter((item) => item.wallId === wall.id).map((windowItem) => (
-      buildOpeningDescriptor('window', windowItem, context)
-    )),
+    ...(floor.doors || [])
+      .filter((item) => item.wallId === wall.id)
+      .map((door) => buildOpeningDescriptor('door', door, context)),
+    ...(floor.windows || [])
+      .filter((item) => item.wallId === wall.id)
+      .map((windowItem) => buildOpeningDescriptor('window', windowItem, context)),
   ]
     .filter(Boolean)
     .sort((left, right) => left.startAlong - right.startAlong);
@@ -148,21 +155,11 @@ export function buildWallSolidSegments(context) {
     pushSegment(cursor, openingStart, context.wallBase, context.wallTop);
 
     if (opening.visibleBaseElevation > context.wallBase + EPSILON) {
-      pushSegment(
-        openingStart,
-        openingEnd,
-        context.wallBase,
-        Math.min(opening.visibleBaseElevation, context.wallTop)
-      );
+      pushSegment(openingStart, openingEnd, context.wallBase, Math.min(opening.visibleBaseElevation, context.wallTop));
     }
 
     if (opening.visibleTopElevation < context.wallTop - EPSILON) {
-      pushSegment(
-        openingStart,
-        openingEnd,
-        Math.max(opening.visibleTopElevation, context.wallBase),
-        context.wallTop
-      );
+      pushSegment(openingStart, openingEnd, Math.max(opening.visibleTopElevation, context.wallBase), context.wallTop);
     }
 
     cursor = Math.max(cursor, openingEnd);

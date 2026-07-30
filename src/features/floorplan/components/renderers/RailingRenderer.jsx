@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { getRailingRenderData } from '@/geometry/railingGeometry';
 
 const RAILING_STYLES = {
@@ -25,7 +26,7 @@ function getStyle(type) {
   return RAILING_STYLES[type] || RAILING_STYLES.guardrail;
 }
 
-export default function RailingRenderer({ railings }) {
+function RailingRenderer({ railings }) {
   return (
     <g className="railings">
       {(railings || []).map((railing) => {
@@ -87,3 +88,5 @@ export default function RailingRenderer({ railings }) {
     </g>
   );
 }
+
+export default memo(RailingRenderer);

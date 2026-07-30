@@ -16,10 +16,10 @@ export function getRectDraftPreviewPolygonPoints(draftPreview) {
   }
 
   if (
-    Number.isFinite(draftPreview.x)
-    && Number.isFinite(draftPreview.y)
-    && Number.isFinite(draftPreview.width)
-    && Number.isFinite(draftPreview.height)
+    Number.isFinite(draftPreview.x) &&
+    Number.isFinite(draftPreview.y) &&
+    Number.isFinite(draftPreview.width) &&
+    Number.isFinite(draftPreview.height)
   ) {
     const corners = getRectCorners(draftPreview);
     return [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft];

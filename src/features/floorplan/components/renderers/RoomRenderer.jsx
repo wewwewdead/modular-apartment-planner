@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function RoomRenderer({ rooms, selectedId, interactive = true }) {
+function RoomRenderer({ rooms, selectedId, interactive = true }) {
   return (
     <g className="rooms">
       {rooms.map((room) => {
@@ -24,3 +25,5 @@ export default function RoomRenderer({ rooms, selectedId, interactive = true }) 
     </g>
   );
 }
+
+export default memo(RoomRenderer);

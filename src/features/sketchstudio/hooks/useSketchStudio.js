@@ -10,6 +10,8 @@ import {
   setEntityMaterial,
   setEntityThickness,
   toggleCraftsmanMode,
+  toggleShortcutOverlay as toggleShortcutOverlayAction,
+  closeShortcutOverlay as closeShortcutOverlayAction,
   setVariables,
   addConstraint,
   updateConstraint,
@@ -117,6 +119,8 @@ export default function useSketchStudio() {
     (viewMode) => dispatch(setUiFlag('viewMode', viewMode === 'isometric' ? 'isometric' : 'plan')),
     [],
   );
+  const toggleShortcutOverlay = useCallback(() => dispatch(toggleShortcutOverlayAction()), []);
+  const closeShortcutOverlay = useCallback(() => dispatch(closeShortcutOverlayAction()), []);
   const setIsometricPlane = useCallback((plane) => {
     if (!['top', 'left', 'right'].includes(plane)) return;
     dispatch(setUiFlag('isometricPlane', plane));
@@ -222,6 +226,8 @@ export default function useSketchStudio() {
     degroupSelection: handleDegroupSelection,
     setViewMode,
     setIsometricPlane,
+    toggleShortcutOverlay,
+    closeShortcutOverlay,
     updateSelectedEntityField,
     rotateSelectionLeft: () => handleRotateSelection(-90),
     rotateSelectionRight: () => handleRotateSelection(90),

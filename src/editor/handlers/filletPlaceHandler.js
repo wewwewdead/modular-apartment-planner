@@ -1,8 +1,21 @@
 import { createWall } from '@/domain/models';
-import { FILLET_DEFAULT_RADIUS, FILLET_RADIUS_STEP, FILLET_MIN_RADIUS, FILLET_MAX_RADIUS, SNAP_DISTANCE_PX } from '@/domain/defaults';
+import {
+  FILLET_DEFAULT_RADIUS,
+  FILLET_RADIUS_STEP,
+  FILLET_MIN_RADIUS,
+  FILLET_MAX_RADIUS,
+  SNAP_DISTANCE_PX,
+} from '@/domain/defaults';
 import { findCorner, computeFilletGeometry } from '@/geometry/filletGeometry';
 
-export function createFilletPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, viewport, activePhaseId }) {
+export function createFilletPlaceHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  viewport,
+  activePhaseId,
+}) {
   return {
     onMouseMove(modelPos, e, toolState) {
       const floor = getFloor(activeFloorId);
@@ -14,8 +27,10 @@ export function createFilletPlaceHandler({ dispatch, editorDispatch, getFloor, a
 
       if (corner) {
         const geometry = computeFilletGeometry(
-          corner.wall1, corner.wall1Endpoint,
-          corner.wall2, corner.wall2Endpoint,
+          corner.wall1,
+          corner.wall1Endpoint,
+          corner.wall2,
+          corner.wall2Endpoint,
           radius,
         );
         editorDispatch({

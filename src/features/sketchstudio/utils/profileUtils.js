@@ -102,7 +102,7 @@ export function getClosedProfileArea(entity) {
   for (let index = 0; index < points.length; index += 1) {
     const point = points[index];
     const next = points[(index + 1) % points.length];
-    area += (point.x * next.y) - (next.x * point.y);
+    area += point.x * next.y - next.x * point.y;
   }
 
   return Math.abs(area / 2);
@@ -249,15 +249,14 @@ export function extractClosedLoopsFromEntities(entities) {
 
     while (stack.length) {
       const current = stack.pop();
-      const related = lineSegments.filter((segment) => (
-        unused.has(segmentKey(segment.start, segment.end))
-        && (
-          pointsEqual(segment.start, current.start)
-          || pointsEqual(segment.start, current.end)
-          || pointsEqual(segment.end, current.start)
-          || pointsEqual(segment.end, current.end)
-        )
-      ));
+      const related = lineSegments.filter(
+        (segment) =>
+          unused.has(segmentKey(segment.start, segment.end)) &&
+          (pointsEqual(segment.start, current.start) ||
+            pointsEqual(segment.start, current.end) ||
+            pointsEqual(segment.end, current.start) ||
+            pointsEqual(segment.end, current.end)),
+      );
 
       related.forEach((segment) => {
         const key = segmentKey(segment.start, segment.end);

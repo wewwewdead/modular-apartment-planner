@@ -23,13 +23,18 @@ export default function Modal({ title, onClose, children }) {
           <h3 className={styles.headerTitle}>{title}</h3>
           <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close">
             <svg viewBox="0 0 20 20" aria-hidden="true" className={styles.closeIcon}>
-              <path d="M6 6l8 8M14 6l-8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M6 6l8 8M14 6l-8 8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </button>
         </div>
-        <div className={styles.body}>
-          {children}
-        </div>
+        <div className={styles.body}>{children}</div>
       </div>
     </div>
   );

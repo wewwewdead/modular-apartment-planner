@@ -1,11 +1,14 @@
 import { createColumn } from '@/domain/models';
-import { GRID_MINOR } from '@/domain/defaults';
+import { snapToGrid } from './handlerSnapUtils';
 
-function snapToGrid(value) {
-  return Math.round(value / GRID_MINOR) * GRID_MINOR;
-}
-
-export function createColumnPlaceHandler({ dispatch, editorDispatch, getFloor, activeFloorId, snapEnabled, activePhaseId }) {
+export function createColumnPlaceHandler({
+  dispatch,
+  editorDispatch,
+  getFloor,
+  activeFloorId,
+  snapEnabled,
+  activePhaseId,
+}) {
   return {
     onMouseMove(modelPos) {
       let x = modelPos.x;

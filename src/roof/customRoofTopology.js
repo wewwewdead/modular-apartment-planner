@@ -180,9 +180,7 @@ function buildPerimeterLoops(perimeterEdges = []) {
       if (!next) break;
 
       next.edge.visited = true;
-      const nextPoint = next.reversed
-        ? clonePoint(next.edge.sourceStartPoint)
-        : clonePoint(next.edge.sourceEndPoint);
+      const nextPoint = next.reversed ? clonePoint(next.edge.sourceStartPoint) : clonePoint(next.edge.sourceEndPoint);
       points.push(nextPoint);
       currentKey = pointKey(nextPoint);
     }
@@ -205,9 +203,7 @@ export function deriveCustomRoofTopology(roofSystem) {
     .map((plane, index) => normalizePlane(plane, index, roofBaseElevation))
     .filter(Boolean);
   const overrideMap = new Map(
-    (roofSystem?.roofEdges || [])
-      .filter(Boolean)
-      .map((edge) => [edge.geometryKey || edge.id, edge])
+    (roofSystem?.roofEdges || []).filter(Boolean).map((edge) => [edge.geometryKey || edge.id, edge]),
   );
 
   const seamMap = new Map();
@@ -243,13 +239,9 @@ export function deriveCustomRoofTopology(roofSystem) {
     const endPoint = clonePoint(first.endPoint);
     const planeIds = [...new Set(entries.map((entry) => entry.planeId))];
     const isPerimeter = planeIds.length === 1;
-    const derivedRole = isPerimeter
-      ? classifyPerimeterEdge(first)
-      : classifySharedEdge(entries);
+    const derivedRole = isPerimeter ? classifyPerimeterEdge(first) : classifySharedEdge(entries);
     const override = overrideMap.get(geometryKey) || null;
-    const roleOverride = override?.edgeRole && override.edgeRole !== 'derived'
-      ? override.edgeRole
-      : null;
+    const roleOverride = override?.edgeRole && override.edgeRole !== 'derived' ? override.edgeRole : null;
     const edgeRole = roleOverride || derivedRole;
 
     return {

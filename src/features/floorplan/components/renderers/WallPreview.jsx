@@ -1,9 +1,10 @@
+import { memo } from 'react';
 import { formatMeasurement } from '@/annotations/format';
 import { TOOLS } from '@/editor/tools';
 import { distance } from '@/geometry/point';
 import { PREVIEW_LABEL_OFFSET } from '@/domain/defaults';
 
-export default function WallPreview({ toolState, activeTool }) {
+function WallPreview({ toolState, activeTool }) {
   if (activeTool !== TOOLS.WALL || !toolState.start || !toolState.preview) {
     return null;
   }
@@ -50,3 +51,5 @@ export default function WallPreview({ toolState, activeTool }) {
     </g>
   );
 }
+
+export default memo(WallPreview);

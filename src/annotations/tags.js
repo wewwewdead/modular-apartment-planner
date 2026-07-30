@@ -31,12 +31,14 @@ function createTag(id, textLines, position, options = {}) {
 
 function buildColumnTags(columns = []) {
   return columns
-    .map((column, index) => createTag(
-      `column-tag-${column.id}`,
-      [column.name?.trim() || getColumnAutoLabel(column, columns) || `C${index + 1}`],
-      columnCenter(column),
-      { sourceType: 'column', sourceId: column.id, priority: 1 }
-    ))
+    .map((column, index) =>
+      createTag(
+        `column-tag-${column.id}`,
+        [column.name?.trim() || getColumnAutoLabel(column, columns) || `C${index + 1}`],
+        columnCenter(column),
+        { sourceType: 'column', sourceId: column.id, priority: 1 },
+      ),
+    )
     .filter(Boolean);
 }
 
@@ -45,24 +47,25 @@ function buildBeamTags(beams = [], columns = []) {
     .map((beam, index) => {
       const renderData = getBeamRenderData(beam, columns || []);
       if (!renderData) return null;
-      return createTag(
-        `beam-tag-${beam.id}`,
-        [`B${index + 1}`],
-        renderData.midpoint,
-        { sourceType: 'beam', sourceId: beam.id, priority: 1 }
-      );
+      return createTag(`beam-tag-${beam.id}`, [`B${index + 1}`], renderData.midpoint, {
+        sourceType: 'beam',
+        sourceId: beam.id,
+        priority: 1,
+      });
     })
     .filter(Boolean);
 }
 
 function buildRoomTags(rooms = []) {
   return rooms
-    .map((room, index) => createTag(
-      `room-tag-${room.id}`,
-      [room.name?.trim() || `R${index + 1}`, formatRoomArea(room)],
-      room.labelPosition,
-      { sourceType: 'room', sourceId: room.id, priority: 3 }
-    ))
+    .map((room, index) =>
+      createTag(
+        `room-tag-${room.id}`,
+        [room.name?.trim() || `R${index + 1}`, formatRoomArea(room)],
+        room.labelPosition,
+        { sourceType: 'room', sourceId: room.id, priority: 3 },
+      ),
+    )
     .filter(Boolean);
 }
 
@@ -73,12 +76,11 @@ function buildDoorTags(doors = [], walls = []) {
       if (!wall) return null;
       const info = doorOutlineOnWall(wall, door);
       const offset = scale(perpendicular(wallDirection(wall)), wall.thickness / 2 + 180);
-      return createTag(
-        `door-tag-${door.id}`,
-        [`D${index + 1}`],
-        add(info.center, offset),
-        { sourceType: 'door', sourceId: door.id, priority: 0 }
-      );
+      return createTag(`door-tag-${door.id}`, [`D${index + 1}`], add(info.center, offset), {
+        sourceType: 'door',
+        sourceId: door.id,
+        priority: 0,
+      });
     })
     .filter(Boolean);
 }
@@ -90,12 +92,11 @@ function buildWindowTags(windows = [], walls = []) {
       if (!wall) return null;
       const info = windowOutlineOnWall(wall, windowItem);
       const offset = scale(perpendicular(wallDirection(wall)), wall.thickness / 2 + 180);
-      return createTag(
-        `window-tag-${windowItem.id}`,
-        [`W${index + 1}`],
-        add(info.center, offset),
-        { sourceType: 'window', sourceId: windowItem.id, priority: 0 }
-      );
+      return createTag(`window-tag-${windowItem.id}`, [`W${index + 1}`], add(info.center, offset), {
+        sourceType: 'window',
+        sourceId: windowItem.id,
+        priority: 0,
+      });
     })
     .filter(Boolean);
 }

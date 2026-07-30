@@ -40,8 +40,9 @@ function hitTestRoof(modelPos, roofSystem, viewport) {
     }
   }
 
-  const sortedPlanes = [...(plan.roofPlanes || [])]
-    .sort((a, b) => polygonArea(a.outline || []) - polygonArea(b.outline || []));
+  const sortedPlanes = [...(plan.roofPlanes || [])].sort(
+    (a, b) => polygonArea(a.outline || []) - polygonArea(b.outline || []),
+  );
   for (const roofPlane of sortedPlanes) {
     if (pointInPolygon(modelPos, roofPlane.outline || [])) {
       return { id: roofPlane.id, type: 'roofPlane' };
@@ -61,8 +62,8 @@ function clamp(value, min, max) {
 
 function pointAlongEdge(edge, offset) {
   return {
-    x: edge.start.x + (edge.direction.x * offset),
-    y: edge.start.y + (edge.direction.y * offset),
+    x: edge.start.x + edge.direction.x * offset,
+    y: edge.start.y + edge.direction.y * offset,
   };
 }
 
@@ -135,13 +136,17 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
       const dy = modelPos.y - toolState.startPos.y;
 
       if (selectedType === 'roofSystem') {
-        if (toolState.dragType !== 'handle' || toolState.handle !== 'roof-boundary-vertex' || toolState.handleIndex == null) {
+        if (
+          toolState.dragType !== 'handle' ||
+          toolState.handle !== 'roof-boundary-vertex' ||
+          toolState.handleIndex == null
+        ) {
           return;
         }
 
-        const boundaryPolygon = (roofSystem.boundaryPolygon || []).map((point, index) => (
-          index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point
-        ));
+        const boundaryPolygon = (roofSystem.boundaryPolygon || []).map((point, index) =>
+          index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point,
+        );
 
         dispatch({
           type: 'ROOF_UPDATE',
@@ -176,7 +181,9 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
               },
             });
           } else {
-            const edge = buildRoofBoundaryEdges(roofSystem).find((entry) => entry.index === parapet.attachment.edgeIndex) || resolved.edge;
+            const edge =
+              buildRoofBoundaryEdges(roofSystem).find((entry) => entry.index === parapet.attachment.edgeIndex) ||
+              resolved.edge;
             const previousProjection = projectPointToRoofEdge(edge, toolState.startPos);
             const nextProjection = projectPointToRoofEdge(edge, modelPos);
             if (!previousProjection || !nextProjection) return;
@@ -185,7 +192,7 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
               Number(parapet.attachment.startOffset ?? 0),
               Number(parapet.attachment.endOffset ?? edge.length),
               nextProjection.offset - previousProjection.offset,
-              edge.length
+              edge.length,
             );
 
             dispatch({
@@ -242,14 +249,18 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
         const roofOpening = (roofSystem.roofOpenings || []).find((entry) => entry.id === selectedId);
         if (!roofOpening) return;
 
-        if (toolState.dragType === 'handle' && toolState.handle === 'roof-opening-vertex' && toolState.handleIndex != null) {
+        if (
+          toolState.dragType === 'handle' &&
+          toolState.handle === 'roof-opening-vertex' &&
+          toolState.handleIndex != null
+        ) {
           dispatch({
             type: 'ROOF_OPENING_UPDATE',
             roofOpening: {
               id: roofOpening.id,
-              boundaryPoints: roofOpening.boundaryPoints.map((point, index) => (
-                index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point
-              )),
+              boundaryPoints: roofOpening.boundaryPoints.map((point, index) =>
+                index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point,
+              ),
             },
           });
         } else {
@@ -269,14 +280,18 @@ export function createRoofSelectHandler({ dispatch, editorDispatch, roofSystem, 
         const roofPlane = (roofSystem.roofPlanes || []).find((entry) => entry.id === selectedId);
         if (!roofPlane) return;
 
-        if (toolState.dragType === 'handle' && toolState.handle === 'roof-plane-vertex' && toolState.handleIndex != null) {
+        if (
+          toolState.dragType === 'handle' &&
+          toolState.handle === 'roof-plane-vertex' &&
+          toolState.handleIndex != null
+        ) {
           dispatch({
             type: 'ROOF_PLANE_UPDATE',
             roofPlane: {
               id: roofPlane.id,
-              boundaryPoints: (roofPlane.boundaryPoints || []).map((point, index) => (
-                index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point
-              )),
+              boundaryPoints: (roofPlane.boundaryPoints || []).map((point, index) =>
+                index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point,
+              ),
             },
           });
         } else {

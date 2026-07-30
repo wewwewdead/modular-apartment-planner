@@ -14,8 +14,12 @@ describe('selectionUtils', () => {
   it('detects entity intersection for line and rect', () => {
     const box = normalizeSelectionBox({ x: 0, y: 0 }, { x: 120, y: 80 });
 
-    expect(entityIntersectsSelectionBox({ id: 'line-1', type: 'line', x1: 20, y1: 20, x2: 140, y2: 20 }, box, [])).toBe(true);
-    expect(entityIntersectsSelectionBox({ id: 'rect-1', type: 'rect', x: 20, y: 20, width: 40, height: 30 }, box, [])).toBe(true);
+    expect(entityIntersectsSelectionBox({ id: 'line-1', type: 'line', x1: 20, y1: 20, x2: 140, y2: 20 }, box, [])).toBe(
+      true,
+    );
+    expect(
+      entityIntersectsSelectionBox({ id: 'rect-1', type: 'rect', x: 20, y: 20, width: 40, height: 30 }, box, []),
+    ).toBe(true);
   });
 
   it('returns selected ids from a marquee', () => {

@@ -70,10 +70,38 @@ export function collectSnapPointsFromEntities(entities) {
       if (entity.type === 'rect') {
         const corners = getRectCorners(entity);
         return [
-          buildSnapPoint({ x: corners.topLeft.x, y: corners.topLeft.y, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'topLeft' }),
-          buildSnapPoint({ x: corners.topRight.x, y: corners.topRight.y, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'topRight' }),
-          buildSnapPoint({ x: corners.bottomLeft.x, y: corners.bottomLeft.y, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'bottomLeft' }),
-          buildSnapPoint({ x: corners.bottomRight.x, y: corners.bottomRight.y, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'bottomRight' }),
+          buildSnapPoint({
+            x: corners.topLeft.x,
+            y: corners.topLeft.y,
+            entityId: entity.id,
+            entityType: entity.type,
+            sourceType: 'corner',
+            sourceKey: 'topLeft',
+          }),
+          buildSnapPoint({
+            x: corners.topRight.x,
+            y: corners.topRight.y,
+            entityId: entity.id,
+            entityType: entity.type,
+            sourceType: 'corner',
+            sourceKey: 'topRight',
+          }),
+          buildSnapPoint({
+            x: corners.bottomLeft.x,
+            y: corners.bottomLeft.y,
+            entityId: entity.id,
+            entityType: entity.type,
+            sourceType: 'corner',
+            sourceKey: 'bottomLeft',
+          }),
+          buildSnapPoint({
+            x: corners.bottomRight.x,
+            y: corners.bottomRight.y,
+            entityId: entity.id,
+            entityType: entity.type,
+            sourceType: 'corner',
+            sourceKey: 'bottomRight',
+          }),
           buildSnapPoint({
             x: (corners.topLeft.x + corners.topRight.x) / 2,
             y: (corners.topLeft.y + corners.topRight.y) / 2,
@@ -123,15 +151,17 @@ export function collectSnapPointsFromEntities(entities) {
       }
 
       if (entity.type === 'ellipse') {
-        return getEllipseSnapPoints(entity).map((snapPoint) => buildSnapPoint({
-          x: snapPoint.x,
-          y: snapPoint.y,
-          entityId: entity.id,
-          entityType: entity.type,
-          sourceType: snapPoint.sourceType,
-          sourceKey: snapPoint.sourceKey,
-          snapType: snapPoint.snapType,
-        }));
+        return getEllipseSnapPoints(entity).map((snapPoint) =>
+          buildSnapPoint({
+            x: snapPoint.x,
+            y: snapPoint.y,
+            entityId: entity.id,
+            entityType: entity.type,
+            sourceType: snapPoint.sourceType,
+            sourceKey: snapPoint.sourceKey,
+            snapType: snapPoint.snapType,
+          }),
+        );
       }
 
       if (entity.type === 'feature') {
@@ -150,27 +180,73 @@ export function collectSnapPointsFromEntities(entities) {
 
         if (entity.shape === 'rect') {
           return [
-            buildSnapPoint({ x: entity.x, y: entity.y, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'topLeft' }),
-            buildSnapPoint({ x: entity.x + entity.width, y: entity.y, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'topRight' }),
-            buildSnapPoint({ x: entity.x, y: entity.y + entity.height, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'bottomLeft' }),
-            buildSnapPoint({ x: entity.x + entity.width, y: entity.y + entity.height, entityId: entity.id, entityType: entity.type, sourceType: 'corner', sourceKey: 'bottomRight' }),
+            buildSnapPoint({
+              x: entity.x,
+              y: entity.y,
+              entityId: entity.id,
+              entityType: entity.type,
+              sourceType: 'corner',
+              sourceKey: 'topLeft',
+            }),
+            buildSnapPoint({
+              x: entity.x + entity.width,
+              y: entity.y,
+              entityId: entity.id,
+              entityType: entity.type,
+              sourceType: 'corner',
+              sourceKey: 'topRight',
+            }),
+            buildSnapPoint({
+              x: entity.x,
+              y: entity.y + entity.height,
+              entityId: entity.id,
+              entityType: entity.type,
+              sourceType: 'corner',
+              sourceKey: 'bottomLeft',
+            }),
+            buildSnapPoint({
+              x: entity.x + entity.width,
+              y: entity.y + entity.height,
+              entityId: entity.id,
+              entityType: entity.type,
+              sourceType: 'corner',
+              sourceKey: 'bottomRight',
+            }),
           ];
         }
 
         if (entity.shape === 'ellipse') {
-          return getEllipseSnapPoints(entity).map((snapPoint) => buildSnapPoint({
-            x: snapPoint.x,
-            y: snapPoint.y,
-            entityId: entity.id,
-            entityType: entity.type,
-            sourceType: snapPoint.sourceType,
-            sourceKey: snapPoint.sourceKey,
-            snapType: snapPoint.snapType,
-          }));
+          return getEllipseSnapPoints(entity).map((snapPoint) =>
+            buildSnapPoint({
+              x: snapPoint.x,
+              y: snapPoint.y,
+              entityId: entity.id,
+              entityType: entity.type,
+              sourceType: snapPoint.sourceType,
+              sourceKey: snapPoint.sourceKey,
+              snapType: snapPoint.snapType,
+            }),
+          );
         }
 
         if (entity.shape === 'polygon') {
-          return (entity.points || []).map((point, index) => buildSnapPoint({
+          return (entity.points || []).map((point, index) =>
+            buildSnapPoint({
+              x: point.x,
+              y: point.y,
+              entityId: entity.id,
+              entityType: entity.type,
+              sourceType: 'vertex',
+              sourceKey: String(index),
+              snapType: 'endpoint',
+            }),
+          );
+        }
+      }
+
+      if (entity.type === 'polyline') {
+        const vertexPoints = entity.points.map((point, index) =>
+          buildSnapPoint({
             x: point.x,
             y: point.y,
             entityId: entity.id,
@@ -178,28 +254,18 @@ export function collectSnapPointsFromEntities(entities) {
             sourceType: 'vertex',
             sourceKey: String(index),
             snapType: 'endpoint',
-          }));
-        }
-      }
-
-      if (entity.type === 'polyline') {
-        const vertexPoints = entity.points.map((point, index) => buildSnapPoint({
-          x: point.x,
-          y: point.y,
-          entityId: entity.id,
-          entityType: entity.type,
-          sourceType: 'vertex',
-          sourceKey: String(index),
-          snapType: 'endpoint',
-        }));
-        const midpoints = getPolylineSegments(entity).map((segment) => buildSnapPoint({
-          x: (segment.start.x + segment.end.x) / 2,
-          y: (segment.start.y + segment.end.y) / 2,
-          entityId: entity.id,
-          entityType: entity.type,
-          sourceType: 'midpoint',
-          sourceKey: `segment-${segment.segmentIndex}`,
-        }));
+          }),
+        );
+        const midpoints = getPolylineSegments(entity).map((segment) =>
+          buildSnapPoint({
+            x: (segment.start.x + segment.end.x) / 2,
+            y: (segment.start.y + segment.end.y) / 2,
+            entityId: entity.id,
+            entityType: entity.type,
+            sourceType: 'midpoint',
+            sourceKey: `segment-${segment.segmentIndex}`,
+          }),
+        );
         return [...vertexPoints, ...midpoints];
       }
 
@@ -254,23 +320,53 @@ export function collectSnapSegmentsFromEntities(entities) {
     }
 
     if (entity.type === 'line') {
-      return [{
-        start: { x: entity.x1, y: entity.y1 },
-        end: { x: entity.x2, y: entity.y2 },
-        entityId: entity.id,
-        entityType: entity.type,
-        sourceType: 'segment',
-        sourceKey: 'segment',
-      }];
+      return [
+        {
+          start: { x: entity.x1, y: entity.y1 },
+          end: { x: entity.x2, y: entity.y2 },
+          entityId: entity.id,
+          entityType: entity.type,
+          sourceType: 'segment',
+          sourceKey: 'segment',
+        },
+      ];
     }
 
     if (entity.type === 'rect') {
       const corners = getRectCorners(entity);
       return [
-        { start: corners.topLeft, end: corners.topRight, entityId: entity.id, entityType: entity.type, sourceType: 'segment', sourceKey: 'top' },
-        { start: corners.topRight, end: corners.bottomRight, entityId: entity.id, entityType: entity.type, sourceType: 'segment', sourceKey: 'right' },
-        { start: corners.bottomRight, end: corners.bottomLeft, entityId: entity.id, entityType: entity.type, sourceType: 'segment', sourceKey: 'bottom' },
-        { start: corners.bottomLeft, end: corners.topLeft, entityId: entity.id, entityType: entity.type, sourceType: 'segment', sourceKey: 'left' },
+        {
+          start: corners.topLeft,
+          end: corners.topRight,
+          entityId: entity.id,
+          entityType: entity.type,
+          sourceType: 'segment',
+          sourceKey: 'top',
+        },
+        {
+          start: corners.topRight,
+          end: corners.bottomRight,
+          entityId: entity.id,
+          entityType: entity.type,
+          sourceType: 'segment',
+          sourceKey: 'right',
+        },
+        {
+          start: corners.bottomRight,
+          end: corners.bottomLeft,
+          entityId: entity.id,
+          entityType: entity.type,
+          sourceType: 'segment',
+          sourceKey: 'bottom',
+        },
+        {
+          start: corners.bottomLeft,
+          end: corners.topLeft,
+          entityId: entity.id,
+          entityType: entity.type,
+          sourceType: 'segment',
+          sourceKey: 'left',
+        },
       ];
     }
 
@@ -415,13 +511,16 @@ export function findNearestPointOnSegment(segments, worldPoint, tolerance) {
   for (const segment of segments) {
     const dx = segment.end.x - segment.start.x;
     const dy = segment.end.y - segment.start.y;
-    const lengthSquared = (dx * dx) + (dy * dy);
+    const lengthSquared = dx * dx + dy * dy;
 
     if (!lengthSquared) {
       continue;
     }
 
-    const t = Math.max(0, Math.min(1, (((worldPoint.x - segment.start.x) * dx) + ((worldPoint.y - segment.start.y) * dy)) / lengthSquared));
+    const t = Math.max(
+      0,
+      Math.min(1, ((worldPoint.x - segment.start.x) * dx + (worldPoint.y - segment.start.y) * dy) / lengthSquared),
+    );
     const candidate = {
       x: segment.start.x + dx * t,
       y: segment.start.y + dy * t,
@@ -456,13 +555,13 @@ export function findPerpendicularSnapPoint(segments, worldPoint, anchorPoint, to
   for (const segment of segments) {
     const dx = segment.end.x - segment.start.x;
     const dy = segment.end.y - segment.start.y;
-    const lengthSquared = (dx * dx) + (dy * dy);
+    const lengthSquared = dx * dx + dy * dy;
 
     if (!lengthSquared) {
       continue;
     }
 
-    const t = (((anchorPoint.x - segment.start.x) * dx) + ((anchorPoint.y - segment.start.y) * dy)) / lengthSquared;
+    const t = ((anchorPoint.x - segment.start.x) * dx + (anchorPoint.y - segment.start.y) * dy) / lengthSquared;
 
     if (t < 0 || t > 1) {
       continue;

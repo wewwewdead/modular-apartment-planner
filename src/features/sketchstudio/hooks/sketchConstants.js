@@ -18,25 +18,59 @@ export const PROFILE_CLOSE_TOLERANCE_PX = 14;
 export const TRANSFORM_DRAG_THRESHOLD_PX = 3;
 
 export const TOOL_DEFINITIONS = [
-  { id: 'select', label: 'Select', shortLabel: 'SEL', shortcut: 'V', description: 'Pick, marquee, and transform entities' },
+  {
+    id: 'select',
+    label: 'Select',
+    shortLabel: 'SEL',
+    shortcut: 'V',
+    description: 'Pick, marquee, and transform entities',
+  },
   { id: 'pan', label: 'Pan', shortLabel: 'PAN', shortcut: 'H', description: 'Move the viewport' },
   { id: 'line', label: 'Line', shortLabel: 'LIN', shortcut: 'L', description: 'Create line entities' },
   { id: 'rect', label: 'Rectangle', shortLabel: 'REC', shortcut: 'R', description: 'Create rectangle entities' },
   { id: 'circle', label: 'Circle', shortLabel: 'CIR', shortcut: 'C', description: 'Create circle entities' },
   { id: 'polyline', label: 'Polyline', shortLabel: 'PLY', shortcut: 'P', description: 'Create multi-segment paths' },
   { id: 'arc', label: 'Arc', shortLabel: 'ARC', shortcut: 'A', description: 'Create three-point arcs' },
-  { id: 'text', label: 'Text', shortLabel: 'TXT', shortcut: 'T', description: 'Place leader labels with a target point and offset' },
-  { id: 'offset', label: 'Offset', shortLabel: 'OFF', shortcut: 'O', description: 'Create offset copies of supported profiles' },
-  { id: 'holeCircle', label: 'Hole', shortLabel: 'HOL', shortcut: 'J', description: 'Create circular subtractive features' },
-  { id: 'cutoutRect', label: 'Cutout', shortLabel: 'CUT', shortcut: 'U', description: 'Create rectangular subtractive features' },
-  { id: 'dimension', label: 'Dimension', shortLabel: 'DIM', shortcut: 'D', description: 'Create linear dimension annotations' },
+  {
+    id: 'text',
+    label: 'Text',
+    shortLabel: 'TXT',
+    shortcut: 'T',
+    description: 'Place leader labels with a target point and offset',
+  },
+  {
+    id: 'offset',
+    label: 'Offset',
+    shortLabel: 'OFF',
+    shortcut: 'O',
+    description: 'Create offset copies of supported profiles',
+  },
+  {
+    id: 'holeCircle',
+    label: 'Hole',
+    shortLabel: 'HOL',
+    shortcut: 'J',
+    description: 'Create circular subtractive features',
+  },
+  {
+    id: 'cutoutRect',
+    label: 'Cutout',
+    shortLabel: 'CUT',
+    shortcut: 'U',
+    description: 'Create rectangular subtractive features',
+  },
+  {
+    id: 'dimension',
+    label: 'Dimension',
+    shortLabel: 'DIM',
+    shortcut: 'D',
+    description: 'Create linear dimension annotations',
+  },
   { id: 'fillet', label: 'Fillet', shortLabel: 'FIL', shortcut: 'F', description: 'Round corners with an arc radius' },
   { id: 'angle', label: 'Angle', shortLabel: 'ANG', shortcut: 'Q', description: 'Measure angles between two rays' },
 ];
 
-export const TOOL_SHORTCUT_MAP = new Map(
-  TOOL_DEFINITIONS.map((tool) => [tool.shortcut.toLowerCase(), tool.id]),
-);
+export const TOOL_SHORTCUT_MAP = new Map(TOOL_DEFINITIONS.map((tool) => [tool.shortcut.toLowerCase(), tool.id]));
 
 export function getEmptySnapState() {
   return {
@@ -71,24 +105,24 @@ export function constrainAnglePoint(vertex, p1, cursorPoint, angleDeg, isometric
 
   if (isometricPlane) {
     const { axisA, axisB } = getIsometricPlaneAxes(isometricPlane);
-    const det = (axisA.x * axisB.y) - (axisA.y * axisB.x);
+    const det = axisA.x * axisB.y - axisA.y * axisB.x;
     if (Math.abs(det) < 1e-6) return cursorPoint;
 
     const d1 = { x: p1.x - vertex.x, y: p1.y - vertex.y };
-    const proj1a = ((d1.x * axisB.y) - (d1.y * axisB.x)) / det;
-    const proj1b = ((axisA.x * d1.y) - (axisA.y * d1.x)) / det;
+    const proj1a = (d1.x * axisB.y - d1.y * axisB.x) / det;
+    const proj1b = (axisA.x * d1.y - axisA.y * d1.x) / det;
     const baseAngle = Math.atan2(proj1b, proj1a);
 
     const dc = { x: cursorPoint.x - vertex.x, y: cursorPoint.y - vertex.y };
-    const projCa = ((dc.x * axisB.y) - (dc.y * axisB.x)) / det;
-    const projCb = ((axisA.x * dc.y) - (axisA.y * dc.x)) / det;
+    const projCa = (dc.x * axisB.y - dc.y * axisB.x) / det;
+    const projCb = (axisA.x * dc.y - axisA.y * dc.x) / det;
     const cursorPlaneAngle = Math.atan2(projCb, projCa);
 
     let delta = cursorPlaneAngle - baseAngle;
     if (delta > Math.PI) delta -= 2 * Math.PI;
     if (delta < -Math.PI) delta += 2 * Math.PI;
     const sign = delta >= 0 ? 1 : -1;
-    const targetPlaneAngle = baseAngle + sign * (angleDeg * Math.PI / 180);
+    const targetPlaneAngle = baseAngle + sign * ((angleDeg * Math.PI) / 180);
 
     const pa = Math.cos(targetPlaneAngle);
     const pb = Math.sin(targetPlaneAngle);
@@ -113,7 +147,7 @@ export function constrainAnglePoint(vertex, p1, cursorPoint, angleDeg, isometric
   if (delta < -Math.PI) delta += 2 * Math.PI;
 
   const sign = delta >= 0 ? 1 : -1;
-  const targetAngle = baseAngle + sign * (angleDeg * Math.PI / 180);
+  const targetAngle = baseAngle + sign * ((angleDeg * Math.PI) / 180);
 
   return {
     x: vertex.x + Math.cos(targetAngle) * dist,
@@ -131,9 +165,9 @@ export function parsePositiveNumber(rawValue) {
 }
 
 export function isOffsettableEntity(entity) {
-  return entity?.type === 'line'
-    || entity?.type === 'rect'
-    || (entity?.type === 'polyline' && isPolylineClosed(entity));
+  return (
+    entity?.type === 'line' || entity?.type === 'rect' || (entity?.type === 'polyline' && isPolylineClosed(entity))
+  );
 }
 
 export function getRectEndpointFromDraft(draft) {
@@ -142,7 +176,8 @@ export function getRectEndpointFromDraft(draft) {
   }
 
   const width = parsePositiveNumber(draft.precisionInput.width) ?? Math.abs(draft.currentPoint.x - draft.startPoint.x);
-  const height = parsePositiveNumber(draft.precisionInput.height) ?? Math.abs(draft.currentPoint.y - draft.startPoint.y);
+  const height =
+    parsePositiveNumber(draft.precisionInput.height) ?? Math.abs(draft.currentPoint.y - draft.startPoint.y);
   const signX = draft.currentPoint.x >= draft.startPoint.x ? 1 : -1;
   const signY = draft.currentPoint.y >= draft.startPoint.y ? 1 : -1;
 
@@ -177,7 +212,8 @@ export function getCircleRadiusPointFromDraft(draft) {
     return null;
   }
 
-  const radius = parsePositiveNumber(draft.precisionInput.radius) ?? calculateDistance(draft.startPoint, draft.currentPoint);
+  const radius =
+    parsePositiveNumber(draft.precisionInput.radius) ?? calculateDistance(draft.startPoint, draft.currentPoint);
   return projectPointFromStart(draft.startPoint, draft.currentPoint, radius);
 }
 
@@ -186,8 +222,8 @@ function getHolePreviewFromDraft(draft) {
     return null;
   }
 
-  const diameter = parsePositiveNumber(draft.precisionInput.diameter)
-    ?? calculateDistance(draft.startPoint, draft.currentPoint) * 2;
+  const diameter =
+    parsePositiveNumber(draft.precisionInput.diameter) ?? calculateDistance(draft.startPoint, draft.currentPoint) * 2;
 
   return {
     type: 'feature',
@@ -202,8 +238,8 @@ function getHolePreviewFromDraft(draft) {
 
 function getHolePreviewFromDraftWithMode(draft, viewMode = 'plan', isometricPlane = 'top') {
   if (viewMode === 'isometric') {
-    const diameter = parsePositiveNumber(draft.precisionInput.diameter)
-      ?? calculateDistance(draft.startPoint, draft.currentPoint) * 2;
+    const diameter =
+      parsePositiveNumber(draft.precisionInput.diameter) ?? calculateDistance(draft.startPoint, draft.currentPoint) * 2;
     const ellipse = buildIsometricEllipse(draft.startPoint, draft.currentPoint, isometricPlane, {
       radius: diameter / 2,
     });
@@ -225,9 +261,7 @@ function getHolePreviewFromDraftWithMode(draft, viewMode = 'plan', isometricPlan
 }
 
 function getCutoutPreviewFromDraft(draft, viewMode = 'plan', isometricPlane = 'top') {
-  const endPoint = viewMode === 'isometric'
-    ? null
-    : getRectEndpointFromDraft(draft);
+  const endPoint = viewMode === 'isometric' ? null : getRectEndpointFromDraft(draft);
 
   if (viewMode === 'isometric') {
     const shape = getIsometricRectangleFromDraft(draft, isometricPlane);
@@ -268,7 +302,8 @@ export function buildOffsetEntityFromDraft(draft, document, targetLayerId) {
     return null;
   }
 
-  const distance = parsePositiveNumber(draft.precisionInput.offset) ?? measureOffsetDistance(sourceEntity, draft.currentPoint);
+  const distance =
+    parsePositiveNumber(draft.precisionInput.offset) ?? measureOffsetDistance(sourceEntity, draft.currentPoint);
 
   if (!distance) {
     return null;
@@ -321,7 +356,8 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
 
   if (draft.type === 'circle' && draft.startPoint && draft.currentPoint) {
     if (ui?.viewMode === 'isometric') {
-      const radius = parsePositiveNumber(draft.precisionInput.radius) ?? calculateDistance(draft.startPoint, draft.currentPoint);
+      const radius =
+        parsePositiveNumber(draft.precisionInput.radius) ?? calculateDistance(draft.startPoint, draft.currentPoint);
       const ellipse = buildIsometricEllipse(draft.startPoint, getCircleRadiusPointFromDraft(draft), ui.isometricPlane, {
         radius,
       });
@@ -375,7 +411,13 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
 
   if (draft.type === 'arc') {
     if (draft.points.length === 1 && draft.currentPoint) {
-      return { type: 'line', x1: draft.points[0].x, y1: draft.points[0].y, x2: draft.currentPoint.x, y2: draft.currentPoint.y };
+      return {
+        type: 'line',
+        x1: draft.points[0].x,
+        y1: draft.points[0].y,
+        x2: draft.currentPoint.x,
+        y2: draft.currentPoint.y,
+      };
     }
 
     if (draft.points.length === 2 && draft.currentPoint) {
@@ -425,9 +467,10 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
       const arcRadius = calculateDistance(vertex, draft.currentPoint);
       const inputAngle = parsePositiveNumber(draft.precisionInput?.angle);
       const isoPlane = ui?.viewMode === 'isometric' ? ui.isometricPlane : null;
-      const p2 = inputAngle != null
-        ? constrainAnglePoint(vertex, draft.points[0], draft.currentPoint, inputAngle, isoPlane)
-        : draft.currentPoint;
+      const p2 =
+        inputAngle != null
+          ? constrainAnglePoint(vertex, draft.points[0], draft.currentPoint, inputAngle, isoPlane)
+          : draft.currentPoint;
       return {
         type: 'angle-dimension',
         vertex,

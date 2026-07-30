@@ -17,12 +17,14 @@ const sampleRows = [
 
 describe('getBomEstimateSummary', () => {
   it('summarizes approximation flags into export-friendly labels', () => {
-    expect(getBomEstimateSummary({
-      dimensionAccuracy: 'approximate',
-      dimensionNote: 'Bounding-box dimensions.',
-      costAccuracy: 'approximate',
-      costNote: 'Bounding-box cost.',
-    })).toMatchObject({
+    expect(
+      getBomEstimateSummary({
+        dimensionAccuracy: 'approximate',
+        dimensionNote: 'Bounding-box dimensions.',
+        costAccuracy: 'approximate',
+        costNote: 'Bounding-box cost.',
+      }),
+    ).toMatchObject({
       estimateStatus: 'approximate-dimensions-and-cost',
       shortLabel: 'Approx. dims + cost',
     });

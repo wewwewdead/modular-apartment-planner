@@ -3,17 +3,20 @@ import { resolveSketchDocument } from './sketchDocumentResolver';
 import { createSketchJoint } from './sketchJoineryUtils';
 
 function getPolylineBounds(entity) {
-  return entity.points.reduce((bounds, point) => ({
-    minX: Math.min(bounds.minX, point.x),
-    minY: Math.min(bounds.minY, point.y),
-    maxX: Math.max(bounds.maxX, point.x),
-    maxY: Math.max(bounds.maxY, point.y),
-  }), {
-    minX: Number.POSITIVE_INFINITY,
-    minY: Number.POSITIVE_INFINITY,
-    maxX: Number.NEGATIVE_INFINITY,
-    maxY: Number.NEGATIVE_INFINITY,
-  });
+  return entity.points.reduce(
+    (bounds, point) => ({
+      minX: Math.min(bounds.minX, point.x),
+      minY: Math.min(bounds.minY, point.y),
+      maxX: Math.max(bounds.maxX, point.x),
+      maxY: Math.max(bounds.maxY, point.y),
+    }),
+    {
+      minX: Number.POSITIVE_INFINITY,
+      minY: Number.POSITIVE_INFINITY,
+      maxX: Number.NEGATIVE_INFINITY,
+      maxY: Number.NEGATIVE_INFINITY,
+    },
+  );
 }
 
 describe('sketchDocumentResolver', () => {
@@ -236,7 +239,9 @@ describe('sketchDocumentResolver', () => {
       status: 'applied',
       canApply: true,
     });
-    expect(fabricationReadyResolution.manufacturingExportEntities.some((entity) => entity.type === 'feature')).toBe(true);
+    expect(fabricationReadyResolution.manufacturingExportEntities.some((entity) => entity.type === 'feature')).toBe(
+      true,
+    );
   });
 
   it('recomputes automatic tab-slot depth from source overlap when geometry changes', () => {
@@ -374,7 +379,9 @@ describe('sketchDocumentResolver', () => {
         },
       ],
     });
-    const sourceProfile = resolution.manufacturingPreviewEntities.find((entity) => entity.id === 'joinery-profile-shelf');
+    const sourceProfile = resolution.manufacturingPreviewEntities.find(
+      (entity) => entity.id === 'joinery-profile-shelf',
+    );
 
     expect(resolution.document.joints[0]).toMatchObject({
       id: 'joint-front-view',

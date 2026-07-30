@@ -12,7 +12,11 @@ describe('profileUtils', () => {
   it('detects and closes polylines', () => {
     const polyline = {
       type: 'polyline',
-      points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }],
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+      ],
       closed: false,
     };
 
@@ -24,7 +28,12 @@ describe('profileUtils', () => {
     const closed = {
       id: 'polyline-1',
       type: 'polyline',
-      points: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }],
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ],
       closed: true,
     };
 
@@ -55,7 +64,11 @@ describe('profileUtils', () => {
       {
         id: 'polyline-1',
         type: 'polyline',
-        points: [{ x: 0, y: 0 }, { x: 100, y: 50 }, { x: 0, y: 100 }],
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 50 },
+          { x: 0, y: 100 },
+        ],
         closed: true,
         meta: { projectionMode: 'isometric', isometricPlane: 'top' },
       },

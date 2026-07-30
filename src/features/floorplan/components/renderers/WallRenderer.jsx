@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { DRAWING_GRAPHICS } from '@/sheets/standards';
 
-export default function WallRenderer({ walls, columns }) {
+function WallRenderer({ walls, columns }) {
   return (
     <g className="walls">
       {walls.map((wall) => {
@@ -23,3 +24,5 @@ export default function WallRenderer({ walls, columns }) {
     </g>
   );
 }
+
+export default memo(WallRenderer);

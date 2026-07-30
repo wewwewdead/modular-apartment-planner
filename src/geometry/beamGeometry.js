@@ -6,12 +6,7 @@ const EPSILON = 1e-6;
 function makeOutline(start, end, width) {
   const direction = normalize(subtract(end, start));
   const offset = scale(perpendicular(direction), width / 2);
-  return [
-    add(start, offset),
-    add(end, offset),
-    subtract(end, offset),
-    subtract(start, offset),
-  ];
+  return [add(start, offset), add(end, offset), subtract(end, offset), subtract(start, offset)];
 }
 
 function findColumn(columns, ref) {
@@ -81,8 +76,7 @@ export function resolveBeamAxis(beam, columns = []) {
   if (!startResolved || !endResolved) return null;
 
   // Prevent zero-length beams (same column)
-  if (startResolved.column && endResolved.column
-    && startResolved.column.id === endResolved.column.id) return null;
+  if (startResolved.column && endResolved.column && startResolved.column.id === endResolved.column.id) return null;
 
   return {
     startColumn: startResolved.column,

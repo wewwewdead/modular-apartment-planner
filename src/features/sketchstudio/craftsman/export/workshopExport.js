@@ -8,8 +8,11 @@ import { exportBomWithCost } from '../../utils/bomExportUtils';
 import { generateAssemblyHtml } from './assemblyHtmlExport';
 import { generateBomHtml } from './bomHtmlExport';
 import { exportEntitiesToDxf } from './dxfExport';
+import { buildNestedSheetFilename, exportNestedSheetsToDxf } from './nestedDxfExport';
 import { exportEntitiesToSvg } from './svgExport';
 import { generateAssemblySteps } from '../utils/assemblyGenerator';
+
+const NESTED_SHEETS_FOLDER = 'sheets';
 
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'Untitled';
@@ -24,8 +27,24 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function buildWorkshopReadme(name, errors, bomRows) {
-  const approximateRows = (bomRows || []).filter((row) => row.dimensionAccuracy === 'approximate' || row.costAccuracy === 'approximate');
+function buildNestedSheetsReadmeLine(sheetCount) {
+  if (!sheetCount) {
+    return [];
+  }
+
+  const firstSheet = buildNestedSheetFilename(0, sheetCount);
+  const lastSheet = buildNestedSheetFilename(sheetCount - 1, sheetCount);
+  const range = sheetCount === 1 ? lastSheet : `${firstSheet} .. ${lastSheet}`;
+
+  return [
+    `  ${NESTED_SHEETS_FOLDER}/${range} - ${sheetCount} nested sheet${sheetCount === 1 ? '' : 's'}, one DXF per sheet of stock (stock outline on layer SHEET, parts cut-ready in place)`,
+  ];
+}
+
+function buildWorkshopReadme(name, errors, bomRows, sheetCount = 0) {
+  const approximateRows = (bomRows || []).filter(
+    (row) => row.dimensionAccuracy === 'approximate' || row.costAccuracy === 'approximate',
+  );
 
   return [
     `${name} - Workshop Package`,
@@ -33,6 +52,7 @@ function buildWorkshopReadme(name, errors, bomRows) {
     '',
     'Contents:',
     `  ${name}.dxf - CNC/laser-ready vector file`,
+    ...buildNestedSheetsReadmeLine(sheetCount),
     `  ${name}.svg - Vector file for Inkscape/Illustrator`,
     '  cutting-list.csv - Bill of Materials (spreadsheet)',
     '  cutting-list.html - BOM report (open in browser)',
@@ -61,6 +81,7 @@ export function buildWorkshopPackageContents(
   const folderName = `${name}-Workshop`;
   const files = [];
   const errors = [];
+  let nestedSheetCount = 0;
 
   try {
     files.push({
@@ -72,6 +93,26 @@ export function buildWorkshopPackageContents(
     });
   } catch (error) {
     errors.push(`DXF: ${error.message}`);
+  }
+
+  try {
+    // One cut file per nested sheet of stock. Projects with no sheet-stock parts
+    // (all-linear or empty BOM) simply contribute no files and no warning.
+    const nestedSheets = exportNestedSheetsToDxf(entities, bomRows, {
+      kerf: options.kerf,
+      sheetSize: options.sheetSize,
+      bladeKerf: options.bladeKerf,
+    });
+    nestedSheetCount = nestedSheets.length;
+    nestedSheets.forEach((sheet) => {
+      files.push({
+        name: `${NESTED_SHEETS_FOLDER}/${sheet.filename}`,
+        content: sheet.content,
+      });
+    });
+  } catch (error) {
+    nestedSheetCount = 0;
+    errors.push(`Nested sheet DXF: ${error.message}`);
   }
 
   try {
@@ -114,7 +155,7 @@ export function buildWorkshopPackageContents(
 
   files.push({
     name: 'README.txt',
-    content: buildWorkshopReadme(name, errors, bomRows),
+    content: buildWorkshopReadme(name, errors, bomRows, nestedSheetCount),
   });
 
   return {

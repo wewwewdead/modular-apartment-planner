@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import {
   cancelDraft,
+  closeShortcutOverlay,
   commitEntity,
   deleteSelected,
   endTransform,
@@ -8,6 +9,7 @@ import {
   setActiveTool,
   setDocumentEntities,
   setPrecisionInput,
+  toggleShortcutOverlay,
 } from '../store/sketchStudioActions';
 import { calculateDistance } from '../utils/canvasMath';
 import { createAngleDimensionEntity, createPolylineEntity } from '../utils/entityUtils';
@@ -17,6 +19,7 @@ import { applyFillet } from '../utils/filletUtils';
 import { removeLastPolylineVertex } from '../utils/polylineUtils';
 import { translateEntities } from '../utils/transformUtils';
 import { TOOL_SHORTCUT_MAP, isEditableTarget, constrainAnglePoint, parsePositiveNumber } from './sketchConstants';
+import { SHORTCUT_OVERLAY_TOGGLE_KEY } from '../utils/shortcutManifest';
 
 export default function useSketchKeyboard(state, dispatch, callbacks) {
   const { commitPrecisionDraft, undo, redo, isSpacePanActiveRef, groupSelection, degroupSelection } = callbacks;
@@ -25,6 +28,16 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     const handleKeyDown = (event) => {
       const key = String(event.key).toLowerCase();
       const hasPrimaryModifier = event.ctrlKey || event.metaKey;
+
+      // The shortcut overlay is modal: while it is open it swallows every binding so
+      // Escape closes the overlay instead of also cancelling the active draft.
+      if (state.ui.shortcutOverlayOpen) {
+        if (event.key === 'Escape' || event.key === SHORTCUT_OVERLAY_TOGGLE_KEY) {
+          event.preventDefault();
+          dispatch(closeShortcutOverlay());
+        }
+        return;
+      }
 
       if (hasPrimaryModifier && !event.altKey && key === 'z') {
         event.preventDefault();
@@ -43,6 +56,12 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
       }
 
       if (isEditableTarget(event.target)) return;
+
+      if (event.key === SHORTCUT_OVERLAY_TOGGLE_KEY && !hasPrimaryModifier && !event.altKey) {
+        event.preventDefault();
+        dispatch(toggleShortcutOverlay());
+        return;
+      }
 
       if (hasPrimaryModifier && !event.altKey && key === 'g') {
         if (event.shiftKey) {
@@ -253,6 +272,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     state.ui.activeLayerId,
     state.ui.activeTool,
     state.ui.isometricPlane,
+    state.ui.shortcutOverlayOpen,
     state.ui.viewMode,
   ]);
 }

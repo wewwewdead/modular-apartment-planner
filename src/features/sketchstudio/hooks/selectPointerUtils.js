@@ -25,7 +25,7 @@ export function resolveSelectPointerDownAction({
   }
 
   return {
-    intent: 'transform-next-selection',
+    intent: 'select-only',
     selectionIds: mergeSelection(selectedIds, targetSelectionIds, shiftKey),
   };
 }

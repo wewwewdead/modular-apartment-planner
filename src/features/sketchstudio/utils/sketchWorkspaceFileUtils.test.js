@@ -32,14 +32,17 @@ describe('sketchWorkspaceFileUtils', () => {
     const handle = { name: 'Desk.sketch.json', createWritable };
     globalThis.showSaveFilePicker = vi.fn().mockResolvedValue(handle);
 
-    const result = await saveSketchWorkspaceFile({
-      document: createBlankSketchDocument({ name: 'Desk' }),
-      objectDraft: null,
-      viewport: { zoom: 1, panX: 0, panY: 0 },
-      ui: { activeLayerId: 'default', snapEnabled: true, orthoEnabled: false },
-    }, {
-      savedAt: '2026-03-22T00:00:00.000Z',
-    });
+    const result = await saveSketchWorkspaceFile(
+      {
+        document: createBlankSketchDocument({ name: 'Desk' }),
+        objectDraft: null,
+        viewport: { zoom: 1, panX: 0, panY: 0 },
+        ui: { activeLayerId: 'default', snapEnabled: true, orthoEnabled: false },
+      },
+      {
+        savedAt: '2026-03-22T00:00:00.000Z',
+      },
+    );
 
     expect(globalThis.showSaveFilePicker).toHaveBeenCalled();
     expect(createWritable).toHaveBeenCalled();
@@ -52,14 +55,16 @@ describe('sketchWorkspaceFileUtils', () => {
   it('opens and deserializes a sketch workspace through the native open picker', async () => {
     const file = {
       name: 'Opened.sketch.json',
-      text: vi.fn().mockResolvedValue(JSON.stringify({
-        kind: 'sketchstudio-workspace',
-        version: 1,
-        document: createBlankSketchDocument({ name: 'Opened Sketch' }),
-        objectDraft: null,
-        viewport: { zoom: 1, panX: 0, panY: 0 },
-        ui: { activeLayerId: 'default', snapEnabled: true, orthoEnabled: false },
-      })),
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          kind: 'sketchstudio-workspace',
+          version: 1,
+          document: createBlankSketchDocument({ name: 'Opened Sketch' }),
+          objectDraft: null,
+          viewport: { zoom: 1, panX: 0, panY: 0 },
+          ui: { activeLayerId: 'default', snapEnabled: true, orthoEnabled: false },
+        }),
+      ),
     };
     const handle = {
       name: 'Opened.sketch.json',

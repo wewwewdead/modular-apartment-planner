@@ -57,11 +57,13 @@ export function expandPartPattern(sourcePart, pattern) {
       ...sourcePart,
       id: `${sourcePart.id}-pattern-${pattern.id}-${i}`,
       name: `${sourcePart.name} (${i + 1})`,
-      parametric: sourcePart.parametric ? {
-        ...sourcePart.parametric,
-        origin: origin || sourcePart.parametric.origin,
-        anchor: anchor || sourcePart.parametric.anchor,
-      } : sourcePart.parametric,
+      parametric: sourcePart.parametric
+        ? {
+            ...sourcePart.parametric,
+            origin: origin || sourcePart.parametric.origin,
+            anchor: anchor || sourcePart.parametric.anchor,
+          }
+        : sourcePart.parametric,
       metadata: {
         ...(sourcePart.metadata || {}),
         patternGenerated: true,
@@ -106,12 +108,8 @@ export function applyPatterns(objectDraft, patterns = []) {
   if (!patterns.length) return objectDraft;
 
   // Remove old pattern instances
-  let nextParts = (objectDraft.parts || []).filter(
-    (part) => !part.metadata?.patternGenerated,
-  );
-  let nextFeatures = (objectDraft.features || []).filter(
-    (feature) => !feature.metadata?.patternGenerated,
-  );
+  let nextParts = (objectDraft.parts || []).filter((part) => !part.metadata?.patternGenerated);
+  let nextFeatures = (objectDraft.features || []).filter((feature) => !feature.metadata?.patternGenerated);
 
   patterns.forEach((pattern) => {
     if (pattern.sourceType === 'part') {

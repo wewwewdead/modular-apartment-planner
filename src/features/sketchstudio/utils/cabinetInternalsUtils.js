@@ -1,9 +1,4 @@
-import {
-  createPanelPart,
-  createShelfPart,
-  createSupportPart,
-  getNumeric,
-} from './partTemplateUtils';
+import { createPanelPart, createShelfPart, createSupportPart, getNumeric } from './partTemplateUtils';
 
 export function evenShelfPositions(innerHeight, shelfCount, thickness) {
   if (shelfCount <= 0 || innerHeight <= 0) {
@@ -69,69 +64,118 @@ export function generateCabinetInternalsParts(params = {}) {
   const parts = [];
 
   // Side panels
-  parts.push(createPanelPart({
-    name: 'Left Side Panel',
-    width: p.depth, height: p.height, thickness: p.thickness, material: p.material, layerId: p.layerId,
-    origin: { x: 0, y: 0, z: 0 },
-    extents: { width: p.thickness, depth: p.depth, height: p.height },
-    metadata: buildGeneratedMeta({ x: 0, y: 0, z: 0 }, { width: p.thickness, depth: p.depth, height: p.height }),
-    generated: true,
-  }));
-  parts.push(createPanelPart({
-    name: 'Right Side Panel',
-    width: p.depth, height: p.height, thickness: p.thickness, material: p.material, layerId: p.layerId,
-    origin: { x: p.width - p.thickness, y: 0, z: 0 },
-    extents: { width: p.thickness, depth: p.depth, height: p.height },
-    metadata: buildGeneratedMeta({ x: p.width - p.thickness, y: 0, z: 0 }, { width: p.thickness, depth: p.depth, height: p.height }),
-    generated: true,
-  }));
+  parts.push(
+    createPanelPart({
+      name: 'Left Side Panel',
+      width: p.depth,
+      height: p.height,
+      thickness: p.thickness,
+      material: p.material,
+      layerId: p.layerId,
+      origin: { x: 0, y: 0, z: 0 },
+      extents: { width: p.thickness, depth: p.depth, height: p.height },
+      metadata: buildGeneratedMeta({ x: 0, y: 0, z: 0 }, { width: p.thickness, depth: p.depth, height: p.height }),
+      generated: true,
+    }),
+  );
+  parts.push(
+    createPanelPart({
+      name: 'Right Side Panel',
+      width: p.depth,
+      height: p.height,
+      thickness: p.thickness,
+      material: p.material,
+      layerId: p.layerId,
+      origin: { x: p.width - p.thickness, y: 0, z: 0 },
+      extents: { width: p.thickness, depth: p.depth, height: p.height },
+      metadata: buildGeneratedMeta(
+        { x: p.width - p.thickness, y: 0, z: 0 },
+        { width: p.thickness, depth: p.depth, height: p.height },
+      ),
+      generated: true,
+    }),
+  );
 
   // Top and bottom panels
-  parts.push(createPanelPart({
-    name: 'Top Panel',
-    width: innerWidth, height: p.depth, thickness: p.thickness, material: p.material, layerId: p.layerId,
-    origin: { x: p.thickness, y: 0, z: p.height - p.thickness },
-    extents: { width: innerWidth, depth: p.depth, height: p.thickness },
-    metadata: buildGeneratedMeta({ x: p.thickness, y: 0, z: p.height - p.thickness }, { width: innerWidth, depth: p.depth, height: p.thickness }),
-    generated: true,
-  }));
-  parts.push(createPanelPart({
-    name: 'Bottom Panel',
-    width: innerWidth, height: p.depth, thickness: p.thickness, material: p.material, layerId: p.layerId,
-    origin: { x: p.thickness, y: 0, z: 0 },
-    extents: { width: innerWidth, depth: p.depth, height: p.thickness },
-    metadata: buildGeneratedMeta({ x: p.thickness, y: 0, z: 0 }, { width: innerWidth, depth: p.depth, height: p.thickness }),
-    generated: true,
-  }));
+  parts.push(
+    createPanelPart({
+      name: 'Top Panel',
+      width: innerWidth,
+      height: p.depth,
+      thickness: p.thickness,
+      material: p.material,
+      layerId: p.layerId,
+      origin: { x: p.thickness, y: 0, z: p.height - p.thickness },
+      extents: { width: innerWidth, depth: p.depth, height: p.thickness },
+      metadata: buildGeneratedMeta(
+        { x: p.thickness, y: 0, z: p.height - p.thickness },
+        { width: innerWidth, depth: p.depth, height: p.thickness },
+      ),
+      generated: true,
+    }),
+  );
+  parts.push(
+    createPanelPart({
+      name: 'Bottom Panel',
+      width: innerWidth,
+      height: p.depth,
+      thickness: p.thickness,
+      material: p.material,
+      layerId: p.layerId,
+      origin: { x: p.thickness, y: 0, z: 0 },
+      extents: { width: innerWidth, depth: p.depth, height: p.thickness },
+      metadata: buildGeneratedMeta(
+        { x: p.thickness, y: 0, z: 0 },
+        { width: innerWidth, depth: p.depth, height: p.thickness },
+      ),
+      generated: true,
+    }),
+  );
 
   // Back panel (optional)
   if (p.includeBackPanel) {
-    parts.push(createPanelPart({
-      name: 'Back Panel',
-      width: innerWidth, height: innerHeight, thickness: p.thickness, material: p.material, layerId: p.layerId,
-      origin: { x: p.thickness, y: p.depth - p.thickness, z: p.thickness },
-      extents: { width: innerWidth, depth: p.thickness, height: innerHeight },
-      metadata: buildGeneratedMeta({ x: p.thickness, y: p.depth - p.thickness, z: p.thickness }, { width: innerWidth, depth: p.thickness, height: innerHeight }),
-      generated: true,
-    }));
+    parts.push(
+      createPanelPart({
+        name: 'Back Panel',
+        width: innerWidth,
+        height: innerHeight,
+        thickness: p.thickness,
+        material: p.material,
+        layerId: p.layerId,
+        origin: { x: p.thickness, y: p.depth - p.thickness, z: p.thickness },
+        extents: { width: innerWidth, depth: p.thickness, height: innerHeight },
+        metadata: buildGeneratedMeta(
+          { x: p.thickness, y: p.depth - p.thickness, z: p.thickness },
+          { width: innerWidth, depth: p.thickness, height: innerHeight },
+        ),
+        generated: true,
+      }),
+    );
   }
 
   // Shelves
   const shelfDepth = p.includeBackPanel ? p.depth - p.thickness : p.depth;
-  const positions = p.shelfPositions
-    ? p.shelfPositions
-    : evenShelfPositions(innerHeight, p.shelfCount, p.thickness);
+  const positions = p.shelfPositions ? p.shelfPositions : evenShelfPositions(innerHeight, p.shelfCount, p.thickness);
 
   positions.forEach((zOffset, i) => {
     const z = p.thickness + zOffset;
-    parts.push(createShelfPart({
-      name: `Shelf ${i + 1}`,
-      width: innerWidth, height: shelfDepth, thickness: p.thickness, material: p.material, layerId: p.layerId,
-      origin: { x: p.thickness, y: 0, z },
-      extents: { width: innerWidth, depth: shelfDepth, height: p.thickness },
-      metadata: buildGeneratedMeta({ x: p.thickness, y: 0, z }, { width: innerWidth, depth: shelfDepth, height: p.thickness }),
-      generated: true,
-    }));
+    parts.push(
+      createShelfPart({
+        name: `Shelf ${i + 1}`,
+        width: innerWidth,
+        height: shelfDepth,
+        thickness: p.thickness,
+        material: p.material,
+        layerId: p.layerId,
+        origin: { x: p.thickness, y: 0, z },
+        extents: { width: innerWidth, depth: shelfDepth, height: p.thickness },
+        metadata: buildGeneratedMeta(
+          { x: p.thickness, y: 0, z },
+          { width: innerWidth, depth: shelfDepth, height: p.thickness },
+        ),
+        generated: true,
+      }),
+    );
   });
 
   // Dividers
@@ -139,14 +183,23 @@ export function generateCabinetInternalsParts(params = {}) {
     const dividerGap = innerWidth / (p.dividerCount + 1);
     for (let i = 0; i < p.dividerCount; i += 1) {
       const x = p.thickness + dividerGap * (i + 1) - p.thickness / 2;
-      parts.push(createSupportPart({
-        name: `Divider ${i + 1}`,
-        width: shelfDepth, height: innerHeight, thickness: p.thickness, material: p.material, layerId: p.layerId,
-        origin: { x, y: 0, z: p.thickness },
-        extents: { width: p.thickness, depth: shelfDepth, height: innerHeight },
-        metadata: buildGeneratedMeta({ x, y: 0, z: p.thickness }, { width: p.thickness, depth: shelfDepth, height: innerHeight }),
-        generated: true,
-      }));
+      parts.push(
+        createSupportPart({
+          name: `Divider ${i + 1}`,
+          width: shelfDepth,
+          height: innerHeight,
+          thickness: p.thickness,
+          material: p.material,
+          layerId: p.layerId,
+          origin: { x, y: 0, z: p.thickness },
+          extents: { width: p.thickness, depth: shelfDepth, height: innerHeight },
+          metadata: buildGeneratedMeta(
+            { x, y: 0, z: p.thickness },
+            { width: p.thickness, depth: shelfDepth, height: innerHeight },
+          ),
+          generated: true,
+        }),
+      );
     }
   }
 

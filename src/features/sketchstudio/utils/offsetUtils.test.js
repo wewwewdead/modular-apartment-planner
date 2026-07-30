@@ -26,7 +26,12 @@ describe('offsetUtils', () => {
     const polyline = {
       id: 'polyline-1',
       type: 'polyline',
-      points: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }],
+      points: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+        { x: 0, y: 40 },
+      ],
       closed: true,
       layerId: 'default',
     };
