@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSelectHandler } from './selectHandler';
+import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 
 /**
  * Wall drag = PREVIEW-THEN-COMMIT.
@@ -250,4 +251,149 @@ describe('selectHandler sectionCut drag — preview-then-commit', () => {
     expect(harness.dispatched).toHaveLength(0);
     expect(harness.getToolState().wallDragPreview).toBeNull();
   });
+});
+
+describe('selectHandler building-service drag', () => {
+  function serviceFloor() {
+    return {
+      id: 'floor_1',
+      level: 0,
+      walls: [],
+      columns: [],
+      doors: [],
+      windows: [],
+      fixtures: [],
+      railings: [],
+      beams: [],
+      stairs: [],
+      landings: [],
+      rooms: [],
+      slabs: [],
+      sectionCuts: [],
+    };
+  }
+
+  function serviceProject() {
+    return {
+      building: {
+        systems: {
+          plumbing: {
+            shafts: [
+              {
+                id: 'shaft_1',
+                name: 'Wet shaft',
+                origin: { x: 1000, y: 1000 },
+                width: 600,
+                depth: 800,
+                servedFloorIds: ['floor_1'],
+                maxFixtureDistance: 3000,
+              },
+            ],
+          },
+          electrical: {
+            riserZones: [
+              {
+                id: 'riser_1',
+                name: 'Electrical riser',
+                origin: { x: 2500, y: 1000 },
+                width: 400,
+                depth: 400,
+                servedFloorIds: ['floor_1'],
+                openingClearance: 100,
+              },
+            ],
+            panelZones: [
+              {
+                id: 'panel_1',
+                name: 'Electrical panel',
+                kind: 'electrical_panel',
+                floorId: 'floor_1',
+                location: 'floor',
+                origin: { x: 4000, y: 1000 },
+                width: 800,
+                depth: 300,
+                rotation: 0,
+                clearance: 600,
+                capacity: null,
+                unitCount: 4,
+                servedFloorIds: ['floor_1'],
+              },
+            ],
+          },
+        },
+      },
+    };
+  }
+
+  function dragService(start, end) {
+    let toolState = {};
+    let selected = null;
+    const dispatched = [];
+    const editorDispatch = (action) => {
+      if (action.type === 'SELECT_OBJECT') selected = { id: action.id, type: action.objectType };
+      if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+    };
+    const handler = createSelectHandler({
+      dispatch: (action) => dispatched.push(action),
+      editorDispatch,
+      project: serviceProject(),
+      getFloor: () => serviceFloor(),
+      activeFloorId: 'floor_1',
+      viewport: { zoom: 0.1 },
+      snapEnabled: true,
+    });
+
+    handler.onMouseDown(start, { button: 0, target: { dataset: {} } }, toolState);
+    handler.onMouseMove(end, { shiftKey: false }, toolState, selected.id, selected.type);
+    handler.onMouseMove(end, { shiftKey: false }, toolState, selected.id, selected.type);
+
+    return { selected, dispatched, toolState };
+  }
+
+  it.each([
+    {
+      label: 'wet-service shaft',
+      start: { x: 1000, y: 1000 },
+      end: { x: 1300, y: 1400 },
+      selectedType: 'plumbingShaft',
+      commandType: BUILDING_COMMANDS.CONFIGURE_PLUMBING_SHAFT,
+      idField: 'shaftId',
+      id: 'shaft_1',
+    },
+    {
+      label: 'electrical riser',
+      start: { x: 2500, y: 1000 },
+      end: { x: 2800, y: 1400 },
+      selectedType: 'electricalRiser',
+      commandType: BUILDING_COMMANDS.CONFIGURE_ELECTRICAL_RISER,
+      idField: 'riserId',
+      id: 'riser_1',
+    },
+    {
+      label: 'electrical panel',
+      start: { x: 4000, y: 1000 },
+      end: { x: 4300, y: 1400 },
+      selectedType: 'electricalPanelZone',
+      commandType: BUILDING_COMMANDS.CONFIGURE_EQUIPMENT_ZONE,
+      idField: 'zoneId',
+      id: 'panel_1',
+    },
+  ])(
+    'selects and dynamically moves the $label from the canvas',
+    ({ start, end, selectedType, commandType, idField, id }) => {
+      const result = dragService(start, end);
+
+      expect(result.selected).toEqual({ id, type: selectedType });
+      expect(result.dispatched).toHaveLength(1);
+      expect(result.dispatched[0]).toMatchObject({
+        type: 'EXECUTE_BUILDING_COMMAND',
+        command: {
+          type: commandType,
+          [idField]: id,
+          origin: end,
+        },
+      });
+      expect(result.toolState.startPos).toEqual(end);
+    },
+  );
 });

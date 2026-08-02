@@ -11,6 +11,8 @@ import { buildIsometricEllipse, buildIsometricPlaneRectangle, getIsometricPlaneA
 import { measureOffsetDistance, offsetLineEntity, offsetPolylineEntity, offsetRectEntity } from '../utils/offsetUtils';
 import { isPolylineClosed } from '../utils/profileUtils';
 import { computeSketchFillet } from '../utils/filletUtils';
+import { DEFAULT_FASTENER_HARDWARE_ID, getFastenerDrillingDefaults, getHardwarePattern } from '../utils/fastenerUtils';
+import { resolveHardwarePatternPlacement } from '../utils/hardwarePatternUtils';
 
 export const HIT_TOLERANCE_PX = 10;
 export const SNAP_TOLERANCE_PX = 12;
@@ -51,6 +53,13 @@ export const TOOL_DEFINITIONS = [
     shortLabel: 'HOL',
     shortcut: 'J',
     description: 'Create circular subtractive features',
+  },
+  {
+    id: 'fastener',
+    label: 'Fastener',
+    shortLabel: 'FAS',
+    shortcut: 'K',
+    description: 'Place screws, bolts, and other catalog hardware',
   },
   {
     id: 'cutoutRect',
@@ -260,6 +269,57 @@ function getHolePreviewFromDraftWithMode(draft, viewMode = 'plan', isometricPlan
   return getHolePreviewFromDraft(draft);
 }
 
+/**
+ * Fastener drafts are hover-only: the tool places on a single click, so the
+ * draft carries nothing but the cursor point (plus the hovered part's id) and
+ * the preview is sized entirely from the active catalog item. A plain fastener
+ * previews as pilot circle, head outline and crosshair; pattern hardware
+ * (hinges, handles) previews its full boring pattern oriented to the hovered
+ * part's nearest edge, so the ghost promises exactly the holes the click will
+ * drill.
+ */
+function getFastenerPreviewFromDraft(draft, ui, document) {
+  const point = draft.currentPoint ?? draft.startPoint;
+  if (!point) {
+    return null;
+  }
+
+  const hardwareId = ui?.activeHardwareId ?? DEFAULT_FASTENER_HARDWARE_ID;
+  const pattern = getHardwarePattern(hardwareId);
+
+  if (pattern) {
+    const targetEntity = draft.hoverPartId
+      ? (document?.entities?.find((entity) => entity.id === draft.hoverPartId) ?? null)
+      : null;
+    const placement = resolveHardwarePatternPlacement(pattern, point, targetEntity);
+
+    if (!placement) {
+      return null;
+    }
+
+    return {
+      type: 'hardware-pattern-preview',
+      hardwareId,
+      holes: placement.holes,
+    };
+  }
+
+  const defaults = getFastenerDrillingDefaults(hardwareId);
+
+  if (!defaults) {
+    return null;
+  }
+
+  return {
+    type: 'fastener-preview',
+    cx: point.x,
+    cy: point.y,
+    diameter: defaults.diameter,
+    headDiameter: defaults.headDiameter,
+    hardwareId: defaults.hardwareId,
+  };
+}
+
 function getCutoutPreviewFromDraft(draft, viewMode = 'plan', isometricPlane = 'top') {
   const endPoint = viewMode === 'isometric' ? null : getRectEndpointFromDraft(draft);
 
@@ -376,6 +436,10 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
 
   if (draft.type === 'holeCircle') {
     return getHolePreviewFromDraftWithMode(draft, ui?.viewMode, ui?.isometricPlane);
+  }
+
+  if (draft.type === 'fastener') {
+    return getFastenerPreviewFromDraft(draft, ui, document);
   }
 
   if (draft.type === 'cutoutRect') {

@@ -1,6 +1,6 @@
 import { createBeam } from '@/domain/models';
 import { BEAM_WIDTH, BEAM_DEPTH } from '@/domain/defaults';
-import { getFloorElevation } from '@/domain/floorModels';
+import { getFloorElevation, getFloorTopElevation } from '@/domain/floorModels';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { pointInPolygon } from '@/geometry/polygon';
 
@@ -57,12 +57,15 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
         return;
       }
 
+      const placementRole = toolState.beamPlacementMode === 'roof_ring' ? 'roof_ring' : 'floor';
+      const beamLevel = placementRole === 'roof_ring' ? getFloorTopElevation(floor) : getFloorElevation(floor);
       const beam = createBeam(
         { kind: 'column', id: toolState.startColumnId },
         { kind: 'column', id: column.id },
         BEAM_WIDTH,
         BEAM_DEPTH,
-        getFloorElevation(floor),
+        beamLevel,
+        { placementRole },
       );
 
       beam.phaseId = activePhaseId || null;
@@ -75,7 +78,13 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
           previewColumnId: null,
         },
       });
-      editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Beam created.' });
+      editorDispatch({
+        type: 'SET_STATUS_MESSAGE',
+        message:
+          placementRole === 'roof_ring'
+            ? `Top / roof beam created at ${Math.round(beamLevel)} mm.`
+            : `Floor / slab beam created at ${Math.round(beamLevel)} mm.`,
+      });
     },
 
     onKeyDown(e) {

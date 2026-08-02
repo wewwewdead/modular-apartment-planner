@@ -58,6 +58,21 @@ export function getSketchWorkspaceFileName(name) {
   return `${sanitizeFileNamePart(name)}.sketch.json`;
 }
 
+/**
+ * True when the sketch was renamed after its last save, so the next plain Save
+ * should re-prompt under the new name instead of silently overwriting the old
+ * file.
+ *
+ * The comparison is against the document name AS IT WAS at the last save -
+ * never against the file name on disk. The file name is the user's to choose in
+ * the save dialog and legitimately differs from the document name (type "my
+ * cabinet" for a doc still called "untitled sketch"); treating that difference
+ * as a pending rename made every subsequent Save re-open the picker.
+ */
+export function isSketchRenamePending({ fileHandle, savedDocumentName, documentName }) {
+  return Boolean(fileHandle) && savedDocumentName != null && documentName !== savedDocumentName;
+}
+
 export function canUseSketchOpenFilePicker() {
   return typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function';
 }

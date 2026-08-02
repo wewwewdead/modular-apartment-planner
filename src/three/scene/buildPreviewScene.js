@@ -1,4 +1,4 @@
-import { buildFloorPreviewObjects } from './objectBuilders';
+import { buildFloorPreviewObjects, buildFloorSystemsPreviewObjects } from './objectBuilders';
 import { buildRoofPreviewObjects } from '@/geometry/roof3dGeometry';
 import {
   getDefaultActiveFloorId,
@@ -59,7 +59,8 @@ export function buildPreviewScene(project, options = {}) {
   const floorDescriptors = floors.map((floor) => {
     const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
-    const objects = [...buildFloorPreviewObjects(floor), ...trussObjects];
+    const systemObjects = buildFloorSystemsPreviewObjects(floor, project?.building?.systems || {});
+    const objects = [...buildFloorPreviewObjects(floor), ...systemObjects, ...trussObjects];
     return {
       floorId: floor.id,
       name: floor.name,
@@ -72,7 +73,7 @@ export function buildPreviewScene(project, options = {}) {
       // object reference while untouched floors keep identity — this lets the
       // preview object cache skip re-triangulating unchanged floors. Truss
       // systems are separate source objects, so include their refs too.
-      sourceKey: { floor, trussSystems: floorTrussSystems },
+      sourceKey: { floor, systems: project?.building?.systems, trussSystems: floorTrussSystems },
     };
   });
 

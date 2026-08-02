@@ -39,7 +39,7 @@ export default function SvgCanvas() {
   const cursorPosRef = useRef({ x: 0, y: 0 });
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
 
-  const { project, dispatch, getFloor } = useProject();
+  const { project, derived, dispatch, getFloor } = useProject();
   const editor = useEditor();
   const {
     activeTool,
@@ -557,6 +557,7 @@ export default function SvgCanvas() {
                 floor={floor}
                 filteredFloor={filteredFloor}
                 filteredProject={filteredProject}
+                structuralLoadPath={derived?.structuralLoadPath}
                 viewMode={viewMode}
                 selectedId={selectedId}
                 selectedType={selectedType}
@@ -603,6 +604,7 @@ export default function SvgCanvas() {
           floorRoofSectionMessage={floorRoofSectionMessage}
           floorRailingSectionMessage={floorRailingSectionMessage}
           pastePreview={pastePreview}
+          coordinationIssues={derived?.validationIssues || []}
         />
         {statusMessage && (
           <div className={styles.toast}>

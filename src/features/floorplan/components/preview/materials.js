@@ -2,10 +2,82 @@ import * as THREE from 'three';
 
 export function createMaterialPalette() {
   return {
+    systemElectrical: new THREE.MeshStandardMaterial({
+      color: 0xe5b92f,
+      roughness: 0.52,
+      metalness: 0.08,
+      transparent: true,
+      opacity: 0.72,
+      side: THREE.DoubleSide,
+    }),
+    systemWater: new THREE.MeshStandardMaterial({
+      color: 0x369bd7,
+      roughness: 0.48,
+      metalness: 0.06,
+      transparent: true,
+      opacity: 0.68,
+      side: THREE.DoubleSide,
+    }),
+    systemMechanical: new THREE.MeshStandardMaterial({
+      color: 0x68b783,
+      roughness: 0.58,
+      metalness: 0.08,
+      transparent: true,
+      opacity: 0.62,
+      side: THREE.DoubleSide,
+    }),
     wall: new THREE.MeshStandardMaterial({
       color: 0xb7c0ca,
       roughness: 0.88,
       metalness: 0.04,
+      side: THREE.DoubleSide,
+    }),
+    wallFiberCement: new THREE.MeshStandardMaterial({
+      color: 0xd8d6cf,
+      roughness: 0.82,
+      metalness: 0.02,
+      side: THREE.DoubleSide,
+    }),
+    wallPlywood: new THREE.MeshStandardMaterial({
+      color: 0xc9975d,
+      roughness: 0.78,
+      metalness: 0.01,
+      side: THREE.DoubleSide,
+    }),
+    wallMixedBoard: new THREE.MeshStandardMaterial({
+      color: 0xc9b695,
+      roughness: 0.8,
+      metalness: 0.01,
+      side: THREE.DoubleSide,
+    }),
+    wallFramingSteel: new THREE.MeshStandardMaterial({
+      color: 0x98a4ae,
+      roughness: 0.4,
+      metalness: 0.62,
+      side: THREE.DoubleSide,
+    }),
+    wallFramingTimber: new THREE.MeshStandardMaterial({
+      color: 0xb7793f,
+      roughness: 0.82,
+      metalness: 0.02,
+      side: THREE.DoubleSide,
+    }),
+    wallFastener: new THREE.MeshStandardMaterial({
+      color: 0x6f7478,
+      roughness: 0.28,
+      metalness: 0.72,
+      side: THREE.DoubleSide,
+    }),
+    wallFastenerContrast: new THREE.MeshStandardMaterial({
+      color: 0x171b1e,
+      roughness: 0.48,
+      metalness: 0.42,
+      side: THREE.DoubleSide,
+    }),
+    wallFastenerConstruction: new THREE.MeshStandardMaterial({
+      color: 0xd4523f,
+      roughness: 0.5,
+      metalness: 0.12,
       side: THREE.DoubleSide,
     }),
     slab: new THREE.MeshStandardMaterial({

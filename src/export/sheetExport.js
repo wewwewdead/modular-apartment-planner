@@ -492,8 +492,16 @@ class PdfBuilder {
     this.pageWidthPt = pageWidthPt;
     this.pageHeightPt = pageHeightPt;
     this.content = [];
+    this.pages = [{ pageWidthPt, pageHeightPt, content: this.content }];
     this.alphaMap = new Map();
     this.images = [];
+  }
+
+  addPage(pageWidthPt, pageHeightPt) {
+    this.pageWidthPt = pageWidthPt;
+    this.pageHeightPt = pageHeightPt;
+    this.content = [];
+    this.pages.push({ pageWidthPt, pageHeightPt, content: this.content });
   }
 
   write(line) {
@@ -546,17 +554,20 @@ class PdfBuilder {
 
   finish() {
     const encoder = new TextEncoder();
-    const contentStream = encoder.encode(this.content.join(''));
     const alphaObjects = [...this.alphaMap.values()];
-    const fontObjectNumber = 4;
-    const firstAlphaObjectNumber = 5;
+    const pageCount = this.pages.length;
+    const firstPageObjectNumber = 3;
+    const fontObjectNumber = firstPageObjectNumber + pageCount;
+    const firstAlphaObjectNumber = fontObjectNumber + 1;
     const firstImageObjectNumber = firstAlphaObjectNumber + alphaObjects.length;
-    const contentObjectNumber = firstImageObjectNumber + this.images.length;
-    const totalObjects = contentObjectNumber;
+    const firstContentObjectNumber = firstImageObjectNumber + this.images.length;
+    const totalObjects = firstContentObjectNumber + pageCount - 1;
     const objects = [];
 
     objects[1] = encoder.encode('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
-    objects[2] = encoder.encode('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+    objects[2] = encoder.encode(
+      `2 0 obj\n<< /Type /Pages /Kids [${this.pages.map((_, index) => `${firstPageObjectNumber + index} 0 R`).join(' ')}] /Count ${pageCount} >>\nendobj\n`,
+    );
 
     const extGStateEntries = alphaObjects
       .map((entry, index) => `/${entry.name} ${firstAlphaObjectNumber + index} 0 R`)
@@ -570,10 +581,16 @@ class PdfBuilder {
     if (extGStateEntries) resources += ` /ExtGState << ${extGStateEntries} >>`;
     if (xObjectEntries) resources += ` /XObject << ${xObjectEntries} >>`;
 
-    objects[3] = encoder.encode(
-      `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(this.pageWidthPt)} ${fmt(this.pageHeightPt)}] /Resources << ${resources} >> /Contents ${contentObjectNumber} 0 R >>\nendobj\n`,
+    this.pages.forEach((page, index) => {
+      const pageObjectNumber = firstPageObjectNumber + index;
+      const contentObjectNumber = firstContentObjectNumber + index;
+      objects[pageObjectNumber] = encoder.encode(
+        `${pageObjectNumber} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(page.pageWidthPt)} ${fmt(page.pageHeightPt)}] /Resources << ${resources} >> /Contents ${contentObjectNumber} 0 R >>\nendobj\n`,
+      );
+    });
+    objects[fontObjectNumber] = encoder.encode(
+      `${fontObjectNumber} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`,
     );
-    objects[4] = encoder.encode('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n');
 
     alphaObjects.forEach((entry, index) => {
       objects[firstAlphaObjectNumber + index] = encoder.encode(
@@ -594,14 +611,18 @@ class PdfBuilder {
       objects[objNum] = combined;
     });
 
-    const contentHeader = encoder.encode(
-      `${contentObjectNumber} 0 obj\n<< /Length ${contentStream.length} >>\nstream\n`,
-    );
-    const contentFooter = encoder.encode('endstream\nendobj\n');
-    objects[contentObjectNumber] = new Uint8Array(contentHeader.length + contentStream.length + contentFooter.length);
-    objects[contentObjectNumber].set(contentHeader, 0);
-    objects[contentObjectNumber].set(contentStream, contentHeader.length);
-    objects[contentObjectNumber].set(contentFooter, contentHeader.length + contentStream.length);
+    this.pages.forEach((page, index) => {
+      const contentObjectNumber = firstContentObjectNumber + index;
+      const contentStream = encoder.encode(page.content.join(''));
+      const contentHeader = encoder.encode(
+        `${contentObjectNumber} 0 obj\n<< /Length ${contentStream.length} >>\nstream\n`,
+      );
+      const contentFooter = encoder.encode('endstream\nendobj\n');
+      objects[contentObjectNumber] = new Uint8Array(contentHeader.length + contentStream.length + contentFooter.length);
+      objects[contentObjectNumber].set(contentHeader, 0);
+      objects[contentObjectNumber].set(contentStream, contentHeader.length);
+      objects[contentObjectNumber].set(contentFooter, contentHeader.length + contentStream.length);
+    });
 
     const header = encoder.encode('%PDF-1.4\n');
     const binaryComment = new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]);
@@ -1026,6 +1047,26 @@ function buildVectorPdfFromSvg(svgElement, paperSize, imageMap = new Map()) {
   [...svgElement.children].forEach((child) => walkElement(builder, child, imageMap));
   builder.write('Q');
 
+  return builder.finish();
+}
+
+export async function buildMultiSheetVectorPdf(entries = []) {
+  if (!entries.length) throw new Error('At least one sheet SVG is required for multi-sheet PDF export.');
+  let builder = null;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry?.svgElement) throw new Error(`Sheet ${index + 1} has no SVG export source.`);
+    const paper = getPaperPreset(entry.paperSize || 'A3_LANDSCAPE');
+    const pageWidthPt = paper.width * MM_TO_PT;
+    const pageHeightPt = paper.height * MM_TO_PT;
+    if (!builder) builder = new PdfBuilder(pageWidthPt, pageHeightPt);
+    else builder.addPage(pageWidthPt, pageHeightPt);
+    const imageMap = await preloadSvgImages(entry.svgElement);
+    builder.write('q');
+    builder.write(`${fmt(MM_TO_PT)} 0 0 ${fmt(-MM_TO_PT)} 0 ${fmt(pageHeightPt)} cm`);
+    [...entry.svgElement.children].forEach((child) => walkElement(builder, child, imageMap));
+    builder.write('Q');
+  }
   return builder.finish();
 }
 

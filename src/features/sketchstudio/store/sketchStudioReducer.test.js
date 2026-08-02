@@ -17,6 +17,8 @@ import {
   patchTransform,
   redo,
   removeJoint,
+  setActiveHardware,
+  setEntityHardware,
   setEntityMaterial,
   setSelection,
   setDocumentEntities,
@@ -78,6 +80,26 @@ function createRectEntity(id, x, y, width, height, thickness = 18) {
     height,
     rotation: 0,
     thickness,
+    layerId: 'default',
+    meta: {},
+  };
+}
+
+/** A placed fastener: a subtractive hole carrying the catalog id it stands for. */
+function createFastenerEntity(id, hardwareId = 'hw-screw-8-32') {
+  return {
+    id,
+    type: 'feature',
+    featureType: 'hole',
+    operation: 'subtract',
+    shape: 'circle',
+    cx: 120,
+    cy: 80,
+    diameter: 3,
+    hardwareId,
+    targetPartId: 'panel-left',
+    depth: 32,
+    through: false,
     layerId: 'default',
     meta: {},
   };
@@ -593,6 +615,69 @@ describe('sketchStudioReducer history', () => {
       expect.objectContaining({ id: 'panel-top' }),
     ]);
     expect(nextState.document.entities.find((entity) => entity.id === 'panel-top')).not.toHaveProperty('materialId');
+  });
+
+  it('tracks the fastener tool hardware outside the document and history', () => {
+    const state = createState();
+
+    expect(state.ui.activeHardwareId).toBe('hw-screw-8-32');
+
+    const nextState = sketchStudioReducer(state, setActiveHardware('hw-bolt-m6-40'));
+    expect(nextState.ui.activeHardwareId).toBe('hw-bolt-m6-40');
+    expect(nextState.document).toBe(state.document);
+    expect(nextState.history).toBe(state.history);
+
+    // Repeating the same id is a no-op, and clearing falls back to the default.
+    expect(sketchStudioReducer(nextState, setActiveHardware('hw-bolt-m6-40'))).toBe(nextState);
+    expect(sketchStudioReducer(nextState, setActiveHardware(null)).ui.activeHardwareId).toBe('hw-screw-8-32');
+  });
+
+  it('re-points a placed fastener at another catalog item and keeps it undoable', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [createFastenerEntity('feature-1'), createRectEntity('panel-left', 0, 0, 200, 120, 18)],
+      },
+    };
+
+    const nextState = sketchStudioReducer(baseState, setEntityHardware(['feature-1'], 'hw-bolt-m6-40'));
+    const fastener = nextState.document.entities.find((entity) => entity.id === 'feature-1');
+
+    expect(fastener).toMatchObject({
+      hardwareId: 'hw-bolt-m6-40',
+      // Pilot diameter of the bolt, and bolts pass clean through.
+      diameter: 6.5,
+      depth: null,
+      through: true,
+    });
+    expect(nextState.document.entities.find((entity) => entity.id === 'panel-left')).toBe(
+      baseState.document.entities[1],
+    );
+    expect(nextState.history.past).toHaveLength(1);
+
+    const undoneState = sketchStudioReducer(nextState, undo());
+    expect(undoneState.document.entities.find((entity) => entity.id === 'feature-1')).toMatchObject({
+      hardwareId: 'hw-screw-8-32',
+      diameter: 3,
+      depth: 32,
+      through: false,
+    });
+  });
+
+  it('ignores hardware changes for non-features and unknown catalog ids', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [createFastenerEntity('feature-1'), createRectEntity('panel-left', 0, 0, 200, 120, 18)],
+      },
+    };
+
+    expect(sketchStudioReducer(baseState, setEntityHardware(['panel-left'], 'hw-bolt-m6-40'))).toBe(baseState);
+    expect(sketchStudioReducer(baseState, setEntityHardware(['feature-1'], 'not-a-catalog-id'))).toBe(baseState);
   });
 
   it('toggles and closes the shortcut overlay without touching history', () => {

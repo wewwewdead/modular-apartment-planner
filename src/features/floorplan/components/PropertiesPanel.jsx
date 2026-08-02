@@ -39,6 +39,7 @@ import FloorProperties from './properties/FloorProperties';
 import ProjectSummary from './properties/ProjectSummary';
 import SheetProperties, { SheetExportMenu } from './properties/SheetProperties';
 import SheetViewportProperties from './properties/SheetViewportProperties';
+import BuildingServiceProperties from './properties/BuildingServiceProperties';
 
 export default function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
@@ -351,7 +352,19 @@ export default function PropertiesPanel() {
       }
     }
   } else if (selectedId && floor) {
-    if (selectedType === 'floor') {
+    if (selectedType === 'plumbingShaft') {
+      const shaft = (project.building?.systems?.plumbing?.shafts || []).find((entry) => entry.id === selectedId);
+      if (shaft)
+        content = <BuildingServiceProperties entity={shaft} serviceType={selectedType} dispatch={dispatch} u={u} />;
+    } else if (selectedType === 'electricalRiser') {
+      const riser = (project.building?.systems?.electrical?.riserZones || []).find((entry) => entry.id === selectedId);
+      if (riser)
+        content = <BuildingServiceProperties entity={riser} serviceType={selectedType} dispatch={dispatch} u={u} />;
+    } else if (selectedType === 'electricalPanelZone') {
+      const panel = (project.building?.systems?.electrical?.panelZones || []).find((entry) => entry.id === selectedId);
+      if (panel)
+        content = <BuildingServiceProperties entity={panel} serviceType={selectedType} dispatch={dispatch} u={u} />;
+    } else if (selectedType === 'floor') {
       const selectedFloor = orderedFloors.find((entry) => entry.id === selectedId) || floor;
       content = (
         <FloorProperties

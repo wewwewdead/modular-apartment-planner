@@ -1,5 +1,6 @@
 import { calculateDistance } from '../../utils/canvasMath';
 import { getClosedProfileArea, isPolylineClosed } from '../../utils/profileUtils';
+import { isHardwareMaterial } from '../data/materials';
 
 function toPositiveNumber(value) {
   const numeric = Number(value);
@@ -47,8 +48,16 @@ function getPolylineLength(points = [], closed = false) {
   return length;
 }
 
+/**
+ * `linear` is cut from stock lengths, `sheet` is nested on stock panels and
+ * `piece` is bought by the item (hardware) so it has neither length nor area.
+ */
 export function getMaterialStockKind(material) {
-  return material?.costBasis === 'perLinearMeter' ? 'linear' : 'sheet';
+  if (material?.costBasis === 'perLinearMeter') {
+    return 'linear';
+  }
+
+  return isHardwareMaterial(material) ? 'piece' : 'sheet';
 }
 
 export function getEntityManufacturingGeometry(entity, material = null) {

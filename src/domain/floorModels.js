@@ -44,6 +44,8 @@ function cloneRoom(room) {
     id: generateId('room'),
     points: (room.points || []).map(clonePoint),
     labelPosition: clonePoint(room.labelPosition),
+    unitInstanceId: null,
+    spaceRequirementId: null,
   };
 }
 
@@ -77,6 +79,12 @@ function cloneBeam(beam, columnIdMap, elevationDelta) {
     startRef: beam.startRef ? { ...beam.startRef, id: columnIdMap.get(beam.startRef.id) || beam.startRef.id } : null,
     endRef: beam.endRef ? { ...beam.endRef, id: columnIdMap.get(beam.endRef.id) || beam.endRef.id } : null,
     floorLevel: (beam.floorLevel ?? 0) + elevationDelta,
+    coordination: beam.coordination
+      ? {
+          ...beam.coordination,
+          supportedElementRefs: (beam.coordination.supportedElementRefs || []).map((ref) => ({ ...ref })),
+        }
+      : undefined,
   };
 }
 
@@ -117,6 +125,9 @@ function cloneStair(stair, sourceFloorId, duplicatedFloorId, landingIdMap) {
         }
       : null,
     roofAccess: stair.roofAccess ? { ...stair.roofAccess } : null,
+    coordination: stair.coordination
+      ? { ...stair.coordination, clearanceOpeningRef: null }
+      : { clearanceOpeningRef: null, minimumHeadroom: 2000 },
   };
 }
 
@@ -129,12 +140,37 @@ function cloneAnnotation(annotation) {
   };
 }
 
+function cloneFixture(fixture) {
+  return {
+    ...fixture,
+    id: generateId('fix'),
+    plumbingShaftId: null,
+  };
+}
+
+function cloneRailing(railing) {
+  return {
+    ...railing,
+    id: generateId('rail'),
+    startPoint: clonePoint(railing.startPoint),
+    endPoint: clonePoint(railing.endPoint),
+  };
+}
+
 function cloneSlab(slab, floorId, elevationDelta) {
   return {
     ...slab,
     id: generateId('slab'),
     floorId,
     boundaryPoints: (slab.boundaryPoints || []).map(clonePoint),
+    supportRefs: [],
+    openings: (slab.openings || []).map((opening) => ({
+      ...opening,
+      id: generateId('slabopening'),
+      serviceRef: null,
+      boundaryPoints: (opening.boundaryPoints || []).map(clonePoint),
+    })),
+    coordination: slab.coordination ? { ...slab.coordination, supportAssignment: 'unconfigured' } : undefined,
     elevation: (slab.elevation ?? 0) + elevationDelta,
   };
 }
@@ -292,6 +328,8 @@ export function createDuplicatedFloor(sourceFloor) {
       cloneStair(stair, sourceFloorId, duplicatedFloorId, landingIdMap),
     ),
     landings,
+    fixtures: (sourceFloor.fixtures || []).map(cloneFixture),
+    railings: (sourceFloor.railings || []).map(cloneRailing),
     annotations: (sourceFloor.annotations || []).map(cloneAnnotation),
     annotationSettings: createAnnotationSettings(sourceFloor.annotationSettings || {}),
     slabs: (sourceFloor.slabs || []).map((slab) => cloneSlab(slab, duplicatedFloorId, elevationDelta)),

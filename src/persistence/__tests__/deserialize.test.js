@@ -38,7 +38,7 @@ describe('deserializeProject', () => {
 
     it('prefers schemaVersion over version', () => {
       const input = makeEnvelope({}, { schemaVersion: 15, version: 14 });
-      // schemaVersion 15 means no migration needed — project passes through
+      // schemaVersion wins, so this enters the 15 -> current migration step.
       const { project } = deserializeProject(input);
       expect(project.id).toBe('proj_test_1');
     });
@@ -133,8 +133,7 @@ describe('deserializeProject', () => {
       expect(project.documentDefaults).toEqual({ drawnBy: '', checkedBy: '' });
     });
 
-    it('skips migration for version 15 data', () => {
-      // Version 15 data should pass through without migration
+    it('migrates version 15 data into the coordinated building core', () => {
       const input = makeEnvelope(
         {
           sheets: [],
@@ -173,6 +172,25 @@ describe('deserializeProject', () => {
       const { project } = deserializeProject(input);
       expect(project.address).toBe('123 Main St');
       expect(project.documentDefaults.drawnBy).toBe('JM');
+      expect(project.version).toBe(23);
+      expect(project.building.levelIds).toEqual(['floor_1']);
+      expect(project.building.jurisdiction).toMatchObject({ countryCode: 'PH', unitSystem: 'metric' });
+      expect(project.building.apartmentDesign).toMatchObject({ status: 'not_detailed', sourceTestFitId: null });
+      expect(project.building.apartmentDesignProfile).toMatchObject({ id: 'iota_small_tropical_apartment_design_v1' });
+      expect(project.building.systems.structural.realization).toMatchObject({
+        status: 'not_realized',
+        sourceTestFitId: null,
+      });
+      expect(project.building.systems.structural.realizationProfile).toMatchObject({
+        id: 'kappa_small_rc_frame_realization_v1',
+      });
+      expect(project.building.systems.realization).toMatchObject({
+        status: 'not_realized',
+        professionalReviewRequired: true,
+      });
+      expect(project.building.systems.realizationProfile).toMatchObject({
+        id: 'lambda_small_apartment_systems_realization_v1',
+      });
     });
 
     it('preserves savedAt from envelope', () => {

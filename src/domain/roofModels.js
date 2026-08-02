@@ -347,11 +347,14 @@ export function createParapet(startPoint = { x: 0, y: 0 }, endPoint = { x: 1000,
 
 export function createDrain(position = { x: 0, y: 0 }, options = {}) {
   return {
-    id: generateId('drain'),
+    id: options.id || generateId('drain'),
     name: options.name ?? '',
     position: clonePoint(position),
     diameter: options.diameter ?? ROOF_DRAIN_DIAMETER,
     invertOffset: options.invertOffset ?? 0,
+    catchmentPlaneIds: [...new Set(options.catchmentPlaneIds || [])],
+    outletRef: options.outletRef ? { ...options.outletRef } : null,
+    routePoints: clonePoints(options.routePoints || []),
   };
 }
 
@@ -446,10 +449,13 @@ function normalizeParapets(parapets = []) {
 
 function normalizeDrains(drains = []) {
   return drains.map((drain) => ({
-    ...createDrain(),
+    ...createDrain(drain?.position, drain || {}),
     ...drain,
     id: drain?.id || generateId('drain'),
     position: clonePoint(drain?.position),
+    catchmentPlaneIds: [...new Set(drain?.catchmentPlaneIds || [])],
+    outletRef: drain?.outletRef ? { ...drain.outletRef } : null,
+    routePoints: clonePoints(drain?.routePoints || []),
   }));
 }
 

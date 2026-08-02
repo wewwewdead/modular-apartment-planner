@@ -1,11 +1,12 @@
 import { sortFloors } from '@/domain/floorModels';
 import { syncProjectRoofSystem } from '@/domain/roofModels';
 import { syncProjectTrussSystems } from '@/domain/trussModels';
+import { syncCanonicalBuilding } from '@/domain/buildingModels';
 
 export const HISTORY_LIMIT = 100;
 
 export function syncProjectStructures(project) {
-  return syncProjectRoofSystem(syncProjectTrussSystems(project));
+  return syncCanonicalBuilding(syncProjectRoofSystem(syncProjectTrussSystems(project)));
 }
 
 export function applyProjectUpdate(state, nextProject, recordHistory = true) {

@@ -87,7 +87,10 @@ export function getBeamSupportCountLimit(supportLength, spacing) {
 }
 
 export function getFloorBeamSupportData(floor) {
-  return (floor?.beams || []).map((beam) => buildBeamData(floor, beam)).filter(Boolean);
+  return (floor?.beams || [])
+    .map((beam) => buildBeamData(floor, beam))
+    .filter(Boolean)
+    .sort((a, b) => b.topElevation - a.topElevation);
 }
 
 export function findBeamSupportAtPoint(floor, point, tolerance = 0) {

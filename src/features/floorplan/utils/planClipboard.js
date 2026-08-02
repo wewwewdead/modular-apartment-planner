@@ -310,6 +310,10 @@ function rebaseSlab(slab, anchor) {
   return {
     ...slab,
     boundaryPoints: (slab.boundaryPoints || []).map((point) => translatePoint(point, -anchor.x, -anchor.y)),
+    openings: (slab.openings || []).map((opening) => ({
+      ...opening,
+      boundaryPoints: (opening.boundaryPoints || []).map((point) => translatePoint(point, -anchor.x, -anchor.y)),
+    })),
   };
 }
 
@@ -380,6 +384,10 @@ function translateSlab(slab, point) {
   return {
     ...slab,
     boundaryPoints: (slab.boundaryPoints || []).map((entry) => translatePoint(entry, point.x, point.y)),
+    openings: (slab.openings || []).map((opening) => ({
+      ...opening,
+      boundaryPoints: (opening.boundaryPoints || []).map((entry) => translatePoint(entry, point.x, point.y)),
+    })),
   };
 }
 
@@ -742,6 +750,9 @@ export function pastePlanClipboardOnFloor({ floor, floorId, payload, placementPo
               idMaps.landings.get(stair.endLandingAttachment.landingId) || stair.endLandingAttachment.landingId,
           }
         : null,
+      coordination: stair.coordination
+        ? { ...stair.coordination, clearanceOpeningRef: null }
+        : { clearanceOpeningRef: null, minimumHeadroom: 2000 },
     };
   });
 
@@ -763,6 +774,13 @@ export function pastePlanClipboardOnFloor({ floor, floorId, payload, placementPo
       ...slab,
       id: nextId,
       floorId,
+      supportRefs: [],
+      openings: (slab.openings || []).map((opening) => ({
+        ...opening,
+        id: generateId('slabopening'),
+        serviceRef: null,
+      })),
+      coordination: slab.coordination ? { ...slab.coordination, supportAssignment: 'unconfigured' } : undefined,
     };
   });
 

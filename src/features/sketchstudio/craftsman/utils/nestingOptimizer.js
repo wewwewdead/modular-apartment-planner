@@ -36,6 +36,8 @@ function minPositive(...values) {
 }
 
 function getStockKind(row) {
+  // `piece` stock (hardware) is counted, never nested.
+  if (row?.stockKind === 'piece') return 'piece';
   if (row?.stockKind === 'linear' || row?.costBasis === 'perLinearMeter') return 'linear';
   return 'sheet';
 }

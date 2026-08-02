@@ -19,6 +19,7 @@ import { buildFloorTrussGeometry, buildTrussDetailScene } from '@/geometry/truss
 import { buildRoofScheduleSummary } from '@/roof/roofSchedule';
 import { buildRoofScheduleLayout } from '@/roof/roofScheduleLayout';
 import { buildProjectSectionScene } from '@/sections/scene';
+import { buildBuildingReport } from '@/domain/documentPackage';
 
 const PLAN_PADDING = 1500;
 const VERTICAL_PADDING = 700;
@@ -68,7 +69,7 @@ function collectPlanPoints(floor) {
   }
   for (const slab of floor.slabs || []) {
     const rd = getSlabRenderData(slab);
-    if (rd?.boundaryPoints) points.push(...rd.boundaryPoints);
+    if (rd?.outline) points.push(...rd.outline);
   }
   for (const sc of floor.sectionCuts || []) {
     points.push(sc.startPoint, sc.endPoint);
@@ -121,6 +122,69 @@ function buildPlanSource(floor) {
     title: `${floor.name} Plan`,
     floor,
     bounds: geometryBounds,
+  };
+}
+
+function buildStructuralPlanSource(project, floor) {
+  const source = buildPlanSource(floor);
+  if (source.kind === 'empty') return source;
+  return {
+    ...source,
+    kind: 'structural_plan',
+    title: `${floor.name} Structural Coordination Plan`,
+    project,
+  };
+}
+
+function buildServicesPlanSource(project, floor) {
+  const source = buildPlanSource(floor);
+  if (source.kind === 'empty') return source;
+  const systems = project?.building?.systems || {};
+  const servicePoints = [
+    ...(systems.plumbing?.shafts || [])
+      .filter((shaft) => (shaft.servedFloorIds || []).includes(floor.id))
+      .map((shaft) => shaft.origin),
+    ...(systems.electrical?.riserZones || [])
+      .filter((riser) => (riser.servedFloorIds || []).includes(floor.id))
+      .map((riser) => riser.origin),
+    ...(systems.plumbing?.drainageRoutes || [])
+      .filter((route) => route.floorId === floor.id)
+      .flatMap((route) => route.points || []),
+    ...(systems.egress?.exits || []).filter((exit) => exit.floorId === floor.id).map((exit) => exit.point),
+    ...(systems.egress?.routes || [])
+      .filter((route) => route.floorId === floor.id)
+      .flatMap((route) => route.points || []),
+  ];
+  return {
+    ...source,
+    kind: 'services_plan',
+    title: `${floor.name} Services and Egress Coordination Plan`,
+    project,
+    bounds: expandBounds(boundsFromPoints([...collectPlanPoints(floor), ...servicePoints]), PLAN_PADDING),
+  };
+}
+
+function buildSitePlanSource(project, floor) {
+  const site = project?.building?.site || {};
+  const points = [...(site.boundary || []), ...collectPlanPoints(floor || {})];
+  return {
+    kind: 'site_plan',
+    title: 'Site Development Plan',
+    project,
+    floor,
+    site,
+    bounds: expandBounds(boundsFromPoints(points), PLAN_PADDING),
+  };
+}
+
+function buildBuildingReportSource(project, reportType) {
+  const report = buildBuildingReport(project, reportType || 'assumptions');
+  const height = Math.max(10000, 2400 + (report.rows || []).length * 420 + (report.notes || []).length * 320);
+  return {
+    kind: 'building_report',
+    title: report.title,
+    report,
+    bounds: { minX: 0, maxX: 16000, minY: 0, maxY: height },
   };
 }
 
@@ -413,6 +477,14 @@ export function resolveSheetViewportSource(project, viewport, phaseContext) {
   }
 
   switch (viewport.sourceView) {
+    case 'site_plan':
+      return buildSitePlanSource(effectiveProject, floor);
+    case 'building_report':
+      return buildBuildingReportSource(effectiveProject, viewport.sourceRefId);
+    case 'structural_plan':
+      return buildStructuralPlanSource(effectiveProject, floor);
+    case 'services_plan':
+      return buildServicesPlanSource(effectiveProject, floor);
     case 'truss_plan':
       return buildTrussPlanSource(effectiveProject, defaultFloorId);
     case 'truss_detail':
@@ -447,6 +519,14 @@ export function resolveSheetViewportSource(project, viewport, phaseContext) {
 
 export function getViewportSourceLabel(sourceView) {
   switch (sourceView) {
+    case 'site_plan':
+      return 'Site Development Plan';
+    case 'building_report':
+      return 'Building Report';
+    case 'structural_plan':
+      return 'Structural Coordination Plan';
+    case 'services_plan':
+      return 'Services and Egress Coordination Plan';
     case 'truss_plan':
       return 'Truss Plan';
     case 'truss_detail':

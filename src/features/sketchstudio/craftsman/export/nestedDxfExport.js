@@ -14,14 +14,28 @@
  * row). Placements carry `originalRow`, so copies of a grouped row are handed
  * out one entity id at a time in placement order - a bijection, so two panels
  * that share cut dimensions but differ in joinery still export their own holes.
+ *
+ * User-placed fasteners ride along too. They are not joinery output, so they
+ * carry no `manufacturingSourceEntityIds` and `selectPartCutEntities` cannot see
+ * them; they are gathered separately by `targetPartId` and pass through the same
+ * placement transform, so the operator drills them in place on the sheet.
  */
 
 import { computeEntityBoundingBox } from '../../utils/bboxUtils';
 import { getRectCorners } from '../../utils/entityUtils';
+import { isFastenerEntity } from '../../utils/fastenerUtils';
+import { distancePointToSegment } from '../../utils/hitTest';
 import { nestPartsOnSheets, DEFAULT_SHEET, DEFAULT_BLADE_KERF } from '../utils/nestingOptimizer';
 import { exportEntitiesToDxf, selectPartCutEntities } from './dxfExport';
 
 const SHEET_LAYER = 'SHEET';
+
+/**
+ * Slack for a fastener drilled exactly on a part edge. Big enough to absorb the
+ * rounding in stored coordinates, far too small to catch a hole that belongs to
+ * a neighbouring part.
+ */
+const FASTENER_EDGE_TOLERANCE = 0.001;
 
 function toNumber(value, fallback = 0) {
   const numeric = Number(value);
@@ -111,6 +125,122 @@ function getPartBox(partEntities) {
   }
 
   return mergeBoxes(partEntities.map(getCutEntityBox).filter(Boolean));
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const xi = polygon[index].x;
+    const yi = polygon[index].y;
+    const xj = polygon[previous].x;
+    const yj = polygon[previous].y;
+    const intersects = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi || 1e-6) + xi;
+
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function isPointOnPolygonEdge(point, polygon) {
+  return polygon.some(
+    (vertex, index) =>
+      distancePointToSegment(point, vertex, polygon[(index + 1) % polygon.length]) <= FASTENER_EDGE_TOLERANCE,
+  );
+}
+
+/**
+ * Solid areas of a part, in sketch coordinates. Only real outlines contribute:
+ * a fastener has to sit on material, and interior features describe the holes
+ * already taken out of it. Rects are read through `getRectPoints` so a rotated
+ * panel is tested against its true corners rather than its bounding box.
+ */
+function getPartContainmentRegions(partEntities) {
+  const regions = [];
+
+  partEntities.forEach((entity) => {
+    if (entity.type === 'rect') {
+      regions.push({ kind: 'polygon', points: getRectPoints(entity) });
+      return;
+    }
+
+    if (entity.type === 'polyline' && entity.closed && (entity.points?.length ?? 0) >= 3) {
+      regions.push({ kind: 'polygon', points: entity.points });
+      return;
+    }
+
+    if (entity.type === 'circle') {
+      regions.push({
+        kind: 'circle',
+        cx: toNumber(entity.center?.x ?? entity.cx),
+        cy: toNumber(entity.center?.y ?? entity.cy),
+        r: Math.abs(toNumber(entity.r ?? entity.radius)),
+      });
+    }
+  });
+
+  return regions;
+}
+
+function isPointOnPart(point, regions, box) {
+  if (regions.length) {
+    return regions.some((region) =>
+      region.kind === 'circle'
+        ? Math.hypot(point.x - region.cx, point.y - region.cy) <= region.r + FASTENER_EDGE_TOLERANCE
+        : pointInPolygon(point, region.points) || isPointOnPolygonEdge(point, region.points),
+    );
+  }
+
+  // No outline to test against (feature-only part): the footprint is all we know.
+  return (
+    Boolean(box) &&
+    point.x >= box.minX - FASTENER_EDGE_TOLERANCE &&
+    point.x <= box.maxX + FASTENER_EDGE_TOLERANCE &&
+    point.y >= box.minY - FASTENER_EDGE_TOLERANCE &&
+    point.y <= box.maxY + FASTENER_EDGE_TOLERANCE
+  );
+}
+
+/**
+ * The user-placed fasteners drilled into one part.
+ *
+ * `targetPartId` is recorded when the fastener is placed and is never re-checked
+ * afterwards, so it goes stale as soon as the part is moved out from under the
+ * hole. Drilling a stale fastener would punch a hole through the wrong place on
+ * the nested sheet, so every candidate is re-tested against the part's real
+ * geometry and the ones that no longer land on it are dropped and counted.
+ */
+function selectPartFasteners(sourceEntities, partId, partEntities, box) {
+  if (!partId) {
+    return { fasteners: [], skipped: 0 };
+  }
+
+  const regions = getPartContainmentRegions(partEntities);
+  const fasteners = [];
+  let skipped = 0;
+
+  sourceEntities.forEach((entity) => {
+    if (!isFastenerEntity(entity) || entity.meta?.manufacturingHidden === true) {
+      return;
+    }
+
+    if ((entity.targetPartId ?? entity.meta?.targetPartId ?? null) !== partId) {
+      return;
+    }
+
+    const center = { x: Number(entity.cx), y: Number(entity.cy) };
+    if (!Number.isFinite(center.x) || !Number.isFinite(center.y) || !isPointOnPart(center, regions, box)) {
+      skipped += 1;
+      return;
+    }
+
+    fasteners.push(entity);
+  });
+
+  return { fasteners, skipped };
 }
 
 /**
@@ -311,6 +441,7 @@ function resolvePlacementEntityId(placement, copyCounters) {
 
 function buildSheetEntities(sheet, sheetIndex, sourceEntities, copyCounters) {
   const sheetEntities = [buildSheetOutline(sheet, sheetIndex)];
+  let skippedFasteners = 0;
 
   (sheet.placements || []).forEach((placement, placementIndex) => {
     const partId = resolvePlacementEntityId(placement, copyCounters);
@@ -325,8 +456,15 @@ function buildSheetEntities(sheet, sheetIndex, sourceEntities, copyCounters) {
       return;
     }
 
+    // Fasteners share the part's transform, so they land on the sheet exactly
+    // where they sit on the part - including the quarter turn the nesting may
+    // have applied. The DXF writer puts them on the HARDWARE layer and leaves
+    // them kerf-exempt on its own, because they still carry `hardwareId`.
+    const placedFasteners = selectPartFasteners(sourceEntities, partId, partEntities, box);
+    skippedFasteners += placedFasteners.skipped;
+
     const transform = buildPlacementTransform(box, placement);
-    partEntities.forEach((entity) => {
+    [...partEntities, ...placedFasteners.fasteners].forEach((entity) => {
       const transformed = transformCutEntity(entity, transform);
       if (transformed) {
         sheetEntities.push(transformed);
@@ -334,7 +472,7 @@ function buildSheetEntities(sheet, sheetIndex, sourceEntities, copyCounters) {
     });
   });
 
-  return sheetEntities;
+  return { entities: sheetEntities, skippedFasteners };
 }
 
 export function buildNestedSheetFilename(sheetIndex, sheetCount = 0) {
@@ -350,8 +488,10 @@ export function buildNestedSheetFilename(sheetIndex, sheetCount = 0) {
  * @param {Object} options - { sheetSize, bladeKerf, kerf } where `bladeKerf` is
  *   the saw gap the optimizer leaves between parts and `kerf` is the same
  *   geometry compensation the single-file DXF export applies.
- * @returns {Array<{ filename: string, content: string }>} empty when there is
- *   nothing sheet-nestable to cut.
+ * @returns {Array<{ filename: string, content: string, skippedFasteners: number }>}
+ *   empty when there is nothing sheet-nestable to cut. `skippedFasteners` counts
+ *   the fasteners left off that sheet because their centre no longer lands on
+ *   the part they were placed against.
  */
 export function exportNestedSheetsToDxf(entities, bomRows, options = {}) {
   const rows = Array.isArray(bomRows) ? bomRows : [];
@@ -371,11 +511,16 @@ export function exportNestedSheetsToDxf(entities, bomRows, options = {}) {
   const sourceEntities = Array.isArray(entities) ? entities : [];
   const copyCounters = new Map();
 
-  return sheets.map((sheet, sheetIndex) => ({
-    filename: buildNestedSheetFilename(sheetIndex, sheets.length),
-    content: exportEntitiesToDxf(buildSheetEntities(sheet, sheetIndex, sourceEntities, copyCounters), {
-      kerf: options.kerf,
-      referenceEntities: sourceEntities,
-    }),
-  }));
+  return sheets.map((sheet, sheetIndex) => {
+    const built = buildSheetEntities(sheet, sheetIndex, sourceEntities, copyCounters);
+
+    return {
+      filename: buildNestedSheetFilename(sheetIndex, sheets.length),
+      content: exportEntitiesToDxf(built.entities, {
+        kerf: options.kerf,
+        referenceEntities: sourceEntities,
+      }),
+      skippedFasteners: built.skippedFasteners,
+    };
+  });
 }

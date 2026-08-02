@@ -88,6 +88,7 @@ export function buildWallPreviewContext(floor, wall, floorLevel) {
   const trimStartAlong = projectPointOnWall(sourceWall, renderWall.start);
   const trimEndAlong = projectPointOnWall(sourceWall, renderWall.end);
   const context = {
+    floor,
     floorId: floor.id,
     wall,
     sourceWall,

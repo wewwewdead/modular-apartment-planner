@@ -232,7 +232,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
           return;
         }
 
-        if (['line', 'rect', 'circle', 'holeCircle', 'cutoutRect', 'offset'].includes(state.draft.type)) {
+        if (['line', 'rect', 'circle', 'holeCircle', 'cutoutRect', 'fastener', 'offset'].includes(state.draft.type)) {
           event.preventDefault();
           commitPrecisionDraft();
         }

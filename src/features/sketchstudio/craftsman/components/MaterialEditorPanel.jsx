@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import styles from '../styles/craftsman.module.css';
-import { getAllMaterials, getMaterialById, getMergedMaterialCategories } from '../data/materials';
+import { getMaterialById, getMergedMaterialCategories, getStockMaterials } from '../data/materials';
 import useCustomMaterials from '../hooks/useCustomMaterials';
 import CustomMaterialForm from './CustomMaterialForm';
 import {
@@ -26,7 +26,8 @@ export default function MaterialEditorPanel() {
   const [duplicateSourceId, setDuplicateSourceId] = useState('');
 
   const categories = getMergedMaterialCategories();
-  const duplicateGroups = groupMaterialsByCategory(getAllMaterials(), categories);
+  // Hardware has no stock dimensions to reprice, so it is not duplicable.
+  const duplicateGroups = groupMaterialsByCategory(getStockMaterials(), categories);
 
   const closeForm = () => {
     setFormState(null);

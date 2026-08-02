@@ -784,6 +784,46 @@
   stroke: #ffb78e;
 }
 
+/*
+ * Placed fasteners read as steel hardware rather than as a cut feature: a solid
+ * pilot circle, a dashed head footprint and centre-line ticks. Hover/selection
+ * rules below restate the highlight colours so the drafting symbol never
+ * outranks the selection feedback.
+ */
+.sketchStudioEntity.is-feature.is-fastener {
+  fill: rgba(160, 176, 192, 0.16);
+  stroke: #a9b8c9;
+  stroke-dasharray: none;
+}
+
+.sketchStudioEntity.is-feature.is-fastener.is-fastener-head {
+  fill: none;
+  stroke-dasharray: 4 3;
+  opacity: 0.6;
+}
+
+.sketchStudioEntity.is-feature.is-fastener.is-fastener-tick {
+  fill: none;
+  stroke-width: 1;
+  opacity: 0.75;
+}
+
+.sketchStudioEntity.is-feature.is-fastener.is-fastener-dowel {
+  stroke: #c9b08a;
+}
+
+.sketchStudioEntity.is-feature.is-fastener.is-fastener-threaded-insert {
+  stroke: #b9a2c9;
+}
+
+.sketchStudioEntity.is-feature.is-fastener.is-hovered {
+  stroke: #f6fbff;
+}
+
+.sketchStudioEntity.is-feature.is-fastener.is-selected {
+  stroke: #6ca5ff;
+}
+
 .sketchStudioEntityJoinery {
   fill: rgba(212, 133, 107, 0.08);
   stroke: #d4856b;

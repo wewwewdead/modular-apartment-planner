@@ -6,6 +6,7 @@ import { updateEntityFromHandle } from '../utils/handleUtils';
 import { applyIsometricOrthoPoint } from '../utils/isometricUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { findFilletableCorner, computeSketchFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
+import { resolveFastenerTargetPartId } from '../utils/fastenerUtils';
 import { expandGroupedSelection } from '../utils/groupUtils';
 import { applyOrthoPoint } from '../utils/canvasMath';
 import { rotateEntities, translateEntities } from '../utils/transformUtils';
@@ -278,7 +279,9 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
       }
 
       const draftAnchor = getOrthoReferencePoint(state.draft.type, state.draft);
-      const { worldPoint, snap } = resolvePointerState(screenPoint, state.viewport, { anchorPoint: draftAnchor });
+      const { worldPoint, snap, hoveredEntity } = resolvePointerState(screenPoint, state.viewport, {
+        anchorPoint: draftAnchor,
+      });
 
       if (activeTool === 'fillet') {
         if (!state.draft.type) dispatch(startDraft({ type: 'fillet' }));
@@ -290,6 +293,31 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
           dispatch(patchDraft({ hoveredCorner: corner, previewGeometry: geometry, currentPoint: worldPoint }));
         } else {
           dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null, currentPoint: worldPoint }));
+        }
+        return;
+      }
+
+      // The fastener tool has no drag step, so the draft exists purely to carry
+      // the cursor point that the ghost preview is drawn at. `hoverPartId` lets
+      // a pattern preview (hinge, handle) orient itself to the hovered part's
+      // nearest edge before the click commits anything.
+      if (activeTool === 'fastener') {
+        const fastenerPoint = snap.point ?? worldPoint;
+        const hoverPartId = resolveFastenerTargetPartId(hoveredEntity);
+
+        if (!state.draft.type) {
+          dispatch(
+            startDraft({
+              type: 'fastener',
+              step: 'place',
+              startPoint: fastenerPoint,
+              currentPoint: fastenerPoint,
+              points: [fastenerPoint],
+              hoverPartId,
+            }),
+          );
+        } else {
+          dispatch(patchDraft({ startPoint: fastenerPoint, currentPoint: fastenerPoint, hoverPartId }));
         }
         return;
       }

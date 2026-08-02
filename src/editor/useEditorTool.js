@@ -55,12 +55,14 @@ export function useEditorTool({
   activePhaseId,
 }) {
   const getFloorRef = useRef(getFloor);
+  const projectRef = useRef(project);
   // Keep the ref pointing at the latest getFloor without reading/writing it during
   // render. Handlers are intentionally memoized without getFloor in their deps and
   // call getFloorRef.current(...) lazily at event time, so they always see fresh
   // floor data while staying referentially stable across renders.
   useEffect(() => {
     getFloorRef.current = getFloor;
+    projectRef.current = project;
   });
 
   const callGetFloor = useMemo(
@@ -69,6 +71,7 @@ export function useEditorTool({
         getFloorRef.current(...args),
     [],
   );
+  const callGetProject = useMemo(() => () => projectRef.current, []);
 
   // eslint-disable react-hooks/refs -- callGetFloor is a stable wrapper that reads
   // getFloorRef.current lazily. The tool handlers below only STORE it in their ctx and
@@ -149,6 +152,8 @@ export function useEditorTool({
     const ctx = {
       dispatch,
       editorDispatch,
+      project,
+      getProject: callGetProject,
       getFloor: (...args) => getFloorRef.current(...args),
       activeFloorId,
       viewport,
@@ -192,6 +197,7 @@ export function useEditorTool({
     }
   }, [
     callGetFloor,
+    callGetProject,
     activeTool,
     activeFloorId,
     project,

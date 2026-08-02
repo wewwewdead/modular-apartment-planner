@@ -5,6 +5,7 @@ import styles from '../styles/craftsman.module.css';
 const COLORS = ['#4a9eff', '#ff6b6b', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b', '#20c997', '#f06595'];
 
 function getRowStockKind(row) {
+  if (row?.stockKind === 'piece') return 'piece';
   return row?.stockKind === 'linear' || row?.costBasis === 'perLinearMeter' ? 'linear' : 'sheet';
 }
 

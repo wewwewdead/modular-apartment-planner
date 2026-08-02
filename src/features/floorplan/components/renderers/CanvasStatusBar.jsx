@@ -26,6 +26,7 @@ const CanvasStatusBar = memo(function CanvasStatusBar({
   floorRoofSectionMessage,
   floorRailingSectionMessage,
   pastePreview,
+  coordinationIssues = [],
 }) {
   useRenderProfile('CanvasStatusBar', {
     cursorX: Math.round(cursorPos.x),
@@ -52,6 +53,12 @@ const CanvasStatusBar = memo(function CanvasStatusBar({
         <span className={styles.statusContext}>View: {viewMode}</span>
         <span className={styles.statusContext}>Mode: {modelTarget}</span>
         <span className={styles.statusTool}>{displayedTool}</span>
+        <span className={styles.statusContext}>
+          Coordination:{' '}
+          {coordinationIssues.length
+            ? `${coordinationIssues.length} finding${coordinationIssues.length === 1 ? '' : 's'}`
+            : 'no current findings'}
+        </span>
         {activePhaseId && (
           <span className={styles.statusContext}>
             Phase: {(phases || []).find((p) => p.id === activePhaseId)?.name || 'Unknown'} ({phaseViewMode})

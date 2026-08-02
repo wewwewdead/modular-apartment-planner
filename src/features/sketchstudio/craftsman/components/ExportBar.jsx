@@ -10,7 +10,7 @@ import styles from '../styles/craftsman.module.css';
 const DEFAULT_KERF = 0.2; // mm, typical laser kerf
 
 function isSheetStockRow(row) {
-  return row?.stockKind !== 'linear' && row?.costBasis !== 'perLinearMeter';
+  return row?.stockKind !== 'linear' && row?.stockKind !== 'piece' && row?.costBasis !== 'perLinearMeter';
 }
 
 export default function ExportBar({

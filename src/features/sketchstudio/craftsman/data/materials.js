@@ -1320,7 +1320,361 @@ const materials = [
     density: 1180,
     color: '#1A1A1A',
   },
+
+  // --- Hardware ---
+  // Counted, not cut: `costBasis: 'perPiece'` + `pricePerPiece`, and no stock
+  // sheet/section dimensions. `fastener` carries the drilling data the hole
+  // placement tool needs (all diameters in mm).
+  {
+    id: 'hw-screw-6-25',
+    name: '#6 x 25mm Wood Screw',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.06,
+    color: '#8C8C8C',
+    fastener: {
+      kind: 'wood-screw',
+      shankDiameter: 3.5,
+      pilotDiameter: 2.5,
+      headDiameter: 6.5,
+      length: 25,
+      countersink: true,
+    },
+  },
+  {
+    id: 'hw-screw-8-32',
+    name: '#8 x 32mm Wood Screw',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.08,
+    color: '#8C8C8C',
+    fastener: {
+      kind: 'wood-screw',
+      shankDiameter: 4.2,
+      pilotDiameter: 3,
+      headDiameter: 8,
+      length: 32,
+      countersink: true,
+    },
+  },
+  {
+    id: 'hw-screw-8-40',
+    name: '#8 x 40mm Wood Screw',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.09,
+    color: '#8C8C8C',
+    fastener: {
+      kind: 'wood-screw',
+      shankDiameter: 4.2,
+      pilotDiameter: 3,
+      headDiameter: 8,
+      length: 40,
+      countersink: true,
+    },
+  },
+  {
+    id: 'hw-screw-8-50',
+    name: '#8 x 50mm Wood Screw',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.11,
+    color: '#8C8C8C',
+    fastener: {
+      kind: 'wood-screw',
+      shankDiameter: 4.2,
+      pilotDiameter: 3,
+      headDiameter: 8,
+      length: 50,
+      countersink: true,
+    },
+  },
+  {
+    id: 'hw-screw-10-60',
+    name: '#10 x 60mm Wood Screw',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.16,
+    color: '#8C8C8C',
+    fastener: {
+      kind: 'wood-screw',
+      shankDiameter: 4.8,
+      pilotDiameter: 3.5,
+      headDiameter: 9,
+      length: 60,
+      countersink: true,
+    },
+  },
+  {
+    id: 'hw-bolt-m6-40',
+    name: 'M6 x 40mm Bolt with Nut and Washers',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.45,
+    color: '#6E7C8A',
+    fastener: {
+      kind: 'machine-bolt',
+      shankDiameter: 6,
+      pilotDiameter: 6.5,
+      headDiameter: 10,
+      length: 40,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-bolt-m8-50',
+    name: 'M8 x 50mm Bolt with Nut and Washers',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.7,
+    color: '#6E7C8A',
+    fastener: {
+      kind: 'machine-bolt',
+      shankDiameter: 8,
+      pilotDiameter: 8.5,
+      headDiameter: 13,
+      length: 50,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-bolt-m8-80',
+    name: 'M8 x 80mm Bolt with Nut and Washers',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.95,
+    color: '#6E7C8A',
+    fastener: {
+      kind: 'machine-bolt',
+      shankDiameter: 8,
+      pilotDiameter: 8.5,
+      headDiameter: 13,
+      length: 80,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-pocket-screw-25-coarse',
+    name: 'Pocket Screw #8 x 25mm Coarse',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.11,
+    color: '#A8894F',
+    fastener: {
+      kind: 'pocket-screw',
+      shankDiameter: 4.2,
+      pilotDiameter: 3.5,
+      headDiameter: 8.5,
+      length: 25,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-pocket-screw-32-coarse',
+    name: 'Pocket Screw #8 x 32mm Coarse',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.12,
+    color: '#A8894F',
+    fastener: {
+      kind: 'pocket-screw',
+      shankDiameter: 4.2,
+      pilotDiameter: 3.5,
+      headDiameter: 8.5,
+      length: 32,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-pocket-screw-32-fine',
+    name: 'Pocket Screw #8 x 32mm Fine',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.13,
+    color: '#A8894F',
+    fastener: {
+      kind: 'pocket-screw',
+      shankDiameter: 4.2,
+      pilotDiameter: 3.5,
+      headDiameter: 8.5,
+      length: 32,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-dowel-6-30',
+    name: '6 x 30mm Hardwood Dowel Pin',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.05,
+    color: '#C8A165',
+    fastener: {
+      kind: 'dowel',
+      shankDiameter: 6,
+      pilotDiameter: 6,
+      headDiameter: 6,
+      length: 30,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-dowel-8-35',
+    name: '8 x 35mm Hardwood Dowel Pin',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.07,
+    color: '#C8A165',
+    fastener: {
+      kind: 'dowel',
+      shankDiameter: 8,
+      pilotDiameter: 8,
+      headDiameter: 8,
+      length: 35,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-dowel-10-40',
+    name: '10 x 40mm Hardwood Dowel Pin',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.1,
+    color: '#C8A165',
+    fastener: {
+      kind: 'dowel',
+      shankDiameter: 10,
+      pilotDiameter: 10,
+      headDiameter: 10,
+      length: 40,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-confirmat-7-50',
+    name: 'Confirmat Screw 7 x 50mm',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.14,
+    color: '#9AA0A6',
+    fastener: {
+      kind: 'confirmat',
+      shankDiameter: 7,
+      pilotDiameter: 5,
+      headDiameter: 10,
+      length: 50,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-confirmat-7-70',
+    name: 'Confirmat Screw 7 x 70mm',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.18,
+    color: '#9AA0A6',
+    fastener: {
+      kind: 'confirmat',
+      shankDiameter: 7,
+      pilotDiameter: 5,
+      headDiameter: 10,
+      length: 70,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-insert-m6-brass',
+    name: 'M6 Brass Threaded Insert',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.35,
+    color: '#C9A227',
+    fastener: {
+      kind: 'threaded-insert',
+      shankDiameter: 8,
+      pilotDiameter: 8,
+      headDiameter: 8,
+      length: 12.7,
+      countersink: false,
+    },
+  },
+  {
+    id: 'hw-insert-m8-brass',
+    name: 'M8 Brass Threaded Insert',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 0.48,
+    color: '#C9A227',
+    fastener: {
+      kind: 'threaded-insert',
+      shankDiameter: 10,
+      pilotDiameter: 10,
+      headDiameter: 10,
+      length: 16,
+      countersink: false,
+    },
+  },
+
+  // --- Mounted hardware (drilling patterns) ---
+  // Counted like fasteners, but placed as a multi-hole boring pattern anchored
+  // to a part edge instead of a single pilot hole. `pattern.holes` positions are
+  // millimetres in the pattern's own frame: `along` runs along the anchor edge,
+  // `inset` runs from the edge into the part. The first hole is the primary -
+  // the placed feature that carries the catalog id and gets billed in the BOM.
+  // Dimensions follow the European standard every off-the-shelf equivalent
+  // shares (35mm cup, 45mm screw spacing on the 32mm system line, 96mm handle
+  // centres), so builders can buy any brand and the placement still holds.
+  {
+    id: 'hw-hinge-concealed-35',
+    name: 'Concealed Hinge 35mm Cup',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 2.5,
+    color: '#9AA5B1',
+    pattern: {
+      kind: 'hinge',
+      anchor: 'edge',
+      summary: '35mm cup, 22.5mm from edge + 2 pilot holes',
+      holes: [
+        { along: 0, inset: 22.5, diameter: 35, depth: 13, role: 'cup' },
+        { along: -22.5, inset: 32, diameter: 2.5, depth: 11, role: 'pilot' },
+        { along: 22.5, inset: 32, diameter: 2.5, depth: 11, role: 'pilot' },
+      ],
+    },
+  },
+  {
+    id: 'hw-handle-bar-96',
+    name: 'Bar Handle 96mm Centres',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 3.0,
+    color: '#B08D57',
+    pattern: {
+      kind: 'handle',
+      anchor: 'center',
+      summary: '2 through holes Ø5mm, 96mm centres',
+      holes: [
+        { along: -48, inset: 0, diameter: 5, through: true, role: 'bolt' },
+        { along: 48, inset: 0, diameter: 5, through: true, role: 'bolt' },
+      ],
+    },
+  },
+  {
+    id: 'hw-knob-single',
+    name: 'Cabinet Knob',
+    category: 'hardware',
+    costBasis: 'perPiece',
+    pricePerPiece: 1.5,
+    color: '#B08D57',
+    pattern: {
+      kind: 'handle',
+      anchor: 'center',
+      summary: '1 through hole Ø5mm',
+      holes: [{ along: 0, inset: 0, diameter: 5, through: true, role: 'bolt' }],
+    },
+  },
 ];
+
+export const HARDWARE_CATEGORY_ID = 'hardware';
 
 export const MATERIAL_CATEGORIES = [
   { id: 'plywood', label: 'Plywood' },
@@ -1328,7 +1682,18 @@ export const MATERIAL_CATEGORIES = [
   { id: 'lumber', label: 'Lumber' },
   { id: 'metal', label: 'Metal' },
   { id: 'acrylic', label: 'Acrylic' },
+  { id: HARDWARE_CATEGORY_ID, label: 'Hardware' },
 ];
+
+/** Default catalog item per fastener kind, used when only the kind is known. */
+export const DEFAULT_HARDWARE_ID_BY_FASTENER_KIND = {
+  'wood-screw': 'hw-screw-8-40',
+  'machine-bolt': 'hw-bolt-m6-40',
+  'pocket-screw': 'hw-pocket-screw-32-coarse',
+  dowel: 'hw-dowel-8-35',
+  confirmat: 'hw-confirmat-7-50',
+  'threaded-insert': 'hw-insert-m6-brass',
+};
 
 const builtInMaterialsById = new Map(materials.map((m) => [m.id, m]));
 
@@ -1369,10 +1734,77 @@ export function buildMaterialCatalogById(materialList = getAllMaterials()) {
   return catalog;
 }
 
+/** Counted hardware (fasteners) rather than stock a part is cut from. */
+export function isHardwareMaterial(material) {
+  return material?.category === HARDWARE_CATEGORY_ID || Boolean(material?.fastener);
+}
+
+export function getHardwareItems() {
+  return getAllMaterials().filter(isHardwareMaterial);
+}
+
+export function getHardwareById(id) {
+  const material = getMaterialById(id);
+  return material && isHardwareMaterial(material) ? material : null;
+}
+
+/** Merged catalog minus hardware: everything a part can actually be cut from. */
+export function getStockMaterials() {
+  return getAllMaterials().filter((material) => !isHardwareMaterial(material));
+}
+
+/**
+ * Catalog hardware for a fastener kind, optionally matched on nominal diameter
+ * (mm) — e.g. an 8mm dowel hole resolves to the 8mm dowel pin. Falls back to the
+ * kind's default item, then to the first item of that kind.
+ */
+export function resolveHardwareIdForFastener(kind, diameter = null) {
+  if (!kind) {
+    return null;
+  }
+
+  const candidates = getHardwareItems().filter((item) => item.fastener?.kind === kind);
+  if (!candidates.length) {
+    return null;
+  }
+
+  const target = Number(diameter);
+  if (Number.isFinite(target) && target > 0) {
+    let best = candidates[0];
+    let bestDelta = Infinity;
+
+    for (const candidate of candidates) {
+      const delta = Math.abs((Number(candidate.fastener?.shankDiameter) || 0) - target);
+      if (delta < bestDelta) {
+        best = candidate;
+        bestDelta = delta;
+      }
+    }
+
+    return best.id;
+  }
+
+  const defaultId = DEFAULT_HARDWARE_ID_BY_FASTENER_KIND[kind];
+  return candidates.some((candidate) => candidate.id === defaultId) ? defaultId : candidates[0].id;
+}
+
+/**
+ * Unit price for the material's own cost basis. Catalog hardware prices live in
+ * `pricePerPiece`; custom materials keep every basis in `pricePerM2`, so both are
+ * accepted for `perPiece`.
+ */
+export function getMaterialUnitPrice(material) {
+  if (material?.costBasis === 'perPiece') {
+    return Number(material.pricePerPiece ?? material.pricePerM2) || 0;
+  }
+
+  return Number(material?.pricePerM2) || 0;
+}
+
 export function buildMaterialPricingDict(materialList = getAllMaterials()) {
   const pricing = {};
   for (const m of materialList) {
-    pricing[m.id] = { unitCost: m.pricePerM2, costBasis: m.costBasis };
+    pricing[m.id] = { unitCost: getMaterialUnitPrice(m), costBasis: m.costBasis };
   }
   return pricing;
 }

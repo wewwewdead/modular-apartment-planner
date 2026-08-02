@@ -16,7 +16,12 @@ function clamp(value, min, max) {
 }
 
 function sourceFitsFrame(source) {
-  return source?.kind === '3d_preview' || source?.kind === 'roof_schedule' || source?.kind === 'sketch_part_list';
+  return (
+    source?.kind === '3d_preview' ||
+    source?.kind === 'roof_schedule' ||
+    source?.kind === 'building_report' ||
+    source?.kind === 'sketch_part_list'
+  );
 }
 
 function resolveViewportScale(viewport) {

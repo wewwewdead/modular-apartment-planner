@@ -1,4 +1,4 @@
-import { getAllMaterials, getMaterialById, getMergedMaterialCategories } from '../data/materials';
+import { getMaterialById, getMergedMaterialCategories, getStockMaterials } from '../data/materials';
 import { duplicateMaterialAsCustom } from '../data/customMaterials';
 import { useCustomMaterialList } from '../hooks/useCustomMaterials';
 import { formatMaterialPrice, groupMaterialsByCategory } from './customMaterialFormHelpers';
@@ -22,7 +22,8 @@ export default function MaterialPicker({
   const selectedValue = isMixedMaterial ? MIXED_SELECT_VALUE : selectedMaterialId || '';
   const thicknessValue = isMixedThickness ? '' : (thickness ?? '');
   const thicknessPlaceholder = isMixedThickness ? 'Mixed' : (currentMaterial?.thickness ?? '');
-  const groups = groupMaterialsByCategory(getAllMaterials(), getMergedMaterialCategories());
+  // Hardware is placed as a fastener, never assigned as the stock a part is cut from.
+  const groups = groupMaterialsByCategory(getStockMaterials(), getMergedMaterialCategories());
 
   // A material id with no catalog entry (e.g. a deleted custom material) still
   // needs an option so the select keeps showing what the part is assigned to.

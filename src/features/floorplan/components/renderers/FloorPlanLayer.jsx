@@ -40,7 +40,12 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
           <SlabRenderer key={slab.id} slab={slab} selectedId={selectedId} />
         ))}
         <RoomRenderer rooms={filteredFloor.rooms} selectedId={selectedId} />
-        <WallRenderer walls={filteredFloor.walls} columns={columns} />
+        <WallRenderer
+          walls={filteredFloor.walls}
+          columns={columns}
+          doors={filteredFloor.doors || EMPTY}
+          windows={filteredFloor.windows || EMPTY}
+        />
         <BeamRenderer beams={filteredFloor.beams || EMPTY} columns={columns} />
         <StairRenderer stairs={filteredFloor.stairs || EMPTY} />
         <LandingRenderer landings={filteredFloor.landings || EMPTY} />

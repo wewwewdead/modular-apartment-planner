@@ -41,6 +41,8 @@ export const SKETCH_STUDIO_ACTIONS = {
   REDO: 'REDO',
   SET_ENTITY_MATERIAL: 'SET_ENTITY_MATERIAL',
   SET_ENTITY_THICKNESS: 'SET_ENTITY_THICKNESS',
+  SET_ENTITY_HARDWARE: 'SET_ENTITY_HARDWARE',
+  SET_ACTIVE_HARDWARE: 'SET_ACTIVE_HARDWARE',
   TOGGLE_CRAFTSMAN_MODE: 'TOGGLE_CRAFTSMAN_MODE',
   TOGGLE_SHORTCUT_OVERLAY: 'TOGGLE_SHORTCUT_OVERLAY',
   CLOSE_SHORTCUT_OVERLAY: 'CLOSE_SHORTCUT_OVERLAY',
@@ -248,6 +250,17 @@ export const setEntityMaterial = (entityIds, materialId) => ({
 export const setEntityThickness = (entityIds, thickness) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_ENTITY_THICKNESS,
   payload: { entityIds, thickness },
+});
+
+export const setEntityHardware = (entityIds, hardwareId) => ({
+  type: SKETCH_STUDIO_ACTIONS.SET_ENTITY_HARDWARE,
+  payload: { entityIds, hardwareId },
+});
+
+/** Catalog item the fastener tool places next. Editor-only: never persisted. */
+export const setActiveHardware = (hardwareId) => ({
+  type: SKETCH_STUDIO_ACTIONS.SET_ACTIVE_HARDWARE,
+  payload: hardwareId,
 });
 
 export const toggleCraftsmanMode = () => ({

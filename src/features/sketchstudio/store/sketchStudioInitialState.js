@@ -1,4 +1,5 @@
 import sampleDocument from '../data/sampleDocument';
+import { DEFAULT_FASTENER_HARDWARE_ID } from '../utils/fastenerUtils';
 import { resolveSketchDocument } from '../utils/sketchDocumentResolver';
 
 const emptySelectionBox = {
@@ -38,6 +39,7 @@ const sketchStudioInitialState = {
     activeLayerId: 'default',
     craftsmanMode: false,
     shortcutOverlayOpen: false,
+    activeHardwareId: DEFAULT_FASTENER_HARDWARE_ID,
     focusedJointId: null,
     editingJointId: null,
   },

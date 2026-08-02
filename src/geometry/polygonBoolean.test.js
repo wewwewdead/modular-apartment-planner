@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { intersectionArea } from './polygonBoolean';
+import { intersectionArea, subtractPolygons } from './polygonBoolean';
 
 const rect = (x, y, w, h) => [
   { x, y },
@@ -51,5 +51,16 @@ describe('intersectionArea', () => {
         rect(0, 0, 10, 10),
       ),
     ).toBe(0);
+  });
+});
+
+describe('subtractPolygons', () => {
+  it('returns a manufacturing region with a hole for a contained cut', () => {
+    const result = subtractPolygons(rect(0, 0, 100, 100), [rect(20, 20, 30, 40)]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].outline).toHaveLength(4);
+    expect(result[0].holes).toHaveLength(1);
+    expect(result[0].holes[0]).toHaveLength(4);
   });
 });

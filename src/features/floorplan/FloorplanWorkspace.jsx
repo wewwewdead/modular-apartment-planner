@@ -11,6 +11,7 @@ import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import SvgCanvas from './components/renderers/SvgCanvas';
 import SheetCanvas from './components/renderers/SheetCanvas';
+import WallDetailEditor from './components/wall-detail/WallDetailEditor';
 
 const ThreePreviewPanel = lazy(() => import('./components/preview/ThreePreviewPanel'));
 
@@ -109,6 +110,8 @@ function FloorplanShell() {
         onToggleSidebar={actions.workspace.toggleSidebar}
         onToggleProperties={actions.workspace.toggleProperties}
       />
+
+      {state.editor.wallDetailEditor && <WallDetailEditor />}
 
       {showNewProjectModal && (
         <NewProjectModal onConfirm={actions.project.createProject} onClose={actions.workspace.closeNewProjectModal} />

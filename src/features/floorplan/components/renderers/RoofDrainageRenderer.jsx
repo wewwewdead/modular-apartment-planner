@@ -58,6 +58,21 @@ function RoofDrainageRenderer({ roofSystem, interactive = false }) {
           </text>
         </g>
       ))}
+      {(roofSystem.drains || [])
+        .filter((drain) => (drain.routePoints || []).length >= 2)
+        .map((drain) => (
+          <polyline
+            key={`${drain.id}_route`}
+            data-type="roof-drainage-route"
+            data-drain-id={drain.id}
+            points={drain.routePoints.map((point) => `${point.x},${point.y}`).join(' ')}
+            fill="none"
+            stroke="#156f89"
+            strokeWidth="2.4"
+            strokeDasharray="10 4"
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
       {drains.map((drain) => (
         <g key={drain.id}>
           <circle

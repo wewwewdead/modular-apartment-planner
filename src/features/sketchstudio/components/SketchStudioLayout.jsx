@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import DraftingCanvas from './DraftingCanvas';
 import LeftToolbar from './LeftToolbar';
@@ -13,6 +13,9 @@ import CraftsmanToggle from '../craftsman/components/CraftsmanToggle';
 import ExportBar from '../craftsman/components/ExportBar';
 import TemplateGallery from '../craftsman/components/TemplateGallery';
 import useSketchBOM from '../craftsman/hooks/useSketchBOM';
+import { buildBomEntityList } from '../craftsman/utils/entityBomAdapter';
+
+const NO_BOM_ENTITIES = [];
 
 export default function SketchStudioLayout(props) {
   const importInputRef = useRef(null);
@@ -78,6 +81,8 @@ export default function SketchStudioLayout(props) {
     status,
     setEntityMaterial,
     setEntityThickness,
+    setEntityHardware,
+    setActiveHardware,
     toggleCraftsmanMode,
     toggleShortcutOverlay,
     closeShortcutOverlay,
@@ -103,7 +108,12 @@ export default function SketchStudioLayout(props) {
     if (ui.focusedJointId) clearFocusedJoint();
     if (ui.editingJointId) clearEditingJoint();
   }, [selection.selectedIds]); // eslint-disable-line react-hooks/exhaustive-deps
-  const bomEntities = ui.craftsmanMode ? document.entities : [];
+  // Joinery fasteners are billed from the export set, so only joints that are
+  // actually fabricable contribute hardware to the cutting list.
+  const bomEntities = useMemo(
+    () => (ui.craftsmanMode ? buildBomEntityList(document.entities, manufacturingExportEntities) : NO_BOM_ENTITIES),
+    [ui.craftsmanMode, document.entities, manufacturingExportEntities],
+  );
   const { bomRows, totalCost, costByMaterial } = useSketchBOM(bomEntities);
 
   const handleLoadTemplate = useCallback(
@@ -213,6 +223,7 @@ export default function SketchStudioLayout(props) {
             ) : (
               <CraftsmanSidebar
                 entities={document.entities}
+                assemblyEntities={bomEntities}
                 selectedEntity={selectedEntity}
                 selectedEntities={selectedEntities}
                 selectedIds={selection.selectedIds}
@@ -237,6 +248,10 @@ export default function SketchStudioLayout(props) {
                 onLoadTemplate={() => setShowGallery(true)}
                 onDuplicateEntities={duplicateEntities}
                 onEntityFieldCommit={updateSelectedEntityField}
+                activeTool={activeTool}
+                activeHardwareId={ui.activeHardwareId}
+                onActiveHardwareChange={setActiveHardware}
+                onEntityHardwareChange={setEntityHardware}
               />
             )
           ) : (
@@ -266,6 +281,10 @@ export default function SketchStudioLayout(props) {
               onToggleBrokenLines={toggleBrokenLines}
               onMaterialChange={setEntityMaterial}
               onThicknessChange={setEntityThickness}
+              activeTool={activeTool}
+              activeHardwareId={ui.activeHardwareId}
+              onActiveHardwareChange={setActiveHardware}
+              onEntityHardwareChange={setEntityHardware}
             />
           )}
         </div>

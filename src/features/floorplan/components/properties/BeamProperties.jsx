@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import { getColumnListLabel } from '@/domain/columnLabels';
+import { getFloorTopElevation } from '@/domain/floorModels';
 import { beamLength } from '@/geometry/beamGeometry';
 import InputField from '../InputField';
 import PhaseSelector from '../PhaseSelector';
@@ -14,6 +15,8 @@ function BeamProperties({ beam, floor, dispatch, floorId, u, phases }) {
   const startColumn = (floor.columns || []).find((column) => column.id === beam.startRef?.id);
   const endColumn = (floor.columns || []).find((column) => column.id === beam.endRef?.id);
   const len = beamLength(beam, floor.columns || []);
+  const isRoofRingBeam =
+    beam.placementRole === 'roof_ring' || Math.abs((beam.floorLevel ?? 0) - getFloorTopElevation(floor)) < 1;
 
   return (
     <div>
@@ -53,8 +56,15 @@ function BeamProperties({ beam, floor, dispatch, floorId, u, phases }) {
         suffix={u.suffix}
         step={u.step(100)}
         value={u.toDisplay(beam.floorLevel)}
-        onChange={(v) => updateBeam({ floorLevel: u.fromDisplay(v) })}
+        onChange={(v) => {
+          const floorLevel = u.fromDisplay(v);
+          updateBeam({
+            floorLevel,
+            placementRole: Math.abs(floorLevel - getFloorTopElevation(floor)) < 1 ? 'roof_ring' : 'floor',
+          });
+        }}
       />
+      <InputField label="Placement" value={isRoofRingBeam ? 'Top / roof beam' : 'Floor / slab beam'} readOnly />
       <InputField label="Span" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
     </div>
   );

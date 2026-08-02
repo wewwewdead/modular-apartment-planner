@@ -1,0 +1,542 @@
+.lifecycle {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.lifecycleHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lifecycleHeader > span {
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.lifecycleHeader > small,
+.stageIntro > span,
+.metricNote,
+.issueCard small,
+.disclaimer,
+.emptyState,
+.moreIssues {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.stageNav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.stageButton {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-areas:
+    'index label'
+    'index status';
+  align-items: center;
+  column-gap: 5px;
+  min-height: 40px;
+  padding: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-bg);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.stageButton:hover,
+.stageButtonActive {
+  border-color: var(--color-active-glow);
+  background: var(--color-active-glow-subtle);
+}
+
+.stageIndex {
+  grid-area: index;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stageButtonActive .stageIndex {
+  background: var(--color-active-glow);
+  color: white;
+}
+
+.stageLabel {
+  grid-area: label;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+.stageStatus {
+  grid-area: status;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stageStatus[data-state='attention'] {
+  color: var(--color-danger);
+}
+
+.stageStatus[data-state='ready'] {
+  color: var(--color-active-glow);
+}
+
+.stageContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+}
+
+.formSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.formSection > strong {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stageIntro {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stageIntro > strong {
+  font-size: 12px;
+}
+
+.formGrid,
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.formGrid label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.formGrid input,
+.formGrid select,
+.formGrid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 11px;
+}
+
+.formGrid input,
+.formGrid select {
+  height: 30px;
+  padding: 0 7px;
+}
+
+.formGrid textarea {
+  min-height: 48px;
+  padding: 7px;
+  resize: vertical;
+}
+
+.formGrid input:focus,
+.formGrid select:focus,
+.formGrid textarea:focus {
+  outline: 2px solid var(--color-accent-subtle);
+  border-color: var(--color-accent);
+}
+
+.wideField {
+  grid-column: 1 / -1;
+}
+
+.primaryAction {
+  min-height: 32px;
+  border: 1px solid var(--color-active-glow);
+  border-radius: var(--radius-sm);
+  background: var(--color-active-glow);
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.secondaryAction {
+  min-height: 32px;
+  border: 1px solid var(--color-active-glow);
+  border-radius: var(--radius-sm);
+  background: var(--color-active-glow-subtle);
+  color: var(--color-active-glow);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.secondaryAction:hover {
+  background: rgba(45, 95, 142, 0.16);
+}
+
+.primaryAction:hover {
+  filter: brightness(1.05);
+}
+
+.commandSuccess,
+.commandError {
+  font-size: 10px;
+}
+
+.commandSuccess {
+  color: var(--color-active-glow);
+}
+
+.commandError {
+  color: var(--color-danger);
+}
+
+.metric {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px;
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+}
+
+.metricLabel {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.metricValue {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.detailList,
+.issueList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.testFitList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.testFitCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+}
+
+.testFitCardSelected {
+  border-color: var(--color-active-glow);
+  box-shadow: inset 0 0 0 1px var(--color-active-glow-subtle);
+}
+
+.testFitTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.testFitPreview {
+  width: 100%;
+  height: 112px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+}
+
+.testFitPreview rect {
+  vector-effect: non-scaling-stroke;
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+}
+
+.testFitBlock_unit {
+  fill: rgba(61, 145, 98, 0.4);
+}
+
+.testFitBlock_corridor {
+  fill: rgba(74, 127, 191, 0.35);
+}
+
+.testFitBlock_stair_core {
+  fill: rgba(220, 145, 55, 0.45);
+}
+
+.testFitBlock_wet_core {
+  fill: rgba(102, 91, 176, 0.45);
+}
+
+.testFitMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.quantityList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quantityRow {
+  display: grid;
+  grid-template-columns: minmax(100px, 1.4fr) minmax(68px, 0.65fr) minmax(76px, 0.8fr);
+  gap: 6px;
+  align-items: center;
+  padding: 6px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  font-size: 10px;
+}
+
+.quantityRow > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.quantityRow small {
+  color: var(--color-text-secondary);
+  font-size: 8px;
+}
+
+.quantityValue,
+.quantityCost {
+  text-align: right;
+}
+
+.quantityCost {
+  color: var(--color-text-secondary);
+}
+
+.requirementChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.requirementChips span {
+  padding: 3px 6px;
+  border-radius: 10px;
+  background: var(--color-active-glow-subtle);
+  color: var(--color-active-glow);
+  font-size: 9px;
+}
+
+.mappingFloor {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mappingFloorTitle {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mappingRow {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.8fr) minmax(120px, 1.5fr) minmax(90px, 1fr);
+  gap: 5px;
+  align-items: center;
+  font-size: 10px;
+}
+
+.mappingRow select {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  color: var(--color-text-primary);
+  font-size: 9px;
+}
+
+.placementList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.placementRow {
+  display: grid;
+  grid-template-columns: minmax(86px, 1.4fr) repeat(3, minmax(48px, 0.65fr)) 40px;
+  gap: 4px;
+  align-items: center;
+  font-size: 9px;
+}
+
+.placementRow > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.placementRow small {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placementRow input,
+.placementRow button {
+  min-width: 0;
+  height: 27px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  color: var(--color-text-primary);
+  font-size: 9px;
+}
+
+.structuralIntentList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.structuralIntentRow {
+  display: grid;
+  grid-template-columns: minmax(82px, 1fr) minmax(74px, 0.7fr) minmax(62px, 0.6fr) minmax(90px, 1.2fr) 40px;
+  gap: 4px;
+  align-items: center;
+  font-size: 9px;
+}
+
+.structuralIntentRow > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.structuralIntentRow small {
+  color: var(--color-text-secondary);
+}
+
+.structuralIntentRow input,
+.structuralIntentRow select,
+.structuralIntentRow button {
+  min-width: 0;
+  height: 27px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  color: var(--color-text-primary);
+  font-size: 9px;
+}
+
+.structuralIntentRow input {
+  padding: 0 4px;
+}
+
+.placementRow input {
+  padding: 0 4px;
+}
+
+.placementRow button {
+  cursor: pointer;
+}
+
+.primaryAction:disabled,
+.secondaryAction:disabled,
+.placementRow button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--color-border);
+  font-size: 10px;
+}
+
+.issueCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px;
+  border-left: 3px solid var(--color-active-glow);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  font-size: 10px;
+}
+
+.issueCard[data-severity='error'] {
+  border-left-color: var(--color-danger);
+}
+
+.issueRule {
+  color: var(--color-text-secondary);
+  font-family: monospace;
+  font-size: 9px;
+}
+
+.emptyState,
+.disclaimer {
+  margin: 0;
+}

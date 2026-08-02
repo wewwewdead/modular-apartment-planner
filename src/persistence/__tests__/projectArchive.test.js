@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import JSZip from 'jszip';
 import { createProject, createRoom, createWall } from '@/domain/models';
+import { CURRENT_SCHEMA_VERSION } from '@/domain/projectVersion';
 import { deserializeProject } from '../deserialize';
 import { importProjectFile, openProjectFile } from '../fileTransfer';
 import { serializeProject } from '../serialize';
@@ -53,7 +54,7 @@ describe('buildProjectArchive', () => {
     expect(manifest.formatVersion).toBe(ARCHIVE_FORMAT_VERSION);
     expect(manifest.projectName).toBe('Manifest Project');
     expect(manifest.appVersion).toBe('1.0.0');
-    expect(manifest.schemaVersion).toBe(15);
+    expect(manifest.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(typeof manifest.savedAt).toBe('string');
   });
 
@@ -74,7 +75,7 @@ describe('readProjectArchive', () => {
     const restored = await readProjectArchive(blob);
 
     expect(restored.data).toEqual(project);
-    expect(restored.schemaVersion).toBe(15);
+    expect(restored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
   });
 
   it('round-trips through a File wrapper', async () => {

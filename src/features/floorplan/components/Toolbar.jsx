@@ -5,6 +5,7 @@ import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { TOOLS } from '@/editor/tools';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
+import { getFloorElevation, getFloorTopElevation } from '@/domain/floorModels';
 import { isTypingTarget } from '@/utils/keyboard';
 import {
   NewIcon,
@@ -103,6 +104,7 @@ export default function Toolbar({
   } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const { canCopySelection, canPaste, copySelection, cutSelection, beginPaste } = usePlanClipboardController();
+  const activeFloor = (project.floors || []).find((floor) => floor.id === activeFloorId) || null;
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
   const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
   const isTrussPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'truss';
@@ -119,6 +121,14 @@ export default function Toolbar({
 
   const setTool = (tool) => {
     editorDispatch({ type: 'SET_TOOL', tool });
+
+    if (tool === TOOLS.BEAM) {
+      editorDispatch({
+        type: 'UPDATE_TOOL_STATE',
+        payload: { beamPlacementMode: 'floor' },
+      });
+      return;
+    }
 
     if (tool !== TOOLS.TRUSS_DRAW || modelTarget !== 'truss') return;
 
@@ -407,6 +417,26 @@ export default function Toolbar({
           ),
         )}
       </div>
+
+      {activeTool === TOOLS.BEAM && isPlanView && activeFloor ? (
+        <div className={styles.segmentedGroup} role="group" aria-label="Beam placement elevation">
+          <span className={styles.groupLabel}>Beam level</span>
+          <button
+            className={toolState.beamPlacementMode !== 'roof_ring' ? styles.segmentedBtnActive : styles.segmentedBtn}
+            onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { beamPlacementMode: 'floor' } })}
+            aria-label={`Place floor or slab beam at ${Math.round(getFloorElevation(activeFloor))} millimetres`}
+          >
+            Floor/slab · {Math.round(getFloorElevation(activeFloor))} mm
+          </button>
+          <button
+            className={toolState.beamPlacementMode === 'roof_ring' ? styles.segmentedBtnActive : styles.segmentedBtn}
+            onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { beamPlacementMode: 'roof_ring' } })}
+            aria-label={`Place top or roof beam at ${Math.round(getFloorTopElevation(activeFloor))} millimetres`}
+          >
+            Top/roof · {Math.round(getFloorTopElevation(activeFloor))} mm
+          </button>
+        </div>
+      ) : null}
 
       {/* Fixtures palette */}
       <div className={styles.fixturePalette}>

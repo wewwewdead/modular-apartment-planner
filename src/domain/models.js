@@ -30,10 +30,14 @@ import {
 } from './defaults';
 import { FIXTURE_DEFAULTS } from '@/editor/tools';
 import { polygonArea, polygonCentroid } from '@/geometry/polygon';
+import { createCanonicalBuilding } from './buildingModels';
+import { createWallAssembly, wallAssemblyThickness } from './wallAssemblies';
 
 export function createProject(name = 'Untitled Project') {
+  const id = generateId('proj');
+  const floors = [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })];
   return {
-    id: generateId('proj'),
+    id,
     name,
     address: '',
     documentDefaults: {
@@ -42,7 +46,8 @@ export function createProject(name = 'Untitled Project') {
     },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    floors: [createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: WALL_HEIGHT })],
+    floors,
+    building: createCanonicalBuilding(id, floors),
     roofSystem: null,
     trussSystems: [],
     sheets: [],
@@ -119,11 +124,13 @@ export function createLinearDimensionAnnotation(startPoint, endPoint, options = 
 }
 
 export function createWall(start, end, thickness = WALL_THICKNESS, options = {}) {
+  const assembly = createWallAssembly(options.assembly?.preset, options.assembly || {}, thickness);
   return {
     id: generateId('wall'),
     start: { x: start.x, y: start.y },
     end: { x: end.x, y: end.y },
-    thickness,
+    thickness: options.assembly ? wallAssemblyThickness(assembly) : thickness,
+    assembly,
     height: options.height ?? WALL_HEIGHT,
     startAttachment: options.startAttachment ?? null,
     endAttachment: options.endAttachment ?? null,
@@ -169,10 +176,11 @@ export function createColumn(x, y, width = COLUMN_WIDTH, depth = COLUMN_DEPTH, o
     type: options.type ?? 'rectangular',
     name: options.name ?? '',
     showLabel: options.showLabel ?? false,
+    stackId: options.stackId ?? generateId('colstack'),
   };
 }
 
-export function createBeam(startRef, endRef, width = BEAM_WIDTH, depth = BEAM_DEPTH, floorLevel = 0) {
+export function createBeam(startRef, endRef, width = BEAM_WIDTH, depth = BEAM_DEPTH, floorLevel = 0, options = {}) {
   return {
     id: generateId('beam'),
     startRef: { ...startRef },
@@ -180,6 +188,13 @@ export function createBeam(startRef, endRef, width = BEAM_WIDTH, depth = BEAM_DE
     width,
     depth,
     floorLevel,
+    placementRole: options.placementRole === 'roof_ring' ? 'roof_ring' : 'floor',
+    coordination: {
+      condition: options.coordination?.condition ?? 'typical',
+      maxPlanningSpan: options.coordination?.maxPlanningSpan ?? null,
+      transferReason: options.coordination?.transferReason ?? '',
+      supportedElementRefs: (options.coordination?.supportedElementRefs || []).map((ref) => ({ ...ref })),
+    },
   };
 }
 
@@ -198,6 +213,16 @@ export function createSlab(
     elevation,
     name: options.name ?? '',
     type: options.type ?? '',
+    supportRefs: (options.supportRefs || []).map((ref) => ({ ...ref })),
+    openings: (options.openings || []).map((opening) => ({
+      ...opening,
+      boundaryPoints: (opening.boundaryPoints || []).map((point) => ({ ...point })),
+    })),
+    coordination: {
+      spanDirection: options.coordination?.spanDirection ?? null,
+      maxPlanningSpan: options.coordination?.maxPlanningSpan ?? null,
+      supportAssignment: options.coordination?.supportAssignment ?? 'unconfigured',
+    },
   };
 }
 
@@ -228,6 +253,12 @@ export function createStair(
     startLandingAttachment: options.startLandingAttachment ?? null,
     endLandingAttachment: options.endLandingAttachment ?? null,
     roofAccess: options.roofAccess ?? null,
+    coordination: {
+      clearanceOpeningRef: options.coordination?.clearanceOpeningRef
+        ? { ...options.coordination.clearanceOpeningRef }
+        : null,
+      minimumHeadroom: options.coordination?.minimumHeadroom ?? 2000,
+    },
   };
 }
 
@@ -254,6 +285,7 @@ export function createFixture(fixtureType, x, y, options = {}) {
     depth: options.depth ?? defaults.depth,
     rotation: options.rotation ?? 0,
     name: options.name ?? '',
+    plumbingShaftId: options.plumbingShaftId ?? null,
   };
 }
 
@@ -289,5 +321,9 @@ export function createRoom(name = 'Room', points = [], color = ROOM_COLOR) {
     labelPosition: { ...centroid },
     color,
     area,
+    useCategory: null,
+    spaceType: null,
+    unitInstanceId: null,
+    spaceRequirementId: null,
   };
 }

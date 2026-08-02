@@ -39,6 +39,33 @@ describe('WallProperties', () => {
       />,
     );
     expect(html).toContain('Length');
+    expect(html).toContain('CHB masonry');
+  });
+
+  it('renders framing controls for a board wall assembly', () => {
+    const { wall, floor } = makeFloor();
+    const framedWall = {
+      ...wall,
+      assembly: { preset: 'fiber_cement', system: 'framed' },
+    };
+    const html = renderToStaticMarkup(
+      <WallProperties
+        wall={framedWall}
+        floor={{ ...floor, walls: [framedWall] }}
+        dispatch={() => {}}
+        editorDispatch={() => {}}
+        floorId="floor_1"
+        u={u}
+        phases={[]}
+      />,
+    );
+    expect(html).toContain('Stud spacing');
+    expect(html).toContain('Double-stud wall');
+    expect(html).toContain('Inside layers');
+    expect(html).toContain('Inside side');
+    expect(html).toContain('Flip Inside / Outside');
+    expect(html).toContain('Design Inside Face — Fiber cement');
+    expect(html).toContain('Design Outside Face — Fiber cement');
   });
 
   it('renders an arc wall without crashing (fillet path)', () => {

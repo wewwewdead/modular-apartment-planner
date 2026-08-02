@@ -5,12 +5,17 @@ import FloorPlanLayer from './FloorPlanLayer';
 import FloorPreviewLayer from './FloorPreviewLayer';
 import FloorSelectionLayer from './FloorSelectionLayer';
 import SectionRenderer from './SectionRenderer';
+import SitePlanOverlay from './SitePlanOverlay';
+import StructuralGridOverlay from './StructuralGridOverlay';
+import WetCoreOverlay from './WetCoreOverlay';
+import ApartmentDesignOverlay from './ApartmentDesignOverlay';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 
 const FloorScene = memo(function FloorScene({
   floor,
   filteredFloor,
   filteredProject,
+  structuralLoadPath,
   viewMode,
   selectedId,
   selectedType,
@@ -55,7 +60,28 @@ const FloorScene = memo(function FloorScene({
       <>
         {viewMode === 'plan' ? (
           <>
+            <SitePlanOverlay site={filteredProject.building?.site} />
             <FloorPlanLayer floor={floor} filteredFloor={filteredFloor} selectedId={selectedId} />
+            <StructuralGridOverlay
+              structuralSystem={filteredProject.building?.systems?.structural}
+              floor={filteredFloor}
+              loadPath={structuralLoadPath}
+            />
+            <WetCoreOverlay
+              plumbingSystem={filteredProject.building?.systems?.plumbing}
+              electricalSystem={filteredProject.building?.systems?.electrical}
+              waterSystem={filteredProject.building?.systems?.water}
+              mechanicalSystem={filteredProject.building?.systems?.mechanical}
+              egressSystem={filteredProject.building?.systems?.egress}
+              floor={filteredFloor}
+              selectedId={selectedId}
+              selectedType={selectedType}
+            />
+            <ApartmentDesignOverlay
+              apartmentDesign={filteredProject.building?.apartmentDesign}
+              profile={filteredProject.building?.apartmentDesignProfile}
+              floor={filteredFloor}
+            />
             <FloorSelectionLayer
               previewContent={previewContent}
               marqueeBounds={marqueeBounds}

@@ -11,6 +11,7 @@ import {
   getSketchWorkspaceFileName,
   importSketchWorkspaceFile,
   isFilePickerAbortError,
+  isSketchRenamePending,
   openSketchWorkspaceFile,
   saveSketchWorkspaceFile,
 } from '../utils/sketchWorkspaceFileUtils';
@@ -21,9 +22,13 @@ import { isEditableTarget } from './sketchConstants';
 export default function useSketchPersistence(state, dispatch) {
   const confirm = useConfirmDialog();
   const [documentFileHandle, setDocumentFileHandle] = useState(null);
+  // `savedDocumentName` is the document name as it was at the last save/open:
+  // a plain Save silently overwrites the current file until the user renames
+  // the document, and only then re-prompts under the new name.
   const [documentPersistenceMeta, setDocumentPersistenceMeta] = useState({
     savedAt: null,
     fileName: null,
+    savedDocumentName: null,
     status: 'idle',
     error: null,
   });
@@ -95,6 +100,7 @@ export default function useSketchPersistence(state, dispatch) {
       setDocumentPersistenceMeta({
         savedAt: workspace.savedAt ?? null,
         fileName: null,
+        savedDocumentName: workspace.document?.name ?? null,
         status: 'recovered',
         error: null,
       });
@@ -160,6 +166,7 @@ export default function useSketchPersistence(state, dispatch) {
       setDocumentPersistenceMeta({
         savedAt: workspace.savedAt ?? options.savedAt ?? null,
         fileName: options.fileName ?? options.fileHandle?.name ?? null,
+        savedDocumentName: workspace.document?.name ?? null,
         status: options.status ?? 'idle',
         error: null,
       });
@@ -259,11 +266,11 @@ export default function useSketchPersistence(state, dispatch) {
   const handleSaveSketch = useCallback(
     async (options = {}) => {
       const saveAs = options.saveAs === true;
-      const renamePending = Boolean(
-        documentFileHandle &&
-        documentPersistenceMeta.fileName &&
-        documentPersistenceMeta.fileName !== desiredSketchFileName,
-      );
+      const renamePending = isSketchRenamePending({
+        fileHandle: documentFileHandle,
+        savedDocumentName: documentPersistenceMeta.savedDocumentName,
+        documentName: state.document.name,
+      });
       setDocumentPersistenceMeta((current) => ({
         ...current,
         status: 'saving',
@@ -279,6 +286,7 @@ export default function useSketchPersistence(state, dispatch) {
         setDocumentPersistenceMeta({
           savedAt,
           fileName,
+          savedDocumentName: state.document.name ?? null,
           status: 'saved',
           error: null,
         });
@@ -303,10 +311,10 @@ export default function useSketchPersistence(state, dispatch) {
     [
       comparableWorkspaceSnapshot,
       currentWorkspaceSnapshot,
-      desiredSketchFileName,
       documentFileHandle,
       documentIsDirty,
-      documentPersistenceMeta.fileName,
+      documentPersistenceMeta.savedDocumentName,
+      state.document.name,
     ],
   );
 
@@ -335,11 +343,13 @@ export default function useSketchPersistence(state, dispatch) {
       isDirty: documentIsDirty,
       hasFileHandle: Boolean(documentFileHandle),
       desiredFileName: desiredSketchFileName,
-      renamePending: Boolean(
-        documentPersistenceMeta.fileName && documentPersistenceMeta.fileName !== desiredSketchFileName,
-      ),
+      renamePending: isSketchRenamePending({
+        fileHandle: documentFileHandle,
+        savedDocumentName: documentPersistenceMeta.savedDocumentName,
+        documentName: state.document.name,
+      }),
     }),
-    [desiredSketchFileName, documentFileHandle, documentIsDirty, documentPersistenceMeta],
+    [desiredSketchFileName, documentFileHandle, documentIsDirty, documentPersistenceMeta, state.document.name],
   );
 
   return {

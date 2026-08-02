@@ -1,6 +1,7 @@
 import { getArcReferencePoint } from './arcUtils';
 import { calculateDistance, getMidpoint, projectPointFromStart } from './canvasMath';
 import { formatDimensionText, inferDimensionSubtype, measureDistance } from './dimensionUtils';
+import { getFastenerDrillingDefaults } from './fastenerUtils';
 import { remapDuplicateEntityGroups } from './groupUtils';
 import { buildIsometricEllipse, getEllipseSnapPoints } from './isometricUtils';
 import { getPolylineMidpoints } from './polylineUtils';
@@ -496,6 +497,8 @@ export function createFeatureEntity(featureConfig, entities, layerId = 'default'
     targetPartId: featureConfig.targetPartId ?? null,
     sourceProfileId: featureConfig.sourceProfileId ?? null,
     shape: featureConfig.shape,
+    // Catalog hardware this feature stands for (fasteners), when it has any.
+    hardwareId: featureConfig.hardwareId ?? null,
     depth: featureConfig.depth ?? null,
     through: featureConfig.through !== false,
     meta: {
@@ -1036,6 +1039,19 @@ export function updateEntityFromNumericField(entity, field, rawValue) {
     };
   }
 
+  // A through hole has no drilling depth; switching a fastener back to a blind
+  // hole restores the depth its catalog item is drilled to.
+  if (entity.type === 'feature' && field === 'through') {
+    const shouldPassThrough = rawValue === true || rawValue === 'true' || rawValue === 'on';
+    const fastenerDefaults = shouldPassThrough ? null : getFastenerDrillingDefaults(entity.hardwareId);
+
+    return {
+      ...entity,
+      through: shouldPassThrough,
+      depth: shouldPassThrough ? null : (entity.depth ?? fastenerDefaults?.depth ?? fastenerDefaults?.length ?? null),
+    };
+  }
+
   const numericValue = Number(rawValue);
 
   if (field === 'subtype' && entity.type === 'dimension') {
@@ -1125,6 +1141,17 @@ export function updateEntityFromNumericField(entity, field, rawValue) {
       return {
         ...entity,
         diameter: Math.abs(numericValue),
+      };
+    }
+
+    // Drilling to a depth is by definition a blind hole.
+    if (field === 'depth') {
+      const depth = Math.abs(numericValue);
+
+      return {
+        ...entity,
+        depth: depth > 0 ? depth : null,
+        through: depth > 0 ? false : entity.through,
       };
     }
 

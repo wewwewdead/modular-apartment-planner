@@ -23,7 +23,10 @@ export function buildPrintableSvg(entities, options = {}) {
   const document = buildSvgExportDocument(entities, options);
   const svgHeight = document.bounds.height + 15;
   const rulerX = document.bounds.x + 5;
-  const rulerY = document.bounds.y + document.bounds.height - 5;
+  // Below the document body, inside the 15mm the sheet adds for it: the bottom of
+  // the bounds is no longer guaranteed to be empty margin now that the hardware
+  // legend can occupy it.
+  const rulerY = document.bounds.y + document.bounds.height + 8;
 
   return `<svg xmlns="http://www.w3.org/2000/svg"
      width="${document.bounds.width}mm" height="${svgHeight}mm"

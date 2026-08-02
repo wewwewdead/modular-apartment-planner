@@ -33,6 +33,39 @@ import {
 } from '@/domain/projectCommands';
 import { propagateWallEdit } from '@/domain/modelGraph';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
+import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingCommands';
+import { validateBuildingCoordination } from '@/domain/buildingGraph';
+import { deriveSiteFeasibility } from '@/domain/siteModels';
+import { deriveApartmentProgram } from '@/domain/apartmentProgram';
+import { deriveWetCoreCoordination } from '@/domain/wetCoreModels';
+import { deriveServicesCoordination } from '@/domain/servicesCoordination';
+import { deriveFeasibilityComparison, deriveFeasibilityEconomics } from '@/domain/feasibilityEconomics';
+import { deriveProfessionalHandoff } from '@/domain/professionalHandoff';
+import { deriveParkingCoordination } from '@/domain/siteAccessModels';
+import { deriveEquipmentCoordination } from '@/domain/equipmentCoordination';
+import { deriveRoofDrainageCoordination } from '@/domain/roofDrainageCoordination';
+import { deriveTestFitCoordination } from '@/domain/testFitModels';
+import { deriveApartmentDesignCoordination } from '@/domain/apartmentDesign';
+import { deriveQuantityTakeoff } from '@/domain/quantityTakeoff';
+import { deriveSpatialCoordination } from '@/domain/spatialValidation';
+import { derivePreliminaryPackage } from '@/domain/documentPackage';
+import { deriveConceptualLoadPath } from '@/domain/structuralCoordination';
+import { deriveStructuralRealization } from '@/domain/structuralRealization';
+import { deriveServicesRealization } from '@/domain/servicesRealization';
+import { deriveCostRealization } from '@/domain/costRealization';
+import { deriveDocumentationRealization } from '@/domain/documentationRealization';
+import { deriveProfessionalExchange } from '@/domain/professionalExchange';
+
+const LIFECYCLE_STAGE_IDS = new Set([
+  'brief',
+  'site',
+  'spaces',
+  'structure',
+  'systems',
+  'validate',
+  'quantities',
+  'documents',
+]);
 
 /**
  * Old + new segments of every wall a propagation touches — the locality scope
@@ -125,7 +158,9 @@ function createInitialEditorState(activeFloorId = null) {
     maximizedPanel: null,
     activePhaseId: null,
     phaseViewMode: 'all',
+    lifecycleStage: 'brief',
     lastRejection: null,
+    wallDetailEditor: null,
   };
 }
 
@@ -198,6 +233,31 @@ export function initializeFloorplanState(initialProject) {
     savedVersion: 0,
     history: [],
     future: [],
+    derived: {
+      validationIssues: validateBuildingCoordination(syncedProject),
+      siteFeasibility: deriveSiteFeasibility(syncedProject),
+      apartmentProgram: deriveApartmentProgram(syncedProject),
+      wetCore: deriveWetCoreCoordination(syncedProject),
+      servicesCoordination: deriveServicesCoordination(syncedProject),
+      feasibilityEconomics: deriveFeasibilityEconomics(syncedProject),
+      feasibilityComparison: deriveFeasibilityComparison(syncedProject),
+      costRealization: deriveCostRealization(syncedProject),
+      documentationRealization: deriveDocumentationRealization(syncedProject),
+      professionalExchange: deriveProfessionalExchange(syncedProject),
+      professionalHandoff: deriveProfessionalHandoff(syncedProject),
+      parkingCoordination: deriveParkingCoordination(syncedProject),
+      equipmentCoordination: deriveEquipmentCoordination(syncedProject),
+      roofDrainageCoordination: deriveRoofDrainageCoordination(syncedProject),
+      testFitCoordination: deriveTestFitCoordination(syncedProject),
+      apartmentDesignCoordination: deriveApartmentDesignCoordination(syncedProject),
+      quantityTakeoff: deriveQuantityTakeoff(syncedProject),
+      spatialCoordination: deriveSpatialCoordination(syncedProject),
+      documentPackage: derivePreliminaryPackage(syncedProject),
+      structuralLoadPath: deriveConceptualLoadPath(syncedProject),
+      structuralRealization: deriveStructuralRealization(syncedProject),
+      servicesRealization: deriveServicesRealization(syncedProject),
+      lastCommand: null,
+    },
   });
 }
 
@@ -218,6 +278,31 @@ function reduceProjectState(state, action) {
         savedVersion: 0,
         history: [],
         future: [],
+        derived: {
+          validationIssues: validateBuildingCoordination(newProject),
+          siteFeasibility: deriveSiteFeasibility(newProject),
+          apartmentProgram: deriveApartmentProgram(newProject),
+          wetCore: deriveWetCoreCoordination(newProject),
+          servicesCoordination: deriveServicesCoordination(newProject),
+          feasibilityEconomics: deriveFeasibilityEconomics(newProject),
+          feasibilityComparison: deriveFeasibilityComparison(newProject),
+          costRealization: deriveCostRealization(newProject),
+          documentationRealization: deriveDocumentationRealization(newProject),
+          professionalExchange: deriveProfessionalExchange(newProject),
+          professionalHandoff: deriveProfessionalHandoff(newProject),
+          parkingCoordination: deriveParkingCoordination(newProject),
+          equipmentCoordination: deriveEquipmentCoordination(newProject),
+          roofDrainageCoordination: deriveRoofDrainageCoordination(newProject),
+          testFitCoordination: deriveTestFitCoordination(newProject),
+          apartmentDesignCoordination: deriveApartmentDesignCoordination(newProject),
+          quantityTakeoff: deriveQuantityTakeoff(newProject),
+          spatialCoordination: deriveSpatialCoordination(newProject),
+          documentPackage: derivePreliminaryPackage(newProject),
+          structuralLoadPath: deriveConceptualLoadPath(newProject),
+          structuralRealization: deriveStructuralRealization(newProject),
+          servicesRealization: deriveServicesRealization(newProject),
+          lastCommand: null,
+        },
       };
     }
 
@@ -236,6 +321,87 @@ function reduceProjectState(state, action) {
         savedVersion: 0,
         history: [],
         future: [],
+        derived: {
+          validationIssues: validateBuildingCoordination(loadedProject),
+          siteFeasibility: deriveSiteFeasibility(loadedProject),
+          apartmentProgram: deriveApartmentProgram(loadedProject),
+          wetCore: deriveWetCoreCoordination(loadedProject),
+          servicesCoordination: deriveServicesCoordination(loadedProject),
+          feasibilityEconomics: deriveFeasibilityEconomics(loadedProject),
+          feasibilityComparison: deriveFeasibilityComparison(loadedProject),
+          costRealization: deriveCostRealization(loadedProject),
+          documentationRealization: deriveDocumentationRealization(loadedProject),
+          professionalExchange: deriveProfessionalExchange(loadedProject),
+          professionalHandoff: deriveProfessionalHandoff(loadedProject),
+          parkingCoordination: deriveParkingCoordination(loadedProject),
+          equipmentCoordination: deriveEquipmentCoordination(loadedProject),
+          roofDrainageCoordination: deriveRoofDrainageCoordination(loadedProject),
+          testFitCoordination: deriveTestFitCoordination(loadedProject),
+          apartmentDesignCoordination: deriveApartmentDesignCoordination(loadedProject),
+          quantityTakeoff: deriveQuantityTakeoff(loadedProject),
+          spatialCoordination: deriveSpatialCoordination(loadedProject),
+          documentPackage: derivePreliminaryPackage(loadedProject),
+          structuralLoadPath: deriveConceptualLoadPath(loadedProject),
+          structuralRealization: deriveStructuralRealization(loadedProject),
+          servicesRealization: deriveServicesRealization(loadedProject),
+          lastCommand: null,
+        },
+      };
+    }
+
+    case 'EXECUTE_BUILDING_COMMAND': {
+      const result = executeBuildingCommand(state.project, action.command);
+      if (!result.ok) {
+        return {
+          ...state,
+          derived: {
+            ...state.derived,
+            lastCommand: {
+              ok: false,
+              commandType: result.commandType,
+              error: result.error,
+            },
+          },
+        };
+      }
+      const nextState = applyProjectUpdate(state, {
+        ...result.project,
+        updatedAt: new Date().toISOString(),
+      });
+      return {
+        ...nextState,
+        derived: {
+          validationIssues: result.validation.issues,
+          siteFeasibility: deriveSiteFeasibility(result.project),
+          apartmentProgram: deriveApartmentProgram(result.project),
+          wetCore: deriveWetCoreCoordination(result.project),
+          servicesCoordination: deriveServicesCoordination(result.project),
+          feasibilityEconomics: deriveFeasibilityEconomics(result.project),
+          feasibilityComparison: deriveFeasibilityComparison(result.project),
+          costRealization: deriveCostRealization(result.project),
+          documentationRealization: deriveDocumentationRealization(result.project),
+          professionalExchange: deriveProfessionalExchange(result.project),
+          professionalHandoff: deriveProfessionalHandoff(result.project),
+          parkingCoordination: deriveParkingCoordination(result.project),
+          equipmentCoordination: deriveEquipmentCoordination(result.project),
+          roofDrainageCoordination: deriveRoofDrainageCoordination(result.project),
+          testFitCoordination: deriveTestFitCoordination(result.project),
+          apartmentDesignCoordination: deriveApartmentDesignCoordination(result.project),
+          quantityTakeoff: deriveQuantityTakeoff(result.project),
+          spatialCoordination: deriveSpatialCoordination(result.project),
+          documentPackage: derivePreliminaryPackage(result.project),
+          structuralLoadPath: deriveConceptualLoadPath(result.project),
+          structuralRealization: deriveStructuralRealization(result.project),
+          servicesRealization: deriveServicesRealization(result.project),
+          lastCommand: {
+            ok: true,
+            commandType: result.commandType,
+            changes: result.changes,
+            introducedIssueIds: result.validation.introduced.map((issue) => issue.id),
+            resolvedIssueIds: result.validation.resolved.map((issue) => issue.id),
+            undoAvailable: Boolean(result.undo),
+          },
+        },
       };
     }
 
@@ -1113,6 +1279,25 @@ function reduceProjectState(state, action) {
 
 function reduceEditorState(editorState, action) {
   switch (action.type) {
+    case 'OPEN_WALL_DETAIL_EDITOR':
+      return {
+        ...editorState,
+        wallDetailEditor: {
+          floorId: action.floorId,
+          wallId: action.wallId,
+          ...(action.side === 'interior' || action.side === 'exterior' ? { side: action.side } : {}),
+        },
+        selectedId: action.wallId,
+        selectedType: 'wall',
+        statusMessage: null,
+      };
+
+    case 'CLOSE_WALL_DETAIL_EDITOR':
+      return editorState.wallDetailEditor ? { ...editorState, wallDetailEditor: null } : editorState;
+
+    case 'SET_LIFECYCLE_STAGE':
+      return LIFECYCLE_STAGE_IDS.has(action.stage) ? { ...editorState, lifecycleStage: action.stage } : editorState;
+
     case 'SET_MODEL_TARGET':
       return {
         ...clearSelectionState(editorState),
@@ -1309,19 +1494,102 @@ function reduceEditorState(editorState, action) {
   }
 }
 
+function routeStructuralActionToCommand(state, action) {
+  if (
+    action.type === 'BEAM_ADD' &&
+    action.beam?.startRef?.kind === 'column' &&
+    action.beam?.endRef?.kind === 'column'
+  ) {
+    return {
+      type: 'EXECUTE_BUILDING_COMMAND',
+      command: {
+        type: BUILDING_COMMANDS.CREATE_BEAM_BETWEEN_SUPPORTS,
+        beamId: action.beam.id,
+        floorId: action.floorId,
+        startColumnId: action.beam.startRef.id,
+        endColumnId: action.beam.endRef.id,
+        width: action.beam.width,
+        depth: action.beam.depth,
+        floorLevel: action.beam.floorLevel,
+        placementRole: action.beam.placementRole,
+        phaseId: action.beam.phaseId,
+      },
+    };
+  }
+
+  if (action.type === 'COLUMN_UPDATE' && action.column && ('x' in action.column || 'y' in action.column)) {
+    const updateKeys = Object.keys(action.column).filter((key) => key !== 'id');
+    const positionOnly = updateKeys.every((key) => key === 'x' || key === 'y');
+    const floor = state.project.floors.find((entry) => entry.id === action.floorId);
+    const column = floor?.columns?.find((entry) => entry.id === action.column.id);
+    if (positionOnly && column) {
+      return {
+        type: 'EXECUTE_BUILDING_COMMAND',
+        command: {
+          type: BUILDING_COMMANDS.MOVE_COLUMN,
+          floorId: action.floorId,
+          columnId: action.column.id,
+          to: {
+            x: action.column.x ?? column.x,
+            y: action.column.y ?? column.y,
+          },
+          scope: action.scope || 'instance',
+        },
+      };
+    }
+  }
+
+  return action;
+}
+
 export default function floorplanReducer(state, action) {
-  const nextProjectState = reduceProjectState(state, action);
+  const projectAction = routeStructuralActionToCommand(state, action);
+  const nextProjectState = reduceProjectState(state, projectAction);
   if (nextProjectState !== state) {
     // A successful project mutation (changeVersion bumped) clears any pending
     // edit rejection; the rejection path itself never bumps changeVersion, so
     // the signal survives exactly until the next real edit.
     const shouldClearRejection =
       nextProjectState.editor?.lastRejection && nextProjectState.changeVersion !== state.changeVersion;
-    return syncFloorplanState(
-      shouldClearRejection
-        ? { ...nextProjectState, editor: { ...nextProjectState.editor, lastRejection: null } }
-        : nextProjectState,
-    );
+    const withClearedRejection = shouldClearRejection
+      ? { ...nextProjectState, editor: { ...nextProjectState.editor, lastRejection: null } }
+      : nextProjectState;
+    const withDerivedValidation =
+      nextProjectState.project !== state.project
+        ? {
+            ...withClearedRejection,
+            derived: {
+              ...withClearedRejection.derived,
+              validationIssues: validateBuildingCoordination(nextProjectState.project),
+              siteFeasibility: deriveSiteFeasibility(nextProjectState.project),
+              apartmentProgram: deriveApartmentProgram(nextProjectState.project),
+              wetCore: deriveWetCoreCoordination(nextProjectState.project),
+              servicesCoordination: deriveServicesCoordination(nextProjectState.project),
+              feasibilityEconomics: deriveFeasibilityEconomics(nextProjectState.project),
+              feasibilityComparison: deriveFeasibilityComparison(nextProjectState.project),
+              costRealization: deriveCostRealization(nextProjectState.project),
+              documentationRealization: deriveDocumentationRealization(nextProjectState.project),
+              professionalExchange: deriveProfessionalExchange(nextProjectState.project),
+              professionalHandoff: deriveProfessionalHandoff(nextProjectState.project),
+              parkingCoordination: deriveParkingCoordination(nextProjectState.project),
+              equipmentCoordination: deriveEquipmentCoordination(nextProjectState.project),
+              roofDrainageCoordination: deriveRoofDrainageCoordination(nextProjectState.project),
+              testFitCoordination: deriveTestFitCoordination(nextProjectState.project),
+              apartmentDesignCoordination: deriveApartmentDesignCoordination(nextProjectState.project),
+              quantityTakeoff: deriveQuantityTakeoff(nextProjectState.project),
+              spatialCoordination: deriveSpatialCoordination(nextProjectState.project),
+              documentPackage: derivePreliminaryPackage(nextProjectState.project),
+              structuralLoadPath: deriveConceptualLoadPath(nextProjectState.project),
+              structuralRealization: deriveStructuralRealization(nextProjectState.project),
+              servicesRealization: deriveServicesRealization(nextProjectState.project),
+              lastCommand:
+                projectAction.type === 'EXECUTE_BUILDING_COMMAND'
+                  ? withClearedRejection.derived?.lastCommand || null
+                  : null,
+            },
+          }
+        : withClearedRejection;
+    return syncFloorplanState(withDerivedValidation);
   }
 
   const nextEditorState = reduceEditorState(state.editor, action);
@@ -1335,4 +1603,11 @@ export default function floorplanReducer(state, action) {
   return state;
 }
 
-export { buildEntityCollections, createInitialEditorState, reduceEditorState, reduceProjectState, syncFloorplanState };
+export {
+  buildEntityCollections,
+  createInitialEditorState,
+  reduceEditorState,
+  reduceProjectState,
+  routeStructuralActionToCommand,
+  syncFloorplanState,
+};

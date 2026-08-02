@@ -17,7 +17,9 @@ import { inferDimensionSubtype } from '../utils/dimensionUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { findFilletableCorner, computeSketchFillet, applyFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
-import { expandGroupedSelection } from '../utils/groupUtils';
+import { buildFastenerFeatureConfig, getHardwarePattern, resolveFastenerTargetPartId } from '../utils/fastenerUtils';
+import { buildHardwarePatternFeatureConfigs } from '../utils/hardwarePatternUtils';
+import { createGroupId, expandGroupedSelection } from '../utils/groupUtils';
 import { closePolyline } from '../utils/profileUtils';
 import { appendPolylineVertex } from '../utils/polylineUtils';
 import {
@@ -137,6 +139,62 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
           dispatch(commitEntity(nextEntity));
           dispatch(setSelection([nextEntity.id]));
           dispatch(setActiveTool('select'));
+        }
+        return;
+      }
+
+      // Fasteners place on a single click: the hole is sized by the active
+      // catalog item, never by dragging, so there is no draft to finish.
+      if (activeTool === 'fastener') {
+        const pattern = getHardwarePattern(state.ui.activeHardwareId);
+
+        // Pattern hardware (hinges, handles) drills its whole boring pattern in
+        // one click: every hole lands as its own feature, the set shares a
+        // group so it selects and deletes together, and the single
+        // SET_DOCUMENT_ENTITIES commit keeps it one undo step.
+        if (pattern) {
+          const targetPartId = resolveFastenerTargetPartId(hoveredEntity);
+          const configs = buildHardwarePatternFeatureConfigs(pattern, snap.point ?? worldPoint, hoveredEntity, {
+            targetPartId,
+          });
+          const groupId = createGroupId(state.document.entities);
+
+          let nextEntities = state.document.entities;
+          const placed = [];
+          for (const config of configs) {
+            const entity = createFeatureEntity(
+              { ...config, meta: { ...config.meta, groupId } },
+              nextEntities,
+              targetLayerId,
+            );
+            if (!entity) {
+              break;
+            }
+            placed.push(entity);
+            nextEntities = [...nextEntities, entity];
+          }
+
+          if (placed.length && placed.length === configs.length) {
+            dispatch(setDocumentEntities(nextEntities));
+            dispatch(setSelection(placed.map((entity) => entity.id)));
+          } else {
+            dispatch(cancelDraft());
+          }
+          return;
+        }
+
+        const nextEntity = createFeatureEntity(
+          buildFastenerFeatureConfig(state.ui.activeHardwareId, snap.point ?? worldPoint, {
+            targetPartId: resolveFastenerTargetPartId(hoveredEntity),
+          }),
+          state.document.entities,
+          targetLayerId,
+        );
+
+        if (nextEntity) {
+          dispatch(commitEntity(nextEntity));
+        } else {
+          dispatch(cancelDraft());
         }
         return;
       }
@@ -532,6 +590,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
       state.draft,
       state.interaction.suppressNextClick,
       state.selection.selectedIds,
+      state.ui.activeHardwareId,
       state.ui.activeLayerId,
       state.ui.isometricPlane,
       state.ui.viewMode,

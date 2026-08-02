@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBlankSketchDocument } from './sketchDocumentUtils';
 import {
   getSketchWorkspaceFileName,
+  isSketchRenamePending,
   openSketchWorkspaceFile,
   saveSketchWorkspaceFile,
 } from './sketchWorkspaceFileUtils';
@@ -78,5 +79,37 @@ describe('sketchWorkspaceFileUtils', () => {
     expect(handle.getFile).toHaveBeenCalled();
     expect(result.fileName).toBe('Opened.sketch.json');
     expect(result.workspace.document.name).toBe('Opened Sketch');
+  });
+
+  describe('isSketchRenamePending', () => {
+    const fileHandle = { name: 'my-cabinet.sketch.json' };
+
+    it('keeps plain Save silent when the document name is unchanged since the last save', () => {
+      // The classic bug case: the user saved under a file name of their own
+      // choosing, which differs from the document name. That must NOT force
+      // the picker open on every subsequent save.
+      expect(
+        isSketchRenamePending({
+          fileHandle,
+          savedDocumentName: 'untitled sketch',
+          documentName: 'untitled sketch',
+        }),
+      ).toBe(false);
+    });
+
+    it('re-prompts once the document is renamed after a save', () => {
+      expect(
+        isSketchRenamePending({
+          fileHandle,
+          savedDocumentName: 'untitled sketch',
+          documentName: 'kitchen cabinet',
+        }),
+      ).toBe(true);
+    });
+
+    it('never reports a pending rename without a file handle or a recorded save', () => {
+      expect(isSketchRenamePending({ fileHandle: null, savedDocumentName: 'a', documentName: 'b' })).toBe(false);
+      expect(isSketchRenamePending({ fileHandle, savedDocumentName: null, documentName: 'b' })).toBe(false);
+    });
   });
 });

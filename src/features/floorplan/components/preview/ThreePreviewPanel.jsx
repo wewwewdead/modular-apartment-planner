@@ -18,6 +18,7 @@ export default function ThreePreviewPanel({
   isMaximized = false,
   onToggleMaximize,
   className = '',
+  applyPhaseFilter = true,
 }) {
   const viewportRef = useRef(null);
   const containerRef = useRef(null);
@@ -34,8 +35,8 @@ export default function ThreePreviewPanel({
   const { selectedId, selectedType, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
 
   const filteredProject = useMemo(
-    () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
-    [project, activePhaseId, phaseViewMode],
+    () => (applyPhaseFilter ? filterProjectByPhase(project, activePhaseId, phaseViewMode) : project),
+    [project, activePhaseId, phaseViewMode, applyPhaseFilter],
   );
 
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);

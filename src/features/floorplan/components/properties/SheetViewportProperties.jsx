@@ -61,6 +61,8 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
         nextSourceView === '3d_preview'
           ? 'supplemental'
           : nextSourceView === 'plan' ||
+              nextSourceView === 'structural_plan' ||
+              nextSourceView === 'services_plan' ||
               nextSourceView === 'roof_plan' ||
               nextSourceView === 'roof_drainage' ||
               nextSourceView === 'truss_plan'
@@ -111,6 +113,10 @@ function SheetViewportProperties({ sheet, viewport, project, dispatch, u }) {
           }}
         >
           <option value="plan">Plan</option>
+          <option value="structural_plan">Structural Coordination Plan</option>
+          <option value="services_plan">Services and Egress Coordination Plan</option>
+          <option value="site_plan">Site Development Plan</option>
+          <option value="building_report">Building Report</option>
           <option value="roof_plan">Roof Plan</option>
           <option value="roof_elevation_front">Roof Front Elevation</option>
           <option value="roof_elevation_rear">Roof Rear Elevation</option>

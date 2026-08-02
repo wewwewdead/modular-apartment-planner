@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createProject, createWall } from '@/domain/models';
+import { createWallDetailing } from '@/domain/wallDetailing';
 import { HISTORY_LIMIT } from '@/domain/projectStateHelpers';
 import floorplanReducer, { initializeFloorplanState } from './floorplanReducer';
 
@@ -76,6 +77,39 @@ describe('floorplanReducer', () => {
     expect(state.entities.floor?.id).toBe(state.project.floors[0].id);
     expect(state.viewport).toEqual(state.editor.viewport);
     expect(state.selection.selectedId).toBeNull();
+    expect(state.editor.lifecycleStage).toBe('brief');
+  });
+
+  it('switches lifecycle stages as transient editor state', () => {
+    const state = initializeFloorplanState(createProject());
+    const nextState = floorplanReducer(state, { type: 'SET_LIFECYCLE_STAGE', stage: 'validate' });
+
+    expect(nextState.editor.lifecycleStage).toBe('validate');
+    expect(nextState.project).toBe(state.project);
+    expect(nextState.history).toHaveLength(0);
+    expect(floorplanReducer(nextState, { type: 'SET_LIFECYCLE_STAGE', stage: 'unknown' })).toBe(nextState);
+  });
+
+  it('opens and closes the wall-detail workspace as transient editor state', () => {
+    const state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    const opened = floorplanReducer(state, { type: 'OPEN_WALL_DETAIL_EDITOR', floorId, wallId: 'wall_1' });
+
+    expect(opened.editor.wallDetailEditor).toEqual({ floorId, wallId: 'wall_1' });
+    expect(opened.editor.selectedId).toBe('wall_1');
+    expect(opened.project).toBe(state.project);
+    expect(opened.history).toHaveLength(0);
+
+    const openedExterior = floorplanReducer(state, {
+      type: 'OPEN_WALL_DETAIL_EDITOR',
+      floorId,
+      wallId: 'wall_1',
+      side: 'exterior',
+    });
+    expect(openedExterior.editor.wallDetailEditor).toEqual({ floorId, wallId: 'wall_1', side: 'exterior' });
+
+    const closed = floorplanReducer(opened, { type: 'CLOSE_WALL_DETAIL_EDITOR' });
+    expect(closed.editor.wallDetailEditor).toBeNull();
   });
 
   it('keeps the derived viewport in sync with editor viewport updates', () => {
@@ -279,6 +313,43 @@ describe('live-model pipeline — WALL_UPDATE', () => {
     const divider = next.project.floors[0].walls.find((w) => w.id === 'divider');
     expect(divider.thickness).toBe(200);
     expect(next.editor.lastRejection).toBeNull();
+  });
+
+  it('gives the 3D scene cache a fresh floor reference after a wall-detail customization', () => {
+    const { state, floorId } = loadTwoRoomState();
+    const previousFloor = state.project.floors.find((floor) => floor.id === floorId);
+    const previousWall = previousFloor.walls.find((wall) => wall.id === 'divider');
+    const detailing = createWallDetailing({
+      enabled: true,
+      sides: {
+        interior: {
+          enabled: true,
+          layout: {
+            mode: 'custom',
+            customPanels: [{ id: 'panel-live', u: 100, v: 100, width: 800, height: 1200 }],
+          },
+        },
+      },
+    });
+
+    const next = floorplanReducer(state, {
+      type: 'WALL_UPDATE',
+      floorId,
+      wall: {
+        id: previousWall.id,
+        assembly: { preset: 'fiber_cement', detailing },
+      },
+    });
+    const nextFloor = next.project.floors.find((floor) => floor.id === floorId);
+    const nextWall = nextFloor.walls.find((wall) => wall.id === 'divider');
+
+    expect(nextFloor).not.toBe(previousFloor);
+    expect(nextWall).not.toBe(previousWall);
+    expect(nextWall.assembly.detailing.sides.interior.layout.customPanels[0]).toMatchObject({
+      id: 'panel-live',
+      u: 100,
+      v: 100,
+    });
   });
 });
 

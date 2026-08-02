@@ -13,6 +13,7 @@ import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { getAnnotationDisplayLabel } from '@/annotations/format';
+import ProjectLifecyclePanel from './ProjectLifecyclePanel';
 import styles from './Sidebar.module.css';
 
 function ChevronSvg({ collapsed }) {
@@ -85,7 +86,7 @@ function Section({ title, count, collapsed, onToggle, collapsible = true, action
 }
 
 export default function Sidebar() {
-  const { project, dispatch, duplicateFloor } = useProject();
+  const { project, derived, dispatch, duplicateFloor } = useProject();
   const {
     activeFloorId,
     activeSheetId,
@@ -95,6 +96,7 @@ export default function Sidebar() {
     modelTarget,
     activePhaseId,
     phaseViewMode,
+    lifecycleStage,
     dispatch: editorDispatch,
   } = useEditor();
   const confirm = useConfirmDialog();
@@ -307,6 +309,14 @@ export default function Sidebar() {
           onChange={(e) => dispatch({ type: 'PROJECT_SET_NAME', name: e.target.value })}
         />
       </Section>
+
+      <ProjectLifecyclePanel
+        project={project}
+        derived={derived}
+        activeStage={lifecycleStage}
+        onStageChange={(stage) => editorDispatch({ type: 'SET_LIFECYCLE_STAGE', stage })}
+        onExecuteCommand={(command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command })}
+      />
 
       <Section
         title="Floors"

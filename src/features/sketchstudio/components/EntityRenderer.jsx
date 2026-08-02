@@ -1,5 +1,6 @@
 import { getArcPath, getArcMidpoint } from '../utils/arcUtils';
 import { getRectCorners } from '../utils/entityUtils';
+import { getFastenerDrillingDefaults, getHardwarePattern, isFastenerEntity } from '../utils/fastenerUtils';
 import { getTextLeaderGeometry } from '../utils/textLeaderUtils';
 
 function rectPoints(entity) {
@@ -9,7 +10,64 @@ function rectPoints(entity) {
     .join(' ');
 }
 
+/**
+ * Drafting symbol for a user-placed fastener: the solid pilot circle that gets
+ * drilled, the dashed head footprint the screw head or bolt washer covers, and
+ * centre-line crosshair ticks. This is the same visual language the placement
+ * ghost in DraftRenderer uses, so a committed fastener reads as the thing the
+ * preview promised.
+ *
+ * Joinery-generated pocket bores and pilot holes are deliberately NOT drawn this
+ * way: they carry no `hardwareId`, so they keep the plain feature-hole rendering.
+ */
+function renderFastener(entity, className, interactive) {
+  const defaults = getFastenerDrillingDefaults(entity.hardwareId);
+  const pilotRadius = Math.max((Number(entity.diameter) || defaults?.diameter || 0) / 2, 0.1);
+  const headRadius = Math.max((Number(defaults?.headDiameter) || 0) / 2, pilotRadius);
+  const crosshairReach = headRadius * 1.8;
+  const kind = defaults?.kind ?? getHardwarePattern(entity.hardwareId)?.kind ?? 'hardware';
+  const fastenerClassName = `${className} is-feature is-fastener is-fastener-${kind}`;
+  const sharedProps = {
+    vectorEffect: 'non-scaling-stroke',
+    pointerEvents: interactive ? 'all' : 'none',
+    ...(interactive ? { cursor: 'pointer' } : {}),
+  };
+
+  return (
+    <g key={entity.id}>
+      <circle
+        {...sharedProps}
+        className={`${fastenerClassName} is-fastener-head`}
+        cx={entity.cx}
+        cy={entity.cy}
+        r={headRadius}
+      />
+      <circle {...sharedProps} className={fastenerClassName} cx={entity.cx} cy={entity.cy} r={pilotRadius} />
+      <line
+        {...sharedProps}
+        className={`${fastenerClassName} is-fastener-tick`}
+        x1={entity.cx - crosshairReach}
+        y1={entity.cy}
+        x2={entity.cx + crosshairReach}
+        y2={entity.cy}
+      />
+      <line
+        {...sharedProps}
+        className={`${fastenerClassName} is-fastener-tick`}
+        x1={entity.cx}
+        y1={entity.cy - crosshairReach}
+        x2={entity.cx}
+        y2={entity.cy + crosshairReach}
+      />
+    </g>
+  );
+}
+
 function renderFeature(entity, className, interactive) {
+  if (isFastenerEntity(entity) && entity.shape === 'circle') {
+    return renderFastener(entity, className, interactive);
+  }
+
   const featureClassName = `${className} is-feature is-${entity.featureType}`;
   const sharedProps = {
     className: featureClassName,

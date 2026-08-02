@@ -9,6 +9,7 @@ import { computeEntityBoundingBox } from '../../utils/bboxUtils';
 import { getDimensionGeometry, measureDistance, formatDimensionText } from '../../utils/dimensionUtils';
 import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
 import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
+import { isFastenerEntity } from '../../utils/fastenerUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
 import { offsetPolygon } from '../utils/polygonOffset';
 import { createDxfWriter } from './dxfWriter';
@@ -23,6 +24,9 @@ const DXF_LAYERS = [
   { name: 'DIMENSIONS', color: 8 },
   { name: 'TEXT', color: 7 },
   { name: 'SHEET', color: 8 },
+  // User-placed fasteners: drill operations, not profile cuts, so the operator
+  // can run (or suppress) them independently of the cut layer.
+  { name: 'HARDWARE', color: 5 },
 ];
 
 const EXPORTABLE_TYPES = new Set([
@@ -65,6 +69,13 @@ function getEntityLayer(entity) {
   // itself to a layer instead of being classified by entity type.
   if (entity.meta?.dxfLayer) {
     return entity.meta.dxfLayer;
+  }
+
+  // Only fasteners the user placed from the catalog. Joinery-generated pocket
+  // bores and pilot holes carry no `hardwareId` and stay on the cut layer with
+  // the rest of the joint geometry.
+  if (isFastenerEntity(entity)) {
+    return 'HARDWARE';
   }
 
   if (entity.type === 'dimension' || entity.type === 'angle-dimension') {
@@ -694,8 +705,14 @@ function getExportEntities(entities, options = {}) {
   }
 
   // Reference geometry (stock outlines) is not a toolpath, so it must never be
-  // grown or shrunk by kerf compensation.
-  return filtered.map((entity) => (entity.meta?.dxfKerfExempt ? entity : applyKerfToEntity(entity, kerf)));
+  // grown or shrunk by kerf compensation. Neither is a fastener's pilot hole: it
+  // is drilled, not routed, so the finished hole is the bit diameter and the
+  // circle must reach the machine at exactly the catalog pilot size. Without the
+  // exemption `applyKerfToFeature` would shrink a 3.0mm pilot to 2.8mm at a
+  // 0.2mm kerf and the screw would split the stock.
+  return filtered.map((entity) =>
+    entity.meta?.dxfKerfExempt || isFastenerEntity(entity) ? entity : applyKerfToEntity(entity, kerf),
+  );
 }
 
 /**

@@ -1,5 +1,6 @@
 import { memo, useState } from 'react';
 import MaterialPicker from './MaterialPicker';
+import FastenerPanel, { isFastenerPanelVisible } from './FastenerPanel';
 import MaterialEditorPanel from './MaterialEditorPanel';
 import BomPanel from './BomPanel';
 import NestingPanel from './NestingPanel';
@@ -107,9 +108,19 @@ function CraftsmanSidebar({
   onLoadTemplate,
   onDuplicateEntities,
   onEntityFieldCommit,
+  activeTool,
+  activeHardwareId,
+  onActiveHardwareChange,
+  onEntityHardwareChange,
+  // Document parts plus the joinery-generated features that consume a fastener -
+  // the same list the BOM is built from, so the assembly panel's hardware counts
+  // match the cutting list and the workshop package instead of missing the
+  // joinery screws and dowels. Falls back to the plain entity list.
+  assemblyEntities = entities,
 }) {
   const hasEntities = entities.length > 0;
   const materialSelection = getMaterialSelectionState(entities, selectedIds);
+  const showFastenerPanel = isFastenerPanelVisible(activeTool, selectedEntity);
 
   return (
     <div className={styles.craftsmanSidebar}>
@@ -125,6 +136,20 @@ function CraftsmanSidebar({
             isMixedThickness={materialSelection.isMixedThickness}
             onMaterialChange={(materialId) => onMaterialChange(selectedIds, materialId)}
             onThicknessChange={(thickness) => onThicknessChange(selectedIds, thickness)}
+          />
+        </CollapsibleSection>
+      )}
+
+      {showFastenerPanel && (
+        <CollapsibleSection title="Fasteners" forceOpen>
+          <FastenerPanel
+            activeTool={activeTool}
+            activeHardwareId={activeHardwareId}
+            onActiveHardwareChange={onActiveHardwareChange}
+            selectedEntity={selectedEntity}
+            selectedIds={selectedIds}
+            onEntityHardwareChange={onEntityHardwareChange}
+            onEntityFieldCommit={onEntityFieldCommit}
           />
         </CollapsibleSection>
       )}
@@ -187,7 +212,7 @@ function CraftsmanSidebar({
       </CollapsibleSection>
 
       <CollapsibleSection title="Assembly Instructions" defaultOpen={false}>
-        <AssemblyPanel entities={entities} />
+        <AssemblyPanel entities={assemblyEntities} />
       </CollapsibleSection>
     </div>
   );

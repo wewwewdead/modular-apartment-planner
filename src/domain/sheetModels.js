@@ -11,7 +11,7 @@ export function createSheetRevision(options = {}) {
 
 export function createSheet(title = 'Sheet 1', options = {}) {
   return {
-    id: generateId('sheet'),
+    id: options.id ?? generateId('sheet'),
     title,
     paperSize: options.paperSize ?? 'A3_LANDSCAPE',
     number: options.number ?? '',
@@ -41,6 +41,8 @@ export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, o
     sourceView === '3d_preview'
       ? 'supplemental'
       : sourceView === 'plan' ||
+          sourceView === 'structural_plan' ||
+          sourceView === 'services_plan' ||
           sourceView === 'roof_plan' ||
           sourceView === 'roof_drainage' ||
           sourceView === 'truss_plan'
@@ -50,7 +52,7 @@ export function createSheetViewport(sourceView = 'plan', sourceFloorId = null, o
           : 'secondary';
 
   return {
-    id: generateId('viewport'),
+    id: options.id ?? generateId('viewport'),
     sourceView,
     sourceFloorId,
     sourceRefId: options.sourceRefId ?? null,

@@ -6,6 +6,7 @@ import styles from '../styles/craftsman.module.css';
 const STEP_ICONS = {
   preparation: '\u2702', // scissors
   assembly: '\u2692', // hammer and pick
+  hardware: '\u2699', // gear
   finishing: '\u2728', // sparkles
 };
 

@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import MaterialPicker from '../craftsman/components/MaterialPicker';
+import FastenerPanel, { isFastenerPanelVisible } from '../craftsman/components/FastenerPanel';
 import { getMaterialSelectionState } from '../craftsman/utils/materialSelectionUtils';
 import SelectionActions from './SelectionActions';
 import ConstraintsSection from './ConstraintsSection';
@@ -31,6 +32,10 @@ function RightPanel({
   onUngroupSelection,
   onMaterialChange,
   onThicknessChange,
+  activeTool,
+  activeHardwareId,
+  onActiveHardwareChange,
+  onEntityHardwareChange,
 }) {
   const materialSelection = useMemo(
     () => getMaterialSelectionState(document.entities, selectedIds),
@@ -102,6 +107,22 @@ function RightPanel({
           </div>
         )}
       </section>
+      {isFastenerPanelVisible(activeTool, selectedEntity) && (
+        <section className="sketchStudioPanelSection">
+          <p className="sketchStudioPanelEyebrow">Fastener</p>
+          <div className="sketchStudioSubpanelCard">
+            <FastenerPanel
+              activeTool={activeTool}
+              activeHardwareId={activeHardwareId}
+              onActiveHardwareChange={onActiveHardwareChange}
+              selectedEntity={selectedEntity}
+              selectedIds={selectedIds}
+              onEntityHardwareChange={onEntityHardwareChange}
+              onEntityFieldCommit={onEntityFieldCommit}
+            />
+          </div>
+        </section>
+      )}
       {selectedIds.length > 0 && (
         <section className="sketchStudioPanelSection">
           <p className="sketchStudioPanelEyebrow">Materials</p>

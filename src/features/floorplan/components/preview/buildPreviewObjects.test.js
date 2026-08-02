@@ -345,6 +345,38 @@ describe('buildPreviewObjectRoot', () => {
     expect(entry.object).toBeDefined();
   });
 
+  it('builds a traced vertical wall-panel extrusion with cut holes', () => {
+    const panel = {
+      ...createDescriptor('panel-1', 'wall', 'wall', 'wallPanel'),
+      outline: [
+        { x: 0, y: 0 },
+        { x: 1000, y: 0 },
+        { x: 1000, y: 1200 },
+        { x: 0, y: 900 },
+      ],
+      holes: [
+        [
+          { x: 200, y: 200 },
+          { x: 400, y: 200 },
+          { x: 400, y: 400 },
+          { x: 200, y: 400 },
+        ],
+      ],
+      origin: { x: 10, y: 20 },
+      baseElevation: 100,
+      depth: 6,
+      rotation: 0.5,
+    };
+    const scene = createSceneDescriptor([
+      { floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects: [panel] },
+    ]);
+
+    const object = buildPreviewObjectRoot(scene, palette).meshMap.get('panel-1').object;
+
+    expect(object.position).toMatchObject({ x: 10, y: 100, z: 20 });
+    expect(object.rotation.y).toBe(-0.5);
+  });
+
   it('uses shared material references (no cloning)', () => {
     const scene = createSceneDescriptor([
       {

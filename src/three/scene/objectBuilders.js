@@ -4,9 +4,24 @@ import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { isValidSlabBoundary } from '@/geometry/slabGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
-import { wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
+import { positionOnWall, wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
+import { add, perpendicular, scale } from '@/geometry/point';
 import { arcWallOutline } from '@/geometry/filletGeometry';
 import { buildWallPreviewContexts, buildWallSolidSegments } from './wallPreviewContext';
+import {
+  WALL_BOARD_MATERIALS,
+  WALL_FRAME_MATERIALS,
+  deriveWallAssemblyLayers,
+  resolveWallAssembly,
+  wallAssemblyCoreDepth,
+} from '@/domain/wallAssemblies';
+import {
+  FASTENER_APPEARANCE_MODES,
+  deriveWallFasteners,
+  deriveWallFramingMembers,
+  deriveWallPanels,
+  resolveWallDetailing,
+} from '@/domain/wallDetailing';
 
 const FIXTURE_3D_HEIGHTS = {
   kitchenTop: 900,
@@ -52,6 +67,7 @@ function createPrismDescriptor(id, kind, outline, baseElevation, height, metadat
     kind,
     geometry: 'prism',
     outline: outline.map((point) => ({ x: point.x, y: point.y })),
+    holes: (metadata.holes || []).map((hole) => hole.map((point) => ({ x: point.x, y: point.y }))),
     baseElevation,
     height,
     materialKey: metadata.materialKey || kind,
@@ -159,8 +175,190 @@ function createStairDescriptor(stair, floorLevel, floorId, landings, landingElev
   };
 }
 
+function boardMaterialKey(material) {
+  return material === WALL_BOARD_MATERIALS.PLYWOOD ? 'wallPlywood' : 'wallFiberCement';
+}
+
+function fastenerMaterialKey(appearance, boardMaterial) {
+  if (appearance === FASTENER_APPEARANCE_MODES.TONAL) return boardMaterialKey(boardMaterial);
+  if (appearance === FASTENER_APPEARANCE_MODES.CONTRAST) return 'wallFastenerContrast';
+  if (appearance === FASTENER_APPEARANCE_MODES.CONSTRUCTION) return 'wallFastenerConstruction';
+  return 'wallFastener';
+}
+
+function detailedWallMetadata(context, assembly, extra = {}) {
+  return {
+    sourceId: context.wall.id,
+    floorId: context.floorId,
+    wallId: context.wall.id,
+    wallAssembly: assembly,
+    wallDetail: true,
+    ...extra,
+  };
+}
+
+function shiftedWallPoint(wall, position, normal, offset) {
+  return add(positionOnWall(wall, position), scale(normal, offset));
+}
+
+function createWallPanelDescriptor(id, context, region, normal, layer, metadata) {
+  const direction = wallDirection(context.sourceWall);
+  const origin = shiftedWallPoint(context.sourceWall, 0, normal, layer.centerOffset);
+  const planOutline = region.outline.map((point) =>
+    shiftedWallPoint(context.sourceWall, point.u, normal, layer.centerOffset),
+  );
+  const minV = Math.min(...region.outline.map((point) => point.v));
+  const maxV = Math.max(...region.outline.map((point) => point.v));
+  return {
+    id,
+    kind: 'wall',
+    geometry: 'wallPanel',
+    outline: region.outline.map((point) => ({ x: point.u, y: point.v })),
+    holes: (region.holes || []).map((hole) => hole.map((point) => ({ x: point.u, y: point.v }))),
+    origin,
+    rotation: Math.atan2(direction.y, direction.x),
+    baseElevation: context.wallBase,
+    depth: layer.buildUp,
+    materialKey: metadata.materialKey,
+    metadata,
+    bounds: createBoundsFromPoints(planOutline, context.wallBase + minV, context.wallBase + maxV),
+  };
+}
+
+function buildDetailedWallObjects(context, assembly, layers) {
+  const detailing = resolveWallDetailing(context.wall);
+  const normal = perpendicular(wallDirection(context.sourceWall));
+  const coreMaterialKey =
+    assembly.framing.material === WALL_FRAME_MATERIALS.TIMBER ? 'wallFramingTimber' : 'wallFramingSteel';
+  const descriptors = deriveWallFramingMembers(context.wall, context.floor).map((member) =>
+    createLinearBoxDescriptor(
+      `${member.id}:3d`,
+      'wall',
+      shiftedWallPoint(context.sourceWall, member.u0, normal, member.frameOffset || 0),
+      shiftedWallPoint(context.sourceWall, member.u1, normal, member.frameOffset || 0),
+      member.depth,
+      context.wallBase + member.v0,
+      member.v1 - member.v0,
+      detailedWallMetadata(context, assembly, {
+        materialKey: coreMaterialKey,
+        assemblySide: 'core',
+        wallDetailKind: 'framing',
+        wallDetailElementId: member.id,
+        framingKind: member.kind,
+      }),
+    ),
+  );
+
+  for (const layer of layers) {
+    const face = detailing.sides[layer.side];
+    if (!face?.enabled) continue;
+    const panels = deriveWallPanels(context.wall, context.floor, layer.side);
+    for (const panel of panels) {
+      if (panel.polygonal) {
+        panel.regions.forEach((region, regionIndex) => {
+          descriptors.push(
+            createWallPanelDescriptor(
+              `${panel.id}:region:${regionIndex + 1}:3d`,
+              context,
+              region,
+              normal,
+              layer,
+              detailedWallMetadata(context, assembly, {
+                materialKey: boardMaterialKey(layer.material),
+                assemblySide: layer.side,
+                boardMaterial: layer.material,
+                wallDetailKind: 'panel',
+                wallDetailElementId: panel.id,
+                panelLabel: panel.label,
+                panelRegionIndex: regionIndex,
+              }),
+            ),
+          );
+        });
+        continue;
+      }
+      panel.fragments.forEach((fragment, fragmentIndex) => {
+        descriptors.push(
+          createLinearBoxDescriptor(
+            `${panel.id}:fragment:${fragmentIndex + 1}:3d`,
+            'wall',
+            shiftedWallPoint(context.sourceWall, fragment.u0, normal, layer.centerOffset),
+            shiftedWallPoint(context.sourceWall, fragment.u1, normal, layer.centerOffset),
+            layer.buildUp,
+            context.wallBase + fragment.v0,
+            fragment.v1 - fragment.v0,
+            detailedWallMetadata(context, assembly, {
+              materialKey: boardMaterialKey(layer.material),
+              assemblySide: layer.side,
+              boardMaterial: layer.material,
+              wallDetailKind: 'panel',
+              wallDetailElementId: panel.id,
+              panelLabel: panel.label,
+              panelFragmentIndex: fragmentIndex,
+            }),
+          ),
+        );
+      });
+    }
+
+    const fastenerSettings = detailing.sides[layer.side].fasteners;
+    const fastenerRadius = fastenerSettings.headDiameter / 2;
+    const fastenerDepth = fastenerSettings.appearance === FASTENER_APPEARANCE_MODES.TONAL ? 1.5 : 3;
+    const surfaceOffset = layer.centerOffset + layer.sign * (layer.buildUp / 2 + 2);
+    for (const fastener of deriveWallFasteners(context.wall, context.floor, layer.side)) {
+      const descriptor = createBoxDescriptor(
+        `${fastener.id}:3d`,
+        'wall',
+        shiftedWallPoint(context.sourceWall, fastener.u, normal, surfaceOffset),
+        { x: fastenerRadius * 2, y: fastenerRadius * 2, z: fastenerDepth },
+        context.wallBase + fastener.v - fastenerRadius,
+        Math.atan2(wallDirection(context.sourceWall).y, wallDirection(context.sourceWall).x),
+        detailedWallMetadata(context, assembly, {
+          materialKey: fastenerMaterialKey(fastenerSettings.appearance, layer.material),
+          assemblySide: layer.side,
+          wallDetailKind: 'fastener',
+          wallDetailElementId: fastener.id,
+          fastenerType: fastener.type,
+        }),
+      );
+      descriptor.geometry = 'wallFastener';
+      descriptor.radius = fastenerRadius;
+      descriptor.depth = fastenerDepth;
+      descriptors.push(descriptor);
+    }
+  }
+
+  // A face that has not opted into explicit panelization keeps the existing
+  // opening-aware schematic skin while the opposite detailed face remains real.
+  const fallbackLayers = layers.filter((layer) => !detailing.sides[layer.side]?.enabled);
+  for (const segment of buildWallSolidSegments(context)) {
+    const height = segment.topElevation - segment.baseElevation;
+    fallbackLayers.forEach((layer) => {
+      const delta = scale(normal, layer.centerOffset);
+      descriptors.push(
+        createLinearBoxDescriptor(
+          `${segment.id}:${layer.side}`,
+          'wall',
+          add(segment.startPoint, delta),
+          add(segment.endPoint, delta),
+          layer.buildUp,
+          segment.baseElevation,
+          height,
+          detailedWallMetadata(context, assembly, {
+            materialKey: boardMaterialKey(layer.material),
+            assemblySide: layer.side,
+            boardMaterial: layer.material,
+          }),
+        ),
+      );
+    });
+  }
+  return descriptors;
+}
+
 function buildWallObjects(wallContexts) {
   return wallContexts.flatMap((context) => {
+    const assembly = resolveWallAssembly(context.wall);
     // Arc walls: create prism directly from wall geometry, skip segment splitting
     // (positionOnWall uses linear interpolation which gives wrong endpoints for arcs)
     if (context.wall.controlPoint) {
@@ -175,26 +373,84 @@ function buildWallObjects(wallContexts) {
           sourceId: context.wall.id,
           floorId: context.floorId,
           wallId: context.wall.id,
+          materialKey: 'wall',
+          wallAssembly: assembly,
         }),
       ];
     }
 
-    return buildWallSolidSegments(context).map((segment) =>
-      createLinearBoxDescriptor(
-        segment.id,
+    const segments = buildWallSolidSegments(context);
+    if (assembly.system !== 'framed') {
+      return segments.map((segment) =>
+        createLinearBoxDescriptor(
+          segment.id,
+          'wall',
+          segment.startPoint,
+          segment.endPoint,
+          segment.thickness,
+          segment.baseElevation,
+          segment.topElevation - segment.baseElevation,
+          {
+            sourceId: segment.wallId,
+            floorId: segment.floorId,
+            wallId: segment.wallId,
+            materialKey: 'wall',
+            wallAssembly: assembly,
+          },
+        ),
+      );
+    }
+
+    const normal = perpendicular(wallDirection(context.renderWall));
+    const layers = deriveWallAssemblyLayers(assembly).filter(
+      (layer) => layer.material !== WALL_BOARD_MATERIALS.NONE && layer.buildUp > 0,
+    );
+    const coreMaterialKey =
+      assembly.framing.material === WALL_FRAME_MATERIALS.TIMBER ? 'wallFramingTimber' : 'wallFramingSteel';
+
+    const detailing = resolveWallDetailing(context.wall);
+    if (detailing.enabled && layers.some((layer) => detailing.sides[layer.side]?.enabled)) {
+      return buildDetailedWallObjects(context, assembly, layers);
+    }
+
+    return segments.flatMap((segment) => {
+      const metadata = {
+        sourceId: segment.wallId,
+        floorId: segment.floorId,
+        wallId: segment.wallId,
+        wallAssembly: assembly,
+      };
+      const height = segment.topElevation - segment.baseElevation;
+      const core = createLinearBoxDescriptor(
+        `${segment.id}:core`,
         'wall',
         segment.startPoint,
         segment.endPoint,
-        segment.thickness,
+        wallAssemblyCoreDepth(assembly),
         segment.baseElevation,
-        segment.topElevation - segment.baseElevation,
-        {
-          sourceId: segment.wallId,
-          floorId: segment.floorId,
-          wallId: segment.wallId,
-        },
-      ),
-    );
+        height,
+        { ...metadata, materialKey: coreMaterialKey, assemblySide: 'core' },
+      );
+      const skins = layers.map((layer) => {
+        const delta = scale(normal, layer.centerOffset);
+        return createLinearBoxDescriptor(
+          `${segment.id}:${layer.side}`,
+          'wall',
+          add(segment.startPoint, delta),
+          add(segment.endPoint, delta),
+          layer.buildUp,
+          segment.baseElevation,
+          height,
+          {
+            ...metadata,
+            materialKey: boardMaterialKey(layer.material),
+            assemblySide: layer.side,
+            boardMaterial: layer.material,
+          },
+        );
+      });
+      return [core, ...skins];
+    });
   });
 }
 
@@ -205,6 +461,7 @@ function buildSlabObjects(floor) {
       createPrismDescriptor(slab.id, 'slab', slab.boundaryPoints, getSlabBottomLevel(slab), slab.thickness ?? 0, {
         sourceId: slab.id,
         floorId: floor.id,
+        holes: (slab.openings || []).map((opening) => opening.boundaryPoints || []),
       }),
     );
 }
@@ -404,4 +661,99 @@ export function buildFloorPreviewObjects(floor) {
     ...buildFixtureObjects(floor, floorLevel),
     ...buildRailingObjects(floor, floorLevel),
   ];
+}
+
+export function buildFloorSystemsPreviewObjects(floor, systems = {}) {
+  const floorLevel = getFloorElevation(floor);
+  const floorHeight = floor.floorToFloorHeight ?? 3000;
+  const electrical = systems.electrical || {};
+  const water = systems.water || {};
+  const mechanical = systems.mechanical || {};
+  const plumbing = systems.plumbing || {};
+  const boxes = [
+    ...(electrical.riserZones || [])
+      .filter((entry) => entry.servedFloorIds?.includes(floor.id))
+      .map((entry) =>
+        createBoxDescriptor(
+          entry.id,
+          'electricalRiser',
+          entry.origin,
+          { x: entry.width, y: floorHeight, z: entry.depth },
+          floorLevel,
+          0,
+          { sourceId: entry.id, floorId: floor.id, materialKey: 'systemElectrical' },
+        ),
+      ),
+    ...(electrical.panelZones || [])
+      .filter((entry) => entry.floorId === floor.id)
+      .map((entry) =>
+        createBoxDescriptor(
+          entry.id,
+          'electricalPanel',
+          entry.origin,
+          { x: entry.width, y: 1800, z: entry.depth },
+          floorLevel,
+          entry.rotation || 0,
+          { sourceId: entry.id, floorId: floor.id, materialKey: 'systemElectrical' },
+        ),
+      ),
+    ...(water.equipmentZones || [])
+      .filter((entry) => entry.floorId === floor.id)
+      .map((entry) =>
+        createBoxDescriptor(
+          entry.id,
+          entry.kind,
+          entry.origin,
+          { x: entry.width, y: entry.kind === 'water_tank' ? 1800 : 900, z: entry.depth },
+          floorLevel,
+          entry.rotation || 0,
+          { sourceId: entry.id, floorId: floor.id, materialKey: 'systemWater' },
+        ),
+      ),
+    ...(mechanical.outdoorUnitZones || [])
+      .filter((entry) => entry.floorId === floor.id)
+      .map((entry) =>
+        createBoxDescriptor(
+          entry.id,
+          entry.kind,
+          entry.origin,
+          { x: entry.width, y: 900, z: entry.depth },
+          floorLevel,
+          entry.rotation || 0,
+          { sourceId: entry.id, floorId: floor.id, materialKey: 'systemMechanical' },
+        ),
+      ),
+    ...(electrical.points || [])
+      .filter((entry) => entry.floorId === floor.id)
+      .map((entry) =>
+        createBoxDescriptor(
+          entry.id,
+          'electricalPoint',
+          entry.position,
+          { x: 120, y: 120, z: 120 },
+          floorLevel + 1100,
+          0,
+          { sourceId: entry.id, floorId: floor.id, materialKey: 'systemElectrical' },
+        ),
+      ),
+  ];
+  const routes = (plumbing.drainageRoutes || [])
+    .filter((entry) => entry.floorId === floor.id)
+    .flatMap((route) =>
+      (route.points || [])
+        .slice(1)
+        .map((point, index) =>
+          createLinearBoxDescriptor(
+            `${route.id}_segment_${index + 1}`,
+            'drainageRoute',
+            route.points[index],
+            point,
+            60,
+            floorLevel + 40,
+            60,
+            { sourceId: route.id, floorId: floor.id, materialKey: 'systemWater' },
+          ),
+        ),
+    );
+  return [...boxes, ...routes];
 }

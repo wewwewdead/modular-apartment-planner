@@ -238,6 +238,92 @@ function renderGenericEntityPreview(draftPreview) {
     );
   }
 
+  if (draftPreview.type === 'hardware-pattern-preview') {
+    return (
+      <g>
+        {draftPreview.holes.map((hole, index) => {
+          const radius = Math.max(hole.diameter / 2, 0.1);
+          const crosshairReach = radius * 1.6;
+
+          return (
+            <g key={index}>
+              <circle
+                className="sketchStudioDraftEntity is-feature"
+                cx={hole.cx}
+                cy={hole.cy}
+                r={radius}
+                fill="none"
+                strokeDasharray="4 3"
+                opacity={0.7}
+                vectorEffect="non-scaling-stroke"
+              />
+              <line
+                className="sketchStudioDraftEntity is-feature"
+                x1={hole.cx - crosshairReach}
+                y1={hole.cy}
+                x2={hole.cx + crosshairReach}
+                y2={hole.cy}
+                vectorEffect="non-scaling-stroke"
+              />
+              <line
+                className="sketchStudioDraftEntity is-feature"
+                x1={hole.cx}
+                y1={hole.cy - crosshairReach}
+                x2={hole.cx}
+                y2={hole.cy + crosshairReach}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          );
+        })}
+      </g>
+    );
+  }
+
+  if (draftPreview.type === 'fastener-preview') {
+    const pilotRadius = Math.max(draftPreview.diameter / 2, 0.1);
+    const headRadius = Math.max(draftPreview.headDiameter / 2, pilotRadius);
+    const crosshairReach = headRadius * 1.8;
+
+    return (
+      <g>
+        <circle
+          className="sketchStudioDraftEntity is-feature"
+          cx={draftPreview.cx}
+          cy={draftPreview.cy}
+          r={headRadius}
+          fill="none"
+          strokeDasharray="4 3"
+          opacity={0.6}
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle
+          className="sketchStudioDraftEntity is-feature"
+          cx={draftPreview.cx}
+          cy={draftPreview.cy}
+          r={pilotRadius}
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          className="sketchStudioDraftEntity is-feature"
+          x1={draftPreview.cx - crosshairReach}
+          y1={draftPreview.cy}
+          x2={draftPreview.cx + crosshairReach}
+          y2={draftPreview.cy}
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          className="sketchStudioDraftEntity is-feature"
+          x1={draftPreview.cx}
+          y1={draftPreview.cy - crosshairReach}
+          x2={draftPreview.cx}
+          y2={draftPreview.cy + crosshairReach}
+          vectorEffect="non-scaling-stroke"
+        />
+      </g>
+    );
+  }
+
   if (draftPreview.type === 'feature') {
     return renderFeaturePreview(draftPreview);
   }

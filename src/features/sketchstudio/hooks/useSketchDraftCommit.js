@@ -9,6 +9,7 @@ import {
   createRectEntity,
 } from '../utils/entityUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
+import { buildFastenerFeatureConfig } from '../utils/fastenerUtils';
 import { buildOffsetEntityFromDraft } from './sketchConstants';
 
 export default function useSketchDraftCommit(state, dispatch, draftPreview) {
@@ -96,6 +97,18 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
       return;
     }
 
+    // Enter drops the fastener at the previewed cursor point; the catalog item
+    // supplies the pilot diameter and the drilling defaults.
+    if (state.draft.type === 'fastener') {
+      const nextEntity = createFeatureEntity(
+        buildFastenerFeatureConfig(state.ui.activeHardwareId, { x: draftPreview.cx, y: draftPreview.cy }),
+        state.document.entities,
+        targetLayerId,
+      );
+      if (nextEntity) dispatch(commitEntity(nextEntity));
+      return;
+    }
+
     if (state.draft.type === 'cutoutRect') {
       const nextEntity = createFeatureEntity(
         {
@@ -135,6 +148,7 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
     draftPreview,
     state.document,
     state.draft,
+    state.ui.activeHardwareId,
     state.ui.activeLayerId,
     state.ui.isometricPlane,
     state.ui.viewMode,

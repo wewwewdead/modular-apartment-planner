@@ -19,6 +19,11 @@ import TrussDetailRenderer from './TrussDetailRenderer';
 import TrussRenderer from './TrussRenderer';
 import WallRenderer from './WallRenderer';
 import WindowRenderer from './WindowRenderer';
+import SitePlanOverlay from './SitePlanOverlay';
+import BuildingReportRenderer from './BuildingReportRenderer';
+import StructuralGridOverlay from './StructuralGridOverlay';
+import { deriveConceptualLoadPath } from '@/domain/structuralCoordination';
+import WetCoreOverlay from './WetCoreOverlay';
 
 const SHEET_PREVIEW_OPTIONS = {
   width: 1600,
@@ -71,7 +76,12 @@ function PlanViewportContent({ floor }) {
         <SlabRenderer key={slab.id} slab={slab} selectedId={null} />
       ))}
       <RoomRenderer rooms={floor.rooms} selectedId={null} interactive={false} />
-      <WallRenderer walls={floor.walls} columns={floor.columns || []} />
+      <WallRenderer
+        walls={floor.walls}
+        columns={floor.columns || []}
+        doors={floor.doors || []}
+        windows={floor.windows || []}
+      />
       <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
       <StairRenderer stairs={floor.stairs || []} />
       <LandingRenderer landings={floor.landings || []} />
@@ -84,6 +94,40 @@ function PlanViewportContent({ floor }) {
         <SectionCutRenderer key={sc.id} sectionCut={sc} selectedId={null} />
       ))}
       <AnnotationRenderer floor={floor} />
+    </>
+  );
+}
+
+function StructuralPlanViewportContent({ source }) {
+  const floor = source.floor;
+  return (
+    <>
+      {(floor.slabs || []).map((slab) => (
+        <SlabRenderer key={slab.id} slab={slab} selectedId={null} />
+      ))}
+      <BeamRenderer beams={floor.beams || []} columns={floor.columns || []} />
+      <ColumnRenderer columns={floor.columns || []} />
+      <StructuralGridOverlay
+        structuralSystem={source.project?.building?.systems?.structural}
+        floor={floor}
+        loadPath={deriveConceptualLoadPath(source.project)}
+      />
+    </>
+  );
+}
+
+function ServicesPlanViewportContent({ source }) {
+  return (
+    <>
+      <PlanViewportContent floor={source.floor} />
+      <WetCoreOverlay
+        plumbingSystem={source.project?.building?.systems?.plumbing}
+        electricalSystem={source.project?.building?.systems?.electrical}
+        waterSystem={source.project?.building?.systems?.water}
+        mechanicalSystem={source.project?.building?.systems?.mechanical}
+        egressSystem={source.project?.building?.systems?.egress}
+        floor={source.floor}
+      />
     </>
   );
 }
@@ -166,6 +210,27 @@ export default function SheetViewportContent({ source }) {
 
   if (source.kind === 'plan') {
     return <PlanViewportContent floor={source.floor} />;
+  }
+
+  if (source.kind === 'structural_plan') {
+    return <StructuralPlanViewportContent source={source} />;
+  }
+
+  if (source.kind === 'services_plan') {
+    return <ServicesPlanViewportContent source={source} />;
+  }
+
+  if (source.kind === 'site_plan') {
+    return (
+      <>
+        <SitePlanOverlay site={source.site} />
+        <PlanViewportContent floor={source.floor} />
+      </>
+    );
+  }
+
+  if (source.kind === 'building_report') {
+    return <BuildingReportRenderer report={source.report} />;
   }
 
   if (source.kind === 'roof_plan') {

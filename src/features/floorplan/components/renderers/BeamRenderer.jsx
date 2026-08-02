@@ -10,17 +10,19 @@ function BeamRenderer({ beams, columns }) {
         if (!renderData) return null;
 
         const points = renderData.outline.map((point) => `${point.x},${point.y}`).join(' ');
+        const isRoofRingBeam = beam.placementRole === 'roof_ring';
 
         return (
           <polygon
             key={beam.id}
             data-id={beam.id}
             data-type="beam"
+            data-placement-role={isRoofRingBeam ? 'roof_ring' : 'floor'}
             points={points}
             fill={DRAWING_GRAPHICS.plan.objectFill}
-            stroke={DRAWING_GRAPHICS.plan.secondaryStroke}
+            stroke={isRoofRingBeam ? '#9a5b16' : DRAWING_GRAPHICS.plan.secondaryStroke}
             strokeWidth={DRAWING_GRAPHICS.plan.secondaryStrokeWidth}
-            strokeDasharray={DRAWING_GRAPHICS.plan.hiddenDash}
+            strokeDasharray={isRoofRingBeam ? '10 4' : DRAWING_GRAPHICS.plan.hiddenDash}
             vectorEffect="non-scaling-stroke"
           />
         );

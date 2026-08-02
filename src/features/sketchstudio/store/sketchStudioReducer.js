@@ -12,6 +12,7 @@ import {
   updateJointInDocument,
 } from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
+import { DEFAULT_FASTENER_HARDWARE_ID, applyHardwareToFeatureEntity } from '../utils/fastenerUtils';
 import { resolveSketchDocument, resolveSketchDocumentLightweight } from '../utils/sketchDocumentResolver';
 import {
   assignEntitiesToGroup,
@@ -889,6 +890,51 @@ export default function sketchStudioReducer(state, action) {
         constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.SET_ENTITY_HARDWARE: {
+      const { entityIds, hardwareId } = action.payload;
+      const idSet = new Set(entityIds);
+      const nextEntities = state.document.entities.map((entity) =>
+        idSet.has(entity.id) ? applyHardwareToFeatureEntity(entity, hardwareId) : entity,
+      );
+
+      // Non-features and unknown catalog ids come back untouched; skip the
+      // resolve + history push entirely when nothing actually changed.
+      if (nextEntities.every((entity, index) => entity === state.document.entities[index])) {
+        return state;
+      }
+
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          entities: nextEntities,
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
+
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
+        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    // Editor-only preference: excluded from the undo snapshot and from the saved
+    // workspace, exactly like the shortcut overlay flag.
+    case SKETCH_STUDIO_ACTIONS.SET_ACTIVE_HARDWARE: {
+      const nextHardwareId = action.payload || DEFAULT_FASTENER_HARDWARE_ID;
+
+      if (state.ui.activeHardwareId === nextHardwareId) {
+        return state;
+      }
+
+      return {
+        ...state,
+        ui: { ...state.ui, activeHardwareId: nextHardwareId },
+      };
     }
 
     case SKETCH_STUDIO_ACTIONS.TOGGLE_CRAFTSMAN_MODE:

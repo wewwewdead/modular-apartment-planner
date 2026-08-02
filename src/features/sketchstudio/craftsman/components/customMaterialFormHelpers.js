@@ -82,8 +82,12 @@ export function getCostBasisUnitLabel(costBasis) {
 
 /** Compact price label, e.g. `$45/m²`. */
 export function formatMaterialPrice(material) {
-  const price = Number(material?.pricePerM2);
-  const amount = Number.isFinite(price) ? price : 0;
+  // Catalog hardware prices live in `pricePerPiece`; custom materials keep every
+  // cost basis in `pricePerM2`.
+  const rawPrice =
+    material?.costBasis === 'perPiece' ? (material.pricePerPiece ?? material.pricePerM2) : material?.pricePerM2;
+  const price = Number(rawPrice);
+  const amount = rawPrice != null && Number.isFinite(price) ? price : 0;
   return `$${amount}/${getCostBasisUnitLabel(material?.costBasis)}`;
 }
 

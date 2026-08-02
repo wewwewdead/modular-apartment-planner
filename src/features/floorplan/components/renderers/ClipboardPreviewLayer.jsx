@@ -22,7 +22,12 @@ function ClipboardPreviewLayer({ content }) {
         <SlabRenderer key={slab.id} slab={slab} selectedId={null} />
       ))}
       <RoomRenderer rooms={content.rooms || []} selectedId={null} />
-      <WallRenderer walls={content.walls || []} columns={content.columns || []} />
+      <WallRenderer
+        walls={content.walls || []}
+        columns={content.columns || []}
+        doors={content.doors || []}
+        windows={content.windows || []}
+      />
       <BeamRenderer beams={content.beams || []} columns={content.columns || []} />
       <StairRenderer stairs={content.stairs || []} />
       <ColumnRenderer columns={content.columns || []} />

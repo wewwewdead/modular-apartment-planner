@@ -10,6 +10,13 @@ import { getDimensionGeometry, measureDistance, formatDimensionText } from '../.
 import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
 import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
+import {
+  FASTENER_LEGEND_TOP_GAP,
+  buildFastenerLegend,
+  buildFastenerLegendElements,
+  buildFastenerMarkElements,
+  getFastenerLegendHeight,
+} from './fastenerLegend';
 
 const EXPORTABLE_TYPES = new Set([
   'line',
@@ -313,9 +320,26 @@ export function buildSvgExportDocument(entities, options = {}) {
   const bounds = computeBounds(exportEntities, referenceEntities);
   const elements = exportEntities.map((entity) => entityToSvgElement(entity, referenceEntities)).filter(Boolean);
 
+  // Hardware callouts are annotation, so `hardwareLegend: false` gives callers a
+  // way back to a pure geometry document. The legend is built from the entities
+  // that actually made it into the drawing, so a selection export never bills
+  // fasteners it did not draw.
+  const legend = options.hardwareLegend === false ? { items: [], marks: [] } : buildFastenerLegend(exportEntities);
+  const legendHeight = getFastenerLegendHeight(legend);
+
+  if (!legendHeight) {
+    return { bounds, elements, legend };
+  }
+
+  const legendElements = buildFastenerLegendElements(legend, {
+    x: bounds.x + 5,
+    y: bounds.y + bounds.height + FASTENER_LEGEND_TOP_GAP,
+  });
+
   return {
-    bounds,
-    elements,
+    bounds: { ...bounds, height: bounds.height + legendHeight },
+    elements: [...elements, ...buildFastenerMarkElements(legend), ...legendElements],
+    legend,
   };
 }
 

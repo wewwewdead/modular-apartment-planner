@@ -41,6 +41,27 @@ function createShape(outline, holes = []) {
   return shape;
 }
 
+function createVerticalShape(outline, holes = []) {
+  const shape = new THREE.Shape();
+  outline.forEach((point, index) => {
+    if (index === 0) shape.moveTo(point.x, point.y);
+    else shape.lineTo(point.x, point.y);
+  });
+  shape.closePath();
+
+  holes.forEach((hole) => {
+    if (!hole?.length) return;
+    const path = new THREE.Path();
+    hole.forEach((point, index) => {
+      if (index === 0) path.moveTo(point.x, point.y);
+      else path.lineTo(point.x, point.y);
+    });
+    path.closePath();
+    shape.holes.push(path);
+  });
+  return shape;
+}
+
 function applySelectedSurfaceStyle(material) {
   if (material.color) {
     material.color.lerp(SELECTED_SURFACE_COLOR, 0.36);
@@ -152,6 +173,37 @@ function createBoxObject(descriptor, materialPalette) {
   const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
   const center = planPointToWorld(descriptor.center, descriptor.baseElevation + descriptor.size.y / 2);
   mesh.position.copy(center);
+  mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+  addOutline(mesh, materialPalette);
+  return mesh;
+}
+
+function createWallFastenerObject(descriptor, materialPalette) {
+  const geometry = new THREE.CylinderGeometry(
+    Math.max(descriptor.radius || 6, 1),
+    Math.max((descriptor.radius || 6) * 0.72, 1),
+    Math.max(descriptor.depth || 5, 1),
+    12,
+  );
+  geometry.rotateX(Math.PI / 2);
+  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  mesh.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation + descriptor.size.y / 2));
+  mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+  addOutline(mesh, materialPalette);
+  return mesh;
+}
+
+function createWallPanelObject(descriptor, materialPalette) {
+  const geometry = new THREE.ExtrudeGeometry(createVerticalShape(descriptor.outline, descriptor.holes), {
+    depth: descriptor.depth,
+    bevelEnabled: false,
+    curveSegments: 1,
+    steps: 1,
+  });
+  geometry.translate(0, 0, -descriptor.depth / 2);
+
+  const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
+  mesh.position.copy(planPointToWorld(descriptor.origin, descriptor.baseElevation));
   mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
   addOutline(mesh, materialPalette);
   return mesh;
@@ -552,12 +604,14 @@ function createRailingObject(descriptor, materialPalette) {
 
 function createObjectForDescriptor(descriptor, materialPalette) {
   if (descriptor.geometry === 'prism') return createPrismObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'wallPanel') return createWallPanelObject(descriptor, materialPalette);
   if (descriptor.geometry === 'roofMesh') return createRoofMeshObject(descriptor, materialPalette);
   if (descriptor.geometry === 'stair') return createStairObject(descriptor, materialPalette);
   if (descriptor.geometry === 'segment3d') return createSegment3DObject(descriptor, materialPalette);
   if (descriptor.geometry === 'window') return createWindowObject(descriptor, materialPalette);
   if (descriptor.geometry === 'railing') return createRailingObject(descriptor, materialPalette);
   if (descriptor.geometry === 'fixture') return createFixtureObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'wallFastener') return createWallFastenerObject(descriptor, materialPalette);
   return createBoxObject(descriptor, materialPalette);
 }
 

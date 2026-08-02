@@ -12,6 +12,26 @@ function toLibraryRing(points) {
   return points.map((point) => [point.x, point.y]);
 }
 
+function fromLibraryRing(ring) {
+  const points = ring.map(([x, y]) => ({ x, y }));
+  if (points.length > 1 && points[0].x === points[points.length - 1].x && points[0].y === points[points.length - 1].y) {
+    points.pop();
+  }
+  return points;
+}
+
+function fromLibraryMultiPolygon(result) {
+  return result
+    .map((polygon) => ({
+      outline: fromLibraryRing(polygon[0] || []),
+      holes: polygon
+        .slice(1)
+        .map(fromLibraryRing)
+        .filter((ring) => ring.length >= 3),
+    }))
+    .filter((polygon) => polygon.outline.length >= 3);
+}
+
 function ringArea(ring) {
   return polygonArea(ring.map(([x, y]) => ({ x, y })));
 }
@@ -39,4 +59,23 @@ export function intersectionArea(pointsA, pointsB) {
     });
   }
   return area;
+}
+
+/**
+ * Subtract one or more simple polygons from a subject polygon. The result is a
+ * list because a cut can divide a panel into separate regions. Each region has
+ * one outer outline and zero or more holes, all in the app's native point form.
+ */
+export function subtractPolygons(subject, cuts = []) {
+  if (!subject || subject.length < 3) return [];
+  const validCuts = cuts.filter((cut) => cut?.length >= 3);
+  if (!validCuts.length) return [{ outline: subject.map((point) => ({ ...point })), holes: [] }];
+
+  try {
+    return fromLibraryMultiPolygon(
+      polygonClipping.difference([toLibraryRing(subject)], ...validCuts.map((cut) => [toLibraryRing(cut)])),
+    );
+  } catch {
+    return [{ outline: subject.map((point) => ({ ...point })), holes: [] }];
+  }
 }

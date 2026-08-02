@@ -120,7 +120,12 @@ export function formatDrawingArea(area) {
 }
 
 export function resolveViewportScaleLabel(viewport, source, sheet) {
-  if (source?.kind === '3d_preview' || source?.kind === 'roof_schedule' || source?.kind === 'sketch_part_list')
+  if (
+    source?.kind === '3d_preview' ||
+    source?.kind === 'roof_schedule' ||
+    source?.kind === 'building_report' ||
+    source?.kind === 'sketch_part_list'
+  )
     return 'NTS';
   if (sheet?.scaleMode === 'as_noted') return 'As noted';
   return `1:${Math.max(1, Math.round(Number(viewport?.scale) || 100))}`;
@@ -131,12 +136,15 @@ export function resolveViewportReferenceNote(viewport, source) {
   if (custom) return custom;
   if (source?.kind === '3d_preview') return 'AXONOMETRIC VIEW';
   if (source?.kind === 'truss_plan') return 'TRUSS PLAN';
+  if (source?.kind === 'structural_plan') return 'STRUCTURAL COORDINATION PLAN';
+  if (source?.kind === 'services_plan') return 'SERVICES AND EGRESS COORDINATION PLAN';
   if (source?.kind === 'truss_detail') return 'TRUSS DETAIL';
   if (source?.kind === 'roof_plan') return 'ROOF PLAN';
   if (source?.kind === 'roof_elevation') return 'ROOF ELEVATION';
   if (source?.kind === 'roof_drainage') return 'ROOF DRAINAGE PLAN';
   if (source?.kind === 'roof_section') return 'ROOF SECTION';
   if (source?.kind === 'roof_schedule') return 'ROOF SCHEDULE';
+  if (source?.kind === 'building_report') return 'MODEL-DERIVED REPORT';
   if (source?.kind === 'section') return 'BUILDING SECTION';
   if (source?.kind === 'elevation') return 'EXTERIOR ELEVATION';
   if (source?.kind === 'sketch_object') return 'OBJECT VIEW';

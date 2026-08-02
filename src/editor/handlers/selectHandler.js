@@ -21,8 +21,51 @@ import { duplicateColumn } from '@/domain/columnModels';
 import { hitTestSectionCut } from '@/geometry/sectionCutGeometry';
 import { railingContainsPoint } from '@/geometry/railingGeometry';
 import { collectPlanRegionSelection, normalizeRectBounds, rectSize } from '@/features/floorplan/utils/planClipboard';
+import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
+import { equipmentZonePolygon } from '@/domain/equipmentCoordination';
 
-function hitTest(modelPos, floor, annotationTolerance) {
+function centeredRectangle(origin, width, depth) {
+  return [
+    { x: origin.x - width / 2, y: origin.y - depth / 2 },
+    { x: origin.x + width / 2, y: origin.y - depth / 2 },
+    { x: origin.x + width / 2, y: origin.y + depth / 2 },
+    { x: origin.x - width / 2, y: origin.y + depth / 2 },
+  ];
+}
+
+function hitTestBuildingService(modelPos, project, floor) {
+  const systems = project?.building?.systems || {};
+
+  for (const shaft of systems.plumbing?.shafts || []) {
+    if (!(shaft.servedFloorIds || []).includes(floor.id)) continue;
+    if (pointInPolygon(modelPos, centeredRectangle(shaft.origin, shaft.width, shaft.depth))) {
+      return { id: shaft.id, type: 'plumbingShaft' };
+    }
+  }
+
+  for (const riser of systems.electrical?.riserZones || []) {
+    if (!(riser.servedFloorIds || []).includes(floor.id)) continue;
+    if (pointInPolygon(modelPos, centeredRectangle(riser.origin, riser.width, riser.depth))) {
+      return { id: riser.id, type: 'electricalRiser' };
+    }
+  }
+
+  for (const panel of systems.electrical?.panelZones || []) {
+    const visible = panel.floorId === floor.id || (panel.servedFloorIds || []).includes(floor.id);
+    if (visible && pointInPolygon(modelPos, equipmentZonePolygon(panel))) {
+      return { id: panel.id, type: 'electricalPanelZone' };
+    }
+  }
+
+  return null;
+}
+
+function hitTest(modelPos, floor, project, annotationTolerance) {
+  // Services render above the architectural plan, so they receive hit priority
+  // when their footprint overlaps a wall, fixture, or room.
+  const serviceHit = hitTestBuildingService(modelPos, project, floor);
+  if (serviceHit) return serviceHit;
+
   // Hit test doors first (smaller targets, higher priority)
   for (const door of floor.doors) {
     const wall = floor.walls.find((w) => w.id === door.wallId);
@@ -75,7 +118,8 @@ function hitTest(modelPos, floor, annotationTolerance) {
   }
 
   // Hit test beams
-  for (const beam of floor.beams || []) {
+  const beamsBySelectionPriority = [...(floor.beams || [])].sort((a, b) => (b.floorLevel ?? 0) - (a.floorLevel ?? 0));
+  for (const beam of beamsBySelectionPriority) {
     const renderData = getBeamRenderData(beam, floor.columns || []);
     if (!renderData) continue;
     if (pointInPolygon(modelPos, renderData.outline)) {
@@ -131,6 +175,8 @@ function hitTest(modelPos, floor, annotationTolerance) {
 export function createSelectHandler({
   dispatch,
   editorDispatch,
+  project,
+  getProject,
   getFloor,
   activeFloorId,
   viewport,
@@ -160,7 +206,8 @@ export function createSelectHandler({
         return;
       }
 
-      const hit = hitTest(modelPos, floor, (SNAP_DISTANCE_PX / viewport.zoom) * 2.5);
+      const currentProject = getProject?.() || project;
+      const hit = hitTest(modelPos, floor, currentProject, (SNAP_DISTANCE_PX / viewport.zoom) * 2.5);
       if (hit) {
         editorDispatch({ type: 'SELECT_OBJECT', id: hit.id, objectType: hit.type });
         const draggableTypes = new Set([
@@ -173,6 +220,9 @@ export function createSelectHandler({
           'sectionCut',
           'landing',
           'railing',
+          'plumbingShaft',
+          'electricalRiser',
+          'electricalPanelZone',
         ]);
         if (!draggableTypes.has(hit.type)) return;
         editorDispatch({
@@ -225,6 +275,7 @@ export function createSelectHandler({
 
       const floor = getFloor(activeFloorId);
       if (!floor) return;
+      const currentProject = getProject?.() || project;
       const dx = modelPos.x - toolState.startPos.x;
       const dy = modelPos.y - toolState.startPos.y;
       const snapDistModel = SNAP_DISTANCE_PX / viewport.zoom;
@@ -382,6 +433,69 @@ export function createSelectHandler({
           type: 'UPDATE_TOOL_STATE',
           payload: { startPos: modelPos },
         });
+      } else if (selectedType === 'plumbingShaft') {
+        const shaft = (currentProject?.building?.systems?.plumbing?.shafts || []).find(
+          (entry) => entry.id === selectedId,
+        );
+        if (!shaft) return;
+        dispatch({
+          type: 'EXECUTE_BUILDING_COMMAND',
+          command: {
+            type: BUILDING_COMMANDS.CONFIGURE_PLUMBING_SHAFT,
+            shaftId: shaft.id,
+            name: shaft.name,
+            origin: { x: shaft.origin.x + dx, y: shaft.origin.y + dy },
+            width: shaft.width,
+            depth: shaft.depth,
+            servedFloorIds: shaft.servedFloorIds,
+            maxFixtureDistance: shaft.maxFixtureDistance,
+          },
+        });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { startPos: modelPos } });
+      } else if (selectedType === 'electricalRiser') {
+        const riser = (currentProject?.building?.systems?.electrical?.riserZones || []).find(
+          (entry) => entry.id === selectedId,
+        );
+        if (!riser) return;
+        dispatch({
+          type: 'EXECUTE_BUILDING_COMMAND',
+          command: {
+            type: BUILDING_COMMANDS.CONFIGURE_ELECTRICAL_RISER,
+            riserId: riser.id,
+            name: riser.name,
+            origin: { x: riser.origin.x + dx, y: riser.origin.y + dy },
+            width: riser.width,
+            depth: riser.depth,
+            servedFloorIds: riser.servedFloorIds,
+            openingClearance: riser.openingClearance,
+          },
+        });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { startPos: modelPos } });
+      } else if (selectedType === 'electricalPanelZone') {
+        const panel = (currentProject?.building?.systems?.electrical?.panelZones || []).find(
+          (entry) => entry.id === selectedId,
+        );
+        if (!panel) return;
+        dispatch({
+          type: 'EXECUTE_BUILDING_COMMAND',
+          command: {
+            type: BUILDING_COMMANDS.CONFIGURE_EQUIPMENT_ZONE,
+            zoneId: panel.id,
+            name: panel.name,
+            kind: panel.kind,
+            floorId: panel.floorId,
+            location: panel.location,
+            origin: { x: panel.origin.x + dx, y: panel.origin.y + dy },
+            width: panel.width,
+            depth: panel.depth,
+            rotation: panel.rotation,
+            clearance: panel.clearance,
+            capacity: panel.capacity,
+            unitCount: panel.unitCount,
+            servedFloorIds: panel.servedFloorIds,
+          },
+        });
+        editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { startPos: modelPos } });
       } else if (selectedType === 'sectionCut') {
         // PREVIEW-THEN-COMMIT (same architecture as wall drags): no
         // SECTION_UPDATE per mousemove. Per-event commits ran the full
