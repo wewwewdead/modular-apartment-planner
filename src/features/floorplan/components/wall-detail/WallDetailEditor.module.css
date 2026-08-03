@@ -54,9 +54,13 @@
 }
 
 .body {
+  position: relative; /* focus-mode drawers, peek tabs, and the tool HUD anchor here */
   min-height: 0;
   display: grid;
   grid-template-columns: 296px minmax(380px, 1fr) 336px;
+}
+.body[data-focus='true'] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .leftPanel,
@@ -73,6 +77,142 @@
 }
 .rightPanel {
   border-left: 1px solid #303b45;
+}
+
+/* Focus mode: panels leave the grid and become slide-in drawers over the canvas. */
+.body[data-focus='true'] .leftPanel,
+.body[data-focus='true'] .rightPanel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 8;
+  visibility: hidden;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  transition:
+    transform var(--duration-smooth, 0.28s) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    visibility 0s linear var(--duration-smooth, 0.28s);
+}
+.body[data-focus='true'] .leftPanel {
+  left: 0;
+  width: 296px;
+  transform: translateX(-102%);
+}
+.body[data-focus='true'] .rightPanel {
+  right: 0;
+  width: 336px;
+  transform: translateX(102%);
+}
+.body[data-focus='true'] .leftPanel[data-peek='true'],
+.body[data-focus='true'] .rightPanel[data-peek='true'] {
+  visibility: visible;
+  transform: translateX(0);
+  transition-delay: 0s;
+}
+
+/* Edge tabs: the drafting-table drawer pulls. They ride along the drawer edge. */
+.panelPeekTab {
+  position: absolute;
+  top: 50%;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 4px 13px;
+  color: #9eabb5;
+  background: rgba(23, 32, 41, 0.94);
+  border: 1px solid #303b45;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    left var(--duration-smooth, 0.28s) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    right var(--duration-smooth, 0.28s) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    color var(--duration-fast, 0.1s) var(--ease-out, ease),
+    border-color var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.panelPeekTab:hover {
+  color: #e8f6f1;
+  border-color: #d2a24f;
+}
+.panelPeekTabLeft {
+  left: 0;
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+}
+.panelPeekTabRight {
+  right: 0;
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+}
+.panelPeekTabLeft[data-open='true'] {
+  left: 296px;
+}
+.panelPeekTabRight[data-open='true'] {
+  right: 336px;
+}
+.panelPeekChevron {
+  font: 700 13px/1 var(--font-blueprint);
+}
+.panelPeekLabel {
+  writing-mode: vertical-rl;
+  font: 600 9px var(--font-blueprint);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* Keyboard-shortcut HUD: transient chip so tool switches read without any panel. */
+.toolHud {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px;
+  color: #e8eef2;
+  font: 600 11px var(--font-blueprint);
+  background: rgba(13, 19, 26, 0.93);
+  border: 1px solid rgba(210, 162, 79, 0.5);
+  border-radius: 5px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+  animation: wallDetailHudLife 1.6s var(--ease-out, ease) forwards;
+}
+.toolHud em {
+  color: #93a2ad;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+}
+@keyframes wallDetailHudLife {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  8% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body[data-focus='true'] .leftPanel,
+  .body[data-focus='true'] .rightPanel,
+  .panelPeekTab {
+    transition: none;
+  }
+  .toolHud {
+    animation: none;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* ---------- Orientation card (first open) ---------- */
@@ -420,6 +560,7 @@
   background: #0c1218;
 }
 .workspaceViews {
+  position: relative; /* anchors the focus-mode keyboard HUD over the canvas, clear of the toolbar */
   min-width: 0;
   min-height: 0;
   display: grid;

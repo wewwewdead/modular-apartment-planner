@@ -149,6 +149,44 @@ describe('WallDetailEditor', () => {
     expect(html).toContain('click a board, stud, screw, or measurement on the drawing');
   });
 
+  it('offers a focus-canvas toggle and keeps both panels docked by default', () => {
+    const html = renderToStaticMarkup(<WallDetailEditor />);
+
+    expect(html).toContain('Focus canvas');
+    expect(html).toContain('Hide both side panels and draw on the full screen');
+    expect(html).toContain('data-focus="false"');
+    // Docked panels are never aria-hidden and the peek tabs stay unmounted.
+    expect(html).toMatch(/id="wall-detail-left-panel"(?![^>]*aria-hidden)/);
+    expect(html).not.toContain('Peek at the workflow panel');
+    expect(html).not.toContain('Peek at the numbers panel');
+  });
+
+  it('hides both panels behind edge peek tabs when the saved preference is focus mode', () => {
+    const hadWindow = 'window' in globalThis;
+    const previousWindow = globalThis.window;
+    globalThis.window = {
+      localStorage: {
+        getItem: (key) => (key === 'floorplan.wallDetailEditor.focusMode' ? 'true' : null),
+      },
+    };
+    try {
+      const html = renderToStaticMarkup(<WallDetailEditor />);
+
+      expect(html).toContain('data-focus="true"');
+      expect(html).toContain('Show panels');
+      expect(html).toContain('Bring the workflow and numbers panels back');
+      expect(html).toMatch(/id="wall-detail-left-panel"[^>]*aria-hidden="true"/);
+      expect(html).toMatch(/id="wall-detail-right-panel"[^>]*aria-hidden="true"/);
+      expect(html).toContain('Peek at the workflow panel');
+      expect(html).toContain('Peek at the numbers panel');
+      expect(html).toContain('aria-controls="wall-detail-left-panel"');
+      expect(html).toContain('aria-controls="wall-detail-right-panel"');
+    } finally {
+      if (hadWindow) globalThis.window = previousWindow;
+      else delete globalThis.window;
+    }
+  });
+
   it('opens the explicitly requested outside fiber-cement face instead of the inside plywood face', () => {
     const wall = mocks.project.floors[0].walls[0];
     wall.assembly = createWallAssembly('mixed_board', {

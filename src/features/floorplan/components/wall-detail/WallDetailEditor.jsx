@@ -259,6 +259,30 @@ function persistOrientationDismissed() {
   }
 }
 
+const FOCUS_MODE_STORAGE_KEY = 'floorplan.wallDetailEditor.focusMode';
+
+/** How long the keyboard-shortcut HUD chip stays up; matches the CSS animation length. */
+const TOOL_HUD_LIFETIME_MS = 1600;
+
+function readFocusModePreference() {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(FOCUS_MODE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function persistFocusModePreference(value) {
+  if (typeof window === 'undefined') return false;
+  try {
+    window.localStorage.setItem(FOCUS_MODE_STORAGE_KEY, value ? 'true' : 'false');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const DIMENSION_SNAP_RADIUS_PX = 22;
 const DIMENSION_POINT_GRAVITY_PX = 14;
 
@@ -749,6 +773,11 @@ export default function WallDetailEditor() {
     checks: true,
   });
   const [orientationDismissed, setOrientationDismissed] = useState(readOrientationDismissed);
+  const [focusMode, setFocusMode] = useState(readFocusModePreference);
+  const [panelPeek, setPanelPeek] = useState(null);
+  const [toolHud, setToolHud] = useState(null);
+  const toolHudTimer = useRef(null);
+  const toolHudNonce = useRef(0);
   const sectionNodes = useRef({});
   const sectionRefSetters = useRef({});
   const shortcutHandlerRef = useRef(null);
@@ -761,6 +790,8 @@ export default function WallDetailEditor() {
     window.addEventListener('keydown', onShortcutKeyDown, true);
     return () => window.removeEventListener('keydown', onShortcutKeyDown, true);
   }, []);
+
+  useEffect(() => () => clearTimeout(toolHudTimer.current), []);
 
   useEffect(() => {
     if (!panelTrace) return undefined;
@@ -895,6 +926,28 @@ export default function WallDetailEditor() {
   const dismissOrientation = () => {
     persistOrientationDismissed();
     setOrientationDismissed(true);
+  };
+
+  const toggleFocusMode = () => {
+    setPanelPeek(null);
+    setFocusMode((value) => {
+      persistFocusModePreference(!value);
+      return !value;
+    });
+  };
+  const togglePanelPeek = (side) => setPanelPeek((value) => (value === side ? null : side));
+  const dismissPanelPeek = () => setPanelPeek(null);
+  const flashToolHud = (definition) => {
+    if (!focusMode || !definition) return;
+    toolHudNonce.current += 1;
+    setToolHud({
+      nonce: toolHudNonce.current,
+      tool: definition.tool,
+      label: definition.label,
+      shortcut: definition.shortcut,
+    });
+    clearTimeout(toolHudTimer.current);
+    toolHudTimer.current = setTimeout(() => setToolHud(null), TOOL_HUD_LIFETIME_MS);
   };
 
   const commitDetailing = (next) => {
@@ -2078,6 +2131,7 @@ export default function WallDetailEditor() {
       if (canvasTool === CANVAS_TOOLS.SELECT) return;
       event.preventDefault();
       chooseCanvasTool(CANVAS_TOOLS.SELECT);
+      flashToolHud(TOOL_BY_ID[CANVAS_TOOLS.SELECT]);
       return;
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -2105,6 +2159,7 @@ export default function WallDetailEditor() {
     claimShortcut(event);
     if (definition.framedOnly && !framedAssembly) return;
     chooseCanvasTool(definition.tool);
+    flashToolHud(definition);
   };
 
   const renderToolButton = (toolId, overrides = {}) => {
@@ -2136,6 +2191,17 @@ export default function WallDetailEditor() {
         </div>
         <div className={styles.headerActions}>
           <ToolbarButton
+            title={
+              focusMode
+                ? 'Bring the workflow and numbers panels back'
+                : 'Hide both side panels and draw on the full screen'
+            }
+            aria-pressed={focusMode}
+            onClick={toggleFocusMode}
+          >
+            {focusMode ? 'Show panels' : 'Focus canvas'}
+          </ToolbarButton>
+          <ToolbarButton
             title="Download the scaled elevation drawing as SVG"
             onClick={() => downloadWallDetailSvg(wall, floor, activeSide)}
           >
@@ -2156,8 +2222,14 @@ export default function WallDetailEditor() {
         </div>
       </header>
 
-      <div className={styles.body}>
-        <aside className={styles.leftPanel} aria-label="Wall detailing steps">
+      <div className={styles.body} data-focus={focusMode ? 'true' : 'false'}>
+        <aside
+          id="wall-detail-left-panel"
+          className={styles.leftPanel}
+          aria-label="Wall detailing steps"
+          data-peek={focusMode && panelPeek === 'left' ? 'true' : 'false'}
+          aria-hidden={focusMode && panelPeek !== 'left' ? 'true' : undefined}
+        >
           {orientationDismissed ? null : (
             <div className={styles.orientationCard}>
               <span className={styles.eyebrow}>Start here</span>
@@ -3004,7 +3076,19 @@ export default function WallDetailEditor() {
               Hold Space + drag to pan · scroll to zoom · 0 fits the wall · Esc cancels, then returns to Select
             </span>
           </div>
-          <div className={styles.workspaceViews} data-view={workspaceView}>
+          <div
+            className={styles.workspaceViews}
+            data-view={workspaceView}
+            onPointerDownCapture={panelPeek ? dismissPanelPeek : undefined}
+            onWheelCapture={panelPeek ? dismissPanelPeek : undefined}
+          >
+            {focusMode && toolHud ? (
+              <div key={toolHud.nonce} className={styles.toolHud} role="status">
+                <kbd className={styles.kbd}>{toolHud.shortcut}</kbd>
+                <strong>{toolHud.label}</strong>
+                <em>{TOOL_HINTS[toolHud.tool]}</em>
+              </div>
+            ) : null}
             {workspaceView !== WORKSPACE_VIEWS.THREE_D ? (
               <div className={styles.elevationPane}>
                 <div
@@ -3351,7 +3435,13 @@ export default function WallDetailEditor() {
           </div>
         </main>
 
-        <aside className={styles.rightPanel} aria-label="Selection, numbers, and checks">
+        <aside
+          id="wall-detail-right-panel"
+          className={styles.rightPanel}
+          aria-label="Selection, numbers, and checks"
+          data-peek={focusMode && panelPeek === 'right' ? 'true' : 'false'}
+          aria-hidden={focusMode && panelPeek !== 'right' ? 'true' : undefined}
+        >
           <CollapsibleSection
             id="selection"
             title="Selection"
@@ -3791,6 +3881,47 @@ export default function WallDetailEditor() {
             </p>
           </CollapsibleSection>
         </aside>
+
+        {focusMode ? (
+          <>
+            <button
+              type="button"
+              className={`${styles.panelPeekTab} ${styles.panelPeekTabLeft}`}
+              data-open={panelPeek === 'left' ? 'true' : 'false'}
+              aria-expanded={panelPeek === 'left'}
+              aria-controls="wall-detail-left-panel"
+              title={
+                panelPeek === 'left'
+                  ? 'Tuck the workflow panel away'
+                  : 'Peek at the workflow panel — touching the drawing tucks it away again'
+              }
+              onClick={() => togglePanelPeek('left')}
+            >
+              <span className={styles.panelPeekChevron} aria-hidden="true">
+                {panelPeek === 'left' ? '‹' : '›'}
+              </span>
+              <span className={styles.panelPeekLabel}>Workflow</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.panelPeekTab} ${styles.panelPeekTabRight}`}
+              data-open={panelPeek === 'right' ? 'true' : 'false'}
+              aria-expanded={panelPeek === 'right'}
+              aria-controls="wall-detail-right-panel"
+              title={
+                panelPeek === 'right'
+                  ? 'Tuck the numbers panel away'
+                  : 'Peek at the numbers panel — touching the drawing tucks it away again'
+              }
+              onClick={() => togglePanelPeek('right')}
+            >
+              <span className={styles.panelPeekChevron} aria-hidden="true">
+                {panelPeek === 'right' ? '›' : '‹'}
+              </span>
+              <span className={styles.panelPeekLabel}>Numbers</span>
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   );
