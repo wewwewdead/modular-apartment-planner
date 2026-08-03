@@ -50,7 +50,9 @@ import {
   createDrawnPanel,
   createTracedPanel,
   deriveWallDimensionGuideSegment,
+  findFramingOpeningClashes,
   fitPanelToFramingReveal,
+  measureFramingClearance,
   moveMemberWithinBounds,
   movePanelWithinBounds,
   movePointWithinBounds,
@@ -2036,6 +2038,19 @@ export default function WallDetailEditor() {
   const unitPx = wallUnitsPerPixel(canvasMetrics, viewport, bounds);
   const dimensionHandleRadius = 4.5 * unitPx;
   const dimensionFontSize = 12.5 * unitPx;
+  // The elevation only draws the near frame, so clashes are measured against
+  // exactly what is on screen rather than against studs hidden behind it.
+  const drawnFrameMembers = frameMembers.filter((member) => member.frameIndex === 0);
+  const framingClashes = findFramingOpeningClashes(drawnFrameMembers, detail.openings);
+  const framingContactById = new Map(framingClashes.map((clash) => [clash.memberId, clash]));
+  const intrusionCount = framingClashes.filter((clash) => clash.contact === 'intrusion').length;
+  // The member under the cursor turns red the moment it eats into an opening,
+  // so a stud is never committed into a doorway by accident.
+  const framingPreviewContact =
+    gesturePreviewType === 'framing' && gesturePreview
+      ? measureFramingClearance(gesturePreview, detail.openings)
+      : null;
+  const framingPreviewFouls = Boolean(framingPreviewContact && framingPreviewContact.overlap > 0.05);
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
   const framedAssembly = assembly.system === 'framed';
   const selectionSummary = selection
@@ -2065,6 +2080,21 @@ export default function WallDetailEditor() {
     reference ? `${referenceEntityName(reference)} · ${friendlyAnchorPhrase(reference.anchor)}` : 'free point';
   const formatMm = (value) => formatWallDimensionValue(value, face.dimensions.precision);
 
+  /** Plain-language verdict on how a framing member meets the nearest opening. */
+  const describeOpeningContact = (contact) => {
+    const opening = contact.openingKind === 'window' ? 'window' : 'door';
+    if (contact.contact === 'clear') return `${formatMm(contact.separation)} mm clear of ${opening}`;
+    if (contact.contact === 'flush') return `flush with ${opening}`;
+    if (contact.contact === 'jamb') return `laps ${opening} edge by ${formatMm(contact.overlap)} mm`;
+    return `inside ${opening} by ${formatMm(contact.overlap)} mm`;
+  };
+
+  /** The line that answers "does this hit the door?" while the member is still moving. */
+  const openingClearanceLines = (member) => {
+    const contact = measureFramingClearance(member, detail.openings);
+    return contact ? [describeOpeningContact(contact)] : [];
+  };
+
   /** Live size / position readout that follows the pointer during gestures. */
   const gestureReadout = (() => {
     if (gesture?.kind === 'draw' && gesturePreview) {
@@ -2081,7 +2111,10 @@ export default function WallDetailEditor() {
       if (gesture.tool === CANVAS_TOOLS.DRAW_STUD || gesture.tool === CANVAS_TOOLS.DRAW_NOGGIN) {
         const vertical = gesture.tool === CANVAS_TOOLS.DRAW_STUD;
         const span = vertical ? gesturePreview.v1 - gesturePreview.v0 : gesturePreview.u1 - gesturePreview.u0;
-        return { point: gesture.current, lines: [`${vertical ? 'stud' : 'noggin'} · ${formatMm(span)} mm`] };
+        return {
+          point: gesture.current,
+          lines: [`${vertical ? 'stud' : 'noggin'} · ${formatMm(span)} mm`, ...openingClearanceLines(gesturePreview)],
+        };
       }
       return null; // the measure tool draws its own live label
     }
@@ -2097,7 +2130,10 @@ export default function WallDetailEditor() {
         const centre = vertical
           ? (gesturePreview.u0 + gesturePreview.u1) / 2
           : (gesturePreview.v0 + gesturePreview.v1) / 2;
-        return { point: gesture.current, lines: [`centre ${vertical ? 'U' : 'V'} ${formatMm(centre)}`] };
+        return {
+          point: gesture.current,
+          lines: [`centre ${vertical ? 'U' : 'V'} ${formatMm(centre)}`, ...openingClearanceLines(gesturePreview)],
+        };
       }
       return { point: gesture.current, lines: [`U ${formatMm(gesturePreview.u)} · V ${formatMm(gesturePreview.v)}`] };
     }
@@ -3130,6 +3166,16 @@ export default function WallDetailEditor() {
                     <rect width={detail.length} height={detail.height} fill="#202830" />
                     <g transform={`translate(0 ${detail.height}) scale(1 -1)`}>
                       <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
+                      {detail.openings.map((opening) => (
+                        <rect
+                          key={`${opening.id}:void`}
+                          className={styles.openingVoid}
+                          x={opening.u0}
+                          y={opening.v0}
+                          width={opening.u1 - opening.u0}
+                          height={opening.v1 - opening.v0}
+                        />
+                      ))}
                       {layerVisibility.panels &&
                         panels.flatMap((panel) =>
                           panel.polygonal
@@ -3169,15 +3215,20 @@ export default function WallDetailEditor() {
                               )),
                         )}
                       {layerVisibility.framing &&
-                        frameMembers
-                          .filter((member) => member.frameIndex === 0)
-                          .map((member) => (
+                        drawnFrameMembers.map((member) => {
+                          const contact = framingContactById.get(member.id);
+                          const setOut =
+                            member.orientation === 'vertical'
+                              ? `centre U ${formatMm((member.u0 + member.u1) / 2)}`
+                              : `centre V ${formatMm((member.v0 + member.v1) / 2)}`;
+                          return (
                             <rect
                               key={member.id}
                               className={styles.frameShape}
                               data-selected={
                                 selection?.type === 'framing' && selection.id === member.id ? 'true' : 'false'
                               }
+                              data-contact={contact?.contact}
                               x={member.u0}
                               y={member.v0}
                               width={member.u1 - member.u0}
@@ -3186,12 +3237,11 @@ export default function WallDetailEditor() {
                               onPointerDown={(event) => beginElementMove(event, 'framing', member.id, member)}
                             >
                               <title>
-                                {member.orientation === 'vertical'
-                                  ? `${member.kind} · centre U ${formatMm((member.u0 + member.u1) / 2)}`
-                                  : `${member.kind} · centre V ${formatMm((member.v0 + member.v1) / 2)}`}
+                                {`${member.kind} · ${setOut}${contact ? ` · ${describeOpeningContact(contact)}` : ''}`}
                               </title>
                             </rect>
-                          ))}
+                          );
+                        })}
                       {layerVisibility.fasteners &&
                         fasteners.map((fastener) => (
                           <FastenerGraphic
@@ -3208,16 +3258,20 @@ export default function WallDetailEditor() {
                         ))}
                       {detail.openings.map((opening) => (
                         <rect
-                          key={opening.id}
+                          key={`${opening.id}:profile`}
+                          className={styles.openingProfile}
                           x={opening.u0}
                           y={opening.v0}
                           width={opening.u1 - opening.u0}
                           height={opening.v1 - opening.v0}
-                          fill="#f7f8fa"
-                          stroke="#101419"
-                          strokeWidth="8"
                           vectorEffect="non-scaling-stroke"
-                        />
+                        >
+                          <title>
+                            {`${opening.kind} · U ${formatMm(opening.u0)} → ${formatMm(opening.u1)} · V ${formatMm(
+                              opening.v0,
+                            )} → ${formatMm(opening.v1)}`}
+                          </title>
+                        </rect>
                       ))}
                       {layerVisibility.asBuilt &&
                         detail.asBuilt.map((measurement) =>
@@ -3229,8 +3283,8 @@ export default function WallDetailEditor() {
                               y1={0}
                               y2={detail.height}
                               stroke={measurement.status === 'within_tolerance' ? '#4caf83' : '#e45545'}
-                              strokeWidth="4"
-                              strokeDasharray="18 12"
+                              strokeWidth="1.25"
+                              strokeDasharray="9 6"
                               vectorEffect="non-scaling-stroke"
                             />
                           ) : (
@@ -3241,8 +3295,8 @@ export default function WallDetailEditor() {
                               y1={measurement.measuredValue}
                               y2={measurement.measuredValue}
                               stroke={measurement.status === 'within_tolerance' ? '#4caf83' : '#e45545'}
-                              strokeWidth="4"
-                              strokeDasharray="18 12"
+                              strokeWidth="1.25"
+                              strokeDasharray="9 6"
                               vectorEffect="non-scaling-stroke"
                             />
                           ),
@@ -3256,8 +3310,8 @@ export default function WallDetailEditor() {
                             height={gesturePreview.v1 - gesturePreview.v0}
                             fill="rgba(255, 184, 92, .28)"
                             stroke="#ffb85c"
-                            strokeWidth="4"
-                            strokeDasharray="18 10"
+                            strokeWidth="1.25"
+                            strokeDasharray="8 5"
                             vectorEffect="non-scaling-stroke"
                           />
                           {(gesturePreview.revealSnaps || []).map((snap, index) => (
@@ -3269,7 +3323,7 @@ export default function WallDetailEditor() {
                               height={snap.axis === 'v' ? Math.abs(snap.to - snap.from) : snap.end - snap.start}
                               fill="rgba(103, 197, 166, .5)"
                               stroke="#67c5a6"
-                              strokeWidth="3"
+                              strokeWidth="1"
                               vectorEffect="non-scaling-stroke"
                             />
                           ))}
@@ -3281,8 +3335,8 @@ export default function WallDetailEditor() {
                             points={panelTracePreview.map((point) => `${point.u},${point.v}`).join(' ')}
                             fill={panelTracePreview.length >= 3 ? 'rgba(255, 184, 92, .2)' : 'none'}
                             stroke="#ffb85c"
-                            strokeWidth="4"
-                            strokeDasharray="18 10"
+                            strokeWidth="1.25"
+                            strokeDasharray="8 5"
                             vectorEffect="non-scaling-stroke"
                           />
                           {panelTrace.points.map((point, index) => (
@@ -3290,10 +3344,10 @@ export default function WallDetailEditor() {
                               key={`${point.u}:${point.v}:${index}`}
                               cx={point.u}
                               cy={point.v}
-                              r={Math.max(12, Math.min(detail.length, detail.height) / 150)}
+                              r={3.5 * unitPx}
                               fill={index === 0 ? '#67c5a6' : '#ffb85c'}
                               stroke="#fff"
-                              strokeWidth="3"
+                              strokeWidth="1"
                               vectorEffect="non-scaling-stroke"
                             />
                           ))}
@@ -3306,10 +3360,10 @@ export default function WallDetailEditor() {
                           y={gesturePreview.v0}
                           width={gesturePreview.u1 - gesturePreview.u0}
                           height={gesturePreview.v1 - gesturePreview.v0}
-                          fill="rgba(82, 183, 232, .46)"
-                          stroke="#72d0f5"
-                          strokeWidth="4"
-                          strokeDasharray="18 10"
+                          fill={framingPreviewFouls ? 'rgba(214, 84, 68, .46)' : 'rgba(82, 183, 232, .46)'}
+                          stroke={framingPreviewFouls ? '#e4634f' : '#72d0f5'}
+                          strokeWidth="1.25"
+                          strokeDasharray="8 5"
                           vectorEffect="non-scaling-stroke"
                         />
                       ) : null}
@@ -3318,10 +3372,10 @@ export default function WallDetailEditor() {
                           className={styles.drawPreview}
                           cx={gesturePreview.u}
                           cy={gesturePreview.v}
-                          r={Math.max(10, Math.min(detail.length, detail.height) / 250)}
+                          r={3 * unitPx}
                           fill="#ffd166"
                           stroke="#fff"
-                          strokeWidth="3"
+                          strokeWidth="1"
                           vectorEffect="non-scaling-stroke"
                         />
                       ) : null}
@@ -3413,6 +3467,11 @@ export default function WallDetailEditor() {
                   <span>Measure precision: {face.dimensions.precision} mm</span>
                   <span>Origin: wall start / finished floor</span>
                   <span>Face: {activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside'}</span>
+                  {intrusionCount > 0 ? (
+                    <span className={styles.dimensionBarAlert}>
+                      {intrusionCount} framing {intrusionCount === 1 ? 'member' : 'members'} inside an opening
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ) : null}

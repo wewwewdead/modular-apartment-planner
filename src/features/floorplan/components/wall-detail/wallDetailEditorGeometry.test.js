@@ -7,7 +7,9 @@ import {
   createDrawnFramingMember,
   createDrawnPanel,
   createTracedPanel,
+  findFramingOpeningClashes,
   fitPanelToFramingReveal,
+  measureFramingClearance,
   movePanelWithinBounds,
   moveWallDimensionWithinBounds,
   panWallViewport,
@@ -181,6 +183,58 @@ describe('wall detail editor geometry', () => {
       point: { u: 400, v: 450 },
       reference: { entityType: 'fastener', entityId: 'guide-1:station:2', anchor: 'center' },
     });
+  });
+
+  it('reports how framing meets an opening so a stud near a door reads as a number', () => {
+    const door = { id: 'door-1', kind: 'door', u0: 900, u1: 1800, v0: 0, v1: 2100 };
+    const clearanceOf = (member) => measureFramingClearance(member, [door]);
+
+    // A stud standing well clear of the jamb reports the gap an installer measures.
+    expect(clearanceOf({ u0: 800, u1: 850, v0: 0, v1: 2400 })).toMatchObject({
+      contact: 'clear',
+      separation: 50,
+      overlap: 0,
+      axis: 'u',
+    });
+
+    // Flush against the jamb is contact, not a clash.
+    expect(clearanceOf({ u0: 850, u1: 900, v0: 0, v1: 2400 })).toMatchObject({ contact: 'flush', overlap: 0 });
+
+    // A header sitting on the head line is flush too, never a clash.
+    expect(clearanceOf({ u0: 900, u1: 1800, v0: 2100, v1: 2150 })).toMatchObject({ contact: 'flush', overlap: 0 });
+
+    // A trimmer centred on the jamb eats half its width into the opening.
+    expect(clearanceOf({ u0: 875, u1: 925, v0: 0, v1: 2400 })).toMatchObject({ contact: 'jamb', overlap: 25 });
+
+    // A stud standing inside the doorway is in the way and says by how much.
+    expect(clearanceOf({ u0: 1000, u1: 1050, v0: 0, v1: 2400 })).toMatchObject({
+      contact: 'intrusion',
+      overlap: 150,
+      axis: 'u',
+    });
+
+    // A stud passing above the head misses the opening entirely.
+    expect(clearanceOf({ u0: 1000, u1: 1050, v0: 2200, v1: 2400 })).toMatchObject({
+      contact: 'clear',
+      separation: 100,
+      axis: 'v',
+    });
+  });
+
+  it('collects opening clashes worst first and ignores framing that only touches', () => {
+    const openings = [{ id: 'door-1', kind: 'door', u0: 900, u1: 1800, v0: 0, v1: 2100 }];
+    const members = [
+      { id: 'clear-stud', kind: 'stud', u0: 600, u1: 650, v0: 0, v1: 2400 },
+      { id: 'header', kind: 'header', u0: 900, u1: 1800, v0: 2100, v1: 2150 },
+      { id: 'trimmer', kind: 'stud', u0: 875, u1: 925, v0: 0, v1: 2400 },
+      { id: 'blocking-stud', kind: 'stud', u0: 1300, u1: 1350, v0: 0, v1: 2400 },
+    ];
+
+    expect(findFramingOpeningClashes(members, openings)).toEqual([
+      expect.objectContaining({ memberId: 'blocking-stud', contact: 'intrusion', overlap: 450 }),
+      expect.objectContaining({ memberId: 'trimmer', contact: 'jamb', overlap: 25 }),
+    ]);
+    expect(findFramingOpeningClashes(members, [])).toEqual([]);
   });
 
   it('turns construction measurements into continuous screw guides with exact intersections', () => {

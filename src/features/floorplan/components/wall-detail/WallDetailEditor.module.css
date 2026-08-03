@@ -1017,35 +1017,75 @@
 
 /* ---------- Element hover feedback ---------- */
 
+/* ---------- CAD line-weight hierarchy ----------
+   Canvas shapes all draw with vector-effect: non-scaling-stroke, so these are
+   screen pixels at every zoom. They are deliberately hairline: SVG centres a
+   stroke on its path, so half of any line sits outside the true edge and a
+   heavy line is a lie about where the timber actually stops. At working zoom a
+   50 mm stud is only about 9 px wide, so the 4 px stroke this replaced pushed
+   its apparent edge out by roughly 11 mm on each side — enough to hide whether
+   a stud fouls a door jamb. Weight also carries meaning, lightest to heaviest:
+   framing behind the boards, board faces, then the opening profile as the
+   heaviest cut line. Nothing may change weight on hover or selection, because
+   that would move the edge the drawing is being measured against. */
+.canvas {
+  --cad-frame-line: 1px;
+  --cad-board-line: 1.25px;
+  --cad-profile-line: 1.6px;
+}
+
 .panelShape {
   stroke: #303943;
-  stroke-width: 4;
+  stroke-width: var(--cad-board-line);
   transition: stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .panelShape[data-selected='true'] {
   stroke: #ffb45c;
-  stroke-width: 12;
 }
 .canvas[data-tool='select'] .panelShape:not([data-selected='true']):hover {
   stroke: #8fd0f0;
-  stroke-width: 9;
   cursor: pointer;
 }
 .frameShape {
   fill: rgba(49, 129, 168, 0.35);
   stroke: #2b789c;
-  stroke-width: 4;
+  stroke-width: var(--cad-frame-line);
   transition:
     fill var(--duration-fast, 0.1s) var(--ease-out, ease),
     stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .frameShape[data-selected='true'] {
   fill: rgba(255, 180, 92, 0.65);
+  stroke: #ffb45c;
 }
 .canvas[data-tool='select'] .frameShape:not([data-selected='true']):hover {
   fill: rgba(96, 170, 208, 0.55);
   stroke: #57b6dd;
   cursor: pointer;
+}
+/* Framing that straddles an opening edge the way a trimmer stud does. */
+.frameShape[data-contact='jamb'] {
+  fill: rgba(214, 158, 74, 0.4);
+  stroke: #d69e4a;
+}
+/* Framing standing inside an opening — on a real wall this has to move or be cut. */
+.frameShape[data-contact='intrusion'] {
+  fill: rgba(214, 84, 68, 0.45);
+  stroke: #e4634f;
+}
+
+/* ---------- Openings ----------
+   Drawn as a void beneath the framing so anything running into the opening
+   stays visible, then re-outlined on top so the jamb, head, and sill read as
+   the crisp cut lines they are. */
+.openingVoid {
+  fill: rgba(226, 233, 240, 0.9);
+  stroke: none;
+}
+.openingProfile {
+  fill: none;
+  stroke: #0d1116;
+  stroke-width: var(--cad-profile-line);
 }
 .canvas[data-tool='select'] .fastenerGraphic:hover {
   filter: brightness(1.45);
@@ -1259,6 +1299,10 @@
   border-top: 1px solid #303b45;
   color: #93a2ad;
   font: 10px var(--font-blueprint);
+}
+.dimensionBarAlert {
+  color: #f0836f;
+  font-weight: 700;
 }
 
 /* ---------- Form controls ---------- */

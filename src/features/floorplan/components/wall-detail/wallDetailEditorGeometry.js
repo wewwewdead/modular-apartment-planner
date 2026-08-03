@@ -3,6 +3,9 @@ import { polygonArea } from '@/geometry/polygon';
 
 const MIN_ELEMENT_SIZE = 10;
 
+/** Millimetres of slop below which two edges count as landing on each other. */
+const CONTACT_TOLERANCE = 0.05;
+
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -733,6 +736,88 @@ function centeredRevealSupport(edge, edges, maximumGap) {
     nearestDistance = distance;
   }
   return nearest ? (edge.position + nearest.position) / 2 : edge.position;
+}
+
+function normalizedRect(value) {
+  const u0 = Number(value?.u0) || 0;
+  const u1 = Number(value?.u1) || 0;
+  const v0 = Number(value?.v0) || 0;
+  const v1 = Number(value?.v1) || 0;
+  return { u0: Math.min(u0, u1), u1: Math.max(u0, u1), v0: Math.min(v0, v1), v1: Math.max(v0, v1) };
+}
+
+/**
+ * Axis-aligned separation between two wall-local rectangles.
+ *
+ * `value` is the clear gap in millimetres: positive when the pair misses,
+ * zero when they land flush, and negative when they genuinely overlap — in
+ * which case its magnitude is the shortest push that would part them again.
+ * `axis` names the direction that separation acts along.
+ */
+export function rectSeparation(a, b) {
+  const left = normalizedRect(a);
+  const right = normalizedRect(b);
+  const gapU = Math.max(right.u0 - left.u1, left.u0 - right.u1);
+  const gapV = Math.max(right.v0 - left.v1, left.v0 - right.v1);
+  return gapU >= gapV ? { value: gapU, axis: 'u' } : { value: gapV, axis: 'v' };
+}
+
+/**
+ * How one framing member meets the nearest opening, so the drawing can answer
+ * "does this stud hit the door?" with a number instead of a thick line.
+ *
+ * `contact` is the installer-facing verdict:
+ *   clear     — misses the opening by `separation` mm
+ *   flush     — lands exactly on the jamb, head, or sill line (headers and
+ *               sills sit here, which is why flush is never a clash)
+ *   jamb      — straddles an opening edge, so `overlap` mm of the member sits
+ *               inside the opening; this is how generated trimmer studs sit
+ *   intrusion — the member's centreline is inside the opening, so on a real
+ *               wall it is in the way and has to move or be cut
+ */
+export function measureFramingClearance(member, openings = [], tolerance = CONTACT_TOLERANCE) {
+  let nearest = null;
+  for (const opening of openings) {
+    const separation = rectSeparation(member, opening);
+    if (nearest && separation.value >= nearest.separation) continue;
+    nearest = { opening, separation: separation.value, axis: separation.axis };
+  }
+  if (!nearest) return null;
+  const { opening, separation, axis } = nearest;
+  const rect = normalizedRect(member);
+  const bounds = normalizedRect(opening);
+  const centre = axis === 'u' ? (rect.u0 + rect.u1) / 2 : (rect.v0 + rect.v1) / 2;
+  const low = axis === 'u' ? bounds.u0 : bounds.v0;
+  const high = axis === 'u' ? bounds.u1 : bounds.v1;
+  const contact =
+    separation > tolerance
+      ? 'clear'
+      : separation >= -tolerance
+        ? 'flush'
+        : centre > low + tolerance && centre < high - tolerance
+          ? 'intrusion'
+          : 'jamb';
+  return {
+    openingId: opening?.id ?? null,
+    openingKind: opening?.kind || 'opening',
+    axis,
+    separation,
+    overlap: Math.max(0, -separation),
+    contact,
+  };
+}
+
+/**
+ * Every framing member that eats into an opening, worst intrusion first, keyed
+ * by member id so the canvas can flag them without re-measuring per render.
+ */
+export function findFramingOpeningClashes(members = [], openings = [], tolerance = CONTACT_TOLERANCE) {
+  if (!openings.length) return [];
+  return members
+    .map((member) => ({ member, clearance: measureFramingClearance(member, openings, tolerance) }))
+    .filter((entry) => entry.clearance && entry.clearance.overlap > tolerance)
+    .map((entry) => ({ memberId: entry.member.id, kind: entry.member.kind, ...entry.clearance }))
+    .sort((a, b) => b.overlap - a.overlap);
 }
 
 export function buildPanelJointBackingMembers(panels, existingMembers, framing, bounds) {
