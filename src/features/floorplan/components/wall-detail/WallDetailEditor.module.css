@@ -912,20 +912,26 @@
 .canvas[data-tool='select'] .wallDimension:hover {
   filter: brightness(1.25);
 }
-.dimensionAnchor {
-  fill: #67c5a6;
-  stroke: #ffffff;
-  stroke-width: 3;
+.dimensionGrip {
   pointer-events: none;
 }
-.dimensionAnchorEditable {
+.dimensionGripEditable {
   cursor: move;
   pointer-events: all;
 }
-.dimensionAnchorEditable:hover {
+.dimensionGripHit {
+  fill: transparent;
+  stroke: none;
+}
+.dimensionGripDot {
+  fill: #67c5a6;
+  stroke: #10141a;
+  stroke-width: 1.25px;
+}
+.dimensionGripEditable:hover .dimensionGripDot {
   fill: #ffffff;
   stroke: #67c5a6;
-  stroke-width: 5;
+  stroke-width: 1.5px;
 }
 .dimensionAcquisition {
   color: #ffbe66;
@@ -937,19 +943,19 @@
 .dimensionAcquisition circle {
   fill: rgba(17, 25, 32, 0.72);
   stroke: currentColor;
-  stroke-width: 3;
+  stroke-width: 1.5;
 }
 .dimensionAcquisition line {
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 1.25;
 }
 .dimensionAcquisition text {
   fill: currentColor;
   stroke: #111820;
-  stroke-width: 5px;
+  stroke-width: 3px;
   paint-order: stroke fill;
   font-family: var(--font-blueprint);
-  font-weight: 800;
+  font-weight: 600;
   dominant-baseline: central;
 }
 .dimensionAcquisitionCoords {
@@ -1313,45 +1319,56 @@
 /* ---------- SVG dimension styling ---------- */
 
 .wallDimension {
-  color: #ffc45f;
+  color: #d9ad63;
   cursor: pointer;
   pointer-events: stroke;
 }
 .wallDimension[data-source='automatic'] {
-  color: #88d6bc;
+  color: #7fb8a4;
 }
 .wallDimension[data-movable='true'] {
   cursor: move;
 }
 .wallDimensionSelected {
-  color: #fff2a8;
+  color: #ffd98a;
 }
 .dimensionScrewGuide {
   stroke: #69cbe8;
-  stroke-width: 3px;
+  stroke-width: 1.5px;
   stroke-dasharray: 10 7;
 }
 .dimensionScrewGuidePoint {
   fill: #69cbe8;
-  stroke: #ffffff;
-  stroke-width: 2px;
+  stroke: #10141a;
+  stroke-width: 1.25px;
 }
 .dimensionLine {
   stroke: currentColor;
-  stroke-width: 3px;
+  stroke-width: 1.25px;
+}
+.dimensionHit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  pointer-events: stroke;
+}
+.dimensionTick {
+  stroke: currentColor;
+  stroke-width: 1.4px;
 }
 .dimensionWitness {
   stroke: currentColor;
-  stroke-width: 2px;
-  stroke-dasharray: 8 6;
-  opacity: 0.78;
+  stroke-width: 1px;
+  opacity: 0.55;
 }
 .dimensionText {
   fill: currentColor;
-  stroke: #111820;
-  stroke-width: 10px;
+  stroke: #202830;
+  stroke-width: 3px;
   paint-order: stroke fill;
-  font: 700 38px var(--font-blueprint);
+  font: 600 38px var(--font-blueprint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;

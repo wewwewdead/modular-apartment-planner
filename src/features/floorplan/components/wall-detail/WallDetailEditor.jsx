@@ -303,7 +303,8 @@ function DimensionGraphic({
   selected,
   editable = false,
   showScrewGuide = false,
-  handleRadius = 9,
+  unitPx = 1,
+  handleRadius = 4.5,
   fontSize = null,
   title = null,
   onPointerDown,
@@ -311,6 +312,7 @@ function DimensionGraphic({
   onEndHandlePointerDown,
 }) {
   const geometry = deriveWallDimensionGeometry(dimension);
+  const px = unitPx > 0 ? unitPx : 1;
   const labelOffset = fontSize ? fontSize * 0.62 : 10;
   const svgPoint = (point) => ({ x: point.u, y: wallHeight - point.v });
   const witnessStart = svgPoint(geometry.witnessStart);
@@ -321,6 +323,39 @@ function DimensionGraphic({
   const screwGuide = deriveWallDimensionGuideSegment(dimension);
   const screwGuideStart = svgPoint(screwGuide.start);
   const screwGuideEnd = svgPoint(screwGuide.end);
+  const dimensionLength = Math.hypot(dimensionEnd.x - dimensionStart.x, dimensionEnd.y - dimensionStart.y);
+  const direction =
+    dimensionLength > 1e-6
+      ? {
+          x: (dimensionEnd.x - dimensionStart.x) / dimensionLength,
+          y: (dimensionEnd.y - dimensionStart.y) / dimensionLength,
+        }
+      : { x: 1, y: 0 };
+  // Architectural tick terminators: 45° slashes across the dimension line,
+  // sized via unitPx so they hold the same screen size at every zoom level.
+  const tickHalf = 4 * px;
+  const tick = {
+    x: (direction.x - direction.y) * Math.SQRT1_2 * tickHalf,
+    y: (direction.x + direction.y) * Math.SQRT1_2 * tickHalf,
+  };
+  // Extension lines keep a small gap off the measured point and overshoot
+  // slightly past the dimension line, so they read as annotation rather than
+  // part of the construction linework.
+  const witnessLine = (from, to) => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length < 1e-6) return null;
+    const along = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+    const gap = Math.min(5 * px, length * 0.4);
+    return {
+      x1: from.x + along.x * gap,
+      y1: from.y + along.y * gap,
+      x2: to.x + along.x * 4 * px,
+      y2: to.y + along.y * 4 * px,
+    };
+  };
+  const witnessLines = [witnessLine(witnessStart, dimensionStart), witnessLine(witnessEnd, dimensionEnd)].filter(
+    Boolean,
+  );
   return (
     <g
       className={`${styles.wallDimension} ${selected ? styles.wallDimensionSelected : ''}`}
@@ -342,33 +377,36 @@ function DimensionGraphic({
           <circle
             cx={screwGuideStart.x}
             cy={screwGuideStart.y}
-            r={handleRadius * 0.55}
+            r={handleRadius * 0.8}
             className={styles.dimensionScrewGuidePoint}
             vectorEffect="non-scaling-stroke"
           />
           <circle
             cx={screwGuideEnd.x}
             cy={screwGuideEnd.y}
-            r={handleRadius * 0.55}
+            r={handleRadius * 0.8}
             className={styles.dimensionScrewGuidePoint}
             vectorEffect="non-scaling-stroke"
           />
         </>
       ) : null}
+      {witnessLines.map((line, index) => (
+        <line
+          key={`witness-${index}`}
+          x1={line.x1}
+          y1={line.y1}
+          x2={line.x2}
+          y2={line.y2}
+          className={styles.dimensionWitness}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
       <line
-        x1={witnessStart.x}
-        y1={witnessStart.y}
-        x2={dimensionStart.x}
-        y2={dimensionStart.y}
-        className={styles.dimensionWitness}
-        vectorEffect="non-scaling-stroke"
-      />
-      <line
-        x1={witnessEnd.x}
-        y1={witnessEnd.y}
+        x1={dimensionStart.x}
+        y1={dimensionStart.y}
         x2={dimensionEnd.x}
         y2={dimensionEnd.y}
-        className={styles.dimensionWitness}
+        className={styles.dimensionHit}
         vectorEffect="non-scaling-stroke"
       />
       <line
@@ -377,38 +415,66 @@ function DimensionGraphic({
         x2={dimensionEnd.x}
         y2={dimensionEnd.y}
         className={styles.dimensionLine}
-        markerStart="url(#wall-dimension-arrow)"
-        markerEnd="url(#wall-dimension-arrow)"
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        x1={dimensionStart.x - tick.x}
+        y1={dimensionStart.y - tick.y}
+        x2={dimensionStart.x + tick.x}
+        y2={dimensionStart.y + tick.y}
+        className={styles.dimensionTick}
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        x1={dimensionEnd.x - tick.x}
+        y1={dimensionEnd.y - tick.y}
+        x2={dimensionEnd.x + tick.x}
+        y2={dimensionEnd.y + tick.y}
+        className={styles.dimensionTick}
         vectorEffect="non-scaling-stroke"
       />
       <text
         x={textPoint.x}
         y={textPoint.y - labelOffset}
         className={styles.dimensionText}
-        style={fontSize ? { fontSize } : undefined}
+        style={fontSize ? { fontSize, strokeWidth: 3 * px } : undefined}
         transform={`rotate(${geometry.angleDegrees} ${textPoint.x} ${textPoint.y - labelOffset})`}
-        vectorEffect="non-scaling-stroke"
       >
         {dimension.label}
       </text>
       {selected ? (
         <>
-          <circle
-            cx={witnessStart.x}
-            cy={witnessStart.y}
-            r={handleRadius}
-            className={`${styles.dimensionAnchor} ${editable ? styles.dimensionAnchorEditable : ''}`}
-            vectorEffect="non-scaling-stroke"
-            onPointerDown={onStartHandlePointerDown}
-          />
-          <circle
-            cx={witnessEnd.x}
-            cy={witnessEnd.y}
-            r={handleRadius}
-            className={`${styles.dimensionAnchor} ${editable ? styles.dimensionAnchorEditable : ''}`}
-            vectorEffect="non-scaling-stroke"
-            onPointerDown={onEndHandlePointerDown}
-          />
+          <g
+            className={`${styles.dimensionGrip} ${editable ? styles.dimensionGripEditable : ''}`}
+            onPointerDown={editable ? onStartHandlePointerDown : undefined}
+          >
+            <circle
+              cx={witnessStart.x}
+              cy={witnessStart.y}
+              r={handleRadius * 2.4}
+              className={styles.dimensionGripHit}
+            />
+            <circle
+              cx={witnessStart.x}
+              cy={witnessStart.y}
+              r={handleRadius}
+              className={styles.dimensionGripDot}
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
+          <g
+            className={`${styles.dimensionGrip} ${editable ? styles.dimensionGripEditable : ''}`}
+            onPointerDown={editable ? onEndHandlePointerDown : undefined}
+          >
+            <circle cx={witnessEnd.x} cy={witnessEnd.y} r={handleRadius * 2.4} className={styles.dimensionGripHit} />
+            <circle
+              cx={witnessEnd.x}
+              cy={witnessEnd.y}
+              r={handleRadius}
+              className={styles.dimensionGripDot}
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
         </>
       ) : null}
     </g>
@@ -1908,7 +1974,7 @@ export default function WallDetailEditor() {
           : null;
   const activeFastenerGuideSnap = canvasTool === CANVAS_TOOLS.ADD_FASTENER ? dimensionAcquisition?.reference : null;
   const unitPx = wallUnitsPerPixel(canvasMetrics, viewport, bounds);
-  const dimensionHandleRadius = Math.max(8, 9 * unitPx);
+  const dimensionHandleRadius = 4.5 * unitPx;
   const dimensionFontSize = 12.5 * unitPx;
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
   const framedAssembly = assembly.system === 'framed';
@@ -2970,19 +3036,6 @@ export default function WallDetailEditor() {
                       setDimensionAcquisition(null);
                     }}
                   >
-                    <defs>
-                      <marker
-                        id="wall-dimension-arrow"
-                        markerWidth="8"
-                        markerHeight="8"
-                        refX="4"
-                        refY="4"
-                        orient="auto-start-reverse"
-                        markerUnits="strokeWidth"
-                      >
-                        <path d="M 0 4 L 8 0 L 8 8 Z" fill="context-stroke" />
-                      </marker>
-                    </defs>
                     <rect width={detail.length} height={detail.height} fill="#202830" />
                     <g transform={`translate(0 ${detail.height}) scale(1 -1)`}>
                       <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
@@ -3207,6 +3260,7 @@ export default function WallDetailEditor() {
                             selected={selected}
                             editable={editable}
                             showScrewGuide={dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.ADD_FASTENER}
+                            unitPx={unitPx}
                             handleRadius={dimensionHandleRadius}
                             fontSize={dimensionFontSize}
                             title={`${dimension.name || 'Measurement'} · ${dimension.label}`}
@@ -3225,6 +3279,7 @@ export default function WallDetailEditor() {
                         dimension={gesturePreview}
                         wallHeight={detail.height}
                         selected
+                        unitPx={unitPx}
                         handleRadius={dimensionHandleRadius}
                         fontSize={dimensionFontSize}
                       />
