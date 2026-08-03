@@ -372,6 +372,7 @@ function DimensionGraphic({
             x2={screwGuideEnd.x}
             y2={screwGuideEnd.y}
             className={styles.dimensionScrewGuide}
+            style={{ strokeDasharray: `${8 * px} ${6 * px}` }}
             vectorEffect="non-scaling-stroke"
           />
           <circle
@@ -496,7 +497,12 @@ function DimensionAcquisitionGraphic({ acquisition, wallHeight, precision, refer
       <circle cx={x} cy={y} r={radius} vectorEffect="non-scaling-stroke" />
       <line x1={x - radius * 1.7} y1={y} x2={x + radius * 1.7} y2={y} vectorEffect="non-scaling-stroke" />
       <line x1={x} y1={y - radius * 1.7} x2={x} y2={y + radius * 1.7} vectorEffect="non-scaling-stroke" />
-      <text x={x + radius * 1.9} y={y - radius * 3.1} style={{ fontSize: radius * 1.3 }}>
+      <text
+        x={x + radius * 1.9}
+        y={y - radius * 3.1}
+        style={{ fontSize: radius * 1.3 }}
+        vectorEffect="non-scaling-stroke"
+      >
         {primary}
       </text>
       <text
@@ -504,6 +510,7 @@ function DimensionAcquisitionGraphic({ acquisition, wallHeight, precision, refer
         y={y - radius * 1.5}
         className={styles.dimensionAcquisitionCoords}
         style={{ fontSize: radius * 1.05 }}
+        vectorEffect="non-scaling-stroke"
       >
         {coords}
       </text>
