@@ -15,6 +15,7 @@ import { formatSurveyorBearing, pointsToSurveyorBearing } from '@/geometry/beari
 import { TOOLS } from '@/editor/tools';
 import { isTypingTarget } from '@/utils/keyboard';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
+import { CanvasZoomProvider } from './CanvasZoomContext';
 import FloorScene from './FloorScene';
 import GridRenderer from './GridRenderer';
 import RoofScene from './RoofScene';
@@ -510,70 +511,72 @@ export default function SvgCanvas() {
           onPointerUp={handleMouseUp}
           onDoubleClick={handleDoubleClick}
         >
-          <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
-            {viewMode === 'plan' && showGrid && <GridRenderer />}
-            {viewMode === 'plan' && showGrid && (
-              <rect
-                x={-100000}
-                y={-100000}
-                width={200000}
-                height={200000}
-                fill="url(#grid-major)"
-                style={{ pointerEvents: 'none' }}
-              />
-            )}
-            {modelTarget === 'roof' ? (
-              <RoofScene
-                roofSystem={roofSystem}
-                roofHiddenByPhase={roofHiddenByPhase}
-                viewMode={viewMode}
-                selectedId={selectedId}
-                selectedType={selectedType}
-                activeTool={activeTool}
-                toolState={toolState}
-                viewport={viewport}
-                filteredProject={filteredProject}
-                activeFloorId={activeFloorId}
-                activeSectionCutId={activeSectionCutId}
-              />
-            ) : modelTarget === 'truss' ? (
-              <TrussScene
-                filteredFloor={filteredFloor}
-                floorTrussSystems={floorTrussSystems}
-                hasProjectTrusses={hasProjectTrusses}
-                trussesHiddenByPhase={trussesHiddenByPhase}
-                viewMode={viewMode}
-                selectedId={selectedId}
-                selectedType={selectedType}
-                activeTool={activeTool}
-                toolState={toolState}
-                viewport={viewport}
-                activeTrussContext={activeTrussContext}
-                filteredProject={filteredProject}
-                activeSectionCutId={activeSectionCutId}
-              />
-            ) : (
-              <FloorScene
-                floor={floor}
-                filteredFloor={filteredFloor}
-                filteredProject={filteredProject}
-                structuralLoadPath={derived?.structuralLoadPath}
-                viewMode={viewMode}
-                selectedId={selectedId}
-                selectedType={selectedType}
-                activeTool={activeTool}
-                toolState={toolState}
-                zoom={viewport.zoom}
-                previewContent={previewContent}
-                regionSelection={regionSelection}
-                activeSectionCutId={activeSectionCutId}
-                roofHiddenByPhase={roofHiddenByPhase}
-                hasProjectRoof={hasProjectRoof}
-                railingsHiddenByPhase={railingsHiddenByPhase}
-                hasProjectRailings={hasProjectRailings}
-              />
-            )}
-          </g>
+          <CanvasZoomProvider value={viewport.zoom}>
+            <g transform={`translate(${viewport.panX}, ${viewport.panY}) scale(${viewport.zoom})`}>
+              {viewMode === 'plan' && showGrid && <GridRenderer />}
+              {viewMode === 'plan' && showGrid && (
+                <rect
+                  x={-100000}
+                  y={-100000}
+                  width={200000}
+                  height={200000}
+                  fill="url(#grid-major)"
+                  style={{ pointerEvents: 'none' }}
+                />
+              )}
+              {modelTarget === 'roof' ? (
+                <RoofScene
+                  roofSystem={roofSystem}
+                  roofHiddenByPhase={roofHiddenByPhase}
+                  viewMode={viewMode}
+                  selectedId={selectedId}
+                  selectedType={selectedType}
+                  activeTool={activeTool}
+                  toolState={toolState}
+                  viewport={viewport}
+                  filteredProject={filteredProject}
+                  activeFloorId={activeFloorId}
+                  activeSectionCutId={activeSectionCutId}
+                />
+              ) : modelTarget === 'truss' ? (
+                <TrussScene
+                  filteredFloor={filteredFloor}
+                  floorTrussSystems={floorTrussSystems}
+                  hasProjectTrusses={hasProjectTrusses}
+                  trussesHiddenByPhase={trussesHiddenByPhase}
+                  viewMode={viewMode}
+                  selectedId={selectedId}
+                  selectedType={selectedType}
+                  activeTool={activeTool}
+                  toolState={toolState}
+                  viewport={viewport}
+                  activeTrussContext={activeTrussContext}
+                  filteredProject={filteredProject}
+                  activeSectionCutId={activeSectionCutId}
+                />
+              ) : (
+                <FloorScene
+                  floor={floor}
+                  filteredFloor={filteredFloor}
+                  filteredProject={filteredProject}
+                  structuralLoadPath={derived?.structuralLoadPath}
+                  viewMode={viewMode}
+                  selectedId={selectedId}
+                  selectedType={selectedType}
+                  activeTool={activeTool}
+                  toolState={toolState}
+                  zoom={viewport.zoom}
+                  previewContent={previewContent}
+                  regionSelection={regionSelection}
+                  activeSectionCutId={activeSectionCutId}
+                  roofHiddenByPhase={roofHiddenByPhase}
+                  hasProjectRoof={hasProjectRoof}
+                  railingsHiddenByPhase={railingsHiddenByPhase}
+                  hasProjectRailings={hasProjectRailings}
+                />
+              )}
+            </g>
+          </CanvasZoomProvider>
         </svg>
         <CanvasOverlayControls
           onResetCenter={handleResetCenterPoint}

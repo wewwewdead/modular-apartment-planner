@@ -419,6 +419,38 @@ describe('buildPreviewObjectRoot', () => {
     expect(meshMap.get('w2').floorVisible).toBe(false);
   });
 
+  it('rakes stair-attached railings along the slope with vertical balusters', () => {
+    const raked = {
+      ...createDescriptor('r1', 'railing', 'railing_handrail', 'railing', { sourceId: 'r1' }),
+      railingType: 'handrail',
+      size: { x: 2500, y: 1000, z: 50 },
+      slopeRise: 1575,
+      baseElevation: 962.5,
+    };
+    const flat = {
+      ...createDescriptor('r2', 'railing', 'railing_handrail', 'railing', { sourceId: 'r2' }),
+      railingType: 'handrail',
+      size: { x: 2500, y: 1000, z: 50 },
+    };
+    const scene = createSceneDescriptor([
+      { floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects: [raked, flat] },
+    ]);
+
+    const { meshMap } = buildPreviewObjectRoot(scene, palette);
+
+    const rakedMeshes = meshMap.get('r1').object.children.filter((child) => child.isMesh);
+    const [topRail, ...balusters] = rakedMeshes;
+    expect(topRail.rotation.z).toBeCloseTo(Math.atan2(1575, 2500), 5);
+    // Baluster feet climb the pitch line: last one sits a full rise above the first
+    const firstY = balusters[0].position.y;
+    const lastY = balusters[balusters.length - 1].position.y;
+    expect(lastY - firstY).toBeCloseTo(1575, 5);
+
+    const flatMeshes = meshMap.get('r2').object.children.filter((child) => child.isMesh);
+    expect(flatMeshes[0].rotation.z).toBe(0);
+    expect(flatMeshes[1].position.y).toBe(flatMeshes[flatMeshes.length - 1].position.y);
+  });
+
   it('assigns previewTarget metadata to objects', () => {
     const scene = createSceneDescriptor([
       {

@@ -1,4 +1,8 @@
-import { buildFloorPreviewObjects, buildFloorSystemsPreviewObjects } from './objectBuilders';
+import {
+  buildFloorPreviewObjects,
+  buildFloorSystemsPreviewObjects,
+  buildStairElevationContexts,
+} from './objectBuilders';
 import { buildRoofPreviewObjects } from '@/geometry/roof3dGeometry';
 import {
   getDefaultActiveFloorId,
@@ -56,11 +60,18 @@ export function buildPreviewScene(project, options = {}) {
   const resolvedVisibleFloorIds = options.visibleFloorIds || floors.map((floor) => floor.id);
   const visibleFloorIds = new Set(resolvedVisibleFloorIds);
 
+  // Railings attach to stairs by plan position across floors (a stairwell
+  // railing drawn on the arrival floor follows the flight from below), so every
+  // floor's objects can depend on every floor's stairs and landings.
+  const stairContexts = buildStairElevationContexts(floors);
+  const stairSources = floors.map((floor) => floor.stairs);
+  const landingSources = floors.map((floor) => floor.landings);
+
   const floorDescriptors = floors.map((floor) => {
     const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
     const systemObjects = buildFloorSystemsPreviewObjects(floor, project?.building?.systems || {});
-    const objects = [...buildFloorPreviewObjects(floor), ...systemObjects, ...trussObjects];
+    const objects = [...buildFloorPreviewObjects(floor, { stairContexts }), ...systemObjects, ...trussObjects];
     return {
       floorId: floor.id,
       name: floor.name,
@@ -73,7 +84,15 @@ export function buildPreviewScene(project, options = {}) {
       // object reference while untouched floors keep identity — this lets the
       // preview object cache skip re-triangulating unchanged floors. Truss
       // systems are separate source objects, so include their refs too.
-      sourceKey: { floor, systems: project?.building?.systems, trussSystems: floorTrussSystems },
+      // stairSources/landingSources: cross-floor railing-stair attachment means
+      // any floor's stairs or landings changing must rebuild every floor.
+      sourceKey: {
+        floor,
+        systems: project?.building?.systems,
+        trussSystems: floorTrussSystems,
+        stairSources,
+        landingSources,
+      },
     };
   });
 

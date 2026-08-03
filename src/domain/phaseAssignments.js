@@ -10,6 +10,8 @@ export const PHASE_ASSIGNABLE_KEYS = [
   'fixtures',
   'rooms',
   'railings',
+  'annotations',
+  'sectionCuts',
 ];
 
 export function mapPhaseAssignableFloorObjects(floor, mapper) {

@@ -63,16 +63,27 @@ function resolveRefPosition(ref, columns) {
   return { point: columnCenter(column), column };
 }
 
+// Phase filtering can hide a beam's supporting columns while the beam itself
+// stays visible; the filter attaches those columns to the beam as
+// `phaseHiddenSupportColumns` so endpoint resolution keeps working.
+function withHiddenSupports(beam, columns) {
+  return beam?.phaseHiddenSupportColumns?.length
+    ? [...(columns || []), ...beam.phaseHiddenSupportColumns]
+    : columns || [];
+}
+
 export function resolveBeamColumns(beam, columns = []) {
+  const resolvable = withHiddenSupports(beam, columns);
   return {
-    startColumn: findColumn(columns, beam.startRef),
-    endColumn: findColumn(columns, beam.endRef),
+    startColumn: findColumn(resolvable, beam.startRef),
+    endColumn: findColumn(resolvable, beam.endRef),
   };
 }
 
 export function resolveBeamAxis(beam, columns = []) {
-  const startResolved = resolveRefPosition(beam.startRef, columns);
-  const endResolved = resolveRefPosition(beam.endRef, columns);
+  const resolvable = withHiddenSupports(beam, columns);
+  const startResolved = resolveRefPosition(beam.startRef, resolvable);
+  const endResolved = resolveRefPosition(beam.endRef, resolvable);
   if (!startResolved || !endResolved) return null;
 
   // Prevent zero-length beams (same column)

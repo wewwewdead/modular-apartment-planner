@@ -344,6 +344,7 @@ function addBox(group, materialKey, sx, sy, sz, px, py, pz, materialPalette) {
   mesh.position.set(px, py, pz);
   addOutline(mesh, materialPalette);
   group.add(mesh);
+  return mesh;
 }
 
 function addCylinder(group, materialKey, rTop, rBot, h, segs, px, py, pz, materialPalette) {
@@ -552,26 +553,70 @@ function createRailingObject(descriptor, materialPalette) {
   const railHeight = 50; // handrail tube diameter
   const postWidth = 30;
 
+  // Stair-attached railings rake along the run: rise is the elevation gain from
+  // the local -x end to the +x end; the group sits at the mid elevation, so the
+  // raked members stay centered while balusters land on the pitch line.
+  const rise = descriptor.slopeRise || 0;
+  const pitch = Math.atan2(rise, length);
+  const rakedLength = Math.sqrt(length * length + rise * rise);
+  const slopePerX = length > 0 ? rise / length : 0;
+
   if (railingType === 'glass') {
     // Top metal rail
-    addBox(group, 'railing_handrail', length, railHeight, postWidth, 0, height - railHeight / 2, 0, materialPalette);
+    const topRail = addBox(
+      group,
+      'railing_handrail',
+      rakedLength,
+      railHeight,
+      postWidth,
+      0,
+      height - railHeight / 2,
+      0,
+      materialPalette,
+    );
+    topRail.rotation.z = pitch;
     // Bottom metal rail
-    addBox(group, 'railing_handrail', length, railHeight, postWidth, 0, railHeight / 2, 0, materialPalette);
+    const bottomRail = addBox(
+      group,
+      'railing_handrail',
+      rakedLength,
+      railHeight,
+      postWidth,
+      0,
+      railHeight / 2,
+      0,
+      materialPalette,
+    );
+    bottomRail.rotation.z = pitch;
     // Glass panel (full height between rails, no outline for clean look)
     const glassH = height - railHeight * 2;
-    const glassGeo = new THREE.BoxGeometry(Math.max(length, 1), Math.max(glassH, 1), Math.max(width * 0.3, 1));
+    const glassGeo = new THREE.BoxGeometry(Math.max(rakedLength, 1), Math.max(glassH, 1), Math.max(width * 0.3, 1));
     const glassMesh = createMesh(glassGeo, materialPalette.railing_glass);
     glassMesh.position.set(0, height / 2, 0);
+    glassMesh.rotation.z = pitch;
     glassMesh.castShadow = false;
     group.add(glassMesh);
   } else if (railingType === 'guardrail') {
     // Solid opaque panel
-    addBox(group, 'railing_guardrail', length, height, width, 0, height / 2, 0, materialPalette);
+    const panel = addBox(group, 'railing_guardrail', rakedLength, height, width, 0, height / 2, 0, materialPalette);
+    panel.rotation.z = pitch;
   } else {
     // handrail: top rail + vertical balusters
     // Top rail
-    addBox(group, 'railing_handrail', length, railHeight, postWidth, 0, height - railHeight / 2, 0, materialPalette);
-    // Balusters spaced ~300mm apart
+    const topRail = addBox(
+      group,
+      'railing_handrail',
+      rakedLength,
+      railHeight,
+      postWidth,
+      0,
+      height - railHeight / 2,
+      0,
+      materialPalette,
+    );
+    topRail.rotation.z = pitch;
+    // Balusters spaced ~300mm apart along the plan length, kept vertical with
+    // their feet on the pitch line so they meet the raked top rail.
     const spacing = 300;
     const postCount = Math.max(2, Math.floor(length / spacing) + 1);
     const actualSpacing = length / (postCount - 1);
@@ -585,7 +630,7 @@ function createRailingObject(descriptor, materialPalette) {
         height - railHeight,
         8,
         px,
-        (height - railHeight) / 2,
+        slopePerX * px + (height - railHeight) / 2,
         0,
         materialPalette,
       );

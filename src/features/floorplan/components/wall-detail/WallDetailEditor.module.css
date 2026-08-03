@@ -715,8 +715,7 @@
   padding: 34px;
   overflow: hidden;
   touch-action: none;
-  background-image: radial-gradient(#26313a 1px, transparent 1px);
-  background-size: 16px 16px;
+  background: #0d141a;
 }
 .canvas {
   width: 100%;
@@ -777,6 +776,142 @@
 .drawPreview {
   pointer-events: none;
 }
+
+/* ---------- Rulers ---------- */
+
+.rulerLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  font-family: var(--font-blueprint);
+}
+.rulerTop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 22px;
+  background: rgba(13, 20, 26, 0.92);
+  border-bottom: 1px solid #26313a;
+}
+.rulerLeft {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 34px;
+  height: 100%;
+  background: rgba(13, 20, 26, 0.92);
+  border-right: 1px solid #26313a;
+}
+.rulerCorner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 34px;
+  height: 22px;
+  place-items: center;
+  background: #101a22;
+  border-right: 1px solid #2b3945;
+  border-bottom: 1px solid #2b3945;
+  color: #67c5a6;
+  font: 700 8px var(--font-blueprint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rulerTick {
+  stroke: #3d505d;
+  stroke-width: 1;
+}
+.rulerTickMajor {
+  stroke: #5d7484;
+  stroke-width: 1;
+}
+.rulerLabel {
+  fill: #8fa2ae;
+  font-size: 8.5px;
+}
+.rulerSpan {
+  fill: rgba(105, 199, 168, 0.55);
+}
+
+/* ---------- Drawing grid + datum ---------- */
+
+.canvasGrid {
+  pointer-events: none;
+}
+.canvasGrid[data-active='false'] {
+  opacity: 0.4;
+}
+.gridMinorLine {
+  stroke: rgba(120, 158, 187, 0.13);
+}
+.gridMajorLine {
+  stroke: rgba(136, 176, 204, 0.22);
+}
+.gridFloorLine {
+  stroke: #5b7183;
+  stroke-width: 2;
+}
+.gridOrigin {
+  fill: none;
+  stroke: #67c5a6;
+  stroke-width: 1.5;
+}
+
+/* ---------- Cursor readout chip ---------- */
+
+.canvasChip {
+  pointer-events: none;
+}
+.canvasChip text {
+  fill: #ffd9a0;
+  stroke: #10161c;
+  stroke-width: 0.32em;
+  paint-order: stroke fill;
+  font-family: var(--font-blueprint);
+  font-weight: 800;
+}
+
+/* ---------- Element hover feedback ---------- */
+
+.panelShape {
+  stroke: #303943;
+  stroke-width: 4;
+  transition: stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.panelShape[data-selected='true'] {
+  stroke: #ffb45c;
+  stroke-width: 12;
+}
+.canvas[data-tool='select'] .panelShape:not([data-selected='true']):hover {
+  stroke: #8fd0f0;
+  stroke-width: 9;
+  cursor: pointer;
+}
+.frameShape {
+  fill: rgba(49, 129, 168, 0.35);
+  stroke: #2b789c;
+  stroke-width: 4;
+  transition:
+    fill var(--duration-fast, 0.1s) var(--ease-out, ease),
+    stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
+}
+.frameShape[data-selected='true'] {
+  fill: rgba(255, 180, 92, 0.65);
+}
+.canvas[data-tool='select'] .frameShape:not([data-selected='true']):hover {
+  fill: rgba(96, 170, 208, 0.55);
+  stroke: #57b6dd;
+  cursor: pointer;
+}
+.canvas[data-tool='select'] .fastenerGraphic:hover {
+  filter: brightness(1.45);
+}
+.canvas[data-tool='select'] .wallDimension:hover {
+  filter: brightness(1.25);
+}
 .dimensionAnchor {
   fill: #67c5a6;
   stroke: #ffffff;
@@ -816,6 +951,10 @@
   font-family: var(--font-blueprint);
   font-weight: 800;
   dominant-baseline: central;
+}
+.dimensionAcquisitionCoords {
+  opacity: 0.78;
+  font-weight: 600 !important;
 }
 .fastenerGuide {
   color: #69cbe8;

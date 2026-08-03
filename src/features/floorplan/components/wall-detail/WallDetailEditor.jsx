@@ -64,6 +64,8 @@ import {
   zoomWallViewport,
 } from './wallDetailEditorGeometry';
 import { createWallDetailPreviewProject } from './wallDetailPreviewProject';
+import { CanvasReadoutChip, WallCanvasGrid, WallCanvasRulers, useWallCanvasMetrics } from './WallCanvasChrome';
+import { friendlyAnchorPhrase, wallUnitsPerPixel } from './wallDetailCanvasMath';
 import {
   AdvancedGroup,
   CollapsibleSection,
@@ -117,7 +119,7 @@ const TOOL_HINTS = Object.freeze({
   [CANVAS_TOOLS.DRAW_STUD]: 'Click for a full-height stud, or drag its vertical span',
   [CANVAS_TOOLS.DRAW_NOGGIN]: 'Click for a full-width noggin, or drag its horizontal span',
   [CANVAS_TOOLS.ADD_FASTENER]: 'Click to place a screw; measurements act as magnetic pencil guides',
-  [CANVAS_TOOLS.DRAW_DIMENSION]: 'Aim for the green target, then drag between two exact points',
+  [CANVAS_TOOLS.DRAW_DIMENSION]: 'Click two exact points (or drag); hold Shift to keep the run level or plumb',
 });
 
 /** Single source of truth for every canvas tool: icon, plain-language name, tooltip and shortcut. */
@@ -185,7 +187,7 @@ const TOOL_DEFINITIONS = Object.freeze([
     icon: 'measure',
     label: 'Measure',
     shortcut: 'M',
-    title: 'Draw measurement — drag between two exact points (M)',
+    title: 'Draw measurement — click two exact points, or drag; Shift locks level/plumb (M)',
     group: 'detail',
   },
 ]);
@@ -288,13 +290,6 @@ function fastenerVisualPalette(appearance, material) {
   };
 }
 
-function dimensionReferenceLabel(reference) {
-  if (!reference) return 'fixed precision coordinate';
-  const anchor = reference.anchor.replaceAll('_', ' ');
-  const position = Number.isFinite(reference.t) ? ` · ${(reference.t * 100).toFixed(2)}% along` : '';
-  return `${reference.entityType} ${anchor}${position}`;
-}
-
 function panelRegionPath(region) {
   return [region.outline, ...(region.holes || [])]
     .filter((ring) => ring?.length)
@@ -309,11 +304,14 @@ function DimensionGraphic({
   editable = false,
   showScrewGuide = false,
   handleRadius = 9,
+  fontSize = null,
+  title = null,
   onPointerDown,
   onStartHandlePointerDown,
   onEndHandlePointerDown,
 }) {
   const geometry = deriveWallDimensionGeometry(dimension);
+  const labelOffset = fontSize ? fontSize * 0.62 : 10;
   const svgPoint = (point) => ({ x: point.u, y: wallHeight - point.v });
   const witnessStart = svgPoint(geometry.witnessStart);
   const witnessEnd = svgPoint(geometry.witnessEnd);
@@ -330,6 +328,7 @@ function DimensionGraphic({
       data-movable={editable ? 'true' : 'false'}
       onPointerDown={onPointerDown}
     >
+      {title ? <title>{title}</title> : null}
       {showScrewGuide ? (
         <>
           <line
@@ -384,9 +383,10 @@ function DimensionGraphic({
       />
       <text
         x={textPoint.x}
-        y={textPoint.y - 10}
+        y={textPoint.y - labelOffset}
         className={styles.dimensionText}
-        transform={`rotate(${geometry.angleDegrees} ${textPoint.x} ${textPoint.y - 10})`}
+        style={fontSize ? { fontSize } : undefined}
+        transform={`rotate(${geometry.angleDegrees} ${textPoint.x} ${textPoint.y - labelOffset})`}
         vectorEffect="non-scaling-stroke"
       >
         {dimension.label}
@@ -415,22 +415,31 @@ function DimensionGraphic({
   );
 }
 
-function DimensionAcquisitionGraphic({ acquisition, wallHeight, precision }) {
+function DimensionAcquisitionGraphic({ acquisition, wallHeight, precision, referenceLabel = '' }) {
   if (!acquisition?.point) return null;
   const radius = Math.max(1, acquisition.markerRadius || 10);
   const x = acquisition.point.u;
   const y = wallHeight - acquisition.point.v;
-  const label = `${acquisition.reference ? 'SNAP' : 'FREE'} · U ${formatWallDimensionValue(
-    acquisition.point.u,
+  const primary = acquisition.reference ? referenceLabel || 'Snapped' : 'Free point';
+  const coords = `U ${formatWallDimensionValue(acquisition.point.u, precision)} · V ${formatWallDimensionValue(
+    acquisition.point.v,
     precision,
-  )} · V ${formatWallDimensionValue(acquisition.point.v, precision)}`;
+  )}`;
   return (
     <g className={styles.dimensionAcquisition} data-snapped={acquisition.reference ? 'true' : 'false'}>
       <circle cx={x} cy={y} r={radius} vectorEffect="non-scaling-stroke" />
       <line x1={x - radius * 1.7} y1={y} x2={x + radius * 1.7} y2={y} vectorEffect="non-scaling-stroke" />
       <line x1={x} y1={y - radius * 1.7} x2={x} y2={y + radius * 1.7} vectorEffect="non-scaling-stroke" />
-      <text x={x + radius * 1.8} y={y - radius * 1.8} style={{ fontSize: radius * 1.25 }}>
-        {label}
+      <text x={x + radius * 1.9} y={y - radius * 3.1} style={{ fontSize: radius * 1.3 }}>
+        {primary}
+      </text>
+      <text
+        x={x + radius * 1.9}
+        y={y - radius * 1.5}
+        className={styles.dimensionAcquisitionCoords}
+        style={{ fontSize: radius * 1.05 }}
+      >
+        {coords}
       </text>
     </g>
   );
@@ -546,7 +555,16 @@ function FastenerGuideGraphic({ guide, wallHeight, precision, selected = false, 
   );
 }
 
-function FastenerGraphic({ fastener, appearance, material, headDiameter, selected, minimumRadius, onPointerDown }) {
+function FastenerGraphic({
+  fastener,
+  appearance,
+  material,
+  headDiameter,
+  selected,
+  minimumRadius,
+  title = null,
+  onPointerDown,
+}) {
   const palette = fastenerVisualPalette(appearance, material);
   const radius = Math.max(headDiameter / 2, minimumRadius);
   const slot = radius * 0.92;
@@ -557,6 +575,7 @@ function FastenerGraphic({ fastener, appearance, material, headDiameter, selecte
       data-selected={selected ? 'true' : 'false'}
       onPointerDown={onPointerDown}
     >
+      {title ? <title>{title}</title> : null}
       {selected ? (
         <circle
           cx={fastener.u}
@@ -592,7 +611,7 @@ function FastenerGraphic({ fastener, appearance, material, headDiameter, selecte
 }
 
 export default function WallDetailEditor() {
-  const { project, dispatch } = useProject();
+  const { project, dispatch, canUndo = false, canRedo = false } = useProject();
   const { wallDetailEditor, dispatch: editorDispatch } = useEditor();
   const svgRef = useRef(null);
   const canvasFrameRef = useRef(null);
@@ -716,6 +735,7 @@ export default function WallDetailEditor() {
   const jurisdiction = configuration ? getWallJurisdictionProfile(configuration.jurisdictionProfileId) : null;
   const assembly = wall ? resolveWallAssembly(wall) : null;
   const bounds = detail ? { length: detail.length, height: detail.height } : null;
+  const canvasMetrics = useWallCanvasMetrics(canvasFrameRef, bounds, workspaceView);
   const previewProject = useMemo(
     () => createWallDetailPreviewProject(project, floor?.id, wall?.id),
     [project, floor?.id, wall?.id],
@@ -1269,6 +1289,18 @@ export default function WallDetailEditor() {
     return { point: quantizeWallLocalPoint(raw, face.dimensions.precision), reference: null, markerRadius };
   };
 
+  /** Hold Shift to keep a measurement level or plumb relative to its anchor point. */
+  const orthoDimensionEndpoint = (event, anchorPoint) => {
+    const acquisition = eventToDimensionEndpoint(event);
+    if (!event.shiftKey || !anchorPoint) return acquisition;
+    const du = Math.abs(acquisition.point.u - anchorPoint.u);
+    const dv = Math.abs(acquisition.point.v - anchorPoint.v);
+    const point =
+      du >= dv ? { u: acquisition.point.u, v: anchorPoint.v } : { u: anchorPoint.u, v: acquisition.point.v };
+    const unchanged = Math.abs(point.u - acquisition.point.u) < 1e-9 && Math.abs(point.v - acquisition.point.v) < 1e-9;
+    return { ...acquisition, point, reference: unchanged ? acquisition.reference : null };
+  };
+
   const eventToFastenerPoint = (event) => {
     const rect = svgRef.current?.getBoundingClientRect();
     if (!rect) return { point: { u: 0, v: 0 }, reference: null, markerRadius: 10 };
@@ -1422,6 +1454,13 @@ export default function WallDetailEditor() {
     return createDrawnFramingMember(value.tool, value.start, value.current, assembly.framing, bounds);
   };
 
+  const commitDrawnDimension = (finalGesture) => {
+    const entity = drawnGestureEntity(finalGesture);
+    if (!entity || wallDimensionMeasurement(entity) < 1) return;
+    updateDimensionSettings({ manual: [...face.dimensions.manual, entity] });
+    setSelection({ type: 'dimension', id: entity.id });
+  };
+
   const commitPanelTrace = (points = panelTrace?.points || []) => {
     const traced = createTracedPanel(points, bounds);
     if (!traced) return false;
@@ -1470,6 +1509,15 @@ export default function WallDetailEditor() {
       setPanelTrace({ points: [...points, point], previewPoint: point });
       return;
     }
+    if (canvasTool === CANVAS_TOOLS.DRAW_DIMENSION && gesture?.awaitingSecondClick) {
+      // Second click of a click-click measurement: commit between the two points.
+      event.preventDefault();
+      const acquisition = orthoDimensionEndpoint(event, gesture.start);
+      setDimensionAcquisition(acquisition);
+      setGesture(null);
+      commitDrawnDimension({ ...gesture, current: acquisition.point, endRef: acquisition.reference });
+      return;
+    }
     const dimensionEndpoint = canvasTool === CANVAS_TOOLS.DRAW_DIMENSION ? eventToDimensionEndpoint(event) : null;
     const fastenerAcquisition = canvasTool === CANVAS_TOOLS.ADD_FASTENER ? eventToFastenerPoint(event) : null;
     const point =
@@ -1495,6 +1543,8 @@ export default function WallDetailEditor() {
       startRef: dimensionEndpoint?.reference || null,
       endRef: dimensionEndpoint?.reference || null,
       pointerId: event.pointerId,
+      screenX: event.clientX,
+      screenY: event.clientY,
     });
   };
 
@@ -1561,7 +1611,14 @@ export default function WallDetailEditor() {
     if (panGesture) return;
     const adjustingDimension = gesture?.kind === 'dimension_endpoint';
     if ((canvasTool === CANVAS_TOOLS.DRAW_DIMENSION || adjustingDimension) && !spacePanActive) {
-      const acquisition = eventToDimensionEndpoint(event);
+      const orthoAnchor = adjustingDimension
+        ? gesture.endpoint === 'start'
+          ? gesture.dimension.end
+          : gesture.dimension.start
+        : gesture?.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+          ? gesture.start
+          : null;
+      const acquisition = orthoDimensionEndpoint(event, orthoAnchor);
       setDimensionAcquisition(acquisition);
       if (adjustingDimension && gesture.pointerId === event.pointerId) {
         setGesture((value) =>
@@ -1580,7 +1637,9 @@ export default function WallDetailEditor() {
     }
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const endpoint =
-      gesture.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION ? eventToDimensionEndpoint(event) : null;
+      gesture.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+        ? orthoDimensionEndpoint(event, gesture.start)
+        : null;
     const point =
       endpoint?.point ||
       eventToLocal(event, gesture.kind === 'draw', gesture.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_PANEL);
@@ -1593,7 +1652,10 @@ export default function WallDetailEditor() {
     if (panGesture) return;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     if (gesture.kind === 'dimension_endpoint') {
-      const acquisition = eventToDimensionEndpoint(event);
+      const acquisition = orthoDimensionEndpoint(
+        event,
+        gesture.endpoint === 'start' ? gesture.dimension.end : gesture.dimension.start,
+      );
       const coordinateKey = gesture.endpoint === 'start' ? 'start' : 'end';
       const referenceKey = gesture.endpoint === 'start' ? 'startRef' : 'endRef';
       svgRef.current?.releasePointerCapture?.(event.pointerId);
@@ -1628,7 +1690,23 @@ export default function WallDetailEditor() {
       return;
     }
     const dimensionEndpoint =
-      gesture.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION ? eventToDimensionEndpoint(event) : null;
+      gesture.kind === 'draw' && gesture.tool === CANVAS_TOOLS.DRAW_DIMENSION
+        ? orthoDimensionEndpoint(event, gesture.start)
+        : null;
+    if (dimensionEndpoint) {
+      // A stationary press is the first click of a click-click measurement:
+      // keep the gesture alive and wait for the second point.
+      const dragPixels = Math.hypot(
+        event.clientX - (gesture.screenX ?? event.clientX),
+        event.clientY - (gesture.screenY ?? event.clientY),
+      );
+      if (dragPixels < 5) {
+        svgRef.current?.releasePointerCapture?.(event.pointerId);
+        setDimensionAcquisition(dimensionEndpoint);
+        setGesture((value) => (value ? { ...value, awaitingSecondClick: true } : value));
+        return;
+      }
+    }
     const finalGesture = {
       ...gesture,
       current:
@@ -1648,9 +1726,7 @@ export default function WallDetailEditor() {
       const entity = drawnGestureEntity(finalGesture);
       if (!entity) return;
       if (finalGesture.tool === CANVAS_TOOLS.DRAW_DIMENSION) {
-        if (wallDimensionMeasurement(entity) < 1) return;
-        updateDimensionSettings({ manual: [...face.dimensions.manual, entity] });
-        setSelection({ type: 'dimension', id: entity.id });
+        commitDrawnDimension(finalGesture);
       } else if (finalGesture.tool === CANVAS_TOOLS.DRAW_PANEL) {
         const panel = createCustomPanel(entity);
         updateLayout({
@@ -1831,12 +1907,81 @@ export default function WallDetailEditor() {
           ? dimensionAcquisition?.reference
           : null;
   const activeFastenerGuideSnap = canvasTool === CANVAS_TOOLS.ADD_FASTENER ? dimensionAcquisition?.reference : null;
-  const dimensionHandleRadius = Math.max(12, Math.min(detail.length, detail.height) / 100 / viewport.zoom);
+  const unitPx = wallUnitsPerPixel(canvasMetrics, viewport, bounds);
+  const dimensionHandleRadius = Math.max(8, 9 * unitPx);
+  const dimensionFontSize = 12.5 * unitPx;
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
   const framedAssembly = assembly.system === 'framed';
   const selectionSummary = selection
     ? `${SELECTION_LABELS[selection.type] || selection.type} selected`
     : 'Nothing selected';
+
+  const referenceEntityName = (reference) => {
+    if (reference.entityType === 'wall') return 'Wall';
+    if (reference.entityType === 'opening') return 'Opening';
+    if (reference.entityType === 'fastener') return 'Screw';
+    if (reference.entityType === 'panel') {
+      const panel = panels.find((entry) => entry.localId === reference.entityId || entry.id === reference.entityId);
+      return panel?.label || 'Board';
+    }
+    if (reference.entityType === 'framing') {
+      const member = frameMembers.find((entry) => entry.id === reference.entityId);
+      return member?.kind ? member.kind.charAt(0).toUpperCase() + member.kind.slice(1) : 'Framing';
+    }
+    if (reference.entityType === 'measurement') {
+      const dimension = dimensions.find((entry) => entry.id === reference.entityId);
+      return dimension?.name || 'Measurement';
+    }
+    return reference.entityType;
+  };
+  /** "Board 2 · left edge" instead of "panel edge_left · 43.21% along". */
+  const describeReference = (reference) =>
+    reference ? `${referenceEntityName(reference)} · ${friendlyAnchorPhrase(reference.anchor)}` : 'free point';
+  const formatMm = (value) => formatWallDimensionValue(value, face.dimensions.precision);
+
+  /** Live size / position readout that follows the pointer during gestures. */
+  const gestureReadout = (() => {
+    if (gesture?.kind === 'draw' && gesturePreview) {
+      if (gesture.tool === CANVAS_TOOLS.DRAW_PANEL) {
+        return {
+          point: gesture.current,
+          lines: [
+            `${formatMm(gesturePreview.u1 - gesturePreview.u0)} × ${formatMm(
+              gesturePreview.v1 - gesturePreview.v0,
+            )} mm`,
+          ],
+        };
+      }
+      if (gesture.tool === CANVAS_TOOLS.DRAW_STUD || gesture.tool === CANVAS_TOOLS.DRAW_NOGGIN) {
+        const vertical = gesture.tool === CANVAS_TOOLS.DRAW_STUD;
+        const span = vertical ? gesturePreview.v1 - gesturePreview.v0 : gesturePreview.u1 - gesturePreview.u0;
+        return { point: gesture.current, lines: [`${vertical ? 'stud' : 'noggin'} · ${formatMm(span)} mm`] };
+      }
+      return null; // the measure tool draws its own live label
+    }
+    if (gesture?.kind === 'move' && gesturePreview) {
+      if (gesture.type === 'panel') {
+        return {
+          point: gesture.current,
+          lines: [`U ${formatMm(gesturePreview.u0)} · V ${formatMm(gesturePreview.v0)}`],
+        };
+      }
+      if (gesture.type === 'framing') {
+        const vertical = gesturePreview.orientation === 'vertical';
+        const centre = vertical
+          ? (gesturePreview.u0 + gesturePreview.u1) / 2
+          : (gesturePreview.v0 + gesturePreview.v1) / 2;
+        return { point: gesture.current, lines: [`centre ${vertical ? 'U' : 'V'} ${formatMm(centre)}`] };
+      }
+      return { point: gesture.current, lines: [`U ${formatMm(gesturePreview.u)} · V ${formatMm(gesturePreview.v)}`] };
+    }
+    if (canvasTool === CANVAS_TOOLS.TRACE_PANEL && panelTrace?.points?.length && panelTrace.previewPoint) {
+      const last = panelTrace.points[panelTrace.points.length - 1];
+      const span = Math.hypot(panelTrace.previewPoint.u - last.u, panelTrace.previewPoint.v - last.v);
+      return span >= 1 ? { point: panelTrace.previewPoint, lines: [`${formatMm(span)} mm`] } : null;
+    }
+    return null;
+  })();
 
   const claimShortcut = (event) => {
     event.preventDefault();
@@ -1850,7 +1995,14 @@ export default function WallDetailEditor() {
     if (event.key === 'Escape') {
       // The panel-trace effect owns Escape while a trace is open; never swallow it here.
       if (panelTrace) return;
-      if (canvasTool === CANVAS_TOOLS.SELECT && !gesture && !dimensionAcquisition) return;
+      if (gesture || dimensionAcquisition) {
+        // First Escape cancels the in-flight gesture but keeps the tool active.
+        event.preventDefault();
+        setGesture(null);
+        setDimensionAcquisition(null);
+        return;
+      }
+      if (canvasTool === CANVAS_TOOLS.SELECT) return;
       event.preventDefault();
       chooseCanvasTool(CANVAS_TOOLS.SELECT);
       return;
@@ -1858,6 +2010,21 @@ export default function WallDetailEditor() {
     if (event.key === 'Delete' || event.key === 'Backspace') {
       claimShortcut(event);
       if (selectionIsDeletable) deleteSelection();
+      return;
+    }
+    if (event.key === '+' || event.key === '=') {
+      claimShortcut(event);
+      zoomViewportAt((zoom) => zoom * 1.2);
+      return;
+    }
+    if (event.key === '-' || event.key === '_') {
+      claimShortcut(event);
+      zoomViewportAt((zoom) => zoom / 1.2);
+      return;
+    }
+    if (event.key === '0') {
+      claimShortcut(event);
+      fitWallInViewport();
       return;
     }
     const definition = TOOL_SHORTCUTS[event.key.toLowerCase()];
@@ -2585,11 +2752,12 @@ export default function WallDetailEditor() {
             </div>
             <InfoHint label="How exact measuring works">
               <p className={styles.inlineHelp}>
-                Dimensions use 64-bit model geometry. Endpoints project continuously onto wall, panel, opening, and
-                framing edges and stay associatively linked when geometry changes. Free endpoints use the measurement
-                precision—not the coarse drawing grid. Aim for the green SNAP target before pressing; select a finished
-                measurement with the Select tool, drag its amber line to move the whole guide, or drag either green
-                endpoint to reshape it. Place Screw snaps continuously to user measurements and their crossings.
+                Click two exact points to measure, or drag; hold Shift to keep the run level or plumb. Dimensions use
+                64-bit model geometry: endpoints project continuously onto wall, panel, opening, and framing edges and
+                stay associatively linked when geometry changes. Free endpoints use the measurement precision—not the
+                coarse drawing grid. Aim for the green snap target before clicking; with Select, drag the amber line to
+                move the whole guide, or drag either green endpoint to reshape it. Place Screw snaps continuously to
+                user measurements and their crossings.
               </p>
             </InfoHint>
             <SelectField
@@ -2642,6 +2810,26 @@ export default function WallDetailEditor() {
               ))}
               <div className={styles.toolCluster}>
                 <ToolButton
+                  icon="undo"
+                  label="Undo"
+                  shortcut="Ctrl+Z"
+                  title="Undo the last change (Ctrl+Z)"
+                  toggle={false}
+                  disabled={!canUndo}
+                  onClick={() => dispatch({ type: 'UNDO' })}
+                />
+                <ToolButton
+                  icon="redo"
+                  label="Redo"
+                  shortcut="Ctrl+Y"
+                  title="Redo the undone change (Ctrl+Y)"
+                  toggle={false}
+                  disabled={!canRedo}
+                  onClick={() => dispatch({ type: 'REDO' })}
+                />
+              </div>
+              <div className={styles.toolCluster}>
+                <ToolButton
                   icon="trash"
                   label="Delete"
                   shortcut="Del"
@@ -2687,7 +2875,7 @@ export default function WallDetailEditor() {
               <ToolbarButton title="Zoom in" aria-label="Zoom in" onClick={() => zoomViewportAt((zoom) => zoom * 1.2)}>
                 +
               </ToolbarButton>
-              <ToolbarButton title="Reset zoom and centre the whole wall" onClick={fitWallInViewport}>
+              <ToolbarButton title="Fit the whole wall in view (0)" onClick={fitWallInViewport}>
                 Fit wall
               </ToolbarButton>
             </div>
@@ -2734,15 +2922,13 @@ export default function WallDetailEditor() {
                 <span className={styles.statusSnap}>
                   {activeRevealSnap
                     ? `Snapped: ${activeRevealSnap.gap} mm panel gap`
-                    : activeDimensionSnap
-                      ? `Exact snap: ${dimensionReferenceLabel(activeDimensionSnap)}`
-                      : `Screw guide snap: ${dimensionReferenceLabel(activeFastenerGuideSnap)}`}
+                    : `Snapped to ${describeReference(activeDimensionSnap || activeFastenerGuideSnap)}`}
                 </span>
               ) : null}
               <span className={styles.statusSelection}>{selectionSummary}</span>
             </span>
             <span className={styles.statusShortcut}>
-              Hold Space + drag to pan · scroll to zoom · Esc returns to Select
+              Hold Space + drag to pan · scroll to zoom · 0 fits the wall · Esc cancels, then returns to Select
             </span>
           </div>
           <div className={styles.workspaceViews} data-view={workspaceView}>
@@ -2765,6 +2951,11 @@ export default function WallDetailEditor() {
                     viewBox={`0 0 ${detail.length} ${detail.height}`}
                     data-tool={canvasTool}
                     style={{
+                      // Aspect-true box: keeps pointer math exact (no letterboxing)
+                      // and makes zoom 100% a genuine fit inside the rulers.
+                      ...(canvasMetrics.ready
+                        ? { width: canvasMetrics.fitWidth, height: canvasMetrics.fitHeight }
+                        : {}),
                       transform: `translate(${viewport.panU}px, ${viewport.panV}px) scale(${viewport.zoom})`,
                     }}
                     onPointerDown={beginCanvasGesture}
@@ -2794,42 +2985,43 @@ export default function WallDetailEditor() {
                     </defs>
                     <rect width={detail.length} height={detail.height} fill="#202830" />
                     <g transform={`translate(0 ${detail.height}) scale(1 -1)`}>
+                      <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
                       {layerVisibility.panels &&
                         panels.flatMap((panel) =>
                           panel.polygonal
                             ? panel.regions.map((region, index) => (
                                 <path
                                   key={`${panel.id}:region:${index}`}
+                                  className={styles.panelShape}
+                                  data-selected={
+                                    selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'
+                                  }
                                   d={panelRegionPath(region)}
                                   fill={faceColor(assembly[activeSide].material)}
                                   fillRule="evenodd"
-                                  stroke={
-                                    selection?.type === 'panel' && selection.id === panel.localId
-                                      ? '#ffb45c'
-                                      : '#303943'
-                                  }
-                                  strokeWidth={selection?.type === 'panel' && selection.id === panel.localId ? 12 : 4}
                                   vectorEffect="non-scaling-stroke"
                                   onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
-                                />
+                                >
+                                  <title>{`${panel.label} · ${formatMm(panel.width)} × ${formatMm(panel.height)} mm`}</title>
+                                </path>
                               ))
                             : panel.fragments.map((fragment, index) => (
                                 <rect
                                   key={`${panel.id}:${index}`}
+                                  className={styles.panelShape}
+                                  data-selected={
+                                    selection?.type === 'panel' && selection.id === panel.localId ? 'true' : 'false'
+                                  }
                                   x={fragment.u0}
                                   y={fragment.v0}
                                   width={fragment.u1 - fragment.u0}
                                   height={fragment.v1 - fragment.v0}
                                   fill={faceColor(assembly[activeSide].material)}
-                                  stroke={
-                                    selection?.type === 'panel' && selection.id === panel.localId
-                                      ? '#ffb45c'
-                                      : '#303943'
-                                  }
-                                  strokeWidth={selection?.type === 'panel' && selection.id === panel.localId ? 12 : 4}
                                   vectorEffect="non-scaling-stroke"
                                   onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
-                                />
+                                >
+                                  <title>{`${panel.label} · ${formatMm(panel.width)} × ${formatMm(panel.height)} mm`}</title>
+                                </rect>
                               )),
                         )}
                       {layerVisibility.framing &&
@@ -2838,20 +3030,23 @@ export default function WallDetailEditor() {
                           .map((member) => (
                             <rect
                               key={member.id}
+                              className={styles.frameShape}
+                              data-selected={
+                                selection?.type === 'framing' && selection.id === member.id ? 'true' : 'false'
+                              }
                               x={member.u0}
                               y={member.v0}
                               width={member.u1 - member.u0}
                               height={member.v1 - member.v0}
-                              fill={
-                                selection?.type === 'framing' && selection.id === member.id
-                                  ? 'rgba(255,180,92,.65)'
-                                  : 'rgba(49,129,168,.35)'
-                              }
-                              stroke="#2b789c"
-                              strokeWidth="4"
                               vectorEffect="non-scaling-stroke"
                               onPointerDown={(event) => beginElementMove(event, 'framing', member.id, member)}
-                            />
+                            >
+                              <title>
+                                {member.orientation === 'vertical'
+                                  ? `${member.kind} · centre U ${formatMm((member.u0 + member.u1) / 2)}`
+                                  : `${member.kind} · centre V ${formatMm((member.v0 + member.v1) / 2)}`}
+                              </title>
+                            </rect>
                           ))}
                       {layerVisibility.fasteners &&
                         fasteners.map((fastener) => (
@@ -2863,6 +3058,7 @@ export default function WallDetailEditor() {
                             headDiameter={face.fasteners.headDiameter}
                             minimumRadius={Math.min(detail.length, detail.height) / 600}
                             selected={selection?.type === 'fastener' && selection.id === fastener.id}
+                            title={`Screw · U ${formatMm(fastener.u)} · V ${formatMm(fastener.v)}`}
                             onPointerDown={(event) => beginElementMove(event, 'fastener', fastener.id, fastener)}
                           />
                         ))}
@@ -3012,6 +3208,8 @@ export default function WallDetailEditor() {
                             editable={editable}
                             showScrewGuide={dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.ADD_FASTENER}
                             handleRadius={dimensionHandleRadius}
+                            fontSize={dimensionFontSize}
+                            title={`${dimension.name || 'Measurement'} · ${dimension.label}`}
                             onPointerDown={(event) =>
                               dimension.source === 'custom'
                                 ? beginDimensionMove(event, dimension)
@@ -3028,6 +3226,7 @@ export default function WallDetailEditor() {
                         wallHeight={detail.height}
                         selected
                         handleRadius={dimensionHandleRadius}
+                        fontSize={dimensionFontSize}
                       />
                     ) : null}
                     {(canvasTool === CANVAS_TOOLS.DRAW_DIMENSION ||
@@ -3038,9 +3237,19 @@ export default function WallDetailEditor() {
                         acquisition={dimensionAcquisition}
                         wallHeight={detail.height}
                         precision={face.dimensions.precision}
+                        referenceLabel={describeReference(dimensionAcquisition.reference)}
+                      />
+                    ) : null}
+                    {gestureReadout ? (
+                      <CanvasReadoutChip
+                        point={gestureReadout.point}
+                        lines={gestureReadout.lines}
+                        unitPx={unitPx}
+                        wallHeight={detail.height}
                       />
                     ) : null}
                   </svg>
+                  <WallCanvasRulers metrics={canvasMetrics} viewport={viewport} bounds={bounds} />
                   {panels.length === 0 ? (
                     <div className={styles.canvasEmptyHint}>
                       <strong>No boards on this face yet</strong>
@@ -3103,8 +3312,16 @@ export default function WallDetailEditor() {
                   Drag on the elevation or enter exact wall-local dimensions.
                   {selectedPanel.polygonal ? ' Width and height scale the traced cut outline.' : ''}
                 </p>
-                <NumberField label="U" value={selectedPanel.u0} onChange={(u) => updateSelectedPanel({ u })} />
-                <NumberField label="V" value={selectedPanel.v0} onChange={(v) => updateSelectedPanel({ v })} />
+                <NumberField
+                  label="From start (U)"
+                  value={selectedPanel.u0}
+                  onChange={(u) => updateSelectedPanel({ u })}
+                />
+                <NumberField
+                  label="From floor (V)"
+                  value={selectedPanel.v0}
+                  onChange={(v) => updateSelectedPanel({ v })}
+                />
                 <NumberField
                   label="Width"
                   value={selectedPanel.width}
@@ -3168,14 +3385,14 @@ export default function WallDetailEditor() {
                   </div>
                 ) : null}
                 <NumberField
-                  label="U"
+                  label="From start (U)"
                   value={selectedFastener.u}
                   step={face.dimensions.precision}
                   disabled={Boolean(selectedFastenerGuide)}
                   onChange={(u) => updateSelectedFastener({ u })}
                 />
                 <NumberField
-                  label="V"
+                  label="From floor (V)"
                   value={selectedFastener.v}
                   step={face.dimensions.precision}
                   disabled={Boolean(selectedFastenerGuide)}
@@ -3202,6 +3419,8 @@ export default function WallDetailEditor() {
                     Exact modeled value:{' '}
                     {formatWallDimensionValue(selectedDimension.measurement, face.dimensions.precision)}
                   </span>
+                  <span>From {describeReference(selectedDimension.startRef)}</span>
+                  <span>To {describeReference(selectedDimension.endRef)}</span>
                 </div>
                 <ToolbarButton onClick={() => prepareDimensionSiteCheck(selectedDimension)}>
                   Use for site / as-built check
@@ -3239,34 +3458,6 @@ export default function WallDetailEditor() {
                       <option value={WALL_DIMENSION_MODES.ALIGNED}>Aligned</option>
                     </SelectField>
                     <NumberField
-                      label="Start U"
-                      value={selectedDimension.start.u}
-                      step={face.dimensions.precision}
-                      onChange={(u) =>
-                        updateSelectedDimension({ start: { ...selectedDimension.start, u }, startRef: null })
-                      }
-                    />
-                    <NumberField
-                      label="Start V"
-                      value={selectedDimension.start.v}
-                      step={face.dimensions.precision}
-                      onChange={(v) =>
-                        updateSelectedDimension({ start: { ...selectedDimension.start, v }, startRef: null })
-                      }
-                    />
-                    <NumberField
-                      label="End U"
-                      value={selectedDimension.end.u}
-                      step={face.dimensions.precision}
-                      onChange={(u) => updateSelectedDimension({ end: { ...selectedDimension.end, u }, endRef: null })}
-                    />
-                    <NumberField
-                      label="End V"
-                      value={selectedDimension.end.v}
-                      step={face.dimensions.precision}
-                      onChange={(v) => updateSelectedDimension({ end: { ...selectedDimension.end, v }, endRef: null })}
-                    />
-                    <NumberField
                       label="Line offset"
                       value={selectedDimension.offset}
                       step={face.dimensions.precision}
@@ -3290,24 +3481,60 @@ export default function WallDetailEditor() {
                       value={selectedDimension.note}
                       onChange={(note) => updateSelectedDimension({ note })}
                     />
-                    <div className={styles.referenceSummary}>
-                      <span>Start: {dimensionReferenceLabel(selectedDimension.startRef)}</span>
-                      <span>End: {dimensionReferenceLabel(selectedDimension.endRef)}</span>
-                      <span>
-                        ΔU{' '}
-                        {formatWallDimensionValue(
-                          Math.abs(selectedDimension.end.u - selectedDimension.start.u),
-                          face.dimensions.precision,
-                        )}
-                      </span>
-                      <span>
-                        ΔV{' '}
-                        {formatWallDimensionValue(
-                          Math.abs(selectedDimension.end.v - selectedDimension.start.v),
-                          face.dimensions.precision,
-                        )}
-                      </span>
-                    </div>
+                    <AdvancedGroup label="Exact endpoint coordinates">
+                      <p className={styles.inlineHelp}>
+                        Usually you reshape by dragging the green endpoints on the drawing; typing here breaks the link
+                        to the snapped edge.
+                      </p>
+                      <NumberField
+                        label="Start · along wall"
+                        value={selectedDimension.start.u}
+                        step={face.dimensions.precision}
+                        onChange={(u) =>
+                          updateSelectedDimension({ start: { ...selectedDimension.start, u }, startRef: null })
+                        }
+                      />
+                      <NumberField
+                        label="Start · above floor"
+                        value={selectedDimension.start.v}
+                        step={face.dimensions.precision}
+                        onChange={(v) =>
+                          updateSelectedDimension({ start: { ...selectedDimension.start, v }, startRef: null })
+                        }
+                      />
+                      <NumberField
+                        label="End · along wall"
+                        value={selectedDimension.end.u}
+                        step={face.dimensions.precision}
+                        onChange={(u) =>
+                          updateSelectedDimension({ end: { ...selectedDimension.end, u }, endRef: null })
+                        }
+                      />
+                      <NumberField
+                        label="End · above floor"
+                        value={selectedDimension.end.v}
+                        step={face.dimensions.precision}
+                        onChange={(v) =>
+                          updateSelectedDimension({ end: { ...selectedDimension.end, v }, endRef: null })
+                        }
+                      />
+                      <div className={styles.referenceSummary}>
+                        <span>
+                          ΔU{' '}
+                          {formatWallDimensionValue(
+                            Math.abs(selectedDimension.end.u - selectedDimension.start.u),
+                            face.dimensions.precision,
+                          )}
+                        </span>
+                        <span>
+                          ΔV{' '}
+                          {formatWallDimensionValue(
+                            Math.abs(selectedDimension.end.v - selectedDimension.start.v),
+                            face.dimensions.precision,
+                          )}
+                        </span>
+                      </div>
+                    </AdvancedGroup>
                     <ToolbarButton danger onClick={deleteSelectedDimension}>
                       Delete measurement
                     </ToolbarButton>

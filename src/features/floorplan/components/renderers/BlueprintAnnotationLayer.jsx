@@ -1,6 +1,13 @@
 import { memo } from 'react';
 import { DRAWING_GRAPHICS, SHEET_COLORS } from '@/sheets/standards';
 import { ANNOTATION_SEMANTIC_ROLES, ANNOTATION_TRUST_LEVELS } from '@/annotations/policy';
+import { useCanvasZoom } from './CanvasZoomContext';
+
+// The size constants in DRAWING_GRAPHICS.annotation read correctly at the
+// default canvas zoom. Dimension LINES stay readable at any zoom via
+// non-scaling strokes; text must compensate the same way or it shrinks into
+// invisibility on zoomed-out plans while the lines stay crisp.
+const ANNOTATION_BASELINE_ZOOM = 0.1;
 
 function estimateTextWidth(text, fontSize) {
   return Math.max(fontSize * 1.2, String(text || '').length * fontSize * 0.58);
@@ -18,9 +25,10 @@ function Arrowhead({ arrow }) {
   );
 }
 
-function DimensionTextMask({ figure, fontSize }) {
-  const width = estimateTextWidth(figure.text.value, fontSize) + DRAWING_GRAPHICS.annotation.textMaskPaddingX;
-  const height = fontSize + DRAWING_GRAPHICS.annotation.textMaskPaddingY;
+function DimensionTextMask({ figure, fontSize, textScale = 1 }) {
+  const width =
+    estimateTextWidth(figure.text.value, fontSize) + DRAWING_GRAPHICS.annotation.textMaskPaddingX * textScale;
+  const height = fontSize + DRAWING_GRAPHICS.annotation.textMaskPaddingY * textScale;
 
   return (
     <rect
@@ -35,8 +43,8 @@ function DimensionTextMask({ figure, fontSize }) {
   );
 }
 
-function DimensionFigure({ figure }) {
-  const fontSize = DRAWING_GRAPHICS.annotation.textSize;
+function DimensionFigure({ figure, textScale = 1 }) {
+  const fontSize = DRAWING_GRAPHICS.annotation.textSize * textScale;
 
   return (
     <g key={figure.id}>
@@ -64,7 +72,7 @@ function DimensionFigure({ figure }) {
       {figure.arrowheads.map((arrow, index) => (
         <Arrowhead key={`${figure.id}-arrow-${index}`} arrow={arrow} />
       ))}
-      <DimensionTextMask figure={figure} fontSize={fontSize} />
+      <DimensionTextMask figure={figure} fontSize={fontSize} textScale={textScale} />
       <text
         x={figure.text.position.x}
         y={figure.text.position.y}
@@ -82,10 +90,10 @@ function DimensionFigure({ figure }) {
   );
 }
 
-function TagTextMask({ tag, fontSize, lineHeight, opacity = 0.92 }) {
+function TagTextMask({ tag, fontSize, lineHeight, opacity = 0.92, textScale = 1 }) {
   const maxLineLength = Math.max(...tag.textLines.map((line) => String(line || '').length), 1);
-  const width = estimateTextWidth('X'.repeat(maxLineLength), fontSize) + (tag.maskPaddingX ?? 44);
-  const height = Math.max(lineHeight, tag.textLines.length * lineHeight) + (tag.maskPaddingY ?? 22);
+  const width = estimateTextWidth('X'.repeat(maxLineLength), fontSize) + (tag.maskPaddingX ?? 44) * textScale;
+  const height = Math.max(lineHeight, tag.textLines.length * lineHeight) + (tag.maskPaddingY ?? 22) * textScale;
   const x =
     tag.textAnchor === 'start'
       ? tag.position.x
@@ -140,13 +148,13 @@ function resolveTagStyle(tag, isRoom) {
   };
 }
 
-function TagFigure({ tag }) {
+function TagFigure({ tag, textScale = 1 }) {
   const isRoom = tag.sourceType === 'room';
-  const nameSize = isRoom
-    ? DRAWING_GRAPHICS.annotation.roomNameSize
-    : (tag.fontSize ?? DRAWING_GRAPHICS.annotation.textSize);
-  const areaSize = DRAWING_GRAPHICS.annotation.roomAreaSize;
-  const lineHeight = isRoom ? 168 : (tag.lineHeight ?? 150);
+  const nameSize =
+    (isRoom ? DRAWING_GRAPHICS.annotation.roomNameSize : (tag.fontSize ?? DRAWING_GRAPHICS.annotation.textSize)) *
+    textScale;
+  const areaSize = DRAWING_GRAPHICS.annotation.roomAreaSize * textScale;
+  const lineHeight = (isRoom ? 168 : (tag.lineHeight ?? 150)) * textScale;
   const startY = tag.position.y - ((tag.textLines.length - 1) * lineHeight) / 2;
   const style = resolveTagStyle(tag, isRoom);
 
@@ -173,7 +181,13 @@ function TagFigure({ tag }) {
         </>
       ) : null}
       {tag.mask ? (
-        <TagTextMask tag={tag} fontSize={nameSize} lineHeight={lineHeight} opacity={style.maskOpacity} />
+        <TagTextMask
+          tag={tag}
+          fontSize={nameSize}
+          lineHeight={lineHeight}
+          opacity={style.maskOpacity}
+          textScale={textScale}
+        />
       ) : null}
       <text
         x={tag.position.x}
@@ -205,13 +219,16 @@ function TagFigure({ tag }) {
 }
 
 function BlueprintAnnotationLayer({ dimensions = [], tags = [], className = 'annotations' }) {
+  const zoom = useCanvasZoom();
+  const textScale = zoom ? ANNOTATION_BASELINE_ZOOM / Math.max(0.0001, zoom) : 1;
+
   return (
     <g className={className}>
       {dimensions.map((figure) => (
-        <DimensionFigure key={figure.id} figure={figure} />
+        <DimensionFigure key={figure.id} figure={figure} textScale={textScale} />
       ))}
       {tags.map((tag) => (
-        <TagFigure key={tag.id} tag={tag} />
+        <TagFigure key={tag.id} tag={tag} textScale={textScale} />
       ))}
     </g>
   );

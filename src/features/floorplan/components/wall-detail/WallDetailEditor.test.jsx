@@ -76,9 +76,10 @@ describe('WallDetailEditor', () => {
     expect(html).toContain('Construction dimensions');
     expect(html).toContain('Draw measurement');
     expect(html).toContain('64-bit model geometry');
-    expect(html).toContain('Aim for the green SNAP target');
+    expect(html).toContain('Click two exact points to measure, or drag; hold Shift');
+    expect(html).toContain('Aim for the green snap target');
     expect(html).toContain('drag either green endpoint');
-    expect(html).toContain('drag its amber line to move the whole guide');
+    expect(html).toContain('drag the amber line to move the whole guide');
     expect(html).toContain('Place Screw snaps continuously to user measurements and their crossings');
     expect(html).toContain('Measure precision: 0.01 mm');
     expect(html).toContain('Overall width and height');
@@ -126,8 +127,19 @@ describe('WallDetailEditor', () => {
     });
     expect(html).toContain('Select / move — click to pick anything, drag to move it (V)');
     expect(html).toContain('Trace cut panel — click each corner, then close the outline (T)');
-    expect(html).toContain('Draw measurement — drag between two exact points (M)');
-    expect(html).toContain('Esc returns to Select');
+    expect(html).toContain('Draw measurement — click two exact points, or drag; Shift locks level/plumb (M)');
+    expect(html).toContain('Esc cancels, then returns to Select');
+  });
+
+  it('renders the canvas chrome: mm rulers, the real snap grid, and undo/redo controls', () => {
+    const html = renderToStaticMarkup(<WallDetailEditor />);
+
+    expect(html).toContain('data-testid="wall-rulers"');
+    expect(html).toContain('wall-grid-major');
+    expect(html).toContain('wall-grid-minor');
+    expect(html).toContain('Undo the last change (Ctrl+Z)');
+    expect(html).toContain('Redo the undone change (Ctrl+Y)');
+    expect(html).toContain('Fit the whole wall in view (0)');
   });
 
   it('gives the right panel a selection inspector with an empty state', () => {

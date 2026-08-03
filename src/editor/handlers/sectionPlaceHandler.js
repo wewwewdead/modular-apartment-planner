@@ -13,7 +13,14 @@ function resetSectionTool(editorDispatch) {
   });
 }
 
-export function createSectionPlaceHandler({ dispatch, editorDispatch, activeFloorId, getFloor, snapEnabled }) {
+export function createSectionPlaceHandler({
+  dispatch,
+  editorDispatch,
+  activeFloorId,
+  getFloor,
+  snapEnabled,
+  activePhaseId,
+}) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -40,6 +47,7 @@ export function createSectionPlaceHandler({ dispatch, editorDispatch, activeFloo
       const label = nextSectionLabel(floor?.sectionCuts || []);
       const sectionCut = createSectionCut(toolState.sectionStartPoint, point, { label });
 
+      sectionCut.phaseId = activePhaseId || null;
       dispatch({ type: 'SECTION_ADD', floorId: activeFloorId, sectionCut });
       editorDispatch({ type: 'SELECT_OBJECT', id: sectionCut.id, objectType: 'sectionCut' });
       resetSectionTool(editorDispatch);

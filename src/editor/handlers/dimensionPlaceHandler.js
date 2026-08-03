@@ -14,7 +14,7 @@ function resetDimensionTool(editorDispatch) {
   });
 }
 
-export function createDimensionPlaceHandler({ dispatch, editorDispatch, activeFloorId, snapEnabled }) {
+export function createDimensionPlaceHandler({ dispatch, editorDispatch, activeFloorId, snapEnabled, activePhaseId }) {
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -43,6 +43,7 @@ export function createDimensionPlaceHandler({ dispatch, editorDispatch, activeFl
         offset: toolState.dimensionPreviewOffset ?? DIMENSION_DEFAULT_OFFSET,
       });
 
+      annotation.phaseId = activePhaseId || null;
       dispatch({ type: 'ANNOTATION_ADD', floorId: activeFloorId, annotation });
       editorDispatch({ type: 'SELECT_OBJECT', id: annotation.id, objectType: 'annotation' });
       resetDimensionTool(editorDispatch);

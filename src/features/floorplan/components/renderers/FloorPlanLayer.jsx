@@ -54,10 +54,10 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
         <FixtureRenderer fixtures={filteredFloor.fixtures || EMPTY} />
         <DoorRenderer doors={filteredFloor.doors} walls={filteredFloor.walls} />
         <WindowRenderer windows={filteredFloor.windows} walls={filteredFloor.walls} />
-        {(floor.sectionCuts || EMPTY).map((sectionCut) => (
+        {(filteredFloor.sectionCuts || EMPTY).map((sectionCut) => (
           <SectionCutRenderer key={sectionCut.id} sectionCut={sectionCut} selectedId={selectedId} />
         ))}
-        <AnnotationRenderer floor={floor} />
+        <AnnotationRenderer floor={filteredFloor} />
       </>
     </RenderProfilerScope>
   );

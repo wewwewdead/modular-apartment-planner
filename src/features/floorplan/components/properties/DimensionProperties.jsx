@@ -3,9 +3,10 @@ import { getAnnotationDisplayLabel } from '@/annotations/format';
 import { normalize, subtract, add, scale } from '@/geometry/point';
 import { getManualAnnotationFigure } from '@/annotations/scene';
 import InputField from '../InputField';
+import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
 
-function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
+function AnnotationProperties({ annotation, floor, dispatch, floorId, u, phases }) {
   const updateAnnotation = (updates) => {
     dispatch({ type: 'ANNOTATION_UPDATE', floorId, annotation: { id: annotation.id, ...updates } });
   };
@@ -16,6 +17,7 @@ function AnnotationProperties({ annotation, floor, dispatch, floorId, u }) {
   return (
     <div>
       <div className={styles.title}>Dimension</div>
+      <PhaseSelector phaseId={annotation.phaseId} phases={phases} onChange={(v) => updateAnnotation({ phaseId: v })} />
       <InputField label="Label" value={getAnnotationDisplayLabel(annotation)} readOnly />
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Mode</label>

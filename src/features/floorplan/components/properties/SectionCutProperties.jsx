@@ -1,9 +1,10 @@
 import { memo } from 'react';
 import { sectionCutLength } from '@/geometry/sectionCutGeometry';
 import InputField from '../InputField';
+import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
 
-function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u }) {
+function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u, phases }) {
   const updateSectionCut = (updates) => {
     dispatch({ type: 'SECTION_UPDATE', floorId, sectionCut: { id: sectionCut.id, ...updates } });
   };
@@ -12,6 +13,7 @@ function SectionCutProperties({ sectionCut, dispatch, floorId, editorDispatch, u
   return (
     <div>
       <div className={styles.title}>Section Cut</div>
+      <PhaseSelector phaseId={sectionCut.phaseId} phases={phases} onChange={(v) => updateSectionCut({ phaseId: v })} />
       <InputField label="Label" value={sectionCut.label} onChange={(value) => updateSectionCut({ label: value })} />
       <div className={styles.subtitle}>Start Point</div>
       <InputField

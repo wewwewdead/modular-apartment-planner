@@ -12,8 +12,11 @@ export function isObjectVisibleInPhase(obj, phases, activePhaseId, phaseViewMode
     if (objPhase && objPhase.visible === false) return false;
   }
   if (phaseViewMode === PHASE_VIEW.ALL) return true;
-  if (!obj.phaseId) return true;
   if (!activePhaseId) return true;
+  // Strict phase views: with an active phase selected, Single/Cumulative show
+  // only explicitly phased work. Unphased objects belong to no phase state, so
+  // they only appear in the "All" view (or when no phase is active).
+  if (!obj.phaseId) return false;
 
   if (phaseViewMode === PHASE_VIEW.SINGLE) {
     return obj.phaseId === activePhaseId;
@@ -27,6 +30,23 @@ export function isObjectVisibleInPhase(obj, phases, activePhaseId, phaseViewMode
   }
 
   return true;
+}
+
+// A visible beam whose supporting columns were phase-hidden must keep its
+// geometry: renderers resolve beam endpoints against the filtered columns, so
+// carry the hidden supports on the beam itself as reference-only fallbacks
+// (consumed by beamGeometry). Attached to the ephemeral filtered copy only —
+// never drawn as columns and never persisted.
+function attachHiddenBeamSupports(beams, visibleColumns, allColumns) {
+  if (!beams?.length) return beams;
+  const visibleIds = new Set((visibleColumns || []).map((column) => column.id));
+  return beams.map((beam) => {
+    const hiddenSupports = [beam.startRef, beam.endRef]
+      .filter((ref) => ref?.kind === 'column' && !visibleIds.has(ref.id))
+      .map((ref) => (allColumns || []).find((column) => column.id === ref.id))
+      .filter(Boolean);
+    return hiddenSupports.length ? { ...beam, phaseHiddenSupportColumns: hiddenSupports } : beam;
+  });
 }
 
 export function filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode) {
@@ -49,6 +69,8 @@ export function filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode) 
   const visibleWallIds = new Set((filtered.walls || []).map((wall) => wall.id));
   filtered.doors = (filtered.doors || []).filter((door) => visibleWallIds.has(door.wallId));
   filtered.windows = (filtered.windows || []).filter((windowItem) => visibleWallIds.has(windowItem.wallId));
+
+  filtered.beams = attachHiddenBeamSupports(filtered.beams, filtered.columns, floor.columns);
 
   return filtered;
 }

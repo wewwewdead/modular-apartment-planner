@@ -38,6 +38,18 @@ const GLYPHS = {
     </>
   ),
   trash: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />,
+  undo: (
+    <>
+      <path d="M8 6l-4 4 4 4" />
+      <path d="M4 10h10a6 6 0 0 1 0 12h-4" />
+    </>
+  ),
+  redo: (
+    <>
+      <path d="M16 6l4 4-4 4" />
+      <path d="M20 10H10a6 6 0 0 0 0 12h4" />
+    </>
+  ),
 };
 
 export function ToolGlyph({ name }) {

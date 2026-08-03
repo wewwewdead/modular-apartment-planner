@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createFloor, createSlab, createWall } from '@/domain/models';
+import { createFloor, createRailing, createSlab, createStair, createWall } from '@/domain/models';
 import { buildFloorPreviewObjects } from './objectBuilders';
+import { buildPreviewScene } from './buildPreviewScene';
 import { createWallDetailing } from '@/domain/wallDetailing';
 
 describe('buildFloorPreviewObjects', () => {
@@ -237,5 +238,99 @@ describe('buildFloorPreviewObjects', () => {
     );
     expect(traced).toMatchObject({ geometry: 'wallPanel', depth: 6 });
     expect(traced.outline).toHaveLength(5);
+  });
+
+  it('rakes a railing drawn along a stair so it follows the run instead of floating flat', () => {
+    const floor = createFloor('Ground Floor', 0);
+    // Stair at origin running +x: 10 risers x 175mm rise, 250mm treads -> run 2500, total rise 1750
+    const stair = createStair({ x: 0, y: 0 }, 1000, 10, 175, 250, { angle: 0 });
+    floor.stairs = [stair];
+    // Railing drawn along the stair's edge (y = halfWidth)
+    const railing = createRailing({ x: 0, y: 500 }, { x: 2500, y: 500 });
+    floor.railings = [railing];
+
+    const descriptor = buildFloorPreviewObjects(floor).find((entry) => entry.kind === 'railing');
+
+    // Base follows the nosing pitch line: first nosing top (175) up to the stair's total rise (1750)
+    expect(descriptor.slopeRise).toBeCloseTo(1575, 5);
+    expect(descriptor.baseElevation).toBeCloseTo((175 + 1750) / 2, 5);
+    expect(descriptor.bounds.minElevation).toBeCloseTo(175, 5);
+    expect(descriptor.bounds.maxElevation).toBeCloseTo(1750 + railing.height, 5);
+  });
+
+  it('keeps a railing away from any stair flat at floor level', () => {
+    const floor = createFloor('Ground Floor', 0);
+    floor.stairs = [createStair({ x: 0, y: 0 }, 1000, 10, 175, 250, { angle: 0 })];
+    const railing = createRailing({ x: 0, y: 3000 }, { x: 2500, y: 3000 });
+    floor.railings = [railing];
+
+    const descriptor = buildFloorPreviewObjects(floor).find((entry) => entry.kind === 'railing');
+
+    expect(descriptor.slopeRise || 0).toBe(0);
+    expect(descriptor.baseElevation).toBe(0);
+  });
+
+  it('rakes an upper-floor railing over a stairwell along the stair arriving from the floor below', () => {
+    // Stair on the ground floor: 10 x 300mm risers over 250mm treads -> arrives exactly at 3000
+    const ground = createFloor('Ground Floor', 0);
+    ground.elevation = 0;
+    const stair = createStair({ x: 0, y: 0 }, 1000, 10, 300, 250, { angle: 0 });
+    ground.stairs = [stair];
+
+    // Railing drawn on the upper floor, over the stairwell, along the flight
+    const upper = createFloor('Second Floor', 1);
+    upper.elevation = 3000;
+    const railing = createRailing({ x: 0, y: 500 }, { x: 2500, y: 500 });
+    upper.railings = [railing];
+
+    const scene = buildPreviewScene({ floors: [ground, upper] }, {});
+    const upperFloor = scene.floors.find((entry) => entry.floorId === upper.id);
+    const descriptor = upperFloor.objects.find((entry) => entry.kind === 'railing');
+
+    // Elevations come from the stair's own floor base, not the railing's floor
+    expect(descriptor.bounds.minElevation).toBeCloseTo(300, 5);
+    expect(descriptor.slopeRise).toBeCloseTo(2700, 5);
+    expect(descriptor.baseElevation).toBeCloseTo((300 + 3000) / 2, 5);
+  });
+
+  it('prefers the railing floor own stair over stairs from other floors', () => {
+    const ground = createFloor('Ground Floor', 0);
+    ground.elevation = 0;
+    ground.stairs = [createStair({ x: 0, y: 0 }, 1000, 10, 300, 250, { angle: 0 })];
+
+    // Stacked stairwell: the upper floor has its own stair on the same footprint
+    const upper = createFloor('Second Floor', 1);
+    upper.elevation = 3000;
+    upper.stairs = [createStair({ x: 0, y: 0 }, 1000, 10, 300, 250, { angle: 0 })];
+    upper.railings = [createRailing({ x: 0, y: 500 }, { x: 2500, y: 500 })];
+
+    const scene = buildPreviewScene({ floors: [ground, upper] }, {});
+    const upperFloor = scene.floors.find((entry) => entry.floorId === upper.id);
+    const descriptor = upperFloor.objects.find((entry) => entry.kind === 'railing');
+
+    // Rakes from the upper floor's own base (3000 + first nosing), not from below
+    expect(descriptor.bounds.minElevation).toBeCloseTo(3300, 5);
+  });
+
+  it('rebuild key for every floor tracks all floors stairs so cross-floor railings invalidate the cache', () => {
+    const ground = createFloor('Ground Floor', 0);
+    ground.elevation = 0;
+    ground.stairs = [createStair({ x: 0, y: 0 }, 1000, 10, 300, 250, { angle: 0 })];
+    const upper = createFloor('Second Floor', 1);
+    upper.elevation = 3000;
+    upper.railings = [createRailing({ x: 0, y: 500 }, { x: 2500, y: 500 })];
+
+    const before = buildPreviewScene({ floors: [ground, upper] }, {});
+
+    // Immutable stair edit on the ground floor (as the reducers do)
+    const editedGround = { ...ground, stairs: [{ ...ground.stairs[0], numberOfRisers: 12 }] };
+    const after = buildPreviewScene({ floors: [editedGround, upper] }, {});
+
+    const upperKeyBefore = before.floors.find((entry) => entry.floorId === upper.id).sourceKey;
+    const upperKeyAfter = after.floors.find((entry) => entry.floorId === upper.id).sourceKey;
+
+    // The upper floor's sourceKey must change even though the upper floor itself
+    // is untouched — its railing geometry depends on the ground floor's stair.
+    expect(upperKeyBefore.stairSources).not.toEqual(upperKeyAfter.stairSources);
   });
 });

@@ -3,6 +3,7 @@ import { getSlabBottomLevel } from '@/elevations/slab';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { isValidSlabBoundary } from '@/geometry/slabGeometry';
+import { getRailingStairProfile } from '@/geometry/railingGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { positionOnWall, wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
 import { add, perpendicular, scale } from '@/geometry/point';
@@ -143,17 +144,40 @@ function resolveLandingElevation(landing, stairs, floorLevel) {
   return computeLandingElevation(landing, stairs, floorLevel) - floorLevel;
 }
 
+function resolveStairBaseElevation(stair, floorLevel, landingElevationMap) {
+  if (stair?.startLandingAttachment) {
+    const elev = landingElevationMap?.get(stair.startLandingAttachment.landingId);
+    if (elev != null) return floorLevel + elev;
+  }
+  return floorLevel;
+}
+
+/**
+ * Absolute base elevation for every stair across all floors. Railings attach to
+ * stairs by plan position regardless of which floor holds the stair — a railing
+ * drawn on the upper floor over the stairwell must follow the flight arriving
+ * from the floor below, so each candidate carries its own floor's base.
+ */
+export function buildStairElevationContexts(floors = []) {
+  return floors.flatMap((floor) => {
+    const stairs = floor.stairs || [];
+    if (!stairs.length) return [];
+    const floorLevel = getFloorElevation(floor);
+    const landings = floor.landings || [];
+    const landingElevationMap = new Map(landings.map((l) => [l.id, resolveLandingElevation(l, stairs, floorLevel)]));
+    return stairs.map((stair) => ({
+      stair,
+      floorId: floor.id,
+      baseElevation: resolveStairBaseElevation(stair, floorLevel, landingElevationMap),
+    }));
+  });
+}
+
 function createStairDescriptor(stair, floorLevel, floorId, landings, landingElevationMap) {
   const renderData = getStairRenderData(stair);
   if (!renderData?.outline?.length) return null;
 
-  let baseElevation = floorLevel;
-  if (stair.startLandingAttachment) {
-    const elev = landingElevationMap?.get(stair.startLandingAttachment.landingId);
-    if (elev != null) {
-      baseElevation = floorLevel + elev;
-    }
-  }
+  const baseElevation = resolveStairBaseElevation(stair, floorLevel, landingElevationMap);
 
   return {
     id: stair.id,
@@ -617,16 +641,44 @@ function buildFixtureObjects(floor, floorLevel) {
   });
 }
 
-function buildRailingObjects(floor, floorLevel) {
+function buildRailingObjects(floor, floorLevel, landingElevationMap, crossFloorStairContexts = []) {
+  const ownStairs = floor.stairs || [];
   return (floor.railings || []).map((railing) => {
     const type = railing.type || 'guardrail';
+
+    // Railings drawn along a stair follow its run instead of sitting flat.
+    // Own-floor stairs take precedence; otherwise fall back to stairs from
+    // other floors (a stairwell railing drawn on the arrival floor must follow
+    // the flight coming up from below).
+    let profile = getRailingStairProfile(railing, ownStairs);
+    let stairBase = null;
+    if (profile) {
+      stairBase = resolveStairBaseElevation(profile.stair, floorLevel, landingElevationMap);
+    } else if (crossFloorStairContexts.length) {
+      profile = getRailingStairProfile(
+        railing,
+        crossFloorStairContexts.map((context) => context.stair),
+      );
+      if (profile) {
+        const context = crossFloorStairContexts.find((candidate) => candidate.stair === profile.stair);
+        stairBase = context ? context.baseElevation : null;
+      }
+    }
+
+    let startElevation = floorLevel;
+    let endElevation = floorLevel;
+    if (profile && stairBase != null) {
+      startElevation = stairBase + profile.startRise;
+      endElevation = stairBase + profile.endRise;
+    }
+
     const descriptor = createLinearBoxDescriptor(
       railing.id,
       'railing',
       railing.startPoint,
       railing.endPoint,
       railing.width,
-      floorLevel,
+      (startElevation + endElevation) / 2,
       railing.height,
       {
         sourceId: railing.id,
@@ -636,16 +688,22 @@ function buildRailingObjects(floor, floorLevel) {
     );
     descriptor.geometry = 'railing';
     descriptor.railingType = type;
+    descriptor.slopeRise = endElevation - startElevation;
+    if (descriptor.slopeRise !== 0) {
+      descriptor.bounds.minElevation = Math.min(startElevation, endElevation);
+      descriptor.bounds.maxElevation = Math.max(startElevation, endElevation) + railing.height;
+    }
     return descriptor;
   });
 }
 
-export function buildFloorPreviewObjects(floor) {
+export function buildFloorPreviewObjects(floor, options = {}) {
   const floorLevel = getFloorElevation(floor);
   const landings = floor.landings || [];
   const stairs = floor.stairs || [];
 
   const landingElevationMap = new Map(landings.map((l) => [l.id, resolveLandingElevation(l, stairs, floorLevel)]));
+  const crossFloorStairContexts = (options.stairContexts || []).filter((context) => context.floorId !== floor.id);
 
   const wallContexts = buildWallPreviewContexts(floor, floorLevel);
 
@@ -659,7 +717,7 @@ export function buildFloorPreviewObjects(floor) {
     ...buildDoorObjects(wallContexts),
     ...buildWindowObjects(wallContexts),
     ...buildFixtureObjects(floor, floorLevel),
-    ...buildRailingObjects(floor, floorLevel),
+    ...buildRailingObjects(floor, floorLevel, landingElevationMap, crossFloorStairContexts),
   ];
 }
 

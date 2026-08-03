@@ -420,6 +420,7 @@ export default function PropertiesPanel() {
             floorId={activeFloorId}
             editorDispatch={editorDispatch}
             u={u}
+            phases={phases}
           />
         );
       }
@@ -433,6 +434,7 @@ export default function PropertiesPanel() {
             dispatch={dispatch}
             floorId={activeFloorId}
             u={u}
+            phases={phases}
           />
         );
       }
