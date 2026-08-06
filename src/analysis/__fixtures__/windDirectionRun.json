@@ -1,0 +1,210 @@
+{
+  "mode": "direction",
+  "directionDeg": 45,
+  "sliceHeight": 1500,
+  "grid": {
+    "columns": 48,
+    "rows": 43,
+    "cellSize": 754.1666666666666,
+    "origin": {
+      "x": -12100,
+      "y": -12100
+    },
+    "obstacleCellCount": 123,
+    "amplificationSum": 2034.754649599432,
+    "velocityXSum": -1437.9955901105131,
+    "velocityYSum": 1249.1130867451866,
+    "pressureCoefficientSum": -987.1865965101783,
+    "solver": {
+      "iterations": 220,
+      "residual": 0.034545022874617165
+    }
+  },
+  "summary": {
+    "referenceSpeed": 6,
+    "peakAmplification": 2.10024356842041,
+    "peakSpeed": 12.601461410522461,
+    "meanAmplification": 1.0483022409064564,
+    "acceleratedFraction": 0.26326635754765587,
+    "shelteredFraction": 0.21792890262751158,
+    "assessedCellCount": 1941
+  },
+  "ventilation": {
+    "summary": {
+      "roomCount": 4,
+      "assessedRoomCount": 3,
+      "openExteriorCount": 4,
+      "openInternalCount": 1,
+      "crossVentilatedRoomCount": 3,
+      "stagnantRoomCount": 1,
+      "meanAirChangesPerHour": 98.54086875015393,
+      "maxAirChangesPerHour": 148.34717813771638
+    },
+    "solver": {
+      "iterations": 15,
+      "residualM3s": 5.479787779094636e-8
+    },
+    "model": {
+      "kind": "wind-pressure-multizone",
+      "screeningOnly": true,
+      "pressureHeightModel": "uniform-from-outdoor-slice",
+      "includesStackEffect": false,
+      "includesThermalBuoyancy": false,
+      "includesIndoorMomentum": false
+    },
+    "rooms": [
+      {
+        "id": "room_nw",
+        "name": "NW living",
+        "floorId": "floor_wind_fixture",
+        "areaMm2": 31500000,
+        "heightMm": 3200,
+        "volumeM3": 100.8,
+        "connectedToExterior": true,
+        "pressurePa": -22.38075477333481,
+        "inflowM3s": 3.2306719059535878,
+        "outflowM3s": 3.230671852044663,
+        "airChangesPerHour": 115.38113853568305,
+        "crossVentilated": true
+      },
+      {
+        "id": "room_ne",
+        "name": "NE bedroom",
+        "floorId": "floor_wind_fixture",
+        "areaMm2": 22500000,
+        "heightMm": 3200,
+        "volumeM3": 72,
+        "connectedToExterior": true,
+        "pressurePa": -13.804952343428255,
+        "inflowM3s": 0.6378857906850871,
+        "outflowM3s": 0.6378857923974067,
+        "airChangesPerHour": 31.894289577062345,
+        "crossVentilated": true
+      },
+      {
+        "id": "room_sw",
+        "name": "SW kitchen",
+        "floorId": "floor_wind_fixture",
+        "areaMm2": 24500000,
+        "heightMm": 3200,
+        "volumeM3": 78.4,
+        "connectedToExterior": true,
+        "pressurePa": -29.540562754993914,
+        "inflowM3s": 3.230671852044663,
+        "outflowM3s": 3.2306719068425407,
+        "airChangesPerHour": 148.34717813771638,
+        "crossVentilated": true
+      },
+      {
+        "id": "room_se",
+        "name": "SE store",
+        "floorId": "floor_wind_fixture",
+        "areaMm2": 17500000,
+        "heightMm": 3000,
+        "volumeM3": 52.5,
+        "connectedToExterior": false,
+        "pressurePa": 0,
+        "inflowM3s": 0,
+        "outflowM3s": 0,
+        "airChangesPerHour": 0,
+        "crossVentilated": false
+      }
+    ],
+    "openings": [
+      {
+        "id": "win_nw_north",
+        "kind": "window",
+        "wallId": "wall_ext_n",
+        "exterior": true,
+        "roomAId": "room_nw",
+        "roomBId": null,
+        "widthMm": 1600,
+        "heightMm": 1200,
+        "centreElevation": 1500,
+        "openFraction": 0.65,
+        "dischargeCoefficient": 0.62,
+        "effectiveAreaM2": 1.248,
+        "pressureCoefficient": -0.5479915738105774,
+        "outsidePressurePa": -11.876073387622833,
+        "flowM3s": -3.2306719059535878,
+        "flowDirection": "b-to-a"
+      },
+      {
+        "id": "win_ne_north",
+        "kind": "window",
+        "wallId": "wall_ext_n",
+        "exterior": true,
+        "roomAId": "room_ne",
+        "roomBId": null,
+        "widthMm": 1200,
+        "heightMm": 1200,
+        "centreElevation": 1500,
+        "openFraction": 0.25,
+        "dischargeCoefficient": 0.62,
+        "effectiveAreaM2": 0.36,
+        "pressureCoefficient": -0.40965500473976135,
+        "outsidePressurePa": -8.878043262720109,
+        "flowM3s": -0.6378857906850871,
+        "flowDirection": "b-to-a"
+      },
+      {
+        "id": "win_ne_east",
+        "kind": "window",
+        "wallId": "wall_ext_e",
+        "exterior": true,
+        "roomAId": "room_ne",
+        "roomBId": null,
+        "widthMm": 1000,
+        "heightMm": 1200,
+        "centreElevation": 1500,
+        "openFraction": 0.4,
+        "dischargeCoefficient": 0.62,
+        "effectiveAreaM2": 0.48,
+        "pressureCoefficient": -0.7650742530822754,
+        "outsidePressurePa": -16.580689212799072,
+        "flowM3s": 0.6378857923974067,
+        "flowDirection": "a-to-b"
+      },
+      {
+        "id": "win_sw_south",
+        "kind": "window",
+        "wallId": "wall_ext_s",
+        "exterior": true,
+        "roomAId": "room_sw",
+        "roomBId": null,
+        "widthMm": 1600,
+        "heightMm": 1200,
+        "centreElevation": 1500,
+        "openFraction": 0.55,
+        "dischargeCoefficient": 0.62,
+        "effectiveAreaM2": 1.056,
+        "pressureCoefficient": -2.039886951446533,
+        "outsidePressurePa": -44.20843001174927,
+        "flowM3s": 3.2306719068425407,
+        "flowDirection": "a-to-b"
+      },
+      {
+        "id": "door_nw_sw",
+        "kind": "door",
+        "wallId": "wall_spine",
+        "exterior": false,
+        "roomAId": "room_sw",
+        "roomBId": "room_nw",
+        "widthMm": 900,
+        "heightMm": 2100,
+        "centreElevation": 1050,
+        "openFraction": 0.8,
+        "dischargeCoefficient": 0.62,
+        "effectiveAreaM2": 1.512,
+        "pressureCoefficient": null,
+        "outsidePressurePa": null,
+        "flowM3s": -3.230671852044663,
+        "flowDirection": "b-to-a"
+      }
+    ]
+  },
+  "model": {
+    "kind": "D2Q9-BGK-2D",
+    "screeningOnly": true
+  }
+}
