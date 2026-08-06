@@ -5,6 +5,10 @@ import { createProject, createWall } from '@/domain/models';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { computeWindStudy } from './windRunner';
 import { createWindStudyState } from './windState';
+import { VENTILATION_CONSTANTS } from './ventilationNetwork';
+// The worker module installs its message handler only where `self` exists, so
+// its marshalling helper can be imported and tested here under plain node.
+import { transferablesOf } from './wind.worker';
 import {
   WIND_FIXTURE_COMFORT_SETTINGS,
   WIND_FIXTURE_DIRECTION_SETTINGS,
@@ -729,11 +733,16 @@ describe('wind study characterization — result key sets', () => {
   });
 
   it('pins the comfort-mode top-level key set', () => {
+    // Extended by T15: `sectorPressureCoefficients` joins the set. It is the
+    // only per-sector field the result keeps — the amplifications are consumed
+    // by the classifier and discarded, the Cp fields are not reconstructible
+    // from anything that survives, and Stage 2 needs them per sector.
     expect(Object.keys(fixtureComfortRun()).sort()).toEqual([
       'grid',
       'mode',
       'model',
       'representativeFlow',
+      'sectorPressureCoefficients',
       'sliceHeight',
       'solverRuns',
       'summary',
@@ -759,13 +768,32 @@ describe('wind study characterization — result key sets', () => {
       'unsafeCellCount',
       'unsafeFraction',
     ]);
+    // Extended by T15: `pressureCoefficient` and `ventilation` join the set.
     expect(Object.keys(result.representativeFlow).sort()).toEqual([
       'amplification',
       'directionDeg',
       'frequency',
+      'pressureCoefficient',
       'referenceSpeed',
       'velocityX',
       'velocityY',
+      'ventilation',
+    ]);
+    // The nested network is the same object direction mode returns, not a
+    // reduced copy of it: same keys, all the way down to the solver block.
+    expect(Object.keys(result.representativeFlow.ventilation).sort()).toEqual([
+      'model',
+      'openings',
+      'rooms',
+      'solver',
+      'status',
+      'summary',
+    ]);
+    expect(Object.keys(result.representativeFlow.ventilation.solver).sort()).toEqual([
+      'converged',
+      'failure',
+      'iterations',
+      'residualM3s',
     ]);
     expect(Object.keys(result.summary).sort()).toEqual(['assessedCellCount', 'fractions', 'unsafeFraction']);
     expect(Object.keys(result.summary.fractions[0]).sort()).toEqual(['fraction', 'id', 'label']);
@@ -791,12 +819,12 @@ describe('wind study characterization — result key sets', () => {
 
   it('pins the keys comfort mode does NOT produce', () => {
     const result = fixtureComfortRun();
-    // characterization: pins current behaviour; see T2 (amendment 2A adds
-    // fields here). Only the amplification field survives a sector run
-    // (windRunner.js:151); velocity and Cp are discarded for every sector
-    // except the representative one, and even that keeps no Cp. Consequently
-    // there is no facade pressure to feed a network, and comfort mode returns
-    // no `ventilation` block at all.
+    // A comfort study is not a single-direction study, and the shape says so.
+    // There is no top-level `ventilation` because there is no one set of room
+    // pressures a sixteen-sector mixture could report: the network T15 added
+    // belongs to the representative SECTOR and is nested inside it. Likewise no
+    // top-level `directionDeg`, and no single-direction fields on the grid —
+    // the grid a comfort study returns is the classified mixture.
     expect(result.ventilation).toBeUndefined();
     expect(result.directionDeg).toBeUndefined();
     expect(result.grid.amplification).toBeUndefined();
@@ -804,7 +832,11 @@ describe('wind study characterization — result key sets', () => {
     expect(result.grid.velocityY).toBeUndefined();
     expect(result.grid.pressureCoefficient).toBeUndefined();
     expect(result.grid.solver).toBeUndefined();
-    expect(result.representativeFlow.pressureCoefficient).toBeUndefined();
+    // Flipped by T15 (amendment 2A). This used to assert
+    // `result.representativeFlow.pressureCoefficient` was undefined: the sector
+    // runs discarded Cp, so nothing downstream could ask what a facade was
+    // doing. It is now the representative sector's own Cp field.
+    expect(result.representativeFlow.pressureCoefficient).toBeInstanceOf(Float32Array);
   });
 
   it('pins the representative sector chosen for the fixture rose', () => {
@@ -812,13 +844,217 @@ describe('wind study characterization — result key sets', () => {
     expect(result.representativeFlow.directionDeg).toBe(0);
     expect(result.representativeFlow.frequency).toBeCloseTo(0.4, 12);
     // Documented in windRunner.js: the representative "reference speed" is the
-    // sector's Weibull scale, used only to pace the 3D particles. Updated by
-    // T11 — it is now that scale AT SLICE HEIGHT: 5.5 m/s at 10 m becomes
-    // 5.5 x 0.6587795011005992 = 3.6232872560532960 under the suburban default.
+    // sector's Weibull scale. Updated by T11 — it is that scale AT SLICE
+    // HEIGHT: 5.5 m/s at 10 m becomes 5.5 x 0.6587795011005992 =
+    // 3.6232872560532960 under the suburban default. As of T15 it paces the 3D
+    // particles AND sets the dynamic pressure the sector's ventilation network
+    // is solved at; the number itself did not move.
     expect(result.representativeFlow.referenceSpeed).toBeCloseTo(3.623287256053296, 12);
     // The rose itself is reported unchanged, still quoted at 10 m.
     expect(result.windRose.find((sector) => sector.directionDeg === 0).weibullC).toBe(5.5);
     // The direction-mode `referenceSpeed` setting is ignored in comfort mode.
     expect(WIND_FIXTURE_COMFORT_SETTINGS.referenceSpeed).toBe(6);
+  });
+});
+
+/**
+ * What a comfort study keeps from its sector runs (T15, plan amendment 2A).
+ *
+ * These are not characterization pins. They are the contract Stage 2's live
+ * canvas and Stage 3's coach are being written against: a sector's pressure
+ * field has to still exist after the classifier has taken its amplitudes, and
+ * the dominant sector has to arrive with a solved airflow network attached.
+ */
+describe('wind study — comfort-mode field retention', () => {
+  function cellCountOf(result) {
+    return result.grid.columns * result.grid.rows;
+  }
+
+  it('keeps one Cp field per rose sector, laid out sector-major', () => {
+    const result = fixtureComfortRun();
+    const cellCount = cellCountOf(result);
+    expect(result.windRose).toHaveLength(4);
+    expect(result.sectorPressureCoefficients).toBeInstanceOf(Float32Array);
+    expect(result.sectorPressureCoefficients).toHaveLength(cellCount * result.windRose.length);
+    // Not a zero-filled allocation: every sector wrote something into its slice.
+    for (let sector = 0; sector < result.windRose.length; sector += 1) {
+      const slice = result.sectorPressureCoefficients.subarray(sector * cellCount, (sector + 1) * cellCount);
+      expect(
+        slice.some((value) => value !== 0),
+        `sector ${sector}`,
+      ).toBe(true);
+      expect(
+        slice.every((value) => Number.isFinite(value)),
+        `sector ${sector}`,
+      ).toBe(true);
+    }
+  });
+
+  it('gives sectors that face different ways different fields', () => {
+    // Guards the layout itself: a stride bug that wrote every sector over the
+    // same slice, or read one, would still pass the sizing test above.
+    const result = fixtureComfortRun();
+    const cellCount = cellCountOf(result);
+    const north = result.sectorPressureCoefficients.subarray(0, cellCount);
+    const east = result.sectorPressureCoefficients.subarray(cellCount, cellCount * 2);
+    expect(result.windRose[0].directionDeg).toBe(0);
+    expect(result.windRose[1].directionDeg).toBe(90);
+    let differing = 0;
+    for (let cell = 0; cell < cellCount; cell += 1) if (north[cell] !== east[cell]) differing += 1;
+    expect(differing).toBeGreaterThan(cellCount / 2);
+  });
+
+  it('stores the representative sector as its own array and as a slice, cell for cell', () => {
+    // The two are separate allocations on purpose — the flow field is handed to
+    // the preview whole, the per-sector block is indexed — so they are checked
+    // against each other rather than assumed to be the same object.
+    const result = fixtureComfortRun();
+    const cellCount = cellCountOf(result);
+    const sectorIndex = result.windRose.findIndex(
+      (sector) => sector.directionDeg === result.representativeFlow.directionDeg,
+    );
+    expect(sectorIndex).toBe(0);
+    const field = result.representativeFlow.pressureCoefficient;
+    expect(field).toHaveLength(cellCount);
+    expect(field.buffer).not.toBe(result.sectorPressureCoefficients.buffer);
+    const slice = result.sectorPressureCoefficients.subarray(sectorIndex * cellCount, (sectorIndex + 1) * cellCount);
+    // Float32 into Float32, so the copy is exact and equality is the right test.
+    const mismatched = [];
+    for (let cell = 0; cell < cellCount; cell += 1) if (field[cell] !== slice[cell]) mismatched.push(cell);
+    expect(mismatched).toEqual([]);
+  });
+
+  it('solves the representative sector as a full airflow network, in direction mode’s shape', () => {
+    const comfort = fixtureComfortRun().representativeFlow.ventilation;
+    const direction = fixtureDirectionRun().ventilation;
+    expect(Object.keys(comfort).sort()).toEqual(Object.keys(direction).sort());
+    expect(Object.keys(comfort.model).sort()).toEqual(Object.keys(direction.model).sort());
+    expect(Object.keys(comfort.solver).sort()).toEqual(Object.keys(direction.solver).sort());
+    expect(Object.keys(comfort.summary).sort()).toEqual(Object.keys(direction.summary).sort());
+    expect(Object.keys(comfort.rooms[0]).sort()).toEqual(Object.keys(direction.rooms[0]).sort());
+    expect(Object.keys(comfort.openings[0]).sort()).toEqual(Object.keys(direction.openings[0]).sort());
+
+    // And it is a solved network, not an empty shell: same fixture apartment,
+    // so the same four rooms and the same five surviving openings.
+    expect(comfort.status).toBe('ok');
+    expect(comfort.solver.converged).toBe(true);
+    expect(comfort.solver.failure).toBeNull();
+    expect(comfort.rooms.map((room) => room.id)).toEqual(direction.rooms.map((room) => room.id));
+    expect(comfort.openings.map((opening) => opening.id)).toEqual(direction.openings.map((opening) => opening.id));
+    expect(comfort.model.cpSliceHeightMm).toBe(WIND_FIXTURE_COMFORT_SETTINGS.sliceHeight);
+  });
+
+  it('reads that network at the sector’s own slice-height speed, exposure applied once', () => {
+    const result = fixtureComfortRun();
+    const sector = result.windRose.find((entry) => entry.directionDeg === result.representativeFlow.directionDeg);
+    const speed = result.representativeFlow.referenceSpeed;
+    // The basis: the sector's 10 m Weibull scale through the same exposure
+    // factor direction mode puts `settings.referenceSpeed` through — once.
+    expect(speed).toBeCloseTo(sector.weibullC * result.model.exposure.factor, 12);
+    expect(speed).toBeLessThan(sector.weibullC);
+
+    // Proved at the network rather than asserted at the call site: every
+    // exterior opening's outdoor pressure is Cp * 0.5 * rho * U^2 with exactly
+    // that U. A second application of the factor would show up here as a
+    // dynamic pressure low by 1 / factor^2, about 2.3x.
+    const dynamicPressure = 0.5 * VENTILATION_CONSTANTS.AIR_DENSITY_KG_M3 * speed * speed;
+    const exterior = result.representativeFlow.ventilation.openings.filter((opening) => opening.exterior);
+    expect(exterior.length).toBeGreaterThan(0);
+    for (const opening of exterior) {
+      expect(Math.abs(opening.pressureCoefficient), opening.id).toBeGreaterThan(1e-6);
+      expect(opening.outsidePressurePa / opening.pressureCoefficient, opening.id).toBeCloseTo(dynamicPressure, 9);
+    }
+  });
+
+  it('samples the representative network off the sector’s own field, not the mixture', () => {
+    // The comfort grid carries no `pressureCoefficient` at all, so a network
+    // built from it would fall back to the correlation on every opening. Three
+    // of the four exterior openings here are LBM-sampled, which can only have
+    // come from the sector run's own field.
+    const comfort = fixtureComfortRun().representativeFlow.ventilation;
+    const exterior = comfort.openings.filter((opening) => opening.exterior);
+    expect(exterior.filter((opening) => opening.cpSource === 'lbm').length).toBeGreaterThanOrEqual(3);
+    expect(comfort.model.cpSampledFloorIds).toEqual(['floor_wind_fixture']);
+  });
+});
+
+/**
+ * What the worker is allowed to hand over rather than copy.
+ *
+ * `postMessage` throws a DataCloneError on a repeated buffer and silently
+ * detaches whatever it is given, so this list is the one place a wrong answer
+ * costs a run-time failure in a real `Worker` and nothing anywhere else. The
+ * function is unit-testable precisely so that failure has a cheaper home.
+ */
+describe('wind worker — transferable buffers', () => {
+  it('offers every array a comfort result owns, each exactly once', () => {
+    const result = fixtureComfortRun();
+    const buffers = transferablesOf(result);
+    const expected = [
+      result.grid.obstacles,
+      result.grid.comfortSpeed,
+      result.grid.safetySpeed,
+      result.grid.categories,
+      result.grid.unsafe,
+      result.grid.counts,
+      result.sectorPressureCoefficients,
+      result.representativeFlow.amplification,
+      result.representativeFlow.velocityX,
+      result.representativeFlow.velocityY,
+      result.representativeFlow.pressureCoefficient,
+    ];
+    for (const array of expected) {
+      expect(buffers.filter((buffer) => buffer === array.buffer)).toHaveLength(1);
+    }
+    // Nothing extra, and nothing that is not an ArrayBuffer.
+    expect(buffers).toHaveLength(expected.length);
+    expect(buffers.every((buffer) => buffer instanceof ArrayBuffer)).toBe(true);
+  });
+
+  it('offers the two buffers T15 added, which used not to exist', () => {
+    const result = fixtureComfortRun();
+    const buffers = transferablesOf(result);
+    // Before T15 the list was: grid.obstacles/comfortSpeed/safetySpeed/
+    // categories/unsafe/counts plus representativeFlow amplification/velocityX/
+    // velocityY — nine. A field left off it is structured-cloned instead of
+    // transferred, which is a silent half-megabyte copy per study, so the count
+    // is pinned rather than the membership alone.
+    expect(buffers).toContain(result.sectorPressureCoefficients.buffer);
+    expect(buffers).toContain(result.representativeFlow.pressureCoefficient.buffer);
+    expect(buffers).toHaveLength(11);
+  });
+
+  it('offers every array a direction result owns, each exactly once', () => {
+    const result = fixtureDirectionRun();
+    const buffers = transferablesOf(result);
+    expect(buffers).toHaveLength(5);
+    for (const array of [
+      result.grid.obstacles,
+      result.grid.amplification,
+      result.grid.velocityX,
+      result.grid.velocityY,
+      result.grid.pressureCoefficient,
+    ]) {
+      expect(buffers.filter((buffer) => buffer === array.buffer)).toHaveLength(1);
+    }
+    // A direction study has no representative sector and no per-sector block.
+    expect(result.representativeFlow).toBeUndefined();
+    expect(result.sectorPressureCoefficients).toBeUndefined();
+  });
+
+  it('lists a shared buffer once, however many fields view it', () => {
+    // Two views of one allocation is a DataCloneError, not a double transfer.
+    const shared = new ArrayBuffer(64);
+    const buffers = transferablesOf({
+      grid: { obstacles: new Uint8Array(shared, 0, 16), amplification: new Float32Array(shared, 16, 4) },
+      sectorPressureCoefficients: new Float32Array(shared, 32, 4),
+    });
+    expect(buffers).toEqual([shared]);
+  });
+
+  it('has nothing to transfer when there is no study', () => {
+    expect(transferablesOf(null)).toEqual([]);
+    expect(transferablesOf(undefined)).toEqual([]);
+    expect(transferablesOf({})).toEqual([]);
   });
 });

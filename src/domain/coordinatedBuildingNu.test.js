@@ -478,7 +478,14 @@ describe('Apartment Planner Xi acceptance', () => {
       markupCount: 2,
       externalResponseCount: 1,
     });
-  });
+    // Measured 2026-08-06, in isolation: 1340 ms. On vitest's 5000 ms default
+    // that is only 3.7x of headroom for a test that publishes two exchanges,
+    // builds every sheet's DXF and round-trips the project through
+    // serialization — and it was timing out when the suite ran it alongside
+    // everything else. 15 s is 10x the measurement, and is the budget the Nu
+    // acceptance test one describe block up already carries for the same
+    // reason and the same measured magnitude (1324 ms).
+  }, 15_000);
 
   it('guards publication and broken review exchange relationships', () => {
     const empty = createProject('Xi guard project');

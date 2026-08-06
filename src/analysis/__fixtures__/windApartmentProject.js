@@ -174,6 +174,52 @@ export const WIND_FIXTURE_COMFORT_SETTINGS = Object.freeze({
   windRoseSource: 'user',
 });
 
+/**
+ * The rose the app actually ships: sixteen sectors, 22.5 deg apart.
+ *
+ * Weighted rather than uniform, because a uniform rose picks its representative
+ * sector by tie-break and a performance fixture should exercise the same code
+ * path a real climate does. The weighting is a cosine about due north, so it is
+ * written by formula rather than by hand — one expression a reader can check,
+ * and no sixteen-row table to mis-transcribe. `normalizeWindRose` rescales the
+ * frequencies to sum to one, so these are relative weights.
+ */
+export const WIND_FIXTURE_SIXTEEN_SECTOR_ROSE = Object.freeze(
+  Array.from({ length: 16 }, (_, index) => {
+    const directionDeg = index * 22.5;
+    const bias = Math.cos((directionDeg * Math.PI) / 180);
+    return Object.freeze({ directionDeg, frequency: 1 + 0.6 * bias, weibullK: 2, weibullC: 4.5 + 1.2 * bias });
+  }),
+);
+
+/**
+ * Production-default resolution and padding, for the performance suite.
+ *
+ * The characterization fixture above deliberately runs small and under-padded
+ * so the pinned JSON stays cheap to reproduce; timing it would measure nothing
+ * a user ever waits for. These two are the settings `createWindStudyState`
+ * hands a real study — resolution 96, 450 iterations, 30 m of padding — so what
+ * they measure is what the editor's spinner is actually waiting on.
+ */
+export const WIND_FIXTURE_PERFORMANCE_DIRECTION_SETTINGS = Object.freeze({
+  enabled: true,
+  mode: 'direction',
+  directionDeg: 45,
+  referenceSpeed: 6,
+  sliceHeight: 1500,
+  resolution: 96,
+  iterations: 450,
+  relaxationTime: 0.58,
+  domainPadding: 30000,
+});
+
+export const WIND_FIXTURE_PERFORMANCE_COMFORT_SETTINGS = Object.freeze({
+  ...WIND_FIXTURE_PERFORMANCE_DIRECTION_SETTINGS,
+  mode: 'comfort',
+  windRose: WIND_FIXTURE_SIXTEEN_SECTOR_ROSE.map((sector) => ({ ...sector })),
+  windRoseSource: 'user',
+});
+
 function sumOf(field) {
   let total = 0;
   for (let index = 0; index < field.length; index += 1) total += field[index];

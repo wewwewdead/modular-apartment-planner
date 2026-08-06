@@ -189,6 +189,21 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
   const siteRose = windRose.map((sector) => ({ ...sector, weibullC: sector.weibullC * exposure.factor }));
   const sectorCount = windRose.length;
   const sectorAmplifications = new Float32Array(cellCount * sectorCount);
+  /**
+   * Every sector's facade pressure field, kept rather than thrown away.
+   *
+   * Laid out exactly like `sectorAmplifications`: sector-major, so sector `s`
+   * occupies `[s * cellCount, (s + 1) * cellCount)` and the sector order is the
+   * NORMALIZED rose's order, which is the order `windRose` is reported in.
+   *
+   * The cost is real and is accepted deliberately: at the default resolution 96
+   * and a 16-sector rose this is around half a megabyte of Float32, transferred
+   * once out of the worker. What it buys is that a comfort study can answer
+   * "what would opening this window do" for any sector without re-solving the
+   * lattice — the amplification field alone cannot, because it is a speed
+   * magnitude and says nothing about which way a facade is pushed.
+   */
+  const sectorPressureCoefficients = new Float32Array(cellCount * sectorCount);
   const solverRuns = [];
   const representativeSectorIndex = windRose.reduce(
     (bestIndex, sector, index) => (sector.frequency > windRose[bestIndex].frequency ? index : bestIndex),
@@ -216,8 +231,27 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     });
     if (!run) continue;
     sectorAmplifications.set(run.amplification, sectorIndex * cellCount);
+    sectorPressureCoefficients.set(run.pressureCoefficient, sectorIndex * cellCount);
     solverRuns.push({ directionDeg: sector.directionDeg, ...run.solver });
     if (sectorIndex === representativeSectorIndex) {
+      /**
+       * The one speed this sector is read at, built the way direction mode
+       * builds its own.
+       *
+       * Direction mode makes `siteReferenceSpeed` by multiplying the single
+       * `settings.referenceSpeed` by the exposure factor. A comfort study has no
+       * single reference speed — the rose IS the climate — so the sector's own
+       * Weibull scale stands in for it, and `siteRose` has already carried it
+       * through the same exposure factor. That is the whole reason this reads
+       * `siteRose` rather than applying `exposure.factor` again here: the T11
+       * correction is applied exactly once, at the point the site rose is built.
+       *
+       * It is also, deliberately, the number `referenceSpeed` below already
+       * reports. The particles, the facade dynamic pressure and the air-change
+       * rates are then all quoted against one speed, so a reader who divides an
+       * opening's pressure by 0.5 * rho * U^2 gets back the Cp on the field.
+       */
+      const sectorReferenceSpeed = siteRose[sectorIndex].weibullC;
       representativeFlow = {
         directionDeg: sector.directionDeg,
         frequency: sector.frequency,
@@ -225,10 +259,31 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
         // dimensionless LBM vectors still carry the actual local pattern. It is
         // the slice-height scale, not the 10 m one: the particles are drawn at
         // pedestrian height and have to move at pedestrian-height speeds.
-        referenceSpeed: siteRose[sectorIndex].weibullC,
+        referenceSpeed: sectorReferenceSpeed,
         amplification: run.amplification,
         velocityX: run.velocityX,
         velocityY: run.velocityY,
+        pressureCoefficient: run.pressureCoefficient,
+        /**
+         * The airflow network for THIS sector, and no other.
+         *
+         * It lives inside `representativeFlow` rather than at the top of the
+         * result because that is exactly what it is a network of: one wind
+         * direction, the most frequent one on the rose. A `ventilation` block
+         * at the top level would read as a property of the comfort study, and a
+         * comfort study is a mixture over sixteen directions — there is no
+         * single set of room pressures it could honestly report.
+         */
+        ventilation: computeVentilationNetwork({
+          project,
+          grid: { ...grid, ...run },
+          referenceSpeed: sectorReferenceSpeed,
+          // Only used if a facade sample fails its sanity test and the empirical
+          // fallback needs an incidence angle.
+          directionDeg: sector.directionDeg,
+          northAngle,
+          sliceHeightMm: settings.sliceHeight,
+        }),
       };
     }
   }
@@ -255,6 +310,7 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     windRose,
     windRoseSource: settings.windRoseSource,
     grid: { ...grid, ...comfort },
+    sectorPressureCoefficients,
     representativeFlow,
     summary: {
       fractions,
