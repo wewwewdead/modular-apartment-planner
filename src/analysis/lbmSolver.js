@@ -8,6 +8,30 @@
  * factor U_local / U_reference.
  */
 
+/**
+ * The lattice, indexed exactly as the four tables below are ordered.
+ *
+ * +x is downstream — the Zou/He inlet is column 0 and the zero-gradient outlet
+ * is the last column. +y is increasing row, which is screen-DOWN in this app's
+ * coordinate convention, so direction 2 travels south and direction 4 north.
+ * Weights in parentheses. Half-way bounce-back reflects through the opposite
+ * pairs 1<->3, 2<->4, 5<->7 and 6<->8, which is what OPPOSITE tabulates.
+ *
+ *          7 (1/36)     4 (1/9)     8 (1/36)
+ *                  \       |       /
+ *                   \      |      /           row - 1   (-y, north)
+ *                    \     |     /
+ *     3 (1/9) ------- 0 (4/9) ------- 1 (1/9) row       ( 0)
+ *                    /     |     \
+ *                   /      |      \           row + 1   (+y, south)
+ *                  /       |       \
+ *          6 (1/36)     2 (1/9)     5 (1/36)
+ *
+ *               col - 1     col      col + 1
+ *                 (-x)      ( 0)      (+x)
+ *
+ * The weights sum to 1: 4/9 + 4*(1/9) + 4*(1/36).
+ */
 const CX = Int8Array.from([0, 1, 0, -1, 0, 1, -1, -1, 1]);
 const CY = Int8Array.from([0, 0, 1, 0, -1, 1, 1, -1, -1]);
 const OPPOSITE = Uint8Array.from([0, 3, 4, 1, 2, 7, 8, 5, 6]);
@@ -40,7 +64,24 @@ function createPopulations(cellCount, obstacles, inletSpeed) {
   return populations;
 }
 
-function macroscopic(populations, index) {
+/**
+ * Density and velocity of one cell, plus whether the raw density was usable.
+ *
+ * `diverged` exists because the two callers want opposite things from a cell
+ * that has blown up. The reporting paths — `referenceDensity` and the output
+ * field — need a finite number to keep one bad cell from poisoning a mean or an
+ * array, so the still-air substitution below stands in. The collision loop needs
+ * the OPPOSITE: it is the instability guard, and it has to see that the
+ * substitution happened. Testing the substituted values instead, which is what
+ * the guard used to do, can never fire — sanitised velocities are 0 and 0 is
+ * finite and slow — so the density half of the guard was unreachable.
+ *
+ * Exported as a test seam. The branch is defensive: every instability reachable
+ * through `solveD2Q9`'s own arguments trips the |u| > 0.35 test first, at some
+ * cell, several iterations before any density overflows, so the ordering can
+ * only be pinned at this level.
+ */
+export function macroscopic(populations, index) {
   const density =
     populations[0][index] +
     populations[1][index] +
@@ -51,8 +92,9 @@ function macroscopic(populations, index) {
     populations[6][index] +
     populations[7][index] +
     populations[8][index];
-  if (!(density > 1e-8) || !Number.isFinite(density)) return { density: 1, ux: 0, uy: 0 };
+  if (!(density > 1e-8) || !Number.isFinite(density)) return { density: 1, ux: 0, uy: 0, diverged: true };
   return {
+    diverged: false,
     density,
     ux:
       (populations[1][index] +
@@ -212,8 +254,13 @@ export function solveD2Q9({
     // Collision.
     for (let index = 0; index < cellCount; index += 1) {
       if (obstacles[index]) continue;
-      const { density, ux, uy } = macroscopic(current, index);
-      if (!Number.isFinite(ux) || !Number.isFinite(uy) || Math.hypot(ux, uy) > 0.35) {
+      // `diverged` is the raw-density verdict and has to be read here, before
+      // the sanitised velocities are looked at: a cell whose density is NaN,
+      // infinite or non-positive reports still air, which passes every test
+      // below and would let a dead lattice run to completion and report itself
+      // as a calm one.
+      const { density, ux, uy, diverged } = macroscopic(current, index);
+      if (diverged || !Number.isFinite(ux) || !Number.isFinite(uy) || Math.hypot(ux, uy) > 0.35) {
         throw new Error('Wind solver became unstable. Increase relaxation time or domain resolution.');
       }
       for (let direction = 0; direction < 9; direction += 1) {

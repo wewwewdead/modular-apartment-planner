@@ -274,16 +274,32 @@
   font-size: 8px;
 }
 .ventilationWarning,
+.ventilationFailure,
+.ventilationEmpty,
 .ventilationNote {
   margin: 0;
   line-height: 1.4;
 }
-.ventilationWarning {
+.ventilationWarning,
+.ventilationFailure,
+.ventilationEmpty {
   padding: 5px;
   border-radius: 3px;
+  font-size: 9px;
+}
+.ventilationWarning {
   background: rgba(216, 146, 42, 0.12);
   color: #8a5a17;
-  font-size: 9px;
+}
+/* A solve that failed prints no numbers at all, so it reads as an error. */
+.ventilationFailure {
+  background: rgba(168, 57, 47, 0.1);
+  color: #a8392f;
+}
+/* Nothing was modelled: not an error, just an absence worth naming. */
+.ventilationEmpty {
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
 }
 .roomFlowList {
   display: flex;

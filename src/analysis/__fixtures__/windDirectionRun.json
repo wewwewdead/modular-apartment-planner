@@ -30,19 +30,22 @@
     "assessedCellCount": 1941
   },
   "ventilation": {
+    "status": "ok",
     "summary": {
       "roomCount": 4,
       "assessedRoomCount": 3,
       "openExteriorCount": 4,
       "openInternalCount": 1,
       "crossVentilatedRoomCount": 3,
-      "stagnantRoomCount": 1,
+      "stagnantRoomCount": 0,
       "meanAirChangesPerHour": 93.87448497741626,
       "maxAirChangesPerHour": 140.47265478613085
     },
     "solver": {
       "iterations": 15,
-      "residualM3s": 5.0609529456124847e-8
+      "residualM3s": 5.0609529456124847e-8,
+      "converged": true,
+      "failure": null
     },
     "model": {
       "kind": "wind-pressure-multizone",

@@ -359,6 +359,149 @@ describe('WindStudyPanel climate card actions (characterization)', () => {
   });
 });
 
+/**
+ * The airflow block refuses to print numbers it cannot stand behind (T8) and
+ * says so when there was nothing to compute at all (T13). These are not
+ * characterization pins — they are the new contract.
+ */
+describe('WindStudyPanel airflow network — when the numbers are withheld', () => {
+  const ROOMS = [
+    { id: 'living', name: 'Living room', pressurePa: 1.2, crossVentilated: true, airChangesPerHour: 2.4 },
+    { id: 'bed', name: 'Bedroom', pressurePa: -0.4, crossVentilated: false, airChangesPerHour: 0.05 },
+  ];
+
+  const SUMMARY = {
+    meanAirChangesPerHour: 2.4,
+    maxAirChangesPerHour: 3.1,
+    crossVentilatedRoomCount: 1,
+    stagnantRoomCount: 0,
+    openExteriorCount: 2,
+  };
+
+  function mountWithVentilation(ventilation) {
+    return mount({
+      status: 'ready',
+      study: {
+        mode: 'direction',
+        summary: { peakAmplification: 1.2, peakSpeed: 6, acceleratedFraction: 0.1, shelteredFraction: 0.2 },
+        ventilation,
+      },
+    });
+  }
+
+  function solved(overrides = {}) {
+    return {
+      status: 'ok',
+      summary: SUMMARY,
+      rooms: ROOMS,
+      solver: { iterations: 12, residualM3s: 4e-9, converged: true, failure: null },
+      ...overrides,
+    };
+  }
+
+  /** Everything the block prints that is derived from the solved pressures. */
+  function expectNoSolvedNumbers() {
+    expect(screen.queryByText(/ACH$/)).toBeNull();
+    expect(screen.queryByText('mean ACH')).toBeNull();
+    expect(screen.queryByText('maximum ACH')).toBeNull();
+    expect(screen.queryByText('cross-flow rooms')).toBeNull();
+    expect(screen.queryByText('below 0.1 ACH')).toBeNull();
+    expect(screen.queryByText('Living room')).toBeNull();
+    expect(screen.queryByText('Bedroom')).toBeNull();
+  }
+
+  it('shows the whole block normally for a converged solve', () => {
+    mountWithVentilation(solved());
+    expect(screen.getByText('Room airflow network')).not.toBeNull();
+    expect(screen.getByText('mean ACH')).not.toBeNull();
+    expect(screen.getByText('2.4 ACH')).not.toBeNull();
+    expect(screen.getByText('Living room')).not.toBeNull();
+    expect(document.querySelector('[data-ventilation-state]')).toBeNull();
+  });
+
+  it('replaces every air-change number with a failure note when the solve hit the iteration cap', () => {
+    const { container } = mountWithVentilation(
+      solved({ solver: { iterations: 60, residualM3s: 4.2e-7, converged: false, failure: 'iteration-cap' } }),
+    );
+    const note = container.querySelector('[data-ventilation-state="failure"]');
+    expect(note).not.toBeNull();
+    expect(collapse(note.textContent)).toContain('did not converge');
+    expect(collapse(note.textContent)).toContain('ran out of iterations');
+    expectNoSolvedNumbers();
+  });
+
+  it('names a singular Jacobian as the cause when that is how it failed', () => {
+    const { container } = mountWithVentilation(
+      solved({ solver: { iterations: 0, residualM3s: 374317, converged: false, failure: 'singular-jacobian' } }),
+    );
+    expect(collapse(container.querySelector('[data-ventilation-state="failure"]').textContent)).toContain(
+      'pressure network went singular',
+    );
+    expectNoSolvedNumbers();
+  });
+
+  it('still withholds the numbers when the failure is unnamed', () => {
+    const { container } = mountWithVentilation(
+      solved({ solver: { iterations: 3, residualM3s: 12, converged: false, failure: null } }),
+    );
+    expect(collapse(container.querySelector('[data-ventilation-state="failure"]').textContent)).toContain(
+      'did not settle',
+    );
+    expectNoSolvedNumbers();
+  });
+
+  it('keeps the screening disclaimer under the failure note', () => {
+    // The caveat is about the model, not about this run; it survives the refusal.
+    mountWithVentilation(
+      solved({ solver: { iterations: 60, residualM3s: 4.2e-7, converged: false, failure: 'iteration-cap' } }),
+    );
+    expect(screen.getByText(/not a code pass\/fail/)).not.toBeNull();
+    expect(screen.getByText('Room airflow network')).not.toBeNull();
+  });
+
+  it('shows the numbers for a result carrying no solver block at all', () => {
+    // A study serialised before the flags existed must not read as a failure.
+    const { container } = mountWithVentilation({ status: 'ok', summary: SUMMARY, rooms: ROOMS });
+    expect(container.querySelector('[data-ventilation-state]')).toBeNull();
+    expect(screen.getByText('mean ACH')).not.toBeNull();
+  });
+
+  it('says the model is empty rather than printing four zeroes', () => {
+    const { container } = mountWithVentilation({
+      status: 'no-rooms',
+      summary: {
+        meanAirChangesPerHour: 0,
+        maxAirChangesPerHour: 0,
+        crossVentilatedRoomCount: 0,
+        stagnantRoomCount: 0,
+        openExteriorCount: 0,
+      },
+      rooms: [],
+      solver: { iterations: 0, residualM3s: 0, converged: true, failure: null },
+    });
+    const note = container.querySelector('[data-ventilation-state="empty"]');
+    expect(note).not.toBeNull();
+    expect(collapse(note.textContent)).toContain('No enclosed rooms are in the current view');
+    expect(collapse(note.textContent)).toContain('phase filter');
+    expect(screen.queryByText('mean ACH')).toBeNull();
+    // The empty state is not the "no exterior airflow path" warning; that one
+    // is advice for a modelled building and would be nonsense here.
+    expect(screen.queryByText(/No exterior airflow path/)).toBeNull();
+  });
+
+  it('keeps the numbers for a sealed building, whose zero is a real answer', () => {
+    const { container } = mountWithVentilation(
+      solved({
+        summary: { ...SUMMARY, openExteriorCount: 0, meanAirChangesPerHour: 0, maxAirChangesPerHour: 0 },
+        rooms: [{ id: 'living', name: 'Living room', pressurePa: 0, crossVentilated: false, airChangesPerHour: 0 }],
+      }),
+    );
+    expect(container.querySelector('[data-ventilation-state]')).toBeNull();
+    expect(screen.getByText(/No exterior airflow path/)).not.toBeNull();
+    expect(screen.getByText('0.0 ACH')).not.toBeNull();
+  });
+});
+
 describe('WindStudyPanel status line (characterization)', () => {
   it('reports the solver sector while a comfort run is in progress', () => {
     mount({

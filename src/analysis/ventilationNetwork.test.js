@@ -411,8 +411,9 @@ function expectMassConserved(result, label) {
   expect(result.rooms.length, `${label}: rooms`).toBeGreaterThan(0);
   for (const room of result.rooms) {
     const { net, throughput } = roomFlowBalance(result, room.id);
-    // The solver's own break criterion (ventilationNetwork.js:280) is
-    // max |node residual| < 1e-7 m3/s, so every node must meet it individually.
+    // The solver's own break criterion is max |node residual| <
+    // CONVERGENCE_RESIDUAL_M3S = 1e-7 m3/s, so every node must meet it
+    // individually.
     expect(Math.abs(net), `${label}: ${room.id} absolute imbalance`).toBeLessThan(1e-7);
     if (throughput > 0) {
       expect(Math.abs(net) / throughput, `${label}: ${room.id} relative imbalance`).toBeLessThan(1e-5);
@@ -658,6 +659,195 @@ describe('ventilation physics — analytic orifice comparison', () => {
     expect(PRESSURE_SMOOTHING_PA).toBe(0.01);
     expect(ratio).toBeCloseTo(Math.sqrt(1 / 3), 6);
     expect(1 - ratio).toBeCloseTo(0.4226497, 6);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Solver honesty flags                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Both failure exits are forced with real inputs rather than a test seam, but
+ * both need a physically absurd wind to reach, and that is the finding as much
+ * as the flag is: for anything a building could actually stand in, this network
+ * is a small, well-conditioned, monotone system that Newton solves in tens of
+ * steps. The two exits are numerical, not physical, and the numbers below say
+ * exactly which piece of arithmetic runs out.
+ */
+describe('ventilation solver — convergence disclosure', () => {
+  const { CONVERGENCE_RESIDUAL_M3S, MAX_SOLVE_ITERATIONS } = VENTILATION_CONSTANTS;
+
+  /** Net imbalance at the one room, recomputed from the reported flows alone. */
+  function imbalanceFromReportedFlows(result) {
+    return Math.abs(result.openings.reduce((sum, opening) => sum + opening.flowM3s, 0));
+  }
+
+  it('pins the criterion the flag is measured against', () => {
+    expect(CONVERGENCE_RESIDUAL_M3S).toBe(1e-7);
+    expect(MAX_SOLVE_ITERATIONS).toBe(60);
+  });
+
+  it('flags an ordinary solve as converged, with no failure', () => {
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+    });
+    expect(result.solver.converged).toBe(true);
+    expect(result.solver.failure).toBeNull();
+    expect(result.solver.residualM3s).toBeLessThan(CONVERGENCE_RESIDUAL_M3S);
+    expect(result.solver.iterations).toBeLessThan(MAX_SOLVE_ITERATIONS);
+  });
+
+  /**
+   * The reported residual has to describe the pressures that were RETURNED. It
+   * used to be assembled at the top of each Newton pass and never re-assembled,
+   * so a run that stopped on the iteration cap reported the balance of the
+   * pressures it held one correction earlier. Under the shipped 60-step cap the
+   * lag is invisible — every reachable cap case has already stalled, so the last
+   * correction is a no-op — but with the cap lowered to 5 on this same fixture
+   * the old code reported 7.9018 m3/s against an actual 5.7451 m3/s, 37 % high.
+   * This assertion is the permanent guard: it holds for any exit.
+   */
+  function expectResidualDescribesTheReturnedPressures(result, label) {
+    expect(result.solver.residualM3s, `${label}: reported residual`).toBeCloseTo(
+      imbalanceFromReportedFlows(result),
+      12,
+    );
+  }
+
+  it('reports the residual of the pressures it returns, on a converged run', () => {
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+    });
+    expectResidualDescribesTheReturnedPressures(result, 'converged');
+  });
+
+  /**
+   * A 18 m2 opening against a 0.375 m2 one, driven at 1e8 m/s.
+   *
+   * The break criterion is an ABSOLUTE 1e-7 m3/s, and at this driving pressure
+   * the room pressure is around 1e16 Pa, whose double-precision quantum maps to
+   * a flow quantum well above 1e-7 m3/s. Newton reaches the resolution floor of
+   * its own arithmetic and then cannot move, so it spends the full 60 steps and
+   * exits on the cap with the flows balanced to about 4e-7 m3/s out of 2e7.
+   */
+  it('flags the iteration cap when the absolute criterion is finer than the arithmetic', () => {
+    const result = computeVentilationNetwork({
+      project: singleRoomProject({ north: { width: 12000, height: 1500 }, south: { width: 250, height: 1500 } }),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 1e8,
+    });
+    expect(result.solver.failure).toBe('iteration-cap');
+    expect(result.solver.converged).toBe(false);
+    expect(result.solver.iterations).toBe(MAX_SOLVE_ITERATIONS);
+    expect(result.solver.residualM3s).toBeGreaterThanOrEqual(CONVERGENCE_RESIDUAL_M3S);
+    expectResidualDescribesTheReturnedPressures(result, 'iteration cap');
+  });
+
+  /**
+   * Two openings at the module's own minimum effective area, driven at 1e12 m/s.
+   *
+   * `flowAtPressureDifference` returns a derivative that decays like
+   * Cd*A/sqrt(dP), so a large enough dP flattens the Jacobian until Gaussian
+   * elimination finds no pivot above its 1e-12 floor. The areas differ, which
+   * matters: an exactly symmetric pair is solved by the initial guess and never
+   * reaches the linear solve at all.
+   */
+  it('flags a singular Jacobian when the orifice derivatives underflow', () => {
+    const result = computeVentilationNetwork({
+      project: singleRoomProject({ north: { width: 200, height: 1 }, south: { width: 110, height: 1 } }),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 1e12,
+    });
+    expect(result.solver.failure).toBe('singular-jacobian');
+    expect(result.solver.converged).toBe(false);
+    // Nothing was applied, so the residual is the one at the initial guess.
+    expect(result.solver.iterations).toBe(0);
+    expect(result.solver.residualM3s).toBeGreaterThan(CONVERGENCE_RESIDUAL_M3S);
+    expectResidualDescribesTheReturnedPressures(result, 'singular Jacobian');
+  });
+
+  it('calls a network with nothing in it converged rather than failed', () => {
+    // No equations means nothing is out of balance. The emptiness is disclosed
+    // by `status`, not by pretending the solver fell over.
+    const project = physicsProject('Nothing at all', 'proj_empty');
+    project.floors[0].walls = shellWalls();
+    const result = computeVentilationNetwork({ project, grid: diagonalCpGrid(), referenceSpeed: 5 });
+    expect(result.rooms).toHaveLength(0);
+    expect(result.solver).toEqual({ iterations: 0, residualM3s: 0, converged: true, failure: null });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Empty-model disclosure and the stagnant-room count                          */
+/* -------------------------------------------------------------------------- */
+
+describe('ventilation summary — what a zero means', () => {
+  it('marks an ordinary result ok', () => {
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+    });
+    expect(result.status).toBe('ok');
+  });
+
+  it('marks a project with walls but no rooms or openings as no-rooms', () => {
+    // What a strict single-phase view leaves behind when the facade and the
+    // room polygons belong to a phase that is not on screen: massing still
+    // exists, so the outdoor solve runs and the wind study is not null, but
+    // there is no interior model at all and every number below is a hard zero.
+    const project = physicsProject('Partitions only', 'proj_partitions');
+    project.floors[0].walls = [
+      partitionWall('wall_a', { x: SHELL[0].x, y: SPINE_Y }, { x: SHELL[1].x, y: SPINE_Y }),
+      partitionWall('wall_b', { x: CROSS_X, y: SHELL[0].y }, { x: CROSS_X, y: SHELL[2].y }),
+    ];
+    const result = computeVentilationNetwork({ project, grid: diagonalCpGrid(), referenceSpeed: 5 });
+    expect(project.floors[0].walls).toHaveLength(2);
+    expect(project.floors[0].windows).toHaveLength(0);
+    expect(result.status).toBe('no-rooms');
+    expect(result.summary.roomCount).toBe(0);
+    expect(result.summary.meanAirChangesPerHour).toBe(0);
+    expect(result.summary.maxAirChangesPerHour).toBe(0);
+  });
+
+  it('keeps status ok for a sealed building, which is a result and not an absence', () => {
+    // Rooms exist and were modelled; they simply have no operable opening. The
+    // panel already has its own warning for that, and it is a different claim.
+    const project = singleRoomProject();
+    project.floors[0].windows = [];
+    const result = computeVentilationNetwork({ project, grid: diagonalCpGrid(), referenceSpeed: 5 });
+    expect(result.status).toBe('ok');
+    expect(result.summary.roomCount).toBe(1);
+    expect(result.summary.openExteriorCount).toBe(0);
+  });
+
+  it('counts stagnant rooms over the rooms that were actually assessed', () => {
+    // The dead-end room really is stagnant: it is connected to the exterior
+    // through the vented room, was solved, and came out at zero flow.
+    const assessed = computeVentilationNetwork({
+      project: deadEndRoomProject(),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+    });
+    expect(assessed.summary.assessedRoomCount).toBe(2);
+    expect(assessed.summary.stagnantRoomCount).toBe(1);
+
+    // Seal that same room off instead. It is now outside the network, reports
+    // 0 ACH because it was never solved, and must NOT be counted as stagnant —
+    // that count is about airflow, not about rooms nobody modelled.
+    const project = deadEndRoomProject();
+    project.floors[0].doors = [];
+    const unassessed = computeVentilationNetwork({ project, grid: diagonalCpGrid(), referenceSpeed: 5 });
+    const deadEnd = unassessed.rooms.find((room) => room.id === 'room_dead_end');
+    expect(deadEnd.connectedToExterior).toBe(false);
+    expect(deadEnd.airChangesPerHour).toBe(0);
+    expect(unassessed.summary.roomCount).toBe(2);
+    expect(unassessed.summary.assessedRoomCount).toBe(1);
+    expect(unassessed.summary.stagnantRoomCount).toBe(0);
   });
 });
 

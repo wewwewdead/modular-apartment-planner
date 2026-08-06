@@ -49,6 +49,40 @@ function coordinate(value, positive, negative) {
   return `${Math.abs(value).toFixed(2)}°${value >= 0 ? positive : negative}`;
 }
 
+/**
+ * Why the airflow network has nothing to print, in the reader's terms.
+ *
+ * Two states suppress the numbers, and they are different claims. A failed
+ * solve produced pressures nobody should read an air-change rate off; an empty
+ * model never had rooms to solve for. Anything else is a real result, including
+ * a sealed building whose honest answer is zero — that one keeps its numbers and
+ * gets the existing "no exterior airflow path" warning instead.
+ *
+ * Results predating these fields carry neither, and are shown as before.
+ */
+function ventilationBlocker(ventilation) {
+  const { converged, failure } = ventilation.solver || {};
+  if (converged === false) {
+    const cause =
+      failure === 'singular-jacobian'
+        ? 'the pressure network went singular'
+        : failure === 'iteration-cap'
+          ? 'it ran out of iterations'
+          : 'it did not settle';
+    return {
+      kind: 'failure',
+      text: `The airflow solver did not converge — ${cause}. No air-change rates are reported for this run: the pressures it stopped at do not balance, so any number derived from them would be wrong rather than approximate.`,
+    };
+  }
+  if (ventilation.status === 'no-rooms') {
+    return {
+      kind: 'empty',
+      text: 'No enclosed rooms are in the current view, so there is no airflow network to solve. If a phase filter is active it may be hiding the façade and the room outlines.',
+    };
+  }
+  return null;
+}
+
 export default function WindStudyPanel({
   windStudy,
   study,
@@ -82,6 +116,9 @@ export default function WindStudyPanel({
     if (stale) return 'Showing the previous result while the new run completes.';
     return null;
   }, [error, progress, stale, status, study]);
+
+  // Whether the airflow numbers may be shown at all, decided once.
+  const ventilationBlock = useMemo(() => (study?.ventilation ? ventilationBlocker(study.ventilation) : null), [study]);
 
   const applyRose = () => {
     const windRose = parseRose(roseText);
@@ -252,48 +289,61 @@ export default function WindStudyPanel({
                     <strong>Room airflow network</strong>
                     <span>steady wind pressure</span>
                   </div>
-                  <div className={styles.ventilationMetrics}>
-                    <div>
-                      <strong>{study.ventilation.summary.meanAirChangesPerHour.toFixed(1)}</strong>
-                      <span>mean ACH</span>
-                    </div>
-                    <div>
-                      <strong>{study.ventilation.summary.maxAirChangesPerHour.toFixed(1)}</strong>
-                      <span>maximum ACH</span>
-                    </div>
-                    <div>
-                      <strong>{study.ventilation.summary.crossVentilatedRoomCount}</strong>
-                      <span>cross-flow rooms</span>
-                    </div>
-                    <div>
-                      <strong>{study.ventilation.summary.stagnantRoomCount}</strong>
-                      <span>below 0.1 ACH</span>
-                    </div>
-                  </div>
-                  {study.ventilation.summary.openExteriorCount === 0 ? (
-                    <p className={styles.ventilationWarning}>
-                      No exterior airflow path. Select façade windows or doors and set an open fraction.
+                  {ventilationBlock ? (
+                    <p
+                      className={
+                        ventilationBlock.kind === 'failure' ? styles.ventilationFailure : styles.ventilationEmpty
+                      }
+                      data-ventilation-state={ventilationBlock.kind}
+                    >
+                      {ventilationBlock.text}
                     </p>
-                  ) : study.ventilation.summary.openExteriorCount === 1 ? (
-                    <p className={styles.ventilationWarning}>
-                      Only one exterior opening is active. Add a second pressure path for sustained cross-flow.
-                    </p>
-                  ) : null}
-                  <div className={styles.roomFlowList}>
-                    {study.ventilation.rooms.slice(0, 8).map((room) => (
-                      <div key={room.id} className={styles.roomFlowRow}>
-                        <span title={`${room.pressurePa.toFixed(2)} Pa`}>{room.name}</span>
-                        <em>
-                          {room.crossVentilated
-                            ? 'Cross-flow'
-                            : room.airChangesPerHour >= 0.1
-                              ? 'Airflow path'
-                              : 'Low / no flow'}
-                        </em>
-                        <strong>{room.airChangesPerHour.toFixed(1)} ACH</strong>
+                  ) : (
+                    <>
+                      <div className={styles.ventilationMetrics}>
+                        <div>
+                          <strong>{study.ventilation.summary.meanAirChangesPerHour.toFixed(1)}</strong>
+                          <span>mean ACH</span>
+                        </div>
+                        <div>
+                          <strong>{study.ventilation.summary.maxAirChangesPerHour.toFixed(1)}</strong>
+                          <span>maximum ACH</span>
+                        </div>
+                        <div>
+                          <strong>{study.ventilation.summary.crossVentilatedRoomCount}</strong>
+                          <span>cross-flow rooms</span>
+                        </div>
+                        <div>
+                          <strong>{study.ventilation.summary.stagnantRoomCount}</strong>
+                          <span>below 0.1 ACH</span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                      {study.ventilation.summary.openExteriorCount === 0 ? (
+                        <p className={styles.ventilationWarning}>
+                          No exterior airflow path. Select façade windows or doors and set an open fraction.
+                        </p>
+                      ) : study.ventilation.summary.openExteriorCount === 1 ? (
+                        <p className={styles.ventilationWarning}>
+                          Only one exterior opening is active. Add a second pressure path for sustained cross-flow.
+                        </p>
+                      ) : null}
+                      <div className={styles.roomFlowList}>
+                        {study.ventilation.rooms.slice(0, 8).map((room) => (
+                          <div key={room.id} className={styles.roomFlowRow}>
+                            <span title={`${room.pressurePa.toFixed(2)} Pa`}>{room.name}</span>
+                            <em>
+                              {room.crossVentilated
+                                ? 'Cross-flow'
+                                : room.airChangesPerHour >= 0.1
+                                  ? 'Airflow path'
+                                  : 'Low / no flow'}
+                            </em>
+                            <strong>{room.airChangesPerHour.toFixed(1)} ACH</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   <p className={styles.ventilationNote}>
                     ACH is a design-screening result, not a code pass/fail; required rates depend on room use and local
                     rules.

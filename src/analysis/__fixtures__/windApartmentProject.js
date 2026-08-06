@@ -218,6 +218,7 @@ export function summarizeWindDirectionRun(result) {
       assessedCellCount: result.summary.assessedCellCount,
     },
     ventilation: {
+      status: result.ventilation.status,
       summary: { ...result.ventilation.summary },
       solver: { ...result.ventilation.solver },
       model: { ...result.ventilation.model },

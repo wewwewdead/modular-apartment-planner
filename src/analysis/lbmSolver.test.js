@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { LBM_CONSTANTS, solveD2Q9 } from './lbmSolver';
+import { LBM_CONSTANTS, macroscopic, solveD2Q9 } from './lbmSolver';
 
 function obstacleGrid(columns, rows, predicate = () => false) {
   const obstacles = new Uint8Array(columns * rows);
@@ -45,6 +45,129 @@ describe('D2Q9 wind solver', () => {
     const fluidPressure = Array.from(result.pressureCoefficient).filter((_, index) => !obstacles[index]);
     expect(fluidPressure.every(Number.isFinite)).toBe(true);
     expect(Math.max(...fluidPressure) - Math.min(...fluidPressure)).toBeGreaterThan(0.01);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Lattice tables                                                             */
+/* -------------------------------------------------------------------------- */
+
+describe('D2Q9 lattice tables', () => {
+  const { CX, CY, OPPOSITE, WEIGHTS } = LBM_CONSTANTS;
+
+  it('matches the diagram at the top of the module, direction for direction', () => {
+    expect(Array.from(CX)).toEqual([0, 1, 0, -1, 0, 1, -1, -1, 1]);
+    expect(Array.from(CY)).toEqual([0, 0, 1, 0, -1, 1, 1, -1, -1]);
+    expect(Array.from(WEIGHTS)).toEqual([4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36]);
+  });
+
+  it('pairs every direction with its exact reverse', () => {
+    for (let direction = 0; direction < 9; direction += 1) {
+      const opposite = OPPOSITE[direction];
+      // `===` rather than `toBe`, which distinguishes 0 from -0 for the rest
+      // direction; the lattice does not.
+      expect(CX[opposite] === -CX[direction], `CX[${direction}]`).toBe(true);
+      expect(CY[opposite] === -CY[direction], `CY[${direction}]`).toBe(true);
+      expect(OPPOSITE[opposite], `OPPOSITE is an involution at ${direction}`).toBe(direction);
+      expect(WEIGHTS[opposite], `WEIGHTS[${direction}]`).toBe(WEIGHTS[direction]);
+    }
+  });
+
+  it('carries a normalised, isotropic weight set', () => {
+    expect(Array.from(WEIGHTS).reduce((sum, weight) => sum + weight, 0)).toBeCloseTo(1, 15);
+    // Second moment of the weights is c_s^2 = 1/3 on each axis, which is the
+    // constant the Cp expression in `fieldAndResidual` divides by.
+    const secondMoment = Array.from(WEIGHTS).reduce((sum, weight, index) => sum + weight * CX[index] * CX[index], 0);
+    expect(secondMoment).toBeCloseTo(1 / 3, 15);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Instability guard                                                          */
+/* -------------------------------------------------------------------------- */
+
+/** Nine populations for a single cell, given as plain numbers. */
+function oneCell(values) {
+  return values.map((value) => Float64Array.of(value));
+}
+
+describe('D2Q9 instability guard', () => {
+  it('reads a healthy cell without flagging it', () => {
+    const populations = oneCell([0.4, 0.1, 0.05, 0.08, 0.05, 0.02, 0.01, 0.01, 0.02]);
+    const macro = macroscopic(populations, 0);
+    expect(macro.diverged).toBe(false);
+    expect(macro.density).toBeCloseTo(0.74, 12);
+    expect(macro.ux).toBeCloseTo((0.1 + 0.02 + 0.02 - 0.08 - 0.01 - 0.01) / 0.74, 12);
+  });
+
+  /**
+   * The bug this pins: the still-air substitution is applied FIRST, so reading
+   * the substituted velocities can never detect the cell it was applied to.
+   * `diverged` is the only thing that survives the substitution, and each case
+   * below returns ux = uy = 0 — values that pass the collision loop's finiteness
+   * and speed tests unchanged.
+   */
+  for (const [label, total] of [
+    ['NaN', Number.NaN],
+    ['+Infinity', Number.POSITIVE_INFINITY],
+    ['-Infinity', Number.NEGATIVE_INFINITY],
+    ['zero', 0],
+    ['negative', -0.5],
+    ['below the 1e-8 floor', 1e-9],
+  ]) {
+    it(`flags a ${label} raw density while still reporting still air to the field`, () => {
+      const populations = oneCell([total, 0, 0, 0, 0, 0, 0, 0, 0]);
+      const macro = macroscopic(populations, 0);
+      expect(macro.diverged).toBe(true);
+      // The substitution itself is deliberate and stays: the reporting paths
+      // need a finite number so one dead cell cannot poison a whole field.
+      expect(macro.density).toBe(1);
+      expect(macro.ux).toBe(0);
+      expect(macro.uy).toBe(0);
+    });
+  }
+
+  it('throws rather than returning a field when the lattice goes unstable', () => {
+    // tau at the 0.5 stability limit with a strong inlet. This diverges within a
+    // couple of iterations, and the guard has to stop it: the alternative is a
+    // plausible-looking amplification map computed from a dead lattice.
+    const columns = 60;
+    const rows = 40;
+    const obstacles = obstacleGrid(columns, rows, (column, row) => column === 25 && row >= 10 && row < 30);
+    expect(() =>
+      solveD2Q9({
+        columns,
+        rows,
+        obstacles,
+        iterations: 400,
+        relaxationTime: 0.5,
+        inletSpeed: 0.34,
+        minIterations: 400,
+        convergenceTolerance: 0,
+      }),
+    ).toThrow(/unstable/);
+    expect(() =>
+      solveD2Q9({
+        columns,
+        rows,
+        obstacles,
+        iterations: 400,
+        relaxationTime: 0.5,
+        inletSpeed: 0.34,
+        minIterations: 400,
+        convergenceTolerance: 0,
+      }),
+    ).toThrow('Wind solver became unstable. Increase relaxation time or domain resolution.');
+  });
+
+  it('leaves a stable run of the same geometry alone', () => {
+    // Guards the test above against passing for the wrong reason: the geometry
+    // is fine, it is the relaxation time and inlet speed that are not.
+    const columns = 60;
+    const rows = 40;
+    const obstacles = obstacleGrid(columns, rows, (column, row) => column === 25 && row >= 10 && row < 30);
+    const result = solveD2Q9({ columns, rows, obstacles, iterations: 200, relaxationTime: 0.6, inletSpeed: 0.06 });
+    expect(Array.from(result.amplification).every(Number.isFinite)).toBe(true);
   });
 });
 

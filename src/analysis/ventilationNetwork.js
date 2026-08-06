@@ -8,7 +8,7 @@
  */
 
 import { add, normalize, perpendicular, scale, subtract } from '@/geometry/point';
-import { pointInPolygon, polygonArea, polygonCentroid } from '@/geometry/polygon';
+import { pointInPolygon, polygonArea, polygonAreaCentroid } from '@/geometry/polygon';
 import { positionOnWall, wallLength } from '@/geometry/wallGeometry';
 import { WALL_HEIGHT } from '@/domain/defaults';
 import { CP_CORRELATION, correlationCp, incidenceFromFlow, isPlausibleCp } from './cpCorrelation';
@@ -20,6 +20,10 @@ const ROOM_PROBE_MM = 80;
 const MIN_EFFECTIVE_AREA_M2 = 1e-4;
 const PRESSURE_SMOOTHING_PA = 0.01;
 const MAX_SOLVE_ITERATIONS = 60;
+/** Newton stops when no room node is out of balance by more than this. */
+const CONVERGENCE_RESIDUAL_M3S = 1e-7;
+/** Under-relaxation on each Newton correction; the orifice law is stiff near dP = 0. */
+const NEWTON_RELAXATION = 0.75;
 
 function finite(value, fallback = 0) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -80,7 +84,9 @@ export function buildVentilationTopology(project) {
           floorId: floor.id,
           name: room.name || 'Room',
           polygon,
-          centroid: polygonCentroid(polygon),
+          // Area centroid, not the vertex mean: an L-shaped or many-vertexed
+          // room has to report the centre of the air it contains.
+          centroid: polygonAreaCentroid(polygon),
           areaMm2,
           floorElevation,
           heightMm: 0,
@@ -295,6 +301,56 @@ function solveLinear(matrix, rhs) {
   return rows.map((row) => row[size]);
 }
 
+/**
+ * Net flow out of every room node at the given pressures, plus the Jacobian of
+ * that net flow with respect to them.
+ *
+ * Pulled out of the Newton loop so the residual can be re-assembled AFTER the
+ * last correction is applied. Assembling it only at the top of each pass — what
+ * this used to do — meant a run that stopped on the iteration cap reported the
+ * balance of the pressures it had one step ago, not the ones it returned.
+ */
+function assembleNewtonSystem(openings, pressures, indexById) {
+  const size = pressures.length;
+  const residual = new Float64Array(size);
+  const jacobian = Array.from({ length: size }, () => new Float64Array(size));
+  for (const opening of openings) {
+    const a = indexById.get(opening.roomAId);
+    const b = opening.exterior ? undefined : indexById.get(opening.roomBId);
+    if (a === undefined) continue;
+    const pressureB = opening.exterior ? opening.outsidePressurePa : pressures[b];
+    const { flow, derivative } = flowAtPressureDifference(opening, pressures[a] - pressureB);
+    residual[a] += flow;
+    jacobian[a][a] += derivative;
+    if (b !== undefined) {
+      residual[b] -= flow;
+      jacobian[a][b] -= derivative;
+      jacobian[b][a] -= derivative;
+      jacobian[b][b] += derivative;
+    }
+  }
+  // Empty active set: no equations, so nothing is out of balance. `Math.max(0)`
+  // already says 0 rather than -Infinity, which is the answer that belongs here.
+  return { residual, jacobian, maximum: Math.max(0, ...Array.from(residual, Math.abs)) };
+}
+
+/**
+ * Damped Newton on the room-pressure network.
+ *
+ * Reports how it stopped as well as where, because the two are not the same
+ * question and a panel that prints air-change rates from a failed solve is
+ * lying. `converged` is measured against the loop's own break criterion, and
+ * `failure` names the exit that was taken when it is not met:
+ *
+ *   - `'iteration-cap'`      MAX_SOLVE_ITERATIONS corrections were applied and
+ *     the network still is not in balance. Reachable in practice by driving the
+ *     flows so large that CONVERGENCE_RESIDUAL_M3S falls below the double
+ *     precision of the residual sum itself.
+ *   - `'singular-jacobian'`  Gaussian elimination found no usable pivot, so
+ *     there is no correction to apply. In this network that means the orifice
+ *     derivatives underflowed: they decay like 1/sqrt(dP), so an extreme driving
+ *     pressure flattens the system until it is numerically rank-deficient.
+ */
 function solvePressures(rooms, openings) {
   const activeIds = connectedRooms(rooms, openings);
   const activeRooms = rooms.filter((room) => activeIds.has(room.id));
@@ -304,38 +360,39 @@ function solvePressures(rooms, openings) {
   pressures.fill(
     outsidePressures.length ? outsidePressures.reduce((sum, value) => sum + value, 0) / outsidePressures.length : 0,
   );
-  let residualM3s = Infinity;
-  let iterations = 0;
 
-  for (iterations = 0; iterations < MAX_SOLVE_ITERATIONS && activeRooms.length; iterations += 1) {
-    const residual = new Float64Array(activeRooms.length);
-    const jacobian = Array.from({ length: activeRooms.length }, () => new Float64Array(activeRooms.length));
-    for (const opening of openings) {
-      const a = indexById.get(opening.roomAId);
-      const b = opening.exterior ? undefined : indexById.get(opening.roomBId);
-      if (a === undefined) continue;
-      const pressureB = opening.exterior ? opening.outsidePressurePa : pressures[b];
-      const { flow, derivative } = flowAtPressureDifference(opening, pressures[a] - pressureB);
-      residual[a] += flow;
-      jacobian[a][a] += derivative;
-      if (b !== undefined) {
-        residual[b] -= flow;
-        jacobian[a][b] -= derivative;
-        jacobian[b][a] -= derivative;
-        jacobian[b][b] += derivative;
-      }
+  let system = assembleNewtonSystem(openings, pressures, indexById);
+  let iterations = 0;
+  let failure = null;
+
+  while (!(system.maximum < CONVERGENCE_RESIDUAL_M3S)) {
+    if (iterations >= MAX_SOLVE_ITERATIONS) {
+      failure = 'iteration-cap';
+      break;
     }
-    residualM3s = Math.max(0, ...Array.from(residual, Math.abs));
-    if (residualM3s < 1e-7) break;
     const correction = solveLinear(
-      jacobian,
-      Array.from(residual, (value) => -value),
+      system.jacobian,
+      Array.from(system.residual, (value) => -value),
     );
-    if (!correction) break;
-    for (let index = 0; index < pressures.length; index += 1) pressures[index] += correction[index] * 0.75;
+    if (!correction) {
+      failure = 'singular-jacobian';
+      break;
+    }
+    for (let index = 0; index < pressures.length; index += 1) pressures[index] += correction[index] * NEWTON_RELAXATION;
+    iterations += 1;
+    system = assembleNewtonSystem(openings, pressures, indexById);
   }
 
-  return { activeIds, activeRooms, indexById, pressures, iterations, residualM3s };
+  return {
+    activeIds,
+    activeRooms,
+    indexById,
+    pressures,
+    iterations,
+    residualM3s: system.maximum,
+    converged: system.maximum < CONVERGENCE_RESIDUAL_M3S,
+    failure,
+  };
 }
 
 /**
@@ -374,13 +431,19 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, d
     const pressureA = a === undefined ? 0 : solved.pressures[a];
     const pressureB = opening.exterior ? opening.outsidePressurePa : b === undefined ? 0 : solved.pressures[b];
     const flowM3s = a === undefined ? 0 : flowAtPressureDifference(opening, pressureA - pressureB).flow;
+    // `roomMetrics` is keyed by every room in the topology and an opening is
+    // only ever built from rooms in that same list, so both lookups are
+    // invariants, not possibilities. The optional chaining that used to guard
+    // the first line of each pair was theatre: the very next line dereferences
+    // the same value unconditionally, so a miss would throw anyway, one line
+    // later and with a worse message.
     const aMetrics = roomMetrics.get(opening.roomAId);
-    aMetrics?.openingIds.add(opening.id);
+    aMetrics.openingIds.add(opening.id);
     if (flowM3s >= 0) aMetrics.outflowM3s += flowM3s;
     else aMetrics.inflowM3s += -flowM3s;
     if (!opening.exterior) {
       const bMetrics = roomMetrics.get(opening.roomBId);
-      bMetrics?.openingIds.add(opening.id);
+      bMetrics.openingIds.add(opening.id);
       if (flowM3s >= 0) bMetrics.inflowM3s += flowM3s;
       else bMetrics.outflowM3s += -flowM3s;
     }
@@ -412,19 +475,34 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, d
   return {
     rooms,
     openings: openingResults,
+    // Whether there was anything to solve at all, kept separate from the answer.
+    // A phase view that filters the facade away leaves a project with walls but
+    // no room polygons and no operable openings, and every number below is then
+    // a hard zero — indistinguishable, to a reader, from a sealed building that
+    // really does move no air. `'no-rooms'` says which one it is.
+    status: rooms.length ? 'ok' : 'no-rooms',
     summary: {
       roomCount: rooms.length,
       assessedRoomCount: assessedRooms.length,
       openExteriorCount: openings.filter((opening) => opening.exterior).length,
       openInternalCount: openings.filter((opening) => !opening.exterior).length,
       crossVentilatedRoomCount: rooms.filter((room) => room.crossVentilated).length,
-      stagnantRoomCount: rooms.filter((room) => room.airChangesPerHour < 0.1).length,
+      // Only rooms that were actually assessed can be stagnant. Counting over
+      // every room made a room with no airflow path at all — which reports 0 ACH
+      // because it was never in the network, not because the wind failed to
+      // reach it — indistinguishable from one the solver found starved.
+      stagnantRoomCount: assessedRooms.filter((room) => room.airChangesPerHour < 0.1).length,
       meanAirChangesPerHour: assessedRooms.length
         ? assessedRooms.reduce((sum, room) => sum + room.airChangesPerHour, 0) / assessedRooms.length
         : 0,
       maxAirChangesPerHour: Math.max(0, ...rooms.map((room) => room.airChangesPerHour)),
     },
-    solver: { iterations: solved.iterations, residualM3s: solved.residualM3s },
+    solver: {
+      iterations: solved.iterations,
+      residualM3s: solved.residualM3s,
+      converged: solved.converged,
+      failure: solved.failure,
+    },
     model: {
       kind: 'wind-pressure-multizone',
       screeningOnly: true,
@@ -445,5 +523,7 @@ export const VENTILATION_CONSTANTS = {
   AIR_DENSITY_KG_M3,
   DEFAULT_DISCHARGE_COEFFICIENT,
   PRESSURE_SMOOTHING_PA,
+  CONVERGENCE_RESIDUAL_M3S,
+  MAX_SOLVE_ITERATIONS,
   CP_PLAUSIBILITY_LIMIT: CP_CORRELATION.CP_PLAUSIBILITY_LIMIT,
 };

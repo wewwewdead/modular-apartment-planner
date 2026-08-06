@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createProject, createWall } from '@/domain/models';
+import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { computeWindStudy } from './windRunner';
 import { createWindStudyState } from './windState';
 import {
@@ -302,7 +303,7 @@ describe('wind study characterization — direction-mode fixture', () => {
     const rooms = fixtureDirectionRun().ventilation.rooms;
     const heightById = Object.fromEntries(rooms.map((room) => [room.id, room.heightMm]));
     // characterization: pins current behaviour; see T2. `roomHeight`
-    // (ventilationNetwork.js:43) only probes each wall's MIDPOINT, so a room
+    // (ventilationNetwork.js:49) only probes each wall's MIDPOINT, so a room
     // that no wall midpoint falls into silently drops to the floor-to-floor
     // height. Every wall in the fixture is 3200 tall, yet SE reports 3000.
     expect(heightById.room_nw).toBe(3200);
@@ -319,7 +320,123 @@ describe('wind study characterization — direction-mode fixture', () => {
     expect(se.airChangesPerHour).toBe(0);
     expect(se.crossVentilated).toBe(false);
     expect(fixtureDirectionRun().ventilation.summary.assessedRoomCount).toBe(3);
-    expect(fixtureDirectionRun().ventilation.summary.stagnantRoomCount).toBe(1);
+    // Updated by T13. This used to be 1, counting SE — a room with no airflow
+    // path at all, whose 0 ACH means "never modelled" rather than "starved".
+    // `stagnantRoomCount` now counts only rooms that were actually assessed, and
+    // all three of those are far above 0.1 ACH.
+    expect(fixtureDirectionRun().ventilation.summary.stagnantRoomCount).toBe(0);
+  });
+
+  it('reports the fixture ventilation solve as converged, on an ok model', () => {
+    const ventilation = fixtureDirectionRun().ventilation;
+    expect(ventilation.status).toBe('ok');
+    expect(ventilation.solver.converged).toBe(true);
+    expect(ventilation.solver.failure).toBeNull();
+    expect(ventilation.solver.residualM3s).toBeLessThan(1e-7);
+  });
+});
+
+/**
+ * A diverged solve has to reach the user as the study's error state.
+ *
+ * `wind.worker.js` wraps `computeWindStudy` in one try/catch and posts
+ * `{ type: 'error', message: error?.message || 'Wind study failed.' }`, which
+ * `useStudyWorker` turns into `status: 'error'` with that message verbatim —
+ * both already pinned in `useWindStudy.dom.test.jsx`. The untested link was the
+ * first one: that the runner lets the throw out at all rather than swallowing it
+ * and returning a half-built study. The worker file itself cannot be imported
+ * under the node environment, so this is tested at the runner.
+ */
+describe('wind study — a diverged solver run', () => {
+  const UNSTABLE_SETTINGS = { ...WIND_FIXTURE_DIRECTION_SETTINGS, relaxationTime: 0.5, iterations: 400 };
+
+  it('propagates the solver error out of the runner, with a message worth showing', () => {
+    let thrown = null;
+    try {
+      computeWindStudy({ project: createWindApartmentProject(), windStudy: UNSTABLE_SETTINGS });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    // What the worker forwards. It has to be actionable, not just present.
+    expect(thrown.message).toBe('Wind solver became unstable. Increase relaxation time or domain resolution.');
+    expect(thrown.message).toMatch(/relaxation time/);
+  });
+
+  it('propagates it out of comfort mode too, rather than dropping the sector', () => {
+    expect(() =>
+      computeWindStudy({
+        project: createWindApartmentProject(),
+        windStudy: { ...UNSTABLE_SETTINGS, ...WIND_FIXTURE_COMFORT_SETTINGS, relaxationTime: 0.5, iterations: 400 },
+      }),
+    ).toThrow(/unstable/);
+  });
+
+  it('does not throw at the relaxation time the fixture actually ships with', () => {
+    expect(WIND_FIXTURE_DIRECTION_SETTINGS.relaxationTime).toBe(0.58);
+    expect(() => fixtureDirectionRun()).not.toThrow();
+  });
+});
+
+/**
+ * The phase-filtered payload, end to end.
+ *
+ * `WindStudyContext.dom.test.jsx` pins what the provider POSTS in a strict
+ * single-phase view: `filterProjectByPhase` keeps only the two explicitly
+ * phased partitions and drops the shell, so the worker receives 2 walls and 0
+ * windows. What it cannot show is what the solver then makes of that, because
+ * its worker is a stub. This runs the same payload through the real runner.
+ */
+describe('wind study — a phase view that filters the building away', () => {
+  function phasedWindProject() {
+    const project = createWindApartmentProject();
+    project.phases = [
+      { id: 'phase_existing', name: 'Existing', order: 0, color: '#888888', visible: true },
+      { id: 'phase_new', name: 'New work', order: 1, color: '#4488cc', visible: true },
+    ];
+    const floor = project.floors[0];
+    floor.walls = floor.walls.map((wall) => ({
+      ...wall,
+      phaseId: wall.id === 'wall_spine' || wall.id === 'wall_cross' ? 'phase_new' : 'phase_existing',
+    }));
+    return project;
+  }
+
+  it('says the airflow model is empty instead of reporting a silent zero', () => {
+    const filtered = filterProjectByPhase(phasedWindProject(), 'phase_new', 'single');
+    expect(filtered.floors[0].walls.map((wall) => wall.id)).toEqual(['wall_spine', 'wall_cross']);
+    expect(filtered.floors[0].windows).toHaveLength(0);
+    expect(filtered.floors[0].rooms).toHaveLength(0);
+
+    const result = computeWindStudy({ project: filtered, windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS } });
+    // Two partitions are still solid massing at pedestrian height, so this is
+    // NOT the null "no massing" study the panel already explains — the outdoor
+    // field is real and the peak amplification is a genuine number.
+    expect(result).not.toBeNull();
+    expect(result.summary.peakAmplification).toBeGreaterThan(1);
+
+    expect(result.ventilation.status).toBe('no-rooms');
+    expect(result.ventilation.summary.roomCount).toBe(0);
+    expect(result.ventilation.summary.openExteriorCount).toBe(0);
+    expect(result.ventilation.summary.meanAirChangesPerHour).toBe(0);
+    expect(result.ventilation.summary.maxAirChangesPerHour).toBe(0);
+    expect(result.ventilation.summary.stagnantRoomCount).toBe(0);
+    // Nothing to solve is not a failed solve.
+    expect(result.ventilation.solver).toEqual({
+      iterations: 0,
+      residualM3s: 0,
+      converged: true,
+      failure: null,
+    });
+  });
+
+  it('keeps the full model in the unfiltered view, so the pin above is not vacuous', () => {
+    const result = computeWindStudy({
+      project: phasedWindProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS },
+    });
+    expect(result.ventilation.status).toBe('ok');
+    expect(result.ventilation.summary.roomCount).toBe(4);
   });
 });
 
@@ -361,7 +478,14 @@ describe('wind study characterization — result key sets', () => {
       'shelteredFraction',
     ]);
     expect(Object.keys(result.model).sort()).toEqual(['kind', 'screeningOnly']);
-    expect(Object.keys(result.ventilation).sort()).toEqual(['model', 'openings', 'rooms', 'solver', 'summary']);
+    expect(Object.keys(result.ventilation).sort()).toEqual([
+      'model',
+      'openings',
+      'rooms',
+      'solver',
+      'status',
+      'summary',
+    ]);
     expect(Object.keys(result.ventilation.summary).sort()).toEqual([
       'assessedRoomCount',
       'crossVentilatedRoomCount',
@@ -372,7 +496,12 @@ describe('wind study characterization — result key sets', () => {
       'roomCount',
       'stagnantRoomCount',
     ]);
-    expect(Object.keys(result.ventilation.solver).sort()).toEqual(['iterations', 'residualM3s']);
+    expect(Object.keys(result.ventilation.solver).sort()).toEqual([
+      'converged',
+      'failure',
+      'iterations',
+      'residualM3s',
+    ]);
     expect(Object.keys(result.ventilation.model).sort()).toEqual([
       'cpFallbackCount',
       'cpFallbackModel',
