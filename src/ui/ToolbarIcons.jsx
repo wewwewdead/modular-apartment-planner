@@ -292,6 +292,41 @@ export function SnapIcon(props) {
   );
 }
 
+export function SunIcon(props) {
+  return (
+    <I {...props}>
+      <circle cx="10" cy="10" r="3.6" {...p} />
+      <path
+        d="M10 2.4v2M10 15.6v2M2.4 10h2M15.6 10h2M4.64 4.64l1.42 1.42M13.94 13.94l1.42 1.42M15.36 4.64l-1.42 1.42M6.06 13.94l-1.42 1.42"
+        {...p}
+      />
+    </I>
+  );
+}
+
+export function WindIcon(props) {
+  return (
+    <I {...props}>
+      <path d="M2.5 6.2h9.2c2.7 0 2.7-3.8.3-3.8-1.2 0-2 .7-2.2 1.6" {...p} />
+      <path d="M2.5 10h13.2c2.5 0 2.5 3.7.2 3.7-1.2 0-2-.7-2.2-1.6" {...p} />
+      <path d="M2.5 13.8h6.2" {...p} />
+      <path d="M2.5 17h10.8" {...p} />
+    </I>
+  );
+}
+
+/** A window with daylight falling through it onto the floor beyond. */
+export function DaylightIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="2.6" y="2.6" width="7" height="8.4" rx="0.6" {...p} />
+      <path d="M6.1 2.6v8.4M2.6 6.8h7" {...p} />
+      <path d="M9.6 4.6l7.8 5.2M9.6 8.4l7.8 5.2M9.6 11l4.4 3.4" {...p} />
+      <path d="M6.4 17.4h11" {...p} />
+    </I>
+  );
+}
+
 export function DetectRoomsIcon(props) {
   return (
     <I {...props}>

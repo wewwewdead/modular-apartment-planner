@@ -62,6 +62,93 @@ export function intersectionArea(pointsA, pointsB) {
 }
 
 /**
+ * Above this many input polygons, union them as a balanced binary tree instead
+ * of in one flat call. The sweep-line cost grows with the number of edge
+ * *intersections*, which for heavily-overlapping input is closer to quadratic
+ * in the polygon count than linear — so a thousand overlapping quads in one
+ * call is far slower than ten rounds of pairwise merges, even though the
+ * pairwise route runs the algorithm many more times.
+ */
+const PAIRWISE_UNION_THRESHOLD = 16;
+
+/**
+ * Merge any number of simple polygons into their union. Overlapping shapes
+ * fuse, disjoint shapes stay separate regions, and enclosed gaps become holes.
+ *
+ * Used by the shadow study, where a building's cast shadow is the union of its
+ * footprint, its translated top face, and one quad per silhouette edge — a set
+ * that overlaps heavily and must be merged before it can be drawn or measured.
+ */
+export function unionPolygons(polygons = []) {
+  return unionRegions(polygons.map((outline) => ({ outline, holes: [] })));
+}
+
+/**
+ * Merge polygons that may already contain holes.
+ *
+ * `unionPolygons` is the convenient API for simple rings. Environmental
+ * projection also needs to union planar faces such as a wall ring or roof slab,
+ * whose courtyard/light-well openings must remain holes until the inner side
+ * faces actually shade them. Keeping that distinction through polygon-clipping
+ * is what makes those shadows geometric rather than conservative silhouettes.
+ */
+export function unionRegions(regions = []) {
+  const polygons = regions
+    .filter((region) => region?.outline?.length >= 3)
+    .map((region) => [
+      toLibraryRing(region.outline),
+      ...(region.holes || []).filter((hole) => hole?.length >= 3).map(toLibraryRing),
+    ]);
+  if (!polygons.length) return [];
+  if (polygons.length === 1) return fromLibraryMultiPolygon(polygons);
+
+  try {
+    return fromLibraryMultiPolygon(
+      polygons.length > PAIRWISE_UNION_THRESHOLD
+        ? pairwiseUnion(polygons)
+        : polygonClipping.union(polygons[0], ...polygons.slice(1)),
+    );
+  } catch {
+    // Degenerate input (collinear or zero-area rings) — fall back to the
+    // unmerged set rather than dropping geometry the caller can still draw.
+    return polygons.flatMap((polygon) => fromLibraryMultiPolygon([polygon]));
+  }
+}
+
+/**
+ * Merge in rounds, pairing neighbours each pass. Each individual union stays
+ * small and mostly-disjoint, and the tree is log(n) deep rather than one pass
+ * over everything at once.
+ */
+function pairwiseUnion(multiPolygons) {
+  let current = multiPolygons;
+
+  while (current.length > 1) {
+    const next = [];
+    for (let index = 0; index < current.length; index += 2) {
+      const left = current[index];
+      const right = current[index + 1];
+      next.push(right ? polygonClipping.union(left, right) : left);
+    }
+    current = next;
+  }
+
+  return current[0];
+}
+
+/**
+ * Total area (mm²) of a native multipolygon list, holes subtracted. Pairs with
+ * `unionPolygons` for "how much ground does this cover" questions.
+ */
+export function multiPolygonArea(regions = []) {
+  return regions.reduce((total, region) => {
+    const outer = Math.abs(polygonArea(region.outline || []));
+    const holes = (region.holes || []).reduce((sum, hole) => sum + Math.abs(polygonArea(hole)), 0);
+    return total + outer - holes;
+  }, 0);
+}
+
+/**
  * Subtract one or more simple polygons from a subject polygon. The result is a
  * list because a cut can divide a panel into separate regions. Each region has
  * one outer outline and zero or more holes, all in the app's native point form.

@@ -9,6 +9,13 @@ function WindowProperties({ window: win, wall, dispatch, floorId, u, phases }) {
   };
 
   const winType = win.type || 'standard';
+  const fixed = winType === 'fixed';
+  const ventilation = {
+    operable: fixed ? false : (win.ventilation?.operable ?? true),
+    openFraction: fixed ? 0 : (win.ventilation?.openFraction ?? 0.5),
+    dischargeCoefficient: win.ventilation?.dischargeCoefficient ?? 0.62,
+  };
+  const updateVentilation = (updates) => updateWindow({ ventilation: { ...ventilation, ...updates } });
 
   return (
     <div>
@@ -79,6 +86,42 @@ function WindowProperties({ window: win, wall, dispatch, floorId, u, phases }) {
           Toggle Open Side
         </button>
       )}
+      <div className={styles.subtitle}>Natural Ventilation</div>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '8px',
+          color: 'var(--color-text-secondary)',
+          fontSize: '12px',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={ventilation.operable}
+          disabled={fixed}
+          onChange={(event) => updateVentilation({ operable: event.target.checked })}
+        />
+        Participates in airflow model
+      </label>
+      <InputField
+        label="Open Fraction"
+        type="number"
+        suffix="%"
+        step={5}
+        value={Math.round(ventilation.openFraction * 100)}
+        readOnly={fixed || !ventilation.operable}
+        onChange={(value) => updateVentilation({ openFraction: Math.min(1, Math.max(0, value / 100)) })}
+      />
+      <InputField
+        label="Discharge Cd"
+        type="number"
+        step={0.01}
+        value={ventilation.dischargeCoefficient}
+        readOnly={fixed || !ventilation.operable}
+        onChange={(value) => updateVentilation({ dischargeCoefficient: Math.min(1, Math.max(0.05, value)) })}
+      />
       {wall && <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />}
     </div>
   );

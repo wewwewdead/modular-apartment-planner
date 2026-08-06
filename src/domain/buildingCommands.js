@@ -73,6 +73,7 @@ import {
   inferSlabSupportRefs,
 } from './structuralCoordination';
 import { pointInPolygon } from '@/geometry/polygon';
+import { isValidTimeZone } from '@/utils/timeZone';
 import {
   DEFAULT_SERVICES_COORDINATION_PROFILE,
   createDrainageRoute,
@@ -101,6 +102,10 @@ export const BUILDING_COMMANDS = Object.freeze({
   ADD_SLAB_OPENING: 'AddSlabOpening',
   DEFINE_PROPERTY_BOUNDARY: 'DefinePropertyBoundary',
   CONFIGURE_SITE_SETBACKS: 'ConfigureSiteSetbacks',
+  CONFIGURE_SITE_LOCATION: 'ConfigureSiteLocation',
+  CACHE_SITE_WIND_CLIMATE: 'CacheSiteWindClimate',
+  UPSERT_SOLAR_STUDY_TARGET: 'UpsertSolarStudyTarget',
+  REMOVE_SOLAR_STUDY_TARGET: 'RemoveSolarStudyTarget',
   CONFIGURE_RECTANGULAR_SITE: 'ConfigureRectangularSite',
   CONFIGURE_REGULAR_PARKING_PLAN: 'ConfigureRegularParkingPlan',
   CONFIGURE_TEST_FIT_PROFILE: 'ConfigureTestFitProfile',
@@ -1743,6 +1748,213 @@ function definePropertyBoundary(project, command) {
     { operation: 'replace', entityType: 'propertyBoundary', id: boundaryId },
     { operation: 'clear', entityType: 'siteEdgeConstraints', reason: 'boundary_topology_changed' },
   ]);
+}
+
+/**
+ * Set where on Earth the site is, which is what turns a floor plan into
+ * something the sun can be aimed at.
+ *
+ * The north angle lives here too: coordinates place the site on the globe, but
+ * only the north angle says which way the drawing is turned.
+ */
+function configureSiteLocation(project, command) {
+  const { latitude, longitude } = command;
+
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+    return commandError(project, command, 'invalid-latitude', 'Latitude must be between -90 and 90 degrees.', {
+      latitude,
+    });
+  }
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    return commandError(project, command, 'invalid-longitude', 'Longitude must be between -180 and 180 degrees.', {
+      longitude,
+    });
+  }
+  if (command.northAngle != null && !Number.isFinite(command.northAngle)) {
+    return commandError(project, command, 'invalid-north-angle', 'North angle must be a finite number.');
+  }
+  if (!isValidTimeZone(command.timeZone)) {
+    return commandError(
+      project,
+      command,
+      'invalid-time-zone',
+      'Choose a valid IANA civil timezone, such as Asia/Manila.',
+      { timeZone: command.timeZone },
+    );
+  }
+
+  const nextProject = updateSite(project, (site) => {
+    const coordinatesChanged = site.latitude !== latitude || site.longitude !== longitude;
+    return {
+      ...site,
+      latitude,
+      longitude,
+      timeZone: command.timeZone.trim(),
+      northAngle: command.northAngle ?? site.northAngle ?? 0,
+      locationLabel: command.locationLabel ?? site.locationLabel ?? '',
+      // A rose fitted for the old coordinates must never silently survive a
+      // location change. Keeping it for timezone/north edits is safe.
+      windClimateCache: coordinatesChanged ? null : site.windClimateCache || null,
+    };
+  });
+
+  return commandSuccess(project, nextProject, command, [
+    { operation: 'replace', entityType: 'siteLocation', id: project.building.site?.boundaryId || 'site' },
+  ]);
+}
+
+function cacheSiteWindClimate(project, command) {
+  const site = project.building.site || {};
+  const cache = command.cache;
+  const expectedLocationKey =
+    Number.isFinite(site.latitude) && Number.isFinite(site.longitude)
+      ? `${site.latitude.toFixed(4)}|${site.longitude.toFixed(4)}`
+      : null;
+  if (!expectedLocationKey) {
+    return commandError(
+      project,
+      command,
+      'site-location-required',
+      'Set a valid site location before caching wind data.',
+    );
+  }
+  if (!cache || typeof cache !== 'object' || cache.locationKey !== expectedLocationKey) {
+    return commandError(
+      project,
+      command,
+      'wind-climate-location-mismatch',
+      'Wind climate coordinates do not match the current site.',
+    );
+  }
+  if (!Array.isArray(cache.windRose) || cache.windRose.length !== 16) {
+    return commandError(
+      project,
+      command,
+      'invalid-wind-climate-rose',
+      'Wind climate must contain 16 direction sectors.',
+    );
+  }
+
+  let frequencyTotal = 0;
+  const windRose = [];
+  const directions = new Set();
+  for (const sector of cache.windRose) {
+    const directionDeg = Number(sector?.directionDeg);
+    const frequency = Number(sector?.frequency);
+    const weibullK = Number(sector?.weibullK);
+    const weibullC = Number(sector?.weibullC);
+    if (
+      !Number.isFinite(directionDeg) ||
+      directionDeg < 0 ||
+      directionDeg >= 360 ||
+      !Number.isFinite(frequency) ||
+      frequency < 0 ||
+      !Number.isFinite(weibullK) ||
+      weibullK <= 0 ||
+      !Number.isFinite(weibullC) ||
+      weibullC <= 0
+    ) {
+      return commandError(project, command, 'invalid-wind-climate-rose', 'Wind climate sectors are invalid.');
+    }
+    frequencyTotal += frequency;
+    directions.add(directionDeg);
+    windRose.push({ directionDeg, frequency, weibullK, weibullC });
+  }
+  if (!(frequencyTotal > 0) || directions.size !== 16) {
+    return commandError(
+      project,
+      command,
+      'invalid-wind-climate-rose',
+      'Wind climate frequencies must total above zero.',
+    );
+  }
+
+  const prevailingDirectionDeg = Number(cache.prevailingDirectionDeg);
+  const prevailingMeanSpeed = Number(cache.prevailingMeanSpeed);
+  if (!Number.isFinite(prevailingDirectionDeg) || !Number.isFinite(prevailingMeanSpeed) || prevailingMeanSpeed <= 0) {
+    return commandError(
+      project,
+      command,
+      'invalid-wind-climate-summary',
+      'Wind climate prevailing conditions are invalid.',
+    );
+  }
+
+  const finiteOr = (value, fallback) =>
+    value == null || value === '' || !Number.isFinite(Number(value)) ? fallback : Number(value);
+  const stored = {
+    schemaVersion: 1,
+    locationKey: expectedLocationKey,
+    source: String(cache.source || 'Historical wind climate'),
+    sourceUrl: String(cache.sourceUrl || ''),
+    period: String(cache.period || ''),
+    startDate: String(cache.startDate || ''),
+    endDate: String(cache.endDate || ''),
+    cachedAt: String(cache.cachedAt || ''),
+    sampleCount: finiteOr(cache.sampleCount, null),
+    meanSpeed: finiteOr(cache.meanSpeed, null),
+    heightM: finiteOr(cache.heightM, 10),
+    requestedLatitude: finiteOr(cache.requestedLatitude, site.latitude),
+    requestedLongitude: finiteOr(cache.requestedLongitude, site.longitude),
+    gridLatitude: finiteOr(cache.gridLatitude, null),
+    gridLongitude: finiteOr(cache.gridLongitude, null),
+    elevationM: finiteOr(cache.elevationM, null),
+    sectorCount: 16,
+    windRose: windRose.map((sector) => ({ ...sector, frequency: sector.frequency / frequencyTotal })),
+    prevailingDirectionDeg: ((prevailingDirectionDeg % 360) + 360) % 360,
+    prevailingMeanSpeed,
+  };
+  const nextProject = updateSite(project, (currentSite) => ({ ...currentSite, windClimateCache: stored }));
+  return commandSuccess(project, nextProject, command, [
+    { operation: 'replace', entityType: 'siteWindClimate', id: expectedLocationKey },
+  ]);
+}
+
+function upsertSolarStudyTarget(project, command) {
+  const id = String(command.id || '').trim();
+  const name = String(command.name || '').trim();
+  const kind = command.kind;
+  const polygon = Array.isArray(command.polygon)
+    ? command.polygon.map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+    : [];
+
+  if (!id) return commandError(project, command, 'solar-target-id-required', 'A stable target id is required.');
+  if (!name) return commandError(project, command, 'solar-target-name-required', 'Give the assessment target a name.');
+  if (!['neighbor', 'amenity'].includes(kind)) {
+    return commandError(project, command, 'invalid-solar-target-kind', 'Target kind must be neighbor or amenity.');
+  }
+  if (!isSimplePolygon(polygon)) {
+    return commandError(
+      project,
+      command,
+      'invalid-solar-target-polygon',
+      'Assessment target must be a simple non-zero-area polygon.',
+    );
+  }
+
+  const target = { id, name, kind, polygon };
+  const nextProject = updateSite(project, (site) => {
+    const targets = [...(site.solarStudyTargets || [])];
+    const index = targets.findIndex((entry) => entry.id === id);
+    if (index >= 0) targets[index] = target;
+    else targets.push(target);
+    return { ...site, solarStudyTargets: targets };
+  });
+  return commandSuccess(project, nextProject, command, [{ operation: 'replace', entityType: 'solarStudyTarget', id }]);
+}
+
+function removeSolarStudyTarget(project, command) {
+  const id = String(command.id || '').trim();
+  if (!id) return commandError(project, command, 'solar-target-id-required', 'A target id is required.');
+  const targets = project.building.site?.solarStudyTargets || [];
+  if (!targets.some((entry) => entry.id === id)) {
+    return commandError(project, command, 'solar-target-not-found', 'Assessment target was not found.', { id });
+  }
+  const nextProject = updateSite(project, (site) => ({
+    ...site,
+    solarStudyTargets: (site.solarStudyTargets || []).filter((entry) => entry.id !== id),
+  }));
+  return commandSuccess(project, nextProject, command, [{ operation: 'remove', entityType: 'solarStudyTarget', id }]);
 }
 
 function configureSiteSetbacks(project, command) {
@@ -4230,6 +4442,14 @@ export function executeBuildingCommand(project, command) {
       return definePropertyBoundary(project, command);
     case BUILDING_COMMANDS.CONFIGURE_SITE_SETBACKS:
       return configureSiteSetbacks(project, command);
+    case BUILDING_COMMANDS.CONFIGURE_SITE_LOCATION:
+      return configureSiteLocation(project, command);
+    case BUILDING_COMMANDS.CACHE_SITE_WIND_CLIMATE:
+      return cacheSiteWindClimate(project, command);
+    case BUILDING_COMMANDS.UPSERT_SOLAR_STUDY_TARGET:
+      return upsertSolarStudyTarget(project, command);
+    case BUILDING_COMMANDS.REMOVE_SOLAR_STUDY_TARGET:
+      return removeSolarStudyTarget(project, command);
     case BUILDING_COMMANDS.CONFIGURE_RECTANGULAR_SITE:
       return configureRectangularSite(project, command);
     case BUILDING_COMMANDS.CONFIGURE_REGULAR_PARKING_PLAN:

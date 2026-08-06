@@ -29,6 +29,14 @@ function stableProjectId(projectId, suffix) {
   return `${projectId || 'project'}_${suffix}`;
 }
 
+function cloneWindClimateCache(cache) {
+  if (!cache || typeof cache !== 'object' || !Array.isArray(cache.windRose)) return null;
+  return {
+    ...cache,
+    windRose: cache.windRose.map((sector) => ({ ...sector })),
+  };
+}
+
 function createSystem(projectId, kind, overrides = {}) {
   return {
     id: stableProjectId(projectId, `${kind}_system`),
@@ -118,6 +126,17 @@ export function createCanonicalBuilding(projectId, floors = [], overrides = {}) 
       boundaryId: stableProjectId(projectId, 'property_boundary'),
       boundary: [],
       northAngle: 0,
+      // Geographic location, needed for sun and shadow studies. Left null until
+      // the user states it: a plausible-looking default would silently produce
+      // shadows for the wrong place, which is worse than producing none.
+      //
+      latitude: null,
+      longitude: null,
+      // IANA civil timezone. Solar geometry still uses the absolute instant;
+      // this tells the UI which instant a chosen local clock time means,
+      // including daylight-saving transitions.
+      timeZone: null,
+      locationLabel: '',
       roadEdges: [],
       edgeSetbacks: [],
       setbacks: { front: null, rear: null, left: null, right: null },
@@ -125,6 +144,15 @@ export function createCanonicalBuilding(projectId, floors = [], overrides = {}) 
       buildableEnvelope: [],
       lotSetup: null,
       ...overrides.site,
+      // Explicit assessment masks for neighbouring lots and outdoor amenity.
+      // The property boundary remains the built-in target.
+      solarStudyTargets: (overrides.site?.solarStudyTargets || []).map((target) => ({
+        ...target,
+        polygon: (target.polygon || []).map((point) => ({ ...point })),
+      })),
+      // Compact fitted climate, not the raw hourly response. Keeping it on the
+      // site makes an already-loaded wind study portable and offline-capable.
+      windClimateCache: cloneWindClimateCache(overrides.site?.windClimateCache),
       parkingPlan: createParkingPlan(overrides.site?.parkingPlan),
     },
     levelIds: floors.map((floor) => floor.id),
@@ -253,6 +281,11 @@ export function syncCanonicalBuilding(project) {
       documentation: createDocumentationModel(project.building.documentation),
       site: {
         ...project.building.site,
+        solarStudyTargets: (project.building.site?.solarStudyTargets || []).map((target) => ({
+          ...target,
+          polygon: (target.polygon || []).map((point) => ({ ...point })),
+        })),
+        windClimateCache: cloneWindClimateCache(project.building.site?.windClimateCache),
         parkingPlan: createParkingPlan(project.building.site?.parkingPlan),
       },
       systems: {

@@ -1,0 +1,631 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.headerIcon {
+  width: 14px;
+  height: 14px;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.toggle,
+.toggleActive {
+  min-width: 42px;
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card-bg);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.toggleActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* --- Location: one line once it is set, a form only while editing --- */
+
+.locationSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.locationText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linkButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.locationForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.field > span {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-bg);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.field textarea {
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 5px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-bg);
+  color: var(--color-text-primary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.primaryButton:hover {
+  background: var(--color-accent-hover);
+}
+
+.secondaryButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.error {
+  margin: 0;
+  color: #a8392f;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.hint,
+.disclaimer {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* --- Mode --- */
+
+.modeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modeRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg-alt);
+}
+
+/*
+ * Recompute indicator.
+ *
+ * Held invisible for the first fraction of a second, so the common case — a
+ * switch that resolves in well under 100 ms — shows nothing at all. Flashing a
+ * progress bar for one frame reads as a glitch, not as feedback. Only work that
+ * actually takes long enough to notice gets an indicator.
+ */
+.progressTrack {
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: transparent;
+}
+
+/*
+ * 250 ms before anything shows. Measured switches land between 50 ms and 175 ms,
+ * which reads as instant thanks to the button responding on the next frame — an
+ * indicator there would flash for a few frames and look like a rendering bug.
+ * Only a plan heavy enough to genuinely stall gets one.
+ */
+.progressTrack[data-busy] {
+  background: var(--color-border-subtle);
+  animation: sun-study-progress-reveal 140ms linear 250ms both;
+}
+
+.progressBar {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--color-accent);
+  opacity: 0;
+}
+
+.progressTrack[data-busy] .progressBar {
+  opacity: 1;
+  animation: sun-study-progress-slide 900ms ease-in-out 250ms infinite;
+}
+
+@keyframes sun-study-progress-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sun-study-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressTrack[data-busy] .progressBar {
+    width: 100%;
+    animation: none;
+  }
+}
+
+.modeButton,
+.modeButtonActive {
+  padding: 5px 2px;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modeButtonActive {
+  background: var(--color-card-bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  color: var(--color-accent);
+}
+
+/* --- Date --- */
+
+.dateRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dateInput {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-bg);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dateReadout {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.presetRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.presetButton,
+.presetButtonActive {
+  padding: 4px 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.presetButtonActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+}
+
+/* --- Time, with the daylight window painted onto the track --- */
+
+.timeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.timeHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.timeValue {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.sunUp,
+.sunDown {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sunUp {
+  color: #a8791f;
+}
+
+.sunDown {
+  color: var(--color-text-tertiary);
+}
+
+/*
+ * The track is a night bar with the daylight window lit between the two custom
+ * properties the component sets from sunrise and sunset. Dragging into the dark
+ * region visibly means "the sun is down", with no text to read.
+ */
+.timeSlider {
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.timeSlider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    #2f3a4d 0%,
+    #2f3a4d var(--daylight-start, 25%),
+    #f0c96a var(--daylight-start, 25%),
+    #ffe9a8 50%,
+    #f0c96a var(--daylight-end, 75%),
+    #2f3a4d var(--daylight-end, 75%),
+    #2f3a4d 100%
+  );
+}
+
+.timeSlider::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    #2f3a4d 0%,
+    #2f3a4d var(--daylight-start, 25%),
+    #f0c96a var(--daylight-start, 25%),
+    #ffe9a8 50%,
+    #f0c96a var(--daylight-end, 75%),
+    #2f3a4d var(--daylight-end, 75%),
+    #2f3a4d 100%
+  );
+}
+
+.timeSlider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -3px;
+  border: 2px solid var(--color-card-bg);
+  border-radius: 50%;
+  appearance: none;
+  background: var(--color-text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.timeSlider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-card-bg);
+  border-radius: 50%;
+  background: var(--color-text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.timeSlider:focus {
+  outline: none;
+}
+
+.timeSlider:focus-visible::-webkit-slider-thumb {
+  border-color: var(--color-accent);
+}
+
+.timeScale {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeScaleNote {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
+.assessmentBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: opacity 120ms ease;
+}
+
+.assessmentBlock[data-stale] {
+  opacity: 0.62;
+}
+
+.resultCard {
+  padding: 7px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--color-border));
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+}
+
+.resultHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.resultHeader strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.resultHeader span {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultCard p {
+  margin: 3px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+/* Coordinate entry, folded behind the map since most people never need it. */
+.coordDetails {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg-alt);
+}
+
+.coordSummary {
+  padding: 5px 8px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.coordSummary::-webkit-details-marker {
+  display: none;
+}
+
+.coordSummary::before {
+  content: '›';
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 120ms ease;
+}
+
+.coordDetails[open] .coordSummary::before {
+  transform: rotate(90deg);
+}
+
+.coordDetails .fieldGrid {
+  padding: 0 8px 8px;
+}
+
+/* --- Advanced, folded away by default --- */
+
+.advancedToggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.advancedToggle:hover {
+  color: var(--color-text-primary);
+}
+
+.chevron,
+.chevronOpen {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.advancedBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg-alt);
+}
+
+.targetManager,
+.targetForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.targetManager {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.subheading {
+  color: var(--color-text-primary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.targetRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+/* Touch targets on tablets, matching the app-wide coarse-pointer treatment. */
+@media (pointer: coarse) {
+  .toggle,
+  .toggleActive,
+  .primaryButton,
+  .secondaryButton,
+  .modeButton,
+  .modeButtonActive,
+  .presetButton,
+  .presetButtonActive {
+    min-height: 44px;
+  }
+
+  .field input,
+  .field select,
+  .dateInput {
+    min-height: 40px;
+  }
+
+  .timeSlider {
+    height: 44px;
+  }
+}

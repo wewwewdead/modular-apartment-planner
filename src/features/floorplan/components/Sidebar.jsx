@@ -14,6 +14,12 @@ import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
 import { getAnnotationDisplayLabel } from '@/annotations/format';
 import ProjectLifecyclePanel from './ProjectLifecyclePanel';
+import SunStudyPanel from './SunStudyPanel';
+import DaylightPanel from './DaylightPanel';
+import SolarAccessPanel from './SolarAccessPanel';
+import WindStudyPanel from './WindStudyPanel';
+import { useDaylightStudy } from '../context/DaylightStudyContext';
+import { useWindStudy } from '../context/WindStudyContext';
 import styles from './Sidebar.module.css';
 
 function ChevronSvg({ collapsed }) {
@@ -97,9 +103,15 @@ export default function Sidebar() {
     activePhaseId,
     phaseViewMode,
     lifecycleStage,
+    sunStudy,
+    daylight,
+    solarAccess,
+    windStudy,
     dispatch: editorDispatch,
   } = useEditor();
   const confirm = useConfirmDialog();
+  const daylightStudy = useDaylightStudy();
+  const wind = useWindStudy();
   const orderedFloors = getOrderedFloors(project);
   const orderedPhases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
@@ -309,6 +321,62 @@ export default function Sidebar() {
           onChange={(e) => dispatch({ type: 'PROJECT_SET_NAME', name: e.target.value })}
         />
       </Section>
+
+      {/* Sits above the lifecycle block because it collapses to a single line
+          when idle, and because a view toggle you reach for constantly should
+          not be behind a long form. */}
+      <SunStudyPanel
+        project={project}
+        sunStudy={sunStudy}
+        study={daylightStudy.sunStudy}
+        recomputing={daylightStudy.sunRecomputing}
+        lastCommand={derived?.lastCommand}
+        onExecuteCommand={(command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command })}
+        onPatch={(patch) => editorDispatch({ type: 'SET_SUN_STUDY', patch })}
+        onToggle={() => editorDispatch({ type: 'TOGGLE_SUN_STUDY' })}
+      />
+
+      {/* Sits with the sun study because the two answer the same question from
+          opposite ends: one is about direct sun on a given day, the other about
+          diffuse light on the worst of them. */}
+      <DaylightPanel
+        project={project}
+        daylight={daylight}
+        study={daylightStudy.study}
+        gridStatus={daylightStudy.gridStatus}
+        gridProgress={daylightStudy.gridProgress}
+        gridError={daylightStudy.gridError}
+        gridStale={daylightStudy.gridStale}
+        onPatch={(patch) => editorDispatch({ type: 'SET_DAYLIGHT_STUDY', patch })}
+        onToggle={() => editorDispatch({ type: 'TOGGLE_DAYLIGHT_STUDY' })}
+      />
+
+      {/* Direct sun on the building's own skin. Reads the same site location
+          the sun study sets, so it sits with the other two. */}
+      <SolarAccessPanel
+        project={project}
+        solarAccess={solarAccess}
+        study={daylightStudy.solarStudy}
+        status={daylightStudy.solarStatus}
+        progress={daylightStudy.solarProgress}
+        error={daylightStudy.solarError}
+        stale={daylightStudy.solarStale}
+        onPatch={(patch) => editorDispatch({ type: 'SET_SOLAR_ACCESS', patch })}
+        onToggle={() => editorDispatch({ type: 'TOGGLE_SOLAR_ACCESS' })}
+      />
+
+      {/* Wind is a separate solver and worker, not another solar mode. */}
+      <WindStudyPanel
+        windStudy={windStudy}
+        study={wind.study}
+        status={wind.status}
+        progress={wind.progress}
+        error={wind.error}
+        stale={wind.stale}
+        climate={wind.climate}
+        onPatch={(patch) => editorDispatch({ type: 'SET_WIND_STUDY', patch })}
+        onToggle={() => editorDispatch({ type: 'TOGGLE_WIND_STUDY' })}
+      />
 
       <ProjectLifecyclePanel
         project={project}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { intersectionArea, subtractPolygons } from './polygonBoolean';
+import { intersectionArea, subtractPolygons, unionRegions } from './polygonBoolean';
 
 const rect = (x, y, w, h) => [
   { x, y },
@@ -62,5 +62,16 @@ describe('subtractPolygons', () => {
     expect(result[0].outline).toHaveLength(4);
     expect(result[0].holes).toHaveLength(1);
     expect(result[0].holes[0]).toHaveLength(4);
+  });
+});
+
+describe('unionRegions', () => {
+  it('preserves a courtyard hole when merging regions', () => {
+    const ring = { outline: rect(0, 0, 100, 100), holes: [rect(20, 20, 60, 60)] };
+    const detached = { outline: rect(200, 0, 20, 20), holes: [] };
+    const result = unionRegions([ring, detached]);
+
+    expect(result).toHaveLength(2);
+    expect(result.find((region) => region.holes.length)?.holes).toHaveLength(1);
   });
 });

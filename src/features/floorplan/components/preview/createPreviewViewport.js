@@ -5,6 +5,7 @@ import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
 import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
 import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
+import { createWindPreviewLayer } from './buildWindPreviewLayer';
 
 let axisIndicatorInstance = null;
 
@@ -23,6 +24,9 @@ export function createPreviewViewport(container) {
     powerPreference: 'high-performance',
   });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // PCFSoftShadowMap is deprecated as of three 0.18x and silently falls back to
+  // this anyway; naming it directly keeps the console clean.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(container.clientWidth || 1, container.clientHeight || 1, false);
   renderer.domElement.style.width = '100%';
@@ -36,16 +40,26 @@ export function createPreviewViewport(container) {
     onChange: () => startRenderLoop(),
   });
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.72));
-  scene.add(new THREE.HemisphereLight(0xdde7f4, 0xe6ded0, 0.7));
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
+  const skyLight = new THREE.HemisphereLight(0xdde7f4, 0xe6ded0, 0.7);
+  scene.add(ambientLight);
+  scene.add(skyLight);
+
+  // Default is a decorative three-quarter key light. When a sun study is
+  // running, `setSun` re-aims this same light at the real solar position and
+  // switches on shadow casting.
   const keyLight = new THREE.DirectionalLight(0xffffff, 1.05);
   keyLight.position.set(3500, 5000, 2000);
+  keyLight.shadow.mapSize.set(2048, 2048);
   scene.add(keyLight);
+  scene.add(keyLight.target);
+  let sunState = null;
 
   let animationFrame = 0;
   let renderLoopRunning = false;
   let worldRoot = null;
   let selectionOverlay = null;
+  let windPreviewLayer = null;
   let gridHelper = null;
   let currentBounds = null;
   let pickHandler = null;
@@ -179,6 +193,8 @@ export function createPreviewViewport(container) {
       walkNavigation.update(deltaSeconds);
     }
 
+    windPreviewLayer?.update(deltaSeconds);
+
     emitCompassHeading();
     renderer.render(scene, camera);
     if (axisIndicatorInstance) {
@@ -186,7 +202,7 @@ export function createPreviewViewport(container) {
     }
 
     // In walk mode, always continue. In inspect mode, stop when settled.
-    if (navigationMode === 'walk' || dampingFramesRemaining > 0) {
+    if (navigationMode === 'walk' || dampingFramesRemaining > 0 || windPreviewLayer?.animated) {
       animationFrame = window.requestAnimationFrame(renderFrame);
     } else {
       renderLoopRunning = false;
@@ -323,7 +339,99 @@ export function createPreviewViewport(container) {
   // Initial render
   startRenderLoop();
 
+  /** Scene bounding sphere, falling back to a sane box before a world exists. */
+  function sceneSphere() {
+    if (currentBounds && !currentBounds.isEmpty()) {
+      return currentBounds.getBoundingSphere(new THREE.Sphere());
+    }
+    return new THREE.Sphere(new THREE.Vector3(0, 0, 0), 10000);
+  }
+
+  /**
+   * Point the key light at the real sun, or restore the decorative default.
+   *
+   * Plan space maps to world as (x, elevation, y), and a compass bearing
+   * becomes a plan direction of (sin, -cos) once the site's north angle is
+   * added — the same convention the 2D shadow projection uses, so the two views
+   * cannot disagree about where the sun is.
+   */
+  function applySun() {
+    const sphere = sceneSphere();
+    const radius = Math.max(sphere.radius, 1000);
+
+    if (!sunState?.enabled) {
+      keyLight.castShadow = false;
+      renderer.shadowMap.enabled = false;
+      keyLight.position.set(3500, 5000, 2000);
+      keyLight.target.position.set(0, 0, 0);
+      keyLight.target.updateMatrixWorld();
+      keyLight.intensity = 1.05;
+      keyLight.color.setHex(0xffffff);
+      ambientLight.intensity = 0.72;
+      skyLight.intensity = 0.7;
+      requestRender();
+      return;
+    }
+
+    if (!(sunState.altitude > 0)) {
+      // Below the horizon: no direct sun at all. Keep a dim sky wash so the
+      // model stays readable rather than going black.
+      keyLight.castShadow = false;
+      renderer.shadowMap.enabled = false;
+      keyLight.intensity = 0;
+      ambientLight.intensity = 0.34;
+      skyLight.intensity = 0.3;
+      requestRender();
+      return;
+    }
+
+    const bearing = (sunState.northAngle * Math.PI) / 180 + sunState.azimuth;
+    const horizontal = Math.cos(sunState.altitude);
+    const direction = new THREE.Vector3(
+      horizontal * Math.sin(bearing),
+      Math.sin(sunState.altitude),
+      horizontal * -Math.cos(bearing),
+    );
+
+    const distance = radius * 3 + 1000;
+    keyLight.position.copy(sphere.center).addScaledVector(direction, distance);
+    keyLight.target.position.copy(sphere.center);
+    keyLight.target.updateMatrixWorld();
+
+    // A low sun is dimmer and warmer for the same reason its shadows are long:
+    // its light takes a longer path through the atmosphere.
+    const elevationFactor = Math.min(1, Math.sin(sunState.altitude) / Math.sin(Math.PI / 6));
+    keyLight.intensity = 0.45 + 1.15 * elevationFactor;
+    keyLight.color.setRGB(1, 0.72 + 0.28 * elevationFactor, 0.48 + 0.52 * elevationFactor);
+    ambientLight.intensity = 0.3 + 0.2 * elevationFactor;
+    skyLight.intensity = 0.42 + 0.18 * elevationFactor;
+
+    keyLight.castShadow = true;
+    renderer.shadowMap.enabled = true;
+
+    // Fit the orthographic shadow camera to the scene. Sized to the bounding
+    // sphere so it stays stable as the sun swings around rather than snapping
+    // resolution at every time step.
+    const shadowCamera = keyLight.shadow.camera;
+    shadowCamera.left = -radius * 1.15;
+    shadowCamera.right = radius * 1.15;
+    shadowCamera.top = radius * 1.15;
+    shadowCamera.bottom = -radius * 1.15;
+    shadowCamera.near = Math.max(1, distance - radius * 2);
+    shadowCamera.far = distance + radius * 2;
+    shadowCamera.updateProjectionMatrix();
+    // Shadow acne scales with scene size; these are tuned for millimetre units.
+    keyLight.shadow.bias = -0.0006;
+    keyLight.shadow.normalBias = radius * 0.004;
+
+    requestRender();
+  }
+
   return {
+    setSun(nextSun) {
+      sunState = nextSun || null;
+      applySun();
+    },
     setWorld(nextRoot, bounds, groundLevel = 0) {
       const hadWorld = !!worldRoot;
       const walkPose = navigationMode === 'walk' ? walkNavigation.capturePose() : null;
@@ -366,6 +474,8 @@ export function createPreviewViewport(container) {
         walkNavigation.restorePose(walkPose);
       }
 
+      // The shadow camera is fitted to the scene bounds, which just changed.
+      applySun();
       requestRender();
     },
     resetView() {
@@ -421,6 +531,16 @@ export function createPreviewViewport(container) {
       }
       requestRender();
     },
+    setWindStudy(study, options = {}) {
+      if (windPreviewLayer) {
+        scene.remove(windPreviewLayer.group);
+        windPreviewLayer.dispose();
+        windPreviewLayer = null;
+      }
+      windPreviewLayer = createWindPreviewLayer(study, options);
+      if (windPreviewLayer) scene.add(windPreviewLayer.group);
+      requestRender();
+    },
     requestRender,
     setActiveFloorContext(nextContext = {}) {
       const previousFloorId = activeFloorContext.floorId;
@@ -471,6 +591,12 @@ export function createPreviewViewport(container) {
         scene.remove(selectionOverlay);
         disposeScene(selectionOverlay, { disposeMaterials: true });
         selectionOverlay = null;
+      }
+
+      if (windPreviewLayer) {
+        scene.remove(windPreviewLayer.group);
+        windPreviewLayer.dispose();
+        windPreviewLayer = null;
       }
 
       if (worldRoot) {

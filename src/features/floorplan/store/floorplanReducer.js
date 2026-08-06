@@ -34,6 +34,10 @@ import {
 import { propagateWallEdit } from '@/domain/modelGraph';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
 import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingCommands';
+import { applySunStudyPatch, createSunStudyState } from '@/analysis/sunStudyState';
+import { applyDaylightPatch, createDaylightState } from '@/analysis/daylightState';
+import { applySolarAccessPatch, createSolarAccessState } from '@/analysis/solarAccessState';
+import { applyWindStudyPatch, createWindStudyState } from '@/analysis/windState';
 import { validateBuildingCoordination } from '@/domain/buildingGraph';
 import { deriveSiteFeasibility } from '@/domain/siteModels';
 import { deriveApartmentProgram } from '@/domain/apartmentProgram';
@@ -161,6 +165,10 @@ function createInitialEditorState(activeFloorId = null) {
     lifecycleStage: 'brief',
     lastRejection: null,
     wallDetailEditor: null,
+    sunStudy: createSunStudyState(),
+    daylight: createDaylightState(),
+    solarAccess: createSolarAccessState(),
+    windStudy: createWindStudyState(),
   };
 }
 
@@ -1423,6 +1431,60 @@ function reduceEditorState(editorState, action) {
 
     case 'TOGGLE_GRID':
       return { ...editorState, showGrid: !editorState.showGrid };
+
+    case 'TOGGLE_SUN_STUDY':
+      return {
+        ...editorState,
+        sunStudy: applySunStudyPatch(editorState.sunStudy, { enabled: !editorState.sunStudy.enabled }),
+      };
+
+    case 'SET_SUN_STUDY': {
+      const sunStudy = applySunStudyPatch(editorState.sunStudy, action.patch || {});
+      // The scrubber fires on every pointer move; bail out when nothing
+      // actually changed so the canvas does not re-render for free.
+      const unchanged = Object.keys(sunStudy).every((key) => sunStudy[key] === editorState.sunStudy[key]);
+      return unchanged ? editorState : { ...editorState, sunStudy };
+    }
+
+    case 'TOGGLE_DAYLIGHT_STUDY':
+      return {
+        ...editorState,
+        daylight: applyDaylightPatch(editorState.daylight, { enabled: !editorState.daylight.enabled }),
+      };
+
+    case 'SET_DAYLIGHT_STUDY': {
+      const daylight = applyDaylightPatch(editorState.daylight, action.patch || {});
+      // Number inputs fire on every keystroke, and a settings change that
+      // resolves to the same value would otherwise restart a worker run.
+      const unchanged = Object.keys(daylight).every((key) => daylight[key] === editorState.daylight[key]);
+      return unchanged ? editorState : { ...editorState, daylight };
+    }
+
+    case 'TOGGLE_SOLAR_ACCESS':
+      return {
+        ...editorState,
+        solarAccess: applySolarAccessPatch(editorState.solarAccess, { enabled: !editorState.solarAccess.enabled }),
+      };
+
+    case 'SET_SOLAR_ACCESS': {
+      const solarAccess = applySolarAccessPatch(editorState.solarAccess, action.patch || {});
+      // A settings change that resolves to the same value must not restart a
+      // worker run that takes seconds.
+      const unchanged = Object.keys(solarAccess).every((key) => solarAccess[key] === editorState.solarAccess[key]);
+      return unchanged ? editorState : { ...editorState, solarAccess };
+    }
+
+    case 'TOGGLE_WIND_STUDY':
+      return {
+        ...editorState,
+        windStudy: applyWindStudyPatch(editorState.windStudy, { enabled: !editorState.windStudy.enabled }),
+      };
+
+    case 'SET_WIND_STUDY': {
+      const windStudy = applyWindStudyPatch(editorState.windStudy, action.patch || {});
+      const unchanged = Object.keys(windStudy).every((key) => windStudy[key] === editorState.windStudy[key]);
+      return unchanged ? editorState : { ...editorState, windStudy };
+    }
 
     case 'TOGGLE_SNAP':
       return { ...editorState, snapEnabled: !editorState.snapEnabled };

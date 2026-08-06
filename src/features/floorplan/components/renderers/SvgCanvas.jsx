@@ -61,6 +61,7 @@ export default function SvgCanvas() {
     activePhaseId,
     phaseViewMode,
     lastRejection,
+    sunStudy,
     dispatch: editorDispatch,
   } = editor;
 
@@ -559,6 +560,7 @@ export default function SvgCanvas() {
                   floor={floor}
                   filteredFloor={filteredFloor}
                   filteredProject={filteredProject}
+                  sunStudy={sunStudy}
                   structuralLoadPath={derived?.structuralLoadPath}
                   viewMode={viewMode}
                   selectedId={selectedId}

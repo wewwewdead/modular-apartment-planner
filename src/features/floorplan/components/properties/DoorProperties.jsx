@@ -9,6 +9,12 @@ function DoorProperties({ door, wall, dispatch, floorId, u, phases }) {
   };
 
   const doorType = door.type || 'swing';
+  const ventilation = {
+    operable: door.ventilation?.operable ?? true,
+    openFraction: door.ventilation?.openFraction ?? 0,
+    dischargeCoefficient: door.ventilation?.dischargeCoefficient ?? 0.62,
+  };
+  const updateVentilation = (updates) => updateDoor({ ventilation: { ...ventilation, ...updates } });
 
   return (
     <div>
@@ -89,6 +95,41 @@ function DoorProperties({ door, wall, dispatch, floorId, u, phases }) {
           </button>
         </>
       )}
+      <div className={styles.subtitle}>Natural Ventilation</div>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          marginBottom: '8px',
+          color: 'var(--color-text-secondary)',
+          fontSize: '12px',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={ventilation.operable}
+          onChange={(event) => updateVentilation({ operable: event.target.checked })}
+        />
+        Participates in airflow model
+      </label>
+      <InputField
+        label="Open Fraction"
+        type="number"
+        suffix="%"
+        step={5}
+        value={Math.round(ventilation.openFraction * 100)}
+        readOnly={!ventilation.operable}
+        onChange={(value) => updateVentilation({ openFraction: Math.min(1, Math.max(0, value / 100)) })}
+      />
+      <InputField
+        label="Discharge Cd"
+        type="number"
+        step={0.01}
+        value={ventilation.dischargeCoefficient}
+        readOnly={!ventilation.operable}
+        onChange={(value) => updateVentilation({ dischargeCoefficient: Math.min(1, Math.max(0.05, value)) })}
+      />
       {wall && <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />}
     </div>
   );

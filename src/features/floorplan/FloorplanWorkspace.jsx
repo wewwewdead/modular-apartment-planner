@@ -6,6 +6,8 @@ import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
 import styles from '@/app/App.module.css';
 import modalStyles from '@/ui/Modal.module.css';
 import { FloorplanProvider, useEditor, useFloorplanContext } from './context/FloorplanContext';
+import { DaylightStudyProvider } from './context/DaylightStudyContext';
+import { WindStudyProvider } from './context/WindStudyContext';
 import Toolbar from './components/Toolbar';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
@@ -200,7 +202,14 @@ export default function FloorplanWorkspace({ initialProject, isPlayground = fals
       <ClipboardProvider>
         <ConfirmDialogProvider>
           <FloorplanProvider initialProject={initialProject} isPlayground={isPlayground}>
-            <FloorplanShell />
+            {/* Inside the floorplan provider, because the study reads the
+                phase-filtered project; outside the shell, because the sidebar
+                panel and the canvas overlay must share one result. */}
+            <DaylightStudyProvider>
+              <WindStudyProvider>
+                <FloorplanShell />
+              </WindStudyProvider>
+            </DaylightStudyProvider>
           </FloorplanProvider>
         </ConfirmDialogProvider>
       </ClipboardProvider>

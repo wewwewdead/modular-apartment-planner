@@ -248,6 +248,55 @@
     0 0 0 1px rgba(45, 95, 142, 0.08);
 }
 
+/*
+ * Sun & Shadow toggle. Carries a text label rather than an icon alone: it is
+ * the entry point to a whole study, and an unlabelled sun glyph next to the
+ * view modes reads as decoration.
+ */
+.sunToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.sunToggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--color-text-primary);
+}
+
+.sunToggleActive {
+  composes: sunToggle;
+  border-color: rgba(214, 158, 46, 0.45);
+  background: rgba(240, 201, 106, 0.16);
+  color: #8a6516;
+  font-weight: 600;
+}
+
+.sunToggleIcon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sunToggleLabel {
+  line-height: 1;
+}
+
 /* Group label */
 .groupLabel {
   font-family: var(--font-heading);

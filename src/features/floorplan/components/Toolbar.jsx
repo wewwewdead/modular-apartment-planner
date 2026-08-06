@@ -45,9 +45,12 @@ import {
   SnapIcon,
   DetectRoomsIcon,
   SidebarIcon,
+  SunIcon,
+  WindIcon,
   PropertiesIcon,
   FilletIcon,
 } from '@/ui/ToolbarIcons';
+import { siteSupportsSunStudy } from '@/analysis/sunStudyState';
 import { FIXTURE_TYPES } from '@/editor/tools';
 import Tooltip from './Tooltip';
 import styles from './Toolbar.module.css';
@@ -100,6 +103,8 @@ export default function Toolbar({
     activePhaseId,
     selectedId,
     selectedType,
+    sunStudy,
+    windStudy,
     dispatch: editorDispatch,
   } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
@@ -190,6 +195,34 @@ export default function Toolbar({
     editorDispatch({ type: 'DESELECT' });
     editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Redid last change.' });
   }, [canRedo, dispatch, editorDispatch]);
+
+  const siteIsLocated = siteSupportsSunStudy(project.building?.site);
+  const sunStudyTooltip = siteIsLocated
+    ? sunStudy?.enabled
+      ? 'Hide Sun & Shadow'
+      : 'Show Sun & Shadow'
+    : 'Sun & Shadow — set the site location first';
+
+  const handleToggleSunStudy = () => {
+    if (!siteIsLocated) {
+      // Nothing to show yet. Point at the panel that can fix it rather than
+      // silently doing nothing, which is what a disabled button would do.
+      editorDispatch({
+        type: 'SET_STATUS_MESSAGE',
+        message: 'Set the site location in the Sun & Shadow panel to cast shadows.',
+      });
+      document.querySelector('[data-panel="sun-study"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    editorDispatch({ type: 'TOGGLE_SUN_STUDY' });
+  };
+
+  const handleToggleWindStudy = () => {
+    editorDispatch({ type: 'TOGGLE_WIND_STUDY' });
+    if (!windStudy?.enabled) {
+      document.querySelector('[data-panel="wind-study"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
 
   const handleDetectRooms = () => {
     const floor = project.floors.find((f) => f.id === activeFloorId);
@@ -396,6 +429,36 @@ export default function Toolbar({
           </button>
         ))}
       </div>
+
+      {/*
+        Sun & Shadow rides with the view modes rather than the Display group.
+        It is a view state like Plan or Section, and the Display group sits
+        roughly 800px past the fold on a 1680px screen — a toggle nobody can
+        see is no better than no toggle at all.
+      */}
+      <Tooltip label={sunStudyTooltip}>
+        <button
+          className={`${styles.sunToggle} ${sunStudy?.enabled ? styles.sunToggleActive : ''}`}
+          onClick={handleToggleSunStudy}
+          aria-label="Toggle Sun and Shadow"
+          aria-pressed={Boolean(sunStudy?.enabled)}
+        >
+          <SunIcon className={styles.sunToggleIcon} />
+          <span className={styles.sunToggleLabel}>Sun</span>
+        </button>
+      </Tooltip>
+
+      <Tooltip label={windStudy?.enabled ? 'Hide Pedestrian Wind' : 'Show Pedestrian Wind'}>
+        <button
+          className={`${styles.sunToggle} ${windStudy?.enabled ? styles.sunToggleActive : ''}`}
+          onClick={handleToggleWindStudy}
+          aria-label="Toggle Pedestrian Wind"
+          aria-pressed={Boolean(windStudy?.enabled)}
+        >
+          <WindIcon className={styles.sunToggleIcon} />
+          <span className={styles.sunToggleLabel}>Wind</span>
+        </button>
+      </Tooltip>
 
       {/* Tool palette - inline row of icons */}
       <div className={styles.toolPalette}>

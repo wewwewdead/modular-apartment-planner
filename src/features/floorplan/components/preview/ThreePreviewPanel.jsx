@@ -8,9 +8,34 @@ import { createPreviewViewport } from './createPreviewViewport';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
 import { resolveWalkFloorContext } from './resolveWalkFloorContext';
+import { computeSunVector } from '@/analysis/sunStudyRunner';
+import { useWindStudy } from '@/features/floorplan/context/WindStudyContext';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import styles from './ThreePreviewPanel.module.css';
+
+const WIND_DIRECTION_LABELS = [
+  'N',
+  'NNE',
+  'NE',
+  'ENE',
+  'E',
+  'ESE',
+  'SE',
+  'SSE',
+  'S',
+  'SSW',
+  'SW',
+  'WSW',
+  'W',
+  'WNW',
+  'NW',
+  'NNW',
+];
+
+function directionLabel(directionDeg) {
+  return WIND_DIRECTION_LABELS[Math.round((directionDeg || 0) / 22.5) % WIND_DIRECTION_LABELS.length];
+}
 
 export default function ThreePreviewPanel({
   project,
@@ -27,12 +52,16 @@ export default function ThreePreviewPanel({
   const sceneCacheRef = useRef(null);
   const [previewScope, setPreviewScope] = useState('all');
   const [navigationMode, setNavigationMode] = useState('inspect');
+  const [showWind3d, setShowWind3d] = useState(true);
+  const [wind3dMode, setWind3dMode] = useState('outdoor');
   const [walkUiState, setWalkUiState] = useState({
     navigationMode: 'inspect',
     isLocked: false,
     canLock: false,
   });
-  const { selectedId, selectedType, activePhaseId, phaseViewMode, dispatch: editorDispatch } = useEditor();
+  const { selectedId, selectedType, activePhaseId, phaseViewMode, sunStudy, dispatch: editorDispatch } = useEditor();
+  const wind = useWindStudy();
+  const activeWind3dMode = wind.study?.mode === 'direction' ? wind3dMode : 'outdoor';
 
   const filteredProject = useMemo(
     () => (applyPhaseFilter ? filterProjectByPhase(project, activePhaseId, phaseViewMode) : project),
@@ -186,6 +215,22 @@ export default function ThreePreviewPanel({
     viewport.setSelectionOverlay(overlay);
   }, [selectedId, selectedType, sceneDescriptor]);
 
+  // Aim the key light at the real sun whenever the study or the site moves.
+  // Only the sun vector is needed here — the shadows themselves come from the
+  // renderer's shadow map, not from the 2D projection.
+  const sunLight = useMemo(() => computeSunVector({ project: filteredProject, sunStudy }), [filteredProject, sunStudy]);
+
+  useEffect(() => {
+    viewportRef.current?.setSun(sunLight);
+  }, [sunLight]);
+
+  useEffect(() => {
+    viewportRef.current?.setWindStudy?.(showWind3d ? wind.study : null, {
+      stale: wind.stale,
+      mode: activeWind3dMode,
+    });
+  }, [activeWind3dMode, showWind3d, wind.stale, wind.study]);
+
   useEffect(() => {
     viewportRef.current?.setNavigationMode(navigationMode);
   }, [navigationMode]);
@@ -248,6 +293,29 @@ export default function ThreePreviewPanel({
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className={`${styles.button} ${showWind3d && wind.settings?.enabled ? styles.analysisButtonActive : ''}`}
+            onClick={() => setShowWind3d((current) => !current)}
+            aria-pressed={showWind3d}
+            disabled={!wind.settings?.enabled}
+            title={wind.settings?.enabled ? 'Toggle the 3D wind field' : 'Enable Pedestrian Wind first'}
+          >
+            3D Wind
+          </button>
+          {showWind3d && wind.settings?.enabled && (
+            <select
+              className={styles.floorSelect}
+              value={activeWind3dMode}
+              onChange={(event) => setWind3dMode(event.target.value)}
+              aria-label="3D wind display"
+            >
+              <option value="outdoor">Outdoor flow</option>
+              <option value="ventilation" disabled={wind.study?.mode !== 'direction'}>
+                Room airflow
+              </option>
+            </select>
+          )}
           <button type="button" className={styles.button} onClick={() => viewportRef.current?.resetView()}>
             {resetLabel}
           </button>
@@ -268,6 +336,33 @@ export default function ThreePreviewPanel({
       <div className={styles.viewportWrap}>
         <div ref={containerRef} className={styles.viewport} />
         <CompassOverlay className={styles.compassDock} needleRef={compassNeedleRef} />
+        {showWind3d && wind.settings?.enabled && (
+          <div className={styles.windBadge} data-stale={wind.stale || undefined}>
+            <span className={styles.windBadgeTitle}>
+              {activeWind3dMode === 'ventilation' ? 'Room airflow network' : 'Outdoor wind field'}
+            </span>
+            <span>
+              {wind.status === 'running'
+                ? 'Solving updated flow…'
+                : wind.study
+                  ? activeWind3dMode === 'ventilation'
+                    ? `${wind.study.ventilation?.summary.crossVentilatedRoomCount || 0} cross-flow rooms · ${(
+                        wind.study.ventilation?.summary.meanAirChangesPerHour || 0
+                      ).toFixed(1)} mean ACH`
+                    : `${
+                        wind.study.mode === 'direction'
+                          ? 'Animated velocity'
+                          : `Comfort map + prevailing ${directionLabel(
+                              wind.study.representativeFlow?.directionDeg,
+                            )} flow`
+                      } · ${(wind.study.sliceHeight / 1000).toFixed(1)} m slice`
+                  : 'Waiting for wind result…'}
+            </span>
+            {activeWind3dMode === 'ventilation' && wind.study && (
+              <span>Blue = inlet · orange = outlet / transfer · room colour = ACH</span>
+            )}
+          </div>
+        )}
         {navigationMode === 'walk' && (
           <div className={styles.walkOverlay}>
             <span className={styles.walkOverlayTitle}>
