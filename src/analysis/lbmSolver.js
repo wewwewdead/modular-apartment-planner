@@ -227,7 +227,41 @@ function fieldAndResidual(populations, columns, rows, obstacles, inletSpeed, pre
   };
 }
 
-export function solveD2Q9({
+/**
+ * How a solve that was abandoned reports itself.
+ *
+ * Not an error the user should ever see: it means a NEWER request arrived while
+ * this one was mid-flight, which is a scheduling outcome rather than a failure
+ * of the model. It travels as a throw because that is the only thing that
+ * unwinds a nested sector loop cleanly, and it is recognised by `name` rather
+ * than by `instanceof` so a copy of the class that crossed a module boundary
+ * still reads as one.
+ */
+export class StudyAbortedError extends Error {
+  constructor(message = 'Wind solve abandoned.') {
+    super(message);
+    this.name = 'StudyAborted';
+  }
+}
+
+export function isStudyAborted(error) {
+  return error?.name === 'StudyAborted';
+}
+
+/** Iterations run between yields on the async path. */
+const DEFAULT_CHUNK_ITERATIONS = 50;
+
+/**
+ * Everything one solve carries between iterations.
+ *
+ * Extracted from the loop so the same iteration can be driven two ways: to
+ * completion in one synchronous call, which is what every physics test and
+ * every direct caller wants, or in awaited chunks, which is what lets a worker
+ * notice that the building has moved on. There is exactly one copy of the
+ * physics; the two entry points differ only in who calls `advanceSolve` and how
+ * often.
+ */
+function createSolveState({
   columns,
   rows,
   obstacles,
@@ -241,71 +275,209 @@ export function solveD2Q9({
   if (columns < 3 || rows < 3 || obstacles?.length !== columns * rows) {
     throw new Error('Wind solver needs a valid obstacle grid at least 3 × 3 cells.');
   }
-  const omega = 1 / Math.max(0.501, relaxationTime);
   const cellCount = columns * rows;
-  let current = createPopulations(cellCount, obstacles, inletSpeed);
-  let next = Array.from({ length: 9 }, () => new Float32Array(cellCount));
-  const collided = Array.from({ length: 9 }, () => new Float32Array(cellCount));
-  let previousSpeed = null;
-  let residual = Infinity;
-  let completedIterations = 0;
+  return {
+    columns,
+    rows,
+    obstacles,
+    iterations,
+    inletSpeed,
+    convergenceTolerance,
+    minIterations,
+    onProgress,
+    omega: 1 / Math.max(0.501, relaxationTime),
+    cellCount,
+    current: createPopulations(cellCount, obstacles, inletSpeed),
+    next: Array.from({ length: 9 }, () => new Float32Array(cellCount)),
+    collided: Array.from({ length: 9 }, () => new Float32Array(cellCount)),
+    previousSpeed: null,
+    residual: Infinity,
+    completedIterations: 0,
+    // A zero-iteration budget is already finished, which is what the loop this
+    // replaced did by never entering its body.
+    done: !(iterations > 0),
+  };
+}
 
-  for (let iteration = 0; iteration < iterations; iteration += 1) {
-    // Collision.
-    for (let index = 0; index < cellCount; index += 1) {
-      if (obstacles[index]) continue;
-      // `diverged` is the raw-density verdict and has to be read here, before
-      // the sanitised velocities are looked at: a cell whose density is NaN,
-      // infinite or non-positive reports still air, which passes every test
-      // below and would let a dead lattice run to completion and report itself
-      // as a calm one.
-      const { density, ux, uy, diverged } = macroscopic(current, index);
-      if (diverged || !Number.isFinite(ux) || !Number.isFinite(uy) || Math.hypot(ux, uy) > 0.35) {
-        throw new Error('Wind solver became unstable. Increase relaxation time or domain resolution.');
-      }
-      for (let direction = 0; direction < 9; direction += 1) {
-        const value = current[direction][index];
-        collided[direction][index] = value - omega * (value - equilibrium(direction, density, ux, uy));
-      }
+/** One collide-stream-boundary pass, plus the periodic residual probe. */
+function stepSolve(state) {
+  const { columns, rows, obstacles, cellCount, omega, inletSpeed, collided, current, next } = state;
+
+  // Collision.
+  for (let index = 0; index < cellCount; index += 1) {
+    if (obstacles[index]) continue;
+    // `diverged` is the raw-density verdict and has to be read here, before
+    // the sanitised velocities are looked at: a cell whose density is NaN,
+    // infinite or non-positive reports still air, which passes every test
+    // below and would let a dead lattice run to completion and report itself
+    // as a calm one.
+    const { density, ux, uy, diverged } = macroscopic(current, index);
+    if (diverged || !Number.isFinite(ux) || !Number.isFinite(uy) || Math.hypot(ux, uy) > 0.35) {
+      throw new Error('Wind solver became unstable. Increase relaxation time or domain resolution.');
     }
-
-    // Pull streaming. Cross-flow edges wrap; inlet/outlet populations are
-    // completed by their explicit boundary conditions below.
     for (let direction = 0; direction < 9; direction += 1) {
-      const cx = CX[direction];
-      const cy = CY[direction];
-      const sourceField = collided[direction];
-      const bouncedField = collided[OPPOSITE[direction]];
-      const targetField = next[direction];
-      for (let row = 0; row < rows; row += 1) {
-        const sourceRow = (row - cy + rows) % rows;
-        for (let column = 0; column < columns; column += 1) {
-          const index = row * columns + column;
-          if (obstacles[index]) continue;
-          const sourceColumn = column - cx;
-          if (sourceColumn < 0 || sourceColumn >= columns) continue;
-          const sourceIndex = sourceRow * columns + sourceColumn;
-          targetField[index] = obstacles[sourceIndex] ? bouncedField[index] : sourceField[sourceIndex];
-        }
-      }
-    }
-
-    applyZouHeInlet(next, columns, rows, obstacles, inletSpeed);
-    applyOutlet(next, columns, rows, obstacles);
-    [current, next] = [next, current];
-    completedIterations = iteration + 1;
-
-    if (completedIterations % 50 === 0 || completedIterations === iterations) {
-      const field = fieldAndResidual(current, columns, rows, obstacles, inletSpeed, previousSpeed);
-      residual = field.residual;
-      previousSpeed = Float32Array.from(field.amplification, (value) => value * inletSpeed);
-      onProgress?.({ iteration: completedIterations, iterations, residual });
-      if (completedIterations >= minIterations && residual < convergenceTolerance) break;
+      const value = current[direction][index];
+      collided[direction][index] = value - omega * (value - equilibrium(direction, density, ux, uy));
     }
   }
 
-  const field = fieldAndResidual(current, columns, rows, obstacles, inletSpeed);
-  return { ...field, residual, iterations: completedIterations, inletSpeed };
+  // Pull streaming. Cross-flow edges wrap; inlet/outlet populations are
+  // completed by their explicit boundary conditions below.
+  for (let direction = 0; direction < 9; direction += 1) {
+    const cx = CX[direction];
+    const cy = CY[direction];
+    const sourceField = collided[direction];
+    const bouncedField = collided[OPPOSITE[direction]];
+    const targetField = next[direction];
+    for (let row = 0; row < rows; row += 1) {
+      const sourceRow = (row - cy + rows) % rows;
+      for (let column = 0; column < columns; column += 1) {
+        const index = row * columns + column;
+        if (obstacles[index]) continue;
+        const sourceColumn = column - cx;
+        if (sourceColumn < 0 || sourceColumn >= columns) continue;
+        const sourceIndex = sourceRow * columns + sourceColumn;
+        targetField[index] = obstacles[sourceIndex] ? bouncedField[index] : sourceField[sourceIndex];
+      }
+    }
+  }
+
+  applyZouHeInlet(next, columns, rows, obstacles, inletSpeed);
+  applyOutlet(next, columns, rows, obstacles);
+  state.current = next;
+  state.next = current;
+  state.completedIterations += 1;
+
+  if (state.completedIterations % 50 === 0 || state.completedIterations === state.iterations) {
+    const field = fieldAndResidual(state.current, columns, rows, obstacles, inletSpeed, state.previousSpeed);
+    state.residual = field.residual;
+    state.previousSpeed = Float32Array.from(field.amplification, (value) => value * inletSpeed);
+    state.onProgress?.({
+      iteration: state.completedIterations,
+      iterations: state.iterations,
+      residual: state.residual,
+    });
+    if (state.completedIterations >= state.minIterations && state.residual < state.convergenceTolerance) {
+      state.done = true;
+      return;
+    }
+  }
+  if (state.completedIterations >= state.iterations) state.done = true;
 }
 
-export const LBM_CONSTANTS = { CX, CY, OPPOSITE, WEIGHTS, DEFAULT_LATTICE_SPEED, REFERENCE_BAND_COLUMNS };
+/** Run at most `budget` iterations. Returns true once the solve has finished. */
+function advanceSolve(state, budget) {
+  let spent = 0;
+  while (!state.done && spent < budget) {
+    stepSolve(state);
+    spent += 1;
+  }
+  return state.done;
+}
+
+function finishSolve(state) {
+  const field = fieldAndResidual(state.current, state.columns, state.rows, state.obstacles, state.inletSpeed);
+  return { ...field, residual: state.residual, iterations: state.completedIterations, inletSpeed: state.inletSpeed };
+}
+
+/**
+ * Hand the event loop a turn.
+ *
+ * A microtask will not do. The whole point of yielding is to let a `message`
+ * event that is already sitting in the worker's queue be delivered, and message
+ * delivery is a TASK — a promise continuation runs before it, not after. A
+ * `MessageChannel` post is the cheapest task available and, being on the same
+ * task source as the incoming request, cannot jump ahead of one that arrived
+ * first. `setTimeout` is the fallback, and is measurably worse: chained timers
+ * hit the 4 ms nesting clamp, which on a sixteen-sector study is most of a
+ * second of pure waiting.
+ */
+function createYieldControl() {
+  // Node, which is where the chunked path is measured and tested. `setImmediate`
+  // is a task, is not clamped, and does not hold the event loop open the way a
+  // started `MessagePort` does — a vitest run that never exits is a worse
+  // failure than a slightly different yield primitive. Reached off `globalThis`
+  // because it is not a browser global and the lint config only knows browser
+  // ones; the module has to load in both.
+  const immediate = globalThis.setImmediate;
+  if (typeof immediate === 'function') {
+    return () => new Promise((resolve) => immediate(resolve));
+  }
+  if (typeof MessageChannel === 'function') {
+    const channel = new MessageChannel();
+    return () =>
+      new Promise((resolve) => {
+        channel.port1.onmessage = () => resolve();
+        channel.port2.postMessage(0);
+      });
+  }
+  return () => new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+let sharedYieldControl = null;
+function defaultYieldControl() {
+  if (!sharedYieldControl) sharedYieldControl = createYieldControl();
+  return sharedYieldControl();
+}
+
+/**
+ * Solve to completion without ever giving up the thread.
+ *
+ * The API and the numbers it returns are exactly what they were before the
+ * chunked path existed, which is the point: every physics test, every
+ * validation suite and both other studies call this and must not have to know
+ * that a second entry point exists.
+ */
+export function solveD2Q9(options) {
+  const state = createSolveState(options);
+  advanceSolve(state, Infinity);
+  return finishSolve(state);
+}
+
+/**
+ * The same solve, in chunks, abandonable between them.
+ *
+ * Used only by the wind worker. `shouldAbort` is consulted at every chunk
+ * boundary and before the first one; when it answers true the solve throws
+ * `StudyAbortedError` rather than returning a half-built field, so a caller
+ * cannot accidentally treat an abandoned run as an answer.
+ *
+ * Cancellation had to work this way. A token in a shared message cannot reach a
+ * worker whose thread is inside a 450-iteration loop — the message sits in the
+ * queue until the loop ends — and a `SharedArrayBuffer` flag needs COOP/COEP
+ * headers this app does not send. Yielding is the only mechanism that gets the
+ * queue drained at all.
+ *
+ * @param {object} options  As `solveD2Q9`.
+ * @param {object} [control]
+ * @param {number} [control.chunkIterations]  Iterations per uninterrupted burst.
+ * @param {() => boolean} [control.shouldAbort]
+ * @param {() => Promise<void>} [control.yieldControl]  Injectable, for measurement.
+ */
+export async function solveD2Q9Async(options, control = {}) {
+  const {
+    chunkIterations = DEFAULT_CHUNK_ITERATIONS,
+    shouldAbort = null,
+    yieldControl = defaultYieldControl,
+  } = control;
+  const state = createSolveState(options);
+  const budget = Math.max(1, Math.floor(chunkIterations));
+
+  while (!state.done) {
+    if (shouldAbort?.()) throw new StudyAbortedError();
+    advanceSolve(state, budget);
+    if (!state.done) await yieldControl();
+  }
+  if (shouldAbort?.()) throw new StudyAbortedError();
+  return finishSolve(state);
+}
+
+export const LBM_CONSTANTS = {
+  CX,
+  CY,
+  OPPOSITE,
+  WEIGHTS,
+  DEFAULT_LATTICE_SPEED,
+  REFERENCE_BAND_COLUMNS,
+  DEFAULT_CHUNK_ITERATIONS,
+};

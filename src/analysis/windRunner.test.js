@@ -1,14 +1,39 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProject, createWall } from '@/domain/models';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
-import { computeWindStudy } from './windRunner';
+import { computeWindStudy, isStudyAborted } from './windRunner';
 import { createWindStudyState } from './windState';
 import { VENTILATION_CONSTANTS } from './ventilationNetwork';
 // The worker module installs its message handler only where `self` exists, so
-// its marshalling helper can be imported and tested here under plain node.
-import { transferablesOf } from './wind.worker';
+// its marshalling helper and its cache can be imported and tested here under
+// plain node.
+import { createWindStudyRunner, transferablesOf } from './wind.worker';
+
+/**
+ * Every entry into the lattice, counted.
+ *
+ * The claim the worker cache makes is a negative one — "this request did not
+ * solve" — and a timing is not proof of it. Wrapping both solver entry points
+ * is, and it is the only way to tell a cache hit from a very fast solve.
+ */
+const lbmCalls = vi.hoisted(() => ({ sync: 0, async: 0 }));
+
+vi.mock('./lbmSolver', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    solveD2Q9: (...args) => {
+      lbmCalls.sync += 1;
+      return actual.solveD2Q9(...args);
+    },
+    solveD2Q9Async: (...args) => {
+      lbmCalls.async += 1;
+      return actual.solveD2Q9Async(...args);
+    },
+  };
+});
 import {
   WIND_FIXTURE_COMFORT_SETTINGS,
   WIND_FIXTURE_DIRECTION_SETTINGS,
@@ -577,15 +602,21 @@ describe('wind study — a phase view that filters the building away', () => {
 
 describe('wind study characterization — result key sets', () => {
   it('pins the direction-mode top-level key set', () => {
+    // Extended by T6: `sourceKey` joins the set. It is the pair of content keys
+    // the worker's field cache is filed under — what this result was assembled
+    // FROM, as opposed to what it is OF — and it is additive: nothing was
+    // removed and no value moved.
     expect(Object.keys(fixtureDirectionRun()).sort()).toEqual([
       'directionDeg',
       'grid',
       'mode',
       'model',
       'sliceHeight',
+      'sourceKey',
       'summary',
       'ventilation',
     ]);
+    expect(Object.keys(fixtureDirectionRun().sourceKey).sort()).toEqual(['massingKey', 'networkKey']);
   });
 
   it('pins the direction-mode nested key sets', () => {
@@ -737,6 +768,7 @@ describe('wind study characterization — result key sets', () => {
     // only per-sector field the result keeps — the amplifications are consumed
     // by the classifier and discarded, the Cp fields are not reconstructible
     // from anything that survives, and Stage 2 needs them per sector.
+    // Extended again by T6 with `sourceKey`, on both modes alike.
     expect(Object.keys(fixtureComfortRun()).sort()).toEqual([
       'grid',
       'mode',
@@ -745,10 +777,12 @@ describe('wind study characterization — result key sets', () => {
       'sectorPressureCoefficients',
       'sliceHeight',
       'solverRuns',
+      'sourceKey',
       'summary',
       'windRose',
       'windRoseSource',
     ]);
+    expect(Object.keys(fixtureComfortRun().sourceKey).sort()).toEqual(['massingKey', 'networkKey']);
   });
 
   it('pins the comfort-mode nested key sets', () => {
@@ -1056,5 +1090,181 @@ describe('wind worker — transferable buffers', () => {
     expect(transferablesOf(null)).toEqual([]);
     expect(transferablesOf(undefined)).toEqual([]);
     expect(transferablesOf({})).toEqual([]);
+  });
+});
+
+/**
+ * The worker-resident solved-field cache (T6).
+ *
+ * The wind stack costs what the lattice costs; everything else in it is noise
+ * by comparison. The lattice depends on the massing and on nothing else, so a
+ * request that leaves the massing key alone can skip it entirely and re-run
+ * only the airflow network and the summaries. These are the pins on that claim,
+ * and the important ones are NEGATIVE — a cache is only worth having if it can
+ * be shown not to have solved.
+ *
+ * Not characterization: this is new contract.
+ */
+describe('wind worker — solved-field cache', () => {
+  const DIRECTION = { ...WIND_FIXTURE_DIRECTION_SETTINGS };
+
+  function ventilationEdit(openFraction) {
+    const project = createWindApartmentProject();
+    const window = project.floors[0].windows[0];
+    window.ventilation = { ...window.ventilation, openFraction };
+    return project;
+  }
+
+  function massingEdit() {
+    const project = createWindApartmentProject();
+    project.floors[0].walls[0].thickness = 400;
+    return project;
+  }
+
+  beforeEach(() => {
+    lbmCalls.sync = 0;
+    lbmCalls.async = 0;
+  });
+
+  it('solves once, then answers a ventilation-only change without touching the lattice', async () => {
+    const runner = createWindStudyRunner();
+
+    const cold = await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    expect(lbmCalls.async).toBe(1);
+    const cachedKey = runner.cachedMassingKey();
+    expect(cachedKey).toBe(cold.sourceKey.massingKey);
+
+    const warm = await runner.run({ project: ventilationEdit(0.05), windStudy: DIRECTION });
+    // The whole point, in one assertion.
+    expect(lbmCalls.async).toBe(1);
+    expect(lbmCalls.sync).toBe(0);
+    expect(warm.sourceKey.massingKey).toBe(cachedKey);
+    expect(warm.sourceKey.networkKey).not.toBe(cold.sourceKey.networkKey);
+
+    // And it is a real re-solve of the network, not the old answer handed back:
+    // nearly closing the NW window has to move that room's air-change rate.
+    const achOf = (result, id) => result.ventilation.rooms.find((room) => room.id === id).airChangesPerHour;
+    expect(achOf(warm, 'room_nw')).toBeLessThan(achOf(cold, 'room_nw') / 2);
+    // The outdoor field is the SAME field, so its summary must not have moved.
+    expect(warm.summary.peakAmplification).toBe(cold.summary.peakAmplification);
+    expect(warm.grid.solver).toEqual(cold.grid.solver);
+  });
+
+  it('reports no solver progress at all on a cached run', async () => {
+    const runner = createWindStudyRunner();
+    const first = [];
+    await runner.run(
+      { project: createWindApartmentProject(), windStudy: DIRECTION },
+      { onProgress: (p) => first.push(p) },
+    );
+    expect(first.filter((entry) => entry.stage === 'solve').length).toBeGreaterThan(0);
+
+    const second = [];
+    await runner.run({ project: ventilationEdit(0.05), windStudy: DIRECTION }, { onProgress: (p) => second.push(p) });
+    expect(second).toEqual([]);
+  });
+
+  it('produces exactly what the synchronous runner produces, cold and warm alike', async () => {
+    const runner = createWindStudyRunner();
+    const cold = await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    expectDeepClose(summarizeWindDirectionRun(cold), DIRECTION_FIXTURE);
+
+    const edited = ventilationEdit(0.05);
+    const warm = await runner.run({ project: edited, windStudy: DIRECTION });
+    const reference = computeWindStudy({ project: ventilationEdit(0.05), windStudy: DIRECTION });
+    expectDeepClose(summarizeWindDirectionRun(warm), summarizeWindDirectionRun(reference));
+  });
+
+  it('evicts and re-solves when the massing changes', async () => {
+    const runner = createWindStudyRunner();
+    const before = await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    const after = await runner.run({ project: massingEdit(), windStudy: DIRECTION });
+    expect(lbmCalls.async).toBe(2);
+    expect(after.sourceKey.massingKey).not.toBe(before.sourceKey.massingKey);
+    expect(runner.cachedMassingKey()).toBe(after.sourceKey.massingKey);
+  });
+
+  it('holds exactly ONE massing generation, so going back re-solves', async () => {
+    // Deliberate: a second generation only pays off for a user oscillating
+    // between two states of the building, and a sixteen-sector field set is
+    // megabytes. Pinned so that growing the cache is a decision rather than a
+    // drift.
+    const runner = createWindStudyRunner();
+    await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    await runner.run({ project: massingEdit(), windStudy: DIRECTION });
+    await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    expect(lbmCalls.async).toBe(3);
+  });
+
+  it('survives having the result it just produced transferred out from under it', async () => {
+    // `postMessage` DETACHES every buffer on `transferablesOf`. If the assembly
+    // handed out the cached arrays rather than copies, the first post would
+    // empty the cache and the second study would be a building with no walls.
+    const runner = createWindStudyRunner();
+    const first = await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    const buffers = transferablesOf(first);
+    expect(buffers.length).toBeGreaterThan(0);
+    structuredClone(first, { transfer: buffers });
+    expect(first.grid.obstacles.byteLength).toBe(0);
+
+    const second = await runner.run({ project: ventilationEdit(0.05), windStudy: DIRECTION });
+    expect(lbmCalls.async).toBe(1);
+    expect(second.grid.obstacles.byteLength).toBeGreaterThan(0);
+    expect(second.summary.assessedCellCount).toBeGreaterThan(0);
+    expect(second.summary.peakAmplification).toBeGreaterThan(1);
+  });
+
+  it('caches every sector of a comfort study, and re-mixes them for free', async () => {
+    const runner = createWindStudyRunner();
+    const comfort = { ...WIND_FIXTURE_COMFORT_SETTINGS };
+    const cold = await runner.run({ project: createWindApartmentProject(), windStudy: comfort });
+    expect(lbmCalls.async).toBe(comfort.windRose.length);
+    expect(cold.solverRuns).toHaveLength(comfort.windRose.length);
+
+    // Same sectors, different mixture weights: no sector field changes, so not
+    // one of them may be solved again.
+    const reweighted = {
+      ...comfort,
+      windRose: comfort.windRose.map((sector, index) => ({ ...sector, frequency: index === 1 ? 0.9 : 0.05 })),
+    };
+    const warm = await runner.run({ project: createWindApartmentProject(), windStudy: reweighted });
+    expect(lbmCalls.async).toBe(comfort.windRose.length);
+    expect(warm.sourceKey.massingKey).toBe(cold.sourceKey.massingKey);
+    // The mixture really was re-made: the dominant sector moved.
+    expect(cold.representativeFlow.directionDeg).toBe(0);
+    expect(warm.representativeFlow.directionDeg).toBe(90);
+  });
+
+  it('abandons a superseded run and leaves the cache untouched', async () => {
+    const runner = createWindStudyRunner();
+    let thrown = null;
+    try {
+      await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION }, { shouldAbort: () => true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isStudyAborted(thrown)).toBe(true);
+    // Nothing was filed: an abandoned run's fields are correct for the massing
+    // it was solving, but a newer request may already have filed its own.
+    expect(runner.cachedMassingKey()).toBeNull();
+  });
+
+  it('answers a study that is switched off, or has no massing, without caching anything', async () => {
+    const runner = createWindStudyRunner();
+    expect(
+      await runner.run({ project: createWindApartmentProject(), windStudy: { ...DIRECTION, enabled: false } }),
+    ).toBeNull();
+    expect(await runner.run({ project: createProject('Empty'), windStudy: DIRECTION })).toBeNull();
+    expect(runner.cachedMassingKey()).toBeNull();
+    expect(lbmCalls.async).toBe(0);
+  });
+
+  it('forgets everything on clear()', async () => {
+    const runner = createWindStudyRunner();
+    await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    runner.clear();
+    expect(runner.cachedMassingKey()).toBeNull();
+    await runner.run({ project: createWindApartmentProject(), windStudy: DIRECTION });
+    expect(lbmCalls.async).toBe(2);
   });
 });

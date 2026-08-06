@@ -1,10 +1,13 @@
 import { buildAnalysisMassing } from './buildingMassing';
 import { buildWindDomain, buildWindResultGrid, sampleLocalFieldAtWorld } from './windDomain';
-import { solveD2Q9 } from './lbmSolver';
+import { StudyAbortedError, isStudyAborted, solveD2Q9, solveD2Q9Async } from './lbmSolver';
 import { classifyComfortGrid, WIND_COMFORT_CATEGORIES } from './windComfort';
 import { createWindStudyState, normalizeWindRose } from './windState';
 import { computeVentilationNetwork } from './ventilationNetwork';
 import { siteExposure } from './windExposure';
+import { combinedWindRequestKey, windMassingKey, windNetworkKey } from './studyRequestIdentity';
+
+export { StudyAbortedError, isStudyAborted };
 
 function resampleRun(domain, solved, grid) {
   const cellCount = grid.columns * grid.rows;
@@ -29,27 +32,6 @@ function resampleRun(domain, solved, grid) {
     }
   }
   return { amplification, velocityX, velocityY, pressureCoefficient };
-}
-
-function runDirection({ masses, grid, settings, northAngle, directionDeg, onProgress }) {
-  const domain = buildWindDomain({
-    masses,
-    directionDeg,
-    northAngle,
-    sliceHeight: settings.sliceHeight,
-    resolution: settings.resolution,
-    domainPadding: settings.domainPadding,
-  });
-  if (!domain) return null;
-  const solved = solveD2Q9({
-    columns: domain.columns,
-    rows: domain.rows,
-    obstacles: domain.obstacles,
-    iterations: settings.iterations,
-    relaxationTime: settings.relaxationTime,
-    onProgress,
-  });
-  return { ...resampleRun(domain, solved, grid), solver: { iterations: solved.iterations, residual: solved.residual } };
 }
 
 function summarizeDirection(field, obstacles, referenceSpeed) {
@@ -92,27 +74,34 @@ const PHASE_VIEW_MODES = ['all', 'single', 'cumulative'];
  * hides nothing.
  */
 function normalizePhaseScope(phaseScope) {
-  const mode = phaseScope?.phaseViewMode;
   return {
     activePhaseId: phaseScope?.activePhaseId || null,
-    phaseViewMode: PHASE_VIEW_MODES.includes(mode) ? mode : 'all',
+    phaseViewMode: PHASE_VIEW_MODES.includes(phaseScope?.phaseViewMode) ? phaseScope.phaseViewMode : 'all',
   };
 }
 
-export function computeWindStudy({ project, windStudy, phaseScope = null }, onProgress = null) {
+/* -------------------------------------------------------------------------- */
+/* Stage 1 — what the request IS                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Everything a run needs that costs nothing to work out, including its identity.
+ *
+ * This is the cheap half of the old `computeWindStudy` prologue: settings
+ * defaulting, site readings, the exposure transform, the disclosure block, the
+ * sector list, and the two content keys the worker's cache is filed under.
+ * Nothing here rasterizes or solves, so it is safe to run on every request —
+ * which is the point, because the keys it produces are how a request finds out
+ * that it does not need to do either.
+ *
+ * @returns {object|null} null when the study is switched off.
+ */
+export function prepareWindRun({ project, windStudy, phaseScope = null }) {
   const settings = { ...createWindStudyState(), ...(windStudy || {}) };
   if (!settings.enabled) return null;
-  const masses = buildAnalysisMassing(project, { includeRoof: false });
-  const grid = buildWindResultGrid({
-    masses,
-    sliceHeight: settings.sliceHeight,
-    resolution: settings.resolution,
-    domainPadding: settings.domainPadding,
-  });
-  if (!grid) return null;
+
   const site = project?.building?.site || {};
   const northAngle = site.northAngle || 0;
-  const cellCount = grid.columns * grid.rows;
 
   /**
    * The 10 m -> slice-height correction, applied EXACTLY ONCE, here.
@@ -135,7 +124,7 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
    * What every result says about itself, before any of it is computed.
    *
    * `convergence` is a disclosure of the ITERATION BUDGET, not of an achieved
-   * residual: `solveD2Q9` runs to `settings.iterations` unless it converges
+   * residual: the solver runs to `settings.iterations` unless it converges
    * first, and at the screening default it does not. The residual it reached is
    * reported separately on `grid.solver`; this names the budget it was given,
    * which is the thing a reader has to know to judge that residual.
@@ -148,17 +137,196 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     phaseScope: normalizePhaseScope(phaseScope),
   };
 
-  if (settings.mode === 'direction') {
-    const run = runDirection({
-      masses,
-      grid,
-      settings,
-      northAngle,
-      directionDeg: settings.directionDeg,
-      onProgress: (progress) => onProgress?.({ stage: 'solve', directionDeg: settings.directionDeg, ...progress }),
+  const massingKey = windMassingKey({ project, settings });
+  const networkKey = windNetworkKey({ project, settings });
+
+  return {
+    project,
+    settings,
+    site,
+    northAngle,
+    exposure,
+    model,
+    massingKey,
+    networkKey,
+    sourceKey: { massingKey, networkKey },
+    key: combinedWindRequestKey({ massingKey, networkKey }),
+  };
+}
+
+/**
+ * The wind rose a comfort run is a mixture over, and the directions it solves.
+ *
+ * Deferred out of `prepareWindRun` so that a rose bad enough to throw does so
+ * only once the run is genuinely going ahead — the same point in the sequence
+ * the old single-function runner threw at, after the massing check.
+ */
+function runSectors(settings) {
+  if (settings.mode !== 'comfort') return { windRose: null, directions: [settings.directionDeg] };
+  const windRose = normalizeWindRose(settings.windRose);
+  if (!windRose) throw new Error('Comfort study needs a valid wind rose.');
+  return { windRose, directions: windRose.map((sector) => sector.directionDeg) };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Stage 2 — the massing raster and the solved fields                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Rasterize the building. Everything this produces is a function of the
+ * massing key and of nothing else, which is why it is cached alongside the
+ * fields rather than rebuilt on a network-only change: at production resolution
+ * the union and the two rasterizations are a real cost, and repeating them
+ * would eat most of what skipping the lattice saves.
+ *
+ * @returns {{masses: Array, grid: object}|null} null when nothing stands at the slice.
+ */
+export function buildWindMassing(prepared) {
+  const { settings } = prepared;
+  const masses = buildAnalysisMassing(prepared.project, { includeRoof: false });
+  const grid = buildWindResultGrid({
+    masses,
+    sliceHeight: settings.sliceHeight,
+    resolution: settings.resolution,
+    domainPadding: settings.domainPadding,
+  });
+  if (!grid) return null;
+  return { masses, grid };
+}
+
+function sectorProgress(prepared, index, count, directionDeg, onProgress) {
+  if (!onProgress) return null;
+  if (prepared.settings.mode !== 'comfort') {
+    return (progress) => onProgress({ stage: 'solve', directionDeg, ...progress });
+  }
+  return (progress) =>
+    onProgress({
+      stage: 'sector',
+      sector: index + 1,
+      sectors: count,
+      directionDeg,
+      overall: (index + progress.iteration / progress.iterations) / count,
+      ...progress,
     });
+}
+
+function directionDomain(prepared, massing, directionDeg) {
+  const { settings } = prepared;
+  return buildWindDomain({
+    masses: massing.masses,
+    directionDeg,
+    northAngle: prepared.northAngle,
+    sliceHeight: settings.sliceHeight,
+    resolution: settings.resolution,
+    domainPadding: settings.domainPadding,
+  });
+}
+
+function solverArguments(prepared, domain, onProgress) {
+  return {
+    columns: domain.columns,
+    rows: domain.rows,
+    obstacles: domain.obstacles,
+    iterations: prepared.settings.iterations,
+    relaxationTime: prepared.settings.relaxationTime,
+    onProgress,
+  };
+}
+
+function fieldOf(domain, solved, grid, directionDeg) {
+  return {
+    directionDeg,
+    ...resampleRun(domain, solved, grid),
+    solver: { iterations: solved.iterations, residual: solved.residual },
+  };
+}
+
+/**
+ * Solve one lattice field per sector, synchronously.
+ *
+ * The array is positional: entry `i` is the field for `directions[i]`, and a
+ * null entry means the domain builder found nothing to flow around at that
+ * bearing. Direction mode has exactly one entry.
+ */
+export function solveWindFields(prepared, massing, directions, onProgress = null) {
+  return directions.map((directionDeg, index) => {
+    const domain = directionDomain(prepared, massing, directionDeg);
+    if (!domain) return null;
+    const progress = sectorProgress(prepared, index, directions.length, directionDeg, onProgress);
+    const solved = solveD2Q9(solverArguments(prepared, domain, progress));
+    return fieldOf(domain, solved, massing.grid, directionDeg);
+  });
+}
+
+/**
+ * The same fields, solved in abandonable chunks.
+ *
+ * Used only by the worker. `shouldAbort` is consulted between sectors as well as
+ * inside each one, so a sixteen-sector comfort study superseded on its second
+ * sector stops there rather than after the sixteenth.
+ */
+export async function solveWindFieldsAsync(prepared, massing, directions, onProgress = null, control = {}) {
+  const { shouldAbort = null } = control;
+  const fields = [];
+  for (let index = 0; index < directions.length; index += 1) {
+    if (shouldAbort?.()) throw new StudyAbortedError();
+    const directionDeg = directions[index];
+    const domain = directionDomain(prepared, massing, directionDeg);
+    if (!domain) {
+      fields.push(null);
+      continue;
+    }
+    const progress = sectorProgress(prepared, index, directions.length, directionDeg, onProgress);
+    const solved = await solveD2Q9Async(solverArguments(prepared, domain, progress), control);
+    fields.push(fieldOf(domain, solved, massing.grid, directionDeg));
+  }
+  return fields;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Stage 3 — assemble a result from fields that already exist                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A result-space grid the caller may hand away.
+ *
+ * The obstacle raster is copied rather than shared because the worker transfers
+ * every typed array it posts, and a transferred buffer is DETACHED on this side.
+ * Sharing the cached one would work exactly once and then hand out an empty
+ * building. The same reasoning applies to every field array copied below.
+ */
+function resultGrid(grid) {
+  return { ...grid, obstacles: Uint8Array.from(grid.obstacles) };
+}
+
+function copyOf(field) {
+  return Float32Array.from(field);
+}
+
+/**
+ * Build the study a caller reads from fields that have already been solved.
+ *
+ * Every remaining cost lives here — the multizone airflow network, the comfort
+ * classification, the summaries — and every one of them is a function of the
+ * network key. That is the whole shape of the cache: a change that moves only
+ * the network key re-runs only this function.
+ */
+export function assembleWindResult(prepared, massing, fields, windRose, onProgress = null) {
+  const { settings, model, project, northAngle, exposure } = prepared;
+  const grid = massing.grid;
+  const cellCount = grid.columns * grid.rows;
+
+  if (settings.mode !== 'comfort') {
+    const run = fields[0];
     if (!run) return null;
-    const directionGrid = { ...grid, ...run };
+    const directionGrid = {
+      ...resultGrid(grid),
+      amplification: copyOf(run.amplification),
+      velocityX: copyOf(run.velocityX),
+      velocityY: copyOf(run.velocityY),
+      pressureCoefficient: copyOf(run.pressureCoefficient),
+      solver: { ...run.solver },
+    };
     const siteReferenceSpeed = settings.referenceSpeed * exposure.factor;
     const ventilation = computeVentilationNetwork({
       project,
@@ -175,14 +343,13 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
       directionDeg: settings.directionDeg,
       sliceHeight: settings.sliceHeight,
       grid: directionGrid,
-      summary: summarizeDirection(run.amplification, grid.obstacles, siteReferenceSpeed),
+      summary: summarizeDirection(directionGrid.amplification, directionGrid.obstacles, siteReferenceSpeed),
       ventilation,
       model,
+      sourceKey: prepared.sourceKey,
     };
   }
 
-  const windRose = normalizeWindRose(settings.windRose);
-  if (!windRose) throw new Error('Comfort study needs a valid wind rose.');
   // The rose is reported unchanged — it is the SITE climate, quoted at 10 m,
   // and rewriting it would leave nothing to trace the result back to. Only the
   // copy the classifier consumes carries the slice-height scales.
@@ -210,25 +377,11 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     0,
   );
   let representativeFlow = null;
+  const comfortGrid = resultGrid(grid);
 
   for (let sectorIndex = 0; sectorIndex < sectorCount; sectorIndex += 1) {
     const sector = windRose[sectorIndex];
-    const run = runDirection({
-      masses,
-      grid,
-      settings,
-      northAngle,
-      directionDeg: sector.directionDeg,
-      onProgress: (progress) =>
-        onProgress?.({
-          stage: 'sector',
-          sector: sectorIndex + 1,
-          sectors: sectorCount,
-          directionDeg: sector.directionDeg,
-          overall: (sectorIndex + progress.iteration / progress.iterations) / sectorCount,
-          ...progress,
-        }),
-    });
+    const run = fields[sectorIndex];
     if (!run) continue;
     sectorAmplifications.set(run.amplification, sectorIndex * cellCount);
     sectorPressureCoefficients.set(run.pressureCoefficient, sectorIndex * cellCount);
@@ -252,6 +405,13 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
        * opening's pressure by 0.5 * rho * U^2 gets back the Cp on the field.
        */
       const sectorReferenceSpeed = siteRose[sectorIndex].weibullC;
+      const representativeGrid = {
+        ...comfortGrid,
+        amplification: copyOf(run.amplification),
+        velocityX: copyOf(run.velocityX),
+        velocityY: copyOf(run.velocityY),
+        pressureCoefficient: copyOf(run.pressureCoefficient),
+      };
       representativeFlow = {
         directionDeg: sector.directionDeg,
         frequency: sector.frequency,
@@ -260,10 +420,10 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
         // the slice-height scale, not the 10 m one: the particles are drawn at
         // pedestrian height and have to move at pedestrian-height speeds.
         referenceSpeed: sectorReferenceSpeed,
-        amplification: run.amplification,
-        velocityX: run.velocityX,
-        velocityY: run.velocityY,
-        pressureCoefficient: run.pressureCoefficient,
+        amplification: representativeGrid.amplification,
+        velocityX: representativeGrid.velocityX,
+        velocityY: representativeGrid.velocityY,
+        pressureCoefficient: representativeGrid.pressureCoefficient,
         /**
          * The airflow network for THIS sector, and no other.
          *
@@ -276,7 +436,7 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
          */
         ventilation: computeVentilationNetwork({
           project,
-          grid: { ...grid, ...run },
+          grid: representativeGrid,
           referenceSpeed: sectorReferenceSpeed,
           // Only used if a facade sample fails its sanity test and the empirical
           // fallback needs an incidence angle.
@@ -293,7 +453,7 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     sectorAmplifications,
     sectorCount,
     cellCount,
-    obstacles: grid.obstacles,
+    obstacles: comfortGrid.obstacles,
     // The Lawson thresholds are pedestrian-height speeds, so the mixture they
     // are compared against has to be a pedestrian-height mixture.
     windRose: siteRose,
@@ -309,7 +469,7 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     sliceHeight: settings.sliceHeight,
     windRose,
     windRoseSource: settings.windRoseSource,
-    grid: { ...grid, ...comfort },
+    grid: { ...comfortGrid, ...comfort },
     sectorPressureCoefficients,
     representativeFlow,
     summary: {
@@ -319,5 +479,36 @@ export function computeWindStudy({ project, windStudy, phaseScope = null }, onPr
     },
     solverRuns,
     model,
+    sourceKey: prepared.sourceKey,
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The three stages, run end to end                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One wind study, synchronously, exactly as before the stages were separated.
+ *
+ * Every physics test, every validation suite and the fixture generator call
+ * this. It builds nothing it can reuse and caches nothing: a caller that wants
+ * the cache uses the worker.
+ */
+export function computeWindStudy({ project, windStudy, phaseScope = null }, onProgress = null) {
+  const prepared = prepareWindRun({ project, windStudy, phaseScope });
+  if (!prepared) return null;
+  const massing = buildWindMassing(prepared);
+  if (!massing) return null;
+  const { windRose, directions } = runSectors(prepared.settings);
+  const fields = solveWindFields(prepared, massing, directions, onProgress);
+  return assembleWindResult(prepared, massing, fields, windRose, onProgress);
+}
+
+/**
+ * The sector directions a prepared run will solve, and the rose behind them.
+ * Exported for the worker, which has to know the sector list to file solved
+ * fields against it.
+ */
+export function windRunSectors(prepared) {
+  return runSectors(prepared.settings);
 }

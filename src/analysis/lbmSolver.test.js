@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { LBM_CONSTANTS, macroscopic, solveD2Q9 } from './lbmSolver';
+import { isStudyAborted, LBM_CONSTANTS, macroscopic, solveD2Q9, solveD2Q9Async, StudyAbortedError } from './lbmSolver';
 
 function obstacleGrid(columns, rows, predicate = () => false) {
   const obstacles = new Uint8Array(columns * rows);
@@ -304,5 +304,180 @@ describe('D2Q9 absolute pressure coefficient', () => {
       0,
     );
     expect(extreme).toBeLessThan(0.05);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The chunked, abandonable entry point                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `solveD2Q9Async` exists for exactly one reason: a worker whose thread is
+ * inside a 450-iteration loop cannot read its own message queue, so a study
+ * superseded by a wall drag runs to completion for a building nobody is looking
+ * at. Yielding between chunks is the only mechanism that gets the queue drained
+ * — a cancellation token posted as a message never arrives, and a
+ * `SharedArrayBuffer` flag needs cross-origin isolation headers.
+ *
+ * Two properties have to hold, and neither is obvious from the code:
+ *   1. it computes the SAME answer as the synchronous path, bit for bit — one
+ *      copy of the physics, two ways of driving it;
+ *   2. a generation counter bumped between chunks stops it, and stops it with a
+ *      throw rather than a half-built field a caller might mistake for one.
+ *
+ * `yieldControl` is injected as a resolved promise rather than a real task, so
+ * these are deterministic and wall-clock-free. The production default is a task
+ * (`setImmediate`, or a `MessageChannel` post in a worker) precisely because a
+ * microtask would NOT let a queued message through; that difference is what the
+ * chunk-overhead measurement in `ventilationPerformance.test.js` is about.
+ */
+const microtask = () => Promise.resolve();
+
+describe('D2Q9 chunked async solver', () => {
+  const columns = 60;
+  const rows = 40;
+  const blockedGrid = () => obstacleGrid(columns, rows, (column, row) => column === 25 && row >= 10 && row < 30);
+
+  it('returns bit-for-bit what the synchronous solver returns', async () => {
+    const options = { columns, rows, obstacles: blockedGrid(), iterations: 200, relaxationTime: 0.6 };
+    const sync = solveD2Q9(options);
+    const chunked = await solveD2Q9Async({ ...options, obstacles: blockedGrid() }, { yieldControl: microtask });
+
+    expect(chunked.iterations).toBe(sync.iterations);
+    expect(chunked.residual).toBe(sync.residual);
+    expect(chunked.referenceDensity).toBe(sync.referenceDensity);
+    for (const field of ['amplification', 'velocityX', 'velocityY', 'pressureCoefficient', 'density']) {
+      expect(Array.from(chunked[field]), field).toEqual(Array.from(sync[field]));
+    }
+  });
+
+  it('is unaffected by the chunk size it happens to be given', async () => {
+    const options = { columns, rows, iterations: 175, relaxationTime: 0.6 };
+    const reference = solveD2Q9({ ...options, obstacles: blockedGrid() });
+    for (const chunkIterations of [1, 7, 50, 1000]) {
+      const run = await solveD2Q9Async(
+        { ...options, obstacles: blockedGrid() },
+        { chunkIterations, yieldControl: microtask },
+      );
+      expect(run.iterations, `chunk ${chunkIterations}`).toBe(reference.iterations);
+      expect(Array.from(run.amplification), `chunk ${chunkIterations}`).toEqual(Array.from(reference.amplification));
+    }
+  });
+
+  it('reports the same convergence break the synchronous path takes', async () => {
+    // Unobstructed and generously budgeted, so the run stops on its tolerance
+    // rather than its cap — the branch a fixed-cap comparison would never reach.
+    const options = {
+      columns: 48,
+      rows: 24,
+      obstacles: obstacleGrid(48, 24),
+      iterations: 5000,
+      convergenceTolerance: 1e-3,
+      minIterations: 150,
+    };
+    const sync = solveD2Q9(options);
+    const chunked = await solveD2Q9Async({ ...options }, { yieldControl: microtask });
+    expect(sync.iterations).toBeLessThan(5000);
+    expect(chunked.iterations).toBe(sync.iterations);
+    expect(chunked.residual).toBe(sync.residual);
+  });
+
+  it('abandons at the next chunk boundary once the generation moves on', async () => {
+    let generation = 0;
+    const mine = 0;
+    let chunks = 0;
+    const yieldControl = () => {
+      chunks += 1;
+      // Three chunks in, a newer request lands.
+      if (chunks === 3) generation = 1;
+      return Promise.resolve();
+    };
+
+    let thrown = null;
+    try {
+      await solveD2Q9Async(
+        { columns, rows, obstacles: blockedGrid(), iterations: 4000, relaxationTime: 0.6 },
+        { chunkIterations: 50, shouldAbort: () => generation !== mine, yieldControl },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(StudyAbortedError);
+    expect(isStudyAborted(thrown)).toBe(true);
+    // It stopped where it was told to, not after the 80 chunks its budget bought.
+    expect(chunks).toBe(3);
+  });
+
+  it('abandons before the first chunk when it was already superseded', async () => {
+    let chunks = 0;
+    await expect(
+      solveD2Q9Async(
+        { columns, rows, obstacles: blockedGrid(), iterations: 4000 },
+        {
+          shouldAbort: () => true,
+          yieldControl: () => {
+            chunks += 1;
+            return Promise.resolve();
+          },
+        },
+      ),
+    ).rejects.toThrow(StudyAbortedError);
+    expect(chunks).toBe(0);
+  });
+
+  it('runs to the end when nothing supersedes it', async () => {
+    const run = await solveD2Q9Async(
+      { columns, rows, obstacles: blockedGrid(), iterations: 100, relaxationTime: 0.6 },
+      { chunkIterations: 25, shouldAbort: () => false, yieldControl: microtask },
+    );
+    expect(run.iterations).toBe(100);
+    expect(Array.from(run.amplification).every(Number.isFinite)).toBe(true);
+  });
+
+  it('throws the instability error on the async path too, not just the sync one', async () => {
+    // The same case `D2Q9 instability guard` runs synchronously. A guard that
+    // only fired on one of the two entry points would let the worker — the ONLY
+    // caller of the async one — report a dead lattice as a calm day.
+    const unstable = {
+      columns,
+      rows,
+      obstacles: blockedGrid(),
+      iterations: 400,
+      relaxationTime: 0.5,
+      inletSpeed: 0.34,
+      minIterations: 400,
+      convergenceTolerance: 0,
+    };
+    expect(() => solveD2Q9(unstable)).toThrow(/unstable/);
+    await expect(solveD2Q9Async({ ...unstable }, { yieldControl: microtask })).rejects.toThrow(
+      'Wind solver became unstable. Increase relaxation time or domain resolution.',
+    );
+  });
+
+  it('rejects an invalid grid on the async path, as the sync path throws', async () => {
+    await expect(solveD2Q9Async({ columns: 2, rows: 2, obstacles: new Uint8Array(4) })).rejects.toThrow(
+      /valid obstacle grid/,
+    );
+  });
+
+  it('uses a real task by default, so a queued message can actually be delivered', async () => {
+    // The default yield must not be a microtask. A promise continuation runs
+    // BEFORE any pending task, so a microtask-yielding solver would drain its
+    // whole budget without ever letting the cancellation it is yielding for
+    // arrive. The competitor here is a `setImmediate`, which is the same task
+    // class a cross-thread message arrives on in node — as `MessageChannel` is
+    // in a worker — and it is queued before the solve starts, so a solver that
+    // genuinely yields must let it run first.
+    const order = [];
+    const queueTask = typeof setImmediate === 'function' ? setImmediate : (fn) => setTimeout(fn, 0);
+    queueTask(() => order.push('task'));
+    // Three chunks, so there are two real yields to be overtaken at.
+    await solveD2Q9Async(
+      { columns: 12, rows: 12, obstacles: obstacleGrid(12, 12), iterations: 120 },
+      { chunkIterations: 50 },
+    );
+    order.push('solve');
+    expect(order).toEqual(['task', 'solve']);
   });
 });

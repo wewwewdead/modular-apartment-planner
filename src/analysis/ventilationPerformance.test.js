@@ -1,12 +1,39 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDoor, createProject, createRoom, createWall, createWindow } from '@/domain/models';
+import { solveD2Q9, solveD2Q9Async } from './lbmSolver';
 import { computeVentilationNetwork, sampleFacadePressure } from './ventilationNetwork';
 import { computeWindStudy } from './windRunner';
+import { createWindStudyRunner } from './wind.worker';
 import {
   WIND_FIXTURE_PERFORMANCE_COMFORT_SETTINGS,
   WIND_FIXTURE_PERFORMANCE_DIRECTION_SETTINGS,
   createWindApartmentProject,
 } from './__fixtures__/windApartmentProject';
+
+/**
+ * Entries into the lattice, counted.
+ *
+ * The cache's central claim is negative — "this request did not solve" — and a
+ * timing cannot prove a negative. Wrapping both solver entry points can. The
+ * wrapper delegates to the real thing, so nothing else in this file is affected
+ * by it beyond a function call per solve.
+ */
+const lbmCalls = vi.hoisted(() => ({ sync: 0, async: 0 }));
+
+vi.mock('./lbmSolver', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    solveD2Q9: (...args) => {
+      lbmCalls.sync += 1;
+      return actual.solveD2Q9(...args);
+    },
+    solveD2Q9Async: (...args) => {
+      lbmCalls.async += 1;
+      return actual.solveD2Q9Async(...args);
+    },
+  };
+});
 
 /**
  * What the wind and ventilation stack costs, and what its answers are worth at
@@ -37,11 +64,20 @@ import {
  *      the user a number it cannot back up.
  *   4. The multizone re-solve, which is the operation an interactive "what if I
  *      open this window" has to run per keystroke.
+ *   5. What the worker's solved-field cache turns (4) into end to end — the
+ *      whole study re-answered without the lattice — and what the chunked,
+ *      abandonable solver costs for being interruptible.
  */
 
 function elapsed(fn) {
   const start = performance.now();
   const value = fn();
+  return { ms: performance.now() - start, value };
+}
+
+async function elapsedAsync(fn) {
+  const start = performance.now();
+  const value = await fn();
   return { ms: performance.now() - start, value };
 }
 
@@ -338,4 +374,181 @@ describe('ventilation network re-solve cost', () => {
     },
     60_000,
   );
+});
+
+/* -------------------------------------------------------------------------- */
+/* The warm path                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the worker's solved-field cache is worth (T6).
+ *
+ * The ring above measures the multizone solve on its own. This measures the
+ * thing a user actually experiences: a whole wind study re-answered after a
+ * ventilation-only edit — same walls, one window's open fraction moved — which
+ * is the single most common interaction the study supports and used to cost a
+ * complete lattice solve.
+ *
+ * Same discipline as the rest of the file: every figure was measured on one
+ * developer machine on the date beside it, and every threshold is about ten
+ * times it.
+ */
+function ventilationEdit(openFraction) {
+  const project = createWindApartmentProject();
+  const window = project.floors[0].windows[0];
+  window.ventilation = { ...window.ventilation, openFraction };
+  return project;
+}
+
+describe('wind study cache — the massing-hit path', () => {
+  beforeEach(() => {
+    lbmCalls.sync = 0;
+    lbmCalls.async = 0;
+  });
+
+  /**
+   * Measured 2026-08-06, production defaults (resolution 96, padding 30000,
+   * 450 iterations) on the fixture apartment:
+   *
+   *     direction, cold          351.6 ms
+   *     direction, warm mean       0.446 ms   (30 repeats after one warm-up)
+   *
+   * That is the answer to the plan's promise about single-digit milliseconds:
+   * it is not single-digit, it is sub-millisecond, because at this size the
+   * multizone solve on four rooms is well under the 0.568 ms the ten-room ring
+   * above costs and the rest is array copies. The ratio is ~790x.
+   */
+  it('re-answers a ventilation-only change without going near the lattice', async () => {
+    const runner = createWindStudyRunner();
+    const settings = { ...WIND_FIXTURE_PERFORMANCE_DIRECTION_SETTINGS };
+
+    const cold = await elapsedAsync(() => runner.run({ project: createWindApartmentProject(), windStudy: settings }));
+    expect(lbmCalls.async).toBe(1);
+    expect(cold.value.grid.columns * cold.value.grid.rows).toBe(8736);
+
+    await runner.run({ project: ventilationEdit(0.01), windStudy: settings });
+    const REPEATS = 20;
+    const warm = await elapsedAsync(async () => {
+      for (let pass = 0; pass < REPEATS; pass += 1) {
+        await runner.run({ project: ventilationEdit(0.02 + pass * 0.01), windStudy: settings });
+      }
+    });
+
+    // The negative claim, which the counter is the only honest proof of: across
+    // 21 further studies the lattice was entered exactly zero more times.
+    expect(lbmCalls.async).toBe(1);
+    expect(lbmCalls.sync).toBe(0);
+
+    // Threshold is 10x the 0.446 ms measured 2026-08-06, and comfortably inside
+    // the single-digit millisecond budget the plan promised.
+    expect(warm.ms / REPEATS).toBeLessThan(5);
+    // Guard against a vacuous pass: the cold run really was the expensive one.
+    expect(cold.ms).toBeGreaterThan(warm.ms / REPEATS);
+
+    // And the warm answers are answers, not the cold one handed back: closing
+    // the NW window has to move that room.
+    const achOf = (result) => result.ventilation.rooms.find((room) => room.id === 'room_nw').airChangesPerHour;
+    const closed = await runner.run({ project: ventilationEdit(0.02), windStudy: settings });
+    expect(achOf(closed)).toBeLessThan(achOf(cold.value) / 5);
+  }, 120_000);
+
+  /**
+   * Measured 2026-08-06, sixteen sectors at production resolution:
+   *
+   *     comfort, cold          4277.9 ms
+   *     comfort, warm mean      150.3 ms   (6 repeats after one warm-up)
+   *
+   * 28x, and the 150 ms that remain are not the network: they are the comfort
+   * classification over 8736 cells x 16 sectors plus the half-megabyte of
+   * per-sector Cp the result carries. Worth naming, because it is the number
+   * that would have to come down if a comfort study ever had to feel live.
+   */
+  it('re-mixes a sixteen-sector comfort study without re-solving one sector', async () => {
+    const runner = createWindStudyRunner();
+    const settings = { ...WIND_FIXTURE_PERFORMANCE_COMFORT_SETTINGS };
+
+    const cold = await elapsedAsync(() => runner.run({ project: createWindApartmentProject(), windStudy: settings }));
+    expect(lbmCalls.async).toBe(16);
+    expect(cold.value.windRose).toHaveLength(16);
+
+    await runner.run({ project: ventilationEdit(0.01), windStudy: settings });
+    const REPEATS = 4;
+    const warm = await elapsedAsync(async () => {
+      for (let pass = 0; pass < REPEATS; pass += 1) {
+        await runner.run({ project: ventilationEdit(0.02 + pass * 0.01), windStudy: settings });
+      }
+    });
+
+    expect(lbmCalls.async).toBe(16);
+    // Threshold is 10x the 150.3 ms measured 2026-08-06.
+    expect(warm.ms / REPEATS).toBeLessThan(1500);
+    expect(cold.ms).toBeGreaterThan((warm.ms / REPEATS) * 10);
+  }, 180_000);
+});
+
+/**
+ * What being interruptible costs.
+ *
+ * The worker solves through `solveD2Q9Async`, which hands the event loop a turn
+ * every 50 iterations so a superseded run can be abandoned. If that turn were
+ * expensive the cure would be worse than the disease, so it is measured rather
+ * than assumed — and measured at the yield, not at the study, because a study
+ * only yields nine times and would hide a hundredfold regression in its noise.
+ *
+ * Measured 2026-08-06, a 40 x 30 lattice run to a fixed 400 iterations:
+ *
+ *     synchronous                    40.9 ms
+ *     chunked at 50 (7 yields)       38.7 ms
+ *     chunked at 1 (399 yields)      42.5 ms   ->  3.9 us per yield
+ *
+ * At the production chunk size the overhead is not distinguishable from noise:
+ * nine yields on a 350 ms study is about 35 microseconds, or 0.01 %. The
+ * 399-yield case is the sensitive one and is what the threshold below guards —
+ * a yield that regressed to a nesting-clamped `setTimeout(0)` would cost 4 ms
+ * each and blow it out by more than an order of magnitude.
+ */
+describe('chunked solver overhead', () => {
+  const columns = 40;
+  const rows = 30;
+
+  function fixedRun() {
+    const obstacles = new Uint8Array(columns * rows);
+    for (let row = 10; row < 20; row += 1) {
+      for (let column = 15; column < 22; column += 1) obstacles[row * columns + column] = 1;
+    }
+    return {
+      columns,
+      rows,
+      obstacles,
+      iterations: 400,
+      relaxationTime: 0.6,
+      // Pin the iteration count: comparing two runs that stopped at different
+      // places would measure the stopping rule, not the yielding.
+      minIterations: 400,
+      convergenceTolerance: 0,
+    };
+  }
+
+  it('costs microseconds per yield, so the production chunk size is free', async () => {
+    const PASSES = 3;
+    let sync = 0;
+    let chunked = 0;
+    let perIteration = 0;
+
+    // One untimed pass so the JIT has seen every path before anything counts.
+    solveD2Q9(fixedRun());
+    await solveD2Q9Async(fixedRun(), { chunkIterations: 1 });
+
+    for (let pass = 0; pass < PASSES; pass += 1) {
+      sync += elapsed(() => solveD2Q9(fixedRun())).ms;
+      chunked += (await elapsedAsync(() => solveD2Q9Async(fixedRun(), { chunkIterations: 50 }))).ms;
+      perIteration += (await elapsedAsync(() => solveD2Q9Async(fixedRun(), { chunkIterations: 1 }))).ms;
+    }
+
+    // At the production chunk size, within noise of the synchronous path.
+    expect(chunked / PASSES).toBeLessThan((sync / PASSES) * 2);
+    // 399 yields on a 40 ms solve. Measured at 1.04x; the threshold is 3x,
+    // which a 4 ms-clamped timer (399 x 4 ms = 1.6 s) misses by a factor of 13.
+    expect(perIteration / PASSES).toBeLessThan((sync / PASSES) * 3);
+  }, 120_000);
 });

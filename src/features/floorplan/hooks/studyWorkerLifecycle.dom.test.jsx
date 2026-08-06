@@ -19,12 +19,22 @@
  *     off `enabled` alone
  *   - scope: daylight alone puts a `floorId` in the request key and payload
  *
- * The divergence T7 REMOVED, and the one intended behaviour change in it:
- * supersession. Wind terminated the superseded worker and rebuilt it; daylight
- * and solar reused one long-lived worker, so a replacement run queued behind
- * the obsolete one. All three now terminate and rebuild — the pins in
- * 'supersession is now uniform' below assert the new behaviour, having
- * previously asserted the old.
+ * ## Supersession: the same behaviour twice reversed
+ *
+ * Wind originally terminated the superseded worker and rebuilt it; daylight and
+ * solar reused one long-lived worker, so a replacement queued behind the
+ * obsolete run. T7 made all three terminate. T6 has now made all three KEEP the
+ * worker and post into it, which is the opposite of what T7 landed and is a
+ * deliberate reversal rather than a regression: terminating threw away
+ * everything a worker had computed, and the wind worker now caches solved
+ * lattice fields worth two orders of magnitude more than the wait it saved.
+ *
+ * What the reversal costs daylight and solar, stated plainly because it is a
+ * real cost: only the wind solver yields between chunks, so only wind can abandon
+ * a superseded run mid-solve. A superseded daylight or solar run still occupies
+ * its worker until it finishes, and its replacement waits. Correctness is
+ * unaffected — the stale answer is suppressed by id — and giving those two
+ * solvers the same chunked yields is the fix, deliberately not in this change.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -232,25 +242,32 @@ describe('study workers — debounce collapse (characterization)', () => {
   });
 });
 
-describe('study workers — supersession is now uniform', () => {
-  it('wind terminates the superseded worker and builds a fresh one', () => {
+describe('study workers — supersession keeps the worker warm, uniformly', () => {
+  it('wind posts the replacement into the worker it already has', () => {
+    // FLIPPED BY T6, from 'wind terminates the superseded worker and builds a
+    // fresh one' (two workers, `workers[0].terminateCount === 1`).
     const shared = project();
     const view = mount(WindProbe, { project: shared, windStudy: createWindStudyState({ enabled: true }) });
     advance(WIND_SETTLE_MS);
     view.update({ project: shared, windStudy: createWindStudyState({ enabled: true, directionDeg: 90 }) });
     advance(WIND_SETTLE_MS);
 
-    expect(workers).toHaveLength(2);
-    expect(workers[0].terminateCount).toBe(1);
-    expect(workers[0].messages).toHaveLength(1);
-    expect(workers[1].messages).toHaveLength(1);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].terminateCount).toBe(0);
+    expect(workers[0].messages).toHaveLength(2);
+    expect(workers[0].messages[0].id).not.toBe(workers[0].messages[1].id);
   });
 
-  it('daylight terminates too: the superseded run is killed, not left in flight', () => {
-    // T7 gave daylight the wind hook's terminate/rebuild. Before, the
-    // superseded Monte Carlo run kept burning the worker thread and the
-    // replacement queued behind it — the newer request could not start until
-    // the obsolete one finished. Now each run gets a thread of its own.
+  it('daylight does too, at the cost of queueing behind the run it superseded', () => {
+    // FLIPPED BY T6, from 'daylight terminates too: the superseded run is
+    // killed, not left in flight' (two workers, one terminated).
+    //
+    // The old comment was right about what termination bought: a superseded
+    // Monte Carlo run keeps burning the worker thread and the replacement waits
+    // for it. That is once again true here, and is the disclosed price of not
+    // throwing the worker away — the daylight solver has no chunked yields yet,
+    // so it cannot be told to stop. Wind's can, which is why wind gets the
+    // benefit without the cost.
     const shared = project();
     const view = mount(DaylightProbe, {
       project: shared,
@@ -260,27 +277,30 @@ describe('study workers — supersession is now uniform', () => {
     view.update({ project: shared, daylight: createDaylightState({ enabled: true, mode: 'grid', rayCount: 999 }) });
     advance(DAYLIGHT_SETTLE_MS);
 
-    expect(workers).toHaveLength(2);
-    expect(workers[0].terminateCount).toBe(1);
-    expect(workers[0].messages).toHaveLength(1);
-    expect(workers[1].messages).toHaveLength(1);
-    expect(workers[0].messages[0].id).not.toBe(workers[1].messages[0].id);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].terminateCount).toBe(0);
+    expect(workers[0].messages).toHaveLength(2);
+    expect(workers[0].messages[0].id).not.toBe(workers[0].messages[1].id);
   });
 
-  it('solar access terminates too, matching wind and daylight', () => {
+  it('solar access does too, matching wind and daylight', () => {
+    // FLIPPED BY T6, from 'solar access terminates too, matching wind and
+    // daylight'. Uniformity is preserved; the value it is uniform on moved.
     const shared = project();
     const view = mount(SolarProbe, { project: shared, solarAccess: createSolarAccessState({ enabled: true }) });
     advance(SOLAR_SETTLE_MS);
     view.update({ project: shared, solarAccess: createSolarAccessState({ enabled: true, skyViewRays: 128 }) });
     advance(SOLAR_SETTLE_MS);
 
-    expect(workers).toHaveLength(2);
-    expect(workers[0].terminateCount).toBe(1);
-    expect(workers[0].messages).toHaveLength(1);
-    expect(workers[1].messages).toHaveLength(1);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].terminateCount).toBe(0);
+    expect(workers[0].messages).toHaveLength(2);
   });
 
-  it('daylight builds one worker per supersession, each running exactly one study', () => {
+  it('daylight runs five studies through one worker, never building a second', () => {
+    // FLIPPED BY T6, from 'daylight builds one worker per supersession, each
+    // running exactly one study', which pinned five workers and the termination
+    // pattern [1, 1, 1, 1, 0].
     const shared = project();
     const view = mount(DaylightProbe, {
       project: shared,
@@ -291,10 +311,34 @@ describe('study workers — supersession is now uniform', () => {
       view.update({ project: shared, daylight: createDaylightState({ enabled: true, mode: 'grid', rayCount }) });
     }
     advance(DAYLIGHT_SETTLE_MS);
-    expect(workers).toHaveLength(5);
-    for (const worker of workers) expect(worker.messages).toHaveLength(1);
-    // The last worker is the live one; the four it superseded are all stopped.
-    expect(workers.map((worker) => worker.terminateCount)).toEqual([1, 1, 1, 1, 0]);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].messages).toHaveLength(5);
+    expect(workers[0].terminateCount).toBe(0);
+    expect(workers[0].messages.map((message) => message.daylight.rayCount).slice(1)).toEqual([100, 200, 300, 400]);
+  });
+
+  it('terminates all three the moment their panels are switched off', () => {
+    // The other half of the contract: warmth is for supersession only. Losing
+    // interest in a study still releases its thread — and, for wind, the fields
+    // it had cached.
+    const shared = project();
+    const views = [
+      [mount(WindProbe, { project: shared, windStudy: createWindStudyState({ enabled: true }) }), 'wind'],
+      [
+        mount(DaylightProbe, { project: shared, daylight: createDaylightState({ enabled: true, mode: 'grid' }) }),
+        'daylight',
+      ],
+      [mount(SolarProbe, { project: shared, solarAccess: createSolarAccessState({ enabled: true }) }), 'solarAccess'],
+    ];
+    advance(WIND_SETTLE_MS);
+    expect(workers).toHaveLength(3);
+    for (const worker of workers) expect(worker.terminateCount).toBe(0);
+
+    views[0][0].update({ project: shared, windStudy: createWindStudyState({ enabled: false }) });
+    views[1][0].update({ project: shared, daylight: createDaylightState({ enabled: false, mode: 'grid' }) });
+    views[2][0].update({ project: shared, solarAccess: createSolarAccessState({ enabled: false }) });
+
+    for (const [, name] of views) expect(workersFor(name)[0].terminateCount, name).toBe(1);
   });
 });
 

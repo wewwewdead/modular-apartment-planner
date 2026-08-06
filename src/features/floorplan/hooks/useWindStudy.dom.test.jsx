@@ -1,29 +1,44 @@
 /* @vitest-environment jsdom */
 /**
- * Characterization suite for the `useWindStudy` worker lifecycle (T18).
+ * Suite for the `useWindStudy` worker lifecycle.
  *
- * Everything here pins CURRENT behaviour ahead of the cache/cancellation rework
- * (T6), including the parts that are arguably wrong — a pin that describes the
- * intended design instead of the shipped one tells the rework nothing.
+ * Written as characterization ahead of T6; REWORKED BY T6, which changed the
+ * lifecycle deliberately. Each assertion that moved says so and says what it
+ * used to claim, because a pin that quietly changed its mind is worse than no
+ * pin at all.
+ *
+ * ## What T6 changed, in one paragraph
+ *
+ * The worker used to be terminated and rebuilt on every supersession. That made
+ * a superseded run stop immediately, at the cost of throwing away everything the
+ * worker had computed — which, once the worker started caching solved lattice
+ * fields, meant every keystroke bought a cold solve. Now the worker is built
+ * once and kept: supersession POSTS the newer request, and the worker abandons
+ * the older one at its next chunk boundary. `terminate()` is reserved for the
+ * two moments nobody wants the answer any more — unmount, and the panel being
+ * switched off.
  *
  * ## Why a stub worker
  *
- * jsdom has no `Worker`, and the hook's `createWorker` (useWindStudy.js:9-16)
- * treats `typeof Worker === 'undefined'` as "this browser cannot run the study".
+ * jsdom has no `Worker`, and the hook's `createWorker` treats
+ * `typeof Worker === 'undefined'` as "this browser cannot run the study".
  * `vi.stubGlobal('Worker', StubWorker)` supplies one. Vite rewrites
  * `new Worker(new URL('@/analysis/wind.worker.js', import.meta.url), …)` into a
  * resolved URL before the stub ever sees it, so the constructor receives
  * `http://localhost:3000/src/analysis/wind.worker.js?worker_file&type=module`
  * and `{ type: 'module' }` — the real worker file is never loaded or executed.
  *
- * The stub emulates exactly the four things the hook touches:
- *   - `new Worker(url, options)`            useWindStudy.js:12
- *   - `worker.addEventListener('message')`  useWindStudy.js:33
- *   - `worker.postMessage(payload)`         useWindStudy.js:75
- *   - `worker.terminate()`                  useWindStudy.js:50, :64
- * The hook never sets `onmessage`, never listens for `error`, and never calls
+ * The stub emulates exactly the four things the hook touches: the constructor,
+ * `addEventListener('message')`, `postMessage` and `terminate`. The hook never
+ * sets `onmessage`, never listens for `error`, and never calls
  * `removeEventListener`; `emit()` below therefore only has to feed the single
  * `message` listener an object shaped like `{ data }`.
+ *
+ * True chunk-abandonment cannot be seen from here — the stub never runs the
+ * solver — so cancellation is pinned at two levels: the MESSAGE level below (the
+ * newer request reaches the worker while the older one is unanswered, and the
+ * older reply is then suppressed) and the SOLVER level in `lbmSolver.test.js`
+ * (an async solve whose generation counter is bumped between chunks stops).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -277,34 +292,42 @@ describe('useWindStudy — re-render with unchanged inputs (characterization)', 
     expect(totalPosts()).toBe(1);
   });
 
-  it('DOES re-run when the settings object is rebuilt with identical values', () => {
-    // characterization: pins current behaviour; see T6. The effect depends on
-    // the memoised `settings` OBJECT (useWindStudy.js:78), not on the
-    // value-equal `requestKey` string it also depends on. A caller that hands
-    // over a fresh-but-equal windStudy object therefore terminates the running
-    // worker and starts the identical run again.
+  it('does NOT re-run when the settings object is rebuilt with identical values', () => {
+    // FLIPPED BY T6. This used to assert the opposite, and named the reason:
+    // the effect depended on the memoised `settings` OBJECT as well as on the
+    // value-equal `requestKey` string, so a caller handing over a
+    // fresh-but-equal windStudy object terminated the running worker and started
+    // the identical run again. The effect is now gated on the request key alone,
+    // and what to post is read from a ref at post time.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
     expect(totalPosts()).toBe(1);
 
-    view.update({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
-    expect(workers[0].terminateCount).toBe(1);
-    advance(SETTLE_MS);
+    for (let pass = 0; pass < 4; pass += 1) {
+      view.update({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
+    }
+    advance(SETTLE_MS * 3);
 
-    expect(workers).toHaveLength(2);
-    expect(totalPosts()).toBe(2);
-    expect(workers[1].messages[0].windStudy).toEqual(workers[0].messages[0].windStudy);
+    expect(workers).toHaveLength(1);
+    expect(totalPosts()).toBe(1);
+    expect(totalTerminations()).toBe(0);
   });
 });
 
-describe('useWindStudy — supersession and debounce (characterization)', () => {
-  it('terminates the running worker immediately and posts one replacement after the settle', () => {
+describe('useWindStudy — supersession and debounce', () => {
+  it('keeps the worker warm and posts the replacement into it', () => {
+    // FLIPPED BY T6. This used to be 'terminates the running worker immediately
+    // and posts one replacement after the settle', and asserted
+    // `first.terminateCount === 1` synchronously with the render commit plus a
+    // second worker after the settle. Killing the worker killed its solved-field
+    // cache, which is the cost T6 exists to remove: the replacement now goes to
+    // the same worker, which abandons the run in flight at its next chunk.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
-    const first = workers[0];
-    expect(first.messages).toHaveLength(1);
+    const worker = workers[0];
+    expect(worker.messages).toHaveLength(1);
 
     view.update({
       project,
@@ -312,18 +335,51 @@ describe('useWindStudy — supersession and debounce (characterization)', () => 
       projectRevision: '0||all',
     });
 
-    // Termination is synchronous with the render commit, not deferred to the
-    // timer (useWindStudy.js:64-65).
-    expect(first.terminateCount).toBe(1);
+    // Nothing happens on the commit itself: no terminate, and no post until the
+    // settle has been survived.
+    expect(worker.terminateCount).toBe(0);
+    expect(worker.messages).toHaveLength(1);
     expect(workers).toHaveLength(1);
 
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
-    expect(workers[1].terminateCount).toBe(0);
-    expect(workers[1].messages).toHaveLength(1);
-    expect(workers[1].messages[0].windStudy.directionDeg).toBe(90);
-    expect(first.messages).toHaveLength(1);
+    expect(workers).toHaveLength(1);
+    expect(totalTerminations()).toBe(0);
+    expect(worker.messages).toHaveLength(2);
+    expect(worker.messages[1].windStudy.directionDeg).toBe(90);
     expect(view.read().status).toBe('running');
+  });
+
+  it('reaches the worker with the newer request while the older one is still unanswered', () => {
+    // The message-level half of the cancellation contract: what the hook
+    // guarantees is that the worker LEARNS about the newer request without
+    // waiting for the older one to reply. What the worker then does with that —
+    // abandon the lattice at the next chunk boundary — is pinned in
+    // `lbmSolver.test.js`, which can run a real solve.
+    const project = createWindApartmentProject();
+    const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
+    advance(SETTLE_MS);
+    const worker = workers[0];
+    const firstId = worker.messages[0].id;
+
+    view.update({
+      project,
+      windStudy: createWindStudyState({ enabled: true, directionDeg: 90 }),
+      projectRevision: '0||all',
+    });
+    advance(SETTLE_MS);
+
+    // Two live requests on one worker, the first of which never replied.
+    expect(worker.messages).toHaveLength(2);
+    expect(worker.messages[1].id).not.toBe(firstId);
+    expect(view.read()).toMatchObject({ status: 'running', study: null });
+
+    // The old worker replying anyway — a real one can have a result in flight
+    // when the newer request lands — is suppressed by id.
+    emit(worker, { id: firstId, type: 'result', result: { mode: 'direction', tag: 'stale' } });
+    expect(view.read()).toMatchObject({ status: 'running', study: null });
+
+    emit(worker, { id: worker.messages[1].id, type: 'result', result: { mode: 'direction', tag: 'live' } });
+    expect(view.read()).toMatchObject({ status: 'ready', study: { tag: 'live' } });
   });
 
   it('collapses a burst of rapid changes into a single postMessage', () => {
@@ -345,10 +401,16 @@ describe('useWindStudy — supersession and debounce (characterization)', () => 
     expect(workers[0].messages[0].windStudy.directionDeg).toBe(112.5);
   });
 
-  it('burns one request id per superseded run even though only the last is posted', () => {
-    // characterization: the id is allocated in the effect body, not in the
-    // timer, so the counter advances once per keystroke. Pinned because a cache
-    // keyed on request id would have to account for the gaps.
+  it('allocates one request id per POST, not one per superseded render', () => {
+    // FLIPPED BY T6. This used to be 'burns one request id per superseded run
+    // even though only the last is posted', and pinned `baselineId + 3` after
+    // three abandoned renders: the id was allocated in the effect body, so the
+    // counter advanced once per keystroke. It is now allocated in the timer, at
+    // the moment of the post, which is what makes an id mean a request the
+    // worker has actually seen.
+    //
+    // The allocator is module-global and other suites share it, so what is
+    // pinned is the STEP between this hook's own posts, not an absolute value.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
@@ -362,18 +424,19 @@ describe('useWindStudy — supersession and debounce (characterization)', () => 
       });
     }
     advance(SETTLE_MS);
-    expect(workers[1].messages[0].id).toBe(baselineId + 3);
+    expect(workers[0].messages).toHaveLength(2);
+    expect(workers[0].messages[1].id).toBe(baselineId + 1);
   });
 
-  it('terminates once per burst, not once per change, because the ref is nulled first', () => {
-    // characterization: `workerRef.current?.terminate()` on line 64 is a no-op
-    // for every change after the first, since line 65 nulls the ref and no new
-    // worker exists until the timer fires. A burst therefore leaves at most one
-    // orphaned run — but also means a long burst has NO worker alive at all.
+  it('terminates nothing across a burst, and keeps one worker alive throughout it', () => {
+    // FLIPPED BY T6. This used to be 'terminates once per burst, not once per
+    // change, because the ref is nulled first' and asserted exactly one
+    // termination plus a second worker. Its own comment named the defect: a long
+    // burst left NO worker alive at all. There is now always exactly one.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
-    const first = workers[0];
+    const worker = workers[0];
 
     for (const directionDeg of [22.5, 45, 67.5, 90]) {
       view.update({
@@ -381,33 +444,39 @@ describe('useWindStudy — supersession and debounce (characterization)', () => 
         windStudy: createWindStudyState({ enabled: true, directionDeg }),
         projectRevision: '0||all',
       });
+      expect(totalTerminations()).toBe(0);
+      expect(workers).toHaveLength(1);
     }
-    expect(first.terminateCount).toBe(1);
-    expect(totalTerminations()).toBe(1);
 
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
-    expect(totalPosts()).toBe(2);
+    expect(workers).toHaveLength(1);
+    expect(worker.messages).toHaveLength(2);
+    expect(totalTerminations()).toBe(0);
   });
 
   it('re-runs when only the project identity changes, settings untouched', () => {
+    // Updated by T6: the re-run is a second POST into the same warm worker
+    // rather than a second worker. It used to assert `workers[0].terminateCount`
+    // was 1.
     const windStudy = createWindStudyState({ enabled: true });
     const view = mount({ project: createWindApartmentProject(), windStudy, projectRevision: '0||all' });
     advance(SETTLE_MS);
     view.update({ project: createWindApartmentProject(), windStudy, projectRevision: '1||all' });
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
-    expect(workers[0].terminateCount).toBe(1);
+    expect(workers).toHaveLength(1);
+    expect(totalPosts()).toBe(2);
+    expect(totalTerminations()).toBe(0);
   });
 
   it('re-runs when only the projectRevision changes', () => {
+    // Updated by T6: one worker, two posts. It used to expect two workers.
     const project = createWindApartmentProject();
     const windStudy = createWindStudyState({ enabled: true });
     const view = mount({ project, windStudy, projectRevision: '0||all' });
     advance(SETTLE_MS);
     view.update({ project, windStudy, projectRevision: '1|phase_new|single' });
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
+    expect(workers).toHaveLength(1);
     expect(totalPosts()).toBe(2);
   });
 
@@ -451,22 +520,36 @@ describe('useWindStudy — worker messages (characterization)', () => {
     expect(view.read()).toMatchObject({ status: 'running', study: null });
   });
 
-  it('ignores a result that arrives for a run that has already been superseded', () => {
+  it('shows a run that lands DURING the settle window, marked stale', () => {
+    // FLIPPED BY T6. This used to be 'ignores a result that arrives for a run
+    // that has already been superseded' and expected `study: null`, because the
+    // worker had been terminated the instant the inputs changed and any reply
+    // was by definition an orphan.
+    //
+    // The request in flight is no longer an orphan: it is still the pending one
+    // until the replacement is actually posted, which is a settle period away.
+    // Dropping its answer would leave the panel blank for a run that finished.
+    // It lands, keyed to the inputs it was a study of, and is therefore marked
+    // stale rather than presented as current — rule 3, doing its job.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
-    const first = workers[0];
-    const staleId = first.messages[0].id;
+    const worker = workers[0];
+    const inFlightId = worker.messages[0].id;
 
     view.update({
       project,
       windStudy: createWindStudyState({ enabled: true, directionDeg: 90 }),
       projectRevision: '0||all',
     });
-    // The terminated worker replies anyway — a real worker can have the result
-    // already in flight when terminate() lands.
-    emit(first, { id: staleId, type: 'result', result: { mode: 'direction', stale: true } });
-    expect(view.read()).toMatchObject({ status: 'running', study: null });
+    emit(worker, { id: inFlightId, type: 'result', result: { mode: 'direction', tag: 'in-flight' } });
+    expect(view.read()).toMatchObject({ status: 'running', stale: true, study: { tag: 'in-flight' } });
+
+    // Once the replacement has actually been posted, the older id stops being
+    // the pending one and a late reply carrying it is dropped.
+    advance(SETTLE_MS);
+    emit(worker, { id: inFlightId, type: 'result', result: { mode: 'direction', tag: 'too-late' } });
+    expect(view.read()).toMatchObject({ status: 'running', stale: true, study: { tag: 'in-flight' } });
   });
 
   it('surfaces progress without leaving the running state', () => {
@@ -510,15 +593,19 @@ describe('useWindStudy — worker messages (characterization)', () => {
   });
 
   it('keeps the previous study on screen when the NEXT run errors', () => {
-    // characterization: pins current behaviour; see T6. The error branch spreads
-    // over the current state (useWindStudy.js:42), so `study` survives. The
-    // panel therefore shows an error line above a result from an older
-    // building, with no marker saying so — `stale` is false once the key
-    // matches.
+    // characterization: pins current behaviour. The error branch spreads over
+    // the current state, so `study` survives. The panel therefore shows an error
+    // line above a result from an older building, with no marker saying so —
+    // `stale` is false once the key matches. Left as it was: T6 deliberately did
+    // not touch the error path, and improving it is a separate decision.
+    //
+    // Updated only in its plumbing: both runs go to the one warm worker, so the
+    // second reply is matched against `messages[1]` rather than `workers[1]`.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
-    emit(workers[0], { id: workers[0].messages[0].id, type: 'result', result: { mode: 'direction', tag: 'first' } });
+    const worker = workers[0];
+    emit(worker, { id: worker.messages[0].id, type: 'result', result: { mode: 'direction', tag: 'first' } });
 
     view.update({
       project,
@@ -526,7 +613,7 @@ describe('useWindStudy — worker messages (characterization)', () => {
       projectRevision: '0||all',
     });
     advance(SETTLE_MS);
-    emit(workers[1], { id: workers[1].messages[0].id, type: 'error', message: 'Solver diverged.' });
+    emit(worker, { id: worker.messages[1].id, type: 'error', message: 'Solver diverged.' });
 
     expect(view.read()).toMatchObject({
       status: 'error',
@@ -580,12 +667,16 @@ describe('useWindStudy — teardown (characterization)', () => {
     expect(totalPosts()).toBe(1);
   });
 
-  it('re-shows the cached study instantly on re-enable AND re-runs it anyway', () => {
-    // characterization: pins current behaviour; see T6. `enabled` is excluded
-    // from `windRunSettingsOf`, so an off/on cycle produces a requestKey that is
-    // string-equal to the finished one: `settled` is true on the very first
-    // render back, and the status reads 'ready' with the old study before any
-    // work has been done. The effect still schedules a full redundant re-run.
+  it('re-shows the cached study instantly on re-enable and does NOT re-run it', () => {
+    // FLIPPED BY T6. This used to end '…AND re-runs it anyway', asserting a
+    // second worker and a second post. The redundant run was the more expensive
+    // half of the defect, because switching the panel off terminates the worker
+    // and with it the solved fields it had cached — so the re-run was guaranteed
+    // to be a cold one, for an answer already on screen.
+    //
+    // The run is now skipped whenever the stored result already answers exactly
+    // this request key. `enabled` is excluded from `windRunSettingsOf`, so an
+    // off/on cycle produces a key string-equal to the finished one.
     const project = createWindApartmentProject();
     const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
@@ -597,9 +688,46 @@ describe('useWindStudy — teardown (characterization)', () => {
     view.update({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     expect(view.read()).toMatchObject({ status: 'ready', stale: false, study: { tag: 'first' } });
 
+    advance(SETTLE_MS * 4);
+    expect(workers).toHaveLength(1);
+    expect(totalPosts()).toBe(1);
+  });
+
+  it('still runs on re-enable when the inputs moved while the panel was off', () => {
+    // Guards the pin above against being a blanket "never re-runs after a
+    // toggle": the skip is keyed on the request, not on the toggle.
+    const project = createWindApartmentProject();
+    const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
     advance(SETTLE_MS);
+    emit(workers[0], { id: workers[0].messages[0].id, type: 'result', result: { mode: 'direction', tag: 'first' } });
+
+    view.update({ project, windStudy: createWindStudyState({ enabled: false }), projectRevision: '0||all' });
+    view.update({
+      project,
+      windStudy: createWindStudyState({ enabled: true, directionDeg: 90 }),
+      projectRevision: '0||all',
+    });
+    advance(SETTLE_MS);
+
+    // A fresh worker, because switching off terminated the last one.
     expect(workers).toHaveLength(2);
     expect(workers[1].messages).toHaveLength(1);
+    expect(workers[1].messages[0].windStudy.directionDeg).toBe(90);
+  });
+
+  it('does not re-run an errored request just because it is re-entered', () => {
+    // The skip is only for an ANSWER. An error is not one, so the next run gets
+    // to try again — which is what keeps a transient worker failure recoverable.
+    const project = createWindApartmentProject();
+    const view = mount({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
+    advance(SETTLE_MS);
+    emit(workers[0], { id: workers[0].messages[0].id, type: 'error', message: 'Solver diverged.' });
+    expect(view.read().status).toBe('error');
+
+    view.update({ project, windStudy: createWindStudyState({ enabled: false }), projectRevision: '0||all' });
+    view.update({ project, windStudy: createWindStudyState({ enabled: true }), projectRevision: '0||all' });
+    advance(SETTLE_MS);
+    expect(totalPosts()).toBe(2);
   });
 
   it('does not terminate anything when the study was never active', () => {

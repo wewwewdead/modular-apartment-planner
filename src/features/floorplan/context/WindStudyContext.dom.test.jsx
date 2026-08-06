@@ -18,9 +18,12 @@
  *
  * The link this closes: the node file proves a viewport action leaves the
  * request KEY unchanged; `useWindStudy.dom.test.jsx` proves unchanged inputs
- * mean no re-run. Neither proves the provider actually hands the hook the same
- * OBJECT identities on a pan — and identity, not key equality, is what the
- * effect depends on (see the settings-identity pin in the hook suite).
+ * mean no re-run. Neither of them runs the real provider, so neither can show
+ * that a pan reaches the hook without disturbing anything. It does, and after
+ * T6 that is a stronger guarantee than it was: the effect is gated on the
+ * request key's VALUE, so the provider re-deriving an equal settings object
+ * would no longer cost a run either. The zero-post pins below are unchanged
+ * across that rework, which is the point of quoting them here.
  */
 
 import { useEffect } from 'react';
@@ -195,7 +198,10 @@ describe('WindStudyProvider wiring (characterization)', () => {
     view.send({ type: 'SET_ACTIVE_PHASE', phaseId: 'phase_new' }, { type: 'SET_PHASE_VIEW_MODE', mode: 'single' });
     advance(SETTLE_MS);
 
-    const posted = workers[workers.length - 1].messages[0].project;
+    // One warm worker (T6), so the newest request is the last MESSAGE rather
+    // than the last worker.
+    const messages = workers[workers.length - 1].messages;
+    const posted = messages[messages.length - 1].project;
     expect(posted).not.toBe(view.state().project);
     // Strict phase views hand the solver the partitions only — no exterior
     // shell and no openings at all. The same behaviour the node suite pins at
@@ -255,32 +261,40 @@ describe('WindStudyProvider viewport actions (characterization)', () => {
 });
 
 describe('WindStudyProvider re-run triggers (characterization)', () => {
-  it('terminates and re-runs once when a wind setting changes', () => {
+  it('re-runs once into the same warm worker when a wind setting changes', () => {
+    // FLIPPED BY T6, from 'terminates and re-runs once when a wind setting
+    // changes', which asserted `workers[0].terminateCount === 1` on the commit
+    // and a second worker after the settle. Supersession now posts rather than
+    // terminates, so the worker's solved-field cache survives the edit — which
+    // is exactly what makes a ventilation-only change cheap.
     const view = enabledRun();
     view.send({ type: 'SET_WIND_STUDY', patch: { directionDeg: 90 } });
-    expect(workers[0].terminateCount).toBe(1);
+    expect(workers[0].terminateCount).toBe(0);
 
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
+    expect(workers).toHaveLength(1);
     expect(totalPosts()).toBe(2);
-    expect(workers[1].messages[0].windStudy.directionDeg).toBe(90);
+    expect(workers[0].messages[1].windStudy.directionDeg).toBe(90);
     expect(view.read().status).toBe('running');
   });
 
   it('collapses a burst of setting changes into one run', () => {
+    // Updated by T6: the second run is a second MESSAGE on the one worker. The
+    // debounce itself is untouched.
     const view = enabledRun();
     for (const directionDeg of [22.5, 45, 67.5, 90, 112.5]) {
       view.send({ type: 'SET_WIND_STUDY', patch: { directionDeg } });
       advance(50);
     }
-    expect(workers).toHaveLength(1);
+    expect(totalPosts()).toBe(1);
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
-    expect(workers[1].messages).toHaveLength(1);
-    expect(workers[1].messages[0].windStudy.directionDeg).toBe(112.5);
+    expect(workers).toHaveLength(1);
+    expect(workers[0].messages).toHaveLength(2);
+    expect(workers[0].messages[1].windStudy.directionDeg).toBe(112.5);
   });
 
   it('re-runs when a geometry edit lands', () => {
+    // Updated by T6: one worker, two posts.
     const view = enabledRun();
     const floorId = view.state().project.floors[0].id;
     view.send({
@@ -289,15 +303,16 @@ describe('WindStudyProvider re-run triggers (characterization)', () => {
       window: { id: 'win_nw_north', ventilation: { operable: true, openFraction: 0.2, dischargeCoefficient: 0.62 } },
     });
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
+    expect(workers).toHaveLength(1);
     expect(totalPosts()).toBe(2);
   });
 
   it('re-runs when the phase view changes', () => {
+    // Updated by T6: one worker, two posts.
     const view = enabledRun();
     view.send({ type: 'SET_PHASE_VIEW_MODE', mode: 'cumulative' });
     advance(SETTLE_MS);
-    expect(workers).toHaveLength(2);
+    expect(workers).toHaveLength(1);
     expect(totalPosts()).toBe(2);
   });
 

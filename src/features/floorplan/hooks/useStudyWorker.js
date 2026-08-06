@@ -12,21 +12,35 @@
  * and what to say when the browser cannot run workers at all. What does not
  * vary is everything here.
  *
- * Four rules it exists to enforce:
+ * Five rules it exists to enforce:
  *
  *   1. **A superseded run must not land.** Editing a wall while a study is
  *      running starts a newer one; the older result is for a building that no
- *      longer exists and has to be dropped, not merged. Replies are matched to
- *      requests by id, so a late one is recognisable and ignorable.
- *   2. **A superseded run must not block the new one.** The old worker is
- *      terminated and a fresh one built, so the replacement starts immediately
- *      instead of queueing behind geometry nobody is looking at any more.
+ *      longer exists. Replies are matched to requests by id, so a reply that
+ *      arrives after its request stopped being the live one is ignorable.
+ *   2. **The worker stays warm.** Supersession posts the new request and lets
+ *      the worker abandon the old one; it does NOT terminate. Termination threw
+ *      away the worker's solved-field cache on every keystroke, which is the
+ *      thing that made a one-window change cost a whole new lattice solve.
  *   3. **The last good result stays on screen.** Clearing the overlay the
  *      instant an edit starts makes the plan flash empty on every keystroke.
  *      The previous study stays, marked stale, until its replacement arrives.
  *   4. **Nothing runs unasked.** The worker is not constructed until a run has
  *      survived the settle period, so a session that never opens a study panel
- *      costs nothing.
+ *      costs nothing — and a request whose answer is already on screen is not
+ *      posted at all.
+ *   5. **Only unmount and deactivation terminate.** Those are the two moments
+ *      where nobody is going to want the answer.
+ *
+ * ## What warmth costs the studies that cannot yet be interrupted
+ *
+ * Only the wind worker solves in abandonable chunks. The daylight and solar
+ * workers still run their solve to completion inside one message handler, so a
+ * superseded run there BLOCKS its replacement until it finishes rather than
+ * being killed. That is a deliberate, disclosed trade: the id matching in rule 1
+ * keeps the stale answer off the screen either way, and terminating to shave
+ * that wait is what cost wind its cache. Giving those two workers the same
+ * chunked yields is the fix, and is not in this change.
  *
  * The shape of the state is what keeps this out of trouble. Only a *finished
  * result* is stored, and only ever written from a callback — the worker's
@@ -45,14 +59,14 @@ let nextRequestId = 1;
  * @param {object} options
  * @param {() => (Worker|null)} options.workerFactory  Builds the study's worker,
  *   or returns null when the environment cannot. Must be a stable reference —
- *   a module-level function, not an inline arrow — because a new identity is
- *   treated as a new run and terminates the worker in flight. Each study keeps
- *   its own factory so that Vite can see its literal `new URL(...)` worker path.
+ *   a module-level function, not an inline arrow. Each study keeps its own
+ *   factory so that Vite can see its literal `new URL(...)` worker path.
  * @param {boolean} options.active       Whether the study should be running at all.
- * @param {string|null} options.requestKey  Identity of the current run; a change
- *   means the stored result no longer describes the inputs on screen.
+ * @param {string|null} options.requestKey  Identity of the current run, BY VALUE.
+ *   This alone gates the run: a rebuilt-but-equal settings object produces an
+ *   equal key and must not cost a re-post.
  * @param {object} options.payload       Posted to the worker as `{ id, ...payload }`.
- *   Memoise it: its identity, alongside `requestKey`, is what triggers a re-run.
+ *   Read through a ref at post time, so its identity is not a re-run trigger.
  * @param {number} options.settleMs      Quiet period before a run starts.
  * @param {string} options.unavailableMessage  Shown when no worker can be built.
  * @returns {{study: object|null, status: string, progress: object|null, error: string|null, stale: boolean}}
@@ -60,12 +74,31 @@ let nextRequestId = 1;
 export function useStudyWorker({ workerFactory, active, requestKey, payload, settleMs, unavailableMessage }) {
   const workerRef = useRef(null);
   const pendingRef = useRef({ id: 0, key: null });
+  const payloadRef = useRef(payload);
+  const answeredRef = useRef(null);
   const [result, setResult] = useState({ study: null, key: null, error: null, progress: null, unavailable: false });
+
+  // Kept current without being a dependency of the run effect: what to post is
+  // not the same question as whether to post. Declared before that effect so it
+  // is already up to date by the time the effect below reads it.
+  useEffect(() => {
+    payloadRef.current = payload;
+  });
+
+  /**
+   * The request key whose answer is already on screen, or null.
+   *
+   * Only a real study counts. An error, or an environment that could not build
+   * a worker, is not an answer — the next run gets to try again.
+   */
+  useEffect(() => {
+    answeredRef.current = result.study && !result.error && !result.unavailable ? result.key : null;
+  }, [result]);
 
   /**
    * Build the worker on first use and give it one long-lived message handler.
    *
-   * One handler rather than one per request, because the worker can outlive a
+   * One handler rather than one per request, because the worker outlives every
    * single run: it reads the pending request from a ref, so a reply that
    * arrives after the plan has moved on is recognised and dropped rather than
    * landing on top of a newer study.
@@ -102,43 +135,47 @@ export function useStudyWorker({ workerFactory, active, requestKey, payload, set
 
   useEffect(() => teardown, [teardown]);
 
-  // Switching a study off releases its worker. The last result is kept: coming
-  // back to an overlay that is already there, marked stale until it refreshes,
-  // beats an empty plan and a fresh wait.
+  // Switching a study off releases its worker, and with it whatever the worker
+  // had cached. The last result is kept: coming back to an overlay that is
+  // already there beats an empty plan and a fresh wait — and because the run
+  // below skips a key it has already answered, coming back does not re-run it
+  // either.
   useEffect(() => {
     if (!active) teardown();
   }, [active, teardown]);
 
   useEffect(() => {
     if (!active) return undefined;
-
-    // These runs are intentionally long. Terminate a superseded worker so a
-    // wall drag does not leave the new run queued behind obsolete geometry.
-    // The ref is nulled straight away, so a burst of changes orphans at most
-    // one run: every terminate after the first is a no-op.
-    workerRef.current?.terminate();
-    workerRef.current = null;
-
-    // Allocated here rather than in the timer, so every superseded run burns an
-    // id and a reply carrying one can never be mistaken for the live request.
-    const id = nextRequestId;
-    nextRequestId += 1;
-    pendingRef.current = { id, key: requestKey };
+    // The answer for exactly these inputs is already on screen. Re-posting would
+    // recompute it, and — since disabling the study terminated the worker that
+    // had the fields cached — recompute it the slow way.
+    if (answeredRef.current !== null && answeredRef.current === requestKey) return undefined;
 
     // The worker is built inside the timer, not here: it is only genuinely
     // needed once a run survives the settle period, and building it in a
     // callback keeps every write to a ref or to state out of the effect body.
+    //
+    // The id is allocated here too, at the moment of the post, so ids count
+    // posts rather than keystrokes. Until this fires the PREVIOUS request is
+    // still the pending one, which is what lets a run that is already finishing
+    // land as a stale-marked result instead of being thrown away.
     const timer = setTimeout(() => {
       const worker = ensureWorker();
       if (!worker) {
         setResult((current) => ({ ...current, key: requestKey, unavailable: true, progress: null }));
         return;
       }
-      worker.postMessage({ id, ...payload });
+      const id = nextRequestId;
+      nextRequestId += 1;
+      pendingRef.current = { id, key: requestKey };
+      // Supersession is the worker's problem now: it sees a newer request and
+      // abandons the one in flight at its next chunk boundary. Terminating here
+      // instead would guarantee a cold start for the replacement.
+      worker.postMessage({ id, ...payloadRef.current });
     }, settleMs);
 
     return () => clearTimeout(timer);
-  }, [active, ensureWorker, payload, requestKey, settleMs]);
+  }, [active, ensureWorker, requestKey, settleMs]);
 
   const settled = result.key === requestKey;
 
