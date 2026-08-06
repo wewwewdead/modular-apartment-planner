@@ -11,11 +11,17 @@ export function WindStudyProvider({ children }) {
   const windStudy = state.editor.windStudy;
   const climate = useSiteWindClimate({ site: project?.building?.site, windStudy, dispatch });
   const projectRevision = `${state.changeVersion}|${state.editor.activePhaseId || ''}|${state.editor.phaseViewMode || ''}`;
+  // What the filtered project was filtered BY, travelling with it. Memoised on
+  // its own two fields so an unrelated re-render cannot hand the hook a fresh
+  // payload identity and restart a run that nothing has invalidated.
+  const activePhaseId = state.editor.activePhaseId;
+  const phaseViewMode = state.editor.phaseViewMode;
+  const phaseScope = useMemo(() => ({ activePhaseId, phaseViewMode }), [activePhaseId, phaseViewMode]);
   // Avoid solving the illustrative rose while its location-backed replacement
   // is still loading. A failed request releases the labelled fallback.
   const blockForClimate = climate.autoRequired && climate.status !== 'error';
   const workerSettings = blockForClimate ? { ...windStudy, enabled: false } : windStudy;
-  const worker = useWindStudyWorker({ project, windStudy: workerSettings, projectRevision });
+  const worker = useWindStudyWorker({ project, windStudy: workerSettings, projectRevision, phaseScope });
   const value = useMemo(
     () => ({
       settings: windStudy,

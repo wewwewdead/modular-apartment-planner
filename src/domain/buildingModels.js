@@ -1,4 +1,5 @@
 import { generateId } from './ids';
+import { DEFAULT_SITE_EXPOSURE_CLASS, SITE_EXPOSURE_CLASSES } from './defaults';
 import { createSpaceProgram } from './apartmentProgram';
 import { createQuantityProfile } from './quantityTakeoff';
 import { DESIGN_CONFIDENCE } from './trustModels';
@@ -35,6 +36,18 @@ function cloneWindClimateCache(cache) {
     ...cache,
     windRose: cache.windRose.map((sector) => ({ ...sector })),
   };
+}
+
+/**
+ * Terrain exposure of the site, normalised.
+ *
+ * Anything unrecognised — including a project saved before the field existed —
+ * lands on the default rather than being carried through: an exposure class is
+ * a multiplier on every wind speed the studies report, and an unreadable one
+ * must not silently become `undefined` downstream.
+ */
+export function normalizeSiteExposureClass(value) {
+  return SITE_EXPOSURE_CLASSES.includes(value) ? value : DEFAULT_SITE_EXPOSURE_CLASS;
 }
 
 function createSystem(projectId, kind, overrides = {}) {
@@ -153,6 +166,12 @@ export function createCanonicalBuilding(projectId, floors = [], overrides = {}) 
       // Compact fitted climate, not the raw hourly response. Keeping it on the
       // site makes an already-loaded wind study portable and offline-capable.
       windClimateCache: cloneWindClimateCache(overrides.site?.windClimateCache),
+      // Terrain roughness around the site. Unlike latitude/longitude this DOES
+      // get a default: every site has some exposure, there is no such thing as
+      // "unknown terrain" that would make a wind study meaningless, and the
+      // middle category is the honest neutral guess. It is disclosed in the
+      // study's model block, so a reader always sees which one was assumed.
+      exposureClass: normalizeSiteExposureClass(overrides.site?.exposureClass),
       parkingPlan: createParkingPlan(overrides.site?.parkingPlan),
     },
     levelIds: floors.map((floor) => floor.id),
@@ -286,6 +305,7 @@ export function syncCanonicalBuilding(project) {
           polygon: (target.polygon || []).map((point) => ({ ...point })),
         })),
         windClimateCache: cloneWindClimateCache(project.building.site?.windClimateCache),
+        exposureClass: normalizeSiteExposureClass(project.building.site?.exposureClass),
         parkingPlan: createParkingPlan(project.building.site?.parkingPlan),
       },
       systems: {

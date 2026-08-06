@@ -1,26 +1,9 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createWindStudyState } from '@/analysis/windState';
+import { siteExposure } from '@/analysis/windExposure';
 import WindStudyPanel, { parseRose, roseToText } from './WindStudyPanel';
-
-/**
- * The disclaimer lives behind the "Solver & wind rose" toggle, which is local
- * `useState` — `renderToStaticMarkup` never runs the click that opens it, so
- * the paragraph is not in the rendered markup.
- *
- * deferred to T18 (jsdom harness): assert the paragraph is REACHABLE — click
- * "Solver & wind rose" and read the rendered <p className={styles.disclaimer}>.
- * Until then the claims are pinned from source, with whitespace collapsed so a
- * Prettier re-wrap cannot break the pin.
- */
-function disclaimerText() {
-  const source = readFileSync(fileURLToPath(new URL('./WindStudyPanel.jsx', import.meta.url)), 'utf8');
-  const match = source.match(/<p className={styles\.disclaimer}>([\s\S]*?)<\/p>/);
-  if (!match) throw new Error('WindStudyPanel no longer has a styles.disclaimer paragraph.');
-  return match[1].replace(/\s+/g, ' ').trim();
-}
+import { SCREENING_CLAIMS, screeningClaims, screeningParagraphs } from './ScreeningDisclaimer';
 
 function render(overrides = {}) {
   return renderToStaticMarkup(
@@ -111,7 +94,7 @@ describe('WindStudyPanel', () => {
     expect(parseRose('north, often, 0, 5')).toBeNull();
   });
 
-  it('shows the opening-network ACH and cross-flow result', () => {
+  it('leads the room list with the bulk air-speed index and keeps ACH beside it', () => {
     const markup = render({
       windStudy: createWindStudyState({ enabled: true }),
       status: 'ready',
@@ -138,26 +121,79 @@ describe('WindStudyPanel', () => {
               pressurePa: 1.2,
               crossVentilated: true,
               airChangesPerHour: 2.4,
+              airSpeedMs: 0.12,
+              airSpeedBand: { lowMs: 0.06, highMs: 0.18, fraction: 0.5 },
             },
           ],
         },
       },
     });
     expect(markup).toContain('Room airflow network');
+    expect(markup).toContain('0.12 m/s');
+    expect(markup).toContain('0.06–0.18 m/s');
     expect(markup).toContain('2.4 ACH');
     expect(markup).toContain('Cross-flow');
     expect(markup).toContain('not a code pass/fail');
   });
 });
 
+/* -------------------------------------------------------------------------- */
+/* The screening disclaimer, now generated from flags                          */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Characterization suite for the hand-written screening disclaimer. A later
- * task replaces this paragraph with text generated from the result's `model`
- * object; each claim below is asserted separately so that rewrite has to
- * account for every one of them individually rather than swapping the block
- * wholesale and losing a caveat by accident.
+ * Direction-mode models shaped exactly as `windRunner.js` / `ventilationNetwork.js`
+ * stamp them. The claim assertions below read the GENERATOR's output, not the
+ * panel source: the golden-string pin these replace could only ever say the
+ * prose had not been retyped, and it went on passing while the prose said "no
+ * atmospheric boundary layer" would have stayed true.
  */
-describe('WindStudyPanel disclaimer claims (characterization)', () => {
+function studyModel(overrides = {}) {
+  return {
+    kind: 'D2Q9-BGK-2D',
+    screeningOnly: true,
+    exposure: siteExposure({ exposureClass: 'suburban', sliceHeightMm: 1500 }),
+    convergence: 'screening-450',
+    phaseScope: { activePhaseId: null, phaseViewMode: 'all' },
+    ...overrides,
+  };
+}
+
+function ventilationModel(overrides = {}) {
+  return {
+    kind: 'wind-pressure-multizone',
+    screeningOnly: true,
+    pressureHeightModel: 'uniform-from-outdoor-slice',
+    includesStackEffect: false,
+    includesThermalBuoyancy: false,
+    includesIndoorMomentum: false,
+    cpFallbackCount: 0,
+    cpFallbackModel: 'swami-chandra-1988',
+    verticalCoupling: false,
+    cpSliceHeightMm: 1500,
+    cpSampledFloorIds: ['floor_1'],
+    cpExtrapolatedCount: 0,
+    includesRoomAirSpeed: true,
+    airSpeedMethod: 'bulk-cross-section',
+    ...overrides,
+  };
+}
+
+function disclaimerText(overrides = {}) {
+  return screeningParagraphs({ model: studyModel(), ventilationModel: ventilationModel(), ...overrides })
+    .map((paragraph) => paragraph.text)
+    .join(' ');
+}
+
+/**
+ * The 24 claims the hand-written paragraph made, each still asserted on its own
+ * so the rewrite had to account for every one individually.
+ *
+ * Twenty-three survive verbatim. The one that changed is marked: T11 applies a
+ * power-law boundary-layer transformation, so "no atmospheric boundary layer"
+ * became false and had to be reworded rather than deleted.
+ */
+describe('screening disclaimer — the claims the hand-written paragraph made', () => {
   it('claims the whole thing is a screening model only', () => {
     expect(disclaimerText()).toContain('Screening model only');
   });
@@ -178,12 +214,22 @@ describe('WindStudyPanel disclaimer claims (characterization)', () => {
     expect(disclaimerText()).toContain('with no vertical flow');
   });
 
-  it('claims there is no atmospheric boundary layer', () => {
-    expect(disclaimerText()).toContain('atmospheric boundary layer');
+  it('REWORDED: the atmospheric boundary layer is now applied, not excluded', () => {
+    // Was: "...with no vertical flow, atmospheric boundary layer, terrain...".
+    // T11 makes that false — the 10 m speed is transformed to slice height by a
+    // power-law ABL profile. The claim survives as a statement of WHAT is
+    // applied and what is still missing, and the negative form must be gone.
+    const text = disclaimerText();
+    expect(text).toContain('atmospheric boundary layer');
+    expect(text).toContain('power-law atmospheric boundary layer profile');
+    expect(text).not.toContain('no vertical flow, atmospheric boundary layer');
+    expect(text).toContain('the solver itself is fed a uniform inlet');
   });
 
   it('claims terrain is excluded', () => {
     expect(disclaimerText()).toContain('terrain');
+    // Still true of the SOLVER, which is what the original claim was about.
+    expect(disclaimerText()).toContain('no sheared profile, terrain height or surface roughness inside the domain');
   });
 
   it('claims thermal buoyancy is excluded from the flow model', () => {
@@ -247,25 +293,160 @@ describe('WindStudyPanel disclaimer claims (characterization)', () => {
   });
 
   it('claims room airflow excludes indoor velocity detail', () => {
+    // Still true, and now doubly load-bearing: T10 reports a bulk index, which
+    // is exactly NOT velocity detail, and the next claim says so.
     expect(disclaimerText()).toContain('indoor velocity detail');
   });
 
   it('claims the study is not a wind-engineering certification', () => {
     expect(disclaimerText()).toContain('This is not a wind-engineering certification.');
   });
+});
 
-  it('pins the exact disclaimer paragraph as one golden string', () => {
-    expect(disclaimerText()).toBe(
-      'Screening model only: location climate is regional 10 m reanalysis, not an on-site anemometer record. ' +
-        'The flow model is a steady 2D pedestrian slice with no vertical flow, atmospheric boundary layer, ' +
-        'terrain, thermal buoyancy, transient gusts, or RANS/LES turbulence closure. Comfort colours use the ' +
-        'modified City Lawson 2.5 / 4 / 6 / 8 m/s thresholds at 5% exceedance; safety flags exceed 15 m/s at ' +
-        '0.022% exceedance. Room airflow is a steady pressure-network calculation using configured opening ' +
-        'fractions and a height-uniform façade pressure from the outdoor slice; it excludes leakage, stack ' +
-        'effect, fans, ducts, and indoor velocity detail. This is not a wind-engineering certification.',
+describe('screening disclaimer — claims the new flags add', () => {
+  it('states the exposure class, exponent and factor it applied', () => {
+    const text = disclaimerText({
+      model: studyModel({ exposure: siteExposure({ exposureClass: 'dense-urban', sliceHeightMm: 1500 }) }),
+    });
+    expect(text).toContain('dense-urban power-law atmospheric boundary layer profile');
+    expect(text).toContain('α 0.33');
+    expect(text).toContain('×0.535');
+    expect(text).toContain('1.5 m analysis slice');
+  });
+
+  it('states the iteration budget the outdoor field was given', () => {
+    expect(disclaimerText()).toContain('fixed screening budget of 450 lattice iterations (screening-450)');
+    expect(disclaimerText()).toContain('not necessarily a converged solution');
+    expect(disclaimerText({ model: studyModel({ convergence: 'screening-3000' }) })).toContain(
+      'budget of 3000 lattice iterations',
     );
   });
 
+  it('says storeys are not vertically coupled', () => {
+    expect(disclaimerText()).toContain('Storeys are solved as separate networks');
+    expect(disclaimerText()).toContain('stair, shaft and atrium flow is absent');
+  });
+
+  it('names the Cp slice and how many floors sampled it', () => {
+    expect(disclaimerText()).toContain('one 1.5 m horizontal slice, sampled by 1 floor');
+    expect(disclaimerText({ ventilationModel: ventilationModel({ cpSampledFloorIds: ['a', 'b'] }) })).toContain(
+      'sampled by 2 floors',
+    );
+    expect(disclaimerText({ ventilationModel: ventilationModel({ cpSampledFloorIds: [] }) })).toContain(
+      'which no opening sampled successfully',
+    );
+  });
+
+  it('discloses extrapolated openings only when there are some', () => {
+    expect(disclaimerText()).not.toContain('extrapolated coefficient');
+    const text = disclaimerText({ ventilationModel: ventilationModel({ cpExtrapolatedCount: 3 }) });
+    expect(text).toContain('3 openings sit more than a storey from that slice and carry extrapolated coefficients');
+    expect(text).toContain('never saw the flow at that height');
+    expect(disclaimerText({ ventilationModel: ventilationModel({ cpExtrapolatedCount: 1 }) })).toContain(
+      '1 opening sits more than a storey from that slice and carries an extrapolated coefficient',
+    );
+  });
+
+  it('discloses the correlation fallback only when it was used, and names the model', () => {
+    expect(disclaimerText()).not.toContain('failed the solved-field sanity test');
+    const text = disclaimerText({ ventilationModel: ventilationModel({ cpFallbackCount: 2 }) });
+    expect(text).toContain('2 exterior openings failed the solved-field sanity test');
+    expect(text).toContain('swami-chandra-1988 correlation');
+  });
+
+  it('says the room air speed is a bulk index with a fixed band, not a felt velocity', () => {
+    const text = disclaimerText();
+    expect(text).toContain('Room air speed is a bulk movement index');
+    expect(text).toContain("through-flow divided by the room's flow-normal cross-section, ±50%");
+    expect(text).toContain('not an occupied-zone velocity');
+    expect(text).toContain('no inlet jet, no decay, no local velocity field');
+  });
+
+  it('names the phase scope only when the view was filtered', () => {
+    expect(disclaimerText()).not.toContain('phase view');
+    const text = disclaimerText({
+      model: studyModel({ phaseScope: { activePhaseId: 'phase_new', phaseViewMode: 'single' } }),
+    });
+    expect(text).toContain('“single” phase view for phase phase_new only');
+    expect(text).toContain('walls and openings alike');
+    // A cumulative view with no active phase still hides nothing named, but it
+    // is a filtered view and has to say so.
+    expect(disclaimerText({ model: studyModel({ phaseScope: { phaseViewMode: 'cumulative' } }) })).toContain(
+      '“cumulative” phase view only',
+    );
+  });
+});
+
+describe('screening disclaimer — completeness', () => {
+  const NAMESPACES = { study: studyModel(), ventilation: ventilationModel() };
+
+  it('has a sentence for every flag the models carry', () => {
+    const covered = new Set(SCREENING_CLAIMS.flatMap((spec) => spec.flags));
+    const uncovered = [];
+    for (const [namespace, model] of Object.entries(NAMESPACES)) {
+      for (const key of Object.keys(model)) {
+        if (!covered.has(`${namespace}.${key}`)) uncovered.push(`${namespace}.${key}`);
+      }
+    }
+    expect(uncovered).toEqual([]);
+  });
+
+  it('has no orphan sentence claiming a flag the models do not carry', () => {
+    const present = new Set(
+      Object.entries(NAMESPACES).flatMap(([namespace, model]) =>
+        Object.keys(model).map((key) => `${namespace}.${key}`),
+      ),
+    );
+    const orphans = SCREENING_CLAIMS.flatMap((spec) => spec.flags).filter((flag) => !present.has(flag));
+    expect(orphans).toEqual([]);
+  });
+
+  it('sources the Lawson numbers from windComfort.js rather than retyping them', async () => {
+    const { COMFORT_EXCEEDANCE, SAFETY_EXCEEDANCE, WIND_COMFORT_CATEGORIES, WIND_SAFETY_SPEED } =
+      await import('@/analysis/windComfort');
+    const text = disclaimerText();
+    for (const category of WIND_COMFORT_CATEGORIES) {
+      if (!Number.isFinite(category.maximumSpeed)) continue;
+      expect(text, String(category.maximumSpeed)).toContain(String(category.maximumSpeed));
+    }
+    expect(text).toContain(`${WIND_SAFETY_SPEED} m/s`);
+    expect(text).toContain(`${COMFORT_EXCEEDANCE * 100}% exceedance`);
+    // 0.00022 * 100 is 0.022000000000000002 in binary floating point; the
+    // generator has to print 0.022 without inventing the digits.
+    expect(text).toContain('0.022% exceedance');
+    expect(SAFETY_EXCEEDANCE).toBe(0.00022);
+  });
+
+  it('is emitted with two claims per flagless permanent property, and no duplicates', () => {
+    const ids = screeningClaims({ model: studyModel(), ventilationModel: ventilationModel() }).map((claim) => claim.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain('lawson-criteria');
+    expect(ids).toContain('not-a-certification');
+    expect(SCREENING_CLAIMS.filter((spec) => spec.flags.length === 0).map((spec) => spec.id)).toEqual([
+      'lawson-criteria',
+      'not-a-certification',
+    ]);
+  });
+
+  it('still states every permanent caveat before any run has landed', () => {
+    // The advanced section renders with `study` null; the model-level claims
+    // must survive that, and only the run-specific ones drop out.
+    const ids = screeningClaims({}).map((claim) => claim.id);
+    expect(ids).toEqual(['screening-only', 'flow-model', 'lawson-criteria', 'network-basis', 'not-a-certification']);
+    expect(screeningParagraphs({})[0].text).toMatch(/^Screening model only/);
+  });
+
+  it('drops the airflow disclosures in comfort mode, where there is no network', () => {
+    const ids = screeningClaims({ model: studyModel() }).map((claim) => claim.id);
+    expect(ids).not.toContain('vertical-coupling');
+    expect(ids).not.toContain('cp-slice');
+    expect(ids).not.toContain('room-air-speed');
+    expect(ids).toContain('exposure-transform');
+    expect(ids).toContain('convergence-budget');
+  });
+});
+
+describe('WindStudyPanel disclaimer placement (characterization)', () => {
   it('pins that the disclaimer is not rendered until the advanced section is opened', () => {
     // characterization: pins current behaviour; see T2. Every caveat above is
     // one click deep. The default panel render carries none of it.

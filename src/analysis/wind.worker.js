@@ -22,9 +22,9 @@ function transferablesOf(result) {
 }
 
 self.onmessage = (event) => {
-  const { id, project, windStudy } = event.data || {};
+  const { id, project, windStudy, phaseScope } = event.data || {};
   try {
-    const result = computeWindStudy({ project, windStudy }, (progress) =>
+    const result = computeWindStudy({ project, windStudy, phaseScope }, (progress) =>
       self.postMessage({ id, type: 'progress', progress }),
     );
     self.postMessage({ id, type: 'result', result }, transferablesOf(result));

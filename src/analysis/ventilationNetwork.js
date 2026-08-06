@@ -12,11 +12,27 @@ import { pointInPolygon, polygonArea, polygonAreaCentroid } from '@/geometry/pol
 import { positionOnWall, wallLength } from '@/geometry/wallGeometry';
 import { WALL_HEIGHT } from '@/domain/defaults';
 import { CP_CORRELATION, correlationCp, incidenceFromFlow, isPlausibleCp } from './cpCorrelation';
+import { computeRoomAirSpeed, ROOM_AIR_SPEED_METHOD, UNRESOLVED_ROOM_AIR_SPEED } from './roomAirSpeed';
 import { windDirectionBasis } from './windDomain';
 
 const AIR_DENSITY_KG_M3 = 1.204;
 const DEFAULT_DISCHARGE_COEFFICIENT = 0.62;
 const ROOM_PROBE_MM = 80;
+/** Height the outdoor slice is cut at when a caller does not say, mm. */
+const DEFAULT_SLICE_HEIGHT_MM = 1500;
+/**
+ * How far an opening's centre may sit from the Cp slice before its pressure
+ * coefficient is disclosed as extrapolated, mm.
+ *
+ * +/-1500 mm around the default 1500 mm slice spans 0 .. 3000 mm — one storey.
+ * Every opening on the storey the slice actually cuts is therefore treated as
+ * sampled, and an opening a full floor above or below is flagged: the solve ran
+ * in a single horizontal plane and never saw the flow at that height, so the
+ * coefficient it hands back is an assumption of vertical uniformity rather than
+ * anything the field measured. Purely a disclosure threshold — crossing it
+ * changes no number, only what the result admits about itself.
+ */
+const CP_SLICE_BAND_MM = 1500;
 const MIN_EFFECTIVE_AREA_M2 = 1e-4;
 const PRESSURE_SMOOTHING_PA = 0.01;
 const MAX_SOLVE_ITERATIONS = 60;
@@ -402,27 +418,59 @@ function solvePressures(rooms, openings) {
  * are only consulted when a facade sample fails its sanity test and the
  * correlation fallback needs an incidence angle; the solved field is the engine
  * everywhere the sample is sane.
+ *
+ * `sliceHeightMm` is the height the outdoor field was solved at. Nothing in the
+ * solve uses it — the Cp values arrive already sampled — but the result has to
+ * be able to say which openings the slice could plausibly speak for, so it is
+ * carried through to the disclosure flags rather than left implicit.
  */
-export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, directionDeg = null, northAngle = 0 }) {
+export function computeVentilationNetwork({
+  project,
+  grid,
+  referenceSpeed = 5,
+  directionDeg = null,
+  northAngle = 0,
+  sliceHeightMm = DEFAULT_SLICE_HEIGHT_MM,
+}) {
   const topology = buildVentilationTopology(project);
   const flowDirection = freeStreamDirection(grid, directionDeg, northAngle);
+  // `Number(null)` is 0, and a default parameter only fires on `undefined`, so
+  // an explicit null would otherwise put the slice on the ground and re-label
+  // every opening's coefficient off the back of it.
+  const requestedSliceHeight = finite(sliceHeightMm, DEFAULT_SLICE_HEIGHT_MM);
+  const sliceHeight = requestedSliceHeight > 0 ? requestedSliceHeight : DEFAULT_SLICE_HEIGHT_MM;
   let cpFallbackCount = 0;
+  let cpExtrapolatedCount = 0;
+  const cpSampledFloorIds = new Set();
   const openings = topology.openings.map((opening) => {
     if (!opening.exterior) {
-      return { ...opening, outsidePressurePa: null, pressureCoefficient: null, cpSource: null };
+      // An internal opening never touches the outdoor field, so every
+      // outdoor-only field is null rather than false: "not applicable", which
+      // is a different statement from "sampled and found to be in band".
+      return {
+        ...opening,
+        outsidePressurePa: null,
+        pressureCoefficient: null,
+        cpSource: null,
+        cpExtrapolated: null,
+      };
     }
     const pressure = sampleFacadePressure(opening, grid, Math.max(0.1, finite(referenceSpeed, 5)), flowDirection);
     if (pressure.source === 'correlation') cpFallbackCount += 1;
+    else cpSampledFloorIds.add(opening.floorId);
+    const cpExtrapolated = Math.abs(finite(opening.centreElevation, 0) - sliceHeight) > CP_SLICE_BAND_MM;
+    if (cpExtrapolated) cpExtrapolatedCount += 1;
     return {
       ...opening,
       outsidePressurePa: pressure.pressurePa,
       pressureCoefficient: pressure.pressureCoefficient,
       cpSource: pressure.source,
+      cpExtrapolated,
     };
   });
   const solved = solvePressures(topology.rooms, openings);
   const roomMetrics = new Map(
-    topology.rooms.map((room) => [room.id, { inflowM3s: 0, outflowM3s: 0, openingIds: new Set() }]),
+    topology.rooms.map((room) => [room.id, { inflowM3s: 0, outflowM3s: 0, openingIds: new Set(), openings: [] }]),
   );
 
   const openingResults = openings.map((opening) => {
@@ -431,6 +479,11 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, d
     const pressureA = a === undefined ? 0 : solved.pressures[a];
     const pressureB = opening.exterior ? opening.outsidePressurePa : b === undefined ? 0 : solved.pressures[b];
     const flowM3s = a === undefined ? 0 : flowAtPressureDifference(opening, pressureA - pressureB).flow;
+    const result = {
+      ...opening,
+      flowM3s,
+      flowDirection: Math.abs(flowM3s) < 1e-6 ? 'balanced' : flowM3s > 0 ? 'a-to-b' : 'b-to-a',
+    };
     // `roomMetrics` is keyed by every room in the topology and an opening is
     // only ever built from rooms in that same list, so both lookups are
     // invariants, not possibilities. The optional chaining that used to guard
@@ -439,19 +492,17 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, d
     // later and with a worse message.
     const aMetrics = roomMetrics.get(opening.roomAId);
     aMetrics.openingIds.add(opening.id);
+    aMetrics.openings.push(result);
     if (flowM3s >= 0) aMetrics.outflowM3s += flowM3s;
     else aMetrics.inflowM3s += -flowM3s;
     if (!opening.exterior) {
       const bMetrics = roomMetrics.get(opening.roomBId);
       bMetrics.openingIds.add(opening.id);
+      bMetrics.openings.push(result);
       if (flowM3s >= 0) bMetrics.inflowM3s += flowM3s;
       else bMetrics.outflowM3s += -flowM3s;
     }
-    return {
-      ...opening,
-      flowM3s,
-      flowDirection: Math.abs(flowM3s) < 1e-6 ? 'balanced' : flowM3s > 0 ? 'a-to-b' : 'b-to-a',
-    };
+    return result;
   });
 
   const rooms = topology.rooms.map((room) => {
@@ -460,14 +511,25 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, d
     const balancedFlowM3s = (metrics.inflowM3s + metrics.outflowM3s) / 2;
     const airChangesPerHour = room.volumeM3 > 0 ? (balancedFlowM3s * 3600) / room.volumeM3 : 0;
     const hasExchange = metrics.inflowM3s > 1e-5 && metrics.outflowM3s > 1e-5;
+    const connectedToExterior = solved.activeIds.has(room.id);
+    // Every assessed room carries the bulk index by construction. A room that
+    // never joined the network reports null rather than 0: its zero would mean
+    // "not modelled", which is the one thing a speed of zero must not say.
+    const airSpeed = connectedToExterior
+      ? computeRoomAirSpeed({ room, openings: metrics.openings })
+      : UNRESOLVED_ROOM_AIR_SPEED;
     return {
       ...room,
-      connectedToExterior: solved.activeIds.has(room.id),
+      connectedToExterior,
       pressurePa: index === undefined ? 0 : solved.pressures[index],
       inflowM3s: metrics.inflowM3s,
       outflowM3s: metrics.outflowM3s,
       airChangesPerHour,
       crossVentilated: hasExchange && metrics.openingIds.size >= 2,
+      // Bulk air-movement index, NOT an occupied-zone velocity. The band is
+      // never absent when the speed is present; see roomAirSpeed.js.
+      airSpeedMs: airSpeed.speedMs,
+      airSpeedBand: airSpeed.band,
     };
   });
 
@@ -515,6 +577,23 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, d
       // openings carry an empirical low-rise estimate, not this building's CFD.
       cpFallbackCount,
       cpFallbackModel: CP_CORRELATION.model,
+      // Storeys are solved as independent networks. There is no shaft, stair or
+      // lift-lobby path between floors in this model, and no buoyancy to drive
+      // one even if there were: an opening only ever connects two rooms on the
+      // same floor, because that is all `buildVentilationTopology` builds.
+      verticalCoupling: false,
+      // Which slice the facade coefficients came from, and who could actually
+      // see it. A floor absent from `cpSampledFloorIds` had no exterior opening
+      // that took a usable sample — its openings ran on the correlation instead.
+      cpSliceHeightMm: sliceHeight,
+      cpSampledFloorIds: [...cpSampledFloorIds].sort(),
+      cpExtrapolatedCount,
+      // Every assessed room carries `airSpeedMs`/`airSpeedBand`. The METHOD is
+      // stated once, here, rather than repeated on every room: a per-room copy
+      // of the string invites a reader to believe rooms could differ, and they
+      // cannot — one construction is applied to all of them.
+      includesRoomAirSpeed: true,
+      airSpeedMethod: ROOM_AIR_SPEED_METHOD,
     },
   };
 }
@@ -526,4 +605,6 @@ export const VENTILATION_CONSTANTS = {
   CONVERGENCE_RESIDUAL_M3S,
   MAX_SOLVE_ITERATIONS,
   CP_PLAUSIBILITY_LIMIT: CP_CORRELATION.CP_PLAUSIBILITY_LIMIT,
+  CP_SLICE_BAND_MM,
+  DEFAULT_SLICE_HEIGHT_MM,
 };

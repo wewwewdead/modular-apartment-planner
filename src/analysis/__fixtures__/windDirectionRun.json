@@ -21,9 +21,9 @@
     }
   },
   "summary": {
-    "referenceSpeed": 6,
+    "referenceSpeed": 3.9526770066035954,
     "peakAmplification": 2.10024356842041,
-    "peakSpeed": 12.601461410522461,
+    "peakSpeed": 8.30158446116244,
     "meanAmplification": 1.0483022409064564,
     "acceleratedFraction": 0.26326635754765587,
     "shelteredFraction": 0.21792890262751158,
@@ -38,12 +38,12 @@
       "openInternalCount": 1,
       "crossVentilatedRoomCount": 3,
       "stagnantRoomCount": 0,
-      "meanAirChangesPerHour": 93.87448497741626,
-      "maxAirChangesPerHour": 140.47265478613085
+      "meanAirChangesPerHour": 61.793882354340475,
+      "maxAirChangesPerHour": 92.47821246880278
     },
     "solver": {
       "iterations": 15,
-      "residualM3s": 5.0609529456124847e-8,
+      "residualM3s": 2.7640612909607398e-8,
       "converged": true,
       "failure": null
     },
@@ -55,7 +55,13 @@
       "includesThermalBuoyancy": false,
       "includesIndoorMomentum": false,
       "cpFallbackCount": 1,
-      "cpFallbackModel": "swami-chandra-1988"
+      "cpFallbackModel": "swami-chandra-1988",
+      "verticalCoupling": false,
+      "cpSliceHeightMm": 1500,
+      "cpSampledFloorIds": ["floor_wind_fixture"],
+      "cpExtrapolatedCount": 0,
+      "includesRoomAirSpeed": true,
+      "airSpeedMethod": "bulk-cross-section"
     },
     "rooms": [
       {
@@ -66,11 +72,17 @@
         "heightMm": 3200,
         "volumeM3": 100.8,
         "connectedToExterior": true,
-        "pressurePa": -31.15810588678537,
-        "inflowM3s": 3.059182234482085,
-        "outflowM3s": 3.059182284036669,
-        "airChangesPerHour": 109.25650925926348,
-        "crossVentilated": true
+        "pressurePa": -13.522175759754383,
+        "inflowM3s": 2.0139699466113985,
+        "outflowM3s": 2.0139699735557057,
+        "airChangesPerHour": 71.92749857441258,
+        "crossVentilated": true,
+        "airSpeedMs": 0.08990937321801572,
+        "airSpeedBand": {
+          "lowMs": 0.04495468660900786,
+          "highMs": 0.13486405982702357,
+          "fraction": 0.5
+        }
       },
       {
         "id": "room_ne",
@@ -80,11 +92,17 @@
         "heightMm": 3200,
         "volumeM3": 72,
         "connectedToExterior": true,
-        "pressurePa": -42.5070842936557,
-        "inflowM3s": 0.6378858190849798,
-        "outflowM3s": 0.6378858163891977,
-        "airChangesPerHour": 31.894290886854435,
-        "crossVentilated": true
+        "pressurePa": -18.446112056170936,
+        "inflowM3s": 0.4195187212686308,
+        "outflowM3s": 0.4195187195236115,
+        "airChangesPerHour": 20.975936019806056,
+        "crossVentilated": true,
+        "airSpeedMs": 0.019751694754597184,
+        "airSpeedBand": {
+          "lowMs": 0.009875847377298592,
+          "highMs": 0.029627542131895775,
+          "fraction": 0.5
+        }
       },
       {
         "id": "room_sw",
@@ -94,11 +112,17 @@
         "heightMm": 3200,
         "volumeM3": 78.4,
         "connectedToExterior": true,
-        "pressurePa": -24.737203362841715,
-        "inflowM3s": 3.0591822850916146,
-        "outflowM3s": 3.059182234482085,
-        "airChangesPerHour": 140.47265478613085,
-        "crossVentilated": true
+        "pressurePa": -10.733678865514122,
+        "inflowM3s": 2.0139699742520114,
+        "outflowM3s": 2.0139699466113985,
+        "airChangesPerHour": 92.47821246880278,
+        "crossVentilated": true,
+        "airSpeedMs": 0.08990937323355826,
+        "airSpeedBand": {
+          "lowMs": 0.04495468661677913,
+          "highMs": 0.1348640598503374,
+          "fraction": 0.5
+        }
       },
       {
         "id": "room_se",
@@ -112,7 +136,9 @@
         "inflowM3s": 0,
         "outflowM3s": 0,
         "airChangesPerHour": 0,
-        "crossVentilated": false
+        "crossVentilated": false,
+        "airSpeedMs": null,
+        "airSpeedBand": null
       }
     ],
     "openings": [
@@ -131,8 +157,9 @@
         "effectiveAreaM2": 1.248,
         "pressureCoefficient": -1.8723793029785156,
         "cpSource": "lbm",
-        "outsidePressurePa": -40.57820425415039,
-        "flowM3s": 3.059182284036669,
+        "cpExtrapolated": false,
+        "outsidePressurePa": -17.61055235631962,
+        "flowM3s": 2.0139699735557057,
         "flowDirection": "a-to-b"
       },
       {
@@ -150,8 +177,9 @@
         "effectiveAreaM2": 0.36,
         "pressureCoefficient": -1.734042763710022,
         "cpSource": "lbm",
-        "outsidePressurePa": -37.580174775123595,
-        "flowM3s": -0.6378858190849798,
+        "cpExtrapolated": false,
+        "outsidePressurePa": -16.309436250355148,
+        "flowM3s": -0.4195187212686308,
         "flowDirection": "b-to-a"
       },
       {
@@ -169,8 +197,9 @@
         "effectiveAreaM2": 0.48,
         "pressureCoefficient": -2.0894620418548584,
         "cpSource": "lbm",
-        "outsidePressurePa": -45.28282137107849,
-        "flowM3s": 0.6378858163891977,
+        "cpExtrapolated": false,
+        "outsidePressurePa": -19.652311166916213,
+        "flowM3s": 0.4195187195236115,
         "flowDirection": "a-to-b"
       },
       {
@@ -188,8 +217,9 @@
         "effectiveAreaM2": 1.056,
         "pressureCoefficient": -0.5345222493849188,
         "cpSource": "correlation",
-        "outsidePressurePa": -11.58416618866996,
-        "flowM3s": -3.0591822850916146,
+        "cpExtrapolated": false,
+        "outsidePressurePa": -5.027417277811501,
+        "flowM3s": -2.0139699742520114,
         "flowDirection": "b-to-a"
       },
       {
@@ -207,14 +237,27 @@
         "effectiveAreaM2": 1.512,
         "pressureCoefficient": null,
         "cpSource": null,
+        "cpExtrapolated": null,
         "outsidePressurePa": null,
-        "flowM3s": 3.059182234482085,
+        "flowM3s": 2.0139699466113985,
         "flowDirection": "a-to-b"
       }
     ]
   },
   "model": {
     "kind": "D2Q9-BGK-2D",
-    "screeningOnly": true
+    "screeningOnly": true,
+    "exposure": {
+      "class": "suburban",
+      "alpha": 0.22,
+      "referenceHeightM": 10,
+      "sliceHeightM": 1.5,
+      "factor": 0.6587795011005992
+    },
+    "convergence": "screening-220",
+    "phaseScope": {
+      "activePhaseId": null,
+      "phaseViewMode": "all"
+    }
   }
 }

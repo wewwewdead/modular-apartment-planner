@@ -235,6 +235,8 @@ export function summarizeWindDirectionRun(result) {
         outflowM3s: room.outflowM3s,
         airChangesPerHour: room.airChangesPerHour,
         crossVentilated: room.crossVentilated,
+        airSpeedMs: room.airSpeedMs,
+        airSpeedBand: room.airSpeedBand,
       })),
       openings: result.ventilation.openings.map((opening) => ({
         id: opening.id,
@@ -251,6 +253,7 @@ export function summarizeWindDirectionRun(result) {
         effectiveAreaM2: opening.effectiveAreaM2,
         pressureCoefficient: opening.pressureCoefficient,
         cpSource: opening.cpSource,
+        cpExtrapolated: opening.cpExtrapolated,
         outsidePressurePa: opening.outsidePressurePa,
         flowM3s: opening.flowM3s,
         flowDirection: opening.flowDirection,

@@ -74,8 +74,8 @@ function totalTerminations() {
   return workers.reduce((sum, worker) => sum + worker.terminateCount, 0);
 }
 
-function Probe({ project, windStudy, projectRevision }) {
-  const value = useWindStudy({ project, windStudy, projectRevision });
+function Probe({ project, windStudy, projectRevision, phaseScope = null }) {
+  const value = useWindStudy({ project, windStudy, projectRevision, phaseScope });
   return (
     <span
       data-probe="wind-study"
@@ -211,10 +211,30 @@ describe('useWindStudy — first run (characterization)', () => {
     mount(base);
     advance(SETTLE_MS);
     const payload = workers[0].messages[0];
-    expect(Object.keys(payload).sort()).toEqual(['id', 'project', 'windStudy']);
+    // Updated by T12: `phaseScope` joins the payload. It is deliberately NOT
+    // inside `windStudy` — it is not a solver setting and must not appear in
+    // `windRunSettingsOf` — and deliberately not part of the request key, which
+    // `projectRevision` already covers.
+    expect(Object.keys(payload).sort()).toEqual(['id', 'phaseScope', 'project', 'windStudy']);
     expect(Object.keys(windRunSettingsOf(windStudy))).not.toContain('enabled');
+    expect(Object.keys(windRunSettingsOf(windStudy))).not.toContain('phaseScope');
     expect(payload.windStudy).toEqual({ ...windRunSettingsOf(windStudy), enabled: true });
     expect(typeof payload.id).toBe('number');
+  });
+
+  it('posts a null phase scope when the caller does not supply one', () => {
+    // The hook defaults it rather than omitting the key, so the worker's
+    // destructure is never handed `undefined` from a caller that forgot.
+    mount(base);
+    advance(SETTLE_MS);
+    expect(workers[0].messages[0].phaseScope).toBeNull();
+  });
+
+  it('posts the phase scope it was handed, by identity', () => {
+    const phaseScope = { activePhaseId: 'phase_new', phaseViewMode: 'single' };
+    mount({ ...base, phaseScope });
+    advance(SETTLE_MS);
+    expect(workers[0].messages[0].phaseScope).toBe(phaseScope);
   });
 
   it('reports running until a matching result lands', () => {

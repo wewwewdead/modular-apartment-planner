@@ -1,9 +1,10 @@
-import { BEAM_DEPTH, BEAM_WIDTH } from './defaults';
+import { BEAM_DEPTH, BEAM_WIDTH, SITE_EXPOSURE_CLASSES } from './defaults';
 import { getFloorElevation, getFloorTopElevation } from './floorModels';
 import {
   createColumnStack,
   createGridAxis,
   createStructuralGrid,
+  normalizeSiteExposureClass,
   resolveGridIntersection,
   syncCanonicalBuilding,
 } from './buildingModels';
@@ -1756,6 +1757,11 @@ function definePropertyBoundary(project, command) {
  *
  * The north angle lives here too: coordinates place the site on the globe, but
  * only the north angle says which way the drawing is turned.
+ *
+ * The terrain exposure class rides along on the same command for the same
+ * reason: it is a property of WHERE the site is, not of any one study, and the
+ * wind runner reads it off the site rather than off its own settings. Omitting
+ * it leaves whatever the site already carries, exactly as the north angle does.
  */
 function configureSiteLocation(project, command) {
   const { latitude, longitude } = command;
@@ -1782,6 +1788,15 @@ function configureSiteLocation(project, command) {
       { timeZone: command.timeZone },
     );
   }
+  if (command.exposureClass != null && !SITE_EXPOSURE_CLASSES.includes(command.exposureClass)) {
+    return commandError(
+      project,
+      command,
+      'invalid-exposure-class',
+      `Site exposure must be one of: ${SITE_EXPOSURE_CLASSES.join(', ')}.`,
+      { exposureClass: command.exposureClass },
+    );
+  }
 
   const nextProject = updateSite(project, (site) => {
     const coordinatesChanged = site.latitude !== latitude || site.longitude !== longitude;
@@ -1792,6 +1807,7 @@ function configureSiteLocation(project, command) {
       timeZone: command.timeZone.trim(),
       northAngle: command.northAngle ?? site.northAngle ?? 0,
       locationLabel: command.locationLabel ?? site.locationLabel ?? '',
+      exposureClass: normalizeSiteExposureClass(command.exposureClass ?? site.exposureClass),
       // A rose fitted for the old coordinates must never silently survive a
       // location change. Keeping it for timezone/north edits is safe.
       windClimateCache: coordinatesChanged ? null : site.windClimateCache || null,

@@ -1052,3 +1052,90 @@ describe('ventilation — facade sample sanity test and correlation fallback', (
     expect(result.model.cpFallbackCount).toBe(0);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* What the result admits about the slice it came from (T12)                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The Cp field is a single horizontal plane. Everything below is about the
+ * result being able to say so — which slice, who sampled it, and which openings
+ * are being handed a coefficient the slice never measured at their height.
+ * None of these flags changes a number; they change what the number claims.
+ */
+describe('ventilation — Cp slice disclosure', () => {
+  const { CP_SLICE_BAND_MM, DEFAULT_SLICE_HEIGHT_MM } = VENTILATION_CONSTANTS;
+
+  function run(overrides = {}) {
+    return computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+      directionDeg: 0,
+      ...overrides,
+    });
+  }
+
+  it('defaults the slice to the height the wind study defaults to', () => {
+    expect(DEFAULT_SLICE_HEIGHT_MM).toBe(1500);
+    expect(run().model.cpSliceHeightMm).toBe(1500);
+    expect(run({ sliceHeightMm: 2400 }).model.cpSliceHeightMm).toBe(2400);
+    // A caller that hands over nonsense gets the default, not NaN — and not 0
+    // either, which is what `Number(null)` would otherwise put on the ground.
+    expect(run({ sliceHeightMm: 'high' }).model.cpSliceHeightMm).toBe(1500);
+    expect(run({ sliceHeightMm: null }).model.cpSliceHeightMm).toBe(1500);
+    expect(run({ sliceHeightMm: 0 }).model.cpSliceHeightMm).toBe(1500);
+    expect(run({ sliceHeightMm: -900 }).model.cpSliceHeightMm).toBe(1500);
+  });
+
+  it('never couples storeys, and says so', () => {
+    expect(run().model.verticalCoupling).toBe(false);
+  });
+
+  it('lists only the floors whose openings took a usable sample', () => {
+    const result = run();
+    const floorId = result.openings[0].floorId;
+    expect(result.model.cpSampledFloorIds).toEqual([floorId]);
+    // A grid with no Cp field at all sends every opening to the correlation, so
+    // no floor sampled anything and the list is empty rather than absent.
+    const noField = run({ grid: { ...diagonalCpGrid(), pressureCoefficient: undefined } });
+    expect(noField.model.cpFallbackCount).toBeGreaterThan(0);
+    expect(noField.model.cpSampledFloorIds).toEqual([]);
+  });
+
+  it('calls an opening on the slice sampled, and one a storey away extrapolated', () => {
+    // Fixture openings centre at 900 + 1500/2 = 1650 mm.
+    const onSlice = run({ sliceHeightMm: 1650 });
+    expect(onSlice.openings.every((opening) => opening.cpExtrapolated === false)).toBe(true);
+    expect(onSlice.model.cpExtrapolatedCount).toBe(0);
+
+    const aStoreyUp = run({ sliceHeightMm: 1650 + CP_SLICE_BAND_MM + 1 });
+    expect(aStoreyUp.openings.every((opening) => opening.cpExtrapolated === true)).toBe(true);
+    expect(aStoreyUp.model.cpExtrapolatedCount).toBe(aStoreyUp.openings.length);
+  });
+
+  it('keeps an opening exactly on the band edge as sampled, not extrapolated', () => {
+    const edge = run({ sliceHeightMm: 1650 + CP_SLICE_BAND_MM });
+    expect(edge.model.cpExtrapolatedCount).toBe(0);
+    const justPast = run({ sliceHeightMm: 1650 + CP_SLICE_BAND_MM + 1e-9 });
+    expect(justPast.model.cpExtrapolatedCount).toBe(justPast.openings.length);
+  });
+
+  it('is symmetric: a slice above the openings flags them just as one below does', () => {
+    const above = run({ sliceHeightMm: 1650 + CP_SLICE_BAND_MM + 500 });
+    const below = run({ sliceHeightMm: Math.max(1, 1650 - CP_SLICE_BAND_MM - 500) });
+    expect(above.model.cpExtrapolatedCount).toBe(above.openings.length);
+    expect(below.model.cpExtrapolatedCount).toBe(below.openings.length);
+  });
+
+  it('changes no number when it flags an opening, only what the result claims', () => {
+    const sampled = run({ sliceHeightMm: 1650 });
+    const flagged = run({ sliceHeightMm: 9000 });
+    expect(flagged.model.cpExtrapolatedCount).toBeGreaterThan(0);
+    for (let index = 0; index < sampled.openings.length; index += 1) {
+      expect(flagged.openings[index].pressureCoefficient).toBe(sampled.openings[index].pressureCoefficient);
+      expect(flagged.openings[index].flowM3s).toBe(sampled.openings[index].flowM3s);
+    }
+    expect(flagged.rooms[0].airChangesPerHour).toBe(sampled.rooms[0].airChangesPerHour);
+  });
+});

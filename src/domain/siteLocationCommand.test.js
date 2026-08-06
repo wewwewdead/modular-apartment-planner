@@ -42,6 +42,35 @@ describe('ConfigureSiteLocation', () => {
     expect(second.project.building.site.northAngle).toBe(27);
   });
 
+  it('gives a new site the default terrain exposure rather than leaving it unset', () => {
+    // Unlike latitude, exposure has no "unknown" that would make a study
+    // meaningless — every site has terrain — so this one does get a default.
+    expect(createProject('Wind Study').building.site.exposureClass).toBe('suburban');
+  });
+
+  it('records a terrain exposure class when one is given', () => {
+    const result = configure(createProject('Wind Study'), { exposureClass: 'dense-urban' });
+
+    expect(result.ok).toBe(true);
+    expect(result.project.building.site.exposureClass).toBe('dense-urban');
+  });
+
+  it('leaves an existing exposure class alone when omitted', () => {
+    const first = configure(createProject('Wind Study'), { exposureClass: 'open' });
+    const second = configure(first.project);
+
+    expect(second.project.building.site.exposureClass).toBe('open');
+  });
+
+  it('rejects an exposure class it does not know, without half-applying', () => {
+    const result = configure(createProject('Wind Study'), { exposureClass: 'rural' });
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe('invalid-exposure-class');
+    expect(result.project.building.site.latitude).toBeNull();
+    expect(result.project.building.site.exposureClass).toBe('suburban');
+  });
+
   it('accepts the extremes of every range', () => {
     for (const location of [
       { latitude: -90, longitude: -180 },

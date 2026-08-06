@@ -4,6 +4,7 @@ import { solveD2Q9 } from './lbmSolver';
 import { classifyComfortGrid, WIND_COMFORT_CATEGORIES } from './windComfort';
 import { createWindStudyState, normalizeWindRose } from './windState';
 import { computeVentilationNetwork } from './ventilationNetwork';
+import { siteExposure } from './windExposure';
 
 function resampleRun(domain, solved, grid) {
   const cellCount = grid.columns * grid.rows;
@@ -77,7 +78,28 @@ function summarizeDirection(field, obstacles, referenceSpeed) {
   };
 }
 
-export function computeWindStudy({ project, windStudy }, onProgress = null) {
+/** Phase view modes the editor can be in; anything else reads as unfiltered. */
+const PHASE_VIEW_MODES = ['all', 'single', 'cumulative'];
+
+/**
+ * What the caller was LOOKING AT when it asked for this run.
+ *
+ * The runner is handed a project that has already been through
+ * `filterProjectByPhase`, so by the time it sees the model there is no way to
+ * tell a sealed building from one whose facade a phase view removed. The scope
+ * travels with the request and is stamped on the result, so a stored study can
+ * still say what it was a study OF. A missing scope is the default view, which
+ * hides nothing.
+ */
+function normalizePhaseScope(phaseScope) {
+  const mode = phaseScope?.phaseViewMode;
+  return {
+    activePhaseId: phaseScope?.activePhaseId || null,
+    phaseViewMode: PHASE_VIEW_MODES.includes(mode) ? mode : 'all',
+  };
+}
+
+export function computeWindStudy({ project, windStudy, phaseScope = null }, onProgress = null) {
   const settings = { ...createWindStudyState(), ...(windStudy || {}) };
   if (!settings.enabled) return null;
   const masses = buildAnalysisMassing(project, { includeRoof: false });
@@ -88,8 +110,43 @@ export function computeWindStudy({ project, windStudy }, onProgress = null) {
     domainPadding: settings.domainPadding,
   });
   if (!grid) return null;
-  const northAngle = project?.building?.site?.northAngle || 0;
+  const site = project?.building?.site || {};
+  const northAngle = site.northAngle || 0;
   const cellCount = grid.columns * grid.rows;
+
+  /**
+   * The 10 m -> slice-height correction, applied EXACTLY ONCE, here.
+   *
+   * Every speed that enters this runner is a 10 m meteorological figure:
+   * `settings.referenceSpeed` is written from the reanalysis `prevailingMeanSpeed`
+   * when a site climate loads, and each rose sector's Weibull scale is fitted to
+   * `wind_speed_10m` samples. Both are transformed by the same scalar so the two
+   * modes stay consistent — a comfort map and a direction run on the same site
+   * must not disagree about how fast the wind is.
+   *
+   * The LBM sees none of this: its amplification field is dimensionless, so the
+   * factor multiplies only the reference the field is scaled BY. That is why one
+   * multiplication here reaches the summary speeds, the facade dynamic pressure
+   * inside the ventilation network, and the comfort quantiles alike.
+   */
+  const exposure = siteExposure({ exposureClass: site.exposureClass, sliceHeightMm: settings.sliceHeight });
+
+  /**
+   * What every result says about itself, before any of it is computed.
+   *
+   * `convergence` is a disclosure of the ITERATION BUDGET, not of an achieved
+   * residual: `solveD2Q9` runs to `settings.iterations` unless it converges
+   * first, and at the screening default it does not. The residual it reached is
+   * reported separately on `grid.solver`; this names the budget it was given,
+   * which is the thing a reader has to know to judge that residual.
+   */
+  const model = {
+    kind: 'D2Q9-BGK-2D',
+    screeningOnly: true,
+    exposure,
+    convergence: `screening-${settings.iterations}`,
+    phaseScope: normalizePhaseScope(phaseScope),
+  };
 
   if (settings.mode === 'direction') {
     const run = runDirection({
@@ -102,28 +159,34 @@ export function computeWindStudy({ project, windStudy }, onProgress = null) {
     });
     if (!run) return null;
     const directionGrid = { ...grid, ...run };
+    const siteReferenceSpeed = settings.referenceSpeed * exposure.factor;
     const ventilation = computeVentilationNetwork({
       project,
       grid: directionGrid,
-      referenceSpeed: settings.referenceSpeed,
+      referenceSpeed: siteReferenceSpeed,
       // Only used if a facade sample fails its sanity test and the empirical
       // fallback needs an incidence angle.
       directionDeg: settings.directionDeg,
       northAngle,
+      sliceHeightMm: settings.sliceHeight,
     });
     return {
       mode: 'direction',
       directionDeg: settings.directionDeg,
       sliceHeight: settings.sliceHeight,
       grid: directionGrid,
-      summary: summarizeDirection(run.amplification, grid.obstacles, settings.referenceSpeed),
+      summary: summarizeDirection(run.amplification, grid.obstacles, siteReferenceSpeed),
       ventilation,
-      model: { kind: 'D2Q9-BGK-2D', screeningOnly: true },
+      model,
     };
   }
 
   const windRose = normalizeWindRose(settings.windRose);
   if (!windRose) throw new Error('Comfort study needs a valid wind rose.');
+  // The rose is reported unchanged — it is the SITE climate, quoted at 10 m,
+  // and rewriting it would leave nothing to trace the result back to. Only the
+  // copy the classifier consumes carries the slice-height scales.
+  const siteRose = windRose.map((sector) => ({ ...sector, weibullC: sector.weibullC * exposure.factor }));
   const sectorCount = windRose.length;
   const sectorAmplifications = new Float32Array(cellCount * sectorCount);
   const solverRuns = [];
@@ -159,8 +222,10 @@ export function computeWindStudy({ project, windStudy }, onProgress = null) {
         directionDeg: sector.directionDeg,
         frequency: sector.frequency,
         // The Weibull scale is used only to pace the visual particles. The
-        // dimensionless LBM vectors still carry the actual local pattern.
-        referenceSpeed: sector.weibullC,
+        // dimensionless LBM vectors still carry the actual local pattern. It is
+        // the slice-height scale, not the 10 m one: the particles are drawn at
+        // pedestrian height and have to move at pedestrian-height speeds.
+        referenceSpeed: siteRose[sectorIndex].weibullC,
         amplification: run.amplification,
         velocityX: run.velocityX,
         velocityY: run.velocityY,
@@ -174,7 +239,9 @@ export function computeWindStudy({ project, windStudy }, onProgress = null) {
     sectorCount,
     cellCount,
     obstacles: grid.obstacles,
-    windRose,
+    // The Lawson thresholds are pedestrian-height speeds, so the mixture they
+    // are compared against has to be a pedestrian-height mixture.
+    windRose: siteRose,
   });
   const fractions = Array.from(comfort.counts, (count, index) => ({
     id: WIND_COMFORT_CATEGORIES[index].id,
@@ -195,6 +262,6 @@ export function computeWindStudy({ project, windStudy }, onProgress = null) {
       assessedCellCount: comfort.assessedCellCount,
     },
     solverRuns,
-    model: { kind: 'D2Q9-BGK-2D', screeningOnly: true },
+    model,
   };
 }

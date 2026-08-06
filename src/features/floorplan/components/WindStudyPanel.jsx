@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { createUniformWindRose } from '@/analysis/windState';
 import { WIND_COMFORT_CATEGORIES } from '@/analysis/windComfort';
 import { WindIcon } from '@/ui/ToolbarIcons';
+import RoomFlowList from './RoomFlowList';
+import ScreeningDisclaimer from './ScreeningDisclaimer';
 import styles from './WindStudyPanel.module.css';
 
 const DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -327,21 +329,10 @@ export default function WindStudyPanel({
                           Only one exterior opening is active. Add a second pressure path for sustained cross-flow.
                         </p>
                       ) : null}
-                      <div className={styles.roomFlowList}>
-                        {study.ventilation.rooms.slice(0, 8).map((room) => (
-                          <div key={room.id} className={styles.roomFlowRow}>
-                            <span title={`${room.pressurePa.toFixed(2)} Pa`}>{room.name}</span>
-                            <em>
-                              {room.crossVentilated
-                                ? 'Cross-flow'
-                                : room.airChangesPerHour >= 0.1
-                                  ? 'Airflow path'
-                                  : 'Low / no flow'}
-                            </em>
-                            <strong>{room.airChangesPerHour.toFixed(1)} ACH</strong>
-                          </div>
-                        ))}
-                      </div>
+                      {/* Speed leads, air-change rate follows: a room can be
+                          flushed often and still feel still, and only the first
+                          number says which. */}
+                      <RoomFlowList rooms={study.ventilation.rooms} metric="speed" />
                     </>
                   )}
                   <p className={styles.ventilationNote}>
@@ -461,15 +452,11 @@ export default function WindStudyPanel({
                 </div>
               )}
 
-              <p className={styles.disclaimer}>
-                Screening model only: location climate is regional 10 m reanalysis, not an on-site anemometer record.
-                The flow model is a steady 2D pedestrian slice with no vertical flow, atmospheric boundary layer,
-                terrain, thermal buoyancy, transient gusts, or RANS/LES turbulence closure. Comfort colours use the
-                modified City Lawson 2.5 / 4 / 6 / 8 m/s thresholds at 5% exceedance; safety flags exceed 15 m/s at
-                0.022% exceedance. Room airflow is a steady pressure-network calculation using configured opening
-                fractions and a height-uniform façade pressure from the outdoor slice; it excludes leakage, stack
-                effect, fans, ducts, and indoor velocity detail. This is not a wind-engineering certification.
-              </p>
+              {/* Generated from the run's own model flags — see
+                  ScreeningDisclaimer.jsx. Before a result lands it still states
+                  every caveat that is a property of the model rather than of
+                  this particular run. */}
+              <ScreeningDisclaimer model={study?.model} ventilationModel={study?.ventilation?.model} />
             </div>
           )}
         </>

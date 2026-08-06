@@ -171,11 +171,17 @@ describe('wind study characterization — direction-mode fixture', () => {
     expectDeepClose(achById, fixtureAchById, 'airChangesPerHour');
 
     // characterization: pins current behaviour; see T2. Note the ORDER of
-    // magnitude, not just the digits — a 100 m³ room with 1.25 m² of open
-    // window in a 6 m/s wind lands around 115 h⁻¹ today.
-    expect(achById.room_nw).toBeGreaterThan(100);
-    expect(achById.room_sw).toBeGreaterThan(100);
+    // magnitude, not just the digits. Updated by T11: the fixture's 6 m/s is a
+    // 10 m meteorological speed, and the suburban exposure default now brings
+    // it to 3.95 m/s at the 1.5 m slice. Every flow is linear in that speed, so
+    // a 100 m³ room with 1.25 m² of open window lands around 72 h⁻¹ rather than
+    // the 109 h⁻¹ it used to — the same run, read at the height it happens at.
+    expect(achById.room_nw).toBeGreaterThan(50);
+    expect(achById.room_sw).toBeGreaterThan(50);
     expect(achById.room_ne).toBeGreaterThan(10);
+    // Still far above any plausible design target: the cramped fixture domain,
+    // not the exposure correction, is what makes these enormous.
+    expect(achById.room_nw).toBeLessThan(100);
   });
 
   it('pins what the fixture domain does to absolute Cp: 40% blockage, 11 cells of fetch', () => {
@@ -224,10 +230,11 @@ describe('wind study characterization — direction-mode fixture', () => {
     expect(byId.win_sw_south.flowM3s).toBeLessThan(0);
     expect(byId.win_nw_north.flowM3s).toBeGreaterThan(0);
     // NE is untouched: both its openings are LBM-sourced, so the offset they
-    // share cancels exactly and its air-change rate is the pre-fix one to
-    // eight significant figures. That is the offset-cancellation claim, tested.
+    // share cancels exactly. Updated by T11 — the value moved from 31.8942896
+    // to 20.9759360 because the whole run is now read at the 1.5 m slice under
+    // the suburban default (x0.65878), not because the cancellation changed.
     expect(byId.win_ne_north.cpSource).toBe('lbm');
-    expect(run.ventilation.rooms.find((room) => room.id === 'room_ne').airChangesPerHour).toBeCloseTo(31.8942896, 5);
+    expect(run.ventilation.rooms.find((room) => room.id === 'room_ne').airChangesPerHour).toBeCloseTo(20.975936, 5);
   });
 
   it('produces a sane, all-LBM facade field at the production default padding', () => {
@@ -327,12 +334,136 @@ describe('wind study characterization — direction-mode fixture', () => {
     expect(fixtureDirectionRun().ventilation.summary.stagnantRoomCount).toBe(0);
   });
 
+  it('gives every fixture room a band whenever it gives it a speed', () => {
+    // The T10 contract, swept over the whole fixture rather than asserted on
+    // one room: no bare number anywhere, and no 0 standing in for "not
+    // modelled". SE is the room that proves the null branch is not vacuous.
+    const rooms = fixtureDirectionRun().ventilation.rooms;
+    expect(rooms).toHaveLength(4);
+    for (const room of rooms) {
+      expect(room.airSpeedMs === null, room.id).toBe(room.airSpeedBand === null);
+      if (room.airSpeedMs === null) {
+        expect(room.connectedToExterior, room.id).toBe(false);
+        continue;
+      }
+      expect(Number.isFinite(room.airSpeedMs), room.id).toBe(true);
+      expect(room.airSpeedBand.lowMs, room.id).toBeCloseTo(room.airSpeedMs * 0.5, 12);
+      expect(room.airSpeedBand.highMs, room.id).toBeCloseTo(room.airSpeedMs * 1.5, 12);
+    }
+    expect(rooms.filter((room) => room.airSpeedMs === null).map((room) => room.id)).toEqual(['room_se']);
+    expect(fixtureDirectionRun().ventilation.model.includesRoomAirSpeed).toBe(true);
+    expect(fixtureDirectionRun().ventilation.model.airSpeedMethod).toBe('bulk-cross-section');
+  });
+
   it('reports the fixture ventilation solve as converged, on an ok model', () => {
     const ventilation = fixtureDirectionRun().ventilation;
     expect(ventilation.status).toBe('ok');
     expect(ventilation.solver.converged).toBe(true);
     expect(ventilation.solver.failure).toBeNull();
     expect(ventilation.solver.residualM3s).toBeLessThan(1e-7);
+  });
+});
+
+/**
+ * The disclosure flags a result carries about itself (T12).
+ *
+ * These are not characterization pins — they are the contract the screening
+ * disclaimer is generated from. A flag with no sentence, or a sentence with no
+ * flag, fails in `WindStudyPanel.test.jsx`; what fails here is a flag that does
+ * not describe what the run actually did.
+ */
+describe('wind study — model disclosure flags', () => {
+  it('discloses the LBM iteration budget it was given, not the residual it reached', () => {
+    const run = fixtureDirectionRun();
+    expect(run.model.convergence).toBe(`screening-${WIND_FIXTURE_DIRECTION_SETTINGS.iterations}`);
+    expect(run.model.convergence).toBe('screening-220');
+    // The budget is a separate statement from the outcome, and the fixture is
+    // the case where they disagree: it spends all 220 and is still not settled.
+    expect(run.grid.solver.iterations).toBe(220);
+    expect(run.grid.solver.residual).toBeGreaterThan(2e-4);
+  });
+
+  it('changes the disclosed budget when the budget changes', () => {
+    const run = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS, iterations: 600 },
+    });
+    expect(run.model.convergence).toBe('screening-600');
+  });
+
+  it('stamps a neutral phase scope when the caller does not name one', () => {
+    expect(fixtureDirectionRun().model.phaseScope).toEqual({ activePhaseId: null, phaseViewMode: 'all' });
+    expect(fixtureComfortRun().model.phaseScope).toEqual({ activePhaseId: null, phaseViewMode: 'all' });
+  });
+
+  it('carries the phase scope the caller ran under, in both modes', () => {
+    const phaseScope = { activePhaseId: 'phase_new', phaseViewMode: 'single' };
+    const direction = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS },
+      phaseScope,
+    });
+    const comfort = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_COMFORT_SETTINGS },
+      phaseScope,
+    });
+    expect(direction.model.phaseScope).toEqual(phaseScope);
+    expect(comfort.model.phaseScope).toEqual(phaseScope);
+  });
+
+  it('refuses a phase view mode it does not recognise rather than echoing it', () => {
+    const run = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS },
+      phaseScope: { activePhaseId: '', phaseViewMode: 'sideways' },
+    });
+    expect(run.model.phaseScope).toEqual({ activePhaseId: null, phaseViewMode: 'all' });
+  });
+
+  it('hands the ventilation network the slice height the field was solved at', () => {
+    const run = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS, sliceHeight: 2200 },
+    });
+    expect(run.sliceHeight).toBe(2200);
+    expect(run.ventilation.model.cpSliceHeightMm).toBe(2200);
+    // Which also moves the exposure transform, since both read one setting.
+    expect(run.model.exposure.sliceHeightM).toBe(2.2);
+  });
+
+  it('names the floors whose openings actually sampled the slice', () => {
+    const run = fixtureDirectionRun();
+    // Three of the four exterior openings took a usable sample; `win_sw_south`
+    // fell back to the correlation. All four sit on the one fixture floor.
+    expect(run.ventilation.model.cpSampledFloorIds).toEqual(['floor_wind_fixture']);
+    expect(run.ventilation.model.cpFallbackCount).toBe(1);
+    expect(run.ventilation.model.verticalCoupling).toBe(false);
+  });
+
+  it('flags no extrapolated openings when every one sits on the slice', () => {
+    const run = fixtureDirectionRun();
+    // Every fixture opening centres at 1500 mm, exactly the slice height.
+    expect(run.ventilation.openings.filter((opening) => opening.exterior).map((o) => o.centreElevation)).toEqual([
+      1500, 1500, 1500, 1500,
+    ]);
+    expect(run.ventilation.model.cpExtrapolatedCount).toBe(0);
+    expect(run.ventilation.openings.filter((opening) => opening.cpExtrapolated === true)).toHaveLength(0);
+  });
+
+  it('flags every opening as extrapolated once the slice is moved a storey away', () => {
+    // 3100 mm still cuts the fixture's 3200 mm walls, so there is a real field
+    // to sample; the openings centre at 1500 mm, 1600 mm below it — past the
+    // 1500 mm band, and the sort of gap a second storey would introduce.
+    const run = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS, sliceHeight: 3100 },
+    });
+    expect(run.ventilation.model.cpSliceHeightMm).toBe(3100);
+    expect(run.ventilation.model.cpExtrapolatedCount).toBe(4);
+    expect(run.ventilation.openings.filter((opening) => opening.exterior).every((o) => o.cpExtrapolated)).toBe(true);
+    // The internal door stays null: it never sampled the slice at all.
+    expect(run.ventilation.openings.find((opening) => !opening.exterior).cpExtrapolated).toBeNull();
   });
 });
 
@@ -477,7 +608,20 @@ describe('wind study characterization — result key sets', () => {
       'referenceSpeed',
       'shelteredFraction',
     ]);
-    expect(Object.keys(result.model).sort()).toEqual(['kind', 'screeningOnly']);
+    expect(Object.keys(result.model).sort()).toEqual([
+      'convergence',
+      'exposure',
+      'kind',
+      'phaseScope',
+      'screeningOnly',
+    ]);
+    expect(Object.keys(result.model.exposure).sort()).toEqual([
+      'alpha',
+      'class',
+      'factor',
+      'referenceHeightM',
+      'sliceHeightM',
+    ]);
     expect(Object.keys(result.ventilation).sort()).toEqual([
       'model',
       'openings',
@@ -503,17 +647,25 @@ describe('wind study characterization — result key sets', () => {
       'residualM3s',
     ]);
     expect(Object.keys(result.ventilation.model).sort()).toEqual([
+      'airSpeedMethod',
+      'cpExtrapolatedCount',
       'cpFallbackCount',
       'cpFallbackModel',
+      'cpSampledFloorIds',
+      'cpSliceHeightMm',
       'includesIndoorMomentum',
+      'includesRoomAirSpeed',
       'includesStackEffect',
       'includesThermalBuoyancy',
       'kind',
       'pressureHeightModel',
       'screeningOnly',
+      'verticalCoupling',
     ]);
     expect(Object.keys(result.ventilation.rooms[0]).sort()).toEqual([
       'airChangesPerHour',
+      'airSpeedBand',
+      'airSpeedMs',
       'areaMm2',
       'centroid',
       'connectedToExterior',
@@ -534,6 +686,7 @@ describe('wind study characterization — result key sets', () => {
     const openingKeys = [
       'centre',
       'centreElevation',
+      'cpExtrapolated',
       'cpSource',
       'dischargeCoefficient',
       'effectiveAreaM2',
@@ -560,6 +713,9 @@ describe('wind study characterization — result key sets', () => {
     expect(internal.pressureCoefficient).toBeNull();
     expect(internal.outsidePressurePa).toBeNull();
     expect(internal.cpSource).toBeNull();
+    // Null, not false: an internal opening never sampled the slice at all, and
+    // "not applicable" is a different claim from "sampled and found in band".
+    expect(internal.cpExtrapolated).toBeNull();
   });
 
   it('pins the keys direction mode does NOT produce', () => {
@@ -622,7 +778,13 @@ describe('wind study characterization — result key sets', () => {
     ]);
     expect(result.solverRuns).toHaveLength(4);
     expect(Object.keys(result.solverRuns[0]).sort()).toEqual(['directionDeg', 'iterations', 'residual']);
-    expect(Object.keys(result.model).sort()).toEqual(['kind', 'screeningOnly']);
+    expect(Object.keys(result.model).sort()).toEqual([
+      'convergence',
+      'exposure',
+      'kind',
+      'phaseScope',
+      'screeningOnly',
+    ]);
     expect(Object.keys(result.windRose[0]).sort()).toEqual(['directionDeg', 'frequency', 'weibullC', 'weibullK']);
     expect(result.windRoseSource).toBe('user');
   });
@@ -650,8 +812,12 @@ describe('wind study characterization — result key sets', () => {
     expect(result.representativeFlow.directionDeg).toBe(0);
     expect(result.representativeFlow.frequency).toBeCloseTo(0.4, 12);
     // Documented in windRunner.js: the representative "reference speed" is the
-    // sector's Weibull scale, used only to pace the 3D particles.
-    expect(result.representativeFlow.referenceSpeed).toBe(5.5);
+    // sector's Weibull scale, used only to pace the 3D particles. Updated by
+    // T11 — it is now that scale AT SLICE HEIGHT: 5.5 m/s at 10 m becomes
+    // 5.5 x 0.6587795011005992 = 3.6232872560532960 under the suburban default.
+    expect(result.representativeFlow.referenceSpeed).toBeCloseTo(3.623287256053296, 12);
+    // The rose itself is reported unchanged, still quoted at 10 m.
+    expect(result.windRose.find((sector) => sector.directionDeg === 0).weibullC).toBe(5.5);
     // The direction-mode `referenceSpeed` setting is ignored in comfort mode.
     expect(WIND_FIXTURE_COMFORT_SETTINGS.referenceSpeed).toBe(6);
   });

@@ -71,6 +71,20 @@ export const ROOM_COLOR = '#E8F0FE';
 export const ENDPOINT_MERGE_TOLERANCE = 1; // mm
 export const MIN_ROOM_AREA = 100000; // mm² (0.1 m²)
 
+/**
+ * Terrain exposure of the site, used to bring a 10 m meteorological wind speed
+ * down to the height a study actually runs at.
+ *
+ * The names are the terrain categories; the power-law exponents that go with
+ * them live in `src/analysis/windExposure.js`, next to the physics that uses
+ * them. `suburban` is the default because it is the middle category and the one
+ * an ordinary urban-fringe apartment site sits in — a wrong guess in either
+ * direction is then at most one category, whereas defaulting to `open` would
+ * silently over-report wind everywhere a building has neighbours.
+ */
+export const SITE_EXPOSURE_CLASSES = Object.freeze(['open', 'suburban', 'dense-urban']);
+export const DEFAULT_SITE_EXPOSURE_CLASS = 'suburban';
+
 export const FILLET_DEFAULT_RADIUS = 200; // mm
 export const FILLET_MIN_RADIUS = 50; // mm
 export const FILLET_MAX_RADIUS = 2000; // mm

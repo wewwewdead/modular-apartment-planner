@@ -8,28 +8,31 @@
  * called. Everything below is the half that needs a real DOM, and nothing here
  * duplicates a claim the node file already pins from source.
  *
- * The whitespace-collapsed source extraction is deliberately identical to the
- * node file's `disclaimerText()` so the two pins can be compared directly: the
- * node file proves the paragraph is IN THE SOURCE, this file proves the same
- * string is REACHABLE IN THE DOM.
+ * Updated by T12: the node file no longer scrapes the paragraph out of the
+ * panel source, because there is no paragraph in the source any more — the text
+ * is generated from the result's model flags by `ScreeningDisclaimer`. The node
+ * file asserts the GENERATOR's output claim by claim; this file asserts the
+ * generated text is REACHABLE IN THE DOM and identical to it.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { createWindStudyState } from '@/analysis/windState';
-// `import.meta.url` is an http:// URL under the jsdom environment, so the node
-// suite's `fileURLToPath(new URL(...))` cannot be reused here. Vite's `?raw`
-// import reads the same bytes and works in either environment.
-import panelSource from './WindStudyPanel.jsx?raw';
+import { screeningParagraphs } from './ScreeningDisclaimer';
 import WindStudyPanel from './WindStudyPanel';
 
 afterEach(cleanup);
 
-/** Mirrors `disclaimerText()` in WindStudyPanel.test.jsx exactly. */
-function disclaimerSourceText() {
-  const match = panelSource.match(/<p className={styles\.disclaimer}>([\s\S]*?)<\/p>/);
-  if (!match) throw new Error('WindStudyPanel no longer has a styles.disclaimer paragraph.');
-  return match[1].replace(/\s+/g, ' ').trim();
+/** What the generator says, paragraph by paragraph. */
+function generatedDisclaimerText(models = {}) {
+  return screeningParagraphs(models).map((paragraph) => paragraph.text);
+}
+
+/** The same, read back out of the rendered block. `textContent` runs the
+ *  paragraphs together, so they are read individually rather than collapsed. */
+function renderedDisclaimerText(container) {
+  const block = container.querySelector('[data-screening-disclaimer]');
+  return [...block.querySelectorAll('p')].map((paragraph) => collapse(paragraph.textContent));
 }
 
 function collapse(value) {
@@ -77,16 +80,74 @@ describe('WindStudyPanel disclaimer reachability (characterization)', () => {
     expect(paragraph.isConnected).toBe(true);
   });
 
-  it('renders exactly the string the node suite pins from source', () => {
-    mount();
+  it('renders exactly what the generator produces for a panel with no result yet', () => {
+    const { container } = mount();
     openAdvanced();
-    expect(collapse(screen.getByText(/^Screening model only/).textContent)).toBe(disclaimerSourceText());
+    expect(renderedDisclaimerText(container)).toEqual(generatedDisclaimerText());
+    // Grouped into paragraphs rather than one wall of text.
+    expect(renderedDisclaimerText(container).length).toBeGreaterThan(1);
   });
 
   it('renders the disclaimer in comfort mode too, not only in direction mode', () => {
-    mount({ windStudy: createWindStudyState({ enabled: true, mode: 'comfort' }) });
+    const { container } = mount({ windStudy: createWindStudyState({ enabled: true, mode: 'comfort' }) });
     openAdvanced();
-    expect(collapse(screen.getByText(/^Screening model only/).textContent)).toBe(disclaimerSourceText());
+    expect(renderedDisclaimerText(container)).toEqual(generatedDisclaimerText());
+  });
+
+  it('grows the disclaimer with the run once a result lands', () => {
+    const model = {
+      kind: 'D2Q9-BGK-2D',
+      screeningOnly: true,
+      exposure: { class: 'dense-urban', alpha: 0.33, referenceHeightM: 10, sliceHeightM: 1.5, factor: 0.5347 },
+      convergence: 'screening-450',
+      phaseScope: { activePhaseId: 'phase_new', phaseViewMode: 'single' },
+    };
+    const ventilation = {
+      status: 'ok',
+      summary: {
+        meanAirChangesPerHour: 2.4,
+        maxAirChangesPerHour: 3.1,
+        crossVentilatedRoomCount: 1,
+        stagnantRoomCount: 0,
+        openExteriorCount: 2,
+      },
+      rooms: [],
+      model: {
+        kind: 'wind-pressure-multizone',
+        screeningOnly: true,
+        pressureHeightModel: 'uniform-from-outdoor-slice',
+        includesStackEffect: false,
+        includesThermalBuoyancy: false,
+        includesIndoorMomentum: false,
+        cpFallbackCount: 2,
+        cpFallbackModel: 'swami-chandra-1988',
+        verticalCoupling: false,
+        cpSliceHeightMm: 1500,
+        cpSampledFloorIds: ['floor_1'],
+        cpExtrapolatedCount: 1,
+        includesRoomAirSpeed: true,
+        airSpeedMethod: 'bulk-cross-section',
+      },
+    };
+    const { container } = mount({
+      status: 'ready',
+      study: {
+        mode: 'direction',
+        summary: { peakAmplification: 1.2, peakSpeed: 6, acceleratedFraction: 0.1, shelteredFraction: 0.2 },
+        ventilation,
+        model,
+      },
+    });
+    openAdvanced();
+    expect(renderedDisclaimerText(container)).toEqual(
+      generatedDisclaimerText({ model, ventilationModel: ventilation.model }),
+    );
+    const text = renderedDisclaimerText(container).join(' ');
+    // The run-specific disclosures the empty panel could not make.
+    expect(text).toContain('dense-urban power-law atmospheric boundary layer profile');
+    expect(text).toContain('2 exterior openings failed the solved-field sanity test');
+    expect(text).toContain('1 opening sits more than a storey from that slice');
+    expect(text).toContain('“single” phase view for phase phase_new only');
   });
 
   it('drives the disclaimer purely from the toggle: open, close, open again', () => {

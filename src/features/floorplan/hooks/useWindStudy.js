@@ -30,9 +30,14 @@ function createWorker() {
  * @param {object} options
  * @param {object} options.project    Phase-filtered project.
  * @param {object} options.windStudy  Editor state from `createWindStudyState`.
+ * @param {object} [options.phaseScope]  `{ activePhaseId, phaseViewMode }` — the
+ *   view the filtered project came from. Posted alongside the project so the
+ *   result can say what it was a study OF; a filtered project cannot say that
+ *   for itself. It is NOT part of the request key: `projectRevision` already
+ *   carries both fields, so a phase change re-runs through that.
  * @returns {{study: object|null, status: string, progress: object|null, error: string|null, stale: boolean}}
  */
-export function useWindStudy({ project, windStudy, projectRevision = null }) {
+export function useWindStudy({ project, windStudy, projectRevision = null, phaseScope = null }) {
   const active = Boolean(windStudy?.enabled);
 
   // Everything a run depends on, as one value. The project object is compared
@@ -47,7 +52,10 @@ export function useWindStudy({ project, windStudy, projectRevision = null }) {
   // `enabled` is deliberately absent from the run settings so that toggling the
   // panel does not invalidate a finished study. The worker is only ever asked
   // to run studies that are meant to run, so it gets it back here.
-  const payload = useMemo(() => ({ project, windStudy: { ...settings, enabled: true } }), [project, settings]);
+  const payload = useMemo(
+    () => ({ project, windStudy: { ...settings, enabled: true }, phaseScope }),
+    [phaseScope, project, settings],
+  );
 
   return useStudyWorker({
     workerFactory: createWorker,
