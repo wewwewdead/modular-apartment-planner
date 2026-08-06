@@ -2,26 +2,29 @@
 /**
  * Cross-hook characterization suite for the three study workers (T18).
  *
- * `useWindStudy`, `useDaylightGrid` and `useSolarAccess` are three copies of the
- * same lifecycle that have drifted apart. T7 unifies them behind one
- * `useStudyWorker`; this file pins where they currently AGREE and, more
- * importantly, where they DIVERGE, so the unification has to make an explicit
- * choice for each difference instead of silently picking one copy.
+ * `useWindStudy`, `useDaylightGrid` and `useSolarAccess` were three copies of
+ * the same lifecycle that had drifted apart. T7 unified them behind one
+ * `useStudyWorker`; this file pins where they AGREE and where they still
+ * DIVERGE, so each difference is an explicit choice rather than a leftover.
  *
  * The stub worker design is the same as `useWindStudy.dom.test.jsx`; here it
  * also records which worker file it was pointed at, so the three hooks can share
  * one global stub and still be told apart.
  *
- * Divergences pinned below:
- *   - settle period: wind 500 ms (useWindStudy.js:6), solar 500 ms
- *     (useSolarAccess.js:26), daylight 350 ms (useDaylightGrid.js:43)
- *   - supersession: wind terminates and rebuilds the worker
- *     (useWindStudy.js:64-65); daylight and solar have no such lines and reuse
- *     one long-lived worker for every run
- *   - activation: daylight also requires `mode === 'grid'`
- *     (useDaylightGrid.js:69); wind and solar key off `enabled` alone
+ * Divergences that REMAIN by design, each a property of the study rather than of
+ * the lifecycle, and each still pinned below:
+ *   - settle period: wind 500 ms, solar 500 ms, daylight 350 ms — the grid is
+ *     the one an author tunes interactively
+ *   - activation: daylight also requires `mode === 'grid'`; wind and solar key
+ *     off `enabled` alone
  *   - scope: daylight alone puts a `floorId` in the request key and payload
- *     (useDaylightGrid.js:76, :147)
+ *
+ * The divergence T7 REMOVED, and the one intended behaviour change in it:
+ * supersession. Wind terminated the superseded worker and rebuilt it; daylight
+ * and solar reused one long-lived worker, so a replacement run queued behind
+ * the obsolete one. All three now terminate and rebuild — the pins in
+ * 'supersession is now uniform' below assert the new behaviour, having
+ * previously asserted the old.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -229,7 +232,7 @@ describe('study workers — debounce collapse (characterization)', () => {
   });
 });
 
-describe('study workers — supersession diverges (characterization)', () => {
+describe('study workers — supersession is now uniform', () => {
   it('wind terminates the superseded worker and builds a fresh one', () => {
     const shared = project();
     const view = mount(WindProbe, { project: shared, windStudy: createWindStudyState({ enabled: true }) });
@@ -243,11 +246,11 @@ describe('study workers — supersession diverges (characterization)', () => {
     expect(workers[1].messages).toHaveLength(1);
   });
 
-  it('daylight does NOT terminate: one worker takes both runs, the old one still in flight', () => {
-    // characterization: pins current behaviour; see T7. Without the wind hook's
-    // terminate/rebuild, the superseded Monte Carlo run keeps burning the
-    // worker thread and the replacement queues behind it — the newer request
-    // cannot start until the obsolete one finishes.
+  it('daylight terminates too: the superseded run is killed, not left in flight', () => {
+    // T7 gave daylight the wind hook's terminate/rebuild. Before, the
+    // superseded Monte Carlo run kept burning the worker thread and the
+    // replacement queued behind it — the newer request could not start until
+    // the obsolete one finished. Now each run gets a thread of its own.
     const shared = project();
     const view = mount(DaylightProbe, {
       project: shared,
@@ -257,25 +260,27 @@ describe('study workers — supersession diverges (characterization)', () => {
     view.update({ project: shared, daylight: createDaylightState({ enabled: true, mode: 'grid', rayCount: 999 }) });
     advance(DAYLIGHT_SETTLE_MS);
 
-    expect(workers).toHaveLength(1);
-    expect(workers[0].terminateCount).toBe(0);
-    expect(workers[0].messages).toHaveLength(2);
-    expect(workers[0].messages[0].id).not.toBe(workers[0].messages[1].id);
+    expect(workers).toHaveLength(2);
+    expect(workers[0].terminateCount).toBe(1);
+    expect(workers[0].messages).toHaveLength(1);
+    expect(workers[1].messages).toHaveLength(1);
+    expect(workers[0].messages[0].id).not.toBe(workers[1].messages[0].id);
   });
 
-  it('solar access does NOT terminate either, matching daylight rather than wind', () => {
+  it('solar access terminates too, matching wind and daylight', () => {
     const shared = project();
     const view = mount(SolarProbe, { project: shared, solarAccess: createSolarAccessState({ enabled: true }) });
     advance(SOLAR_SETTLE_MS);
     view.update({ project: shared, solarAccess: createSolarAccessState({ enabled: true, skyViewRays: 128 }) });
     advance(SOLAR_SETTLE_MS);
 
-    expect(workers).toHaveLength(1);
-    expect(workers[0].terminateCount).toBe(0);
-    expect(workers[0].messages).toHaveLength(2);
+    expect(workers).toHaveLength(2);
+    expect(workers[0].terminateCount).toBe(1);
+    expect(workers[0].messages).toHaveLength(1);
+    expect(workers[1].messages).toHaveLength(1);
   });
 
-  it('daylight keeps reusing the one worker across many supersessions', () => {
+  it('daylight builds one worker per supersession, each running exactly one study', () => {
     const shared = project();
     const view = mount(DaylightProbe, {
       project: shared,
@@ -286,9 +291,10 @@ describe('study workers — supersession diverges (characterization)', () => {
       view.update({ project: shared, daylight: createDaylightState({ enabled: true, mode: 'grid', rayCount }) });
     }
     advance(DAYLIGHT_SETTLE_MS);
-    expect(workers).toHaveLength(1);
-    expect(workers[0].messages).toHaveLength(5);
-    expect(workers[0].terminateCount).toBe(0);
+    expect(workers).toHaveLength(5);
+    for (const worker of workers) expect(worker.messages).toHaveLength(1);
+    // The last worker is the live one; the four it superseded are all stopped.
+    expect(workers.map((worker) => worker.terminateCount)).toEqual([1, 1, 1, 1, 0]);
   });
 });
 
@@ -338,6 +344,9 @@ describe('study workers — activation and scope diverge (characterization)', ()
     advance(DAYLIGHT_SETTLE_MS);
     view.update({ project: shared, daylight, floorId: 'floor_first' });
     advance(DAYLIGHT_SETTLE_MS);
-    expect(workers[0].messages.map((message) => message.floorId)).toEqual(['floor_ground', 'floor_first']);
+    // Read across workers, not within one: a floor switch supersedes the run in
+    // flight, and a superseded run is now terminated and its worker replaced.
+    const posted = workers.flatMap((worker) => worker.messages);
+    expect(posted.map((message) => message.floorId)).toEqual(['floor_ground', 'floor_first']);
   });
 });

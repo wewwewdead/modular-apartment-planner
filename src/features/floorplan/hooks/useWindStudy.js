@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+/**
+ * Drives the wind comfort study on a worker.
+ *
+ * Everything about the request lifecycle — debounce, supersession, staleness,
+ * teardown — lives in `useStudyWorker`. This hook only shapes the request:
+ * which settings a run depends on, and what the worker is handed.
+ */
+
+import { useMemo } from 'react';
 import { studyRequestKey } from '@/analysis/studyRequestIdentity';
 import { windRunSettingsOf } from '@/analysis/windState';
+import { useStudyWorker } from './useStudyWorker';
 
-let nextRequestId = 1;
+/** Quiet period before a run starts, ms. A comfort run is heavy enough that an abandoned one costs real time. */
 const SETTLE_MS = 500;
+
 const UNAVAILABLE_MESSAGE = 'This browser cannot run the wind solver in the background.';
 
 function createWorker() {
@@ -11,88 +21,42 @@ function createWorker() {
   try {
     return new Worker(new URL('@/analysis/wind.worker.js', import.meta.url), { type: 'module' });
   } catch {
+    // Blocked by a strict CSP, or an environment without module workers.
     return null;
   }
 }
 
+/**
+ * @param {object} options
+ * @param {object} options.project    Phase-filtered project.
+ * @param {object} options.windStudy  Editor state from `createWindStudyState`.
+ * @returns {{study: object|null, status: string, progress: object|null, error: string|null, stale: boolean}}
+ */
 export function useWindStudy({ project, windStudy, projectRevision = null }) {
-  const workerRef = useRef(null);
-  const pendingRef = useRef({ id: 0, key: null });
-  const [result, setResult] = useState({ study: null, key: null, error: null, progress: null, unavailable: false });
   const active = Boolean(windStudy?.enabled);
+
+  // Everything a run depends on, as one value. The project object is compared
+  // by identity: the reducer replaces it on every edit, which is exactly when
+  // the study needs redoing.
   const settings = useMemo(() => (windStudy ? windRunSettingsOf(windStudy) : null), [windStudy]);
   const requestKey = useMemo(
     () => (active ? studyRequestKey({ project, projectRevision, settings }) : null),
     [active, project, projectRevision, settings],
   );
 
-  const ensureWorker = useCallback(() => {
-    if (workerRef.current) return workerRef.current;
-    const worker = createWorker();
-    if (!worker) return null;
-    worker.addEventListener('message', (event) => {
-      const message = event.data || {};
-      if (message.id !== pendingRef.current.id) return;
-      const key = pendingRef.current.key;
-      if (message.type === 'progress') {
-        setResult((current) => ({ ...current, progress: message.progress }));
-      } else if (message.type === 'result') {
-        setResult({ study: message.result, key, error: null, progress: null, unavailable: false });
-      } else if (message.type === 'error') {
-        setResult((current) => ({ ...current, key, error: message.message, progress: null }));
-      }
-    });
-    workerRef.current = worker;
-    return worker;
-  }, []);
+  // `enabled` is deliberately absent from the run settings so that toggling the
+  // panel does not invalidate a finished study. The worker is only ever asked
+  // to run studies that are meant to run, so it gets it back here.
+  const payload = useMemo(() => ({ project, windStudy: { ...settings, enabled: true } }), [project, settings]);
 
-  const teardown = useCallback(() => {
-    workerRef.current?.terminate();
-    workerRef.current = null;
-    pendingRef.current = { id: 0, key: null };
-  }, []);
-
-  useEffect(() => teardown, [teardown]);
-  useEffect(() => {
-    if (!active) teardown();
-  }, [active, teardown]);
-
-  useEffect(() => {
-    if (!active) return undefined;
-    // A comfort run is intentionally long. Terminate a superseded worker so a
-    // wall drag does not leave the new run queued behind obsolete geometry.
-    workerRef.current?.terminate();
-    workerRef.current = null;
-    const id = nextRequestId;
-    nextRequestId += 1;
-    pendingRef.current = { id, key: requestKey };
-    const timer = setTimeout(() => {
-      const worker = ensureWorker();
-      if (!worker) {
-        setResult((current) => ({ ...current, key: requestKey, unavailable: true, progress: null }));
-        return;
-      }
-      worker.postMessage({ id, project, windStudy: { ...settings, enabled: true } });
-    }, SETTLE_MS);
-    return () => clearTimeout(timer);
-  }, [active, ensureWorker, project, requestKey, settings]);
-
-  const settled = result.key === requestKey;
-  return {
-    study: active ? result.study : null,
-    status: !active
-      ? 'idle'
-      : !settled
-        ? 'running'
-        : result.unavailable
-          ? 'unavailable'
-          : result.error
-            ? 'error'
-            : 'ready',
-    progress: result.progress,
-    error: result.unavailable ? UNAVAILABLE_MESSAGE : result.error,
-    stale: Boolean(active && result.study && !settled),
-  };
+  return useStudyWorker({
+    workerFactory: createWorker,
+    active,
+    requestKey,
+    payload,
+    settleMs: SETTLE_MS,
+    unavailableMessage: UNAVAILABLE_MESSAGE,
+  });
 }
 
 export default useWindStudy;

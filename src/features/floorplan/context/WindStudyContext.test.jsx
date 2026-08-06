@@ -115,9 +115,11 @@ describe('wind study request identity — viewport (characterization)', () => {
 
   it('pins that neither the hook nor the provider mentions anything viewport-shaped', () => {
     const hook = readFileSync(fileURLToPath(new URL('../hooks/useWindStudy.js', import.meta.url)), 'utf8');
+    const lifecycle = readFileSync(fileURLToPath(new URL('../hooks/useStudyWorker.js', import.meta.url)), 'utf8');
     const provider = readFileSync(fileURLToPath(new URL('./WindStudyContext.jsx', import.meta.url)), 'utf8');
     for (const [name, source] of [
       ['useWindStudy.js', hook],
+      ['useStudyWorker.js', lifecycle],
       ['WindStudyContext.jsx', provider],
     ]) {
       expect(/viewport|zoom|panX|panY/i.test(source), name).toBe(false);
