@@ -11,6 +11,8 @@ import { add, normalize, perpendicular, scale, subtract } from '@/geometry/point
 import { pointInPolygon, polygonArea, polygonCentroid } from '@/geometry/polygon';
 import { positionOnWall, wallLength } from '@/geometry/wallGeometry';
 import { WALL_HEIGHT } from '@/domain/defaults';
+import { CP_CORRELATION, correlationCp, incidenceFromFlow, isPlausibleCp } from './cpCorrelation';
+import { windDirectionBasis } from './windDomain';
 
 const AIR_DENSITY_KG_M3 = 1.204;
 const DEFAULT_DISCHARGE_COEFFICIENT = 0.62;
@@ -155,8 +157,62 @@ function gridCell(grid, point) {
   return row * grid.columns + column;
 }
 
-/** Sample the first clear CFD cell outside an exterior opening. */
-export function sampleFacadePressure(opening, grid, referenceSpeed) {
+/**
+ * Direction the free stream TRAVELS in, as a world-frame vector.
+ *
+ * An explicit meteorological bearing is exact and is what the runner passes. A
+ * cached result that carries only fields is read instead: the LBM writes its
+ * velocity vectors into the result grid in world coordinates, so their mean over
+ * the clear cells is the free stream. Returns null when neither is available.
+ */
+function freeStreamDirection(grid, directionDeg, northAngle) {
+  // `Number(null)` is 0, so the type has to be checked before the value: a
+  // missing bearing must not silently read as due north.
+  if (typeof directionDeg === 'number' && Number.isFinite(directionDeg)) {
+    return windDirectionBasis(directionDeg, finite(northAngle, 0)).flow;
+  }
+  let x = 0;
+  let y = 0;
+  const cellCount = grid?.obstacles?.length || 0;
+  for (let index = 0; index < cellCount; index += 1) {
+    if (grid.obstacles[index]) continue;
+    x += finite(grid.velocityX?.[index], 0);
+    y += finite(grid.velocityY?.[index], 0);
+  }
+  return Math.hypot(x, y) > 1e-9 ? { x, y } : null;
+}
+
+/**
+ * Empirical Cp for one exterior opening, used when the solved field cannot be
+ * trusted at that facade.
+ *
+ * Side ratio is fixed at 1 (a square plan, G = 0). The correlation's side-ratio
+ * term needs the width of this facade and of the one adjacent to it, and a
+ * general floorplan has no unambiguous "adjacent facade"; the term is worth at
+ * most about +/-0.15 at glancing incidence and exactly nothing at normal
+ * incidence, which is a smaller error than the situation that triggered the
+ * fallback in the first place. With no wind direction at all the opening is
+ * treated as a side wall, the least committal of the three regimes — every
+ * opening then reads the same Cp, so no spurious flow is invented.
+ */
+function fallbackPressureCoefficient(opening, flowDirection) {
+  const incidenceDeg = flowDirection ? incidenceFromFlow(opening.outwardNormal, flowDirection) : 90;
+  return correlationCp({ incidenceDeg, sideRatio: 1 });
+}
+
+/**
+ * Sample the first clear CFD cell outside an exterior opening, falling back to
+ * the Swami-Chandra correlation when that sample fails a sanity test.
+ *
+ * The sanity test is deliberately wide: non-finite, or outside the plausibility
+ * band in `cpCorrelation.js` (|Cp| > 3). A coarse 2D slice legitimately reaches
+ * -2.6 on a strongly accelerated side wall, so anything narrower would start
+ * discarding real answers. This replaces a silent clamp to +/-2.5, which turned
+ * a diverged cell into a plausible-looking number instead of disclosing it.
+ *
+ * @returns {{pressureCoefficient: number, pressurePa: number, source: 'lbm'|'correlation'}}
+ */
+export function sampleFacadePressure(opening, grid, referenceSpeed, flowDirection = null) {
   const dynamicPressure = 0.5 * AIR_DENSITY_KG_M3 * referenceSpeed * referenceSpeed;
   const distances = [0.55, 1, 1.75, 2.75, 4].map((factor) => Math.max(100, grid.cellSize * factor));
   let pressureCoefficient = null;
@@ -165,27 +221,20 @@ export function sampleFacadePressure(opening, grid, referenceSpeed) {
     const index = gridCell(grid, point);
     if (index < 0 || grid.obstacles?.[index]) continue;
     const candidate = grid.pressureCoefficient?.[index];
-    if (Number.isFinite(candidate)) {
-      pressureCoefficient = clamp(candidate, -2.5, 2.5);
+    if (candidate === undefined) break;
+    if (isPlausibleCp(candidate)) {
+      pressureCoefficient = candidate;
       break;
     }
   }
 
-  // Older cached results do not have Cp. Use an explicitly approximate
-  // incidence model so their ventilation view remains usable.
-  if (pressureCoefficient === null) {
-    const index = gridCell(grid, add(opening.centre, scale(opening.outwardNormal, grid.cellSize * 1.5)));
-    const vx = index >= 0 ? finite(grid.velocityX?.[index], 0) : 0;
-    const vy = index >= 0 ? finite(grid.velocityY?.[index], 0) : 0;
-    const magnitude = Math.hypot(vx, vy);
-    const outwardFlow = magnitude ? (vx * opening.outwardNormal.x + vy * opening.outwardNormal.y) / magnitude : 0;
-    const incidence = Math.max(0, -outwardFlow);
-    pressureCoefficient = incidence > 0 ? 0.6 * incidence * incidence : -0.3;
-  }
+  const source = pressureCoefficient === null ? 'correlation' : 'lbm';
+  if (pressureCoefficient === null) pressureCoefficient = fallbackPressureCoefficient(opening, flowDirection);
 
   return {
     pressureCoefficient,
     pressurePa: pressureCoefficient * dynamicPressure,
+    source,
   };
 }
 
@@ -289,13 +338,30 @@ function solvePressures(rooms, openings) {
   return { activeIds, activeRooms, indexById, pressures, iterations, residualM3s };
 }
 
-/** Compute room pressures, opening flows and air-change rates for one wind run. */
-export function computeVentilationNetwork({ project, grid, referenceSpeed = 5 }) {
+/**
+ * Compute room pressures, opening flows and air-change rates for one wind run.
+ *
+ * `directionDeg` / `northAngle` are the meteorological bearing of the run. They
+ * are only consulted when a facade sample fails its sanity test and the
+ * correlation fallback needs an incidence angle; the solved field is the engine
+ * everywhere the sample is sane.
+ */
+export function computeVentilationNetwork({ project, grid, referenceSpeed = 5, directionDeg = null, northAngle = 0 }) {
   const topology = buildVentilationTopology(project);
+  const flowDirection = freeStreamDirection(grid, directionDeg, northAngle);
+  let cpFallbackCount = 0;
   const openings = topology.openings.map((opening) => {
-    if (!opening.exterior) return { ...opening, outsidePressurePa: null, pressureCoefficient: null };
-    const pressure = sampleFacadePressure(opening, grid, Math.max(0.1, finite(referenceSpeed, 5)));
-    return { ...opening, outsidePressurePa: pressure.pressurePa, pressureCoefficient: pressure.pressureCoefficient };
+    if (!opening.exterior) {
+      return { ...opening, outsidePressurePa: null, pressureCoefficient: null, cpSource: null };
+    }
+    const pressure = sampleFacadePressure(opening, grid, Math.max(0.1, finite(referenceSpeed, 5)), flowDirection);
+    if (pressure.source === 'correlation') cpFallbackCount += 1;
+    return {
+      ...opening,
+      outsidePressurePa: pressure.pressurePa,
+      pressureCoefficient: pressure.pressureCoefficient,
+      cpSource: pressure.source,
+    };
   });
   const solved = solvePressures(topology.rooms, openings);
   const roomMetrics = new Map(
@@ -366,6 +432,11 @@ export function computeVentilationNetwork({ project, grid, referenceSpeed = 5 })
       includesStackEffect: false,
       includesThermalBuoyancy: false,
       includesIndoorMomentum: false,
+      // How many exterior openings could not use the solved field, and what
+      // stood in for it. Panels should disclose a non-zero count: those
+      // openings carry an empirical low-rise estimate, not this building's CFD.
+      cpFallbackCount,
+      cpFallbackModel: CP_CORRELATION.model,
     },
   };
 }
@@ -374,4 +445,5 @@ export const VENTILATION_CONSTANTS = {
   AIR_DENSITY_KG_M3,
   DEFAULT_DISCHARGE_COEFFICIENT,
   PRESSURE_SMOOTHING_PA,
+  CP_PLAUSIBILITY_LIMIT: CP_CORRELATION.CP_PLAUSIBILITY_LIMIT,
 };

@@ -15,6 +15,14 @@ const WEIGHTS = Float64Array.from([4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 
 
 const DEFAULT_LATTICE_SPEED = 0.06;
 
+/**
+ * Fluid columns used as the far-field static-pressure reference, counted from
+ * the inlet. Column 0 is skipped: the Zou/He boundary writes three populations
+ * there directly, so its density is a boundary artefact rather than a solved
+ * value.
+ */
+const REFERENCE_BAND_COLUMNS = 2;
+
 function equilibrium(direction, density, ux, uy) {
   const projection = CX[direction] * ux + CY[direction] * uy;
   const speedSquared = ux * ux + uy * uy;
@@ -94,13 +102,60 @@ function applyOutlet(populations, columns, rows, obstacles) {
   }
 }
 
-function fieldAndResidual(populations, obstacles, inletSpeed, previousSpeed = null) {
+/**
+ * Static pressure of the undisturbed approach flow, in lattice density units.
+ *
+ * These boundary conditions do not conserve mass: the Zou/He inlet injects
+ * whatever mass its own solved density calls for and the zero-gradient outlet
+ * copies its neighbour, so the settled far-field density drifts away from the
+ * initial lattice value of 1 and keeps drifting while the run develops. Reading
+ * Cp against the constant 1 therefore put a large, run-dependent offset on the
+ * whole field: on the committed wind fixture it is 1.32 at iteration 220 and
+ * has grown to 3.62 by the time the run converges.
+ *
+ * The inlet-adjacent band is the reference because it is the one place in the
+ * domain where the reference condition of a pressure coefficient — flow at the
+ * undisturbed reference velocity U_ref — is imposed by construction rather than
+ * hoped for: the Zou/He inlet pins u = inletSpeed across the whole inlet plane.
+ * Its disturbance from the building decays like exp(-2*pi*x/W) across the
+ * periodic cross-flow width W, so a domain padded by more than about W/2
+ * upstream reads a genuinely undisturbed static pressure there. The downstream
+ * half cannot be used instead: a bluff body leaves a real drag-induced pressure
+ * deficit behind it that must NOT average to zero.
+ *
+ * If the band is entirely solid (a building rasterized onto the inlet) the mean
+ * over every fluid cell is used, which at least removes the global drift, and a
+ * fully solid domain falls back to the lattice value.
+ */
+function referenceDensity(populations, columns, rows, obstacles) {
+  const lastBandColumn = Math.min(REFERENCE_BAND_COLUMNS, columns - 2);
+  let total = 0;
+  let count = 0;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 1; column <= lastBandColumn; column += 1) {
+      const index = row * columns + column;
+      if (obstacles[index]) continue;
+      total += macroscopic(populations, index).density;
+      count += 1;
+    }
+  }
+  if (count > 0) return total / count;
+  for (let index = 0; index < obstacles.length; index += 1) {
+    if (obstacles[index]) continue;
+    total += macroscopic(populations, index).density;
+    count += 1;
+  }
+  return count > 0 ? total / count : 1;
+}
+
+function fieldAndResidual(populations, columns, rows, obstacles, inletSpeed, previousSpeed = null) {
   const cellCount = obstacles.length;
   const amplification = new Float32Array(cellCount);
   const velocityX = new Float32Array(cellCount);
   const velocityY = new Float32Array(cellCount);
   const density = new Float32Array(cellCount);
   const pressureCoefficient = new Float32Array(cellCount);
+  const reference = referenceDensity(populations, columns, rows, obstacles);
   let delta = 0;
   let magnitude = 0;
   for (let index = 0; index < cellCount; index += 1) {
@@ -109,9 +164,10 @@ function fieldAndResidual(populations, obstacles, inletSpeed, previousSpeed = nu
     const { ux, uy } = macro;
     const speed = Math.hypot(ux, uy);
     density[index] = macro.density;
-    // For D2Q9, p = rho * c_s^2 and c_s^2 = 1/3.  Normalising the
-    // gauge pressure by 0.5 * rho_ref * U_ref^2 gives this Cp expression.
-    pressureCoefficient[index] = (2 * (macro.density - 1)) / (3 * inletSpeed * inletSpeed);
+    // For D2Q9, p = rho * c_s^2 and c_s^2 = 1/3. The gauge pressure is measured
+    // against the far-field reference above, not against the lattice value 1,
+    // and normalised by 0.5 * rho_ref * U_ref^2 to give this Cp expression.
+    pressureCoefficient[index] = (2 * (macro.density - reference)) / (3 * inletSpeed * inletSpeed);
     velocityX[index] = ux / inletSpeed;
     velocityY[index] = uy / inletSpeed;
     amplification[index] = speed / inletSpeed;
@@ -124,6 +180,7 @@ function fieldAndResidual(populations, obstacles, inletSpeed, previousSpeed = nu
     velocityY,
     density,
     pressureCoefficient,
+    referenceDensity: reference,
     residual: previousSpeed ? delta / Math.max(magnitude, 1e-9) : Infinity,
   };
 }
@@ -192,7 +249,7 @@ export function solveD2Q9({
     completedIterations = iteration + 1;
 
     if (completedIterations % 50 === 0 || completedIterations === iterations) {
-      const field = fieldAndResidual(current, obstacles, inletSpeed, previousSpeed);
+      const field = fieldAndResidual(current, columns, rows, obstacles, inletSpeed, previousSpeed);
       residual = field.residual;
       previousSpeed = Float32Array.from(field.amplification, (value) => value * inletSpeed);
       onProgress?.({ iteration: completedIterations, iterations, residual });
@@ -200,8 +257,8 @@ export function solveD2Q9({
     }
   }
 
-  const field = fieldAndResidual(current, obstacles, inletSpeed);
+  const field = fieldAndResidual(current, columns, rows, obstacles, inletSpeed);
   return { ...field, residual, iterations: completedIterations, inletSpeed };
 }
 
-export const LBM_CONSTANTS = { CX, CY, OPPOSITE, WEIGHTS, DEFAULT_LATTICE_SPEED };
+export const LBM_CONSTANTS = { CX, CY, OPPOSITE, WEIGHTS, DEFAULT_LATTICE_SPEED, REFERENCE_BAND_COLUMNS };

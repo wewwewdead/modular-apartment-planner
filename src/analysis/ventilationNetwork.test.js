@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDoor, createProject, createRoom, createWall, createWindow } from '@/domain/models';
 import { buildVentilationTopology, computeVentilationNetwork, VENTILATION_CONSTANTS } from './ventilationNetwork';
+import { correlationCp } from './cpCorrelation';
 
 function rectangularRoomProject() {
   const project = createProject('Ventilation');
@@ -657,5 +658,207 @@ describe('ventilation physics — analytic orifice comparison', () => {
     expect(PRESSURE_SMOOTHING_PA).toBe(0.01);
     expect(ratio).toBeCloseTo(Math.sqrt(1 / 3), 6);
     expect(1 - ratio).toBeCloseTo(0.4226497, 6);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Facade-sample sanity test and correlation fallback                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The solved field is the engine; the correlation only stands in where a sample
+ * is unusable. `win_north` sits at y = 1050 and probes northward, `win_south` at
+ * y = 8950 probing southward, so on the 1 m grid above the north probes land in
+ * rows 27..30 and the south probes in rows 39..42. Poisoning rows below 35
+ * therefore takes out exactly one of the two openings.
+ */
+const POISON_ROW = 35;
+
+function halfPoisonedGrid(poison) {
+  return cpGrid((column, row) => (row < POISON_ROW ? poison : -0.3));
+}
+
+function openingById(result, id) {
+  return result.openings.find((opening) => opening.id === id);
+}
+
+describe('ventilation — facade sample sanity test and correlation fallback', () => {
+  it('labels every opening as lbm-sourced when the field is sane', () => {
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+      directionDeg: 0,
+    });
+    expect(result.openings.every((opening) => opening.cpSource === 'lbm')).toBe(true);
+    expect(result.model.cpFallbackCount).toBe(0);
+    expect(result.model.cpFallbackModel).toBe('swami-chandra-1988');
+    expect(openingById(result, 'win_north').pressureCoefficient).toBeCloseTo(0.6, 6);
+  });
+
+  for (const [label, poison] of [
+    ['a non-finite sample', Number.NaN],
+    ['a sample beyond the plausibility band', 9],
+    ['a large negative sample beyond the band', -12],
+  ]) {
+    it(`falls back to the correlation for ${label}, and only for that opening`, () => {
+      const result = computeVentilationNetwork({
+        project: singleRoomProject(),
+        grid: halfPoisonedGrid(poison),
+        referenceSpeed: 5,
+        directionDeg: 0,
+      });
+      const north = openingById(result, 'win_north');
+      const south = openingById(result, 'win_south');
+      // Wind from the north (bearing 0), so the north facade is at normal
+      // incidence and the south facade fully leeward.
+      expect(north.cpSource).toBe('correlation');
+      expect(north.pressureCoefficient).toBeCloseTo(correlationCp({ incidenceDeg: 0, sideRatio: 1 }), 12);
+      expect(south.cpSource).toBe('lbm');
+      expect(south.pressureCoefficient).toBeCloseTo(-0.3, 6);
+      expect(result.model.cpFallbackCount).toBe(1);
+      // The network still runs, and still runs the right way round.
+      expect(north.flowM3s).toBeLessThan(0);
+      expect(south.flowM3s).toBeGreaterThan(0);
+      expect(result.rooms[0].airChangesPerHour).toBeGreaterThan(1);
+    });
+  }
+
+  it('keeps samples that sit exactly on the plausibility limit', () => {
+    const { CP_PLAUSIBILITY_LIMIT } = VENTILATION_CONSTANTS;
+    expect(CP_PLAUSIBILITY_LIMIT).toBe(3);
+    const inside = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: halfPoisonedGrid(-CP_PLAUSIBILITY_LIMIT),
+      referenceSpeed: 5,
+      directionDeg: 0,
+    });
+    expect(openingById(inside, 'win_north').cpSource).toBe('lbm');
+    expect(openingById(inside, 'win_north').pressureCoefficient).toBeCloseTo(-CP_PLAUSIBILITY_LIMIT, 6);
+
+    const outside = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: halfPoisonedGrid(-CP_PLAUSIBILITY_LIMIT - 0.01),
+      referenceSpeed: 5,
+      directionDeg: 0,
+    });
+    expect(openingById(outside, 'win_north').cpSource).toBe('correlation');
+  });
+
+  it('no longer clamps an out-of-band sample into a plausible-looking number', () => {
+    // The previous behaviour turned a sample of 9 into 2.5 and reported it as
+    // if the solver had produced it. Nothing in the result may now read 2.5.
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid: halfPoisonedGrid(9),
+      referenceSpeed: 5,
+      directionDeg: 0,
+    });
+    expect(result.openings.map((opening) => opening.pressureCoefficient)).not.toContain(2.5);
+  });
+
+  it('uses a legacy grid with no Cp field entirely through the correlation', () => {
+    const grid = diagonalCpGrid();
+    delete grid.pressureCoefficient;
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid,
+      referenceSpeed: 5,
+      directionDeg: 0,
+    });
+    const exterior = result.openings.filter((opening) => opening.exterior);
+    expect(exterior.every((opening) => opening.cpSource === 'correlation')).toBe(true);
+    expect(result.model.cpFallbackCount).toBe(exterior.length);
+    expect(openingById(result, 'win_north').pressureCoefficient).toBeCloseTo(
+      correlationCp({ incidenceDeg: 0, sideRatio: 1 }),
+      12,
+    );
+    expect(openingById(result, 'win_south').pressureCoefficient).toBeCloseTo(
+      correlationCp({ incidenceDeg: 180, sideRatio: 1 }),
+      12,
+    );
+  });
+
+  it('infers the incidence from the solved velocity field when no bearing is given', () => {
+    const grid = cpGrid(() => Number.NaN);
+    // +y is south: this is air travelling south, i.e. wind from the north.
+    grid.velocityY = grid.velocityY.map(() => 1);
+    const result = computeVentilationNetwork({ project: singleRoomProject(), grid, referenceSpeed: 5 });
+    expect(openingById(result, 'win_north').pressureCoefficient).toBeCloseTo(
+      correlationCp({ incidenceDeg: 0, sideRatio: 1 }),
+      9,
+    );
+    expect(openingById(result, 'win_south').pressureCoefficient).toBeCloseTo(
+      correlationCp({ incidenceDeg: 180, sideRatio: 1 }),
+      9,
+    );
+    expect(openingById(result, 'win_north').flowM3s).toBeLessThan(0);
+  });
+
+  it('prefers an explicit bearing over the velocity field', () => {
+    const grid = cpGrid(() => Number.NaN);
+    grid.velocityY = grid.velocityY.map(() => 1);
+    // Bearing 180 is wind from the south, the opposite of what the field says.
+    const result = computeVentilationNetwork({
+      project: singleRoomProject(),
+      grid,
+      referenceSpeed: 5,
+      directionDeg: 180,
+    });
+    expect(openingById(result, 'win_south').pressureCoefficient).toBeCloseTo(
+      correlationCp({ incidenceDeg: 0, sideRatio: 1 }),
+      9,
+    );
+    expect(openingById(result, 'win_south').flowM3s).toBeLessThan(0);
+  });
+
+  it('invents no flow at all when neither a bearing nor a velocity field exists', () => {
+    const grid = cpGrid(() => Number.NaN);
+    const result = computeVentilationNetwork({ project: singleRoomProject(), grid, referenceSpeed: 5 });
+    // Every opening reads the same side-wall value, so there is nothing to
+    // drive air and the panel gets an honest zero rather than a guess.
+    const exterior = result.openings.filter((opening) => opening.exterior);
+    for (const opening of exterior) {
+      expect(opening.pressureCoefficient).toBeCloseTo(correlationCp({ incidenceDeg: 90, sideRatio: 1 }), 12);
+      expect(Math.abs(opening.flowM3s)).toBeLessThan(1e-7);
+    }
+    expect(result.rooms[0].airChangesPerHour).toBeLessThan(1e-3);
+  });
+
+  it('leaves internal openings without a Cp source at all', () => {
+    const project = createProject('Two rooms');
+    const floor = project.floors[0];
+    const outer = [
+      { x: 1050, y: 1050 },
+      { x: 10950, y: 1050 },
+      { x: 10950, y: 8950 },
+      { x: 1050, y: 8950 },
+    ];
+    floor.walls = shellWalls();
+    const partition = partitionWall('wall_p', { x: CROSS_X, y: outer[0].y }, { x: CROSS_X, y: outer[2].y });
+    floor.walls.push(partition);
+    floor.rooms = [
+      withId(
+        createRoom('West', [outer[0], { x: CROSS_X, y: outer[0].y }, { x: CROSS_X, y: outer[2].y }, outer[3]]),
+        'w',
+      ),
+      withId(
+        createRoom('East', [{ x: CROSS_X, y: outer[0].y }, outer[1], outer[2], { x: CROSS_X, y: outer[2].y }]),
+        'e',
+      ),
+    ];
+    floor.windows = [operableWindow('win_w', 'wall_shell_3', 5450), operableWindow('win_e', 'wall_shell_1', 2450)];
+    floor.doors = [openDoor('door_we', 'wall_p', 2450)];
+
+    const result = computeVentilationNetwork({
+      project,
+      grid: diagonalCpGrid(),
+      referenceSpeed: 5,
+      directionDeg: 0,
+    });
+    const internal = result.openings.find((opening) => !opening.exterior);
+    expect(internal.cpSource).toBeNull();
+    expect(internal.pressureCoefficient).toBeNull();
+    expect(result.model.cpFallbackCount).toBe(0);
   });
 });

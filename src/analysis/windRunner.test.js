@@ -177,27 +177,81 @@ describe('wind study characterization — direction-mode fixture', () => {
     expect(achById.room_ne).toBeGreaterThan(10);
   });
 
-  it('pins the negative Cp offset the LBM field currently carries', () => {
+  it('pins what the fixture domain does to absolute Cp: 40% blockage, 11 cells of fetch', () => {
     const openings = fixtureDirectionRun().ventilation.openings.filter((opening) => opening.exterior);
-    // characterization: pins current behaviour; see T2. The wind comes from
-    // 45° (NE), so the north and east facades are WINDWARD and should sample a
-    // positive Cp. Every exterior opening samples a negative one, because
-    // lbmSolver.js:114 normalises against lattice density 1.0 with no
-    // far-field re-zeroing, leaving a roughly -1.3 constant offset on the
-    // whole field. The offset cancels inside the multizone network (only
-    // pressure DIFFERENCES drive flow, and the spread here is a believable
-    // ΔCp ≈ 1.5), so this is a reporting/absolute-value defect rather than a
-    // flow defect — but anything that reads absolute Cp is wrong today.
+    // characterization: pins current behaviour; see T2. Cp is now measured
+    // against the solver's own far-field probe (lbmSolver.js), which removes
+    // the run-dependent offset the old `rho - 1` form carried. What is left in
+    // THIS fixture is not a solver defect but a domain one: the fixture runs at
+    // domainPadding 12000 to stay fast, which rasterises to a 15 x 15 solid
+    // block in a 48 x 37 lattice — 40 % blockage with 11 cells of upstream
+    // fetch. At that geometry the reference band is inside the body's own
+    // stagnation influence, so the whole field reads about 1.3 low. The
+    // production default (domainPadding 30000) does not do this; the test
+    // below runs it and gets a sane field.
     expect(openings.every((opening) => opening.pressureCoefficient < 0)).toBe(true);
-    const windward = openings.find((opening) => opening.id === 'win_nw_north');
-    const leeward = openings.find((opening) => opening.id === 'win_sw_south');
-    expect(windward.pressureCoefficient).toBeLessThan(0);
-    expect(leeward.pressureCoefficient).toBeLessThan(windward.pressureCoefficient);
-    expect(windward.pressureCoefficient - leeward.pressureCoefficient).toBeGreaterThan(1.4);
-    // The whole-field mean is far from the ~0 a settled far field should give.
+    const spread =
+      Math.max(...openings.map((opening) => opening.pressureCoefficient)) -
+      Math.min(...openings.map((opening) => opening.pressureCoefficient));
+    expect(spread).toBeGreaterThan(1.4);
+    // A domain-wide mean is not required to be zero even with a correct
+    // reference: a blocked, drag-loaded channel has a real streamwise pressure
+    // drop. Under-padding still leaves this one far more negative than a
+    // well-padded run (-0.30 at domainPadding 120000).
     expect(DIRECTION_FIXTURE.grid.pressureCoefficientSum / DIRECTION_FIXTURE.summary.assessedCellCount).toBeLessThan(
-      -0.4,
+      -1.5,
     );
+  });
+
+  it('pins the flow reversal that mixing an LBM sample with a correlation sample can cause', () => {
+    // characterization: pins current behaviour; see T2. `win_sw_south` samples
+    // Cp = -3.36 in this cramped domain, fails the |Cp| <= 3 sanity test and is
+    // replaced by the Swami-Chandra value -0.534. That value is correct on its
+    // own datum, but the three surviving LBM samples still carry this domain's
+    // ~1.3 low bias, so the substituted opening ends up the HIGHEST pressure of
+    // the four and the NW/SW pair draws air in through its leeward facade. With
+    // the wind from 45 deg the north and east facades should be the inlets.
+    // Mixing sources is only safe when they share a reference, and the guard
+    // against that is a well-padded domain, not the sanity test.
+    const run = fixtureDirectionRun();
+    const byId = Object.fromEntries(run.ventilation.openings.map((opening) => [opening.id, opening]));
+    expect(byId.win_sw_south.cpSource).toBe('correlation');
+    expect(run.ventilation.model.cpFallbackCount).toBe(1);
+    expect(['win_nw_north', 'win_ne_north', 'win_ne_east'].every((id) => byId[id].cpSource === 'lbm')).toBe(true);
+    expect(byId.win_sw_south.pressureCoefficient).toBeGreaterThan(byId.win_nw_north.pressureCoefficient);
+    // Air enters the leeward south window and leaves the windward north one.
+    expect(byId.win_sw_south.flowM3s).toBeLessThan(0);
+    expect(byId.win_nw_north.flowM3s).toBeGreaterThan(0);
+    // NE is untouched: both its openings are LBM-sourced, so the offset they
+    // share cancels exactly and its air-change rate is the pre-fix one to
+    // eight significant figures. That is the offset-cancellation claim, tested.
+    expect(byId.win_ne_north.cpSource).toBe('lbm');
+    expect(run.ventilation.rooms.find((room) => room.id === 'room_ne').airChangesPerHour).toBeCloseTo(31.8942896, 5);
+  });
+
+  it('produces a sane, all-LBM facade field at the production default padding', () => {
+    // Not characterization: this is the physics the fixture's cramped domain
+    // cannot show. Wind from 45 deg (NE), converged, default domainPadding.
+    const result = computeWindStudy({
+      project: createWindApartmentProject(),
+      windStudy: { ...WIND_FIXTURE_DIRECTION_SETTINGS, domainPadding: 30000, iterations: 3000 },
+    });
+    const byId = Object.fromEntries(result.ventilation.openings.map((opening) => [opening.id, opening]));
+    expect(result.grid.solver.residual).toBeLessThan(1e-3);
+    expect(result.ventilation.model.cpFallbackCount).toBe(0);
+    expect(
+      result.ventilation.openings.filter((opening) => opening.exterior).every((opening) => opening.cpSource === 'lbm'),
+    ).toBe(true);
+    // Every windward facade sits above the leeward one, and none of them is
+    // anywhere near the -0.5 to -2.0 band the old un-referenced field produced.
+    for (const id of ['win_nw_north', 'win_ne_north', 'win_ne_east']) {
+      expect(byId[id].pressureCoefficient, id).toBeGreaterThan(byId.win_sw_south.pressureCoefficient);
+      expect(byId[id].pressureCoefficient, id).toBeGreaterThan(-0.5);
+    }
+    expect(byId.win_sw_south.pressureCoefficient).toBeLessThan(-1);
+    // Air enters on the windward side and leaves the leeward one.
+    expect(byId.win_nw_north.flowM3s).toBeLessThan(0);
+    expect(byId.win_sw_south.flowM3s).toBeGreaterThan(0);
   });
 
   it('pins that the fixture run stops on the iteration cap, not on convergence', () => {
@@ -236,11 +290,11 @@ describe('wind study characterization — direction-mode fixture', () => {
       expect(byId[id].flowDirection, `${id}.flowDirection`).toBe(fixtureById[id].flowDirection);
     }
     expect(openings.map((opening) => opening.flowDirection)).toEqual([
-      'b-to-a',
-      'b-to-a',
-      'a-to-b',
       'a-to-b',
       'b-to-a',
+      'a-to-b',
+      'b-to-a',
+      'a-to-b',
     ]);
   });
 
@@ -320,6 +374,8 @@ describe('wind study characterization — result key sets', () => {
     ]);
     expect(Object.keys(result.ventilation.solver).sort()).toEqual(['iterations', 'residualM3s']);
     expect(Object.keys(result.ventilation.model).sort()).toEqual([
+      'cpFallbackCount',
+      'cpFallbackModel',
       'includesIndoorMomentum',
       'includesStackEffect',
       'includesThermalBuoyancy',
@@ -349,6 +405,7 @@ describe('wind study characterization — result key sets', () => {
     const openingKeys = [
       'centre',
       'centreElevation',
+      'cpSource',
       'dischargeCoefficient',
       'effectiveAreaM2',
       'exterior',
@@ -373,6 +430,7 @@ describe('wind study characterization — result key sets', () => {
     expect(internal.outwardNormal).toBeNull();
     expect(internal.pressureCoefficient).toBeNull();
     expect(internal.outsidePressurePa).toBeNull();
+    expect(internal.cpSource).toBeNull();
   });
 
   it('pins the keys direction mode does NOT produce', () => {

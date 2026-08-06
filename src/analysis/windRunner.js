@@ -106,6 +106,10 @@ export function computeWindStudy({ project, windStudy }, onProgress = null) {
       project,
       grid: directionGrid,
       referenceSpeed: settings.referenceSpeed,
+      // Only used if a facade sample fails its sanity test and the empirical
+      // fallback needs an incidence angle.
+      directionDeg: settings.directionDeg,
+      northAngle,
     });
     return {
       mode: 'direction',

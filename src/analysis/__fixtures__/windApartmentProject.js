@@ -249,6 +249,7 @@ export function summarizeWindDirectionRun(result) {
         dischargeCoefficient: opening.dischargeCoefficient,
         effectiveAreaM2: opening.effectiveAreaM2,
         pressureCoefficient: opening.pressureCoefficient,
+        cpSource: opening.cpSource,
         outsidePressurePa: opening.outsidePressurePa,
         flowM3s: opening.flowM3s,
         flowDirection: opening.flowDirection,

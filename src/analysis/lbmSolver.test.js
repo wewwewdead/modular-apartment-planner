@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { solveD2Q9 } from './lbmSolver';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { LBM_CONSTANTS, solveD2Q9 } from './lbmSolver';
 
 function obstacleGrid(columns, rows, predicate = () => false) {
   const obstacles = new Uint8Array(columns * rows);
@@ -45,5 +45,141 @@ describe('D2Q9 wind solver', () => {
     const fluidPressure = Array.from(result.pressureCoefficient).filter((_, index) => !obstacles[index]);
     expect(fluidPressure.every(Number.isFinite)).toBe(true);
     expect(Math.max(...fluidPressure) - Math.min(...fluidPressure)).toBeGreaterThan(0.01);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Absolute Cp magnitude                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Blunt-body reference case. Everything the wind stack shipped before this
+ * checked Cp DIFFERENCES, which are blind to the reference pressure the whole
+ * field is measured against; these two tests check the absolute scale, which
+ * has exactly two anchors an incompressible flow must hit:
+ *
+ *   Cp = +1 at the windward stagnation point (all the dynamic head recovered)
+ *   Cp =  0 in the undisturbed approach flow
+ *
+ * Domain: a 10 x 8 cell rectangular block in a 94 x 80 channel — 10 % blockage
+ * across the periodic cross-flow, 44 cells of upstream fetch (more than half
+ * the channel width, so the body's exp(-2*pi*x/W) upstream influence is down to
+ * ~3 % at the reference band) and 40 cells of wake before the outlet.
+ *
+ * tau = 0.6 and U = 0.12 put the lattice Reynolds number near 11. That is
+ * laminar, and the residual viscous over-pressure at the stagnation point is
+ * why the measured value settles at ~1.11 rather than 1.000; running hotter
+ * pushes it towards 1 but the wake starts shedding and a snapshot stops being a
+ * mean. 8000 iterations reaches residual ~4e-5, and the answer is stable to
+ * +/-0.006 over the last 2000 of them.
+ */
+const STAGNATION_CASE = {
+  columns: 94,
+  rows: 80,
+  firstColumn: 44,
+  lastColumn: 53,
+  firstRow: 36,
+  lastRow: 43,
+  inletSpeed: 0.12,
+  relaxationTime: 0.6,
+  iterations: 8000,
+};
+
+let stagnationRun = null;
+function solveStagnationCase() {
+  const { columns, rows, firstColumn, lastColumn, firstRow, lastRow } = STAGNATION_CASE;
+  const obstacles = obstacleGrid(
+    columns,
+    rows,
+    (column, row) => column >= firstColumn && column <= lastColumn && row >= firstRow && row <= lastRow,
+  );
+  const result = solveD2Q9({
+    columns,
+    rows,
+    obstacles,
+    iterations: STAGNATION_CASE.iterations,
+    relaxationTime: STAGNATION_CASE.relaxationTime,
+    inletSpeed: STAGNATION_CASE.inletSpeed,
+    // Pin the iteration count: the assertions below are physics, and physics
+    // read off a run that stopped at an arbitrary residual is not comparable.
+    minIterations: STAGNATION_CASE.iterations,
+    convergenceTolerance: 0,
+  });
+  return { ...result, obstacles };
+}
+
+/** Mean Cp over the two cells straddling mid-span, one column off the face. */
+function stagnationCp(run) {
+  const { columns, firstColumn, firstRow, lastRow } = STAGNATION_CASE;
+  const midSpan = [Math.floor((firstRow + lastRow) / 2), Math.ceil((firstRow + lastRow) / 2)];
+  return (
+    midSpan.reduce((sum, row) => sum + run.pressureCoefficient[row * columns + firstColumn - 1], 0) / midSpan.length
+  );
+}
+
+describe('D2Q9 absolute pressure coefficient', () => {
+  // One 8000-iteration solve shared by the whole block; it takes about 6 s.
+  beforeAll(() => {
+    stagnationRun = solveStagnationCase();
+  }, 120000);
+
+  it('recovers Cp = 1 at the windward stagnation point of a blunt block', () => {
+    const run = stagnationRun;
+    // Half-way bounce-back puts the wall midway between the last solid cell and
+    // this one, so the cell one column upstream of the face at mid-span is the
+    // closest the lattice gets to the stagnation point.
+    expect(run.residual).toBeLessThan(1e-3);
+    expect(stagnationCp(run)).toBeGreaterThan(0.85);
+    expect(stagnationCp(run)).toBeLessThan(1.15);
+  });
+
+  it('holds the undisturbed approach flow at Cp = 0', () => {
+    const { columns, rows, firstColumn, firstRow, lastRow } = STAGNATION_CASE;
+    const run = stagnationRun;
+    // Upstream only. A bluff body leaves a real drag-induced pressure deficit
+    // downstream of itself, so a domain-wide mean is not required to vanish and
+    // asserting that it does would be asserting the wrong physics. The band
+    // stops two body heights short of the block and starts clear of the
+    // reference band itself, so it is not measuring its own definition.
+    const height = lastRow - firstRow + 1;
+    const start = 4 + LBM_CONSTANTS.REFERENCE_BAND_COLUMNS;
+    const end = firstColumn - 2 * height;
+    let total = 0;
+    let count = 0;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = start; column < end; column += 1) {
+        const index = row * columns + column;
+        if (run.obstacles[index]) continue;
+        total += run.pressureCoefficient[index];
+        count += 1;
+      }
+    }
+
+    expect(count).toBeGreaterThan(500);
+    expect(Math.abs(total / count)).toBeLessThan(0.05);
+  });
+
+  it('proves the far-field re-referencing is load-bearing, not a no-op', () => {
+    const { inletSpeed } = STAGNATION_CASE;
+    const run = stagnationRun;
+    // These boundary conditions do not conserve mass, so the settled far-field
+    // density is NOT the lattice initial value of 1. Reading Cp against 1 — what
+    // the solver did before this test existed — offsets the whole field by this
+    // much, which is far larger than either tolerance above.
+    const offset = (2 * (run.referenceDensity - 1)) / (3 * inletSpeed * inletSpeed);
+    expect(Math.abs(run.referenceDensity - 1)).toBeGreaterThan(1e-3);
+    expect(Math.abs(offset)).toBeGreaterThan(0.25);
+    expect(Math.abs(stagnationCp(run) + offset - 1)).toBeGreaterThan(0.15);
+  });
+
+  it('leaves an unobstructed domain at Cp = 0 everywhere', () => {
+    const columns = 48;
+    const rows = 24;
+    const result = solveD2Q9({ columns, rows, obstacles: obstacleGrid(columns, rows), iterations: 400 });
+    const extreme = Array.from(result.pressureCoefficient).reduce(
+      (worst, value) => Math.max(worst, Math.abs(value)),
+      0,
+    );
+    expect(extreme).toBeLessThan(0.05);
   });
 });
