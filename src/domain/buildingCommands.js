@@ -104,7 +104,12 @@ export const BUILDING_COMMANDS = Object.freeze({
   DEFINE_PROPERTY_BOUNDARY: 'DefinePropertyBoundary',
   CONFIGURE_SITE_SETBACKS: 'ConfigureSiteSetbacks',
   CONFIGURE_SITE_LOCATION: 'ConfigureSiteLocation',
-  CACHE_SITE_WIND_CLIMATE: 'CacheSiteWindClimate',
+  // CACHE_SITE_WIND_CLIMATE was removed by plan amendment 14. A fetched wind
+  // climate is a cache, not a document edit: writing it through a command put a
+  // network result on the undo stack, so enabling a wind study destroyed the
+  // redo stack and undoing past it discarded the climate. The fetch cache is
+  // now localStorage (src/persistence/windClimateCache.js) and the project file
+  // carries a snapshot written at explicit save time only.
   UPSERT_SOLAR_STUDY_TARGET: 'UpsertSolarStudyTarget',
   REMOVE_SOLAR_STUDY_TARGET: 'RemoveSolarStudyTarget',
   CONFIGURE_RECTANGULAR_SITE: 'ConfigureRectangularSite',
@@ -1809,120 +1814,17 @@ function configureSiteLocation(project, command) {
       locationLabel: command.locationLabel ?? site.locationLabel ?? '',
       exposureClass: normalizeSiteExposureClass(command.exposureClass ?? site.exposureClass),
       // A rose fitted for the old coordinates must never silently survive a
-      // location change. Keeping it for timezone/north edits is safe.
+      // location change. Keeping it for timezone/north edits is safe. Both the
+      // saved snapshot and the legacy cache are dropped: nothing writes the
+      // legacy shape any more, but a file saved before plan amendment 14 still
+      // arrives carrying one, and it is just as wrong for the new coordinates.
+      windClimateSnapshot: coordinatesChanged ? null : site.windClimateSnapshot || null,
       windClimateCache: coordinatesChanged ? null : site.windClimateCache || null,
     };
   });
 
   return commandSuccess(project, nextProject, command, [
     { operation: 'replace', entityType: 'siteLocation', id: project.building.site?.boundaryId || 'site' },
-  ]);
-}
-
-function cacheSiteWindClimate(project, command) {
-  const site = project.building.site || {};
-  const cache = command.cache;
-  const expectedLocationKey =
-    Number.isFinite(site.latitude) && Number.isFinite(site.longitude)
-      ? `${site.latitude.toFixed(4)}|${site.longitude.toFixed(4)}`
-      : null;
-  if (!expectedLocationKey) {
-    return commandError(
-      project,
-      command,
-      'site-location-required',
-      'Set a valid site location before caching wind data.',
-    );
-  }
-  if (!cache || typeof cache !== 'object' || cache.locationKey !== expectedLocationKey) {
-    return commandError(
-      project,
-      command,
-      'wind-climate-location-mismatch',
-      'Wind climate coordinates do not match the current site.',
-    );
-  }
-  if (!Array.isArray(cache.windRose) || cache.windRose.length !== 16) {
-    return commandError(
-      project,
-      command,
-      'invalid-wind-climate-rose',
-      'Wind climate must contain 16 direction sectors.',
-    );
-  }
-
-  let frequencyTotal = 0;
-  const windRose = [];
-  const directions = new Set();
-  for (const sector of cache.windRose) {
-    const directionDeg = Number(sector?.directionDeg);
-    const frequency = Number(sector?.frequency);
-    const weibullK = Number(sector?.weibullK);
-    const weibullC = Number(sector?.weibullC);
-    if (
-      !Number.isFinite(directionDeg) ||
-      directionDeg < 0 ||
-      directionDeg >= 360 ||
-      !Number.isFinite(frequency) ||
-      frequency < 0 ||
-      !Number.isFinite(weibullK) ||
-      weibullK <= 0 ||
-      !Number.isFinite(weibullC) ||
-      weibullC <= 0
-    ) {
-      return commandError(project, command, 'invalid-wind-climate-rose', 'Wind climate sectors are invalid.');
-    }
-    frequencyTotal += frequency;
-    directions.add(directionDeg);
-    windRose.push({ directionDeg, frequency, weibullK, weibullC });
-  }
-  if (!(frequencyTotal > 0) || directions.size !== 16) {
-    return commandError(
-      project,
-      command,
-      'invalid-wind-climate-rose',
-      'Wind climate frequencies must total above zero.',
-    );
-  }
-
-  const prevailingDirectionDeg = Number(cache.prevailingDirectionDeg);
-  const prevailingMeanSpeed = Number(cache.prevailingMeanSpeed);
-  if (!Number.isFinite(prevailingDirectionDeg) || !Number.isFinite(prevailingMeanSpeed) || prevailingMeanSpeed <= 0) {
-    return commandError(
-      project,
-      command,
-      'invalid-wind-climate-summary',
-      'Wind climate prevailing conditions are invalid.',
-    );
-  }
-
-  const finiteOr = (value, fallback) =>
-    value == null || value === '' || !Number.isFinite(Number(value)) ? fallback : Number(value);
-  const stored = {
-    schemaVersion: 1,
-    locationKey: expectedLocationKey,
-    source: String(cache.source || 'Historical wind climate'),
-    sourceUrl: String(cache.sourceUrl || ''),
-    period: String(cache.period || ''),
-    startDate: String(cache.startDate || ''),
-    endDate: String(cache.endDate || ''),
-    cachedAt: String(cache.cachedAt || ''),
-    sampleCount: finiteOr(cache.sampleCount, null),
-    meanSpeed: finiteOr(cache.meanSpeed, null),
-    heightM: finiteOr(cache.heightM, 10),
-    requestedLatitude: finiteOr(cache.requestedLatitude, site.latitude),
-    requestedLongitude: finiteOr(cache.requestedLongitude, site.longitude),
-    gridLatitude: finiteOr(cache.gridLatitude, null),
-    gridLongitude: finiteOr(cache.gridLongitude, null),
-    elevationM: finiteOr(cache.elevationM, null),
-    sectorCount: 16,
-    windRose: windRose.map((sector) => ({ ...sector, frequency: sector.frequency / frequencyTotal })),
-    prevailingDirectionDeg: ((prevailingDirectionDeg % 360) + 360) % 360,
-    prevailingMeanSpeed,
-  };
-  const nextProject = updateSite(project, (currentSite) => ({ ...currentSite, windClimateCache: stored }));
-  return commandSuccess(project, nextProject, command, [
-    { operation: 'replace', entityType: 'siteWindClimate', id: expectedLocationKey },
   ]);
 }
 
@@ -4460,8 +4362,6 @@ export function executeBuildingCommand(project, command) {
       return configureSiteSetbacks(project, command);
     case BUILDING_COMMANDS.CONFIGURE_SITE_LOCATION:
       return configureSiteLocation(project, command);
-    case BUILDING_COMMANDS.CACHE_SITE_WIND_CLIMATE:
-      return cacheSiteWindClimate(project, command);
     case BUILDING_COMMANDS.UPSERT_SOLAR_STUDY_TARGET:
       return upsertSolarStudyTarget(project, command);
     case BUILDING_COMMANDS.REMOVE_SOLAR_STUDY_TARGET:

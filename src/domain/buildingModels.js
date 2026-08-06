@@ -30,11 +30,31 @@ function stableProjectId(projectId, suffix) {
   return `${projectId || 'project'}_${suffix}`;
 }
 
+/** LEGACY: the pre-amendment-14 `site.windClimateCache`. Read-only from here on. */
 function cloneWindClimateCache(cache) {
   if (!cache || typeof cache !== 'object' || !Array.isArray(cache.windRose)) return null;
   return {
     ...cache,
     windRose: cache.windRose.map((sector) => ({ ...sector })),
+  };
+}
+
+/**
+ * The versioned climate snapshot a project file carries.
+ *
+ * Structurally cloned so no sync can alias the loaded file's arrays, and NEVER
+ * written by any reducer path: it arrives with the project at load and is
+ * refreshed only by an explicit save (see persistence/serialize.js). That is
+ * the whole point of plan amendment 14 — a fetched climate that mutates project
+ * state is a fetched climate on the undo stack.
+ */
+function cloneWindClimateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+  const normals = snapshot.normals;
+  if (!normals || typeof normals !== 'object' || !Array.isArray(normals.windRose)) return null;
+  return {
+    ...snapshot,
+    normals: { ...normals, windRose: normals.windRose.map((sector) => ({ ...sector })) },
   };
 }
 
@@ -165,6 +185,9 @@ export function createCanonicalBuilding(projectId, floors = [], overrides = {}) 
       })),
       // Compact fitted climate, not the raw hourly response. Keeping it on the
       // site makes an already-loaded wind study portable and offline-capable.
+      // `windClimateSnapshot` is the current shape; `windClimateCache` is the
+      // legacy one, still read so files saved before amendment 14 keep working.
+      windClimateSnapshot: cloneWindClimateSnapshot(overrides.site?.windClimateSnapshot),
       windClimateCache: cloneWindClimateCache(overrides.site?.windClimateCache),
       // Terrain roughness around the site. Unlike latitude/longitude this DOES
       // get a default: every site has some exposure, there is no such thing as
@@ -304,6 +327,7 @@ export function syncCanonicalBuilding(project) {
           ...target,
           polygon: (target.polygon || []).map((point) => ({ ...point })),
         })),
+        windClimateSnapshot: cloneWindClimateSnapshot(project.building.site?.windClimateSnapshot),
         windClimateCache: cloneWindClimateCache(project.building.site?.windClimateCache),
         exposureClass: normalizeSiteExposureClass(project.building.site?.exposureClass),
         parkingPlan: createParkingPlan(project.building.site?.parkingPlan),

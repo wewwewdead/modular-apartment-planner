@@ -108,6 +108,13 @@
   font-size: 9px;
   line-height: 1.4;
 }
+/* Reads as a note, not an alarm: nothing is broken and nothing is required of
+   the reader — the newer climate is already what the study ran on. */
+.climateCard .climateNotice {
+  padding-left: 6px;
+  border-left: 2px solid rgba(57, 118, 136, 0.5);
+  color: var(--color-text-primary);
+}
 .climateActions button,
 .climateActions a {
   padding: 2px 0;

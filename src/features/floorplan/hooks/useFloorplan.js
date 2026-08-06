@@ -13,6 +13,7 @@ import {
   openProjectFile,
 } from '@/persistence/fileTransfer';
 import { useAutosave } from '@/persistence/useAutosave';
+import { currentWindClimateSnapshot } from '@/persistence/windClimateCache';
 import floorplanReducer, { initializeFloorplanState } from '../store/floorplanReducer';
 
 function getImportErrorMessage(err) {
@@ -91,10 +92,21 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
 
   const handleSave = useCallback(async () => {
     try {
-      const { fileHandle } = await exportProjectFile(project, { fileHandle: projectFileHandle });
+      // Explicit save is the only moment the fetched wind climate is written
+      // into the file (plan amendment 14). It is read from the localStorage
+      // fetch cache here rather than from project state, because project state
+      // deliberately never carries it as an edit — that write was what put a
+      // network result on the undo stack. Null when nothing has been fetched
+      // for this site, in which case the snapshot already in the project (from
+      // the file it was loaded from) is written through untouched.
+      const windClimateSnapshot = currentWindClimateSnapshot(project);
+      const { fileHandle } = await exportProjectFile(project, {
+        fileHandle: projectFileHandle,
+        windClimateSnapshot,
+      });
       setProjectFileHandle(fileHandle);
       try {
-        await saveProject(project);
+        await saveProject(project, { windClimateSnapshot });
       } catch {
         // Browser draft sync is secondary to file save.
       }

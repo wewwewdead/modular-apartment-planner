@@ -9,8 +9,8 @@ export function setBackend(b) {
   backend = validateBackend(b);
 }
 
-export async function saveProject(project) {
-  const serialized = serializeProject(project);
+export async function saveProject(project, options = {}) {
+  const serialized = serializeProject(project, options);
   await backend.save(project.id, project.name, serialized);
   return serialized.savedAt;
 }

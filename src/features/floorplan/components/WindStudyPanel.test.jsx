@@ -86,6 +86,37 @@ describe('WindStudyPanel', () => {
     expect(markup).toContain('Refresh online');
   });
 
+  /**
+   * Plan amendment 18. Climate metadata reaches this panel from a project file
+   * or from localStorage, both hand-editable. `@/analysis/windClimate`
+   * allowlists it on the way in; the panel's side of the contract is that it
+   * only ever renders those values as text — asserted in the DOM by
+   * `WindStudyPanel.dom.test.jsx`, and at the source level here, where it is
+   * cheap enough to be worth pinning.
+   */
+  it('renders no raw HTML and links only the source URL the hook supplies', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const source = readFileSync(fileURLToPath(new URL('./WindStudyPanel.jsx', import.meta.url)), 'utf8');
+    expect(source).not.toContain('dangerouslySetInnerHTML');
+    // One href in the whole panel, and it is the module constant the hook
+    // passes through — never a string that came out of a project file.
+    expect(source.match(/href=\{[^}]*\}/g)).toEqual(['href={climate.sourceUrl}']);
+  });
+
+  it('shows the updated-climate notice as a plain status line', () => {
+    const markup = render({
+      windStudy: createWindStudyState({
+        enabled: true,
+        windRoseSource: 'site-climate',
+        windClimate: { period: '2021–2025', sampleCount: 43824 },
+      }),
+      climate: { status: 'ready', site: { latitude: 10.32, longitude: 123.89 }, updated: true, sourceUrl: '#' },
+    });
+    expect(markup).toContain('Climate data updated since this project was saved');
+    expect(markup).toContain('data-climate-notice="updated"');
+  });
+
   it('parses and formats wind-rose Weibull sectors', () => {
     const parsed = parseRose('0, 60, 2, 5\n180, 40, 1.8, 6');
     expect(parsed).toHaveLength(2);

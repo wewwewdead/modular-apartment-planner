@@ -418,6 +418,79 @@ describe('WindStudyPanel climate card actions (characterization)', () => {
     const { container } = mount();
     expect(container.querySelector('[data-status="unavailable"]')).not.toBeNull();
   });
+
+  it('says when the climate moved on from what the project file was saved with', () => {
+    // Plan amendment 14: the newer data is already in use, so this is a notice
+    // and not a question — no modal, no buttons, nothing blocked.
+    const { container } = mount({
+      climate: { status: 'ready', site, sourceUrl: 'https://open-meteo.com', updated: true, activate: vi.fn() },
+      windStudy: createWindStudyState({
+        enabled: true,
+        windRoseSource: 'site-climate',
+        windClimate: { period: '2021–2025', sampleCount: 43824 },
+      }),
+    });
+    const notice = container.querySelector('[data-climate-notice="updated"]');
+    expect(collapse(notice.textContent)).toBe(
+      'Climate data updated since this project was saved. The newer figures are in use; saving the project records them.',
+    );
+    expect(container.querySelector('dialog')).toBeNull();
+    expect(within(notice).queryByRole('button')).toBeNull();
+  });
+
+  it('shows no notice when the climate agrees with the saved project', () => {
+    const { container } = mount({
+      climate: { status: 'ready', site, sourceUrl: 'https://open-meteo.com', activate: vi.fn() },
+    });
+    expect(container.querySelector('[data-climate-notice]')).toBeNull();
+  });
+});
+
+/**
+ * Plan amendment 18: climate metadata comes out of a project file or
+ * localStorage, both of which a user can hand-edit. `@/analysis/windClimate`
+ * allowlists it on the way in; this is the other end — whatever survives that
+ * allowlist may only ever be rendered as text.
+ */
+describe('WindStudyPanel renders untrusted climate metadata as text only', () => {
+  const site = { latitude: 10.32, longitude: 123.89 };
+  const hostile = {
+    period: '"><img src=x onerror=alert(1)>',
+    sampleCount: 43824,
+    prevailingDirectionDeg: 90,
+    prevailingMeanSpeed: 4.3,
+    source: 'javascript:alert(2)',
+    sourceUrl: 'javascript:alert(3)',
+  };
+
+  it('never grows an element or an attribute out of a metadata string', () => {
+    const { container } = mount({
+      climate: { status: 'ready', site, sourceUrl: 'https://open-meteo.com/en/docs', activate: vi.fn() },
+      windStudy: createWindStudyState({ enabled: true, windRoseSource: 'site-climate', windClimate: hostile }),
+    });
+    expect(container.querySelector('img')).toBeNull();
+    // It IS on screen — as characters, escaped in the markup, which is the point.
+    expect(container.textContent).toContain('"><img src=x onerror=alert(1)>');
+    expect(container.innerHTML).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(container.innerHTML).not.toContain('<img');
+  });
+
+  it('takes the source link from the hook constant, and never from the payload', () => {
+    const { container } = mount({
+      climate: { status: 'ready', site, sourceUrl: 'https://open-meteo.com/en/docs', activate: vi.fn() },
+      windStudy: createWindStudyState({ enabled: true, windRoseSource: 'site-climate', windClimate: hostile }),
+    });
+    const links = [...container.querySelectorAll('a')];
+    expect(links).toHaveLength(1);
+    expect(links[0].getAttribute('href')).toBe('https://open-meteo.com/en/docs');
+    for (const element of container.querySelectorAll('[href], [src]')) {
+      expect(element.getAttribute('href') ?? element.getAttribute('src')).not.toMatch(/^javascript:/i);
+    }
+  });
+
+  // The source-level half of this claim (no `dangerouslySetInnerHTML`, exactly
+  // one `href`, and it is the hook constant) lives in `WindStudyPanel.test.jsx`,
+  // which runs under the node environment where `import.meta.url` is a file URL.
 });
 
 /**

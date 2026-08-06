@@ -204,6 +204,15 @@ export default function WindStudyPanel({
             ) : (
               <p>Site climate is not loaded; comfort results use the illustrative rose.</p>
             )}
+            {/* The reader is looking at numbers their project file does not
+                contain. No modal and no choice to make — the newer data is
+                already in use — but never a silent substitution either. */}
+            {climate?.updated && (
+              <p className={styles.climateNotice} data-climate-notice="updated">
+                Climate data updated since this project was saved. The newer figures are in use; saving the project
+                records them.
+              </p>
+            )}
             {climate?.site && climate.status !== 'loading' && (
               <div className={styles.climateActions}>
                 <button
