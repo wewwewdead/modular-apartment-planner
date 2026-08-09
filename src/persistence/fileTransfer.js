@@ -136,7 +136,7 @@ export async function openProjectFile() {
 }
 
 export async function exportProjectFile(project, options = {}) {
-  const serialized = serializeProject(project, { windClimateSnapshot: options.windClimateSnapshot ?? null });
+  const serialized = serializeProject(project);
   let fileHandle = options.fileHandle ?? null;
 
   if (!fileHandle) {

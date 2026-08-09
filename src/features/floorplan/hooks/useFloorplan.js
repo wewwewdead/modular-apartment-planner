@@ -13,7 +13,6 @@ import {
   openProjectFile,
 } from '@/persistence/fileTransfer';
 import { useAutosave } from '@/persistence/useAutosave';
-import { currentWindClimateSnapshot } from '@/persistence/windClimateCache';
 import floorplanReducer, { initializeFloorplanState } from '../store/floorplanReducer';
 
 function getImportErrorMessage(err) {
@@ -92,21 +91,12 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
 
   const handleSave = useCallback(async () => {
     try {
-      // Explicit save is the only moment the fetched wind climate is written
-      // into the file (plan amendment 14). It is read from the localStorage
-      // fetch cache here rather than from project state, because project state
-      // deliberately never carries it as an edit — that write was what put a
-      // network result on the undo stack. Null when nothing has been fetched
-      // for this site, in which case the snapshot already in the project (from
-      // the file it was loaded from) is written through untouched.
-      const windClimateSnapshot = currentWindClimateSnapshot(project);
       const { fileHandle } = await exportProjectFile(project, {
         fileHandle: projectFileHandle,
-        windClimateSnapshot,
       });
       setProjectFileHandle(fileHandle);
       try {
-        await saveProject(project, { windClimateSnapshot });
+        await saveProject(project);
       } catch {
         // Browser draft sync is secondary to file save.
       }
@@ -259,6 +249,10 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
     () => (filteredProject.trussSystems || []).filter((trussSystem) => trussSystem.floorId === editor.activeFloorId),
     [editor.activeFloorId, filteredProject.trussSystems],
   );
+  const floorCeilings = useMemo(
+    () => (filteredProject.ceilings || []).filter((ceiling) => ceiling.floorId === editor.activeFloorId),
+    [editor.activeFloorId, filteredProject.ceilings],
+  );
   const resolvedDocument = useMemo(
     () => ({
       project: filteredProject,
@@ -267,11 +261,13 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       activeSheet,
       roofSystem: filteredProject.roofSystem || null,
       trussSystems: floorTrussSystems,
+      ceilings: floorCeilings,
       entities: {
         walls: filteredFloor?.walls || [],
         rooms: filteredFloor?.rooms || [],
         doors: filteredFloor?.doors || [],
         windows: filteredFloor?.windows || [],
+        electricalDevices: filteredFloor?.electricalDevices || [],
         columns: filteredFloor?.columns || [],
         beams: filteredFloor?.beams || [],
         stairs: filteredFloor?.stairs || [],
@@ -287,9 +283,10 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         drains: filteredProject.roofSystem?.drains || [],
         roofOpenings: filteredProject.roofSystem?.roofOpenings || [],
         trussSystems: floorTrussSystems,
+        ceilings: floorCeilings,
       },
     }),
-    [activeFloor, activeSheet, filteredFloor, filteredProject, floorTrussSystems],
+    [activeFloor, activeSheet, filteredFloor, filteredProject, floorCeilings, floorTrussSystems],
   );
 
   const selectors = useMemo(
@@ -302,6 +299,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       filteredProject,
       filteredFloor,
       floorTrussSystems,
+      floorCeilings,
       resolvedDocument,
       canUndo: state.history.length > 0,
       canRedo: state.future.length > 0,
@@ -327,6 +325,7 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
       duplicateFloor,
       filteredFloor,
       filteredProject,
+      floorCeilings,
       floorTrussSystems,
       getFloor,
       isPropertiesCollapsed,

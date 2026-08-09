@@ -65,10 +65,11 @@ export function filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode) 
     filtered[key] = arr.filter(isVisible);
   }
 
-  // Also filter doors/windows whose parent wall was filtered out
+  // Also filter doors/windows/devices whose parent wall was filtered out
   const visibleWallIds = new Set((filtered.walls || []).map((wall) => wall.id));
   filtered.doors = (filtered.doors || []).filter((door) => visibleWallIds.has(door.wallId));
   filtered.windows = (filtered.windows || []).filter((windowItem) => visibleWallIds.has(windowItem.wallId));
+  filtered.electricalDevices = (filtered.electricalDevices || []).filter((device) => visibleWallIds.has(device.wallId));
 
   filtered.beams = attachHiddenBeamSupports(filtered.beams, filtered.columns, floor.columns);
 
@@ -89,11 +90,15 @@ export function filterProjectByPhase(project, activePhaseId, phaseViewMode) {
   const trussSystems = (project.trussSystems || []).filter((trussSystem) =>
     isObjectVisibleInPhase(trussSystem, phases, activePhaseId, phaseViewMode),
   );
+  const ceilings = (project.ceilings || []).filter((ceiling) =>
+    isObjectVisibleInPhase(ceiling, phases, activePhaseId, phaseViewMode),
+  );
 
   return {
     ...project,
     floors: project.floors.map((floor) => filterFloorByPhase(floor, phases, activePhaseId, phaseViewMode)),
     roofSystem,
     trussSystems,
+    ceilings,
   };
 }

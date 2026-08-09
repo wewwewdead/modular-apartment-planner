@@ -13,6 +13,7 @@
  */
 
 import { wallOutline } from '@/geometry/wallGeometry';
+import { wallBaseOffset } from '@/domain/wallFit';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { unionPolygons } from '@/geometry/polygonBoolean';
 import { buildRoofPlaneGeometry } from '@/geometry/roofPlaneGeometry';
@@ -37,7 +38,8 @@ function collectFloorPrisms(floor, options) {
     if (height < MIN_MASS_HEIGHT_MM) continue;
     const outline = wallOutline(wall);
     if (outline.length < 3) continue;
-    prisms.push({ outline, base: floorElevation, top: floorElevation + height });
+    const base = floorElevation + wallBaseOffset(wall);
+    prisms.push({ outline, base, top: base + height });
   }
 
   if (options.includeColumns) {

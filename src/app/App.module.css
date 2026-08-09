@@ -111,6 +111,162 @@
   grid-template-columns: 1fr;
 }
 
+/*
+ * Focus mode: one pane, and everything else out of its way without being out of
+ * reach.
+ *
+ * The toolbar keeps its row — a pane you cannot pick a tool for is not a
+ * workspace — while the sidebar and properties panel become drawers floating
+ * *over* the pane. That is the whole distinction from the split view: opening a
+ * reference panel no longer takes 300px off the thing you are looking at, and
+ * closing it gives the space straight back. It reuses the same slide-in
+ * mechanism the layout already falls back to on narrow screens, so there is one
+ * drawer behaviour in the app rather than two.
+ */
+.layoutFocused .canvas {
+  box-shadow: none;
+}
+
+.layoutFocused .sidebar,
+.layoutFocused .properties {
+  position: fixed;
+  top: var(--toolbar-height);
+  bottom: 0;
+  z-index: 20;
+  background: var(--color-panel-bg);
+  box-shadow: var(--shadow-floating);
+  transition: transform var(--duration-layout) var(--ease-out);
+}
+
+.layoutFocused .sidebar {
+  left: 0;
+  width: var(--sidebar-width);
+  transform: translateX(-100%);
+}
+
+.layoutFocused .properties {
+  right: 0;
+  left: auto;
+  width: var(--properties-width);
+  transform: translateX(100%);
+}
+
+.layoutFocused .sidebarVisible,
+.layoutFocused .propertiesVisible {
+  transform: translateX(0);
+}
+
+/* Toolbar folded away: the row collapses to nothing rather than the element
+   being hidden, because the grid still has a `toolbar` track to size and a
+   zero-height track is what lets the pane start at the very top of the window. */
+.layoutToolbarHidden {
+  grid-template-rows: 0 1fr;
+}
+
+.layoutToolbarHidden .sidebar,
+.layoutToolbarHidden .properties {
+  top: 0;
+}
+
+/* The handle that folds the toolbar away and brings it back. Sits centred on
+   the seam between the toolbar and the pane, so it is where the thing it
+   controls just went. */
+.toolbarTab {
+  position: fixed;
+  top: var(--toolbar-height);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: var(--color-surface-elevated);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.12));
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    top var(--duration-layout) var(--ease-out);
+}
+
+.toolbarTabRaised {
+  top: 0;
+}
+
+.toolbarTab:hover {
+  background: white;
+  color: var(--color-text-primary);
+}
+
+.toolbarTab svg {
+  width: 14px;
+  height: 14px;
+}
+
+.focusHint {
+  position: fixed;
+  /* Clear of both the toolbar and the fold-away tab centred on its edge. */
+  top: calc(var(--toolbar-height) + 26px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(20, 24, 34, 0.82);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  /* Purely informational, and it sits over the drawing — never let it swallow
+     a click meant for the canvas underneath. */
+  pointer-events: none;
+  /* Stated outside the animation as well: this is the only thing telling a
+     first-time user how to get back out, so it must be visible even if the
+     animation is suppressed, interrupted, or never starts. */
+  opacity: 1;
+  animation: focusHintIn var(--duration-layout, 180ms) var(--ease-out, ease-out) both;
+}
+
+.focusHintKey {
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.layoutToolbarHidden .focusHint {
+  top: 26px;
+}
+
+@keyframes focusHintIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focusHint {
+    animation: none;
+  }
+}
+
 .previewHidden {
   display: none;
 }
@@ -123,6 +279,12 @@
   .modelWorkspace {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) 280px;
+  }
+
+  /* Only one pane is rendered here, so the second row would be 280px of
+     nothing. Stated after the rule above so it wins on equal specificity. */
+  .workspaceMaximized {
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .previewFallback {

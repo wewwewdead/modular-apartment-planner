@@ -12,11 +12,11 @@ const RULER_STEP_CANDIDATES = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000
  * matches the drawing aspect exactly. Keeping the box aspect-true is what makes
  * pointer math, rulers, and "Fit wall" all agree.
  */
-export function computeCanvasFit({ frameWidth, frameHeight, length, height, margin = 56 }) {
+export function computeCanvasFit({ frameWidth, frameHeight, length, height, margin = 56, mirrorU = false }) {
   const availableWidth = Math.max(0, (Number(frameWidth) || 0) - margin * 2);
   const availableHeight = Math.max(0, (Number(frameHeight) || 0) - margin * 2);
   if (!(length > 0) || !(height > 0) || availableWidth < 40 || availableHeight < 40) {
-    return { ready: false, frameWidth: 0, frameHeight: 0, fitWidth: 0, fitHeight: 0, pxPerMm: 0 };
+    return { ready: false, frameWidth: 0, frameHeight: 0, fitWidth: 0, fitHeight: 0, pxPerMm: 0, mirrorU: false };
   }
   const pxPerMm = Math.min(availableWidth / length, availableHeight / height);
   return {
@@ -26,6 +26,7 @@ export function computeCanvasFit({ frameWidth, frameHeight, length, height, marg
     fitWidth: length * pxPerMm,
     fitHeight: height * pxPerMm,
     pxPerMm,
+    mirrorU: Boolean(mirrorU),
   };
 }
 
@@ -40,15 +41,47 @@ export function wallUnitsPerPixel(metrics, viewport, bounds) {
 /**
  * Map a wall-local point (mm, V up from floor) to screen pixels relative to the
  * canvas frame, honouring the centred CSS `translate(pan) scale(zoom)` camera.
+ * When the metrics carry `mirrorU` (a face elevation viewed from the other side
+ * of the wall), U is reflected so rulers land where the drawing does.
  */
 export function wallPointToFrame(point, metrics, viewport) {
   const zoom = Math.max(0.001, Number(viewport?.zoom) || 1);
   const panU = Number(viewport?.panU) || 0;
   const panV = Number(viewport?.panV) || 0;
+  const uPx = (Number(point?.u) || 0) * metrics.pxPerMm;
+  const displayUPx = metrics.mirrorU ? metrics.fitWidth - uPx : uPx;
   return {
-    x: metrics.frameWidth / 2 + panU + zoom * ((Number(point?.u) || 0) * metrics.pxPerMm - metrics.fitWidth / 2),
+    x: metrics.frameWidth / 2 + panU + zoom * (displayUPx - metrics.fitWidth / 2),
     y: metrics.frameHeight / 2 + panV + zoom * (metrics.fitHeight / 2 - (Number(point?.v) || 0) * metrics.pxPerMm),
   };
+}
+
+/**
+ * Map a wall-local point (mm, V up from floor) to the elevation SVG's own
+ * coordinate space (viewBox `0 0 length height`, Y down). `view` carries
+ * `{ length, height, mirrorU }`; with `mirrorU` the U axis is reflected so the
+ * face is drawn as seen standing in front of it rather than through the wall.
+ */
+export function wallLocalToSvg(point, view) {
+  const u = Number(point?.u) || 0;
+  return {
+    x: view.mirrorU ? view.length - u : u,
+    y: view.height - (Number(point?.v) || 0),
+  };
+}
+
+/**
+ * Reflect an SVG text rotation across the vertical axis, then normalise so the
+ * label still reads upright: horizontal text stays at 0° (not 180°), vertical
+ * text keeps its reading direction, slopes flip sign.
+ */
+export function mirrorAngleDegrees(angle) {
+  let mirrored = 180 - (Number(angle) || 0);
+  while (mirrored > 180) mirrored -= 360;
+  while (mirrored < -180) mirrored += 360;
+  if (mirrored > 90) mirrored -= 180;
+  else if (mirrored < -90) mirrored += 180;
+  return mirrored;
 }
 
 /** Pick a labelled ruler step (and minor subdivision) for the current scale. */

@@ -3,6 +3,7 @@ import AnnotationRenderer from './AnnotationRenderer';
 import BeamRenderer from './BeamRenderer';
 import ColumnRenderer from './ColumnRenderer';
 import DoorRenderer from './DoorRenderer';
+import ElectricalRenderer from './ElectricalRenderer';
 import FixtureDefs from './FixtureDefs';
 import FixtureRenderer from './FixtureRenderer';
 import LandingRenderer from './LandingRenderer';
@@ -54,6 +55,7 @@ const FloorPlanLayer = memo(function FloorPlanLayer({ floor, filteredFloor, sele
         <FixtureRenderer fixtures={filteredFloor.fixtures || EMPTY} />
         <DoorRenderer doors={filteredFloor.doors} walls={filteredFloor.walls} />
         <WindowRenderer windows={filteredFloor.windows} walls={filteredFloor.walls} />
+        <ElectricalRenderer devices={filteredFloor.electricalDevices || EMPTY} walls={filteredFloor.walls} />
         {(filteredFloor.sectionCuts || EMPTY).map((sectionCut) => (
           <SectionCutRenderer key={sectionCut.id} sectionCut={sectionCut} selectedId={selectedId} />
         ))}

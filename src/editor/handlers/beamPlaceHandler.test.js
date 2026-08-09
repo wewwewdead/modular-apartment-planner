@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createBeamPlaceHandler } from './beamPlaceHandler';
 
-function createHarness(beamPlacementMode = 'floor') {
+function createHarness(beamPlacementMode, columnHeight = null) {
   const floor = {
     id: 'floor_1',
     elevation: 3000,
     floorToFloorHeight: 3000,
     columns: [
-      { id: 'column_a', x: 0, y: 0, width: 300, depth: 300, rotation: 0 },
-      { id: 'column_b', x: 4000, y: 0, width: 300, depth: 300, rotation: 0 },
+      { id: 'column_a', x: 0, y: 0, width: 300, depth: 300, rotation: 0, height: columnHeight },
+      { id: 'column_b', x: 4000, y: 0, width: 300, depth: 300, rotation: 0, height: columnHeight },
     ],
   };
   let toolState = { beamPlacementMode };
@@ -52,7 +52,21 @@ describe('beam placement elevation', () => {
     });
     expect(editorActions).toContainEqual({
       type: 'SET_STATUS_MESSAGE',
-      message: 'Top / roof beam created at 6000 mm.',
+      message: 'Top / roof beam created at 6000 mm. Walls running under it build to 2550 mm.',
     });
+  });
+
+  // The beam bears on the columns, so a retyped column height moves it — the
+  // storey's nominal floor-to-floor no longer gets to disagree with the steel.
+  it('sits a top beam on the columns it spans rather than on the storey height', () => {
+    const { dispatched } = createHarness('roof_ring', 3400);
+
+    expect(dispatched[0].beam).toMatchObject({ floorLevel: 6400, placementRole: 'roof_ring' });
+  });
+
+  it('defaults to a top beam when no placement mode has been chosen', () => {
+    const { dispatched } = createHarness(undefined, 3000);
+
+    expect(dispatched[0].beam).toMatchObject({ floorLevel: 6000, placementRole: 'roof_ring' });
   });
 });

@@ -2,9 +2,9 @@
  * A bundled index of world cities, used to place a site without a network.
  *
  * Two jobs: it backs the search box, and its points are the landmarks drawn on
- * the location map. Settlement follows habitable land closely enough that the
- * scatter reads as continents, which is what lets a coastline-free map still be
- * navigable.
+ * the location map. It used to carry a third — being the only thing on that map,
+ * with the scatter standing in for continents — which it did badly; the
+ * coastlines in `worldOutline.js` do that now, and these are landmarks again.
  *
  * Coordinates are approximate city-centre points. That is deliberate and
  * sufficient: one degree of latitude is 111 km and shifts solar altitude by one

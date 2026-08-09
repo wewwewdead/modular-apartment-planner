@@ -9,39 +9,19 @@ import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
 import { resolveWalkFloorContext } from './resolveWalkFloorContext';
 import { computeSunVector } from '@/analysis/sunStudyRunner';
-import { useWindStudy } from '@/features/floorplan/context/WindStudyContext';
+import { RENDER_STYLE_PRESETS, persistRenderStylePreference, readRenderStylePreference } from './renderStyle';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import styles from './ThreePreviewPanel.module.css';
 
-const WIND_DIRECTION_LABELS = [
-  'N',
-  'NNE',
-  'NE',
-  'ENE',
-  'E',
-  'ESE',
-  'SE',
-  'SSE',
-  'S',
-  'SSW',
-  'SW',
-  'WSW',
-  'W',
-  'WNW',
-  'NW',
-  'NNW',
-];
-
-function directionLabel(directionDeg) {
-  return WIND_DIRECTION_LABELS[Math.round((directionDeg || 0) / 22.5) % WIND_DIRECTION_LABELS.length];
-}
+// ~15 scene rebuilds a second while the project is changing every frame.
+const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
 
 export default function ThreePreviewPanel({
   project,
   activeFloorId,
-  isMaximized = false,
-  onToggleMaximize,
+  isFocused = false,
+  onToggleFocus,
   className = '',
   applyPhaseFilter = true,
 }) {
@@ -52,16 +32,21 @@ export default function ThreePreviewPanel({
   const sceneCacheRef = useRef(null);
   const [previewScope, setPreviewScope] = useState('all');
   const [navigationMode, setNavigationMode] = useState('inspect');
-  const [showWind3d, setShowWind3d] = useState(true);
-  const [wind3dMode, setWind3dMode] = useState('outdoor');
+  const [renderStyle, setRenderStyle] = useState(readRenderStylePreference);
   const [walkUiState, setWalkUiState] = useState({
     navigationMode: 'inspect',
     isLocked: false,
     canLock: false,
   });
-  const { selectedId, selectedType, activePhaseId, phaseViewMode, sunStudy, dispatch: editorDispatch } = useEditor();
-  const wind = useWindStudy();
-  const activeWind3dMode = wind.study?.mode === 'direction' ? wind3dMode : 'outdoor';
+  const {
+    selectedId,
+    selectedType,
+    activePhaseId,
+    phaseViewMode,
+    sunStudy,
+    hiddenWallBoards,
+    dispatch: editorDispatch,
+  } = useEditor();
 
   const filteredProject = useMemo(
     () => (applyPhaseFilter ? filterProjectByPhase(project, activePhaseId, phaseViewMode) : project),
@@ -81,8 +66,9 @@ export default function ThreePreviewPanel({
       buildPreviewScene(filteredProject, {
         activeFloorId,
         visibleFloorIds,
+        hiddenWallBoards,
       }),
-    [filteredProject, activeFloorId, visibleFloorIds],
+    [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards],
   );
 
   const activeFloor = (project?.floors || []).find((floor) => floor.id === activeFloorId) || null;
@@ -188,24 +174,55 @@ export default function ThreePreviewPanel({
 
   // Scene structure effect: rebuild only when project data / phase filter / floor visibility changes
   const meshMapRef = useRef(null);
+  const lastBuildAt = useRef(0);
+  const [sceneBuildId, setSceneBuildId] = useState(0);
 
+  /*
+   * Rebuilding a floor re-triangulates every mesh on it — several milliseconds
+   * of a 16 ms frame, plus the GPU buffer churn of disposing what it replaces.
+   * A drag changes the project on every frame, so an unthrottled rebuild spends
+   * most of the plan editor's frame budget on the preview beside it. Capping the
+   * rate keeps the preview live (still ~15 updates a second) while leaving the
+   * frame to the canvas the pointer is actually in.
+   *
+   * The trailing build is what makes this safe: the effect re-runs for each new
+   * descriptor and its cleanup cancels the timer it scheduled, so the last
+   * descriptor of a drag always gets built — the preview never settles on a
+   * stale scene.
+   */
   useEffect(() => {
     const viewport = viewportRef.current;
     const sceneCache = sceneCacheRef.current;
-    if (!viewport || !sceneCache) return;
+    if (!viewport || !sceneCache) return undefined;
 
-    // Incremental build: reuse THREE groups for floors whose source geometry is
-    // unchanged (immutable reducer updates preserve floor object identity), and
-    // only rebuild floors that actually changed.
-    const { root, meshMap } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
-    meshMapRef.current = meshMap;
-    viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel);
+    const runBuild = () => {
+      lastBuildAt.current = performance.now();
+      // Incremental build: reuse THREE groups for floors whose source geometry is
+      // unchanged (immutable reducer updates preserve floor object identity), and
+      // only rebuild floors that actually changed.
+      const { root, meshMap } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
+      meshMapRef.current = meshMap;
+      viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel);
+      setSceneBuildId((id) => id + 1);
+    };
+
+    const sinceLastBuild = performance.now() - lastBuildAt.current;
+    if (sinceLastBuild >= MIN_SCENE_REBUILD_INTERVAL_MS) {
+      runBuild();
+      return undefined;
+    }
+
+    const timer = setTimeout(runBuild, MIN_SCENE_REBUILD_INTERVAL_MS - sinceLastBuild);
+    return () => clearTimeout(timer);
   }, [sceneDescriptor]);
 
   // Selection effect: swap overlay meshes without rebuilding the scene.
   // Re-runs when the selection changes OR when the scene was rebuilt
   // (setWorld clears the overlay, and the meshMap identity changes), so a
   // selected object stays highlighted after an unrelated geometry edit.
+  // Keyed on the build counter rather than the descriptor: a throttled
+  // descriptor has no meshes yet, and re-highlighting against the previous
+  // meshMap would point the overlay at meshes that are about to be replaced.
   useEffect(() => {
     const viewport = viewportRef.current;
     const meshMap = meshMapRef.current;
@@ -213,7 +230,7 @@ export default function ThreePreviewPanel({
 
     const overlay = buildSelectionOverlay(meshMap, { selectedId, selectedType }, viewport.materialPalette);
     viewport.setSelectionOverlay(overlay);
-  }, [selectedId, selectedType, sceneDescriptor]);
+  }, [selectedId, selectedType, sceneBuildId]);
 
   // Aim the key light at the real sun whenever the study or the site moves.
   // Only the sun vector is needed here — the shadows themselves come from the
@@ -225,15 +242,13 @@ export default function ThreePreviewPanel({
   }, [sunLight]);
 
   useEffect(() => {
-    viewportRef.current?.setWindStudy?.(showWind3d ? wind.study : null, {
-      stale: wind.stale,
-      mode: activeWind3dMode,
-    });
-  }, [activeWind3dMode, showWind3d, wind.stale, wind.study]);
-
-  useEffect(() => {
     viewportRef.current?.setNavigationMode(navigationMode);
   }, [navigationMode]);
+
+  useEffect(() => {
+    viewportRef.current?.setRenderStyle(renderStyle);
+    persistRenderStylePreference(renderStyle);
+  }, [renderStyle]);
 
   useEffect(() => {
     viewportRef.current?.setActiveFloorContext(walkFloorContext);
@@ -249,7 +264,9 @@ export default function ThreePreviewPanel({
   const secondaryFooter =
     navigationMode === 'walk'
       ? 'Ghost walk is noclip flight now, still read-only and collision-free.'
-      : 'Perspective preview, future-ready for presets and floor visibility.';
+      : renderStyle === 'realistic'
+        ? 'Realistic: sky lighting, ambient occlusion, soft sun shadows. The image keeps refining for a moment after the camera stops.'
+        : 'Shaded: flat drawing view with outlines and the ground grid.';
 
   return (
     <section className={`${styles.panel} ${className}`}>
@@ -283,6 +300,19 @@ export default function ThreePreviewPanel({
           </div>
           <select
             className={styles.floorSelect}
+            value={renderStyle}
+            onChange={(e) => setRenderStyle(e.target.value)}
+            title="Realistic adds sky lighting, ambient occlusion and soft sun shadows; Shaded is the flat drawing view."
+            aria-label="Preview render style"
+          >
+            {Object.entries(RENDER_STYLE_PRESETS).map(([name, preset]) => (
+              <option key={name} value={name}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className={styles.floorSelect}
             value={previewScope}
             onChange={(e) => handlePreviewScopeChange(e.target.value)}
           >
@@ -293,41 +323,19 @@ export default function ThreePreviewPanel({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className={`${styles.button} ${showWind3d && wind.settings?.enabled ? styles.analysisButtonActive : ''}`}
-            onClick={() => setShowWind3d((current) => !current)}
-            aria-pressed={showWind3d}
-            disabled={!wind.settings?.enabled}
-            title={wind.settings?.enabled ? 'Toggle the 3D wind field' : 'Enable Pedestrian Wind first'}
-          >
-            3D Wind
-          </button>
-          {showWind3d && wind.settings?.enabled && (
-            <select
-              className={styles.floorSelect}
-              value={activeWind3dMode}
-              onChange={(event) => setWind3dMode(event.target.value)}
-              aria-label="3D wind display"
-            >
-              <option value="outdoor">Outdoor flow</option>
-              <option value="ventilation" disabled={wind.study?.mode !== 'direction'}>
-                Room airflow
-              </option>
-            </select>
-          )}
           <button type="button" className={styles.button} onClick={() => viewportRef.current?.resetView()}>
             {resetLabel}
           </button>
-          {onToggleMaximize && (
+          {onToggleFocus && (
             <button
               type="button"
               className={`${styles.button} ${styles.iconButton}`}
-              onClick={onToggleMaximize}
-              title={isMaximized ? 'Restore split view' : 'Maximize preview'}
-              aria-label={isMaximized ? 'Restore split view' : 'Maximize preview'}
+              onClick={onToggleFocus}
+              title={isFocused ? 'Exit focus mode (Esc)' : 'Focus preview — fills the window'}
+              aria-label={isFocused ? 'Exit focus mode' : 'Focus preview'}
+              aria-pressed={isFocused}
             >
-              {isMaximized ? <CollapseIcon /> : <ExpandIcon />}
+              {isFocused ? <CollapseIcon /> : <ExpandIcon />}
             </button>
           )}
         </div>
@@ -336,33 +344,6 @@ export default function ThreePreviewPanel({
       <div className={styles.viewportWrap}>
         <div ref={containerRef} className={styles.viewport} />
         <CompassOverlay className={styles.compassDock} needleRef={compassNeedleRef} />
-        {showWind3d && wind.settings?.enabled && (
-          <div className={styles.windBadge} data-stale={wind.stale || undefined}>
-            <span className={styles.windBadgeTitle}>
-              {activeWind3dMode === 'ventilation' ? 'Room airflow network' : 'Outdoor wind field'}
-            </span>
-            <span>
-              {wind.status === 'running'
-                ? 'Solving updated flow…'
-                : wind.study
-                  ? activeWind3dMode === 'ventilation'
-                    ? `${wind.study.ventilation?.summary.crossVentilatedRoomCount || 0} cross-flow rooms · ${(
-                        wind.study.ventilation?.summary.meanAirChangesPerHour || 0
-                      ).toFixed(1)} mean ACH`
-                    : `${
-                        wind.study.mode === 'direction'
-                          ? 'Animated velocity'
-                          : `Comfort map + prevailing ${directionLabel(
-                              wind.study.representativeFlow?.directionDeg,
-                            )} flow`
-                      } · ${(wind.study.sliceHeight / 1000).toFixed(1)} m slice`
-                  : 'Waiting for wind result…'}
-            </span>
-            {activeWind3dMode === 'ventilation' && wind.study && (
-              <span>Blue = inlet · orange = outlet / transfer · room colour = ACH</span>
-            )}
-          </div>
-        )}
         {navigationMode === 'walk' && (
           <div className={styles.walkOverlay}>
             <span className={styles.walkOverlayTitle}>

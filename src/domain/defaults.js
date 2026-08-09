@@ -44,6 +44,21 @@ export const ROOF_PARAPET_THICKNESS = 180; // mm
 export const ROOF_DRAIN_DIAMETER = 120; // mm
 export const ROOF_OPENING_CURB_HEIGHT = 0; // mm
 
+export const CEILING_DROP = 150; // mm (attachment plane to board underside)
+export const CEILING_FURRING_SPACING = 406; // mm
+export const CEILING_CARRIER_SPACING = 1220; // mm
+export const CEILING_HANGER_SPACING = 1200; // mm
+export const CEILING_FURRING_WIDTH = 50; // mm
+export const CEILING_FURRING_DEPTH = 19; // mm
+export const CEILING_CARRIER_WIDTH = 12; // mm
+export const CEILING_CARRIER_DEPTH = 38; // mm
+export const CEILING_WALL_ANGLE_LEG = 25; // mm
+export const CEILING_BOARD_THICKNESS = 4.5; // mm
+// Plan size of a suspension rod/wire. Half of it is the clearance a hanger
+// keeps from every ceiling edge, so the rod stands beside the beam it hangs
+// from rather than inside it.
+export const CEILING_HANGER_PLAN_SIZE = 10; // mm
+
 export const LANDING_WIDTH = 1000; // mm
 export const LANDING_DEPTH = 1000; // mm
 export const LANDING_THICKNESS = 200; // mm
@@ -63,6 +78,15 @@ export const FIXTURE_SOFA_DEPTH = 900;
 export const FIXTURE_BED_WIDTH = 1400;
 export const FIXTURE_BED_DEPTH = 2000;
 
+export const ELECTRICAL_SYMBOL_SIZE = 300; // mm (plan footprint of a device symbol)
+// Physical faceplate every view agrees on: drawn true-size in plan, extruded in
+// 3D, and used for offset clamping/snapping. Oversized versus a real single-gang
+// plate (70×115) so it survives a whole-apartment camera.
+export const ELECTRICAL_PLATE = { width: 100, height: 120, depth: 40 }; // mm
+export const OUTLET_MOUNT_HEIGHT = 300; // mm
+export const GFCI_MOUNT_HEIGHT = 1100; // mm (above counter)
+export const SWITCH_MOUNT_HEIGHT = 1200; // mm
+
 export const RAILING_HEIGHT = 1000; // mm
 export const RAILING_WIDTH = 50; // mm
 
@@ -70,20 +94,6 @@ export const ROOM_COLOR = '#E8F0FE';
 
 export const ENDPOINT_MERGE_TOLERANCE = 1; // mm
 export const MIN_ROOM_AREA = 100000; // mm² (0.1 m²)
-
-/**
- * Terrain exposure of the site, used to bring a 10 m meteorological wind speed
- * down to the height a study actually runs at.
- *
- * The names are the terrain categories; the power-law exponents that go with
- * them live in `src/analysis/windExposure.js`, next to the physics that uses
- * them. `suburban` is the default because it is the middle category and the one
- * an ordinary urban-fringe apartment site sits in — a wrong guess in either
- * direction is then at most one category, whereas defaulting to `open` would
- * silently over-report wind everywhere a building has neighbours.
- */
-export const SITE_EXPOSURE_CLASSES = Object.freeze(['open', 'suburban', 'dense-urban']);
-export const DEFAULT_SITE_EXPOSURE_CLASS = 'suburban';
 
 export const FILLET_DEFAULT_RADIUS = 200; // mm
 export const FILLET_MIN_RADIUS = 50; // mm

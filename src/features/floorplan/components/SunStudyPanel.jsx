@@ -10,6 +10,7 @@ import {
   SUN_STUDY_KEY_DATES,
 } from '@/analysis/sunStudyState';
 import { SunIcon } from '@/ui/ToolbarIcons';
+import { SUN_HOURS_RAMP } from './renderers/ShadowOverlay';
 import LocationPicker from './LocationPicker';
 import styles from './SunStudyPanel.module.css';
 
@@ -56,6 +57,44 @@ function formatCoordinate(value, positive, negative) {
   return `${Math.abs(value).toFixed(2)}°${value >= 0 ? positive : negative}`;
 }
 
+/**
+ * The map's key.
+ *
+ * The overlay stretches its ramp across the best-lit ground in the study, so a
+ * colour only means a number of hours once something says what the ends of the
+ * ramp are. The contours on the map carry hours of their own; this is what ties
+ * the wash between them back to the same scale, and marks where the target
+ * falls on it.
+ */
+function SunHoursLegend({ grid }) {
+  const gradient = `linear-gradient(90deg, ${SUN_HOURS_RAMP.map(
+    ({ stop, color: [red, green, blue] }) => `rgb(${red}, ${green}, ${blue}) ${(stop * 100).toFixed(0)}%`,
+  ).join(', ')})`;
+
+  const maxHours = Math.max(grid.maxHours, 0.5);
+  const thresholdShare = Math.min(1, Math.max(0, grid.thresholdHours / maxHours));
+  const thresholdIsOnScale = grid.thresholdHours > 0 && grid.thresholdHours < maxHours;
+
+  return (
+    <div className={styles.legend} data-legend="sun-hours">
+      <div className={styles.legendBar} style={{ background: gradient }}>
+        {thresholdIsOnScale && (
+          <span
+            className={styles.legendMarker}
+            style={{ left: `${(thresholdShare * 100).toFixed(2)}%` }}
+            aria-hidden="true"
+          />
+        )}
+      </div>
+      <div className={styles.legendScale}>
+        <span>0 h</span>
+        {thresholdIsOnScale && <span className={styles.legendTarget}>{grid.thresholdHours} h target</span>}
+        <span>{maxHours.toFixed(1)} h</span>
+      </div>
+    </div>
+  );
+}
+
 function formatStudyDate(date) {
   const { year, month, day } = parseSunStudyDate(date);
   return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(undefined, {
@@ -82,6 +121,7 @@ export default function SunStudyPanel({
   sunStudy,
   study = null,
   recomputing = false,
+  studyError = null,
   lastCommand,
   onExecuteCommand,
   onPatch,
@@ -443,6 +483,9 @@ export default function SunStudyPanel({
             <div className={styles.progressTrack} data-busy={recomputing || undefined} aria-hidden="true">
               <span className={styles.progressBar} />
             </div>
+            {/* The day study runs on a worker now; a run that dies must say so
+                rather than leaving a stale overlay pretending to be current. */}
+            {studyError && <p className={styles.error}>{studyError}</p>}
           </div>
 
           <div className={styles.dateRow}>
@@ -532,6 +575,7 @@ export default function SunStudyPanel({
                 <p>{result.detail}</p>
               </div>
             )}
+            {study?.mode === 'sunHours' && study.grid && <SunHoursLegend grid={study.grid} />}
           </div>
 
           <button

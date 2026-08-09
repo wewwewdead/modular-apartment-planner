@@ -8,6 +8,7 @@ import {
   deriveWallFramingLayout,
   resolveWallAssembly,
   wallAssemblyThickness,
+  wallFaceViewMirrorsU,
 } from './wallAssemblies';
 
 describe('wall assemblies', () => {
@@ -52,6 +53,25 @@ describe('wall assemblies', () => {
     expect(leftLayers.find((layer) => layer.side === 'exterior').sign).toBe(1);
     expect(rightLayers.find((layer) => layer.side === 'interior').sign).toBe(1);
     expect(rightLayers.find((layer) => layer.side === 'exterior').sign).toBe(-1);
+  });
+
+  it('mirrors the elevation U axis for exactly the face on the wall far side', () => {
+    // The un-mirrored canvas viewpoint matches a viewer on the +perpendicular
+    // side (layer sign +1). The sign −1 face is seen from the other side of the
+    // wall, so its front-on elevation must flip U — one face of every wall,
+    // never both, and which one follows interiorSide.
+    const leftInside = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, { interiorSide: 'left' });
+    expect(wallFaceViewMirrorsU(leftInside, 'interior')).toBe(true);
+    expect(wallFaceViewMirrorsU(leftInside, 'exterior')).toBe(false);
+
+    const rightInside = createWallAssembly(WALL_ASSEMBLY_PRESETS.MIXED_BOARD, { interiorSide: 'right' });
+    expect(wallFaceViewMirrorsU(rightInside, 'interior')).toBe(false);
+    expect(wallFaceViewMirrorsU(rightInside, 'exterior')).toBe(true);
+
+    // Masonry walls carry interiorSide too — the same rule applies.
+    const masonry = resolveWallAssembly({ thickness: 100 });
+    expect(wallFaceViewMirrorsU(masonry, 'interior')).toBe(true);
+    expect(wallFaceViewMirrorsU(masonry, 'exterior')).toBe(false);
   });
 
   it('lays out two stud rows and frames around door openings', () => {

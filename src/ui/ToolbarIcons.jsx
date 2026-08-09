@@ -304,17 +304,6 @@ export function SunIcon(props) {
   );
 }
 
-export function WindIcon(props) {
-  return (
-    <I {...props}>
-      <path d="M2.5 6.2h9.2c2.7 0 2.7-3.8.3-3.8-1.2 0-2 .7-2.2 1.6" {...p} />
-      <path d="M2.5 10h13.2c2.5 0 2.5 3.7.2 3.7-1.2 0-2-.7-2.2-1.6" {...p} />
-      <path d="M2.5 13.8h6.2" {...p} />
-      <path d="M2.5 17h10.8" {...p} />
-    </I>
-  );
-}
-
 /** A window with daylight falling through it onto the floor beyond. */
 export function DaylightIcon(props) {
   return (
@@ -435,6 +424,22 @@ export function CollapseIcon(props) {
   );
 }
 
+export function ChevronUpIcon(props) {
+  return (
+    <I {...props}>
+      <path d="M5 12l5-5 5 5" {...p} />
+    </I>
+  );
+}
+
+export function ChevronDownIcon(props) {
+  return (
+    <I {...props}>
+      <path d="M5 8l5 5 5-5" {...p} />
+    </I>
+  );
+}
+
 export function CenterViewIcon(props) {
   return (
     <I {...props}>
@@ -451,6 +456,17 @@ export function FilletIcon(props) {
       <path d="M5 4v8" {...p} />
       <path d="M5 16h8" {...p} />
       <path d="M5 12 Q 5 16 9 16" {...p} />
+    </I>
+  );
+}
+
+export function ElectricalIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="4" y="3" width="12" height="14" rx="1.5" {...p} />
+      <circle cx="10" cy="8" r="1.2" {...p} />
+      <circle cx="10" cy="13" r="1.2" {...p} />
+      <path d="M8 8h-1M13 8h-1M8 13h-1M13 13h-1" {...p} />
     </I>
   );
 }

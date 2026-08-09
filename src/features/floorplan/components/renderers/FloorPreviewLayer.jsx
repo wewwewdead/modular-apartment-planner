@@ -4,6 +4,7 @@ import BeamPreview from './BeamPreview';
 import ColumnPreview from './ColumnPreview';
 import DimensionPreview from './DimensionPreview';
 import DoorWindowPreview from './DoorWindowPreview';
+import ElectricalPreview from './ElectricalPreview';
 import FilletPreview from './FilletPreview';
 import FixturePreview from './FixturePreview';
 import LandingPreview from './LandingPreview';
@@ -31,6 +32,7 @@ const FloorPreviewLayer = memo(function FloorPreviewLayer({ toolState, activeToo
       />
       <StairPreview toolState={toolState} activeTool={activeTool} floorId={floor.id} />
       <DoorWindowPreview toolState={toolState} activeTool={activeTool} walls={floor.walls} />
+      <ElectricalPreview toolState={toolState} activeTool={activeTool} walls={floor.walls} />
       <SectionCutPreview toolState={toolState} activeTool={activeTool} />
       <RailingPreview toolState={toolState} activeTool={activeTool} />
       <ColumnPreview toolState={toolState} activeTool={activeTool} />

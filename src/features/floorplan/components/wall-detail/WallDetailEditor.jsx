@@ -7,6 +7,7 @@ import {
   createWallAssembly,
   resolveWallAssembly,
   wallAssemblyThickness,
+  wallFaceViewMirrorsU,
 } from '@/domain/wallAssemblies';
 import {
   FASTENER_LAYOUT_MODES,
@@ -66,8 +67,27 @@ import {
   zoomWallViewport,
 } from './wallDetailEditorGeometry';
 import { createWallDetailPreviewProject } from './wallDetailPreviewProject';
-import { CanvasReadoutChip, WallCanvasGrid, WallCanvasRulers, useWallCanvasMetrics } from './WallCanvasChrome';
-import { friendlyAnchorPhrase, wallUnitsPerPixel } from './wallDetailCanvasMath';
+import {
+  CanvasReadoutChip,
+  CanvasSizeTag,
+  WallCanvasGrid,
+  WallCanvasRulers,
+  useWallCanvasMetrics,
+} from './WallCanvasChrome';
+import {
+  SIZE_TAG_FONT_PX,
+  SIZE_TAG_GAP_PX,
+  boardLayerLabel,
+  boardMaterialLabel,
+  describeSelectedFastener,
+  describeSelectedFraming,
+  describeSelectedPanel,
+  faceSizeLine,
+  framingKindLabel,
+  placeSelectionTag,
+  selectionTagLines,
+} from './wallDetailSelectionReadout';
+import { friendlyAnchorPhrase, mirrorAngleDegrees, wallLocalToSvg, wallUnitsPerPixel } from './wallDetailCanvasMath';
 import {
   AdvancedGroup,
   CollapsibleSection,
@@ -114,7 +134,7 @@ const JOINT_SYSTEM_LABELS = Object.freeze({
 });
 
 const TOOL_HINTS = Object.freeze({
-  [CANVAS_TOOLS.SELECT]: 'Select and drag any panel, frame member, or screw',
+  [CANVAS_TOOLS.SELECT]: 'Select and drag any panel, frame member, or screw · hold Ctrl while dragging to copy it',
   [CANVAS_TOOLS.PAN]: 'Drag anywhere to pan; use the mouse wheel to zoom',
   [CANVAS_TOOLS.DRAW_PANEL]: 'Drag a rectangle to draw a board panel',
   [CANVAS_TOOLS.TRACE_PANEL]: 'Click each cut corner; click the first point or double-click to finish',
@@ -131,7 +151,7 @@ const TOOL_DEFINITIONS = Object.freeze([
     icon: 'select',
     label: 'Select',
     shortcut: 'V',
-    title: 'Select / move — click to pick anything, drag to move it (V)',
+    title: 'Select / move — click to pick anything, drag to move it, Ctrl-drag to copy it (V)',
     group: 'navigate',
   },
   {
@@ -288,12 +308,6 @@ function persistFocusModePreference(value) {
 const DIMENSION_SNAP_RADIUS_PX = 22;
 const DIMENSION_POINT_GRAVITY_PX = 14;
 
-function boardMaterialLabel(material) {
-  if (material === WALL_BOARD_MATERIALS.PLYWOOD) return 'Plywood';
-  if (material === WALL_BOARD_MATERIALS.FIBER_CEMENT) return 'Fiber cement';
-  return 'No board';
-}
-
 function faceColor(material) {
   if (material === WALL_BOARD_MATERIALS.PLYWOOD) return '#c9975d';
   return material === WALL_BOARD_MATERIALS.FIBER_CEMENT ? '#dedbd1' : '#d3d7da';
@@ -325,7 +339,7 @@ function panelRegionPath(region) {
 
 function DimensionGraphic({
   dimension,
-  wallHeight,
+  view,
   selected,
   editable = false,
   showScrewGuide = false,
@@ -340,7 +354,8 @@ function DimensionGraphic({
   const geometry = deriveWallDimensionGeometry(dimension);
   const px = unitPx > 0 ? unitPx : 1;
   const labelOffset = fontSize ? fontSize * 0.62 : 10;
-  const svgPoint = (point) => ({ x: point.u, y: wallHeight - point.v });
+  const svgPoint = (point) => wallLocalToSvg(point, view);
+  const textAngle = view.mirrorU ? mirrorAngleDegrees(geometry.angleDegrees) : geometry.angleDegrees;
   const witnessStart = svgPoint(geometry.witnessStart);
   const witnessEnd = svgPoint(geometry.witnessEnd);
   const dimensionStart = svgPoint(geometry.dimensionStart);
@@ -465,7 +480,7 @@ function DimensionGraphic({
         y={textPoint.y - labelOffset}
         className={styles.dimensionText}
         style={fontSize ? { fontSize, strokeWidth: 3 * px } : undefined}
-        transform={`rotate(${geometry.angleDegrees} ${textPoint.x} ${textPoint.y - labelOffset})`}
+        transform={`rotate(${textAngle} ${textPoint.x} ${textPoint.y - labelOffset})`}
       >
         {dimension.label}
       </text>
@@ -508,11 +523,10 @@ function DimensionGraphic({
   );
 }
 
-function DimensionAcquisitionGraphic({ acquisition, wallHeight, precision, referenceLabel = '' }) {
+function DimensionAcquisitionGraphic({ acquisition, view, precision, referenceLabel = '' }) {
   if (!acquisition?.point) return null;
   const radius = Math.max(1, acquisition.markerRadius || 10);
-  const x = acquisition.point.u;
-  const y = wallHeight - acquisition.point.v;
+  const { x, y } = wallLocalToSvg(acquisition.point, view);
   const primary = acquisition.reference ? referenceLabel || 'Snapped' : 'Free point';
   const coords = `U ${formatWallDimensionValue(acquisition.point.u, precision)} · V ${formatWallDimensionValue(
     acquisition.point.v,
@@ -544,8 +558,8 @@ function DimensionAcquisitionGraphic({ acquisition, wallHeight, precision, refer
   );
 }
 
-function FastenerGuideGraphic({ guide, wallHeight, precision, selected = false, onPointerDown }) {
-  const svgPoint = (point) => ({ x: point.u, y: wallHeight - point.v });
+function FastenerGuideGraphic({ guide, view, precision, selected = false, onPointerDown }) {
+  const svgPoint = (point) => wallLocalToSvg(point, view);
   const tick = 16;
   if (guide.mode === FASTENER_GUIDE_MODES.PANEL_PERIMETER) {
     const firstSegment = guide.segments[0];
@@ -734,6 +748,7 @@ export default function WallDetailEditor() {
   const [viewport, setViewport] = useState({ zoom: 1, panU: 0, panV: 0 });
   const [panGesture, setPanGesture] = useState(null);
   const [spacePanActive, setSpacePanActive] = useState(false);
+  const [copyModifierActive, setCopyModifierActive] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapStep, setSnapStep] = useState(50);
   const [dimensionAcquisition, setDimensionAcquisition] = useState(null);
@@ -830,6 +845,23 @@ export default function WallDetailEditor() {
     };
   }, []);
 
+  // Ctrl (Cmd on a Mac) held over the drawing arms duplicate-on-drag. Tracked as
+  // state purely so the cursor can say so before the drag starts — the commit
+  // itself reads the modifier off the pointer event that began the drag, which
+  // is the only reading that cannot go stale.
+  useEffect(() => {
+    const syncCopyModifier = (event) => setCopyModifierActive(Boolean(event.ctrlKey || event.metaKey));
+    const clearCopyModifier = () => setCopyModifierActive(false);
+    window.addEventListener('keydown', syncCopyModifier);
+    window.addEventListener('keyup', syncCopyModifier);
+    window.addEventListener('blur', clearCopyModifier);
+    return () => {
+      window.removeEventListener('keydown', syncCopyModifier);
+      window.removeEventListener('keyup', syncCopyModifier);
+      window.removeEventListener('blur', clearCopyModifier);
+    };
+  }, []);
+
   const detail = useMemo(() => (wall && floor ? deriveWallDetail(wall, floor) : null), [floor, wall]);
   const configuration = detail?.configuration || null;
   const face = configuration?.sides?.[activeSide] || null;
@@ -840,7 +872,11 @@ export default function WallDetailEditor() {
   const profile = face ? getWallProductProfile(face.productProfileId) : null;
   const jurisdiction = configuration ? getWallJurisdictionProfile(configuration.jurisdictionProfileId) : null;
   const assembly = wall ? resolveWallAssembly(wall) : null;
-  const bounds = detail ? { length: detail.length, height: detail.height } : null;
+  // A face elevation is always drawn as seen standing in front of that face.
+  // The face on the wall's far side (relative to the U axis viewpoint) renders
+  // and reads mirrored — the same reflection the built wall shows in 3D.
+  const mirrorU = assembly ? wallFaceViewMirrorsU(assembly, activeSide) : false;
+  const bounds = detail ? { length: detail.length, height: detail.height, mirrorU } : null;
   const canvasMetrics = useWallCanvasMetrics(canvasFrameRef, bounds, workspaceView);
   const previewProject = useMemo(
     () => createWallDetailPreviewProject(project, floor?.id, wall?.id),
@@ -1379,6 +1415,26 @@ export default function WallDetailEditor() {
     setSelection(null);
   };
 
+  /**
+   * Strip this face back to no screws at all. There is no "none" mode to switch
+   * to: the generated pattern only stops in custom mode, and a pencil guide lays
+   * its own row of screws for as long as it exists — so clearing every screw
+   * means clearing the guides that would otherwise redraw them on the spot.
+   * One history entry, so Ctrl+Z brings the whole lot back.
+   */
+  const removeAllFasteners = () => {
+    updateFastenerPattern({
+      mode: FASTENER_LAYOUT_MODES.CUSTOM,
+      manual: [],
+      guides: [],
+      removedGeneratedIds: [],
+    });
+    // The draft was pointing at a guide that no longer exists; keep its spacing
+    // settings but detach it, so applying it lays a fresh guide.
+    setFastenerGuideDraft((guide) => (guide.id ? { ...guide, id: null } : guide));
+    setSelection(null);
+  };
+
   const deleteSelection = () => {
     if (selection?.type === 'panel') deleteSelectedPanel();
     else if (selection?.type === 'framing') deleteSelectedMember();
@@ -1522,7 +1578,10 @@ export default function WallDetailEditor() {
     const moveSnapCandidates =
       value.type === 'panel'
         ? collectWallSnapCandidates({
-            panels: panels.filter((panel) => panel.localId !== value.id),
+            // A board being moved must not snap to where it currently sits, but
+            // a copy has to: butting the new board against the original across
+            // one shadow gap is the whole point of copying it.
+            panels: value.copy ? panels : panels.filter((panel) => panel.localId !== value.id),
             members: detail.framing,
             openings: detail.openings,
             length: detail.length,
@@ -1693,6 +1752,7 @@ export default function WallDetailEditor() {
     setSelection({ type: 'dimension', id: dimension.id });
     setGesture({
       kind: 'dimension_move',
+      copy: Boolean(event.ctrlKey || event.metaKey),
       dimensionId: dimension.id,
       dimension,
       start: point,
@@ -1725,14 +1785,19 @@ export default function WallDetailEditor() {
     if (spacePanActive || canvasTool !== CANVAS_TOOLS.SELECT || event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    if (type === 'fastener' && entity.guideId) {
+    // Ctrl-drag duplicates instead of moving, the way a copy works on a drawing
+    // board: the original stays put and the drag carries the new piece.
+    const copy = Boolean(event.ctrlKey || event.metaKey);
+    // A guide-driven screw cannot be moved — its position belongs to the pencil
+    // guide — but it can be copied, because the copy is a free manual screw.
+    if (type === 'fastener' && entity.guideId && !copy) {
       setSelection({ type, id });
       return;
     }
     const point = eventToLocal(event, false);
     svgRef.current?.setPointerCapture?.(event.pointerId);
     setSelection({ type, id });
-    setGesture({ kind: 'move', type, id, entity, start: point, current: point, pointerId: event.pointerId });
+    setGesture({ kind: 'move', copy, type, id, entity, start: point, current: point, pointerId: event.pointerId });
   };
 
   const updateCanvasGesture = (event) => {
@@ -1776,6 +1841,41 @@ export default function WallDetailEditor() {
     );
   };
 
+  /**
+   * Drop of a Ctrl-drag: the original stays where it was and the dragged shape
+   * lands as a new piece. Copying a generated board or member materialises the
+   * whole generated set first — exactly as moving one does — because a custom
+   * piece can only live in a custom layout.
+   */
+  const commitElementCopy = (finalGesture, moved) => {
+    if (finalGesture.type === 'panel') {
+      // Blank label: the copy is numbered in sequence rather than inheriting
+      // the original's name and leaving the wall with two boards called P3.
+      const panel = createCustomPanel(moved, { label: '' });
+      updateLayout({ mode: PANEL_LAYOUT_MODES.CUSTOM, customPanels: [...editablePanels(), panel] });
+      setSelection({ type: 'panel', id: panel.id });
+      return;
+    }
+    if (finalGesture.type === 'framing') {
+      // Added as one more member without touching the layout mode. Moving a
+      // generated stud has to take the whole frame over — the generator would
+      // otherwise put the stud straight back — but a copy leaves the original
+      // generated, so an automatic frame keeps regenerating from its spacing
+      // with this extra member standing alongside it.
+      const member = createCustomFramingMember({ ...moved, id: null });
+      updateDetailing({
+        framing: { ...configuration.framing, members: [...configuration.framing.members, member] },
+      });
+      setSelection({ type: 'framing', id: member.id });
+      return;
+    }
+    // A copied screw is a plain manual screw wherever it came from: it drops any
+    // link to the pencil guide that placed the original, and lands through the
+    // same path as one placed by hand, so dropping it onto an existing screw
+    // selects that screw instead of stacking a second one on top of it.
+    addFastener(moved);
+  };
+
   const finishCanvasGesture = (event) => {
     if (panGesture) return;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
@@ -1810,6 +1910,15 @@ export default function WallDetailEditor() {
       svgRef.current?.releasePointerCapture?.(event.pointerId);
       setGesture(null);
       if (Math.hypot(delta.u, delta.v) < face.dimensions.precision) return;
+      if (gesture.copy) {
+        // The copy measures its own two points from here on: dragging it away
+        // from the geometry it was snapped to would otherwise leave it claiming
+        // an association it no longer has.
+        const duplicate = createWallDimension({ ...moved, id: null, startRef: null, endRef: null });
+        updateDimensionSettings({ manual: [...face.dimensions.manual, duplicate] });
+        setSelection({ type: 'dimension', id: duplicate.id });
+        return;
+      }
       updateDimensionSettings({
         manual: face.dimensions.manual.map((dimension) =>
           dimension.id === gesture.dimensionId ? createWallDimension({ ...moved, id: dimension.id }) : dimension,
@@ -1881,7 +1990,13 @@ export default function WallDetailEditor() {
       finalGesture.current.u - finalGesture.start.u,
       finalGesture.current.v - finalGesture.start.v,
     );
+    // A copy dropped exactly on its original would be invisible and impossible
+    // to select apart, so the same "did it actually move?" guard covers both.
     if (!moved || movedDistance < 1) return;
+    if (finalGesture.copy) {
+      commitElementCopy(finalGesture, moved);
+      return;
+    }
     if (finalGesture.type === 'panel') {
       updateLayout({
         mode: PANEL_LAYOUT_MODES.CUSTOM,
@@ -2013,7 +2128,10 @@ export default function WallDetailEditor() {
                 bounds,
                 face.dimensions.precision,
               ),
-              id: gesture.dimensionId,
+              // A copy must not shadow the measurement it came from: the drawn
+              // list swaps a dimension for the preview that shares its id, and
+              // the original has to stay on the drawing while the copy moves.
+              id: gesture.copy ? `${gesture.dimensionId}:copy` : gesture.dimensionId,
             });
             return {
               ...dimension,
@@ -2053,9 +2171,6 @@ export default function WallDetailEditor() {
   const framingPreviewFouls = Boolean(framingPreviewContact && framingPreviewContact.overlap > 0.05);
   const activeToolDefinition = TOOL_BY_ID[canvasTool];
   const framedAssembly = assembly.system === 'framed';
-  const selectionSummary = selection
-    ? `${SELECTION_LABELS[selection.type] || selection.type} selected`
-    : 'Nothing selected';
 
   const referenceEntityName = (reference) => {
     if (reference.entityType === 'wall') return 'Wall';
@@ -2067,7 +2182,7 @@ export default function WallDetailEditor() {
     }
     if (reference.entityType === 'framing') {
       const member = frameMembers.find((entry) => entry.id === reference.entityId);
-      return member?.kind ? member.kind.charAt(0).toUpperCase() + member.kind.slice(1) : 'Framing';
+      return member ? framingKindLabel(member.kind) : 'Framing';
     }
     if (reference.entityType === 'measurement') {
       const dimension = dimensions.find((entry) => entry.id === reference.entityId);
@@ -2075,9 +2190,27 @@ export default function WallDetailEditor() {
     }
     return reference.entityType;
   };
+  /**
+   * Anchors are stored against the U axis (edge_left = the U0 edge). On a
+   * mirrored face elevation the U0 edge sits on the viewer's RIGHT, so the
+   * spoken left/right swaps to match what the installer actually sees.
+   */
+  const MIRRORED_ANCHOR_NAMES = {
+    edge_left: 'edge_right',
+    edge_right: 'edge_left',
+    bottom_left: 'bottom_right',
+    bottom_right: 'bottom_left',
+    center_left: 'center_right',
+    center_right: 'center_left',
+    top_left: 'top_right',
+    top_right: 'top_left',
+  };
+  const displayAnchor = (anchor) => (mirrorU ? MIRRORED_ANCHOR_NAMES[anchor] || anchor : anchor);
   /** "Board 2 · left edge" instead of "panel edge_left · 43.21% along". */
   const describeReference = (reference) =>
-    reference ? `${referenceEntityName(reference)} · ${friendlyAnchorPhrase(reference.anchor)}` : 'free point';
+    reference
+      ? `${referenceEntityName(reference)} · ${friendlyAnchorPhrase(displayAnchor(reference.anchor))}`
+      : 'free point';
   const formatMm = (value) => formatWallDimensionValue(value, face.dimensions.precision);
 
   /** Plain-language verdict on how a framing member meets the nearest opening. */
@@ -2119,10 +2252,13 @@ export default function WallDetailEditor() {
       return null; // the measure tool draws its own live label
     }
     if (gesture?.kind === 'move' && gesturePreview) {
+      // The original stays drawn under a Ctrl-drag, so the readout has to say
+      // which of the two shapes on screen the pointer is carrying.
+      const heading = gesture.copy ? [`Copy of ${SELECTION_LABELS[gesture.type] || gesture.type}`] : [];
       if (gesture.type === 'panel') {
         return {
           point: gesture.current,
-          lines: [`U ${formatMm(gesturePreview.u0)} · V ${formatMm(gesturePreview.v0)}`],
+          lines: [...heading, `U ${formatMm(gesturePreview.u0)} · V ${formatMm(gesturePreview.v0)}`],
         };
       }
       if (gesture.type === 'framing') {
@@ -2132,10 +2268,17 @@ export default function WallDetailEditor() {
           : (gesturePreview.v0 + gesturePreview.v1) / 2;
         return {
           point: gesture.current,
-          lines: [`centre ${vertical ? 'U' : 'V'} ${formatMm(centre)}`, ...openingClearanceLines(gesturePreview)],
+          lines: [
+            ...heading,
+            `centre ${vertical ? 'U' : 'V'} ${formatMm(centre)}`,
+            ...openingClearanceLines(gesturePreview),
+          ],
         };
       }
-      return { point: gesture.current, lines: [`U ${formatMm(gesturePreview.u)} · V ${formatMm(gesturePreview.v)}`] };
+      return {
+        point: gesture.current,
+        lines: [...heading, `U ${formatMm(gesturePreview.u)} · V ${formatMm(gesturePreview.v)}`],
+      };
     }
     if (canvasTool === CANVAS_TOOLS.TRACE_PANEL && panelTrace?.points?.length && panelTrace.previewPoint) {
       const last = panelTrace.points[panelTrace.points.length - 1];
@@ -2144,6 +2287,44 @@ export default function WallDetailEditor() {
     }
     return null;
   })();
+
+  /**
+   * What the selected piece is and how big it is. Clicking a board, stud, or
+   * noggin should answer that on the drawing, so the same description feeds the
+   * canvas tag, the status bar, and the inspector card.
+   */
+  const sizePrecision = face.dimensions.precision;
+  const selectionDescription = selectedPanel
+    ? describeSelectedPanel(selectedPanel, assembly[activeSide], sizePrecision)
+    : selectedMember
+      ? describeSelectedFraming(selectedMember, assembly.framing, sizePrecision)
+      : selectedFastener
+        ? describeSelectedFastener(selectedFastener, face.fasteners.headDiameter, sizePrecision)
+        : null;
+  // A tag for a hidden layer would label nothing, and while a gesture runs the
+  // pointer chip is the live number — two readouts over one piece is noise.
+  const selectionLayerVisible =
+    selectionDescription?.type === 'panel'
+      ? layerVisibility.panels
+      : selectionDescription?.type === 'framing'
+        ? layerVisibility.framing
+        : selectionDescription?.type === 'fastener'
+          ? layerVisibility.fasteners
+          : false;
+  const selectionTagLinesToDraw = gesture || !selectionLayerVisible ? [] : selectionTagLines(selectionDescription);
+  const selectionTag = selectionTagLinesToDraw.length
+    ? placeSelectionTag(selectionDescription.box, bounds, {
+        fontSize: unitPx * SIZE_TAG_FONT_PX,
+        lines: selectionTagLinesToDraw,
+        gap: unitPx * SIZE_TAG_GAP_PX,
+      })
+    : null;
+  const activeBoardLabel = boardLayerLabel(assembly[activeSide], sizePrecision);
+  const selectionSummary = selection
+    ? `${SELECTION_LABELS[selection.type] || selection.type} selected${
+        selectionDescription ? ` · ${selectionDescription.size}` : ''
+      }`
+    : 'Nothing selected';
 
   const claimShortcut = (event) => {
     event.preventDefault();
@@ -2609,7 +2790,8 @@ export default function WallDetailEditor() {
             <InfoHint label="Studs, noggins and backing">
               <p className={styles.inlineHelp}>
                 Studs run floor to ceiling; noggins are the horizontal blocking between them. Every board joint needs a
-                member behind it, so use Add missing joint backing after moving boards around.
+                member behind it, so use Add missing joint backing after moving boards around. To repeat a member you
+                already have, hold Ctrl and drag it with Select — the original stays put and the drag carries a copy.
               </p>
             </InfoHint>
             <SelectField
@@ -2914,6 +3096,20 @@ export default function WallDetailEditor() {
               <ToolbarButton title="Discard manual screws and rebuild the pattern" onClick={regenerateFasteners}>
                 Regenerate screws
               </ToolbarButton>
+              <ToolbarButton
+                danger
+                disabled={fasteners.length === 0}
+                title={
+                  fasteners.length
+                    ? `Clear all ${fasteners.length} screws from the ${activeSide} face, including the ${
+                        face.fasteners.guides.length
+                      } pencil ${face.fasteners.guides.length === 1 ? 'guide' : 'guides'} that lay them — Ctrl+Z undoes it`
+                    : 'This face has no screws to remove'
+                }
+                onClick={removeAllFasteners}
+              >
+                Remove all screws
+              </ToolbarButton>
             </div>
           </CollapsibleSection>
 
@@ -3109,7 +3305,8 @@ export default function WallDetailEditor() {
               <span className={styles.statusSelection}>{selectionSummary}</span>
             </span>
             <span className={styles.statusShortcut}>
-              Hold Space + drag to pan · scroll to zoom · 0 fits the wall · Esc cancels, then returns to Select
+              Ctrl + drag copies a piece · Hold Space + drag to pan · scroll to zoom · 0 fits the wall · Esc cancels,
+              then returns to Select
             </span>
           </div>
           <div
@@ -3143,6 +3340,11 @@ export default function WallDetailEditor() {
                     className={styles.canvas}
                     viewBox={`0 0 ${detail.length} ${detail.height}`}
                     data-tool={canvasTool}
+                    data-copy={
+                      canvasTool === CANVAS_TOOLS.SELECT && !spacePanActive && (gesture?.copy || copyModifierActive)
+                        ? 'true'
+                        : 'false'
+                    }
                     style={{
                       // Aspect-true box: keeps pointer math exact (no letterboxing)
                       // and makes zoom 100% a genuine fit inside the rulers.
@@ -3164,7 +3366,16 @@ export default function WallDetailEditor() {
                     }}
                   >
                     <rect width={detail.length} height={detail.height} fill="#202830" />
-                    <g transform={`translate(0 ${detail.height}) scale(1 -1)`}>
+                    <g
+                      data-mirrored={mirrorU ? 'true' : 'false'}
+                      transform={
+                        mirrorU
+                          ? // Mirrored face: reflect U so the elevation reads as
+                            // seen standing in front of this face (matches 3D).
+                            `translate(${detail.length} ${detail.height}) scale(-1 -1)`
+                          : `translate(0 ${detail.height}) scale(1 -1)`
+                      }
+                    >
                       <WallCanvasGrid bounds={bounds} snapStep={snapStep} unitPx={unitPx} active={snapEnabled} />
                       {detail.openings.map((opening) => (
                         <rect
@@ -3192,7 +3403,7 @@ export default function WallDetailEditor() {
                                   vectorEffect="non-scaling-stroke"
                                   onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
                                 >
-                                  <title>{`${panel.label} · ${formatMm(panel.width)} × ${formatMm(panel.height)} mm`}</title>
+                                  <title>{`${panel.label} · ${faceSizeLine(panel.width, panel.height, sizePrecision)} · ${activeBoardLabel}`}</title>
                                 </path>
                               ))
                             : panel.fragments.map((fragment, index) => (
@@ -3210,17 +3421,14 @@ export default function WallDetailEditor() {
                                   vectorEffect="non-scaling-stroke"
                                   onPointerDown={(event) => beginElementMove(event, 'panel', panel.localId, panel)}
                                 >
-                                  <title>{`${panel.label} · ${formatMm(panel.width)} × ${formatMm(panel.height)} mm`}</title>
+                                  <title>{`${panel.label} · ${faceSizeLine(panel.width, panel.height, sizePrecision)} · ${activeBoardLabel}`}</title>
                                 </rect>
                               )),
                         )}
                       {layerVisibility.framing &&
                         drawnFrameMembers.map((member) => {
                           const contact = framingContactById.get(member.id);
-                          const setOut =
-                            member.orientation === 'vertical'
-                              ? `centre U ${formatMm((member.u0 + member.u1) / 2)}`
-                              : `centre V ${formatMm((member.v0 + member.v1) / 2)}`;
+                          const described = describeSelectedFraming(member, assembly.framing, sizePrecision);
                           return (
                             <rect
                               key={member.id}
@@ -3237,7 +3445,9 @@ export default function WallDetailEditor() {
                               onPointerDown={(event) => beginElementMove(event, 'framing', member.id, member)}
                             >
                               <title>
-                                {`${member.kind} · ${setOut}${contact ? ` · ${describeOpeningContact(contact)}` : ''}`}
+                                {`${described.name} · ${described.size} · ${described.note} · ${described.setOut}${
+                                  contact ? ` · ${describeOpeningContact(contact)}` : ''
+                                }`}
                               </title>
                             </rect>
                           );
@@ -3252,7 +3462,9 @@ export default function WallDetailEditor() {
                             headDiameter={face.fasteners.headDiameter}
                             minimumRadius={Math.min(detail.length, detail.height) / 600}
                             selected={selection?.type === 'fastener' && selection.id === fastener.id}
-                            title={`Screw · U ${formatMm(fastener.u)} · V ${formatMm(fastener.v)}`}
+                            title={`Screw · ${
+                              describeSelectedFastener(fastener, face.fasteners.headDiameter, sizePrecision).note
+                            }`}
                             onPointerDown={(event) => beginElementMove(event, 'fastener', fastener.id, fastener)}
                           />
                         ))}
@@ -3385,7 +3597,7 @@ export default function WallDetailEditor() {
                         <FastenerGuideGraphic
                           key={guide.id}
                           guide={guide}
-                          wallHeight={detail.height}
+                          view={bounds}
                           precision={face.dimensions.precision}
                           selected={fastenerGuideDraft.id === guide.id}
                         />
@@ -3401,7 +3613,7 @@ export default function WallDetailEditor() {
                           <DimensionGraphic
                             key={dimension.id}
                             dimension={renderedDimension}
-                            wallHeight={detail.height}
+                            view={bounds}
                             selected={selected}
                             editable={editable}
                             showScrewGuide={dimension.source === 'custom' && canvasTool === CANVAS_TOOLS.ADD_FASTENER}
@@ -3422,7 +3634,18 @@ export default function WallDetailEditor() {
                     {gesturePreview && gesturePreviewType === 'dimension' ? (
                       <DimensionGraphic
                         dimension={gesturePreview}
-                        wallHeight={detail.height}
+                        view={bounds}
+                        selected
+                        unitPx={unitPx}
+                        handleRadius={dimensionHandleRadius}
+                        fontSize={dimensionFontSize}
+                      />
+                    ) : null}
+                    {/* A Ctrl-drag copy is drawn alongside its original, not in place of it. */}
+                    {layerVisibility.dimensions && gesture?.copy && dimensionGesturePreview ? (
+                      <DimensionGraphic
+                        dimension={dimensionGesturePreview}
+                        view={bounds}
                         selected
                         unitPx={unitPx}
                         handleRadius={dimensionHandleRadius}
@@ -3435,9 +3658,18 @@ export default function WallDetailEditor() {
                     dimensionAcquisition ? (
                       <DimensionAcquisitionGraphic
                         acquisition={dimensionAcquisition}
-                        wallHeight={detail.height}
+                        view={bounds}
                         precision={face.dimensions.precision}
                         referenceLabel={describeReference(dimensionAcquisition.reference)}
+                      />
+                    ) : null}
+                    {selectionTag ? (
+                      <CanvasSizeTag
+                        point={selectionTag.point}
+                        placement={selectionTag.placement}
+                        lines={selectionTagLinesToDraw}
+                        unitPx={unitPx}
+                        view={bounds}
                       />
                     ) : null}
                     {gestureReadout ? (
@@ -3445,7 +3677,7 @@ export default function WallDetailEditor() {
                         point={gestureReadout.point}
                         lines={gestureReadout.lines}
                         unitPx={unitPx}
-                        wallHeight={detail.height}
+                        view={bounds}
                       />
                     ) : null}
                   </svg>
@@ -3465,7 +3697,9 @@ export default function WallDetailEditor() {
                   <span>V 0 → {detail.height.toFixed(0)} mm</span>
                   <span>{dimensions.length} visible construction dimensions</span>
                   <span>Measure precision: {face.dimensions.precision} mm</span>
-                  <span>Origin: wall start / finished floor</span>
+                  <span>
+                    Origin: wall start ({mirrorU ? 'right' : 'left'} edge as you face this side) / finished floor
+                  </span>
                   <span>Face: {activeSide === WALL_DETAIL_SIDES.INTERIOR ? 'inside' : 'outside'}</span>
                   {intrusionCount > 0 ? (
                     <span className={styles.dimensionBarAlert}>
@@ -3519,6 +3753,13 @@ export default function WallDetailEditor() {
             {selectedPanel && (
               <div className={styles.selectionCard}>
                 <h3>Selected panel — {selectedPanel.label}</h3>
+                <div className={styles.measurementReadout}>
+                  <strong>{selectionDescription.size}</strong>
+                  <span>Width across the wall × height up from the finished floor</span>
+                  <span>
+                    {selectionDescription.note} · {selectionDescription.areaNote}
+                  </span>
+                </div>
                 <p>
                   Drag on the elevation or enter exact wall-local dimensions.
                   {selectedPanel.polygonal ? ' Width and height scale the traced cut outline.' : ''}
@@ -3553,7 +3794,14 @@ export default function WallDetailEditor() {
 
             {selectedMember && (
               <div className={styles.selectionCard}>
-                <h3>Selected framing — {selectedMember.kind}</h3>
+                <h3>Selected framing — {selectionDescription.name}</h3>
+                <div className={styles.measurementReadout}>
+                  <strong>{selectionDescription.size}</strong>
+                  <span>Width across the wall × height up from the finished floor</span>
+                  <span>
+                    {selectionDescription.note} · {selectionDescription.setOut}
+                  </span>
+                </div>
                 <p>Drag on the elevation or enter exact member extents.</p>
                 <NumberField
                   label="U start"

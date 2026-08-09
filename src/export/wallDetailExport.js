@@ -6,8 +6,9 @@ import {
   deriveWallDimensionGeometry,
   formatWallDimensionValue,
 } from '@/domain/wallDetailing';
-import { resolveWallAssembly } from '@/domain/wallAssemblies';
+import { resolveWallAssembly, wallFaceViewMirrorsU } from '@/domain/wallAssemblies';
 import { getWallJurisdictionProfile, getWallProductProfile } from '@/domain/wallProductProfiles';
+import { mirrorAngleDegrees } from '@/features/floorplan/components/wall-detail/wallDetailCanvasMath';
 
 function escapeXml(value) {
   return String(value ?? '')
@@ -38,12 +39,12 @@ function triggerDownload(contents, filename, type) {
   URL.revokeObjectURL(url);
 }
 
-function svgRegionPath(region, wallHeight) {
+function svgRegionPath(region, px, wallHeight) {
   return [region.outline, ...(region.holes || [])]
     .filter((ring) => ring?.length)
     .map(
       (ring) =>
-        `${ring.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.u} ${wallHeight - point.v}`).join(' ')} Z`,
+        `${ring.map((point, index) => `${index === 0 ? 'M' : 'L'} ${px(point.u)} ${wallHeight - point.v}`).join(' ')} Z`,
     )
     .join(' ');
 }
@@ -51,6 +52,11 @@ function svgRegionPath(region, wallHeight) {
 export function createWallDetailSvg(wall, floor, side = 'interior') {
   const detail = deriveWallDetail(wall, floor);
   const assembly = resolveWallAssembly(wall);
+  // The drawing shows the face as seen standing in front of it (same view the
+  // editor and the 3D preview show); the face on the wall's far side mirrors U.
+  const mirrorU = wallFaceViewMirrorsU(assembly, side);
+  const px = (u) => (mirrorU ? detail.length - u : u);
+  const rectX = (u0, u1) => (mirrorU ? detail.length - u1 : u0);
   const face = detail.configuration.sides[side];
   const profile = getWallProductProfile(face.productProfileId);
   const jurisdiction = getWallJurisdictionProfile(detail.configuration.jurisdictionProfileId);
@@ -80,31 +86,31 @@ export function createWallDetailSvg(wall, floor, side = 'interior') {
       panel.polygonal
         ? panel.regions.map(
             (region, index) =>
-              `<path d="${svgRegionPath(region, detail.height)}" fill-rule="evenodd" class="panel" data-panel="${escapeXml(panel.label)}" data-region="${index + 1}"/>`,
+              `<path d="${svgRegionPath(region, px, detail.height)}" fill-rule="evenodd" class="panel" data-panel="${escapeXml(panel.label)}" data-region="${index + 1}"/>`,
           )
         : panel.fragments.map(
             (fragment, index) =>
-              `<rect x="${fragment.u0}" y="${detail.height - fragment.v1}" width="${fragment.u1 - fragment.u0}" height="${fragment.v1 - fragment.v0}" class="panel" data-panel="${escapeXml(panel.label)}" data-fragment="${index + 1}"/>`,
+              `<rect x="${rectX(fragment.u0, fragment.u1)}" y="${detail.height - fragment.v1}" width="${fragment.u1 - fragment.u0}" height="${fragment.v1 - fragment.v0}" class="panel" data-panel="${escapeXml(panel.label)}" data-fragment="${index + 1}"/>`,
           ),
     )
     .join('');
   const labelMarkup = panels
     .map(
       (panel) =>
-        `<text x="${(panel.u0 + panel.u1) / 2}" y="${detail.height - (panel.v0 + panel.v1) / 2}" class="panel-label">${escapeXml(panel.label)}</text>`,
+        `<text x="${px((panel.u0 + panel.u1) / 2)}" y="${detail.height - (panel.v0 + panel.v1) / 2}" class="panel-label">${escapeXml(panel.label)}</text>`,
     )
     .join('');
   const framingMarkup = detail.framing
     .filter((member) => member.frameIndex === 0)
     .map(
       (member) =>
-        `<rect x="${member.u0}" y="${detail.height - member.v1}" width="${member.u1 - member.u0}" height="${member.v1 - member.v0}" class="framing" data-kind="${escapeXml(member.kind)}"/>`,
+        `<rect x="${rectX(member.u0, member.u1)}" y="${detail.height - member.v1}" width="${member.u1 - member.u0}" height="${member.v1 - member.v0}" class="framing" data-kind="${escapeXml(member.kind)}"/>`,
     )
     .join('');
   const fastenerMarkup = fasteners
     .map(
       (fastener) =>
-        `<circle cx="${fastener.u}" cy="${detail.height - fastener.v}" r="${face.fasteners.headDiameter / 2}" class="fastener" fill="${fastenerPalette.fill}" stroke="${fastenerPalette.stroke}" data-appearance="${escapeXml(fastenerAppearance)}" data-head-diameter-mm="${face.fasteners.headDiameter}" data-fastener="${escapeXml(fastener.id)}"${fastener.guideId ? ` data-guide="${escapeXml(fastener.guideId)}" data-guide-station="${fastener.guideStation}"` : ''}/>`,
+        `<circle cx="${px(fastener.u)}" cy="${detail.height - fastener.v}" r="${face.fasteners.headDiameter / 2}" class="fastener" fill="${fastenerPalette.fill}" stroke="${fastenerPalette.stroke}" data-appearance="${escapeXml(fastenerAppearance)}" data-head-diameter-mm="${face.fasteners.headDiameter}" data-fastener="${escapeXml(fastener.id)}"${fastener.guideId ? ` data-guide="${escapeXml(fastener.guideId)}" data-guide-station="${fastener.guideStation}"` : ''}/>`,
     )
     .join('');
   const fastenerGuideMarkup = fastenerGuides
@@ -115,15 +121,15 @@ export function createWallDetailSvg(wall, floor, side = 'interior') {
             const stations = segment.stations
               .map((station) => {
                 const tickStart = {
-                  x: station.u - station.inward.u * 16,
+                  x: px(station.u - station.inward.u * 16),
                   y: detail.height - (station.v - station.inward.v * 16),
                 };
                 const tickEnd = {
-                  x: station.u + station.inward.u * 16,
+                  x: px(station.u + station.inward.u * 16),
                   y: detail.height - (station.v + station.inward.v * 16),
                 };
                 const labelPoint = {
-                  x: station.u - station.inward.u * 26,
+                  x: px(station.u - station.inward.u * 26),
                   y: detail.height - (station.v - station.inward.v * 26),
                 };
                 const label =
@@ -135,27 +141,27 @@ export function createWallDetailSvg(wall, floor, side = 'interior') {
               .join('');
             const remainder =
               segment.remainder > face.dimensions.precision / 2
-                ? `<text x="${segment.end.u}" y="${detail.height - segment.end.v - 24}" class="fastener-guide-remainder">${escapeXml(`remainder ${formatWallDimensionValue(segment.remainder, face.dimensions.precision)}`)}</text>`
+                ? `<text x="${px(segment.end.u)}" y="${detail.height - segment.end.v - 24}" class="fastener-guide-remainder">${escapeXml(`remainder ${formatWallDimensionValue(segment.remainder, face.dimensions.precision)}`)}</text>`
                 : '';
-            return `<line x1="${segment.start.u}" y1="${detail.height - segment.start.v}" x2="${segment.end.u}" y2="${detail.height - segment.end.v}" class="fastener-guide-line"/>${stations}${remainder}`;
+            return `<line x1="${px(segment.start.u)}" y1="${detail.height - segment.start.v}" x2="${px(segment.end.u)}" y2="${detail.height - segment.end.v}" class="fastener-guide-line"/>${stations}${remainder}`;
           })
           .join('');
         const labelAnchor = guide.segments[0]?.start || { u: 0, v: 0 };
         return `<g class="fastener-guide-group" data-guide="${escapeXml(guide.id)}" data-mode="panel_perimeter" data-panel="${escapeXml(guide.panelId)}" data-spacing-mm="${guide.spacing}">
     ${segments}
-    <text x="${labelAnchor.u}" y="${detail.height - labelAnchor.v + 34}" class="fastener-guide-label">${escapeXml(`${guide.name} · panel-edge trace · ${formatWallDimensionValue(guide.spacing, face.dimensions.precision)} O.C.`)}</text>
+    <text x="${px(labelAnchor.u)}" y="${detail.height - labelAnchor.v + 34}" class="fastener-guide-label">${escapeXml(`${guide.name} · panel-edge trace · ${formatWallDimensionValue(guide.spacing, face.dimensions.precision)} O.C.`)}</text>
   </g>`;
       }
       const vertical = guide.direction === FASTENER_GUIDE_DIRECTIONS.VERTICAL;
       const start = vertical
-        ? { x: guide.coordinate, y: detail.height - guide.start }
-        : { x: guide.start, y: detail.height - guide.coordinate };
+        ? { x: px(guide.coordinate), y: detail.height - guide.start }
+        : { x: px(guide.start), y: detail.height - guide.coordinate };
       const end = vertical
-        ? { x: guide.coordinate, y: detail.height - guide.end }
-        : { x: guide.end, y: detail.height - guide.coordinate };
+        ? { x: px(guide.coordinate), y: detail.height - guide.end }
+        : { x: px(guide.end), y: detail.height - guide.coordinate };
       const stations = guide.stations
         .map((station) => {
-          const x = station.u;
+          const x = px(station.u);
           const y = detail.height - station.v;
           const label =
             station.index === 0
@@ -179,18 +185,19 @@ export function createWallDetailSvg(wall, floor, side = 'interior') {
   const openingMarkup = detail.openings
     .map(
       (opening) =>
-        `<rect x="${opening.u0}" y="${detail.height - opening.v1}" width="${opening.u1 - opening.u0}" height="${opening.v1 - opening.v0}" class="opening"/><text x="${(opening.u0 + opening.u1) / 2}" y="${detail.height - (opening.v0 + opening.v1) / 2}" class="opening-label">${escapeXml(opening.kind.toUpperCase())}</text>`,
+        `<rect x="${rectX(opening.u0, opening.u1)}" y="${detail.height - opening.v1}" width="${opening.u1 - opening.u0}" height="${opening.v1 - opening.v0}" class="opening"/><text x="${px((opening.u0 + opening.u1) / 2)}" y="${detail.height - (opening.v0 + opening.v1) / 2}" class="opening-label">${escapeXml(opening.kind.toUpperCase())}</text>`,
     )
     .join('');
   const dimensionMarkup = detail.dimensions[side]
     .map((dimension) => {
       const geometry = deriveWallDimensionGeometry(dimension);
       const y = (point) => detail.height - point.v;
+      const textAngle = mirrorU ? mirrorAngleDegrees(geometry.angleDegrees) : geometry.angleDegrees;
       return `<g class="dimension-group" data-dimension="${escapeXml(dimension.id)}" data-source="${escapeXml(dimension.source)}" data-measurement-mm="${dimension.measurement}" data-precision-mm="${face.dimensions.precision}">
-    <line x1="${geometry.witnessStart.u}" y1="${y(geometry.witnessStart)}" x2="${geometry.dimensionStart.u}" y2="${y(geometry.dimensionStart)}" class="dimension-witness"/>
-    <line x1="${geometry.witnessEnd.u}" y1="${y(geometry.witnessEnd)}" x2="${geometry.dimensionEnd.u}" y2="${y(geometry.dimensionEnd)}" class="dimension-witness"/>
-    <line x1="${geometry.dimensionStart.u}" y1="${y(geometry.dimensionStart)}" x2="${geometry.dimensionEnd.u}" y2="${y(geometry.dimensionEnd)}" class="dimension"/>
-    <text x="${geometry.textPoint.u}" y="${y(geometry.textPoint) - 10}" class="dimension-label" text-anchor="middle" transform="rotate(${geometry.angleDegrees} ${geometry.textPoint.u} ${y(geometry.textPoint) - 10})">${escapeXml(dimension.label)}</text>
+    <line x1="${px(geometry.witnessStart.u)}" y1="${y(geometry.witnessStart)}" x2="${px(geometry.dimensionStart.u)}" y2="${y(geometry.dimensionStart)}" class="dimension-witness"/>
+    <line x1="${px(geometry.witnessEnd.u)}" y1="${y(geometry.witnessEnd)}" x2="${px(geometry.dimensionEnd.u)}" y2="${y(geometry.dimensionEnd)}" class="dimension-witness"/>
+    <line x1="${px(geometry.dimensionStart.u)}" y1="${y(geometry.dimensionStart)}" x2="${px(geometry.dimensionEnd.u)}" y2="${y(geometry.dimensionEnd)}" class="dimension"/>
+    <text x="${px(geometry.textPoint.u)}" y="${y(geometry.textPoint) - 10}" class="dimension-label" text-anchor="middle" transform="rotate(${textAngle} ${px(geometry.textPoint.u)} ${y(geometry.textPoint) - 10})">${escapeXml(dimension.label)}</text>
   </g>`;
     })
     .join('');
@@ -202,7 +209,7 @@ export function createWallDetailSvg(wall, floor, side = 'interior') {
     .join('');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}mm" height="${height}mm" viewBox="${-margin} ${-margin} ${width} ${height}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}mm" height="${height}mm" viewBox="${-margin} ${-margin} ${width} ${height}" data-view-mirrored="${mirrorU}">
   <title>${escapeXml(`Wall ${wall.id} ${side} construction detail`)}</title>
   <style>
     .sheet { fill: #fbfaf6; }
@@ -230,6 +237,7 @@ export function createWallDetailSvg(wall, floor, side = 'interior') {
   <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="#293039"/></marker></defs>
   <rect x="${-margin}" y="${-margin}" width="${width}" height="${height}" class="sheet"/>
   <text x="0" y="-170" class="title">WALL ASSEMBLY DETAIL — ${escapeXml(side.toUpperCase())}</text>
+  <text x="0" y="-25" class="meta">${escapeXml(`Drawn as seen facing this side · U origin (wall start) at the ${mirrorU ? 'RIGHT' : 'LEFT'} edge`)}</text>
   <text x="0" y="-115" class="meta">${escapeXml(`${profile.manufacturer} ${profile.product} · ${jurisdiction.label}`)}</text>
   <text x="0" y="-70" class="meta">Wall ${escapeXml(wall.id)} · ${detail.length.toFixed(0)} × ${detail.height.toFixed(0)} mm · ${panels.length} panels · ${fasteners.length} fasteners · ${escapeXml(face.layout.jointSystem)} joint · V ${face.layout.horizontalGap} / H ${face.layout.verticalGap} mm reveal · ${verticalJointLanding.toFixed(1)} / ${horizontalJointLanding.toFixed(1)} mm panel landing per side · ${escapeXml(face.layout.revealIntent.replaceAll('_', ' '))}</text>
   <rect x="0" y="0" width="${detail.length}" height="${detail.height}" class="wall"/>

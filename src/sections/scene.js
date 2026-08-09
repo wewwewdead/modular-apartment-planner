@@ -1,4 +1,5 @@
 import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjectFloor } from '@/domain/floorModels';
+import { wallBaseOffset } from '@/domain/wallFit';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
@@ -126,8 +127,8 @@ function buildWallElements(floor, sectionCut) {
         wall.id,
         sectionCut,
         outline,
-        floorElevation,
-        floorElevation + (wall.height ?? 0),
+        floorElevation + wallBaseOffset(wall),
+        floorElevation + wallBaseOffset(wall) + (wall.height ?? 0),
         sectionCut.depth,
       );
     })
@@ -210,8 +211,8 @@ function buildDoorElements(floor, sectionCut, wallElementsBySourceId) {
         door.id,
         sectionCut,
         [info.p1, info.p2, info.p3, info.p4],
-        floorElevation + (door.sillHeight ?? 0),
-        floorElevation + (door.sillHeight ?? 0) + (door.height ?? 0),
+        floorElevation + wallBaseOffset(wall) + (door.sillHeight ?? 0),
+        floorElevation + wallBaseOffset(wall) + (door.sillHeight ?? 0) + (door.height ?? 0),
         sectionCut.depth,
       );
       return alignOpeningWithHostWall(element, wallElementsBySourceId?.get(wall.id));
@@ -232,8 +233,8 @@ function buildWindowElements(floor, sectionCut, wallElementsBySourceId) {
         windowItem.id,
         sectionCut,
         [info.p1, info.p2, info.p3, info.p4],
-        floorElevation + (windowItem.sillHeight ?? 0),
-        floorElevation + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
+        floorElevation + wallBaseOffset(wall) + (windowItem.sillHeight ?? 0),
+        floorElevation + wallBaseOffset(wall) + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
         sectionCut.depth,
       );
       return alignOpeningWithHostWall(element, wallElementsBySourceId?.get(wall.id));

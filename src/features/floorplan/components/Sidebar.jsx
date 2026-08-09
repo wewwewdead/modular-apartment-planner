@@ -7,7 +7,8 @@ import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
 import { getAttachableRoofTrussSystems, getRoofTypeLabel } from '@/domain/roofModels';
-import { TOOLS } from '@/editor/tools';
+import { CEILING_ATTACHMENT_MODES, createCeilingForProject, getProjectCeilings } from '@/domain/ceilingModels';
+import { ELECTRICAL_DEVICE_DEFAULTS, TOOLS } from '@/editor/tools';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
 import { getStairDisplayLabel } from '@/domain/stairLabels';
@@ -17,9 +18,7 @@ import ProjectLifecyclePanel from './ProjectLifecyclePanel';
 import SunStudyPanel from './SunStudyPanel';
 import DaylightPanel from './DaylightPanel';
 import SolarAccessPanel from './SolarAccessPanel';
-import WindStudyPanel from './WindStudyPanel';
 import { useDaylightStudy } from '../context/DaylightStudyContext';
-import { useWindStudy } from '../context/WindStudyContext';
 import styles from './Sidebar.module.css';
 
 function ChevronSvg({ collapsed }) {
@@ -106,17 +105,16 @@ export default function Sidebar() {
     sunStudy,
     daylight,
     solarAccess,
-    windStudy,
     dispatch: editorDispatch,
   } = useEditor();
   const confirm = useConfirmDialog();
   const daylightStudy = useDaylightStudy();
-  const wind = useWindStudy();
   const orderedFloors = getOrderedFloors(project);
   const orderedPhases = getOrderedPhases(project);
   const floor = orderedFloors.find((entry) => entry.id === activeFloorId) || null;
   const roofSystem = project.roofSystem || null;
   const trussSystems = project.trussSystems || [];
+  const floorCeilings = getProjectCeilings(project, activeFloorId);
   const attachableRoofTrussSystems = getAttachableRoofTrussSystems(project);
   const roofPhase = roofSystem?.phaseId ? orderedPhases.find((phase) => phase.id === roofSystem.phaseId) || null : null;
   const [collapsedSections, setCollapsedSections] = useState({
@@ -130,6 +128,7 @@ export default function Sidebar() {
     drains: false,
     roofOpenings: false,
     trusses: false,
+    ceilings: true,
     sheets: false,
     phases: false,
     slabs: false,
@@ -140,6 +139,7 @@ export default function Sidebar() {
     landings: false,
     doors: false,
     windows: false,
+    electricalDevices: false,
     columns: false,
     rooms: false,
   });
@@ -312,6 +312,30 @@ export default function Sidebar() {
     editorDispatch({ type: 'SET_STATUS_MESSAGE', message: 'Select two support beams to create a truss.' });
   };
 
+  const openCeilingEditor = (ceilingId) => {
+    editorDispatch({ type: 'OPEN_CEILING_DETAIL_EDITOR', ceilingId });
+  };
+
+  const addCeiling = () => {
+    // A truss on the same floor gives the ceiling its boundary and the chords it
+    // hangs from, so it is preferred over the floor-derived boundary.
+    const firstTrussOnFloor = (project.trussSystems || []).find((entry) => entry.floorId === activeFloorId) || null;
+    const ceiling = createCeilingForProject(project, {
+      floorId: activeFloorId,
+      phaseId: activePhaseId || null,
+      ...(firstTrussOnFloor
+        ? { attachment: { mode: CEILING_ATTACHMENT_MODES.TRUSS, trussSystemId: firstTrussOnFloor.id } }
+        : {}),
+    });
+    dispatch({ type: 'CEILING_ADD', ceiling });
+    openCeilingEditor(ceiling.id);
+  };
+
+  const handleDeleteCeiling = async (ceiling) => {
+    if (!(await confirm(`Delete "${ceiling.name || 'Ceiling'}"?`))) return;
+    dispatch({ type: 'CEILING_DELETE', ceilingId: ceiling.id });
+  };
+
   return (
     <div className={styles.sidebar}>
       <Section title="Project" collapsible={false}>
@@ -330,6 +354,7 @@ export default function Sidebar() {
         sunStudy={sunStudy}
         study={daylightStudy.sunStudy}
         recomputing={daylightStudy.sunRecomputing}
+        studyError={daylightStudy.sunError}
         lastCommand={derived?.lastCommand}
         onExecuteCommand={(command) => dispatch({ type: 'EXECUTE_BUILDING_COMMAND', command })}
         onPatch={(patch) => editorDispatch({ type: 'SET_SUN_STUDY', patch })}
@@ -363,19 +388,6 @@ export default function Sidebar() {
         stale={daylightStudy.solarStale}
         onPatch={(patch) => editorDispatch({ type: 'SET_SOLAR_ACCESS', patch })}
         onToggle={() => editorDispatch({ type: 'TOGGLE_SOLAR_ACCESS' })}
-      />
-
-      {/* Wind is a separate solver and worker, not another solar mode. */}
-      <WindStudyPanel
-        windStudy={windStudy}
-        study={wind.study}
-        status={wind.status}
-        progress={wind.progress}
-        error={wind.error}
-        stale={wind.stale}
-        climate={wind.climate}
-        onPatch={(patch) => editorDispatch({ type: 'SET_WIND_STUDY', patch })}
-        onToggle={() => editorDispatch({ type: 'TOGGLE_WIND_STUDY' })}
       />
 
       <ProjectLifecyclePanel
@@ -522,6 +534,54 @@ export default function Sidebar() {
         ) : (
           <div className={styles.item} onClick={createTruss}>
             Draw first truss above beams
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="Ceilings"
+        count={floorCeilings.length}
+        collapsed={collapsedSections.ceilings}
+        onToggle={() => toggleSection('ceilings')}
+        action={
+          <button type="button" className={styles.sectionAddBtn} onClick={addCeiling} title="Add Ceiling">
+            +
+          </button>
+        }
+      >
+        {floorCeilings.length ? (
+          floorCeilings.map((ceiling) => (
+            <div key={ceiling.id} className={styles.floorCard}>
+              <button type="button" className={styles.floorButton} onClick={() => openCeilingEditor(ceiling.id)}>
+                <span className={styles.floorName}>{ceiling.name || 'Ceiling'}</span>
+                <span className={styles.floorMeta}>
+                  {ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.TRUSS ? 'Truss-hung' : 'Manual datum'} ·{' '}
+                  {Math.round(ceiling.baseElevation || 0)} mm
+                </span>
+              </button>
+              <div className={styles.floorActions}>
+                <button
+                  type="button"
+                  className={styles.floorActionBtn}
+                  onClick={() => openCeilingEditor(ceiling.id)}
+                  title={`Edit ${ceiling.name || 'Ceiling'}`}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.floorActionBtn} ${styles.floorActionDanger}`}
+                  onClick={() => handleDeleteCeiling(ceiling)}
+                  title={`Delete ${ceiling.name || 'Ceiling'}`}
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className={styles.item} onClick={addCeiling}>
+            Add a ceiling on this floor
           </div>
         )}
       </Section>
@@ -916,6 +976,23 @@ export default function Sidebar() {
                 onClick={() => selectObject(w.id, 'window')}
               >
                 Window {w.id.split('_').pop()}
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Electrical"
+            count={(floor.electricalDevices || []).length}
+            collapsed={collapsedSections.electricalDevices}
+            onToggle={() => toggleSection('electricalDevices')}
+          >
+            {(floor.electricalDevices || []).map((device) => (
+              <div
+                key={device.id}
+                className={`${styles.item} ${selectedId === device.id ? styles.itemSelected : ''}`}
+                onClick={() => selectObject(device.id, 'electricalDevice')}
+              >
+                {ELECTRICAL_DEVICE_DEFAULTS[device.deviceType]?.label || 'Device'} {device.id.split('_').pop()}
               </div>
             ))}
           </Section>

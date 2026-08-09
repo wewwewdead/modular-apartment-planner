@@ -129,8 +129,35 @@ describe('deserializeProject', () => {
       expect(project.sheets).toEqual([]);
       expect(project.roofSystem).toBeNull();
       expect(project.trussSystems).toEqual([]);
+      expect(project.ceilings).toEqual([]);
       expect(project.address).toBe('');
       expect(project.documentDefaults).toEqual({ drawnBy: '', checkedBy: '' });
+    });
+
+    it('migrates a v24 envelope with no ceilings up to the current schema', async () => {
+      const { CURRENT_SCHEMA_VERSION } = await import('@/domain/projectVersion');
+      expect(CURRENT_SCHEMA_VERSION).toBe(26);
+
+      const { createProject } = await import('@/domain/models');
+      const payload = createProject('Pre-ceiling save');
+      delete payload.ceilings;
+      const { project } = deserializeProject({ schemaVersion: 24, version: payload.version, data: payload });
+
+      expect(project.ceilings).toEqual([]);
+      expect(project.version).toBe(23);
+    });
+
+    it('carries stored ceilings through a current-schema round trip', async () => {
+      const { createProject } = await import('@/domain/models');
+      const { createCeiling } = await import('@/domain/ceilingModels');
+      const payload = createProject('Ceiling save');
+      const ceiling = createCeiling('Living Ceiling', { id: 'ceiling_1', floorId: payload.floors[0].id });
+      payload.ceilings = [ceiling];
+
+      const { project } = deserializeProject({ schemaVersion: 25, version: payload.version, data: payload });
+
+      expect(project.ceilings).toHaveLength(1);
+      expect(project.ceilings[0]).toMatchObject({ id: 'ceiling_1', name: 'Living Ceiling' });
     });
 
     it('migrates version 15 data into the coordinated building core', () => {

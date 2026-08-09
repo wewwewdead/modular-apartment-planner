@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSelectHandler } from './selectHandler';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
+import { ELECTRICAL_PLATE } from '@/domain/defaults';
 
 /**
  * Wall drag = PREVIEW-THEN-COMMIT.
@@ -396,4 +397,111 @@ describe('selectHandler building-service drag', () => {
       expect(result.toolState.startPos).toEqual(end);
     },
   );
+});
+
+describe('selectHandler — electrical devices', () => {
+  // One 6000-long wall, 200 thick, with a device 1000mm along its right face.
+  function deviceFloor() {
+    return {
+      id: 'floor_1',
+      walls: [{ id: 'wall_1', start: { x: 0, y: 0 }, end: { x: 6000, y: 0 }, thickness: 200 }],
+      columns: [],
+      doors: [],
+      windows: [],
+      rooms: [],
+      electricalDevices: [
+        { id: 'elec_1', wallId: 'wall_1', offset: 1000, side: 'right', deviceType: 'outlet', mountHeight: 300 },
+      ],
+    };
+  }
+
+  function createDeviceHarness(floor = deviceFloor()) {
+    let toolState = {};
+    let selected = null;
+    const dispatched = [];
+
+    const handler = createSelectHandler({
+      dispatch: (action) => dispatched.push(action),
+      editorDispatch: (action) => {
+        if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+        if (action.type === 'SELECT_OBJECT') selected = { id: action.id, type: action.objectType };
+        if (action.type === 'DESELECT') selected = null;
+      },
+      getFloor: () => floor,
+      activeFloorId: floor.id,
+      viewport: { zoom: 0.1 },
+      snapEnabled: false,
+    });
+
+    return {
+      dispatched,
+      getSelected: () => selected,
+      down(modelPos) {
+        handler.onMouseDown(modelPos, { button: 0, target: { dataset: {} } }, toolState);
+      },
+      move(modelPos) {
+        handler.onMouseMove(modelPos, {}, toolState, selected?.id, selected?.type);
+      },
+      key(e) {
+        handler.onKeyDown(e, toolState, selected?.id, selected?.type);
+      },
+    };
+  }
+
+  it('hit-tests the device ahead of its host wall', () => {
+    const harness = createDeviceHarness();
+    harness.down({ x: 1000, y: 100 });
+
+    expect(harness.getSelected()).toEqual({ id: 'elec_1', type: 'electricalDevice' });
+  });
+
+  it('slides the device along the wall and re-faces it to the cursor side', () => {
+    const harness = createDeviceHarness();
+    harness.down({ x: 1000, y: 100 });
+    harness.move({ x: 2500, y: -400 }); // promotes pendingDrag -> dragging
+    harness.move({ x: 2500, y: -400 });
+
+    expect(harness.dispatched).toContainEqual({
+      type: 'ELECTRICAL_DEVICE_UPDATE',
+      floorId: 'floor_1',
+      device: { id: 'elec_1', offset: 2500, side: 'left' },
+    });
+  });
+
+  it('clamps the slid offset inside the wall by the physical plate width', () => {
+    const harness = createDeviceHarness();
+    harness.down({ x: 1000, y: 100 });
+    harness.move({ x: 99999, y: 100 });
+    harness.move({ x: 99999, y: 100 });
+
+    const last = harness.dispatched.at(-1);
+    expect(last.device.offset).toBe(6000 - ELECTRICAL_PLATE.width / 2);
+  });
+
+  it('snaps the dragged device flush against a column standing on the wall', () => {
+    const floor = deviceFloor();
+    // 400×400 column centred on the wall at x=3000: faces at 2800 and 3200
+    floor.columns = [{ id: 'col_1', x: 3000, y: 0, width: 400, depth: 400, rotation: 0 }];
+    const harness = createDeviceHarness(floor);
+    harness.down({ x: 1000, y: 100 });
+    harness.move({ x: 2740, y: 100 });
+    harness.move({ x: 2740, y: 100 });
+
+    const last = harness.dispatched.at(-1);
+    // plate (100 wide) sits flush against the 2800 column face
+    expect(last.device.offset).toBe(2800 - ELECTRICAL_PLATE.width / 2);
+  });
+
+  it('deletes the selected device', () => {
+    const harness = createDeviceHarness();
+    harness.down({ x: 1000, y: 100 });
+    harness.key({ key: 'Delete' });
+
+    expect(harness.dispatched).toContainEqual({
+      type: 'ELECTRICAL_DEVICE_DELETE',
+      floorId: 'floor_1',
+      deviceId: 'elec_1',
+    });
+    expect(harness.getSelected()).toBeNull();
+  });
 });

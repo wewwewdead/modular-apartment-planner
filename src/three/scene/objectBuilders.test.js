@@ -5,6 +5,20 @@ import { buildPreviewScene } from './buildPreviewScene';
 import { createWallDetailing } from '@/domain/wallDetailing';
 
 describe('buildFloorPreviewObjects', () => {
+  it('lifts a wall standing on a beam off the slab in 3D', () => {
+    const floor = createFloor('Ground Floor', 0);
+    floor.elevation = 0;
+    // A wall sitting on a 450 plinth beam, 2100 tall: it must occupy
+    // 450..2550, not 0..2100.
+    floor.walls = [{ ...createWall({ x: 0, y: 0 }, { x: 4000, y: 0 }, 200, { height: 2100 }), baseOffset: 450 }];
+
+    const wallBox = buildFloorPreviewObjects(floor).find((object) => object.kind === 'wall');
+
+    expect(wallBox.baseElevation).toBeCloseTo(450, 6);
+    expect(wallBox.bounds.minElevation).toBeCloseTo(450, 6);
+    expect(wallBox.bounds.maxElevation).toBeCloseTo(2550, 6);
+  });
+
   it('carries slab openings into the coordinated 3D prism descriptor', () => {
     const floor = createFloor('Ground Floor', 0);
     floor.slabs = [
@@ -45,6 +59,42 @@ describe('buildFloorPreviewObjects', () => {
         { x: 1000, y: 2000 },
       ],
     ]);
+  });
+
+  it('mounts electrical devices on the wall face at their mount height', () => {
+    const floor = createFloor('Ground Floor', 0);
+    const wall = createWall({ x: 0, y: 0 }, { x: 5000, y: 0 });
+    floor.walls = [wall];
+    floor.electricalDevices = [
+      { id: 'elec_1', wallId: wall.id, offset: 2000, deviceType: 'switch-3way', side: 'right', mountHeight: 1200 },
+      { id: 'elec_2', wallId: wall.id, offset: 3000, deviceType: 'outlet-220v', side: 'left', mountHeight: 300 },
+      { id: 'elec_3', wallId: 'wall_gone', offset: 100, deviceType: 'outlet', side: 'right', mountHeight: 300 },
+    ];
+
+    const descriptors = buildFloorPreviewObjects(floor).filter((entry) => entry.kind === 'electricalDevice');
+
+    expect(descriptors.map((entry) => entry.id)).toEqual(['elec_1', 'elec_2']);
+    const [threeWay, range] = descriptors;
+
+    // wall runs along +x, so 'right' (+perp) is +y and 'left' is -y in plan
+    expect(threeWay.center.x).toBeCloseTo(2000);
+    expect(threeWay.center.y).toBeGreaterThan(wall.thickness / 2);
+    expect(range.center.x).toBeCloseTo(3000);
+    expect(range.center.y).toBeLessThan(-wall.thickness / 2);
+
+    // plate is centred on the mount height and rides the opaque plate material
+    expect(threeWay.baseElevation + threeWay.size.y / 2).toBeCloseTo(1200);
+    expect(range.baseElevation + range.size.y / 2).toBeCloseTo(300);
+    expect(threeWay.materialKey).toBe('electricalPlate');
+    expect(threeWay.metadata.sourceId).toBe('elec_1');
+
+    // each device carries its type and mounting face so the 3D builder can
+    // shape sockets/toggles per type and aim them at the served room
+    expect(threeWay.geometry).toBe('electricalDevice');
+    expect(threeWay.deviceType).toBe('switch-3way');
+    expect(threeWay.faceSign).toBe(1);
+    expect(range.deviceType).toBe('outlet-220v');
+    expect(range.faceSign).toBe(-1);
   });
 
   it('carries the selected board-wall assembly into the 3D material and metadata', () => {

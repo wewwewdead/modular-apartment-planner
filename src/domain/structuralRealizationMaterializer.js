@@ -1,6 +1,7 @@
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { intersectionArea } from '@/geometry/polygonBoolean';
 import { createBeam, createColumn } from './models';
+import { resolveBeamBearingLevel } from './beamLevels';
 import { createColumnStack, resolveGridIntersection } from './buildingModels';
 import { inferSlabSupportRefs } from './structuralCoordination';
 import {
@@ -179,14 +180,17 @@ export function materializeAcceptedStructuralRealization(project, profileOverrid
       const startColumn = columns.find((column) => column.stackId === startStack.id);
       const endColumn = columns.find((column) => column.stackId === endStack.id);
       const key = segmentKey(candidate.firstAxis, candidate.secondAxis, candidate.fixedAxis, candidate.orientation);
+      // Grid beams frame the top of the storey, sitting on the columns they
+      // span — at the floor datum their soffit would fall below the slab and
+      // they would cap no wall on this floor.
       const beam = generated(
         createBeam(
           { kind: 'column', id: startColumn.id },
           { kind: 'column', id: endColumn.id },
           profile.beamWidth,
           profile.beamDepth,
-          floor.elevation || 0,
-          { coordination: { condition: 'typical' } },
+          resolveBeamBearingLevel(floorWithColumns, [startColumn.id, endColumn.id]),
+          { placementRole: 'roof_ring', coordination: { condition: 'typical' } },
         ),
         realizationId,
         acceptedId,

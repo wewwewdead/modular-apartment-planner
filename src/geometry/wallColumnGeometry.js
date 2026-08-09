@@ -5,6 +5,13 @@ import { arcWallOutline } from './filletGeometry';
 
 const EPSILON = 1e-6;
 const CENTERLINE_ALIGNMENT_THRESHOLD = 0.92;
+// A column centre has to stay catchable from inside the column. The pixel-derived
+// snap radius is 100 mm at the default zoom — narrower than a 300 column's own
+// half-width — so aiming at the centre would otherwise land on nothing at all.
+// A quarter of the smaller plan dimension keeps this core clear of the faces
+// (half-width away) and the corners (further still), so those still win when
+// the user is actually aiming at them.
+const CENTER_CAPTURE_FRACTION = 0.25;
 
 function makeOutline(start, end, thickness, controlPoint = null) {
   if (controlPoint) {
@@ -100,6 +107,19 @@ function buildCenterlineAttachment(column, centerline, point) {
     featureType: 'centerline',
     featureIndex: centerline.index,
     offset: dot(subtract(point, center), centerline.axis),
+  };
+}
+
+// The column's own centre, as a zero-offset centreline attachment: it resolves
+// back to the exact centre through the existing path, and survives the column
+// being moved, rotated or resized.
+function buildCenterAttachment(column) {
+  return {
+    kind: 'column',
+    columnId: column.id,
+    featureType: 'centerline',
+    featureIndex: 0,
+    offset: 0,
   };
 }
 
@@ -207,15 +227,23 @@ export function getWallRenderData(wall, columns = []) {
 
 export function snapWallEndpoint(
   modelPos,
-  { walls = [], columns = [], snapDist, chainStart = null, otherPoint = null, ignoreWallId = null } = {},
+  {
+    walls = [],
+    columns = [],
+    snapDist,
+    chainStart = null,
+    chainStartAttachment = null,
+    otherPoint = null,
+    ignoreWallId = null,
+  } = {},
 ) {
   let best = null;
   const directionHint =
     otherPoint && distance(otherPoint, modelPos) > EPSILON ? normalize(subtract(modelPos, otherPoint)) : null;
 
-  const consider = (point, priority, attachment = null) => {
+  const consider = (point, priority, attachment = null, captureDistance = snapDist) => {
     const candidateDistance = distance(modelPos, point);
-    if (candidateDistance > snapDist) return;
+    if (candidateDistance > captureDistance) return;
     best = setBestCandidate(best, {
       point: { x: point.x, y: point.y },
       attachment: cloneAttachment(attachment),
@@ -225,19 +253,28 @@ export function snapWallEndpoint(
   };
 
   if (chainStart) {
-    consider(chainStart, 0, null);
+    consider(chainStart, 0, chainStartAttachment);
+  }
+
+  // Column centres outrank everything below because they are the points a
+  // structural bay is dimensioned to: a wall drawn centre to centre reads the
+  // same 3500 as the grid, and trims back to the faces for what gets built.
+  for (const column of columns) {
+    const core = Math.min(column.width || 0, column.depth || 0) * CENTER_CAPTURE_FRACTION;
+    const capture = core > 0 ? Math.max(snapDist, core) : snapDist;
+    consider(columnCenter(column), 1, buildCenterAttachment(column), capture);
   }
 
   for (const wall of walls) {
     if (wall.id === ignoreWallId) continue;
-    consider(wall.start, 1, null);
-    consider(wall.end, 1, null);
+    consider(wall.start, 2, null);
+    consider(wall.end, 2, null);
   }
 
   for (const column of columns) {
     const corners = columnOutline(column);
     corners.forEach((corner, index) => {
-      consider(corner, 2, {
+      consider(corner, 3, {
         kind: 'column',
         columnId: column.id,
         featureType: 'corner',
@@ -246,7 +283,7 @@ export function snapWallEndpoint(
     });
 
     for (const face of columnFaces(column)) {
-      consider(face.midpoint, 3, buildFaceAttachment(column, face, face.midpoint));
+      consider(face.midpoint, 4, buildFaceAttachment(column, face, face.midpoint));
     }
 
     if (directionHint) {
@@ -256,13 +293,13 @@ export function snapWallEndpoint(
         const projection = dot(subtract(modelPos, center), centerline.axis);
         if (Math.abs(projection) > centerline.halfLength + snapDist) continue;
         const point = add(center, scale(centerline.axis, projection));
-        consider(point, 4, buildCenterlineAttachment(column, centerline, point));
+        consider(point, 5, buildCenterlineAttachment(column, centerline, point));
       }
     }
 
     for (const face of columnFaces(column)) {
       const { point } = nearestPointOnSegment(modelPos, face.start, face.end);
-      consider(point, 5, buildFaceAttachment(column, face, point));
+      consider(point, 6, buildFaceAttachment(column, face, point));
     }
   }
 
@@ -270,7 +307,7 @@ export function snapWallEndpoint(
     if (wall.id === ignoreWallId) continue;
     const { point, t } = nearestPointOnSegment(modelPos, wall.start, wall.end);
     if (t <= 0.001 || t >= 0.999) continue;
-    consider(point, 6, null);
+    consider(point, 7, null);
   }
 
   if (!best) return null;

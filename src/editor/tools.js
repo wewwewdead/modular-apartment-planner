@@ -13,6 +13,9 @@ import {
   FIXTURE_SOFA_DEPTH,
   FIXTURE_BED_WIDTH,
   FIXTURE_BED_DEPTH,
+  OUTLET_MOUNT_HEIGHT,
+  GFCI_MOUNT_HEIGHT,
+  SWITCH_MOUNT_HEIGHT,
 } from '@/domain/defaults';
 
 export const TOOLS = {
@@ -30,6 +33,7 @@ export const TOOLS = {
   LANDING: 'landing',
   FIXTURE: 'fixture',
   RAILING: 'railing',
+  ELECTRICAL: 'electrical',
   TRUSS_DRAW: 'truss_draw',
   ROOF_PARAPET: 'roof_parapet',
   ROOF_DRAIN: 'roof_drain',
@@ -61,4 +65,25 @@ export const FIXTURE_DEFAULTS = {
   [FIXTURE_TYPES.TV]: { width: FIXTURE_TV_WIDTH, depth: FIXTURE_TV_DEPTH },
   [FIXTURE_TYPES.SOFA]: { width: FIXTURE_SOFA_WIDTH, depth: FIXTURE_SOFA_DEPTH },
   [FIXTURE_TYPES.BED]: { width: FIXTURE_BED_WIDTH, depth: FIXTURE_BED_DEPTH },
+};
+
+// Surface-mounted wall devices (outlets/switches). Distinct from the
+// building-services electrical axis (risers, panel zones) — these are the
+// per-wall symbols an occupant plans against.
+export const ELECTRICAL_DEVICE_TYPES = {
+  OUTLET: 'outlet',
+  OUTLET_GFCI: 'outlet-gfci',
+  OUTLET_220V: 'outlet-220v',
+  SWITCH: 'switch',
+  SWITCH_3WAY: 'switch-3way',
+  SWITCH_DIMMER: 'switch-dimmer',
+};
+
+export const ELECTRICAL_DEVICE_DEFAULTS = {
+  [ELECTRICAL_DEVICE_TYPES.OUTLET]: { label: 'Outlet', mountHeight: OUTLET_MOUNT_HEIGHT },
+  [ELECTRICAL_DEVICE_TYPES.OUTLET_GFCI]: { label: 'GFCI Outlet', mountHeight: GFCI_MOUNT_HEIGHT },
+  [ELECTRICAL_DEVICE_TYPES.OUTLET_220V]: { label: '220V Outlet', mountHeight: OUTLET_MOUNT_HEIGHT },
+  [ELECTRICAL_DEVICE_TYPES.SWITCH]: { label: 'Switch', mountHeight: SWITCH_MOUNT_HEIGHT },
+  [ELECTRICAL_DEVICE_TYPES.SWITCH_3WAY]: { label: '3-Way Switch', mountHeight: SWITCH_MOUNT_HEIGHT },
+  [ELECTRICAL_DEVICE_TYPES.SWITCH_DIMMER]: { label: 'Dimmer Switch', mountHeight: SWITCH_MOUNT_HEIGHT },
 };

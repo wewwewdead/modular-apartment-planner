@@ -788,10 +788,18 @@ function deriveAutomaticFraming(wall, floor, assembly) {
   return members.filter((member) => member.u1 - member.u0 > EPSILON && member.v1 - member.v0 > EPSILON);
 }
 
-export function deriveWallFramingMembers(wall, floor) {
+/**
+ * `includeWhenDisabled` derives the layout a framed wall would be built to even
+ * though detailing has not been switched on for documentation. The layout comes
+ * entirely from `assembly.framing`, which every framed wall has; the detailing
+ * flag governs drawing and takeoff, not whether the studs exist. The 3D preview
+ * uses it to show the frame behind a wall whose boards are hidden.
+ */
+export function deriveWallFramingMembers(wall, floor, { includeWhenDisabled = false } = {}) {
   const detailing = resolveWallDetailing(wall);
   const assembly = resolveWallAssembly(wall);
-  if (!detailing.enabled || assembly.system !== 'framed') return [];
+  if (assembly.system !== 'framed') return [];
+  if (!detailing.enabled && !includeWhenDisabled) return [];
 
   if (detailing.framing.mode === FRAMING_LAYOUT_MODES.CUSTOM) {
     return detailing.framing.members.map((member) => createCustomFramingMember(member));

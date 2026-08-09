@@ -1,5 +1,6 @@
 import { generateId } from './ids';
 import { CURRENT_PROJECT_VERSION } from './projectVersion';
+import { normalizeWallHeightMode } from './wallFit';
 import {
   WALL_THICKNESS,
   WALL_HEIGHT,
@@ -27,8 +28,9 @@ import {
   RAILING_WIDTH,
   ROOM_COLOR,
   DIMENSION_DEFAULT_OFFSET,
+  OUTLET_MOUNT_HEIGHT,
 } from './defaults';
-import { FIXTURE_DEFAULTS } from '@/editor/tools';
+import { ELECTRICAL_DEVICE_DEFAULTS, FIXTURE_DEFAULTS } from '@/editor/tools';
 import { polygonArea, polygonCentroid } from '@/geometry/polygon';
 import { createCanonicalBuilding } from './buildingModels';
 import { createWallAssembly, wallAssemblyThickness } from './wallAssemblies';
@@ -50,6 +52,7 @@ export function createProject(name = 'Untitled Project') {
     building: createCanonicalBuilding(id, floors),
     roofSystem: null,
     trussSystems: [],
+    ceilings: [],
     sheets: [],
     phases: [],
     version: CURRENT_PROJECT_VERSION,
@@ -70,6 +73,7 @@ export function createFloor(name = 'Floor', levelIndex = 0, options = {}) {
     rooms: [],
     doors: [],
     windows: [],
+    electricalDevices: [],
     columns: [],
     beams: [],
     stairs: [],
@@ -132,6 +136,12 @@ export function createWall(start, end, thickness = WALL_THICKNESS, options = {})
     thickness: options.assembly ? wallAssemblyThickness(assembly) : thickness,
     assembly,
     height: options.height ?? WALL_HEIGHT,
+    // 'auto' walls take their height from the beam they run under; the stored
+    // number is what they fall back to where no structure crosses them.
+    heightMode: normalizeWallHeightMode(options.heightMode),
+    // How far the underside sits above the floor's elevation — non-zero only
+    // where a beam underfoot holds the wall up off the slab.
+    baseOffset: options.baseOffset ?? 0,
     startAttachment: options.startAttachment ?? null,
     endAttachment: options.endAttachment ?? null,
     controlPoint: options.controlPoint ?? null,
@@ -161,6 +171,20 @@ export function createWindow(wallId, offset, width = WINDOW_WIDTH, type = 'stand
     sillHeight: WINDOW_SILL_HEIGHT,
     type,
     openDirection,
+  };
+}
+
+// Surface-mounted wall device: it rides on a wall face and never punches an
+// opening, so `side` (not a width) is what places it. `offset` is the device
+// centre measured from wall.start, the same convention doors use.
+export function createElectricalDevice(wallId, offset, deviceType = 'outlet', side = 'right') {
+  return {
+    id: generateId('elec'),
+    wallId,
+    offset,
+    deviceType,
+    side,
+    mountHeight: ELECTRICAL_DEVICE_DEFAULTS[deviceType]?.mountHeight ?? OUTLET_MOUNT_HEIGHT,
   };
 }
 

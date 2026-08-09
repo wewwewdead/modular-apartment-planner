@@ -179,6 +179,21 @@ export function wallAssemblyThickness(assembly) {
   return wallAssemblyCoreDepth(assembly) + boardBuildUp(assembly.interior) + boardBuildUp(assembly.exterior);
 }
 
+/**
+ * Whether a true front-on elevation of this face runs opposite the wall's U
+ * axis. U is anchored at wall.start, and a viewer standing on the
+ * +perpendicular side (the viewer's right walking start → end) sees U grow to
+ * their right. The face whose skin sits on the other side of the centreline is
+ * viewed from the −perpendicular side, where U grows to the viewer's LEFT — so
+ * an elevation of that face must mirror U to show what the installer sees,
+ * matching the built wall in the 3D preview.
+ */
+export function wallFaceViewMirrorsU(assembly, side) {
+  const interiorSign = assembly?.interiorSide === WALL_INTERIOR_SIDES.RIGHT ? 1 : -1;
+  const faceSign = side === 'exterior' ? -interiorSign : interiorSign;
+  return faceSign === -1;
+}
+
 function uniqueSorted(values, tolerance = 0.5) {
   return [...values]
     .sort((a, b) => a - b)

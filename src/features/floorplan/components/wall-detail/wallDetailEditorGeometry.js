@@ -66,8 +66,11 @@ export function panWallViewport(viewport, delta) {
 export function screenPointToWallLocal(event, rect, bounds) {
   const width = Math.max(1, rect.width);
   const height = Math.max(1, rect.height);
+  const u = clamp(((event.clientX - rect.left) / width) * bounds.length, 0, bounds.length);
   return {
-    u: clamp(((event.clientX - rect.left) / width) * bounds.length, 0, bounds.length),
+    // A mirrored face elevation (bounds.mirrorU) draws U right-to-left, so the
+    // pointer's screen X maps back to wall U through the same reflection.
+    u: bounds.mirrorU ? bounds.length - u : u,
     v: clamp(bounds.height - ((event.clientY - rect.top) / height) * bounds.height, 0, bounds.height),
   };
 }

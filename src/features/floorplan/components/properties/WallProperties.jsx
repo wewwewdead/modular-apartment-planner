@@ -16,6 +16,12 @@ import {
 } from '@/domain/wallAssemblies';
 import { WALL_DETAIL_SIDES, createWallDetailing, resolveWallDetailing } from '@/domain/wallDetailing';
 import {
+  WALL_HEIGHT_MODES,
+  normalizeWallHeightMode,
+  resolveWallClearRun,
+  resolveWallStructureFit,
+} from '@/domain/wallFit';
+import {
   formatSurveyorBearing,
   pointsToSurveyorBearing,
   surveyorBearingToSvgAngle,
@@ -24,26 +30,44 @@ import {
 import InputField from '../InputField';
 import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
+import { Hint, Note, NumberField, Readout, Section, SelectField, Stack, Status, panelKitStyles } from './PanelKit';
 
-const selectStyle = {
-  flex: 1,
-  height: '28px',
-  padding: '0 4px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  fontSize: '12px',
-  background: 'var(--color-surface-elevated)',
+const EMPTY_SIDES = [];
+
+function sameSides(a, b) {
+  return a.length === b.length && a.every((side) => b.includes(side));
+}
+
+function clampLayers(value) {
+  return Math.max(1, Math.min(4, Math.round(value)));
+}
+
+const ASSEMBLY_SUMMARY = {
+  chb: 'CHB masonry',
+  fiber_cement: 'Fiber cement',
+  plywood: 'Plywood',
+  mixed_board: 'Mixed board',
 };
 
-function PropertySelect({ label, value, onChange, children }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <label style={{ flex: '0 0 92px', fontSize: 12, color: 'var(--color-text-secondary)' }}>{label}</label>
-      <select value={value} onChange={(event) => onChange(event.target.value)} style={selectStyle}>
-        {children}
-      </select>
-    </div>
-  );
+/**
+ * The wall's vertical fit in one line. A wall that found no beam above it is
+ * the case worth flagging — that is almost always a mis-levelled beam rather
+ * than a wall that genuinely runs free, so it reads as a warning.
+ */
+function describeStructureFit(fit, u) {
+  if (!fit) return { tone: 'info', text: 'No beam runs along this wall, so it keeps the height above.' };
+
+  const standsOn = fit.supportBeamId ? `Stands on the beam below at ${u.toDisplay(fit.base)} ${u.suffix}. ` : '';
+  if (fit.top === null) {
+    return {
+      tone: 'warning',
+      text: `${standsOn}${fit.crossingCount} beam(s) run along this wall but none sit above it — check their Floor Level, it should be the top of the columns.`,
+    };
+  }
+  return {
+    tone: 'info',
+    text: `${standsOn}Stops at the soffit ${u.toDisplay(fit.top)} ${u.suffix} — clear of the beam above.`,
+  };
 }
 
 function boardMaterialLabel(material) {
@@ -178,10 +202,26 @@ export function WallDrawingInput({
   );
 }
 
-function WallProperties({ wall, floor, dispatch, editorDispatch, floorId, u, phases }) {
+function WallProperties({ wall, floor, floors, hiddenWallBoards, dispatch, editorDispatch, floorId, u, phases }) {
+  const hiddenSides = (hiddenWallBoards || {})[wall.id] || EMPTY_SIDES;
   const len = wallLength(wall);
   const isArc = Boolean(wall.controlPoint);
+  const heightMode = normalizeWallHeightMode(wall.heightMode);
+  // Whole-building beams: the one capping this wall is often filed on the
+  // storey above, and the panel has to report what the fit actually used.
+  const structureFit = resolveWallStructureFit(wall, floor, floors || [floor]);
+  const clearRun = resolveWallClearRun(wall, floor);
   const assembly = resolveWallAssembly(wall);
+  // Only offer to hide a face that actually carries a board — a wall boarded on
+  // one side has no meaningful "Both".
+  const boardedSides = ['interior', 'exterior'].filter(
+    (side) => assembly[side]?.material && assembly[side].material !== WALL_BOARD_MATERIALS.NONE,
+  );
+  const boardVisibilityOptions = [
+    { label: 'None', sides: [] },
+    ...boardedSides.map((side) => ({ label: side === 'interior' ? 'Inside' : 'Outside', sides: [side] })),
+    ...(boardedSides.length > 1 ? [{ label: 'Both', sides: boardedSides }] : []),
+  ];
   const wallOpenings = [
     ...(floor?.doors || []).filter((door) => door.wallId === wall.id).map((door) => ({ ...door, openingKind: 'door' })),
     ...(floor?.windows || [])
@@ -279,274 +319,337 @@ function WallProperties({ wall, floor, dispatch, editorDispatch, floorId, u, pha
           suffix={u.suffix}
           step={u.step(100)}
           value={u.toDisplay(wall.height)}
-          onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
+          onChange={(v) =>
+            updateWall({ height: Math.max(100, u.fromDisplay(v)), heightMode: WALL_HEIGHT_MODES.MANUAL })
+          }
         />
         <InputField label="Arc Length" type="number" suffix={u.suffix} value={u.toDisplay(len)} readOnly />
       </div>
     );
   }
 
+  const isMasonry = assembly.system === 'masonry';
+  const fitMessage = describeStructureFit(structureFit, u);
+
   return (
-    <div>
-      <div className={styles.title}>Wall</div>
+    <div className={panelKitStyles.gutter}>
       <PhaseSelector phaseId={wall.phaseId} phases={phases} onChange={(v) => updateWall({ phaseId: v })} />
-      <div className={styles.subtitle}>Start Point</div>
-      <InputField
-        label="X"
-        type="number"
-        suffix={u.suffix}
-        value={u.toDisplay(wall.start.x)}
-        onChange={(v) => updateWall({ start: { ...wall.start, x: u.fromDisplay(v) } })}
-      />
-      <InputField
-        label="Y"
-        type="number"
-        suffix={u.suffix}
-        value={u.toDisplay(wall.start.y)}
-        onChange={(v) => updateWall({ start: { ...wall.start, y: u.fromDisplay(v) } })}
-      />
-      <div className={styles.subtitle}>End Point</div>
-      <InputField
-        label="X"
-        type="number"
-        suffix={u.suffix}
-        value={u.toDisplay(wall.end.x)}
-        onChange={(v) => updateWall({ end: { ...wall.end, x: u.fromDisplay(v) } })}
-      />
-      <InputField
-        label="Y"
-        type="number"
-        suffix={u.suffix}
-        value={u.toDisplay(wall.end.y)}
-        onChange={(v) => updateWall({ end: { ...wall.end, y: u.fromDisplay(v) } })}
-      />
-      <div className={styles.subtitle}>Properties</div>
-      <PropertySelect
-        label="Assembly"
-        value={assembly.preset}
-        onChange={(preset) => applyAssembly(createWallAssembly(preset, {}, wall.thickness))}
-      >
-        <option value={WALL_ASSEMBLY_PRESETS.CHB}>CHB masonry</option>
-        <option value={WALL_ASSEMBLY_PRESETS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
-        <option value={WALL_ASSEMBLY_PRESETS.PLYWOOD}>Plywood</option>
-        <option value={WALL_ASSEMBLY_PRESETS.MIXED_BOARD}>Mixed board wall</option>
-      </PropertySelect>
-      {assembly.system === 'masonry' ? (
-        <InputField
-          label="CHB core"
-          type="number"
-          suffix={u.suffix}
-          step={u.step(10)}
-          value={u.toDisplay(assembly.coreThickness)}
-          onChange={(v) => updateAssembly({ coreThickness: Math.max(50, u.fromDisplay(v)) })}
+
+      {/* What the model did to this wall, before any control it might explain. */}
+      {heightMode === WALL_HEIGHT_MODES.AUTO && fitMessage ? (
+        <Status tone={fitMessage.tone}>{fitMessage.text}</Status>
+      ) : null}
+
+      <Section id="wall.size" title="Size" summary={`${u.toDisplay(len)} × ${u.toDisplay(wall.height)}`}>
+        <NumberField
+          label="Length"
+          value={u.toDisplay(len)}
+          step={u.step(100)}
+          unit={u.suffix}
+          onChange={updateWallLength}
         />
-      ) : (
-        <>
-          <PropertySelect
-            label="Inside side"
-            value={assembly.interiorSide}
-            onChange={(interiorSide) => updateAssembly({ interiorSide })}
-          >
-            <option value={WALL_INTERIOR_SIDES.LEFT}>Left of start → end</option>
-            <option value={WALL_INTERIOR_SIDES.RIGHT}>Right of start → end</option>
-          </PropertySelect>
-          <button
-            type="button"
-            className={styles.confirmBtn}
-            onClick={() =>
-              updateAssembly({
-                interiorSide:
-                  assembly.interiorSide === WALL_INTERIOR_SIDES.LEFT
-                    ? WALL_INTERIOR_SIDES.RIGHT
-                    : WALL_INTERIOR_SIDES.LEFT,
-              })
-            }
-          >
-            Flip Inside / Outside
-          </button>
-          <div className={styles.drawingHint}>
-            Inside is measured while looking from the wall start point toward its end point.
-          </div>
-          <PropertySelect
-            label="Inside board"
-            value={assembly.interior.material}
-            onChange={(material) => changeBoardMaterial('interior', material)}
-          >
-            <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
-            <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
-            <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
-          </PropertySelect>
-          {assembly.interior.material !== WALL_BOARD_MATERIALS.NONE ? (
-            <>
-              <InputField
-                label="Inside board thick."
-                type="number"
-                suffix={u.suffix}
-                step={u.step(1)}
-                value={u.toDisplay(assembly.interior.thickness)}
-                onChange={(v) => updateBoardLayer('interior', { thickness: Math.max(1, u.fromDisplay(v)) })}
-              />
-              <InputField
-                label="Inside layers"
-                type="number"
-                step={1}
-                value={assembly.interior.layerCount}
-                onChange={(v) => updateBoardLayer('interior', { layerCount: Math.max(1, Math.min(4, Math.round(v))) })}
-              />
-            </>
-          ) : null}
-          <PropertySelect
-            label="Outside board"
-            value={assembly.exterior.material}
-            onChange={(material) => changeBoardMaterial('exterior', material)}
-          >
-            <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
-            <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
-            <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
-          </PropertySelect>
-          {assembly.exterior.material !== WALL_BOARD_MATERIALS.NONE ? (
-            <>
-              <InputField
-                label="Outside board thick."
-                type="number"
-                suffix={u.suffix}
-                step={u.step(1)}
-                value={u.toDisplay(assembly.exterior.thickness)}
-                onChange={(v) => updateBoardLayer('exterior', { thickness: Math.max(1, u.fromDisplay(v)) })}
-              />
-              <InputField
-                label="Outside layers"
-                type="number"
-                step={1}
-                value={assembly.exterior.layerCount}
-                onChange={(v) => updateBoardLayer('exterior', { layerCount: Math.max(1, Math.min(4, Math.round(v))) })}
-              />
-            </>
-          ) : null}
-          <PropertySelect
+        <NumberField
+          label="Height"
+          value={u.toDisplay(wall.height)}
+          step={u.step(100)}
+          unit={u.suffix}
+          onChange={(v) =>
+            updateWall({ height: Math.max(100, u.fromDisplay(v)), heightMode: WALL_HEIGHT_MODES.MANUAL })
+          }
+        />
+        <SelectField label="Top" value={heightMode} onChange={(value) => updateWall({ heightMode: value })}>
+          <option value={WALL_HEIGHT_MODES.AUTO}>Fit under beam</option>
+          <option value={WALL_HEIGHT_MODES.MANUAL}>Fixed height</option>
+        </SelectField>
+        {clearRun?.trimmed ? (
+          <>
+            <Readout label="Clear run" value={u.toDisplay(clearRun.length)} unit={u.suffix} />
+            <Hint>Built length, column face to column face. Length above is centreline.</Hint>
+          </>
+        ) : null}
+        <Readout label="Built thickness" value={u.toDisplay(wallAssemblyThickness(assembly))} unit={u.suffix} />
+      </Section>
+
+      <Section id="wall.assembly" title="Assembly" summary={ASSEMBLY_SUMMARY[assembly.preset] || assembly.preset}>
+        <SelectField
+          label="Assembly"
+          value={assembly.preset}
+          onChange={(preset) => applyAssembly(createWallAssembly(preset, {}, wall.thickness))}
+        >
+          <option value={WALL_ASSEMBLY_PRESETS.CHB}>CHB masonry</option>
+          <option value={WALL_ASSEMBLY_PRESETS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
+          <option value={WALL_ASSEMBLY_PRESETS.PLYWOOD}>Plywood</option>
+          <option value={WALL_ASSEMBLY_PRESETS.MIXED_BOARD}>Mixed board wall</option>
+        </SelectField>
+        {isMasonry ? (
+          <NumberField
+            label="CHB core"
+            value={u.toDisplay(assembly.coreThickness)}
+            step={u.step(10)}
+            unit={u.suffix}
+            onChange={(v) => updateAssembly({ coreThickness: Math.max(50, u.fromDisplay(v)) })}
+          />
+        ) : (
+          <>
+            <SelectField
+              label="Inside side"
+              value={assembly.interiorSide}
+              onChange={(interiorSide) => updateAssembly({ interiorSide })}
+            >
+              <option value={WALL_INTERIOR_SIDES.LEFT}>Left of start → end</option>
+              <option value={WALL_INTERIOR_SIDES.RIGHT}>Right of start → end</option>
+            </SelectField>
+            <Stack>
+              <button
+                type="button"
+                className={styles.actionBtn}
+                onClick={() =>
+                  updateAssembly({
+                    interiorSide:
+                      assembly.interiorSide === WALL_INTERIOR_SIDES.LEFT
+                        ? WALL_INTERIOR_SIDES.RIGHT
+                        : WALL_INTERIOR_SIDES.LEFT,
+                  })
+                }
+              >
+                Flip Inside / Outside
+              </button>
+            </Stack>
+            <Hint>Inside is measured while looking from the wall start point toward its end point.</Hint>
+
+            <SelectField
+              label="Inside board"
+              value={assembly.interior.material}
+              onChange={(material) => changeBoardMaterial('interior', material)}
+            >
+              <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
+              <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
+              <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
+            </SelectField>
+            {assembly.interior.material !== WALL_BOARD_MATERIALS.NONE ? (
+              <>
+                <NumberField
+                  label="Inside thick."
+                  value={u.toDisplay(assembly.interior.thickness)}
+                  step={u.step(1)}
+                  unit={u.suffix}
+                  onChange={(v) => updateBoardLayer('interior', { thickness: Math.max(1, u.fromDisplay(v)) })}
+                />
+                <NumberField
+                  label="Inside layers"
+                  value={assembly.interior.layerCount}
+                  step={1}
+                  onChange={(v) => updateBoardLayer('interior', { layerCount: clampLayers(v) })}
+                />
+              </>
+            ) : null}
+            <SelectField
+              label="Outside board"
+              value={assembly.exterior.material}
+              onChange={(material) => changeBoardMaterial('exterior', material)}
+            >
+              <option value={WALL_BOARD_MATERIALS.NONE}>None</option>
+              <option value={WALL_BOARD_MATERIALS.FIBER_CEMENT}>HardieFlex / fiber cement</option>
+              <option value={WALL_BOARD_MATERIALS.PLYWOOD}>Plywood</option>
+            </SelectField>
+            {assembly.exterior.material !== WALL_BOARD_MATERIALS.NONE ? (
+              <>
+                <NumberField
+                  label="Outside thick."
+                  value={u.toDisplay(assembly.exterior.thickness)}
+                  step={u.step(1)}
+                  unit={u.suffix}
+                  onChange={(v) => updateBoardLayer('exterior', { thickness: Math.max(1, u.fromDisplay(v)) })}
+                />
+                <NumberField
+                  label="Outside layers"
+                  value={assembly.exterior.layerCount}
+                  step={1}
+                  onChange={(v) => updateBoardLayer('exterior', { layerCount: clampLayers(v) })}
+                />
+              </>
+            ) : null}
+            <Stack>
+              <button
+                type="button"
+                className={styles.confirmBtn}
+                onClick={() => openWallDetailEditor(WALL_DETAIL_SIDES.INTERIOR)}
+              >
+                Design Inside Face — {boardMaterialLabel(assembly.interior.material)}
+              </button>
+            </Stack>
+            <Stack>
+              <button
+                type="button"
+                className={styles.confirmBtn}
+                onClick={() => openWallDetailEditor(WALL_DETAIL_SIDES.EXTERIOR)}
+              >
+                Design Outside Face — {boardMaterialLabel(assembly.exterior.material)}
+              </button>
+            </Stack>
+          </>
+        )}
+      </Section>
+
+      {isMasonry ? null : (
+        <Section
+          id="wall.framing"
+          title="Framing"
+          defaultOpen={false}
+          summary={`${framingLayout.studCount} studs @ ${u.toDisplay(assembly.framing.spacing)}`}
+        >
+          <SelectField
             label="Frame"
             value={assembly.framing.material}
             onChange={(material) => updateFraming({ material })}
           >
             <option value={WALL_FRAME_MATERIALS.LIGHT_GAUGE_STEEL}>Light-gauge steel</option>
             <option value={WALL_FRAME_MATERIALS.TIMBER}>Timber</option>
-          </PropertySelect>
-          <InputField
+          </SelectField>
+          <NumberField
             label="Stud spacing"
-            type="number"
-            suffix={u.suffix}
-            step={u.step(50)}
             value={u.toDisplay(assembly.framing.spacing)}
+            step={u.step(50)}
+            unit={u.suffix}
             onChange={(v) => updateFraming({ spacing: Math.max(100, u.fromDisplay(v)) })}
           />
-          <InputField
+          <NumberField
             label="Stud width"
-            type="number"
-            suffix={u.suffix}
-            step={u.step(5)}
             value={u.toDisplay(assembly.framing.studWidth)}
+            step={u.step(5)}
+            unit={u.suffix}
             onChange={(v) => updateFraming({ studWidth: Math.max(20, u.fromDisplay(v)) })}
           />
-          <InputField
-            label="Layout offset"
-            type="number"
-            suffix={u.suffix}
-            step={u.step(10)}
-            value={u.toDisplay(assembly.framing.startOffset)}
-            onChange={(v) => updateFraming({ startOffset: Math.max(0, u.fromDisplay(v)) })}
-          />
-          <InputField
+          <NumberField
             label="Frame depth"
-            type="number"
-            suffix={u.suffix}
-            step={u.step(5)}
             value={u.toDisplay(assembly.framing.studDepth)}
+            step={u.step(5)}
+            unit={u.suffix}
             onChange={(v) => updateFraming({ studDepth: Math.max(25, u.fromDisplay(v)) })}
           />
-          <PropertySelect
+          <NumberField
+            label="Layout offset"
+            value={u.toDisplay(assembly.framing.startOffset)}
+            step={u.step(10)}
+            unit={u.suffix}
+            onChange={(v) => updateFraming({ startOffset: Math.max(0, u.fromDisplay(v)) })}
+          />
+          <SelectField
             label="Frame rows"
             value={String(assembly.framing.frameCount)}
             onChange={(value) => updateFraming({ frameCount: Number(value) })}
           >
             <option value="1">Single frame</option>
             <option value="2">Double-stud wall</option>
-          </PropertySelect>
+          </SelectField>
           {assembly.framing.frameCount === 2 ? (
-            <InputField
+            <NumberField
               label="Frame gap"
-              type="number"
-              suffix={u.suffix}
-              step={u.step(5)}
               value={u.toDisplay(assembly.framing.frameGap)}
+              step={u.step(5)}
+              unit={u.suffix}
               onChange={(v) => updateFraming({ frameGap: Math.max(0, u.fromDisplay(v)) })}
             />
           ) : null}
-          <InputField
+          <NumberField
             label="Noggin rows"
-            type="number"
-            step={1}
             value={assembly.framing.nogginRows}
+            step={1}
             onChange={(v) => updateFraming({ nogginRows: Math.max(0, Math.min(6, Math.round(v))) })}
           />
-          <InputField label="Stud count" value={framingLayout.studCount} readOnly />
-          <InputField
-            label="Frame length"
-            suffix="m"
-            value={(framingLayout.totalLinearLengthMm / 1000).toFixed(2)}
-            readOnly
-          />
-          <div className={styles.drawingHint}>
+          <Readout label="Stud count" value={framingLayout.studCount} />
+          <Readout label="Frame length" value={(framingLayout.totalLinearLengthMm / 1000).toFixed(2)} unit="m" />
+          <Note label="Nonstructural partition — review required">
             Board framing is modeled and quantified as a nonstructural partition. Member capacity, fixings, bracing,
             fire resistance, moisture exposure, and product-specific spacing still require professional confirmation.
-          </div>
-          <button
-            type="button"
-            className={styles.confirmBtn}
-            onClick={() => openWallDetailEditor(WALL_DETAIL_SIDES.INTERIOR)}
-          >
-            Design Inside Face — {boardMaterialLabel(assembly.interior.material)}
-          </button>
-          <button
-            type="button"
-            className={styles.confirmBtn}
-            onClick={() => openWallDetailEditor(WALL_DETAIL_SIDES.EXTERIOR)}
-          >
-            Design Outside Face — {boardMaterialLabel(assembly.exterior.material)}
-          </button>
-        </>
+          </Note>
+        </Section>
       )}
-      <InputField
-        label="Built thickness"
-        suffix={u.suffix}
-        value={u.toDisplay(wallAssemblyThickness(assembly))}
-        readOnly
-      />
-      <InputField
-        label="Height"
-        type="number"
-        suffix={u.suffix}
-        step={u.step(100)}
-        value={u.toDisplay(wall.height)}
-        onChange={(v) => updateWall({ height: Math.max(100, u.fromDisplay(v)) })}
-      />
-      <InputField
-        label="Length"
-        type="number"
-        suffix={u.suffix}
-        step={u.step(100)}
-        value={u.toDisplay(len)}
-        onChange={updateWallLength}
-      />
-      <div className={styles.subtitle}>Continue from End</div>
-      <WallDrawingInput
-        start={wall.end}
-        dispatch={dispatch}
-        editorDispatch={editorDispatch}
-        activeFloorId={floorId}
-        u={u}
-        selectNewWall
-        wallOptions={{ assembly, thickness: wallAssemblyThickness(assembly), height: wall.height }}
-      />
+
+      {isMasonry ? null : (
+        <Section
+          id="wall.preview"
+          title="3D view"
+          defaultOpen={false}
+          summary={hiddenSides.length ? `${hiddenSides.length} face hidden` : 'Fully clad'}
+        >
+          {boardedSides.length ? (
+            <>
+              <Stack>
+                <div className={styles.segmentControl}>
+                  {boardVisibilityOptions.map((option) => (
+                    <button
+                      key={option.label}
+                      type="button"
+                      className={sameSides(option.sides, hiddenSides) ? styles.segmentBtnActive : styles.segmentBtn}
+                      onClick={() =>
+                        editorDispatch({
+                          type: 'SET_WALL_BOARD_VISIBILITY',
+                          wallId: wall.id,
+                          hiddenSides: option.sides,
+                        })
+                      }
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </Stack>
+              <Hint>
+                {hiddenSides.length
+                  ? 'Stripped in the 3D preview only — the framing behind is exposed. Drawings and quantities are unaffected.'
+                  : 'Strip a face to check the framing behind it. The other side stays clad.'}
+              </Hint>
+            </>
+          ) : (
+            <Hint>This wall has no boards, so its framing is already exposed in 3D.</Hint>
+          )}
+        </Section>
+      )}
+
+      <Section
+        id="wall.position"
+        title="Position"
+        defaultOpen={false}
+        summary={`${u.toDisplay(wall.start.x)}, ${u.toDisplay(wall.start.y)}`}
+      >
+        <NumberField
+          label="Start X"
+          value={u.toDisplay(wall.start.x)}
+          unit={u.suffix}
+          onChange={(v) => updateWall({ start: { ...wall.start, x: u.fromDisplay(v) } })}
+        />
+        <NumberField
+          label="Start Y"
+          value={u.toDisplay(wall.start.y)}
+          unit={u.suffix}
+          onChange={(v) => updateWall({ start: { ...wall.start, y: u.fromDisplay(v) } })}
+        />
+        <NumberField
+          label="End X"
+          value={u.toDisplay(wall.end.x)}
+          unit={u.suffix}
+          onChange={(v) => updateWall({ end: { ...wall.end, x: u.fromDisplay(v) } })}
+        />
+        <NumberField
+          label="End Y"
+          value={u.toDisplay(wall.end.y)}
+          unit={u.suffix}
+          onChange={(v) => updateWall({ end: { ...wall.end, y: u.fromDisplay(v) } })}
+        />
+      </Section>
+
+      <Section id="wall.continue" title="Continue from end" defaultOpen={false}>
+        <WallDrawingInput
+          start={wall.end}
+          dispatch={dispatch}
+          editorDispatch={editorDispatch}
+          activeFloorId={floorId}
+          u={u}
+          selectNewWall
+          wallOptions={{ assembly, thickness: wallAssemblyThickness(assembly), height: wall.height }}
+        />
+      </Section>
     </div>
   );
 }

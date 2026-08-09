@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { buildRulerTicks, computeCanvasFit, wallPointToFrame } from './wallDetailCanvasMath';
+import { buildRulerTicks, computeCanvasFit, wallLocalToSvg, wallPointToFrame } from './wallDetailCanvasMath';
+import { SIZE_TAG_FONT_PX, SIZE_TAG_GAP_PX, SIZE_TAG_LINE_STEP } from './wallDetailSelectionReadout';
 import styles from './WallDetailEditor.module.css';
 
 /** Frame margin reserved around the fitted drawing — leaves room for the rulers. */
@@ -38,6 +39,7 @@ export function useWallCanvasMetrics(frameRef, bounds, remeasureKey = null) {
     length: bounds?.length || 0,
     height: bounds?.height || 0,
     margin: CANVAS_FIT_MARGIN,
+    mirrorU: Boolean(bounds?.mirrorU),
   });
 }
 
@@ -162,17 +164,57 @@ export function WallCanvasGrid({ bounds, snapStep, unitPx, active }) {
 /**
  * Small text chip that follows the pointer during draw and move gestures so the
  * live size or position is readable at the cursor, not in a distant panel.
- * Rendered in un-flipped SVG coordinates.
+ * Rendered in un-flipped SVG coordinates; `view` is `{ length, height, mirrorU }`
+ * so the chip lands beside the pointer on mirrored face elevations too.
  */
-export function CanvasReadoutChip({ point, lines, unitPx, wallHeight }) {
+export function CanvasReadoutChip({ point, lines, unitPx, view }) {
   if (!point || !lines?.length) return null;
   const fontSize = unitPx * 11.5;
-  const x = point.u + unitPx * 16;
-  const y = wallHeight - point.v - unitPx * 16;
+  const anchor = wallLocalToSvg(point, view);
+  const x = anchor.x + unitPx * 16;
+  const y = anchor.y - unitPx * 16;
   return (
     <g className={styles.canvasChip} style={{ fontSize }}>
       {lines.map((line, index) => (
         <text key={index} x={x} y={y + index * fontSize * 1.3}>
+          {line}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+/**
+ * Standing size tag for the selected piece: what it is, how wide and how tall,
+ * and what it is made of — pinned to the piece itself so the answer is on the
+ * drawing rather than in a panel. Like the pointer chip it is drawn in
+ * un-flipped SVG coordinates, so the text stays upright and readable on a
+ * mirrored face elevation. `placement` sits it above the piece, or inside its
+ * top edge when there is no headroom left on the wall.
+ */
+export function CanvasSizeTag({ point, lines, unitPx, view, placement = 'above', leader = true }) {
+  if (!point || !lines?.length) return null;
+  const fontSize = unitPx * SIZE_TAG_FONT_PX;
+  const step = fontSize * SIZE_TAG_LINE_STEP;
+  const anchor = wallLocalToSvg(point, view);
+  const gap = unitPx * SIZE_TAG_GAP_PX;
+  // 'above' stacks the last line nearest the piece; 'below' hangs down from it.
+  const firstLineY =
+    placement === 'above' ? anchor.y - gap - (lines.length - 1) * step : anchor.y + gap + fontSize * 0.9;
+  return (
+    <g className={styles.canvasSizeTag} style={{ fontSize }} data-placement={placement} aria-hidden="true">
+      {leader ? (
+        <line
+          className={styles.sizeTagLeader}
+          x1={anchor.x}
+          y1={anchor.y}
+          x2={anchor.x}
+          y2={placement === 'above' ? anchor.y - gap * 0.55 : anchor.y + gap * 0.55}
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : null}
+      {lines.map((line, index) => (
+        <text key={index} x={anchor.x} y={firstLineY + index * step}>
           {line}
         </text>
       ))}

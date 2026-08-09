@@ -24,6 +24,7 @@ import { useUnits } from './properties/useUnits';
 import WallProperties, { WallDrawingInput } from './properties/WallProperties';
 import DoorProperties from './properties/DoorProperties';
 import WindowProperties from './properties/WindowProperties';
+import ElectricalProperties from './properties/ElectricalProperties';
 import RoomProperties from './properties/RoomProperties';
 import SlabProperties from './properties/SlabProperties';
 import BeamProperties from './properties/BeamProperties';
@@ -41,6 +42,54 @@ import SheetProperties, { SheetExportMenu } from './properties/SheetProperties';
 import SheetViewportProperties from './properties/SheetViewportProperties';
 import BuildingServiceProperties from './properties/BuildingServiceProperties';
 
+/*
+ * Plain nouns for the selection types. The panel used to interpolate the raw
+ * type string, so it offered "Delete electricalDevice" and "Delete sectionCut"
+ * — internal identifiers surfaced on the one button that cannot be undone by
+ * clicking it again.
+ */
+const OBJECT_NOUNS = {
+  wall: 'wall',
+  door: 'door',
+  window: 'window',
+  room: 'room',
+  slab: 'slab',
+  beam: 'beam',
+  column: 'column',
+  stair: 'stair',
+  landing: 'landing',
+  railing: 'railing',
+  fixture: 'fixture',
+  annotation: 'dimension',
+  sectionCut: 'section cut',
+  electricalDevice: 'outlet',
+  phase: 'phase',
+  floor: 'floor',
+  sheet: 'sheet',
+  sheetViewport: 'viewport',
+  roofPlane: 'roof plane',
+  roofEdge: 'roof edge',
+  roofOpening: 'roof opening',
+  roofParapet: 'parapet',
+  roofDrain: 'drain',
+  trussSystem: 'truss system',
+  trussInstance: 'truss',
+  plumbingShaft: 'plumbing shaft',
+  electricalRiser: 'electrical riser',
+  electricalPanelZone: 'panel zone',
+};
+
+function selectionLabel(selectedType, floorName) {
+  if (!selectedType) return floorName || 'Project';
+  const noun = OBJECT_NOUNS[selectedType] || 'Object';
+  return noun.charAt(0).toUpperCase() + noun.slice(1);
+}
+
+function selectionMeta(selectedType, selectedId) {
+  if (!selectedType) return 'Nothing selected';
+  return selectedId || '';
+}
+
 export default function PropertiesPanel() {
   const { project, dispatch, duplicateFloor } = useProject();
   const {
@@ -55,6 +104,7 @@ export default function PropertiesPanel() {
     toolState,
     activePhaseId,
     phaseViewMode,
+    hiddenWallBoards,
     dispatch: editorDispatch,
   } = useEditor();
   const orderedFloors = getOrderedFloors(project);
@@ -151,6 +201,8 @@ export default function PropertiesPanel() {
       dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
     } else if (selectedType === 'window') {
       dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+    } else if (selectedType === 'electricalDevice') {
+      dispatch({ type: 'ELECTRICAL_DEVICE_DELETE', floorId: activeFloorId, deviceId: selectedId });
     } else if (selectedType === 'column') {
       dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
     } else if (selectedType === 'fixture') {
@@ -395,6 +447,8 @@ export default function PropertiesPanel() {
           <WallProperties
             wall={wall}
             floor={floor}
+            floors={project.floors}
+            hiddenWallBoards={hiddenWallBoards}
             dispatch={dispatch}
             editorDispatch={editorDispatch}
             floorId={activeFloorId}
@@ -497,6 +551,21 @@ export default function PropertiesPanel() {
           />
         );
       }
+    } else if (selectedType === 'electricalDevice') {
+      const device = (floor.electricalDevices || []).find((entry) => entry.id === selectedId);
+      const wall = device ? floor.walls.find((w) => w.id === device.wallId) : null;
+      if (device) {
+        content = (
+          <ElectricalProperties
+            device={device}
+            wall={wall}
+            dispatch={dispatch}
+            floorId={activeFloorId}
+            u={u}
+            phases={phases}
+          />
+        );
+      }
     } else if (selectedType === 'column') {
       const column = (floor.columns || []).find((c) => c.id === selectedId);
       if (column) {
@@ -536,54 +605,69 @@ export default function PropertiesPanel() {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.segmentControl}>
-        <button
-          className={u.unit === 'mm' ? styles.segmentBtnActive : styles.segmentBtn}
-          onClick={() => u.setUnit('mm')}
-        >
-          mm
-        </button>
-        <button className={u.unit === 'm' ? styles.segmentBtnActive : styles.segmentBtn} onClick={() => u.setUnit('m')}>
-          m
-        </button>
-      </div>
-      {workspaceMode === 'sheet' && sheet && <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />}
-      {activeTool === TOOLS.FILLET && modelTarget === 'floor' && workspaceMode === 'model' && (
-        <div>
-          <div className={styles.title}>Fillet Tool</div>
-          <div className={styles.subtitle}>Settings</div>
-          <InputField
-            label="Radius"
-            type="number"
-            suffix={u.suffix}
-            step={u.step(FILLET_DEFAULT_RADIUS / 4)}
-            value={u.toDisplay(toolState.radius ?? FILLET_DEFAULT_RADIUS)}
-            onChange={(v) => {
-              const mm = u.fromDisplay(v);
-              const clamped = Math.max(FILLET_MIN_RADIUS, Math.min(FILLET_MAX_RADIUS, mm));
-              editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { ...toolState, radius: clamped } });
-            }}
-          />
-          <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.4 }}>
-            Click a corner where two walls meet to round it. Use [ / ] to adjust radius.
-          </p>
+      <div className={styles.panelHeader}>
+        <div className={styles.panelIdentity}>
+          <div className={styles.panelKind}>{selectionLabel(selectedType, floor?.name)}</div>
+          <div className={styles.panelKindMeta}>{selectionMeta(selectedType, selectedId)}</div>
         </div>
-      )}
-      {activeTool === TOOLS.WALL && modelTarget === 'floor' && toolState.start && workspaceMode === 'model' && (
-        <WallDrawingInput
-          start={toolState.start}
-          preview={toolState.preview}
-          dispatch={dispatch}
-          editorDispatch={editorDispatch}
-          activeFloorId={activeFloorId}
-          u={u}
-        />
-      )}
-      {content}
+        <div className={styles.segmentControl}>
+          <button
+            className={u.unit === 'mm' ? styles.segmentBtnActive : styles.segmentBtn}
+            onClick={() => u.setUnit('mm')}
+            aria-label="Show measurements in millimetres"
+          >
+            mm
+          </button>
+          <button
+            className={u.unit === 'm' ? styles.segmentBtnActive : styles.segmentBtn}
+            onClick={() => u.setUnit('m')}
+            aria-label="Show measurements in metres"
+          >
+            m
+          </button>
+        </div>
+      </div>
+      <div className={styles.panelBody}>
+        {workspaceMode === 'sheet' && sheet && <SheetExportMenu sheet={sheet} editorDispatch={editorDispatch} />}
+        {activeTool === TOOLS.FILLET && modelTarget === 'floor' && workspaceMode === 'model' && (
+          <div>
+            <div className={styles.title}>Fillet Tool</div>
+            <div className={styles.subtitle}>Settings</div>
+            <InputField
+              label="Radius"
+              type="number"
+              suffix={u.suffix}
+              step={u.step(FILLET_DEFAULT_RADIUS / 4)}
+              value={u.toDisplay(toolState.radius ?? FILLET_DEFAULT_RADIUS)}
+              onChange={(v) => {
+                const mm = u.fromDisplay(v);
+                const clamped = Math.max(FILLET_MIN_RADIUS, Math.min(FILLET_MAX_RADIUS, mm));
+                editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { ...toolState, radius: clamped } });
+              }}
+            />
+            <p style={{ fontSize: '11px', color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.4 }}>
+              Click a corner where two walls meet to round it. Use [ / ] to adjust radius.
+            </p>
+          </div>
+        )}
+        {activeTool === TOOLS.WALL && modelTarget === 'floor' && toolState.start && workspaceMode === 'model' && (
+          <WallDrawingInput
+            start={toolState.start}
+            preview={toolState.preview}
+            dispatch={dispatch}
+            editorDispatch={editorDispatch}
+            activeFloorId={activeFloorId}
+            u={u}
+          />
+        )}
+        {content}
+      </div>
       {selectedId && selectedType !== 'floor' && (
-        <button className={styles.deleteBtn} onClick={handleDelete}>
-          Delete {selectedType === 'sheetViewport' ? 'viewport' : selectedType}
-        </button>
+        <div className={styles.panelFooter}>
+          <button className={styles.deleteBtn} onClick={handleDelete}>
+            Delete {OBJECT_NOUNS[selectedType] || 'object'}
+          </button>
+        </div>
       )}
     </div>
   );

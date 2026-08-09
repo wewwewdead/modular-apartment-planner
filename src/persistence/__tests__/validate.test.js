@@ -721,3 +721,94 @@ describe('Kappa structural-realization persistence', () => {
     });
   });
 });
+
+describe('ceiling persistence', () => {
+  function ceilingFixture(overrides = {}) {
+    return {
+      id: 'ceiling_1',
+      name: 'Ceiling',
+      floorId: 'floor_1',
+      phaseId: null,
+      attachment: { mode: 'manual', trussSystemId: null },
+      boundaryPolygon: [
+        { x: 0, y: 0 },
+        { x: 4000, y: 0 },
+        { x: 4000, y: 3000 },
+      ],
+      baseElevation: 2700,
+      detailing: { enabled: true },
+      ...overrides,
+    };
+  }
+
+  it('rejects a non-array ceilings collection', () => {
+    const errors = validateProjectStructure(makeProject({ ceilings: {} }));
+    expect(errors).toContainEqual(expect.objectContaining({ path: 'ceilings' }));
+    expect(validateProjectStructure(makeProject({ ceilings: [] }))).toEqual([]);
+  });
+
+  it('warns about broken phase, floor and truss-attachment references', () => {
+    const project = makeProject({
+      phases: [{ id: 'phase_1' }],
+      trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }],
+      ceilings: [
+        ceilingFixture({
+          phaseId: 'phase_gone',
+          floorId: 'floor_gone',
+          attachment: { mode: 'truss', trussSystemId: 'truss_gone' },
+        }),
+      ],
+    });
+
+    const warnings = validateProjectReferences(project);
+    expect(warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'ceiling ceiling_1', message: expect.stringContaining('non-existent phase') }),
+        expect.objectContaining({ path: 'ceiling ceiling_1', message: expect.stringContaining('non-existent floor') }),
+        expect.objectContaining({
+          path: 'ceiling ceiling_1',
+          message: expect.stringContaining('non-existent truss system'),
+        }),
+      ]),
+    );
+  });
+
+  it('emits no ceiling warnings when every reference resolves', () => {
+    const project = makeProject({
+      phases: [{ id: 'phase_1' }],
+      trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }],
+      ceilings: [ceilingFixture({ phaseId: 'phase_1', attachment: { mode: 'truss', trussSystemId: 'truss_1' } })],
+    });
+
+    expect(validateProjectReferences(project).filter((w) => w.path.startsWith('ceiling '))).toEqual([]);
+  });
+
+  it('nullifies an invalid ceiling phaseId', () => {
+    const project = makeProject({
+      phases: [{ id: 'phase_1' }],
+      ceilings: [ceilingFixture({ phaseId: 'phase_gone' })],
+    });
+
+    expect(repairBrokenReferences(project).ceilings[0].phaseId).toBeNull();
+  });
+
+  it('drops a dangling truss attachment back to manual, keeping the stored ceiling geometry', () => {
+    const ceiling = ceilingFixture({
+      attachment: { mode: 'truss', trussSystemId: 'truss_gone' },
+      baseElevation: 2450,
+    });
+    const project = makeProject({ trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }], ceilings: [ceiling] });
+
+    const repaired = repairBrokenReferences(project).ceilings[0];
+    expect(repaired.attachment).toEqual({ mode: 'manual', trussSystemId: null });
+    expect(repaired.baseElevation).toBe(2450);
+    expect(repaired.boundaryPolygon).toBe(ceiling.boundaryPolygon);
+  });
+
+  it('leaves a ceiling whose references all resolve untouched by identity', () => {
+    const ceiling = ceilingFixture({ attachment: { mode: 'truss', trussSystemId: 'truss_1' } });
+    const project = makeProject({ trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }], ceilings: [ceiling] });
+
+    expect(repairBrokenReferences(project).ceilings[0]).toBe(ceiling);
+  });
+});

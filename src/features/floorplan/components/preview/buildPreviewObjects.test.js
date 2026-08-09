@@ -241,6 +241,7 @@ function createMockPalette() {
     'fixtureAccentCeramic',
     'fixtureAccentWood',
     'fixtureAccentFabric',
+    'electricalPlate',
     'railing_handrail',
     'railing_glass',
     'railing_guardrail',
@@ -375,6 +376,46 @@ describe('buildPreviewObjectRoot', () => {
 
     expect(object.position).toMatchObject({ x: 10, y: 100, z: 20 });
     expect(object.rotation.y).toBe(-0.5);
+  });
+
+  it('builds per-type electrical device groups with details on the mounted face', () => {
+    const device = (id, deviceType, faceSign) => ({
+      ...createDescriptor(id, 'electricalDevice', 'electricalPlate', 'electricalDevice'),
+      size: { x: 100, y: 120, z: 40 },
+      deviceType,
+      faceSign,
+    });
+    const scene = createSceneDescriptor([
+      {
+        floorId: 'f1',
+        name: 'Ground',
+        elevation: 0,
+        visible: true,
+        objects: [
+          device('e-outlet', 'outlet', 1),
+          device('e-outlet-flip', 'outlet', -1),
+          device('e-switch', 'switch', 1),
+          device('e-gfci', 'outlet-gfci', 1),
+        ],
+      },
+    ]);
+
+    const { meshMap } = buildPreviewObjectRoot(scene, palette);
+
+    // outlet: plate + two socket cylinders; switch: plate + tilted toggle;
+    // gfci: plate + decora insert + 2 sockets + 2 buttons — types are distinct
+    const outlet = meshMap.get('e-outlet').object;
+    const switchDev = meshMap.get('e-switch').object;
+    const gfci = meshMap.get('e-gfci').object;
+    expect(outlet.children).toHaveLength(3);
+    expect(switchDev.children).toHaveLength(2);
+    expect(gfci.children).toHaveLength(6);
+    expect(switchDev.children[1].rotation.x).not.toBe(0);
+
+    // details sit proud of the plate on the mounted face, flipping with side
+    expect(outlet.children[1].position.z).toBeGreaterThan(0);
+    const flipped = meshMap.get('e-outlet-flip').object;
+    expect(flipped.children[1].position.z).toBeLessThan(0);
   });
 
   it('uses shared material references (no cloning)', () => {

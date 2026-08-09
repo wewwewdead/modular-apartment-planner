@@ -65,6 +65,14 @@ function cloneWindow(windowItem, wallIdMap) {
   };
 }
 
+function cloneElectricalDevice(device, wallIdMap) {
+  return {
+    ...device,
+    id: generateId('elec'),
+    wallId: wallIdMap.get(device.wallId) || device.wallId,
+  };
+}
+
 function cloneColumn(column) {
   return {
     ...column,
@@ -322,6 +330,7 @@ export function createDuplicatedFloor(sourceFloor) {
     rooms: (sourceFloor.rooms || []).map(cloneRoom),
     doors: (sourceFloor.doors || []).map((door) => cloneDoor(door, wallIdMap)),
     windows: (sourceFloor.windows || []).map((windowItem) => cloneWindow(windowItem, wallIdMap)),
+    electricalDevices: (sourceFloor.electricalDevices || []).map((device) => cloneElectricalDevice(device, wallIdMap)),
     columns,
     beams: (sourceFloor.beams || []).map((beam) => cloneBeam(beam, columnIdMap, elevationDelta)),
     stairs: (sourceFloor.stairs || []).map((stair) =>

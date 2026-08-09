@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { WORLD_CITIES, searchCities, nearestCity } from '@/analysis/worldCities';
+import { WORLD_BORDERS_PATH, WORLD_LAND_PATH } from '@/analysis/worldOutline';
 import styles from './LocationPicker.module.css';
 
 /**
@@ -10,11 +11,18 @@ import styles from './LocationPicker.module.css';
  *
  * The map is an equirectangular projection — longitude and latitude map
  * linearly to x and y, which makes hit-testing exact and reversible with two
- * lines of arithmetic. It draws a graticule and the bundled city index rather
- * than coastlines: shipping real outlines would mean either a megabyte of path
- * data or a tile server, and neither is worth it when a sun study only needs
- * the position to within tens of kilometres. The city scatter follows habitable
- * land closely enough to navigate by.
+ * lines of arithmetic, and which lets `worldOutline.js` store real coastlines
+ * pre-projected: its coordinates *are* the viewBox's, so nothing is transformed
+ * at render time.
+ *
+ * It drew no coastlines at first, on the theory that they would cost a megabyte
+ * of path data or a tile server. That was wrong by a factor of twenty. Natural
+ * Earth's 1:110m outlines, simplified to the third of a degree this map can
+ * actually resolve, are about 50 kB of source — and without them the picker was
+ * a scatter of city dots that you had to already know the world to read.
+ *
+ * Still no tiles and no network: the whole map is two paths and a graticule, so
+ * the PWA's "works offline" claim survives intact.
  */
 
 const MAP_WIDTH = 360;
@@ -131,7 +139,16 @@ export default function LocationPicker({ latitude, longitude, onChange }) {
       >
         <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} className={styles.ocean} />
 
-        {/* Graticule every 30°, with the equator and prime meridian emphasised. */}
+        {/* Land first, then the borders drawn over it as strokes. Filling each
+            country separately would show every sliver the simplification opened
+            up along a shared border. */}
+        <path d={WORLD_LAND_PATH} className={styles.land} />
+        <path d={WORLD_BORDERS_PATH} className={styles.border} />
+
+        {/* Graticule every 30°, with the equator and prime meridian emphasised.
+            Drawn over the land rather than under it: a graticule that stops at
+            the coast reads as a rendering fault, and the tropics below have to
+            be followed across Africa and Asia to be worth anything. */}
         {[-60, -30, 30, 60].map((lat) => (
           <line
             key={`lat${lat}`}
@@ -168,12 +185,14 @@ export default function LocationPicker({ latitude, longitude, onChange }) {
           />
         ))}
 
+        {/* Cities were the map once and are now landmarks on it, so they are
+            drawn back enough to stop competing with the coastline. Sized against
+            the rendered width, not the viewBox: the map is about 220px wide in
+            the sidebar, so a 360-unit viewBox scales by ~0.6 and anything under
+            r=1.4 lands sub-pixel and vanishes. */}
         {WORLD_CITIES.map((city) => {
           const point = project(city);
-          // Sized against the rendered width, not the viewBox: the map is about
-          // 220px wide in the sidebar, so a 360-unit viewBox scales by ~0.6 and
-          // anything under r=1.5 lands sub-pixel and vanishes.
-          return <circle key={city.id} cx={point.x} cy={point.y} r="1.6" className={styles.cityDot} />;
+          return <circle key={city.id} cx={point.x} cy={point.y} r="1.4" className={styles.cityDot} />;
         })}
 
         {marker && (

@@ -544,6 +544,82 @@ function createFixtureObject(descriptor, materialPalette) {
   return group;
 }
 
+// ── Electrical devices ──
+// Local frame: x along the wall, y up from the plate bottom, z across the wall;
+// descriptor.faceSign picks which ±z face carries the sockets/toggles so the
+// details always face the room the device serves.
+
+function buildOutletDevice(group, W, H, D, face, palette) {
+  for (const dy of [-26, 26]) {
+    const socket = addCylinder(group, 'fixtureAccentDark', 15, 15, 6, 16, 0, H / 2 + dy, face * (D / 2 + 3), palette);
+    socket.rotation.x = Math.PI / 2;
+  }
+}
+
+function buildGfciOutletDevice(group, W, H, D, face, palette) {
+  // Decora-style rectangular insert with test/reset buttons between the sockets
+  addBox(group, 'fixtureAccentCeramic', 56, 90, 8, 0, H / 2, face * (D / 2 + 4), palette);
+  addBox(group, 'fixtureAccentDark', 40, 26, 6, 0, H / 2 + 26, face * (D / 2 + 8), palette);
+  addBox(group, 'fixtureAccentDark', 40, 26, 6, 0, H / 2 - 26, face * (D / 2 + 8), palette);
+  addBox(group, 'fixtureAccentMetal', 22, 10, 5, 0, H / 2 + 4, face * (D / 2 + 8), palette);
+  addBox(group, 'fixtureAccentMetal', 22, 10, 5, 0, H / 2 - 8, face * (D / 2 + 8), palette);
+}
+
+function build220vOutletDevice(group, W, H, D, face, palette) {
+  // Single heavy round receptacle on a wider plate
+  addBox(group, 'electricalPlate', W + 16, H + 8, D, 0, H / 2, 0, palette);
+  const socket = addCylinder(group, 'fixtureAccentDark', 30, 30, 10, 20, 0, H / 2, face * (D / 2 + 5), palette);
+  socket.rotation.x = Math.PI / 2;
+  const pin = addCylinder(group, 'fixtureAccentMetal', 9, 9, 6, 12, 0, H / 2, face * (D / 2 + 12), palette);
+  pin.rotation.x = Math.PI / 2;
+}
+
+function buildSwitchDevice(group, W, H, D, face, palette) {
+  const toggle = addBox(group, 'fixtureAccentMetal', 14, 32, 24, 0, H / 2, face * (D / 2 + 10), palette);
+  toggle.rotation.x = face * -0.45;
+}
+
+function build3waySwitchDevice(group, W, H, D, face, palette) {
+  // Flat rocker paddle — visually distinct from the single-pole toggle
+  addBox(group, 'fixtureAccentCeramic', 46, 80, 10, 0, H / 2, face * (D / 2 + 5), palette);
+  addBox(group, 'fixtureAccentDark', 46, 4, 4, 0, H / 2, face * (D / 2 + 10), palette);
+}
+
+function buildDimmerSwitchDevice(group, W, H, D, face, palette) {
+  const knob = addCylinder(group, 'fixtureAccentMetal', 20, 22, 16, 20, 0, H / 2, face * (D / 2 + 8), palette);
+  knob.rotation.x = Math.PI / 2;
+  addBox(group, 'fixtureAccentDark', 4, 14, 4, 0, H / 2 + 8, face * (D / 2 + 15), palette);
+}
+
+const ELECTRICAL_DEVICE_BUILDERS = {
+  outlet: buildOutletDevice,
+  'outlet-gfci': buildGfciOutletDevice,
+  'outlet-220v': build220vOutletDevice,
+  switch: buildSwitchDevice,
+  'switch-3way': build3waySwitchDevice,
+  'switch-dimmer': buildDimmerSwitchDevice,
+};
+
+function createElectricalDeviceObject(descriptor, materialPalette) {
+  const group = new THREE.Group();
+  const W = descriptor.size.x;
+  const H = descriptor.size.y;
+  const D = descriptor.size.z;
+  const face = descriptor.faceSign ?? 1;
+
+  const builder = ELECTRICAL_DEVICE_BUILDERS[descriptor.deviceType];
+  // 220v draws its own, wider plate
+  if (builder !== build220vOutletDevice) {
+    addBox(group, descriptor.materialKey, W, H, D, 0, H / 2, 0, materialPalette);
+  }
+  (builder || buildOutletDevice)(group, W, H, D, face, materialPalette);
+
+  group.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation));
+  group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+
+  return group;
+}
+
 // ── Railing ──
 
 function createRailingObject(descriptor, materialPalette) {
@@ -656,6 +732,7 @@ function createObjectForDescriptor(descriptor, materialPalette) {
   if (descriptor.geometry === 'window') return createWindowObject(descriptor, materialPalette);
   if (descriptor.geometry === 'railing') return createRailingObject(descriptor, materialPalette);
   if (descriptor.geometry === 'fixture') return createFixtureObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'electricalDevice') return createElectricalDeviceObject(descriptor, materialPalette);
   if (descriptor.geometry === 'wallFastener') return createWallFastenerObject(descriptor, materialPalette);
   return createBoxObject(descriptor, materialPalette);
 }

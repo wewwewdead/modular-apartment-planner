@@ -1,10 +1,9 @@
-import { BEAM_DEPTH, BEAM_WIDTH, SITE_EXPOSURE_CLASSES } from './defaults';
+import { BEAM_DEPTH, BEAM_WIDTH } from './defaults';
 import { getFloorElevation, getFloorTopElevation } from './floorModels';
 import {
   createColumnStack,
   createGridAxis,
   createStructuralGrid,
-  normalizeSiteExposureClass,
   resolveGridIntersection,
   syncCanonicalBuilding,
 } from './buildingModels';
@@ -104,12 +103,6 @@ export const BUILDING_COMMANDS = Object.freeze({
   DEFINE_PROPERTY_BOUNDARY: 'DefinePropertyBoundary',
   CONFIGURE_SITE_SETBACKS: 'ConfigureSiteSetbacks',
   CONFIGURE_SITE_LOCATION: 'ConfigureSiteLocation',
-  // CACHE_SITE_WIND_CLIMATE was removed by plan amendment 14. A fetched wind
-  // climate is a cache, not a document edit: writing it through a command put a
-  // network result on the undo stack, so enabling a wind study destroyed the
-  // redo stack and undoing past it discarded the climate. The fetch cache is
-  // now localStorage (src/persistence/windClimateCache.js) and the project file
-  // carries a snapshot written at explicit save time only.
   UPSERT_SOLAR_STUDY_TARGET: 'UpsertSolarStudyTarget',
   REMOVE_SOLAR_STUDY_TARGET: 'RemoveSolarStudyTarget',
   CONFIGURE_RECTANGULAR_SITE: 'ConfigureRectangularSite',
@@ -1762,11 +1755,6 @@ function definePropertyBoundary(project, command) {
  *
  * The north angle lives here too: coordinates place the site on the globe, but
  * only the north angle says which way the drawing is turned.
- *
- * The terrain exposure class rides along on the same command for the same
- * reason: it is a property of WHERE the site is, not of any one study, and the
- * wind runner reads it off the site rather than off its own settings. Omitting
- * it leaves whatever the site already carries, exactly as the north angle does.
  */
 function configureSiteLocation(project, command) {
   const { latitude, longitude } = command;
@@ -1793,18 +1781,7 @@ function configureSiteLocation(project, command) {
       { timeZone: command.timeZone },
     );
   }
-  if (command.exposureClass != null && !SITE_EXPOSURE_CLASSES.includes(command.exposureClass)) {
-    return commandError(
-      project,
-      command,
-      'invalid-exposure-class',
-      `Site exposure must be one of: ${SITE_EXPOSURE_CLASSES.join(', ')}.`,
-      { exposureClass: command.exposureClass },
-    );
-  }
-
   const nextProject = updateSite(project, (site) => {
-    const coordinatesChanged = site.latitude !== latitude || site.longitude !== longitude;
     return {
       ...site,
       latitude,
@@ -1812,14 +1789,6 @@ function configureSiteLocation(project, command) {
       timeZone: command.timeZone.trim(),
       northAngle: command.northAngle ?? site.northAngle ?? 0,
       locationLabel: command.locationLabel ?? site.locationLabel ?? '',
-      exposureClass: normalizeSiteExposureClass(command.exposureClass ?? site.exposureClass),
-      // A rose fitted for the old coordinates must never silently survive a
-      // location change. Keeping it for timezone/north edits is safe. Both the
-      // saved snapshot and the legacy cache are dropped: nothing writes the
-      // legacy shape any more, but a file saved before plan amendment 14 still
-      // arrives carrying one, and it is just as wrong for the new coordinates.
-      windClimateSnapshot: coordinatesChanged ? null : site.windClimateSnapshot || null,
-      windClimateCache: coordinatesChanged ? null : site.windClimateCache || null,
     };
   });
 

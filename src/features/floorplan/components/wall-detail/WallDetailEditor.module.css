@@ -895,6 +895,11 @@
 .canvas[data-tool='select'] {
   cursor: grab;
 }
+/* Ctrl held with Select armed: the next drag duplicates rather than moves. */
+.canvas[data-copy='true'],
+.canvas[data-copy='true'] * {
+  cursor: copy;
+}
 .canvas[data-tool='pan'] {
   cursor: grab;
 }
@@ -1013,6 +1018,41 @@
   paint-order: stroke fill;
   font-family: var(--font-blueprint);
   font-weight: 800;
+}
+
+/* ---------- Selected-piece size tag ----------
+   Pinned to the selected board or frame member so its width × height is read
+   off the drawing. Text is centred on the piece and outlined against whatever
+   it sits on, and the whole tag is inert so it can never swallow a click meant
+   for the piece underneath it. */
+
+.canvasSizeTag {
+  pointer-events: none;
+}
+.canvasSizeTag text {
+  fill: #e8f1f7;
+  stroke: #0c1218;
+  stroke-width: 0.34em;
+  paint-order: stroke fill;
+  text-anchor: middle;
+  font-family: var(--font-blueprint);
+  font-weight: 800;
+}
+/* First line is the name of the piece; the size line carries the weight. */
+.canvasSizeTag text:nth-of-type(1) {
+  fill: #ffd9a0;
+  font-size: 0.86em;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.canvasSizeTag text:nth-of-type(3) {
+  fill: #9fb3c0;
+  font-size: 0.86em;
+}
+.sizeTagLeader {
+  stroke: #ffd9a0;
+  stroke-width: 1px;
+  opacity: 0.75;
 }
 
 /* ---------- Element hover feedback ---------- */

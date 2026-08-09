@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PHASE_VIEW, filterFloorByPhase, isObjectVisibleInPhase } from './phaseFilter';
+import { PHASE_VIEW, filterFloorByPhase, filterProjectByPhase, isObjectVisibleInPhase } from './phaseFilter';
 
 const PHASES = [
   { id: 'p1', name: 'Phase 1', order: 0, visible: true },
@@ -91,5 +91,87 @@ describe('filterFloorByPhase strict phase views', () => {
     const filtered = filterFloorByPhase(floorFixture(), withHidden, null, PHASE_VIEW.ALL);
     expect(ids(filtered.annotations)).toEqual(['dim_p3', 'dim_unphased']);
     expect(ids(filtered.sectionCuts)).toEqual(['sec_unphased']);
+  });
+});
+
+describe('filterProjectByPhase — project-level collections', () => {
+  function projectFixture() {
+    return {
+      id: 'proj-1',
+      phases: PHASES,
+      floors: [floorFixture()],
+      roofSystem: null,
+      trussSystems: [{ id: 'truss_p1', phaseId: 'p1' }],
+      ceilings: [
+        { id: 'ceiling_p1', floorId: 'floor-1', phaseId: 'p1' },
+        { id: 'ceiling_p3', floorId: 'floor-1', phaseId: 'p3' },
+        { id: 'ceiling_unphased', floorId: 'floor-1', phaseId: null },
+      ],
+    };
+  }
+
+  it('filters ceilings alongside truss systems in the single view', () => {
+    const filtered = filterProjectByPhase(projectFixture(), 'p3', PHASE_VIEW.SINGLE);
+    expect(ids(filtered.ceilings)).toEqual(['ceiling_p3']);
+    expect(ids(filtered.trussSystems)).toEqual([]);
+  });
+
+  it('accumulates ceilings up to the active phase but still hides unphased ones', () => {
+    const filtered = filterProjectByPhase(projectFixture(), 'p3', PHASE_VIEW.CUMULATIVE);
+    expect(ids(filtered.ceilings)).toEqual(['ceiling_p1', 'ceiling_p3']);
+  });
+
+  it('hides a ceiling whose phase eye toggle is off', () => {
+    const project = { ...projectFixture(), phases: PHASES.map((p) => (p.id === 'p1' ? { ...p, visible: false } : p)) };
+    const filtered = filterProjectByPhase(project, null, PHASE_VIEW.ALL);
+    expect(ids(filtered.ceilings)).toEqual(['ceiling_p3', 'ceiling_unphased']);
+  });
+
+  it('returns the project untouched on the All-view fast path', () => {
+    const project = projectFixture();
+    expect(filterProjectByPhase(project, null, PHASE_VIEW.ALL)).toBe(project);
+  });
+});
+
+describe('filterFloorByPhase — electrical devices', () => {
+  // Two walls: one visible in phase 1, one in phase 3. Devices are hosted on
+  // both, so the second one is only reachable through its host wall.
+  function deviceFloorFixture() {
+    return {
+      id: 'floor-1',
+      walls: [
+        { id: 'wall_p1', phaseId: 'p1' },
+        { id: 'wall_p3', phaseId: 'p3' },
+      ],
+      doors: [],
+      windows: [],
+      electricalDevices: [
+        { id: 'elec_p1', wallId: 'wall_p1', phaseId: 'p1' },
+        { id: 'elec_p3', wallId: 'wall_p1', phaseId: 'p3' },
+        { id: 'elec_on_hidden_wall', wallId: 'wall_p3', phaseId: 'p1' },
+      ],
+    };
+  }
+
+  it('filters out a device whose own phase is hidden', () => {
+    // Only p2 is hidden, so every host wall survives and the eye toggle is the
+    // sole reason a device can disappear here.
+    const floor = deviceFloorFixture();
+    floor.electricalDevices = [
+      { id: 'elec_p1', wallId: 'wall_p1', phaseId: 'p1' },
+      { id: 'elec_p2', wallId: 'wall_p1', phaseId: 'p2' },
+    ];
+    const withHidden = PHASES.map((p) => (p.id === 'p2' ? { ...p, visible: false } : p));
+
+    const filtered = filterFloorByPhase(floor, withHidden, null, PHASE_VIEW.ALL);
+    expect(ids(filtered.walls)).toEqual(['wall_p1', 'wall_p3']);
+    expect(ids(filtered.electricalDevices)).toEqual(['elec_p1']);
+  });
+
+  it('filters out a device on a phase-hidden wall even when its own phase is visible', () => {
+    const filtered = filterFloorByPhase(deviceFloorFixture(), PHASES, 'p1', PHASE_VIEW.SINGLE);
+    expect(ids(filtered.walls)).toEqual(['wall_p1']);
+    // elec_on_hidden_wall is a phase-1 object, but wall_p3 is gone from this view.
+    expect(ids(filtered.electricalDevices)).toEqual(['elec_p1']);
   });
 });

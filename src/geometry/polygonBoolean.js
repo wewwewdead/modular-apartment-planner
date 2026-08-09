@@ -62,6 +62,23 @@ export function intersectionArea(pointsA, pointsB) {
 }
 
 /**
+ * Clip a subject polygon to a clip polygon. Returns the same region list shape
+ * as `subtractPolygons` — a concave clip can split the subject into several
+ * disjoint regions, each with its own outline and holes.
+ */
+export function intersectPolygons(subjectPoints, clipPoints) {
+  if (!subjectPoints || subjectPoints.length < 3 || !clipPoints || clipPoints.length < 3) return [];
+
+  try {
+    return fromLibraryMultiPolygon(
+      polygonClipping.intersection([toLibraryRing(subjectPoints)], [toLibraryRing(clipPoints)]),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Above this many input polygons, union them as a balanced binary tree instead
  * of in one flat call. The sweep-line cost grows with the number of edge
  * *intersections*, which for heavily-overlapping input is closer to quadratic

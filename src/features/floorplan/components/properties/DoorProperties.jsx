@@ -1,7 +1,13 @@
 import { memo } from 'react';
-import InputField from '../InputField';
 import PhaseSelector from '../PhaseSelector';
 import styles from '../PropertiesPanel.module.css';
+import { NumberField, Readout, Section, SelectField, Stack, panelKitStyles } from './PanelKit';
+
+const DOOR_TYPES = [
+  { value: 'swing', label: 'Swing' },
+  { value: 'double', label: 'Double' },
+  { value: 'sliding', label: 'Sliding' },
+];
 
 function DoorProperties({ door, wall, dispatch, floorId, u, phases }) {
   const updateDoor = (updates) => {
@@ -9,128 +15,70 @@ function DoorProperties({ door, wall, dispatch, floorId, u, phases }) {
   };
 
   const doorType = door.type || 'swing';
-  const ventilation = {
-    operable: door.ventilation?.operable ?? true,
-    openFraction: door.ventilation?.openFraction ?? 0,
-    dischargeCoefficient: door.ventilation?.dischargeCoefficient ?? 0.62,
-  };
-  const updateVentilation = (updates) => updateDoor({ ventilation: { ...ventilation, ...updates } });
+  const swings = doorType !== 'double';
+  const flip = () => updateDoor({ openDirection: door.openDirection === 'left' ? 'right' : 'left' });
 
   return (
-    <div>
-      <div className={styles.title}>Door</div>
+    <div className={panelKitStyles.gutter}>
       <PhaseSelector phaseId={door.phaseId} phases={phases} onChange={(v) => updateDoor({ phaseId: v })} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-        <label style={{ flex: '0 0 80px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>Type</label>
-        <select
-          value={doorType}
-          onChange={(e) => updateDoor({ type: e.target.value })}
-          style={{
-            flex: 1,
-            height: '28px',
-            padding: '0 4px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: '12px',
-            background: 'var(--color-surface-elevated)',
-          }}
-        >
-          <option value="swing">Swing</option>
-          <option value="double">Double</option>
-          <option value="sliding">Sliding</option>
-        </select>
-      </div>
-      <InputField
-        label="Width"
-        type="number"
-        suffix={u.suffix}
-        step={u.step(50)}
-        value={u.toDisplay(door.width)}
-        onChange={(v) => updateDoor({ width: Math.max(400, u.fromDisplay(v)) })}
-      />
-      <InputField
-        label="Height"
-        type="number"
-        suffix={u.suffix}
-        step={u.step(50)}
-        value={u.toDisplay(door.height)}
-        onChange={(v) => updateDoor({ height: Math.max(300, u.fromDisplay(v)) })}
-      />
-      <InputField
-        label="Sill"
-        type="number"
-        suffix={u.suffix}
-        step={u.step(50)}
-        value={u.toDisplay(door.sillHeight)}
-        onChange={(v) => updateDoor({ sillHeight: u.fromDisplay(v) })}
-      />
-      <InputField
-        label="Offset"
-        type="number"
-        suffix={u.suffix}
-        value={u.toDisplay(door.offset)}
-        onChange={(v) => updateDoor({ offset: Math.max(0, u.fromDisplay(v)) })}
-      />
-      {doorType !== 'double' && (
-        <>
-          <InputField
-            label={doorType === 'sliding' ? 'Slide Dir' : 'Swing'}
-            value={door.openDirection}
-            readOnly={false}
-            onChange={() =>
-              updateDoor({
-                openDirection: door.openDirection === 'left' ? 'right' : 'left',
-              })
-            }
-          />
-          <button
-            className={styles.actionBtn}
-            onClick={() =>
-              updateDoor({
-                openDirection: door.openDirection === 'left' ? 'right' : 'left',
-              })
-            }
-          >
-            {doorType === 'sliding' ? 'Toggle Slide Direction' : 'Toggle Swing Direction'}
-          </button>
-        </>
-      )}
-      <div className={styles.subtitle}>Natural Ventilation</div>
-      <label
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          marginBottom: '8px',
-          color: 'var(--color-text-secondary)',
-          fontSize: '12px',
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={ventilation.operable}
-          onChange={(event) => updateVentilation({ operable: event.target.checked })}
+
+      <Section id="door.leaf" title="Leaf" summary={`${u.toDisplay(door.width)} × ${u.toDisplay(door.height)}`}>
+        <SelectField label="Type" value={doorType} onChange={(type) => updateDoor({ type })}>
+          {DOOR_TYPES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </SelectField>
+        <NumberField
+          label="Width"
+          value={u.toDisplay(door.width)}
+          step={u.step(50)}
+          unit={u.suffix}
+          onChange={(v) => updateDoor({ width: Math.max(400, u.fromDisplay(v)) })}
         />
-        Participates in airflow model
-      </label>
-      <InputField
-        label="Open Fraction"
-        type="number"
-        suffix="%"
-        step={5}
-        value={Math.round(ventilation.openFraction * 100)}
-        readOnly={!ventilation.operable}
-        onChange={(value) => updateVentilation({ openFraction: Math.min(1, Math.max(0, value / 100)) })}
-      />
-      <InputField
-        label="Discharge Cd"
-        type="number"
-        step={0.01}
-        value={ventilation.dischargeCoefficient}
-        readOnly={!ventilation.operable}
-        onChange={(value) => updateVentilation({ dischargeCoefficient: Math.min(1, Math.max(0.05, value)) })}
-      />
-      {wall && <InputField label="Wall" value={wall.id.split('_').pop()} readOnly />}
+        <NumberField
+          label="Height"
+          value={u.toDisplay(door.height)}
+          step={u.step(50)}
+          unit={u.suffix}
+          onChange={(v) => updateDoor({ height: Math.max(300, u.fromDisplay(v)) })}
+        />
+        {/*
+         * One control per action. This used to be a text input that looked
+         * editable, silently discarded whatever you typed, and flipped the
+         * value instead — with a button doing the identical thing beneath it.
+         */}
+        {swings ? (
+          <Stack>
+            <button type="button" className={styles.actionBtn} onClick={flip}>
+              {doorType === 'sliding' ? 'Slides from' : 'Swings from'} {door.openDirection} — flip
+            </button>
+          </Stack>
+        ) : null}
+      </Section>
+
+      <Section
+        id="door.placement"
+        title="Placement"
+        defaultOpen={false}
+        summary={`${u.toDisplay(door.offset)} along wall`}
+      >
+        <NumberField
+          label="Along wall"
+          value={u.toDisplay(door.offset)}
+          unit={u.suffix}
+          onChange={(v) => updateDoor({ offset: Math.max(0, u.fromDisplay(v)) })}
+        />
+        <NumberField
+          label="Sill"
+          value={u.toDisplay(door.sillHeight)}
+          step={u.step(50)}
+          unit={u.suffix}
+          onChange={(v) => updateDoor({ sillHeight: u.fromDisplay(v) })}
+        />
+        {wall ? <Readout label="Host wall" value={wall.id.split('_').pop()} muted /> : null}
+      </Section>
     </div>
   );
 }

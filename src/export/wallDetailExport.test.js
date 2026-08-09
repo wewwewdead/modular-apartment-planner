@@ -65,6 +65,24 @@ describe('wall detail export', () => {
     expect(svg).toContain('22.0 / 22.0 mm panel landing per side');
   });
 
+  it('draws each face as seen standing in front of it, mirroring U for the far-side face', () => {
+    const { floor, wall } = fixture();
+
+    // interiorSide is left (default), so the interior face is viewed from the
+    // wall's far side: its drawing mirrors U. The vertical screw guide stored at
+    // U 400 on a 3000 mm wall must land at x = 2600 in the drawing.
+    const interiorSvg = createWallDetailSvg(wall, floor, 'interior');
+    expect(interiorSvg).toContain('data-view-mirrored="true"');
+    expect(interiorSvg).toContain('U origin (wall start) at the RIGHT edge');
+    expect(interiorSvg).toContain('x1="2600"');
+    expect(interiorSvg).not.toContain('x1="400"');
+
+    // The exterior face is the un-mirrored view for this wall.
+    const exteriorSvg = createWallDetailSvg(wall, floor, 'exterior');
+    expect(exteriorSvg).toContain('data-view-mirrored="false"');
+    expect(exteriorSvg).toContain('U origin (wall start) at the LEFT edge');
+  });
+
   it('exports a traced cut panel as a manufacturing path', () => {
     const { floor, wall } = fixture();
     wall.assembly.detailing.sides.interior.layout = {

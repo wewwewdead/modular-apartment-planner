@@ -1,75 +1,16 @@
 import { getFloorStackBounds } from '@/domain/floorModels';
 import { getProjectTrussSystem, getTrussTypeAttachedRoofType, resolveTrussType } from '@/domain/trussModels';
-import { add, dot, perpendicular, scale, subtract } from '@/geometry/point';
 import { buildTrussSystemGeometry } from '@/geometry/trussGeometry';
 import { buildTrussProfile, resolveTrussMetrics } from './profile';
+import {
+  buildSystemBoundary,
+  collectSystemCopyPlanPoints,
+  projectPointOntoAxis,
+  resolveSystemLayoutRange,
+  resolveSystemPlanAxes,
+} from './systemPlanAxes';
 
 const EPSILON = 1e-6;
-
-function normalizePlanVector(vector, fallback = { x: 1, y: 0 }) {
-  const x = Number(vector?.x || 0);
-  const y = Number(vector?.y || 0);
-  const length = Math.hypot(x, y);
-  if (length <= EPSILON) {
-    return { ...fallback };
-  }
-
-  return {
-    x: x / length,
-    y: y / length,
-  };
-}
-
-function projectPointOntoAxis(point, origin, axis) {
-  return dot(subtract(point, origin), axis);
-}
-
-function pointFromAxisCoordinates(origin, axisX, axisY, x, y) {
-  return add(add(origin, scale(axisX, x)), scale(axisY, y));
-}
-
-function collectSystemCopyPlanPoints(systemGeometry) {
-  return (systemGeometry?.instances || []).flatMap((instanceGeometry) =>
-    (instanceGeometry.copies || []).flatMap((copy) => [copy.overallStartPoint, copy.overallEndPoint]),
-  );
-}
-
-function collectSystemLayoutGuidePoints(systemGeometry) {
-  return (systemGeometry?.instances || []).flatMap((instanceGeometry) =>
-    [instanceGeometry.layoutLineStartPoint, instanceGeometry.layoutLineEndPoint].filter(Boolean),
-  );
-}
-
-function resolveSystemPlanAxes(systemGeometry) {
-  const instanceGeometry =
-    (systemGeometry?.instances || []).find(
-      (entry) => (entry.copies || []).length || (entry.layoutLineStartPoint && entry.layoutLineEndPoint),
-    ) || null;
-  if (!instanceGeometry) return null;
-
-  const firstCopy = instanceGeometry.copies?.[0] || null;
-  const layoutAxis = normalizePlanVector(
-    subtract(
-      instanceGeometry.layoutLineEndPoint || instanceGeometry.layoutLineStartPoint || { x: 1, y: 0 },
-      instanceGeometry.layoutLineStartPoint || { x: 0, y: 0 },
-    ),
-  );
-  let spanAxis = firstCopy
-    ? normalizePlanVector(subtract(firstCopy.overallEndPoint, firstCopy.overallStartPoint), perpendicular(layoutAxis))
-    : perpendicular(layoutAxis);
-
-  if (Math.abs(dot(layoutAxis, spanAxis)) > 0.95) {
-    spanAxis = perpendicular(layoutAxis);
-  }
-
-  return {
-    origin: systemGeometry.transform?.pivot ||
-      instanceGeometry.layoutLineStartPoint ||
-      firstCopy?.overallStartPoint || { x: 0, y: 0 },
-    layoutAxis,
-    spanAxis,
-  };
-}
 
 export function getTrussRoofAttachmentElevation(trussSystem) {
   const baseElevation = Number.isFinite(trussSystem?.baseElevation) ? trussSystem.baseElevation : 0;
@@ -141,6 +82,9 @@ export function resolveTrussSystemRoofAttachmentType(trussSystem, catalog) {
   return attachmentTypes.length === 1 ? attachmentTypes[0] : null;
 }
 
+// The roof covers what the top chords cover, overhangs included; a ceiling hung
+// from the same system stops at the bearings instead — see
+// deriveCeilingBoundaryFromTrussSystem.
 export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeometry = null) {
   const systemGeometry = sourceSystemGeometry || (trussSystem ? buildTrussSystemGeometry(trussSystem) : null);
   const planAxes = resolveSystemPlanAxes(systemGeometry);
@@ -148,33 +92,12 @@ export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeome
   if (!planAxes || !copyPlanPoints.length) return null;
 
   const spanValues = copyPlanPoints.map((point) => projectPointOntoAxis(point, planAxes.origin, planAxes.spanAxis));
-  let layoutValues = copyPlanPoints.map((point) => projectPointOntoAxis(point, planAxes.origin, planAxes.layoutAxis));
-  const layoutSpan = Math.max(...layoutValues) - Math.min(...layoutValues);
 
-  if (layoutSpan <= EPSILON) {
-    const layoutGuidePoints = collectSystemLayoutGuidePoints(systemGeometry);
-    if (layoutGuidePoints.length) {
-      layoutValues = layoutGuidePoints.map((point) =>
-        projectPointOntoAxis(point, planAxes.origin, planAxes.layoutAxis),
-      );
-    }
-  }
-
-  const minSpan = Math.min(...spanValues);
-  const maxSpan = Math.max(...spanValues);
-  const minLayout = Math.min(...layoutValues);
-  const maxLayout = Math.max(...layoutValues);
-
-  if (maxSpan - minSpan <= EPSILON || maxLayout - minLayout <= EPSILON) {
-    return null;
-  }
-
-  return [
-    pointFromAxisCoordinates(planAxes.origin, planAxes.spanAxis, planAxes.layoutAxis, minSpan, minLayout),
-    pointFromAxisCoordinates(planAxes.origin, planAxes.spanAxis, planAxes.layoutAxis, maxSpan, minLayout),
-    pointFromAxisCoordinates(planAxes.origin, planAxes.spanAxis, planAxes.layoutAxis, maxSpan, maxLayout),
-    pointFromAxisCoordinates(planAxes.origin, planAxes.spanAxis, planAxes.layoutAxis, minSpan, maxLayout),
-  ];
+  return buildSystemBoundary(
+    planAxes,
+    { min: Math.min(...spanValues), max: Math.max(...spanValues) },
+    resolveSystemLayoutRange(systemGeometry, planAxes),
+  );
 }
 
 export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSystemGeometry = null) {
@@ -198,6 +121,13 @@ export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSyste
   const layoutY =
     Number(instanceGeometry.layoutLineEndPoint?.y || 0) - Number(instanceGeometry.layoutLineStartPoint?.y || 0);
   const length = Math.hypot(-layoutY, layoutX) || 1;
+  // perpendicular(layout line) is the truss span axis: profile-local x=0 (the
+  // start support, where a shed truss is LOW) sits at the axis minimum. Roof
+  // pitch directions point DOWNHILL everywhere else in the app (the preset
+  // shed plane is highest at the axis minimum), so the shed roof must pitch
+  // along the NEGATED span axis. Profile-driven types keep the span axis:
+  // they map profile position 0 to the axis minimum, matching truss local x.
+  const pitchSign = roofAttachmentType === 'shed' ? -1 : 1;
 
   return {
     roofType: roofAttachmentType,
@@ -206,8 +136,8 @@ export function deriveRoofStateFromTrussSystem(trussSystem, catalog, sourceSyste
     pitch: {
       slope: pitchSlope,
       direction: {
-        x: -layoutY / length,
-        y: layoutX / length,
+        x: (pitchSign * -layoutY) / length,
+        y: (pitchSign * layoutX) / length,
       },
       ridgeOffset:
         roofAttachmentType === 'gable'

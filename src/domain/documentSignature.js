@@ -10,6 +10,7 @@ export function deriveDocumentModelSignature(project) {
     floors: project.floors,
     roofSystem: project.roofSystem,
     trussSystems: project.trussSystems,
+    ceilings: project.ceilings,
   });
   let hash = 2166136261;
   for (let index = 0; index < serialized.length; index += 1) {

@@ -8,6 +8,7 @@ import {
   windowOutlineOnWall,
 } from '@/geometry/wallGeometry';
 import { getWallRenderData } from '@/geometry/wallColumnGeometry';
+import { wallBaseOffset } from '@/domain/wallFit';
 
 const EPSILON = 1e-6;
 
@@ -97,8 +98,8 @@ export function buildWallPreviewContext(floor, wall, floorLevel) {
     trimStartAlong,
     trimEndAlong,
     renderLength: wallLength(renderWall),
-    wallBase: floorLevel,
-    wallTop: floorLevel + (wall.height ?? 0),
+    wallBase: floorLevel + wallBaseOffset(wall),
+    wallTop: floorLevel + wallBaseOffset(wall) + (wall.height ?? 0),
   };
 
   const openings = [

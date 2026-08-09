@@ -4,6 +4,8 @@ import {
   chooseRulerStep,
   computeCanvasFit,
   friendlyAnchorPhrase,
+  mirrorAngleDegrees,
+  wallLocalToSvg,
   wallPointToFrame,
   wallUnitsPerPixel,
 } from './wallDetailCanvasMath';
@@ -47,6 +49,58 @@ describe('wallPointToFrame', () => {
     const centre = wallPointToFrame({ u: 3000, v: 1350 }, metrics, { zoom: 2, panU: 40, panV: -12 });
     expect(centre.x).toBeCloseTo(1256 / 2 + 40);
     expect(centre.y).toBeCloseTo(800 / 2 - 12);
+  });
+
+  it('reflects U on mirrored metrics so U 0 lands where the far end normally sits', () => {
+    const mirroredMetrics = computeCanvasFit({
+      frameWidth: 1256,
+      frameHeight: 800,
+      length: 6000,
+      height: 2700,
+      margin: 28,
+      mirrorU: true,
+    });
+    const viewport = { zoom: 1, panU: 0, panV: 0 };
+    const origin = wallPointToFrame({ u: 0, v: 0 }, mirroredMetrics, viewport);
+    expect(origin.x).toBeCloseTo(1256 - (1256 - 1200) / 2);
+    const farEnd = wallPointToFrame({ u: 6000, v: 0 }, mirroredMetrics, viewport);
+    expect(farEnd.x).toBeCloseTo((1256 - 1200) / 2);
+    // V is untouched by the mirror.
+    expect(origin.y).toBeCloseTo((800 - 540) / 2 + 540);
+  });
+});
+
+describe('wallLocalToSvg', () => {
+  it('maps V up-from-floor to SVG Y down, straight U by default', () => {
+    expect(wallLocalToSvg({ u: 400, v: 300 }, { length: 3000, height: 2400, mirrorU: false })).toEqual({
+      x: 400,
+      y: 2100,
+    });
+  });
+
+  it('reflects U across the wall length when the view is mirrored', () => {
+    expect(wallLocalToSvg({ u: 400, v: 300 }, { length: 3000, height: 2400, mirrorU: true })).toEqual({
+      x: 2600,
+      y: 2100,
+    });
+  });
+});
+
+describe('mirrorAngleDegrees', () => {
+  it('keeps horizontal dimension text horizontal and upright', () => {
+    expect(mirrorAngleDegrees(0)).toBe(0);
+    expect(mirrorAngleDegrees(180)).toBe(0);
+  });
+
+  it('keeps vertical dimension text reading in the same direction', () => {
+    expect(mirrorAngleDegrees(-90)).toBe(-90);
+    expect(mirrorAngleDegrees(90)).toBe(90);
+  });
+
+  it('flips the sign of sloped text so it follows the mirrored line', () => {
+    expect(mirrorAngleDegrees(30)).toBe(-30);
+    expect(mirrorAngleDegrees(-30)).toBe(30);
+    expect(mirrorAngleDegrees(45)).toBe(-45);
   });
 });
 

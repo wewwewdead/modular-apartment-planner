@@ -125,10 +125,13 @@ describe('WallDetailEditor', () => {
     ['V', 'H', 'P', 'T', 'S', 'N', 'F', 'M', 'Del'].forEach((shortcut) => {
       expect(html).toContain(`aria-keyshortcuts="${shortcut}"`);
     });
-    expect(html).toContain('Select / move — click to pick anything, drag to move it (V)');
+    expect(html).toContain('Select / move — click to pick anything, drag to move it, Ctrl-drag to copy it (V)');
     expect(html).toContain('Trace cut panel — click each corner, then close the outline (T)');
     expect(html).toContain('Draw measurement — click two exact points, or drag; Shift locks level/plumb (M)');
     expect(html).toContain('Esc cancels, then returns to Select');
+    // The copy shortcut is only discoverable if the canvas says it exists.
+    expect(html).toContain('Ctrl + drag copies a piece');
+    expect(html).toContain('hold Ctrl while dragging to copy it');
   });
 
   it('renders the canvas chrome: mm rulers, the real snap grid, and undo/redo controls', () => {
@@ -185,6 +188,27 @@ describe('WallDetailEditor', () => {
       if (hadWindow) globalThis.window = previousWindow;
       else delete globalThis.window;
     }
+  });
+
+  it('mirrors the canvas U axis only for the face viewed from the wall far side', () => {
+    // Fixture wall: interiorSide left (default), so the interior face is on the
+    // −perpendicular side and must mirror; the exterior face must not. This pins
+    // "left in the editor = left when physically facing the wall" against 3D.
+    const interiorHtml = renderToStaticMarkup(<WallDetailEditor />);
+    expect(interiorHtml).toContain('data-mirrored="true"');
+    expect(interiorHtml).toContain('scale(-1 -1)');
+    expect(interiorHtml).toContain('Origin: wall start (right edge as you face this side)');
+
+    const wall = mocks.project.floors[0].walls[0];
+    wall.assembly.detailing = createWallDetailing({
+      enabled: true,
+      sides: { interior: { enabled: true }, exterior: { enabled: true } },
+    });
+    mocks.editor.wallDetailEditor = { ...mocks.editor.wallDetailEditor, side: 'exterior' };
+    const exteriorHtml = renderToStaticMarkup(<WallDetailEditor />);
+    expect(exteriorHtml).toContain('data-mirrored="false"');
+    expect(exteriorHtml).toContain('scale(1 -1)');
+    expect(exteriorHtml).toContain('Origin: wall start (left edge as you face this side)');
   });
 
   it('opens the explicitly requested outside fiber-cement face instead of the inside plywood face', () => {

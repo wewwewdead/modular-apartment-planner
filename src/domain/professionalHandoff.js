@@ -16,6 +16,7 @@ const FLOOR_COLLECTIONS = Object.freeze([
   'walls',
   'doors',
   'windows',
+  'electricalDevices',
   'columns',
   'beams',
   'slabs',
@@ -206,6 +207,8 @@ export function deriveRevisionEntityRecords(project) {
   if (project?.roofSystem?.id) records.push(record('roofSystem', project.roofSystem.id, project.roofSystem));
   for (const entity of project?.trussSystems || [])
     if (entity?.id) records.push(record('trussSystem', entity.id, entity));
+  for (const entity of project?.ceilings || [])
+    if (entity?.id) records.push(record('ceiling', entity.id, entity, entity.floorId));
   return records.sort((a, b) => a.key.localeCompare(b.key));
 }
 

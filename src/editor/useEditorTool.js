@@ -14,6 +14,7 @@ import { createSectionPlaceHandler } from './handlers/sectionPlaceHandler';
 import { createLandingPlaceHandler } from './handlers/landingPlaceHandler';
 import { createFixturePlaceHandler } from './handlers/fixturePlaceHandler';
 import { createRailingPlaceHandler } from './handlers/railingPlaceHandler';
+import { createElectricalPlaceHandler } from './handlers/electricalPlaceHandler';
 import { createElevationSelectHandler } from './handlers/elevationSelectHandler';
 import { createRoofSelectHandler } from './handlers/roofSelectHandler';
 import { createRoofParapetPlaceHandler } from './handlers/roofParapetPlaceHandler';
@@ -190,6 +191,8 @@ export function useEditorTool({
         return createFixturePlaceHandler(ctx);
       case TOOLS.RAILING:
         return createRailingPlaceHandler(ctx);
+      case TOOLS.ELECTRICAL:
+        return createElectricalPlaceHandler(ctx);
       case TOOLS.FILLET:
         return createFilletPlaceHandler(ctx);
       default:

@@ -37,6 +37,17 @@ describe('wall detail editor geometry', () => {
     ).toEqual({ u: 1500, v: 1800 });
   });
 
+  it('reflects the pointer U on a mirrored face elevation (screen-left = far wall end)', () => {
+    const rect = { left: 10, top: 10, width: 300, height: 240 };
+    const mirrored = { ...bounds, mirrorU: true };
+    // The wall centre is its own mirror image.
+    expect(screenPointToWallLocal({ clientX: 160, clientY: 70 }, rect, mirrored)).toEqual({ u: 1500, v: 1800 });
+    // The left edge of the canvas is the wall's far end (U = length) when mirrored.
+    expect(screenPointToWallLocal({ clientX: 10, clientY: 70 }, rect, mirrored)).toEqual({ u: 3000, v: 1800 });
+    // A quarter in from screen-left reads three quarters along the wall.
+    expect(screenPointToWallLocal({ clientX: 85, clientY: 70 }, rect, mirrored)).toEqual({ u: 2250, v: 1800 });
+  });
+
   it('snaps to panel joints, framing centers, openings, and the configured grid', () => {
     const candidates = collectWallSnapCandidates({
       ...bounds,

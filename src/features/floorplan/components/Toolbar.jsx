@@ -5,7 +5,8 @@ import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { TOOLS } from '@/editor/tools';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
-import { getFloorElevation, getFloorTopElevation } from '@/domain/floorModels';
+import { getFloorElevation } from '@/domain/floorModels';
+import { resolveFloorBeamBearingLevel } from '@/domain/beamLevels';
 import { isTypingTarget } from '@/utils/keyboard';
 import {
   NewIcon,
@@ -46,12 +47,12 @@ import {
   DetectRoomsIcon,
   SidebarIcon,
   SunIcon,
-  WindIcon,
   PropertiesIcon,
   FilletIcon,
+  ElectricalIcon,
 } from '@/ui/ToolbarIcons';
 import { siteSupportsSunStudy } from '@/analysis/sunStudyState';
-import { FIXTURE_TYPES } from '@/editor/tools';
+import { ELECTRICAL_DEVICE_DEFAULTS, ELECTRICAL_DEVICE_TYPES, FIXTURE_TYPES } from '@/editor/tools';
 import Tooltip from './Tooltip';
 import styles from './Toolbar.module.css';
 
@@ -78,8 +79,26 @@ const toolItems = [
   { tool: TOOLS.COLUMN, label: 'Column', shortcut: 'C', Icon: ColumnIcon },
   { tool: TOOLS.LANDING, label: 'Landing', shortcut: 'L', Icon: LandingIcon },
   { tool: TOOLS.RAILING, label: 'Railing', shortcut: 'H', Icon: RailingIcon },
+  { tool: TOOLS.ELECTRICAL, label: 'Electrical', shortcut: 'E', Icon: ElectricalIcon },
   { tool: TOOLS.FILLET, label: 'Fillet', shortcut: 'G', Icon: FilletIcon },
 ];
+
+// Buttons carry the plan symbol's own lettering rather than a bespoke icon, so
+// the palette reads the same way the drawing does.
+const electricalDeviceCodes = {
+  [ELECTRICAL_DEVICE_TYPES.OUTLET]: 'DUP',
+  [ELECTRICAL_DEVICE_TYPES.OUTLET_GFCI]: 'GFCI',
+  [ELECTRICAL_DEVICE_TYPES.OUTLET_220V]: '220',
+  [ELECTRICAL_DEVICE_TYPES.SWITCH]: 'S',
+  [ELECTRICAL_DEVICE_TYPES.SWITCH_3WAY]: 'S3',
+  [ELECTRICAL_DEVICE_TYPES.SWITCH_DIMMER]: 'SD',
+};
+
+const electricalDeviceItems = Object.values(ELECTRICAL_DEVICE_TYPES).map((deviceType) => ({
+  deviceType,
+  label: ELECTRICAL_DEVICE_DEFAULTS[deviceType].label,
+  code: electricalDeviceCodes[deviceType],
+}));
 
 export default function Toolbar({
   onNew,
@@ -104,7 +123,6 @@ export default function Toolbar({
     selectedId,
     selectedType,
     sunStudy,
-    windStudy,
     dispatch: editorDispatch,
   } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
@@ -128,9 +146,12 @@ export default function Toolbar({
     editorDispatch({ type: 'SET_TOOL', tool });
 
     if (tool === TOOLS.BEAM) {
+      // Default to the beam that sits on top of the columns: that is the one
+      // carrying the storey you are drawing walls on. A floor/slab beam is the
+      // deck below and sets no wall height here.
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',
-        payload: { beamPlacementMode: 'floor' },
+        payload: { beamPlacementMode: 'roof_ring' },
       });
       return;
     }
@@ -215,13 +236,6 @@ export default function Toolbar({
       return;
     }
     editorDispatch({ type: 'TOGGLE_SUN_STUDY' });
-  };
-
-  const handleToggleWindStudy = () => {
-    editorDispatch({ type: 'TOGGLE_WIND_STUDY' });
-    if (!windStudy?.enabled) {
-      document.querySelector('[data-panel="wind-study"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
   };
 
   const handleDetectRooms = () => {
@@ -448,18 +462,6 @@ export default function Toolbar({
         </button>
       </Tooltip>
 
-      <Tooltip label={windStudy?.enabled ? 'Hide Pedestrian Wind' : 'Show Pedestrian Wind'}>
-        <button
-          className={`${styles.sunToggle} ${windStudy?.enabled ? styles.sunToggleActive : ''}`}
-          onClick={handleToggleWindStudy}
-          aria-label="Toggle Pedestrian Wind"
-          aria-pressed={Boolean(windStudy?.enabled)}
-        >
-          <WindIcon className={styles.sunToggleIcon} />
-          <span className={styles.sunToggleLabel}>Wind</span>
-        </button>
-      </Tooltip>
-
       {/* Tool palette - inline row of icons */}
       <div className={styles.toolPalette}>
         <span className={styles.groupLabel}>Tools</span>
@@ -485,19 +487,40 @@ export default function Toolbar({
         <div className={styles.segmentedGroup} role="group" aria-label="Beam placement elevation">
           <span className={styles.groupLabel}>Beam level</span>
           <button
-            className={toolState.beamPlacementMode !== 'roof_ring' ? styles.segmentedBtnActive : styles.segmentedBtn}
+            className={toolState.beamPlacementMode === 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn}
             onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { beamPlacementMode: 'floor' } })}
             aria-label={`Place floor or slab beam at ${Math.round(getFloorElevation(activeFloor))} millimetres`}
           >
             Floor/slab · {Math.round(getFloorElevation(activeFloor))} mm
           </button>
           <button
-            className={toolState.beamPlacementMode === 'roof_ring' ? styles.segmentedBtnActive : styles.segmentedBtn}
+            className={toolState.beamPlacementMode !== 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn}
             onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { beamPlacementMode: 'roof_ring' } })}
-            aria-label={`Place top or roof beam at ${Math.round(getFloorTopElevation(activeFloor))} millimetres`}
+            aria-label={`Place top or roof beam at ${Math.round(resolveFloorBeamBearingLevel(activeFloor))} millimetres`}
           >
-            Top/roof · {Math.round(getFloorTopElevation(activeFloor))} mm
+            Top/roof · {Math.round(resolveFloorBeamBearingLevel(activeFloor))} mm
           </button>
+        </div>
+      ) : null}
+
+      {activeTool === TOOLS.ELECTRICAL && isPlanView ? (
+        <div className={styles.toolPalette} role="group" aria-label="Electrical device type">
+          <span className={styles.groupLabel}>Device</span>
+          {electricalDeviceItems.map(({ deviceType, label, code }) => {
+            const isActive = (toolState.deviceType || ELECTRICAL_DEVICE_TYPES.OUTLET) === deviceType;
+            return (
+              <Tooltip key={deviceType} label={label}>
+                <button
+                  className={isActive ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
+                  onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { deviceType } })}
+                  aria-label={label}
+                  aria-pressed={isActive}
+                >
+                  {code}
+                </button>
+              </Tooltip>
+            );
+          })}
         </div>
       ) : null}
 

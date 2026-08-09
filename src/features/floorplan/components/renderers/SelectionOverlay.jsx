@@ -9,6 +9,8 @@ import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { getManualAnnotationFigure } from '@/annotations/scene';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 import { getRailingRenderData } from '@/geometry/railingGeometry';
+import { deviceOutlineOnWall } from '@/geometry/wallGeometry';
+import { ELECTRICAL_SYMBOL_SIZE } from '@/domain/defaults';
 
 const HANDLE_SIZE = 8; // px, will use vectorEffect
 
@@ -260,6 +262,28 @@ function SelectionOverlay({ selectedId, selectedType, floor, zoom }) {
     if (!wall) return null;
     const outline = getWallRenderData(wall, floor.columns || []).outline;
     const points = outline.map((p) => `${p.x},${p.y}`).join(' ');
+    return (
+      <polygon
+        points={points}
+        fill="none"
+        stroke="var(--color-selection)"
+        strokeWidth={2}
+        strokeDasharray="6 3"
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+
+  if (selectedType === 'electricalDevice') {
+    const device = (floor.electricalDevices || []).find((entry) => entry.id === selectedId);
+    if (!device) return null;
+    const wall = floor.walls.find((w) => w.id === device.wallId);
+    if (!wall) return null;
+    // The symbol is a fixed 300mm in model space, which shrinks to nothing at
+    // plan zooms — grow the marquee to a constant on-screen size instead.
+    const size = Math.max(ELECTRICAL_SYMBOL_SIZE, (HANDLE_SIZE * 3) / zoom);
+    const info = deviceOutlineOnWall(wall, device, size);
+    const points = [info.p1, info.p2, info.p3, info.p4].map((p) => `${p.x},${p.y}`).join(' ');
     return (
       <polygon
         points={points}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createProject, createWall } from '@/domain/models';
+import { createBeam, createColumn, createElectricalDevice, createProject, createWall } from '@/domain/models';
+import { createCeiling } from '@/domain/ceilingModels';
 import { createWallDetailing } from '@/domain/wallDetailing';
 import { HISTORY_LIMIT } from '@/domain/projectStateHelpers';
 import floorplanReducer, { initializeFloorplanState } from './floorplanReducer';
@@ -88,6 +89,44 @@ describe('floorplanReducer', () => {
     expect(nextState.project).toBe(state.project);
     expect(nextState.history).toHaveLength(0);
     expect(floorplanReducer(nextState, { type: 'SET_LIFECYCLE_STAGE', stage: 'unknown' })).toBe(nextState);
+  });
+
+  it('focuses one pane at a time, and toggling the same pane leaves focus', () => {
+    const state = initializeFloorplanState(createProject());
+
+    const canvasFocused = floorplanReducer(state, { type: 'TOGGLE_FOCUS_PANEL', panel: 'canvas' });
+    expect(canvasFocused.editor.focusedPanel).toBe('canvas');
+
+    // Switching straight to the other pane, without leaving focus first.
+    const previewFocused = floorplanReducer(canvasFocused, { type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' });
+    expect(previewFocused.editor.focusedPanel).toBe('preview');
+
+    const restored = floorplanReducer(previewFocused, { type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' });
+    expect(restored.editor.focusedPanel).toBeNull();
+  });
+
+  it('leaves focus outright when handed no panel', () => {
+    // What Escape dispatches. Toggling against whichever pane happens to be
+    // focused would be a race; this cannot land on the wrong one.
+    const state = initializeFloorplanState(createProject());
+    const focused = floorplanReducer(state, { type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' });
+
+    expect(floorplanReducer(focused, { type: 'TOGGLE_FOCUS_PANEL', panel: null }).editor.focusedPanel).toBeNull();
+    // And is harmless when nothing is focused.
+    expect(floorplanReducer(state, { type: 'TOGGLE_FOCUS_PANEL', panel: null }).editor.focusedPanel).toBeNull();
+  });
+
+  it('keeps focus out of history and off the project', () => {
+    const state = initializeFloorplanState(createProject());
+    const focused = floorplanReducer(state, { type: 'TOGGLE_FOCUS_PANEL', panel: 'canvas' });
+
+    // A view state, not an edit: undo must not have anything to undo.
+    expect(focused.project).toBe(state.project);
+    expect(focused.history).toHaveLength(0);
+  });
+
+  it('starts with nothing focused', () => {
+    expect(initializeFloorplanState(createProject()).editor.focusedPanel).toBeNull();
   });
 
   it('opens and closes the wall-detail workspace as transient editor state', () => {
@@ -444,6 +483,189 @@ describe('live-model pipeline — routed reducer cases', () => {
   });
 });
 
+describe('walls fitted to the structure above them', () => {
+  // 3400 columns carrying a 450-deep beam: a wall under it is 2950, not 3000.
+  function beamState() {
+    let state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    const columns = [
+      { ...createColumn(0, 0, 300, 300, { height: 3400 }), id: 'col_a' },
+      { ...createColumn(6000, 0, 300, 300, { height: 3400 }), id: 'col_b' },
+    ];
+    const beam = {
+      ...createBeam({ kind: 'column', id: 'col_a' }, { kind: 'column', id: 'col_b' }, 250, 450, 3400),
+      id: 'beam_top',
+    };
+    const project = {
+      ...state.project,
+      floors: state.project.floors.map((floor) =>
+        floor.id === floorId ? { ...floor, columns, beams: [beam] } : floor,
+      ),
+    };
+    state = floorplanReducer(state, { type: 'PROJECT_LOAD', project });
+    return { state, floorId };
+  }
+
+  const wallOf = (state, floorId) => state.project.floors.find((floor) => floor.id === floorId).walls[0];
+
+  it('drops a newly drawn wall onto the beam soffit', () => {
+    const { state, floorId } = beamState();
+    const wall = { ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }), id: 'wall_1' };
+    expect(wall.height).toBe(3000);
+
+    const next = floorplanReducer(state, { type: 'WALL_ADD', floorId, wall });
+
+    expect(wallOf(next, floorId).height).toBe(2950);
+  });
+
+  it('refits the wall when the beam it runs under gets deeper', () => {
+    const { state, floorId } = beamState();
+    let next = floorplanReducer(state, {
+      type: 'WALL_ADD',
+      floorId,
+      wall: { ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }), id: 'wall_1' },
+    });
+
+    next = floorplanReducer(next, { type: 'BEAM_UPDATE', floorId, beam: { id: 'beam_top', depth: 700 } });
+
+    expect(wallOf(next, floorId).height).toBe(2700);
+  });
+
+  it('leaves a wall pinned to a fixed height where the user put it', () => {
+    const { state, floorId } = beamState();
+    let next = floorplanReducer(state, {
+      type: 'WALL_ADD',
+      floorId,
+      wall: { ...createWall({ x: 0, y: 0 }, { x: 6000, y: 0 }), id: 'wall_1' },
+    });
+
+    next = floorplanReducer(next, {
+      type: 'WALL_UPDATE',
+      floorId,
+      wall: { id: 'wall_1', height: 2400, heightMode: 'manual' },
+    });
+
+    expect(wallOf(next, floorId).height).toBe(2400);
+  });
+});
+
+describe('ceilings — project collection', () => {
+  function ceilingState(ceilingOverrides = {}) {
+    const state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    const ceiling = createCeiling('Living Ceiling', { id: 'ceiling_1', floorId, ...ceilingOverrides });
+    return { state, floorId, ceiling };
+  }
+
+  it('adds, updates and deletes a ceiling as undoable project state', () => {
+    const { state, floorId, ceiling } = ceilingState();
+    const projectBeforeAdd = state.project;
+
+    const added = floorplanReducer(state, { type: 'CEILING_ADD', ceiling });
+    expect(added.project.ceilings).toHaveLength(1);
+    expect(added.project.ceilings[0]).toBe(ceiling);
+    expect(added.entities.ceilings.map((entry) => entry.id)).toEqual(['ceiling_1']);
+    expect(added.history).toHaveLength(1);
+
+    const updated = floorplanReducer(added, {
+      type: 'CEILING_UPDATE',
+      ceiling: { id: 'ceiling_1', name: 'Renamed', baseElevation: 2600 },
+    });
+    expect(updated.project.ceilings[0]).toMatchObject({
+      id: 'ceiling_1',
+      name: 'Renamed',
+      baseElevation: 2600,
+      floorId,
+    });
+    // Shallow merge keeps untouched branches intact.
+    expect(updated.project.ceilings[0].detailing).toBe(ceiling.detailing);
+
+    const undone = floorplanReducer(updated, { type: 'UNDO' });
+    expect(undone.project).toBe(added.project);
+    expect(undone.project.ceilings[0].name).toBe('Living Ceiling');
+
+    const deleted = floorplanReducer(updated, { type: 'CEILING_DELETE', ceilingId: 'ceiling_1' });
+    expect(deleted.project.ceilings).toEqual([]);
+    expect(floorplanReducer(deleted, { type: 'UNDO' }).project).toBe(updated.project);
+    // Undoing every commit returns the exact pre-ceiling project.
+    expect(
+      floorplanReducer(floorplanReducer(floorplanReducer(deleted, { type: 'UNDO' }), { type: 'UNDO' }), {
+        type: 'UNDO',
+      }).project,
+    ).toBe(projectBeforeAdd);
+  });
+
+  it('drops the ceilings of a deleted floor', () => {
+    const { state, floorId, ceiling } = ceilingState();
+    const otherFloor = { ...state.project.floors[0], id: 'floor-keep', levelIndex: 1, name: 'Level 2' };
+    let next = floorplanReducer(state, { type: 'FLOOR_ADD', floor: otherFloor });
+    next = floorplanReducer(next, { type: 'CEILING_ADD', ceiling });
+    next = floorplanReducer(next, {
+      type: 'CEILING_ADD',
+      ceiling: createCeiling('Upper Ceiling', { id: 'ceiling_2', floorId: 'floor-keep' }),
+    });
+
+    const deleted = floorplanReducer(next, { type: 'FLOOR_DELETE', floorId, fallbackFloorId: 'floor-keep' });
+    expect(deleted.project.ceilings.map((entry) => entry.id)).toEqual(['ceiling_2']);
+  });
+
+  it('shifts manual ceilings with a floor elevation change but leaves truss-attached ones alone', () => {
+    const { state, floorId } = ceilingState();
+    let next = floorplanReducer(state, {
+      type: 'CEILING_ADD',
+      ceiling: createCeiling('Manual', {
+        id: 'ceiling_manual',
+        floorId,
+        baseElevation: 2700,
+        attachment: { mode: 'manual', trussSystemId: null },
+      }),
+    });
+    next = floorplanReducer(next, {
+      type: 'CEILING_ADD',
+      ceiling: createCeiling('Truss-hung', {
+        id: 'ceiling_truss',
+        floorId,
+        baseElevation: 2700,
+        attachment: { mode: 'truss', trussSystemId: 'truss_1' },
+      }),
+    });
+
+    const raised = floorplanReducer(next, { type: 'FLOOR_UPDATE', floor: { id: floorId, elevation: 3000 } });
+    const byId = Object.fromEntries(raised.project.ceilings.map((entry) => [entry.id, entry]));
+    expect(byId.ceiling_manual.baseElevation).toBe(5700);
+    expect(byId.ceiling_truss.baseElevation).toBe(2700);
+  });
+
+  it('clears ceiling phase assignments when the phase is deleted', () => {
+    const { state, floorId } = ceilingState();
+    let next = floorplanReducer(state, { type: 'PHASE_ADD', phase: { id: 'phase_1', name: 'Phase 1', order: 0 } });
+    next = floorplanReducer(next, {
+      type: 'CEILING_ADD',
+      ceiling: createCeiling('Phased', { id: 'ceiling_1', floorId, phaseId: 'phase_1' }),
+    });
+
+    const deleted = floorplanReducer(next, { type: 'PHASE_DELETE', phaseId: 'phase_1' });
+    expect(deleted.project.phases).toEqual([]);
+    expect(deleted.project.ceilings[0].phaseId).toBeNull();
+  });
+
+  it('opens and closes the ceiling-detail workspace as transient editor state', () => {
+    const state = initializeFloorplanState(createProject());
+    expect(state.editor.ceilingDetailEditor).toBeNull();
+
+    const opened = floorplanReducer(state, { type: 'OPEN_CEILING_DETAIL_EDITOR', ceilingId: 'ceiling_1' });
+    expect(opened.editor.ceilingDetailEditor).toEqual({ ceilingId: 'ceiling_1' });
+    expect(opened.editor.selectedId).toBe('ceiling_1');
+    expect(opened.editor.selectedType).toBe('ceiling');
+    expect(opened.project).toBe(state.project);
+    expect(opened.history).toHaveLength(0);
+
+    const closed = floorplanReducer(opened, { type: 'CLOSE_CEILING_DETAIL_EDITOR' });
+    expect(closed.editor.ceilingDetailEditor).toBeNull();
+    expect(floorplanReducer(closed, { type: 'CLOSE_CEILING_DETAIL_EDITOR' })).toBe(closed);
+  });
+});
+
 describe('live-model pipeline — performance', () => {
   it('full reducer commit on a 200-wall plan stays under the CI budget (300ms)', () => {
     let state = initializeFloorplanState(createProject());
@@ -479,5 +701,79 @@ describe('live-model pipeline — performance', () => {
     // eslint-disable-next-line no-console
     console.log(`[bench] 200-wall WALL_UPDATE commit: ${elapsed.toFixed(1)}ms`);
     expect(elapsed).toBeLessThan(300);
+  });
+});
+
+describe('electrical devices', () => {
+  function loadWallState() {
+    let state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    const project = {
+      ...state.project,
+      floors: state.project.floors.map((floor) =>
+        floor.id === floorId ? { ...floor, walls: [wallFixture('host', 0, 0, 6000, 0)] } : floor,
+      ),
+    };
+    state = floorplanReducer(state, { type: 'PROJECT_LOAD', project });
+    return { state, floorId };
+  }
+
+  function addDevice(state, floorId, overrides = {}) {
+    const device = { ...createElectricalDevice('host', 1000, 'outlet', 'right'), phaseId: null, ...overrides };
+    return { state: floorplanReducer(state, { type: 'ELECTRICAL_DEVICE_ADD', floorId, device }), device };
+  }
+
+  it('round-trips add / update / delete', () => {
+    const { state: loaded, floorId } = loadWallState();
+    const { state: added, device } = addDevice(loaded, floorId);
+    expect(added.project.floors[0].electricalDevices).toEqual([device]);
+    expect(added.entities.electricalDevices).toHaveLength(1);
+
+    const updated = floorplanReducer(added, {
+      type: 'ELECTRICAL_DEVICE_UPDATE',
+      floorId,
+      device: { id: device.id, offset: 2500, side: 'left' },
+    });
+    expect(updated.project.floors[0].electricalDevices[0]).toMatchObject({ offset: 2500, side: 'left' });
+
+    const deleted = floorplanReducer(updated, {
+      type: 'ELECTRICAL_DEVICE_DELETE',
+      floorId,
+      deviceId: device.id,
+    });
+    expect(deleted.project.floors[0].electricalDevices).toEqual([]);
+  });
+
+  it('undo restores a deleted device', () => {
+    const { state: loaded, floorId } = loadWallState();
+    const { state: added, device } = addDevice(loaded, floorId);
+    const deleted = floorplanReducer(added, { type: 'ELECTRICAL_DEVICE_DELETE', floorId, deviceId: device.id });
+
+    const undone = floorplanReducer(deleted, { type: 'UNDO' });
+    expect(undone.project.floors[0].electricalDevices).toEqual([device]);
+  });
+
+  it('drops devices hosted on a deleted wall', () => {
+    const { state: loaded, floorId } = loadWallState();
+    const { state: added } = addDevice(loaded, floorId);
+
+    const afterDelete = floorplanReducer(added, { type: 'WALL_DELETE', floorId, wallId: 'host' });
+    expect(afterDelete.project.floors[0].walls).toEqual([]);
+    expect(afterDelete.project.floors[0].electricalDevices).toEqual([]);
+  });
+
+  it('re-clamps a device offset when its host wall shortens', () => {
+    const { state: loaded, floorId } = loadWallState();
+    const { state: added, device } = addDevice(loaded, floorId, { offset: 5800 });
+
+    const shortened = floorplanReducer(added, {
+      type: 'WALL_UPDATE',
+      floorId,
+      wall: { id: 'host', end: { x: 1000, y: 0 } },
+    });
+
+    // Wall is now 1000 long, so the 100mm faceplate centre cannot exceed 950.
+    expect(shortened.project.floors[0].electricalDevices[0].offset).toBe(950);
+    expect(shortened.project.floors[0].electricalDevices[0].id).toBe(device.id);
   });
 });

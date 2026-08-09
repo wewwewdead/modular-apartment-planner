@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { intersectionArea, subtractPolygons, unionRegions } from './polygonBoolean';
+import {
+  intersectPolygons,
+  intersectionArea,
+  multiPolygonArea,
+  subtractPolygons,
+  unionRegions,
+} from './polygonBoolean';
 
 const rect = (x, y, w, h) => [
   { x, y },
@@ -51,6 +57,59 @@ describe('intersectionArea', () => {
         rect(0, 0, 10, 10),
       ),
     ).toBe(0);
+  });
+});
+
+describe('intersectPolygons', () => {
+  it('returns the overlapping region of two rectangles', () => {
+    const result = intersectPolygons(rect(0, 0, 10, 10), rect(5, 5, 10, 10));
+
+    expect(result).toHaveLength(1);
+    expect(result[0].outline).toHaveLength(4);
+    expect(result[0].holes).toEqual([]);
+    expect(multiPolygonArea(result)).toBeCloseTo(25, 6);
+  });
+
+  it('returns an empty list for disjoint polygons', () => {
+    expect(intersectPolygons(rect(0, 0, 10, 10), rect(100, 100, 10, 10))).toEqual([]);
+  });
+
+  it('returns the subject unchanged when it sits fully inside the clip', () => {
+    const result = intersectPolygons(rect(20, 20, 10, 10), rect(0, 0, 100, 100));
+
+    expect(result).toHaveLength(1);
+    expect(multiPolygonArea(result)).toBeCloseTo(100, 6);
+  });
+
+  it('splits the subject into separate regions across a concave clip', () => {
+    const uShape = [
+      { x: 0, y: 0 },
+      { x: 30, y: 0 },
+      { x: 30, y: 30 },
+      { x: 20, y: 30 },
+      { x: 20, y: 10 },
+      { x: 10, y: 10 },
+      { x: 10, y: 30 },
+      { x: 0, y: 30 },
+    ];
+    const result = intersectPolygons(rect(0, 20, 30, 10), uShape);
+
+    expect(result).toHaveLength(2);
+    expect(multiPolygonArea(result)).toBeCloseTo(200, 6);
+  });
+
+  it('is safe on degenerate inputs', () => {
+    expect(intersectPolygons([], rect(0, 0, 10, 10))).toEqual([]);
+    expect(intersectPolygons(rect(0, 0, 10, 10), null)).toEqual([]);
+    expect(
+      intersectPolygons(
+        [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+        ],
+        rect(0, 0, 10, 10),
+      ),
+    ).toEqual([]);
   });
 });
 

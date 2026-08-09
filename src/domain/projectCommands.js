@@ -1,6 +1,7 @@
 import { syncWallAttachmentPoints, detachColumnAttachments } from '@/geometry/wallColumnGeometry';
 import { syncStairLandingAttachment } from '@/geometry/landingGeometry';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
+import { ELECTRICAL_PLATE } from './defaults';
 
 /**
  * Replace references to a deleted floor with a fallback floor id.
@@ -73,13 +74,15 @@ export function mergeWallUpdate(existingWall, wallUpdate, columns = []) {
 }
 
 /**
- * Clamp wall-mounted openings (doors/windows) when a wall length changes.
- * Pure function: (openings, wallId, nextWallLength) => nextOpenings
+ * Clamp wall-mounted objects (doors/windows/electrical devices) when a wall
+ * length changes. Devices carry no `width`, so their plan footprint comes in as
+ * `fallbackWidth`.
+ * Pure function: (openings, wallId, nextWallLength, fallbackWidth) => nextOpenings
  */
-export function clampWallMountedOpenings(openings, wallId, nextWallLength) {
+export function clampWallMountedOpenings(openings, wallId, nextWallLength, fallbackWidth = 0) {
   return openings.map((opening) => {
     if (opening.wallId !== wallId) return opening;
-    const nextOffset = clampWallOpeningOffset(nextWallLength, opening.width, opening.offset);
+    const nextOffset = clampWallOpeningOffset(nextWallLength, opening.width ?? fallbackWidth, opening.offset);
     return nextOffset === opening.offset ? opening : { ...opening, offset: nextOffset };
   });
 }
@@ -104,6 +107,12 @@ export function applyWallUpdate(floor, wallUpdate, columns = []) {
     walls,
     doors: clampWallMountedOpenings(floor.doors, updatedWall.id, nextWallLength),
     windows: clampWallMountedOpenings(floor.windows, updatedWall.id, nextWallLength),
+    electricalDevices: clampWallMountedOpenings(
+      floor.electricalDevices || [],
+      updatedWall.id,
+      nextWallLength,
+      ELECTRICAL_PLATE.width,
+    ),
   };
 }
 
@@ -141,6 +150,12 @@ export function applyPropagatedWallEdits(floor, propagation, columns = []) {
       walls,
       doors: clampWallMountedOpenings(nextFloor.doors, updatedWall.id, nextLength),
       windows: clampWallMountedOpenings(nextFloor.windows, updatedWall.id, nextLength),
+      electricalDevices: clampWallMountedOpenings(
+        nextFloor.electricalDevices || [],
+        updatedWall.id,
+        nextLength,
+        ELECTRICAL_PLATE.width,
+      ),
     };
   }
 

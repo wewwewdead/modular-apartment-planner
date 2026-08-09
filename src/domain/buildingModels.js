@@ -1,5 +1,4 @@
 import { generateId } from './ids';
-import { DEFAULT_SITE_EXPOSURE_CLASS, SITE_EXPOSURE_CLASSES } from './defaults';
 import { createSpaceProgram } from './apartmentProgram';
 import { createQuantityProfile } from './quantityTakeoff';
 import { DESIGN_CONFIDENCE } from './trustModels';
@@ -28,46 +27,6 @@ export const DEFAULT_JURISDICTION = Object.freeze({
 
 function stableProjectId(projectId, suffix) {
   return `${projectId || 'project'}_${suffix}`;
-}
-
-/** LEGACY: the pre-amendment-14 `site.windClimateCache`. Read-only from here on. */
-function cloneWindClimateCache(cache) {
-  if (!cache || typeof cache !== 'object' || !Array.isArray(cache.windRose)) return null;
-  return {
-    ...cache,
-    windRose: cache.windRose.map((sector) => ({ ...sector })),
-  };
-}
-
-/**
- * The versioned climate snapshot a project file carries.
- *
- * Structurally cloned so no sync can alias the loaded file's arrays, and NEVER
- * written by any reducer path: it arrives with the project at load and is
- * refreshed only by an explicit save (see persistence/serialize.js). That is
- * the whole point of plan amendment 14 — a fetched climate that mutates project
- * state is a fetched climate on the undo stack.
- */
-function cloneWindClimateSnapshot(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
-  const normals = snapshot.normals;
-  if (!normals || typeof normals !== 'object' || !Array.isArray(normals.windRose)) return null;
-  return {
-    ...snapshot,
-    normals: { ...normals, windRose: normals.windRose.map((sector) => ({ ...sector })) },
-  };
-}
-
-/**
- * Terrain exposure of the site, normalised.
- *
- * Anything unrecognised — including a project saved before the field existed —
- * lands on the default rather than being carried through: an exposure class is
- * a multiplier on every wind speed the studies report, and an unreadable one
- * must not silently become `undefined` downstream.
- */
-export function normalizeSiteExposureClass(value) {
-  return SITE_EXPOSURE_CLASSES.includes(value) ? value : DEFAULT_SITE_EXPOSURE_CLASS;
 }
 
 function createSystem(projectId, kind, overrides = {}) {
@@ -183,18 +142,6 @@ export function createCanonicalBuilding(projectId, floors = [], overrides = {}) 
         ...target,
         polygon: (target.polygon || []).map((point) => ({ ...point })),
       })),
-      // Compact fitted climate, not the raw hourly response. Keeping it on the
-      // site makes an already-loaded wind study portable and offline-capable.
-      // `windClimateSnapshot` is the current shape; `windClimateCache` is the
-      // legacy one, still read so files saved before amendment 14 keep working.
-      windClimateSnapshot: cloneWindClimateSnapshot(overrides.site?.windClimateSnapshot),
-      windClimateCache: cloneWindClimateCache(overrides.site?.windClimateCache),
-      // Terrain roughness around the site. Unlike latitude/longitude this DOES
-      // get a default: every site has some exposure, there is no such thing as
-      // "unknown terrain" that would make a wind study meaningless, and the
-      // middle category is the honest neutral guess. It is disclosed in the
-      // study's model block, so a reader always sees which one was assumed.
-      exposureClass: normalizeSiteExposureClass(overrides.site?.exposureClass),
       parkingPlan: createParkingPlan(overrides.site?.parkingPlan),
     },
     levelIds: floors.map((floor) => floor.id),
@@ -327,9 +274,6 @@ export function syncCanonicalBuilding(project) {
           ...target,
           polygon: (target.polygon || []).map((point) => ({ ...point })),
         })),
-        windClimateSnapshot: cloneWindClimateSnapshot(project.building.site?.windClimateSnapshot),
-        windClimateCache: cloneWindClimateCache(project.building.site?.windClimateCache),
-        exposureClass: normalizeSiteExposureClass(project.building.site?.exposureClass),
         parkingPlan: createParkingPlan(project.building.site?.parkingPlan),
       },
       systems: {

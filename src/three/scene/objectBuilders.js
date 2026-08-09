@@ -1,3 +1,4 @@
+import { ELECTRICAL_PLATE } from '@/domain/defaults';
 import { getFloorElevation } from '@/domain/floorModels';
 import { getSlabBottomLevel } from '@/elevations/slab';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
@@ -5,7 +6,7 @@ import { computeLandingElevation } from '@/geometry/landingGeometry';
 import { isValidSlabBoundary } from '@/geometry/slabGeometry';
 import { getRailingStairProfile } from '@/geometry/railingGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
-import { positionOnWall, wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
+import { positionOnWall, wallAngle, wallDirection, wallLength, wallOutline } from '@/geometry/wallGeometry';
 import { add, perpendicular, scale } from '@/geometry/point';
 import { arcWallOutline } from '@/geometry/filletGeometry';
 import { buildWallPreviewContexts, buildWallSolidSegments } from './wallPreviewContext';
@@ -249,12 +250,40 @@ function createWallPanelDescriptor(id, context, region, normal, layer, metadata)
   };
 }
 
-function buildDetailedWallObjects(context, assembly, layers) {
-  const detailing = resolveWallDetailing(context.wall);
+const EMPTY_HIDDEN_BOARDS = new Map();
+
+/** Board skins for the given faces, one box per wall segment per face. */
+function buildSkinDescriptors(segments, layers, normal, assembly) {
+  return segments.flatMap((segment) =>
+    layers.map((layer) => {
+      const delta = scale(normal, layer.centerOffset);
+      return createLinearBoxDescriptor(
+        `${segment.id}:${layer.side}`,
+        'wall',
+        add(segment.startPoint, delta),
+        add(segment.endPoint, delta),
+        layer.buildUp,
+        segment.baseElevation,
+        segment.topElevation - segment.baseElevation,
+        {
+          sourceId: segment.wallId,
+          floorId: segment.floorId,
+          wallId: segment.wallId,
+          wallAssembly: assembly,
+          materialKey: boardMaterialKey(layer.material),
+          assemblySide: layer.side,
+          boardMaterial: layer.material,
+        },
+      );
+    }),
+  );
+}
+
+function buildFramingMemberDescriptors(context, assembly, options = {}) {
   const normal = perpendicular(wallDirection(context.sourceWall));
   const coreMaterialKey =
     assembly.framing.material === WALL_FRAME_MATERIALS.TIMBER ? 'wallFramingTimber' : 'wallFramingSteel';
-  const descriptors = deriveWallFramingMembers(context.wall, context.floor).map((member) =>
+  return deriveWallFramingMembers(context.wall, context.floor, options).map((member) =>
     createLinearBoxDescriptor(
       `${member.id}:3d`,
       'wall',
@@ -272,6 +301,12 @@ function buildDetailedWallObjects(context, assembly, layers) {
       }),
     ),
   );
+}
+
+function buildDetailedWallObjects(context, assembly, layers) {
+  const detailing = resolveWallDetailing(context.wall);
+  const normal = perpendicular(wallDirection(context.sourceWall));
+  const descriptors = buildFramingMemberDescriptors(context, assembly);
 
   for (const layer of layers) {
     const face = detailing.sides[layer.side];
@@ -380,7 +415,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
   return descriptors;
 }
 
-function buildWallObjects(wallContexts) {
+function buildWallObjects(wallContexts, hiddenBoardSides = EMPTY_HIDDEN_BOARDS) {
   return wallContexts.flatMap((context) => {
     const assembly = resolveWallAssembly(context.wall);
     // Arc walls: create prism directly from wall geometry, skip segment splitting
@@ -432,9 +467,26 @@ function buildWallObjects(wallContexts) {
     const coreMaterialKey =
       assembly.framing.material === WALL_FRAME_MATERIALS.TIMBER ? 'wallFramingTimber' : 'wallFramingSteel';
 
+    // Board faces stripped for inspection. Whichever side is left keeps its
+    // cladding, so you can strip one face and still read the wall's thickness.
+    const hiddenSides = hiddenBoardSides.get(context.wall.id);
+    const visibleLayers = hiddenSides ? layers.filter((layer) => !hiddenSides.includes(layer.side)) : layers;
+
     const detailing = resolveWallDetailing(context.wall);
-    if (detailing.enabled && layers.some((layer) => detailing.sides[layer.side]?.enabled)) {
-      return buildDetailedWallObjects(context, assembly, layers);
+    if (detailing.enabled && visibleLayers.some((layer) => detailing.sides[layer.side]?.enabled)) {
+      return buildDetailedWallObjects(context, assembly, visibleLayers);
+    }
+
+    // With a face stripped, show the studs, tracks and noggins the wall is
+    // actually built from rather than the slab that stands in for them. The
+    // layout derives even when detailing is off — that flag governs drawing the
+    // wall, not whether it has a frame. A wall with no derivable members falls
+    // through to the core slab so it never vanishes.
+    if (visibleLayers.length < layers.length) {
+      const members = buildFramingMemberDescriptors(context, assembly, { includeWhenDisabled: true });
+      if (members.length) {
+        return [...members, ...buildSkinDescriptors(segments, visibleLayers, normal, assembly)];
+      }
     }
 
     return segments.flatMap((segment) => {
@@ -455,25 +507,7 @@ function buildWallObjects(wallContexts) {
         height,
         { ...metadata, materialKey: coreMaterialKey, assemblySide: 'core' },
       );
-      const skins = layers.map((layer) => {
-        const delta = scale(normal, layer.centerOffset);
-        return createLinearBoxDescriptor(
-          `${segment.id}:${layer.side}`,
-          'wall',
-          add(segment.startPoint, delta),
-          add(segment.endPoint, delta),
-          layer.buildUp,
-          segment.baseElevation,
-          height,
-          {
-            ...metadata,
-            materialKey: boardMaterialKey(layer.material),
-            assemblySide: layer.side,
-            boardMaterial: layer.material,
-          },
-        );
-      });
-      return [core, ...skins];
+      return [core, ...buildSkinDescriptors([segment], visibleLayers, normal, assembly)];
     });
   });
 }
@@ -641,6 +675,36 @@ function buildFixtureObjects(floor, floorLevel) {
   });
 }
 
+function buildElectricalDeviceObjects(floor, floorLevel) {
+  const walls = floor.walls || [];
+  return (floor.electricalDevices || [])
+    .map((device) => {
+      const wall = walls.find((w) => w.id === device.wallId);
+      if (!wall) return null;
+      // Plan centre sits half a plate proud of the mounted face; `mountHeight`
+      // is the plate centre, matching how device heights are called out on site.
+      const sideSign = device.side === 'left' ? -1 : 1;
+      const outset = sideSign * ((wall.thickness + ELECTRICAL_PLATE.depth) / 2);
+      const center = add(positionOnWall(wall, device.offset), scale(perpendicular(wallDirection(wall)), outset));
+      const descriptor = createBoxDescriptor(
+        device.id,
+        'electricalDevice',
+        center,
+        { x: ELECTRICAL_PLATE.width, y: ELECTRICAL_PLATE.height, z: ELECTRICAL_PLATE.depth },
+        floorLevel + Math.max(0, (device.mountHeight ?? 300) - ELECTRICAL_PLATE.height / 2),
+        wallAngle(wall),
+        { sourceId: device.id, floorId: floor.id, materialKey: 'electricalPlate' },
+      );
+      descriptor.geometry = 'electricalDevice';
+      descriptor.deviceType = device.deviceType;
+      // Which local ±z the faceplate details face: +perpendicular ('right') maps
+      // to local +z after the plan→world rotation, 'left' to −z.
+      descriptor.faceSign = sideSign;
+      return descriptor;
+    })
+    .filter(Boolean);
+}
+
 function buildRailingObjects(floor, floorLevel, landingElevationMap, crossFloorStairContexts = []) {
   const ownStairs = floor.stairs || [];
   return (floor.railings || []).map((railing) => {
@@ -709,7 +773,7 @@ export function buildFloorPreviewObjects(floor, options = {}) {
 
   return [
     ...buildSlabObjects(floor),
-    ...buildWallObjects(wallContexts),
+    ...buildWallObjects(wallContexts, options.hiddenBoardSides || EMPTY_HIDDEN_BOARDS),
     ...buildColumnObjects(floor, floorLevel),
     ...buildBeamObjects(floor),
     ...buildStairObjects(floor, floorLevel, landings, landingElevationMap),
@@ -717,6 +781,7 @@ export function buildFloorPreviewObjects(floor, options = {}) {
     ...buildDoorObjects(wallContexts),
     ...buildWindowObjects(wallContexts),
     ...buildFixtureObjects(floor, floorLevel),
+    ...buildElectricalDeviceObjects(floor, floorLevel),
     ...buildRailingObjects(floor, floorLevel, landingElevationMap, crossFloorStairContexts),
   ];
 }

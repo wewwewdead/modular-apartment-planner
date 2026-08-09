@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
+import { useDragGestureRelease } from '@/features/floorplan/hooks/useDragGestureRelease';
 import { MAX_ZOOM, MIN_ZOOM, ZOOM_FACTOR } from '@/domain/defaults';
 import { fitViewportToSheet } from '@/sheets/layout';
 import { SHEET_TOKENS } from '@/sheets/standards';
@@ -24,6 +25,8 @@ export default function SheetCanvas() {
 
   const { project, dispatch } = useProject();
   const { activeSheetId, selectedId, selectedType, viewport, dispatch: editorDispatch } = useEditor();
+
+  useDragGestureRelease(dispatch);
 
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
   const scene = useMemo(() => buildSheetScene(project, sheet), [project, sheet]);
@@ -95,6 +98,11 @@ export default function SheetCanvas() {
   const handlePointerDown = useCallback(
     (event) => {
       if (activePointerId.current !== null && activePointerId.current !== event.pointerId) return;
+
+      // Dragging a viewport rewrites the project on every pointer move, same as
+      // the plan canvas: bracket it so the drag is one undo entry and one
+      // coordination pass rather than one of each per frame.
+      dispatch({ type: 'BEGIN_DRAG_GESTURE' });
 
       if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
         capturePointer(event.pointerId);
@@ -180,6 +188,7 @@ export default function SheetCanvas() {
     [
       activePointerId,
       capturePointer,
+      dispatch,
       editorDispatch,
       getSheetPos,
       scene,

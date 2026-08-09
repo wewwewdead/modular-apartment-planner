@@ -1,6 +1,7 @@
 import { createBeam } from '@/domain/models';
 import { BEAM_WIDTH, BEAM_DEPTH } from '@/domain/defaults';
-import { getFloorElevation, getFloorTopElevation } from '@/domain/floorModels';
+import { resolveBeamBearingLevel } from '@/domain/beamLevels';
+import { getFloorElevation } from '@/domain/floorModels';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { pointInPolygon } from '@/geometry/polygon';
 
@@ -57,8 +58,14 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
         return;
       }
 
-      const placementRole = toolState.beamPlacementMode === 'roof_ring' ? 'roof_ring' : 'floor';
-      const beamLevel = placementRole === 'roof_ring' ? getFloorTopElevation(floor) : getFloorElevation(floor);
+      const placementRole = toolState.beamPlacementMode === 'floor' ? 'floor' : 'roof_ring';
+      // A top beam lands on the columns it spans; a floor/slab beam frames the
+      // deck this storey stands on, so it sits at the storey's own datum and
+      // carries nothing on this floor.
+      const beamLevel =
+        placementRole === 'roof_ring'
+          ? resolveBeamBearingLevel(floor, [toolState.startColumnId, column.id])
+          : getFloorElevation(floor);
       const beam = createBeam(
         { kind: 'column', id: toolState.startColumnId },
         { kind: 'column', id: column.id },
@@ -82,8 +89,10 @@ export function createBeamPlaceHandler({ dispatch, editorDispatch, getFloor, act
         type: 'SET_STATUS_MESSAGE',
         message:
           placementRole === 'roof_ring'
-            ? `Top / roof beam created at ${Math.round(beamLevel)} mm.`
-            : `Floor / slab beam created at ${Math.round(beamLevel)} mm.`,
+            ? `Top / roof beam created at ${Math.round(beamLevel)} mm. Walls running under it build to ${Math.round(
+                beamLevel - BEAM_DEPTH - getFloorElevation(floor),
+              )} mm.`
+            : `Floor / slab beam created at ${Math.round(beamLevel)} mm. It frames this floor's deck, so it sets no wall height here.`,
       });
     },
 

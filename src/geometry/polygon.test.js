@@ -157,9 +157,9 @@ describe('polygon math', () => {
     });
 
     it('is exactly rotated by the integer quarter-turn (x, y) -> (-y, x)', () => {
-      // The ventilation network relies on quarter-turn rotations of a scene
-      // being bit-identical; every cross product is invariant under this map and
-      // the two coordinate sums simply swap, so the centroid must rotate exactly.
+      // Quarter-turn rotations of a scene must be bit-identical: every cross
+      // product is invariant under this map and the two coordinate sums simply
+      // swap, so the centroid must rotate exactly.
       const rotated = L_SHAPE.map((point) => ({ x: -point.y, y: point.x }));
       const base = polygonAreaCentroid(L_SHAPE);
       expect(polygonAreaCentroid(rotated)).toEqual({ x: -base.y, y: base.x });

@@ -223,6 +223,29 @@ describe('migration_23_to_24 wall-detail dimension backfill', () => {
   });
 });
 
+describe('migration_24_to_25 ceiling collection backfill', () => {
+  it('adds an empty project-level ceilings array without touching the rest of the model', async () => {
+    const { migrateV24toV25 } = await import('../migrations/migration_24_to_25.js');
+    const { createProject } = await import('@/domain/models');
+    const legacy = createProject('Ceiling migration');
+    delete legacy.ceilings;
+
+    const result = migrateV24toV25(legacy);
+
+    expect(result.ceilings).toEqual([]);
+    expect(result.floors).toBe(legacy.floors);
+    expect(result.trussSystems).toBe(legacy.trussSystems);
+    // The domain format version is unchanged by this schema-only step.
+    expect(result.version).toBe(legacy.version);
+  });
+
+  it('preserves ceilings that a newer save already carried', async () => {
+    const { migrateV24toV25 } = await import('../migrations/migration_24_to_25.js');
+    const ceilings = [{ id: 'ceiling_1', floorId: 'floor_1' }];
+    expect(migrateV24toV25({ id: 'p1', ceilings }).ceilings).toBe(ceilings);
+  });
+});
+
 describe('migration_14_to_15 beam floorLevel backfill (regression)', () => {
   // Regression for a `no-undef` bug at migration_14_to_15 line 121: the beam backfill
   // loop referenced an out-of-scope `index` variable inside a `for...of floor` loop.
@@ -279,5 +302,43 @@ describe('migration_14_to_15 beam floorLevel backfill (regression)', () => {
     const result = await migrate(project);
 
     expect(result.floors[0].beams[0].floorLevel).toBe(1234);
+  });
+});
+
+describe('migration_25_to_26 electrical device collection backfill', () => {
+  it('adds an empty electricalDevices array to every floor', async () => {
+    const { migrateV25toV26 } = await import('../migrations/migration_25_to_26.js');
+    const legacy = {
+      id: 'p1',
+      floors: [
+        { id: 'floor_1', walls: [] },
+        { id: 'floor_2', walls: [] },
+      ],
+      version: 23,
+    };
+
+    const result = migrateV25toV26(legacy);
+
+    expect(result.floors.map((floor) => floor.electricalDevices)).toEqual([[], []]);
+    // The domain format version is unchanged by this schema-only step.
+    expect(result.version).toBe(legacy.version);
+  });
+
+  it('preserves devices a newer save already carried', async () => {
+    const { migrateV25toV26 } = await import('../migrations/migration_25_to_26.js');
+    const floor = { id: 'floor_1', electricalDevices: [{ id: 'elec_1', wallId: 'wall_1' }] };
+    expect(migrateV25toV26({ id: 'p1', floors: [floor] }).floors[0]).toBe(floor);
+  });
+
+  it('loads a v25 save through deserializeProject with the collection present', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const { createProject } = await import('@/domain/models');
+    const payload = createProject('Pre-electrical save');
+    payload.floors = payload.floors.map(({ electricalDevices: _devices, ...floor }) => floor);
+
+    const { project } = deserializeProject({ schemaVersion: 25, version: payload.version, data: payload });
+
+    expect(project.floors.every((floor) => Array.isArray(floor.electricalDevices))).toBe(true);
+    expect(project.floors[0].electricalDevices).toEqual([]);
   });
 });

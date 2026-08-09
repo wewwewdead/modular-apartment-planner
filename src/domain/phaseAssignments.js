@@ -2,6 +2,7 @@ export const PHASE_ASSIGNABLE_KEYS = [
   'walls',
   'doors',
   'windows',
+  'electricalDevices',
   'columns',
   'beams',
   'slabs',
@@ -43,6 +44,9 @@ export function countObjectsInProjectPhase(project, phaseId) {
   for (const trussSystem of project?.trussSystems || []) {
     if (trussSystem.phaseId === phaseId) count += 1;
   }
+  for (const ceiling of project?.ceilings || []) {
+    if (ceiling.phaseId === phaseId) count += 1;
+  }
 
   return count;
 }
@@ -56,6 +60,9 @@ export function clearProjectPhaseReferences(project, phaseId) {
     roofSystem: project.roofSystem?.phaseId === phaseId ? { ...project.roofSystem, phaseId: null } : project.roofSystem,
     trussSystems: (project.trussSystems || []).map((trussSystem) =>
       trussSystem.phaseId === phaseId ? { ...trussSystem, phaseId: null } : trussSystem,
+    ),
+    ceilings: (project.ceilings || []).map((ceiling) =>
+      ceiling.phaseId === phaseId ? { ...ceiling, phaseId: null } : ceiling,
     ),
     sheets: (project.sheets || []).map((sheet) => ({
       ...sheet,
@@ -82,6 +89,9 @@ export function sanitizeProjectPhaseReferences(project, validPhaseIds) {
       trussSystem.phaseId == null || validPhaseIds.has(trussSystem.phaseId)
         ? trussSystem
         : { ...trussSystem, phaseId: null },
+    ),
+    ceilings: (project.ceilings || []).map((ceiling) =>
+      ceiling.phaseId == null || validPhaseIds.has(ceiling.phaseId) ? ceiling : { ...ceiling, phaseId: null },
     ),
     sheets: (project.sheets || []).map((sheet) => ({
       ...sheet,

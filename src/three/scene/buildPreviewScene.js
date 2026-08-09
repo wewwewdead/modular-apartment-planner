@@ -11,6 +11,7 @@ import {
   getOrderedFloors,
 } from '@/domain/floorModels';
 import { buildTrussPreviewObjects } from '@/geometry/trussGeometry';
+import { buildCeilingPreviewObjects } from '@/geometry/ceilingGeometry';
 
 function mergeBounds(current, next) {
   if (!next) return current;
@@ -53,6 +54,8 @@ function createNavigationTarget(bounds, fallbackBounds) {
 
 export function buildPreviewScene(project, options = {}) {
   const floors = getOrderedFloors(project);
+  // { wallId: ['interior', ...] } of board faces stripped for frame inspection.
+  const hiddenBoardSides = new Map(Object.entries(options.hiddenWallBoards || {}).filter(([, sides]) => sides?.length));
   const activeFloorId = getDefaultActiveFloorId(project, options.activeFloorId);
   const activeFloor = floors.find((floor) => floor.id === activeFloorId) || null;
   const topFloor = floors[floors.length - 1] || null;
@@ -70,8 +73,34 @@ export function buildPreviewScene(project, options = {}) {
   const floorDescriptors = floors.map((floor) => {
     const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
+    const floorCeilings = (project?.ceilings || []).filter((ceiling) => ceiling.floorId === floor.id);
+    const ceilingObjects = floorCeilings.flatMap((ceiling) => buildCeilingPreviewObjects(ceiling, project));
+    // A truss-attached ceiling takes its boundary and attachment plane from its
+    // truss system, which need not be one of this floor's truss systems.
+    const ceilingTrussSystems = floorCeilings
+      .map((ceiling) => (project?.trussSystems || []).find((system) => system.id === ceiling.attachment?.trussSystemId))
+      .filter(Boolean);
+    // Ceilings are also traced around the beams, columns and walls they run
+    // into. Those normally sit on this floor, but a ceiling hung from another
+    // floor's truss stops at that floor's structure too.
+    const ceilingStructureFloors = [...new Set(ceilingTrussSystems.map((system) => system.floorId))]
+      .filter((trussFloorId) => trussFloorId && trussFloorId !== floor.id)
+      .map((trussFloorId) => floors.find((entry) => entry.id === trussFloorId))
+      .filter(Boolean);
     const systemObjects = buildFloorSystemsPreviewObjects(floor, project?.building?.systems || {});
-    const objects = [...buildFloorPreviewObjects(floor, { stairContexts }), ...systemObjects, ...trussObjects];
+    const objects = [
+      ...buildFloorPreviewObjects(floor, { stairContexts, hiddenBoardSides }),
+      ...systemObjects,
+      ...trussObjects,
+      ...ceilingObjects,
+    ];
+    // Only the floors actually holding a stripped wall get a changing key, so
+    // toggling one wall does not re-triangulate the rest of the building. The
+    // faces are part of the key: hiding the far side is a different scene.
+    const strippedHere = (floor.walls || [])
+      .filter((wall) => hiddenBoardSides.has(wall.id))
+      .map((wall) => `${wall.id}:${[...hiddenBoardSides.get(wall.id)].sort().join('+')}`)
+      .join('|');
     return {
       floorId: floor.id,
       name: floor.name,
@@ -83,13 +112,18 @@ export function buildPreviewScene(project, options = {}) {
       // updated immutably (reducers spread), so a changed floor gets a new
       // object reference while untouched floors keep identity — this lets the
       // preview object cache skip re-triangulating unchanged floors. Truss
-      // systems are separate source objects, so include their refs too.
+      // systems are separate source objects, so include their refs too — and
+      // ceilings likewise live in a project-level array.
       // stairSources/landingSources: cross-floor railing-stair attachment means
       // any floor's stairs or landings changing must rebuild every floor.
       sourceKey: {
         floor,
+        strippedHere,
         systems: project?.building?.systems,
         trussSystems: floorTrussSystems,
+        ceilings: floorCeilings,
+        ceilingTrussSystems,
+        ceilingStructureFloors,
         stairSources,
         landingSources,
       },

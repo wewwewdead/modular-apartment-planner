@@ -1,6 +1,7 @@
 import { buildProjectElevationScene } from '@/elevations/scene';
 import { getElevationView, projectElevationHorizontal } from '@/elevations/projection';
 import { getFloorElevation } from '@/domain/floorModels';
+import { wallBaseOffset } from '@/domain/wallFit';
 import { pointInPolygon } from '@/geometry/polygon';
 import { clampWallOpeningOffset, wallLength } from '@/geometry/wallGeometry';
 
@@ -95,7 +96,7 @@ export function createElevationSelectHandler({ dispatch, editorDispatch, project
         nextOffset = clampWallOpeningOffset(wallLen, windowItem.width, t * wallLen);
       }
 
-      const wallBase = getFloorElevation(floor);
+      const wallBase = getFloorElevation(floor) + wallBaseOffset(wall);
       const wallHeight = wall.height ?? 0;
       const maxSillHeight = Math.max(0, wallHeight - (windowItem.height ?? 0));
       const sceneHeight = -modelPos.y;

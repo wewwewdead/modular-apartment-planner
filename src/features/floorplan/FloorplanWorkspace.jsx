@@ -1,21 +1,52 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ClipboardProvider } from '@/app/ClipboardProvider';
 import Modal from '@/ui/Modal';
 import NewProjectModal from '@/ui/NewProjectModal';
 import { ConfirmDialogProvider } from '@/ui/ConfirmDialog';
 import styles from '@/app/App.module.css';
+import { ChevronDownIcon, ChevronUpIcon } from '@/ui/ToolbarIcons';
 import modalStyles from '@/ui/Modal.module.css';
 import { FloorplanProvider, useEditor, useFloorplanContext } from './context/FloorplanContext';
 import { DaylightStudyProvider } from './context/DaylightStudyContext';
-import { WindStudyProvider } from './context/WindStudyContext';
 import Toolbar from './components/Toolbar';
 import Sidebar from './components/Sidebar';
 import PropertiesPanel from './components/PropertiesPanel';
 import SvgCanvas from './components/renderers/SvgCanvas';
 import SheetCanvas from './components/renderers/SheetCanvas';
 import WallDetailEditor from './components/wall-detail/WallDetailEditor';
+import CeilingDetailEditor from './components/ceiling-detail/CeilingDetailEditor';
 
 const ThreePreviewPanel = lazy(() => import('./components/preview/ThreePreviewPanel'));
+
+/** How long the way out stays on screen after entering focus mode. */
+const FOCUS_HINT_LIFETIME_MS = 2600;
+
+/**
+ * A moment's reminder of how to get back.
+ *
+ * Focus mode removes every piece of chrome, which is the point of it and also
+ * the problem with it: the only remaining exits are Escape and a small button
+ * in a corner. Showing the shortcut once, briefly, on entry costs nothing and
+ * means nobody has to guess. Its caller keys it on the focused pane, so
+ * switching panes remounts it and shows the hint again — that is a fresh act of
+ * entering, and remounting beats resetting state from inside an effect.
+ */
+function FocusExitHint() {
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(false), FOCUS_HINT_LIFETIME_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div className={styles.focusHint} role="status">
+      Press <kbd className={styles.focusHintKey}>Esc</kbd> to exit focus
+    </div>
+  );
+}
 
 function EditorShell({
   project,
@@ -28,49 +59,120 @@ function EditorShell({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { workspaceMode, activeFloorId, maximizedPanel, dispatch } = useEditor();
+  const { workspaceMode, activeFloorId, focusedPanel, toolState, pastePreview, dispatch } = useEditor();
+
+  // Focus only means anything over the model workspace; the sheet view has no
+  // second pane to choose between.
+  const isFocused = workspaceMode === 'model' && Boolean(focusedPanel);
+
+  /*
+   * Focus mode keeps the toolbar, because a pane you cannot draw on is not a
+   * workspace. It can still be folded away for a completely clean view, which
+   * is what the tab under it does.
+   *
+   * Only ever hidden *inside* focus mode — the split view always has its
+   * toolbar — so the flag is read through `isFocused` rather than reset when
+   * focus ends. Within a session the choice sticks, and the tab to bring it
+   * back sits exactly where it went.
+   */
+  const [toolbarHiddenInFocus, setToolbarHiddenInFocus] = useState(false);
+  const isToolbarHidden = isFocused && toolbarHiddenInFocus;
+
+  /*
+   * Escape leaves focus mode — but the canvas tools get first refusal.
+   *
+   * On the canvas, Escape already means something: it drops a drag, clears a
+   * wall chain, aborts a paste. So focus mode stands aside whenever one of
+   * those is in flight, and you press Escape twice — once to cancel what you
+   * were doing, once to come back out. That is the order people expect.
+   *
+   * The list below is of *in-progress markers*, deliberately not "is a
+   * placement tool active". Tools do not all return to select on Escape — the
+   * wall tool clears its chain and stays on the wall tool — so keying off the
+   * active tool would mean the keyboard could never leave focus again. Every
+   * marker here is cleared by the very Escape that was withheld, which is what
+   * guarantees the second press gets through and focus can never trap you.
+   *
+   * This listener belongs to a parent, and React flushes child effects first,
+   * so the canvas has already had its turn at the key by the time this runs.
+   */
+  useEffect(() => {
+    if (!isFocused) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const target = event.target;
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName)) return;
+
+      if (focusedPanel === 'canvas') {
+        const cancellingSomething =
+          pastePreview?.active ||
+          toolState?.dragging ||
+          toolState?.pendingDrag ||
+          toolState?.start ||
+          toolState?.chainStart ||
+          toolState?.startColumnId;
+        if (cancellingSomething) return;
+      }
+
+      dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: null });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFocused, focusedPanel, toolState, pastePreview, dispatch]);
 
   return (
     <div
-      className={styles.layout}
+      className={`${styles.layout} ${isFocused ? styles.layoutFocused : ''} ${
+        isToolbarHidden ? styles.layoutToolbarHidden : ''
+      }`}
       style={{
-        '--layout-sidebar-width': isSidebarCollapsed ? '0px' : 'var(--sidebar-width)',
-        '--layout-properties-width': isPropertiesCollapsed ? '0px' : 'var(--properties-width)',
+        // In focus mode the panels float over the pane rather than taking a
+        // column from it, so the grid tracks collapse either way.
+        '--layout-sidebar-width': isSidebarCollapsed || isFocused ? '0px' : 'var(--sidebar-width)',
+        '--layout-properties-width': isPropertiesCollapsed || isFocused ? '0px' : 'var(--properties-width)',
       }}
     >
-      <div className={styles.toolbar}>
-        <Toolbar
-          onNew={onNew}
-          onSave={onSave}
-          onShare={onShare}
-          onLoad={onLoad}
-          isSidebarCollapsed={isSidebarCollapsed}
-          isPropertiesCollapsed={isPropertiesCollapsed}
-          onToggleSidebar={onToggleSidebar}
-          onToggleProperties={onToggleProperties}
-        />
-      </div>
-      <div className={`${styles.sidebar} ${isSidebarCollapsed ? styles.panelHidden : styles.sidebarVisible}`}>
+      {!isToolbarHidden && (
+        <div className={styles.toolbar}>
+          <Toolbar
+            onNew={onNew}
+            onSave={onSave}
+            onShare={onShare}
+            onLoad={onLoad}
+            isSidebarCollapsed={isSidebarCollapsed}
+            isPropertiesCollapsed={isPropertiesCollapsed}
+            onToggleSidebar={onToggleSidebar}
+            onToggleProperties={onToggleProperties}
+          />
+        </div>
+      )}
+      <div
+        className={`${styles.sidebar} ${
+          isSidebarCollapsed ? (isFocused ? '' : styles.panelHidden) : styles.sidebarVisible
+        }`}
+      >
         <Sidebar />
       </div>
       <div className={styles.canvas}>
         {workspaceMode === 'sheet' ? (
           <SheetCanvas />
         ) : (
-          <div className={`${styles.modelWorkspace} ${maximizedPanel ? styles.workspaceMaximized : ''}`}>
-            {maximizedPanel !== 'preview' && (
+          <div className={`${styles.modelWorkspace} ${focusedPanel ? styles.workspaceMaximized : ''}`}>
+            {focusedPanel !== 'preview' && (
               <div className={styles.primaryCanvas}>
                 <SvgCanvas />
               </div>
             )}
-            {maximizedPanel !== 'canvas' && (
+            {focusedPanel !== 'canvas' && (
               <div className={styles.preview}>
                 <Suspense fallback={<div className={styles.previewFallback}>Loading 3D preview...</div>}>
                   <ThreePreviewPanel
                     project={project}
                     activeFloorId={activeFloorId}
-                    isMaximized={maximizedPanel === 'preview'}
-                    onToggleMaximize={() => dispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'preview' })}
+                    isFocused={focusedPanel === 'preview'}
+                    onToggleFocus={() => dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' })}
                   />
                 </Suspense>
               </div>
@@ -78,9 +180,26 @@ function EditorShell({
           </div>
         )}
       </div>
-      <div className={`${styles.properties} ${isPropertiesCollapsed ? styles.panelHidden : styles.propertiesVisible}`}>
+      <div
+        className={`${styles.properties} ${
+          isPropertiesCollapsed ? (isFocused ? '' : styles.panelHidden) : styles.propertiesVisible
+        }`}
+      >
         <PropertiesPanel />
       </div>
+      {isFocused && (
+        <button
+          type="button"
+          className={`${styles.toolbarTab} ${isToolbarHidden ? styles.toolbarTabRaised : ''}`}
+          onClick={() => setToolbarHiddenInFocus((hidden) => !hidden)}
+          title={isToolbarHidden ? 'Show toolbar' : 'Hide toolbar'}
+          aria-label={isToolbarHidden ? 'Show toolbar' : 'Hide toolbar'}
+          aria-expanded={!isToolbarHidden}
+        >
+          {isToolbarHidden ? <ChevronDownIcon /> : <ChevronUpIcon />}
+        </button>
+      )}
+      {isFocused && <FocusExitHint key={focusedPanel} />}
     </div>
   );
 }
@@ -114,6 +233,8 @@ function FloorplanShell() {
       />
 
       {state.editor.wallDetailEditor && <WallDetailEditor />}
+
+      {state.editor.ceilingDetailEditor && <CeilingDetailEditor />}
 
       {showNewProjectModal && (
         <NewProjectModal onConfirm={actions.project.createProject} onClose={actions.workspace.closeNewProjectModal} />
@@ -206,9 +327,7 @@ export default function FloorplanWorkspace({ initialProject, isPlayground = fals
                 phase-filtered project; outside the shell, because the sidebar
                 panel and the canvas overlay must share one result. */}
             <DaylightStudyProvider>
-              <WindStudyProvider>
-                <FloorplanShell />
-              </WindStudyProvider>
+              <FloorplanShell />
             </DaylightStudyProvider>
           </FloorplanProvider>
         </ConfirmDialogProvider>

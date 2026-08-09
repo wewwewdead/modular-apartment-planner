@@ -26,6 +26,7 @@ const INSPECTABLE_TYPES = new Set([
   'door',
   'window',
   'fixture',
+  'electricalDevice',
   'railing',
   'roofSystem',
   'parapet',
@@ -45,6 +46,7 @@ const TYPE_LABELS = {
   door: 'Door',
   window: 'Window',
   fixture: 'Fixture',
+  electricalDevice: 'Electrical Device',
   railing: 'Railing',
   roofSystem: 'Roof',
   parapet: 'Parapet',
@@ -61,6 +63,15 @@ const FIXTURE_TYPE_LABELS = {
   table: 'Table',
   tv: 'TV',
   sofa: 'Sofa',
+};
+
+const ELECTRICAL_DEVICE_TYPE_LABELS = {
+  outlet: 'Outlet',
+  'outlet-gfci': 'GFCI Outlet',
+  'outlet-220v': '220V Outlet',
+  switch: 'Switch',
+  'switch-3way': '3-Way Switch',
+  'switch-dimmer': 'Dimmer Switch',
 };
 
 function mmRow(label, value) {
@@ -110,6 +121,8 @@ function findObjectInFloor(floor, selectedType, selectedId) {
       return floor.windows?.find((windowItem) => windowItem.id === selectedId) || null;
     case 'fixture':
       return (floor.fixtures || []).find((fixture) => fixture.id === selectedId) || null;
+    case 'electricalDevice':
+      return (floor.electricalDevices || []).find((device) => device.id === selectedId) || null;
     case 'railing':
       return (floor.railings || []).find((r) => r.id === selectedId) || null;
     default:
@@ -170,6 +183,8 @@ function titleForObject(selectedType, object, floor) {
       return `${TYPE_LABELS[selectedType]} ${object.id.split('_').pop()}`;
     case 'fixture':
       return FIXTURE_TYPE_LABELS[object.fixtureType] || 'Fixture';
+    case 'electricalDevice':
+      return ELECTRICAL_DEVICE_TYPE_LABELS[object.deviceType] || 'Electrical Device';
     case 'railing': {
       const typeLabel = object.type ? object.type.charAt(0).toUpperCase() + object.type.slice(1) : 'Railing';
       return `${typeLabel} Railing ${object.id.split('_').pop()}`;
@@ -235,6 +250,11 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
       return [mmRow('Width', object.width), mmRow('Height', object.height), mmRow('Sill', object.sillHeight)];
     case 'fixture':
       return [mmRow('Width', object.width), mmRow('Depth', object.depth)];
+    case 'electricalDevice':
+      return [
+        mmRow('Mount Height', object.mountHeight),
+        { label: 'Side', value: object.side === 'left' ? 'Left' : 'Right' },
+      ];
     case 'railing':
       return [
         mmRow('Length', railingLength(object)),

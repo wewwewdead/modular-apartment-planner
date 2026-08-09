@@ -1,5 +1,6 @@
 import { getFloorElevation, getFloorStackBounds, getOrderedFloors, resolveProjectFloor } from '@/domain/floorModels';
 import { getProjectTrussSystems } from '@/domain/trussModels';
+import { wallBaseOffset } from '@/domain/wallFit';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { computeLandingElevation } from '@/geometry/landingGeometry';
@@ -39,8 +40,8 @@ function buildWallRects(floor, view) {
         `wall-elev-${wall.id}`,
         'wall',
         projectPlanPoints(view, renderData.outline),
-        floorElevation,
-        floorElevation + (wall.height ?? 0),
+        floorElevation + wallBaseOffset(wall),
+        floorElevation + wallBaseOffset(wall) + (wall.height ?? 0),
         { sourceId: wall.id },
       );
     })
@@ -133,8 +134,8 @@ function buildDoorRects(floor, view) {
         `door-elev-${door.id}`,
         'door',
         projectPlanPoints(view, [info.p1, info.p2, info.p3, info.p4]),
-        floorElevation + (door.sillHeight ?? 0),
-        floorElevation + (door.sillHeight ?? 0) + (door.height ?? 0),
+        floorElevation + wallBaseOffset(wall) + (door.sillHeight ?? 0),
+        floorElevation + wallBaseOffset(wall) + (door.sillHeight ?? 0) + (door.height ?? 0),
         { sourceId: door.id },
       );
     })
@@ -152,8 +153,8 @@ function buildWindowRects(floor, view) {
         `window-elev-${windowItem.id}`,
         'window',
         projectPlanPoints(view, [info.p1, info.p2, info.p3, info.p4]),
-        floorElevation + (windowItem.sillHeight ?? 0),
-        floorElevation + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
+        floorElevation + wallBaseOffset(wall) + (windowItem.sillHeight ?? 0),
+        floorElevation + wallBaseOffset(wall) + (windowItem.sillHeight ?? 0) + (windowItem.height ?? 0),
         { sourceId: windowItem.id },
       );
     })

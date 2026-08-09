@@ -8,13 +8,11 @@ import SectionRenderer from './SectionRenderer';
 import ShadowOverlay from './ShadowOverlay';
 import DaylightOverlay from './DaylightOverlay';
 import SolarAccessOverlay from './SolarAccessOverlay';
-import WindOverlay from './WindOverlay';
 import SitePlanOverlay from './SitePlanOverlay';
 import StructuralGridOverlay from './StructuralGridOverlay';
 import WetCoreOverlay from './WetCoreOverlay';
 import ApartmentDesignOverlay from './ApartmentDesignOverlay';
 import { useDaylightStudy } from '../../context/DaylightStudyContext';
-import { useWindStudy } from '../../context/WindStudyContext';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
 
 const FloorScene = memo(function FloorScene({
@@ -48,7 +46,6 @@ const FloorScene = memo(function FloorScene({
   // sidebar panel is looking at the same study, and the grid variant costs a
   // worker run nobody wants to pay for twice.
   const daylight = useDaylightStudy();
-  const wind = useWindStudy();
 
   useRenderProfile('FloorScene', {
     viewMode,
@@ -88,7 +85,6 @@ const FloorScene = memo(function FloorScene({
               sliceHeight={daylight.solarAccess?.facadeSliceHeight}
               stale={daylight.solarStale}
             />
-            <WindOverlay study={wind.study} stale={wind.stale} />
             <StructuralGridOverlay
               structuralSystem={filteredProject.building?.systems?.structural}
               floor={filteredFloor}

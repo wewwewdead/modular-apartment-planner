@@ -101,34 +101,63 @@
   outline: none;
 }
 
+/* A 360-unit viewBox drawn about 220px wide scales by ~0.6, so a stroke width
+   in user units is a width in degrees of longitude and lands sub-pixel. Every
+   line here is a hairline on the *screen*, which is what `non-scaling-stroke`
+   gives — free of the usual caveat, since this map never pans or zooms. */
+.map line,
+.map path {
+  vector-effect: non-scaling-stroke;
+}
+
 .ocean {
-  fill: #eef1f4;
+  fill: #dbe5ec;
+}
+
+/* `evenodd` because the land data carries one interior ring — the Caspian —
+   and an interior ring only punches a hole under the default `nonzero` rule if
+   it happens to wind the opposite way to its parent. */
+.land {
+  fill: #eae7dc;
+  fill-rule: evenodd;
+  stroke: rgba(84, 102, 116, 0.75);
+  stroke-width: 0.6px;
+  stroke-linejoin: round;
+}
+
+/* Borders carry less weight than any coast: a country you have crossed into is
+   a smaller fact than the edge of the land. */
+.border {
+  fill: none;
+  stroke: rgba(112, 120, 124, 0.5);
+  stroke-width: 0.5px;
+  stroke-linejoin: round;
 }
 
 .graticule {
-  stroke: rgba(90, 105, 125, 0.18);
-  stroke-width: 0.4;
+  stroke: rgba(70, 90, 110, 0.16);
+  stroke-width: 0.5px;
 }
 
 .equator {
-  stroke: rgba(90, 105, 125, 0.38);
-  stroke-width: 0.5;
+  stroke: rgba(70, 90, 110, 0.32);
+  stroke-width: 0.7px;
 }
 
 /* Tropics of Cancer and Capricorn — the band where the sun can reach the zenith. */
 .tropic {
-  stroke: rgba(200, 150, 60, 0.5);
-  stroke-width: 0.4;
+  stroke: rgba(186, 134, 44, 0.6);
+  stroke-width: 0.7px;
   stroke-dasharray: 3 2;
 }
 
 .cityDot {
-  fill: rgba(46, 66, 92, 0.78);
+  fill: rgba(46, 66, 92, 0.5);
 }
 
 .markerGuide {
   stroke: var(--color-accent);
-  stroke-width: 0.5;
+  stroke-width: 0.8px;
   stroke-dasharray: 2 2;
   opacity: 0.7;
 }
@@ -136,7 +165,7 @@
 .markerHalo {
   fill: rgba(26, 122, 104, 0.22);
   stroke: var(--color-accent);
-  stroke-width: 0.7;
+  stroke-width: 1px;
 }
 
 .markerDot {

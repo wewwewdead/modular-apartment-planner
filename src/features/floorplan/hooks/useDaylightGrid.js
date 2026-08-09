@@ -20,9 +20,9 @@ import { studyRequestKey } from '@/analysis/studyRequestIdentity';
 import { useStudyWorker } from './useStudyWorker';
 
 /**
- * Quiet period before a run starts, ms. Shorter than the wind and solar
- * studies': the grid is the one an author tunes interactively, so it is worth
- * trading a few abandoned runs for a map that keeps up.
+ * Quiet period before a run starts, ms. Shorter than the solar study's: the
+ * grid is the one an author tunes interactively, so it is worth trading a few
+ * abandoned runs for a map that keeps up.
  */
 const SETTLE_MS = 350;
 

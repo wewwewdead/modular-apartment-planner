@@ -2,9 +2,12 @@
  * Turns a project plus the editor's sun-study settings into everything the
  * overlays, the panel and the 3D preview need to draw.
  *
- * One entry point, one result shape, computed synchronously. Instant and range
- * studies are fast enough to run inside a `useMemo`; the sun-hours grid is the
- * expensive one and only runs when that mode is selected.
+ * One entry point, one result shape, all pure functions of plain data. Where
+ * they run is the caller's choice: the editor runs `computeDayStudy` on a
+ * worker (`sunStudy.worker.js` via `useSunDayStudy`) because a day of shadow
+ * casts is hundreds of milliseconds, and `computeInstantShadow` on the main
+ * thread because a scrubber step must not pay a postMessage round-trip. Tests
+ * and worker-less browsers call both synchronously.
  */
 
 import { solarPosition, sunTimes, siteInstant, sampleDaySunPositions } from './solarPosition';

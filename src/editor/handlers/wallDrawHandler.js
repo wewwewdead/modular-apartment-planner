@@ -42,6 +42,7 @@ export function createWallDrawHandler({
           columns: floor.columns || [],
           snapDist: snapDistModel,
           chainStart: toolState.chainStart,
+          chainStartAttachment: toolState.chainStartAttachment,
           otherPoint: toolState.start,
         });
         if (snapResult) {
@@ -58,7 +59,13 @@ export function createWallDrawHandler({
         // First click: set start
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { start: snapped, chainStart: snapped, startAttachment: attachment, preview: null },
+          payload: {
+            start: snapped,
+            chainStart: snapped,
+            startAttachment: attachment,
+            chainStartAttachment: attachment,
+            preview: null,
+          },
         });
       } else {
         // Second+ click: create wall and chain
@@ -78,7 +85,13 @@ export function createWallDrawHandler({
         if (toolState.chainStart && distance(endPt, toolState.chainStart) < snapDistModel) {
           editorDispatch({
             type: 'UPDATE_TOOL_STATE',
-            payload: { start: null, chainStart: null, startAttachment: null, preview: null },
+            payload: {
+              start: null,
+              chainStart: null,
+              startAttachment: null,
+              chainStartAttachment: null,
+              preview: null,
+            },
           });
         } else {
           // Chain: end becomes new start
@@ -103,6 +116,7 @@ export function createWallDrawHandler({
           columns: floor.columns || [],
           snapDist: snapDistModel,
           chainStart: toolState.chainStart,
+          chainStartAttachment: toolState.chainStartAttachment,
           otherPoint: toolState.start,
         });
         if (snapResult) preview = { ...snapResult.point };
@@ -121,7 +135,7 @@ export function createWallDrawHandler({
       // Finish chain
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',
-        payload: { start: null, chainStart: null, startAttachment: null, preview: null },
+        payload: { start: null, chainStart: null, startAttachment: null, chainStartAttachment: null, preview: null },
       });
     },
 
@@ -129,7 +143,7 @@ export function createWallDrawHandler({
       if (e.key === 'Escape') {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
-          payload: { start: null, chainStart: null, startAttachment: null, preview: null },
+          payload: { start: null, chainStart: null, startAttachment: null, chainStartAttachment: null, preview: null },
         });
       }
     },

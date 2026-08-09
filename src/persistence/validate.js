@@ -408,6 +408,10 @@ export function validateProjectStructure(project) {
     }
   }
 
+  if (project.ceilings != null && !Array.isArray(project.ceilings)) {
+    errors.push({ path: 'ceilings', message: 'Project ceilings must be an array' });
+  }
+
   project.floors.forEach((floor, fi) => {
     if (!floor.id) {
       errors.push({ path: `floors[${fi}].id`, message: 'Floor must have an id' });
@@ -844,6 +848,28 @@ export function validateProjectReferences(project) {
     }
   }
 
+  const trussSystemIds = new Set((project.trussSystems || []).map((ts) => ts.id));
+  for (const ceiling of project.ceilings || []) {
+    if (ceiling.phaseId && !phaseIds.has(ceiling.phaseId)) {
+      warnings.push({
+        path: `ceiling ${ceiling.id}`,
+        message: `phaseId references non-existent phase ${ceiling.phaseId}`,
+      });
+    }
+    if (ceiling.floorId && !floorIds.has(ceiling.floorId)) {
+      warnings.push({
+        path: `ceiling ${ceiling.id}`,
+        message: `References non-existent floor ${ceiling.floorId}`,
+      });
+    }
+    if (ceiling.attachment?.trussSystemId && !trussSystemIds.has(ceiling.attachment.trussSystemId)) {
+      warnings.push({
+        path: `ceiling ${ceiling.id}`,
+        message: `attachment references non-existent truss system ${ceiling.attachment.trussSystemId}`,
+      });
+    }
+  }
+
   // Check viewport phaseId references
   for (const sheet of project.sheets || []) {
     for (const vp of sheet.viewports || []) {
@@ -883,9 +909,12 @@ export function repairBrokenReferences(project) {
     const columnIds = new Set((floor.columns || []).map((column) => column.id));
     const beamIds = new Set((floor.beams || []).map((beam) => beam.id));
 
-    // Remove doors/windows pointing to non-existent walls
+    // Remove doors/windows/devices pointing to non-existent walls
     const doors = (floor.doors || []).filter((d) => !d.wallId || wallIds.has(d.wallId));
     const windows = (floor.windows || []).filter((w) => !w.wallId || wallIds.has(w.wallId));
+    const electricalDevices = (floor.electricalDevices || []).filter(
+      (device) => !device.wallId || wallIds.has(device.wallId),
+    );
 
     // Nullify invalid stair landing attachments
     const stairs = (floor.stairs || []).map((stair) => {
@@ -944,7 +973,16 @@ export function repairBrokenReferences(project) {
         return valid ? opening : { ...opening, serviceRef: null };
       }),
     }));
-    const repairedFloor = { ...floorWithoutSketchAssets, doors, windows, stairs, rooms, fixtures, slabs };
+    const repairedFloor = {
+      ...floorWithoutSketchAssets,
+      doors,
+      windows,
+      electricalDevices,
+      stairs,
+      rooms,
+      fixtures,
+      slabs,
+    };
     for (const key of PHASE_ASSIGNABLE_KEYS) {
       const arr = repairedFloor[key];
       if (!Array.isArray(arr)) continue;
@@ -980,6 +1018,20 @@ export function repairBrokenReferences(project) {
   const trussSystems = (project.trussSystems || []).map((ts) =>
     ts.phaseId && !phaseIds.has(ts.phaseId) ? { ...ts, phaseId: null } : ts,
   );
+
+  // Nullify invalid phaseId on ceilings, and drop a dangling truss attachment
+  // back to manual so the stored boundary/elevation stay the ceiling's own.
+  const trussSystemIds = new Set(trussSystems.map((ts) => ts.id));
+  const ceilings = (project.ceilings || []).map((ceiling) => {
+    let repaired = ceiling;
+    if (ceiling.phaseId && !phaseIds.has(ceiling.phaseId)) {
+      repaired = { ...repaired, phaseId: null };
+    }
+    if (ceiling.attachment?.trussSystemId && !trussSystemIds.has(ceiling.attachment.trussSystemId)) {
+      repaired = { ...repaired, attachment: { ...ceiling.attachment, mode: 'manual', trussSystemId: null } };
+    }
+    return repaired;
+  });
 
   // Nullify invalid viewport phaseId references
   const sheets = (project.sheets || []).map((sheet) => ({
@@ -1211,7 +1263,7 @@ export function repairBrokenReferences(project) {
     },
   };
 
-  return { ...project, building, floors: repairedFloors, roofSystem, trussSystems, sheets };
+  return { ...project, building, floors: repairedFloors, roofSystem, trussSystems, ceilings, sheets };
 }
 
 export function validateAndRepair(project) {

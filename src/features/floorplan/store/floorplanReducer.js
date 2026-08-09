@@ -17,6 +17,7 @@ import {
   applyProjectUpdate,
   replaceFloors,
   syncProjectStructures,
+  updateCeilings,
   updateFloor,
   updateRoofSystem,
   updateTrussSystems,
@@ -37,7 +38,6 @@ import { BUILDING_COMMANDS, executeBuildingCommand } from '@/domain/buildingComm
 import { applySunStudyPatch, createSunStudyState } from '@/analysis/sunStudyState';
 import { applyDaylightPatch, createDaylightState } from '@/analysis/daylightState';
 import { applySolarAccessPatch, createSolarAccessState } from '@/analysis/solarAccessState';
-import { applyWindStudyPatch, createWindStudyState } from '@/analysis/windState';
 import { validateBuildingCoordination } from '@/domain/buildingGraph';
 import { deriveSiteFeasibility } from '@/domain/siteModels';
 import { deriveApartmentProgram } from '@/domain/apartmentProgram';
@@ -104,6 +104,68 @@ function normalizeViewMode(viewMode) {
   return viewMode;
 }
 
+/**
+ * The whole-project coordination models. Every one of them walks the entire
+ * project, and together they cost tens of milliseconds on a modest plan
+ * (`derivePreliminaryPackage` and `validateBuildingCoordination` dominate), so
+ * they are computed once per settled edit — never per drag frame. See
+ * `createDragGesture` for how a pointer drag defers them to the mouse-up.
+ */
+function computeDerivedModels(project, validationIssues = null) {
+  return {
+    validationIssues: validationIssues || validateBuildingCoordination(project),
+    siteFeasibility: deriveSiteFeasibility(project),
+    apartmentProgram: deriveApartmentProgram(project),
+    wetCore: deriveWetCoreCoordination(project),
+    servicesCoordination: deriveServicesCoordination(project),
+    feasibilityEconomics: deriveFeasibilityEconomics(project),
+    feasibilityComparison: deriveFeasibilityComparison(project),
+    costRealization: deriveCostRealization(project),
+    documentationRealization: deriveDocumentationRealization(project),
+    professionalExchange: deriveProfessionalExchange(project),
+    professionalHandoff: deriveProfessionalHandoff(project),
+    parkingCoordination: deriveParkingCoordination(project),
+    equipmentCoordination: deriveEquipmentCoordination(project),
+    roofDrainageCoordination: deriveRoofDrainageCoordination(project),
+    testFitCoordination: deriveTestFitCoordination(project),
+    apartmentDesignCoordination: deriveApartmentDesignCoordination(project),
+    quantityTakeoff: deriveQuantityTakeoff(project),
+    spatialCoordination: deriveSpatialCoordination(project),
+    documentPackage: derivePreliminaryPackage(project),
+    structuralLoadPath: deriveConceptualLoadPath(project),
+    structuralRealization: deriveStructuralRealization(project),
+    servicesRealization: deriveServicesRealization(project),
+  };
+}
+
+/**
+ * Pointer-drag bookkeeping.
+ *
+ * A drag emits one project mutation per pointer-move event. Treating each of
+ * those as a settled edit made a drag cost one full coordination pass and one
+ * undo entry per frame — the plan visibly stalled, and a single window slide
+ * buried the undo stack under a hundred entries.
+ *
+ * So the canvas brackets a drag with BEGIN_DRAG_GESTURE / END_DRAG_GESTURE and,
+ * in between:
+ *   - only the FIRST mutation records history, so the whole drag undoes as one
+ *     step back to the pre-drag project;
+ *   - the coordination models are left at their pre-drag values and flagged
+ *     stale, then recomputed once on END.
+ *
+ * The consequence is that panels reading `derived` (the lifecycle panel, the
+ * structural-grid overlay, the status-bar issue count) show pre-drag numbers
+ * while the pointer is down and catch up on release. Geometry itself is never
+ * deferred — the canvas always draws the live project.
+ */
+function createDragGesture(derivedStale = false) {
+  return { active: false, historyRecorded: false, derivedStale };
+}
+
+function isDerivedStale(state) {
+  return Boolean(state.gesture?.derivedStale);
+}
+
 function getInitialModelViewport() {
   return { panX: 400, panY: 300, zoom: DEFAULT_ZOOM };
 }
@@ -159,16 +221,21 @@ function createInitialEditorState(activeFloorId = null) {
     statusMessage: null,
     regionSelection: null,
     pastePreview: { active: false, point: null },
-    maximizedPanel: null,
+    focusedPanel: null,
     activePhaseId: null,
     phaseViewMode: 'all',
     lifecycleStage: 'brief',
     lastRejection: null,
     wallDetailEditor: null,
+    ceilingDetailEditor: null,
+    // Board faces stripped in the 3D preview so the frame inside can be
+    // inspected: { [wallId]: ['interior'] | ['exterior'] | both }. A viewing
+    // state, not a property of the wall — it never enters history, is never
+    // saved, and an absent key means the wall is fully clad.
+    hiddenWallBoards: {},
     sunStudy: createSunStudyState(),
     daylight: createDaylightState(),
     solarAccess: createSolarAccessState(),
-    windStudy: createWindStudyState(),
   };
 }
 
@@ -183,6 +250,7 @@ function buildEntityCollections(project, activeFloorId) {
     walls: activeFloor?.walls || [],
     doors: activeFloor?.doors || [],
     windows: activeFloor?.windows || [],
+    electricalDevices: activeFloor?.electricalDevices || [],
     columns: activeFloor?.columns || [],
     beams: activeFloor?.beams || [],
     stairs: activeFloor?.stairs || [],
@@ -201,6 +269,7 @@ function buildEntityCollections(project, activeFloorId) {
     sheets: project?.sheets || [],
     phases: project?.phases || [],
     trussSystems: (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === activeFloorId),
+    ceilings: (project?.ceilings || []).filter((ceiling) => ceiling.floorId === activeFloorId),
   };
 }
 
@@ -241,29 +310,9 @@ export function initializeFloorplanState(initialProject) {
     savedVersion: 0,
     history: [],
     future: [],
+    gesture: createDragGesture(),
     derived: {
-      validationIssues: validateBuildingCoordination(syncedProject),
-      siteFeasibility: deriveSiteFeasibility(syncedProject),
-      apartmentProgram: deriveApartmentProgram(syncedProject),
-      wetCore: deriveWetCoreCoordination(syncedProject),
-      servicesCoordination: deriveServicesCoordination(syncedProject),
-      feasibilityEconomics: deriveFeasibilityEconomics(syncedProject),
-      feasibilityComparison: deriveFeasibilityComparison(syncedProject),
-      costRealization: deriveCostRealization(syncedProject),
-      documentationRealization: deriveDocumentationRealization(syncedProject),
-      professionalExchange: deriveProfessionalExchange(syncedProject),
-      professionalHandoff: deriveProfessionalHandoff(syncedProject),
-      parkingCoordination: deriveParkingCoordination(syncedProject),
-      equipmentCoordination: deriveEquipmentCoordination(syncedProject),
-      roofDrainageCoordination: deriveRoofDrainageCoordination(syncedProject),
-      testFitCoordination: deriveTestFitCoordination(syncedProject),
-      apartmentDesignCoordination: deriveApartmentDesignCoordination(syncedProject),
-      quantityTakeoff: deriveQuantityTakeoff(syncedProject),
-      spatialCoordination: deriveSpatialCoordination(syncedProject),
-      documentPackage: derivePreliminaryPackage(syncedProject),
-      structuralLoadPath: deriveConceptualLoadPath(syncedProject),
-      structuralRealization: deriveStructuralRealization(syncedProject),
-      servicesRealization: deriveServicesRealization(syncedProject),
+      ...computeDerivedModels(syncedProject),
       lastCommand: null,
     },
   });
@@ -286,29 +335,11 @@ function reduceProjectState(state, action) {
         savedVersion: 0,
         history: [],
         future: [],
+        gesture: createDragGesture(),
+        // Wall ids from the outgoing project mean nothing here.
+        editor: { ...state.editor, hiddenWallBoards: {} },
         derived: {
-          validationIssues: validateBuildingCoordination(newProject),
-          siteFeasibility: deriveSiteFeasibility(newProject),
-          apartmentProgram: deriveApartmentProgram(newProject),
-          wetCore: deriveWetCoreCoordination(newProject),
-          servicesCoordination: deriveServicesCoordination(newProject),
-          feasibilityEconomics: deriveFeasibilityEconomics(newProject),
-          feasibilityComparison: deriveFeasibilityComparison(newProject),
-          costRealization: deriveCostRealization(newProject),
-          documentationRealization: deriveDocumentationRealization(newProject),
-          professionalExchange: deriveProfessionalExchange(newProject),
-          professionalHandoff: deriveProfessionalHandoff(newProject),
-          parkingCoordination: deriveParkingCoordination(newProject),
-          equipmentCoordination: deriveEquipmentCoordination(newProject),
-          roofDrainageCoordination: deriveRoofDrainageCoordination(newProject),
-          testFitCoordination: deriveTestFitCoordination(newProject),
-          apartmentDesignCoordination: deriveApartmentDesignCoordination(newProject),
-          quantityTakeoff: deriveQuantityTakeoff(newProject),
-          spatialCoordination: deriveSpatialCoordination(newProject),
-          documentPackage: derivePreliminaryPackage(newProject),
-          structuralLoadPath: deriveConceptualLoadPath(newProject),
-          structuralRealization: deriveStructuralRealization(newProject),
-          servicesRealization: deriveServicesRealization(newProject),
+          ...computeDerivedModels(newProject),
           lastCommand: null,
         },
       };
@@ -329,29 +360,11 @@ function reduceProjectState(state, action) {
         savedVersion: 0,
         history: [],
         future: [],
+        gesture: createDragGesture(),
+        // Wall ids from the outgoing project mean nothing here.
+        editor: { ...state.editor, hiddenWallBoards: {} },
         derived: {
-          validationIssues: validateBuildingCoordination(loadedProject),
-          siteFeasibility: deriveSiteFeasibility(loadedProject),
-          apartmentProgram: deriveApartmentProgram(loadedProject),
-          wetCore: deriveWetCoreCoordination(loadedProject),
-          servicesCoordination: deriveServicesCoordination(loadedProject),
-          feasibilityEconomics: deriveFeasibilityEconomics(loadedProject),
-          feasibilityComparison: deriveFeasibilityComparison(loadedProject),
-          costRealization: deriveCostRealization(loadedProject),
-          documentationRealization: deriveDocumentationRealization(loadedProject),
-          professionalExchange: deriveProfessionalExchange(loadedProject),
-          professionalHandoff: deriveProfessionalHandoff(loadedProject),
-          parkingCoordination: deriveParkingCoordination(loadedProject),
-          equipmentCoordination: deriveEquipmentCoordination(loadedProject),
-          roofDrainageCoordination: deriveRoofDrainageCoordination(loadedProject),
-          testFitCoordination: deriveTestFitCoordination(loadedProject),
-          apartmentDesignCoordination: deriveApartmentDesignCoordination(loadedProject),
-          quantityTakeoff: deriveQuantityTakeoff(loadedProject),
-          spatialCoordination: deriveSpatialCoordination(loadedProject),
-          documentPackage: derivePreliminaryPackage(loadedProject),
-          structuralLoadPath: deriveConceptualLoadPath(loadedProject),
-          structuralRealization: deriveStructuralRealization(loadedProject),
-          servicesRealization: deriveServicesRealization(loadedProject),
+          ...computeDerivedModels(loadedProject),
           lastCommand: null,
         },
       };
@@ -379,28 +392,7 @@ function reduceProjectState(state, action) {
       return {
         ...nextState,
         derived: {
-          validationIssues: result.validation.issues,
-          siteFeasibility: deriveSiteFeasibility(result.project),
-          apartmentProgram: deriveApartmentProgram(result.project),
-          wetCore: deriveWetCoreCoordination(result.project),
-          servicesCoordination: deriveServicesCoordination(result.project),
-          feasibilityEconomics: deriveFeasibilityEconomics(result.project),
-          feasibilityComparison: deriveFeasibilityComparison(result.project),
-          costRealization: deriveCostRealization(result.project),
-          documentationRealization: deriveDocumentationRealization(result.project),
-          professionalExchange: deriveProfessionalExchange(result.project),
-          professionalHandoff: deriveProfessionalHandoff(result.project),
-          parkingCoordination: deriveParkingCoordination(result.project),
-          equipmentCoordination: deriveEquipmentCoordination(result.project),
-          roofDrainageCoordination: deriveRoofDrainageCoordination(result.project),
-          testFitCoordination: deriveTestFitCoordination(result.project),
-          apartmentDesignCoordination: deriveApartmentDesignCoordination(result.project),
-          quantityTakeoff: deriveQuantityTakeoff(result.project),
-          spatialCoordination: deriveSpatialCoordination(result.project),
-          documentPackage: derivePreliminaryPackage(result.project),
-          structuralLoadPath: deriveConceptualLoadPath(result.project),
-          structuralRealization: deriveStructuralRealization(result.project),
-          servicesRealization: deriveServicesRealization(result.project),
+          ...computeDerivedModels(result.project, result.validation.issues),
           lastCommand: {
             ok: true,
             commandType: result.commandType,
@@ -497,6 +489,17 @@ function reduceProjectState(state, action) {
       return updateTrussSystems(state, (trussSystems) =>
         trussSystems.filter((trussSystem) => trussSystem.id !== action.trussSystemId),
       );
+
+    case 'CEILING_ADD':
+      return updateCeilings(state, (ceilings) => [...ceilings, action.ceiling]);
+
+    case 'CEILING_UPDATE':
+      return updateCeilings(state, (ceilings) =>
+        ceilings.map((ceiling) => (ceiling.id === action.ceiling.id ? { ...ceiling, ...action.ceiling } : ceiling)),
+      );
+
+    case 'CEILING_DELETE':
+      return updateCeilings(state, (ceilings) => ceilings.filter((ceiling) => ceiling.id !== action.ceilingId));
 
     case 'TRUSS_INSTANCE_ADD':
       return updateTrussSystems(state, (trussSystems) =>
@@ -720,11 +723,21 @@ function reduceProjectState(state, action) {
               : trussSystem,
           );
 
+          // Truss-attached ceilings resolve their height from the truss system,
+          // which the shift above already moved — only manual ceilings store an
+          // absolute elevation that has to follow the floor.
+          const nextCeilings = (state.project.ceilings || []).map((ceiling) =>
+            ceiling.floorId === action.floor.id && ceiling.attachment?.mode === 'manual'
+              ? { ...ceiling, baseElevation: (ceiling.baseElevation ?? 0) + elevationDelta }
+              : ceiling,
+          );
+
           return {
             ...state.project,
             updatedAt: new Date().toISOString(),
             floors: sortFloors(nextFloors),
             trussSystems: nextTrussSystems,
+            ceilings: nextCeilings,
           };
         })(),
       );
@@ -764,6 +777,7 @@ function reduceProjectState(state, action) {
           trussSystems: (state.project.trussSystems || []).filter(
             (trussSystem) => trussSystem.floorId !== action.floorId,
           ),
+          ceilings: (state.project.ceilings || []).filter((ceiling) => ceiling.floorId !== action.floorId),
         },
         action.floorId,
         action.fallbackFloorId,
@@ -930,6 +944,7 @@ function reduceProjectState(state, action) {
           walls: floor.walls.filter((wall) => wall.id !== action.wallId),
           doors: floor.doors.filter((door) => door.wallId !== action.wallId),
           windows: floor.windows.filter((windowItem) => windowItem.wallId !== action.wallId),
+          electricalDevices: (floor.electricalDevices || []).filter((device) => device.wallId !== action.wallId),
         };
         if (!deleted) return nextFloor;
         return reconcileFloorRooms(nextFloor, {
@@ -1016,6 +1031,26 @@ function reduceProjectState(state, action) {
       return updateFloor(state, action.floorId, (floor) => ({
         ...floor,
         windows: floor.windows.filter((windowItem) => windowItem.id !== action.windowId),
+      }));
+
+    case 'ELECTRICAL_DEVICE_ADD':
+      return updateFloor(state, action.floorId, (floor) => ({
+        ...floor,
+        electricalDevices: [...(floor.electricalDevices || []), action.device],
+      }));
+
+    case 'ELECTRICAL_DEVICE_UPDATE':
+      return updateFloor(state, action.floorId, (floor) => ({
+        ...floor,
+        electricalDevices: (floor.electricalDevices || []).map((device) =>
+          device.id === action.device.id ? { ...device, ...action.device } : device,
+        ),
+      }));
+
+    case 'ELECTRICAL_DEVICE_DELETE':
+      return updateFloor(state, action.floorId, (floor) => ({
+        ...floor,
+        electricalDevices: (floor.electricalDevices || []).filter((device) => device.id !== action.deviceId),
       }));
 
     case 'BEAM_ADD':
@@ -1303,6 +1338,18 @@ function reduceEditorState(editorState, action) {
     case 'CLOSE_WALL_DETAIL_EDITOR':
       return editorState.wallDetailEditor ? { ...editorState, wallDetailEditor: null } : editorState;
 
+    case 'OPEN_CEILING_DETAIL_EDITOR':
+      return {
+        ...editorState,
+        ceilingDetailEditor: { ceilingId: action.ceilingId },
+        selectedId: action.ceilingId,
+        selectedType: 'ceiling',
+        statusMessage: null,
+      };
+
+    case 'CLOSE_CEILING_DETAIL_EDITOR':
+      return editorState.ceilingDetailEditor ? { ...editorState, ceilingDetailEditor: null } : editorState;
+
     case 'SET_LIFECYCLE_STAGE':
       return LIFECYCLE_STAGE_IDS.has(action.stage) ? { ...editorState, lifecycleStage: action.stage } : editorState;
 
@@ -1432,6 +1479,26 @@ function reduceEditorState(editorState, action) {
     case 'TOGGLE_GRID':
       return { ...editorState, showGrid: !editorState.showGrid };
 
+    case 'SET_WALL_BOARD_VISIBILITY': {
+      if (!action.wallId) return editorState;
+      const sides = (action.hiddenSides || []).filter((side) => side === 'interior' || side === 'exterior');
+      const current = editorState.hiddenWallBoards || {};
+      const previous = current[action.wallId] || [];
+      if (previous.length === sides.length && sides.every((side) => previous.includes(side))) return editorState;
+
+      const next = { ...current };
+      // Drop the key rather than storing an empty array, so "nothing hidden"
+      // has exactly one representation.
+      if (sides.length) next[action.wallId] = sides;
+      else delete next[action.wallId];
+      return { ...editorState, hiddenWallBoards: next };
+    }
+
+    case 'SHOW_ALL_WALL_BOARDS':
+      return Object.keys(editorState.hiddenWallBoards || {}).length
+        ? { ...editorState, hiddenWallBoards: {} }
+        : editorState;
+
     case 'TOGGLE_SUN_STUDY':
       return {
         ...editorState,
@@ -1472,18 +1539,6 @@ function reduceEditorState(editorState, action) {
       // worker run that takes seconds.
       const unchanged = Object.keys(solarAccess).every((key) => solarAccess[key] === editorState.solarAccess[key]);
       return unchanged ? editorState : { ...editorState, solarAccess };
-    }
-
-    case 'TOGGLE_WIND_STUDY':
-      return {
-        ...editorState,
-        windStudy: applyWindStudyPatch(editorState.windStudy, { enabled: !editorState.windStudy.enabled }),
-      };
-
-    case 'SET_WIND_STUDY': {
-      const windStudy = applyWindStudyPatch(editorState.windStudy, action.patch || {});
-      const unchanged = Object.keys(windStudy).every((key) => windStudy[key] === editorState.windStudy[key]);
-      return unchanged ? editorState : { ...editorState, windStudy };
     }
 
     case 'TOGGLE_SNAP':
@@ -1537,10 +1592,14 @@ function reduceEditorState(editorState, action) {
         },
       };
 
-    case 'TOGGLE_MAXIMIZE_PANEL':
+    // Focus mode: one pane fills the whole window and every other piece of
+    // chrome gets out of the way. `panel: null` leaves focus outright, which is
+    // what Escape and a workspace change need — toggling against whatever
+    // happens to be focused would be a race.
+    case 'TOGGLE_FOCUS_PANEL':
       return {
         ...editorState,
-        maximizedPanel: editorState.maximizedPanel === action.panel ? null : action.panel,
+        focusedPanel: action.panel == null || editorState.focusedPanel === action.panel ? null : action.panel,
       };
 
     case 'SET_ACTIVE_PHASE':
@@ -1605,6 +1664,29 @@ function routeStructuralActionToCommand(state, action) {
 }
 
 export default function floorplanReducer(state, action) {
+  // Gesture brackets carry no project data of their own; they only switch the
+  // store between per-frame mode and settled mode. BEGIN always starts a fresh
+  // gesture (carrying any still-stale flag forward, in case a previous END was
+  // lost), and END is a no-op unless a gesture is open, so the canvas can fire
+  // it from every pointer-release path without bookkeeping of its own.
+  if (action.type === 'BEGIN_DRAG_GESTURE') {
+    return { ...state, gesture: { active: true, historyRecorded: false, derivedStale: isDerivedStale(state) } };
+  }
+
+  if (action.type === 'END_DRAG_GESTURE') {
+    if (!state.gesture?.active && !isDerivedStale(state)) return state;
+    if (!isDerivedStale(state)) return { ...state, gesture: createDragGesture() };
+
+    return {
+      ...state,
+      gesture: createDragGesture(),
+      derived: {
+        ...computeDerivedModels(state.project),
+        lastCommand: state.derived?.lastCommand || null,
+      },
+    };
+  }
+
   const projectAction = routeStructuralActionToCommand(state, action);
   const nextProjectState = reduceProjectState(state, projectAction);
   if (nextProjectState !== state) {
@@ -1616,41 +1698,25 @@ export default function floorplanReducer(state, action) {
     const withClearedRejection = shouldClearRejection
       ? { ...nextProjectState, editor: { ...nextProjectState.editor, lastRejection: null } }
       : nextProjectState;
-    const withDerivedValidation =
-      nextProjectState.project !== state.project
-        ? {
+    const projectChanged = nextProjectState.project !== state.project;
+    // Mid-drag the coordination pass is skipped and only flagged; END_DRAG_GESTURE
+    // runs it once against the settled project.
+    const withDerivedValidation = !projectChanged
+      ? withClearedRejection
+      : withClearedRejection.gesture?.active
+        ? { ...withClearedRejection, gesture: { ...withClearedRejection.gesture, derivedStale: true } }
+        : {
             ...withClearedRejection,
+            gesture: createDragGesture(),
             derived: {
               ...withClearedRejection.derived,
-              validationIssues: validateBuildingCoordination(nextProjectState.project),
-              siteFeasibility: deriveSiteFeasibility(nextProjectState.project),
-              apartmentProgram: deriveApartmentProgram(nextProjectState.project),
-              wetCore: deriveWetCoreCoordination(nextProjectState.project),
-              servicesCoordination: deriveServicesCoordination(nextProjectState.project),
-              feasibilityEconomics: deriveFeasibilityEconomics(nextProjectState.project),
-              feasibilityComparison: deriveFeasibilityComparison(nextProjectState.project),
-              costRealization: deriveCostRealization(nextProjectState.project),
-              documentationRealization: deriveDocumentationRealization(nextProjectState.project),
-              professionalExchange: deriveProfessionalExchange(nextProjectState.project),
-              professionalHandoff: deriveProfessionalHandoff(nextProjectState.project),
-              parkingCoordination: deriveParkingCoordination(nextProjectState.project),
-              equipmentCoordination: deriveEquipmentCoordination(nextProjectState.project),
-              roofDrainageCoordination: deriveRoofDrainageCoordination(nextProjectState.project),
-              testFitCoordination: deriveTestFitCoordination(nextProjectState.project),
-              apartmentDesignCoordination: deriveApartmentDesignCoordination(nextProjectState.project),
-              quantityTakeoff: deriveQuantityTakeoff(nextProjectState.project),
-              spatialCoordination: deriveSpatialCoordination(nextProjectState.project),
-              documentPackage: derivePreliminaryPackage(nextProjectState.project),
-              structuralLoadPath: deriveConceptualLoadPath(nextProjectState.project),
-              structuralRealization: deriveStructuralRealization(nextProjectState.project),
-              servicesRealization: deriveServicesRealization(nextProjectState.project),
+              ...computeDerivedModels(nextProjectState.project),
               lastCommand:
                 projectAction.type === 'EXECUTE_BUILDING_COMMAND'
                   ? withClearedRejection.derived?.lastCommand || null
                   : null,
             },
-          }
-        : withClearedRejection;
+          };
     return syncFloorplanState(withDerivedValidation);
   }
 

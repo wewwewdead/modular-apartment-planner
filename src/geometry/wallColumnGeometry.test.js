@@ -171,6 +171,50 @@ describe('snapWallEndpoint', () => {
     });
   });
 
+  it('snaps to the column centre so a bay wall measures centre to centre', () => {
+    const col = makeColumn();
+    // Well inside the column but nowhere near a corner or a face.
+    const result = snapWallEndpoint({ x: 1030, y: 985 }, { walls: [], columns: [col], snapDist: 100 });
+    expect(result.point).toEqual({ x: 1000, y: 1000 });
+    expect(result.attachment).toMatchObject({
+      kind: 'column',
+      columnId: col.id,
+      featureType: 'centerline',
+      featureIndex: 0,
+      offset: 0,
+    });
+    // It has to resolve back to the exact centre through the normal path.
+    expect(resolveColumnAttachmentPoint(col, result.attachment)).toEqual({ x: 1000, y: 1000 });
+  });
+
+  it('still gives a face its own midpoint when the cursor is out by the column core', () => {
+    const col = makeColumn(); // 400x300, so the centre core reaches 75mm
+    // Right face midpoint is (1200,1000); the cursor sits 10mm off it and 190 from the centre.
+    const result = snapWallEndpoint({ x: 1190, y: 1000 }, { walls: [], columns: [col], snapDist: 100 });
+    expect(result.point).toEqual({ x: 1200, y: 1000 });
+    expect(result.attachment).toMatchObject({ featureType: 'face', featureIndex: 1 });
+  });
+
+  it('takes the column centre over a wall endpoint sitting on it, keeping the attachment', () => {
+    const col = makeColumn();
+    // A previous wall already died on this centre but recorded no attachment.
+    const existing = createWall({ x: 1000, y: 1000 }, { x: 5000, y: 1000 });
+    const result = snapWallEndpoint({ x: 1002, y: 1001 }, { walls: [existing], columns: [col], snapDist: 100 });
+    expect(result.point).toEqual({ x: 1000, y: 1000 });
+    expect(result.attachment).toMatchObject({ columnId: col.id, featureType: 'centerline', offset: 0 });
+  });
+
+  it('carries the chain-start attachment back when a loop closes on a column', () => {
+    const col = makeColumn();
+    const attachment = { kind: 'column', columnId: col.id, featureType: 'centerline', featureIndex: 0, offset: 0 };
+    const result = snapWallEndpoint(
+      { x: 1005, y: 1005 },
+      { walls: [], columns: [col], snapDist: 100, chainStart: { x: 1000, y: 1000 }, chainStartAttachment: attachment },
+    );
+    expect(result.point).toEqual({ x: 1000, y: 1000 });
+    expect(result.attachment).toMatchObject(attachment);
+  });
+
   it('returns null when nothing is within snap distance', () => {
     const existing = createWall({ x: 3000, y: 0 }, { x: 3000, y: 4000 });
     const result = snapWallEndpoint(

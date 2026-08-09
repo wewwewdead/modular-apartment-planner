@@ -1,9 +1,12 @@
 import { distance } from '@/geometry/point';
 import {
   clampWallOpeningOffset,
+  deviceOutlineOnWall,
   doorOutlineOnWall,
+  snapOffsetToWallColumns,
   windowOutlineOnWall,
   wallLength,
+  wallSideOfPoint,
   projectPointOnWall,
 } from '@/geometry/wallGeometry';
 import { pointInPolygon } from '@/geometry/polygon';
@@ -14,7 +17,7 @@ import { landingContainsPoint } from '@/geometry/landingGeometry';
 import { fixtureContainsPoint } from '@/geometry/fixtureGeometry';
 import { slabContainsPoint } from '@/geometry/slabGeometry';
 import { hitTestAnnotation } from '@/annotations/scene';
-import { MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
+import { ELECTRICAL_PLATE, ELECTRICAL_SYMBOL_SIZE, MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { describeWallEditRejection, propagateWallEdit } from '@/domain/modelGraph';
 import { getWallRenderData, resolveWallEndpoints, snapWallEndpoint } from '@/geometry/wallColumnGeometry';
 import { duplicateColumn } from '@/domain/columnModels';
@@ -65,6 +68,20 @@ function hitTest(modelPos, floor, project, annotationTolerance) {
   // when their footprint overlaps a wall, fixture, or room.
   const serviceHit = hitTestBuildingService(modelPos, project, floor);
   if (serviceHit) return serviceHit;
+
+  // Electrical devices are the smallest targets on the plan, so they take
+  // priority over the door/window they may sit beside. The centre-distance
+  // fallback keeps a 300mm symbol clickable at plan zooms where its outline is
+  // only a few pixels across.
+  for (const device of floor.electricalDevices || []) {
+    const wall = floor.walls.find((w) => w.id === device.wallId);
+    if (!wall) continue;
+    const info = deviceOutlineOnWall(wall, device, ELECTRICAL_SYMBOL_SIZE);
+    const poly = [info.p1, info.p2, info.p3, info.p4];
+    if (pointInPolygon(modelPos, poly) || distance(modelPos, info.center) <= annotationTolerance) {
+      return { id: device.id, type: 'electricalDevice' };
+    }
+  }
 
   // Hit test doors first (smaller targets, higher priority)
   for (const door of floor.doors) {
@@ -216,6 +233,7 @@ export function createSelectHandler({
           'fixture',
           'door',
           'window',
+          'electricalDevice',
           'stair',
           'sectionCut',
           'landing',
@@ -666,6 +684,36 @@ export function createSelectHandler({
           type: 'UPDATE_TOOL_STATE',
           payload: { startPos: modelPos },
         });
+      } else if (selectedType === 'electricalDevice') {
+        // Slide along the parent wall, and re-face the device to whichever side
+        // of the wall the cursor is on — dragging across the wall is how you
+        // move an outlet to the other room.
+        const device = (floor.electricalDevices || []).find((entry) => entry.id === selectedId);
+        if (!device) return;
+
+        const wall = floor.walls.find((w) => w.id === device.wallId);
+        if (!wall) return;
+
+        // Clamp and snap by the physical plate so the device can land flush
+        // against columns and wall ends — the symbol is drawing decoration.
+        const snappedOffset = snapOffsetToWallColumns(
+          wall,
+          projectPointOnWall(wall, modelPos),
+          floor.columns,
+          ELECTRICAL_PLATE.width,
+        );
+        const clampedOffset = clampWallOpeningOffset(wallLength(wall), ELECTRICAL_PLATE.width, snappedOffset);
+
+        dispatch({
+          type: 'ELECTRICAL_DEVICE_UPDATE',
+          floorId: activeFloorId,
+          device: { id: device.id, offset: clampedOffset, side: wallSideOfPoint(wall, modelPos) },
+        });
+
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: { startPos: modelPos },
+        });
       }
     },
 
@@ -786,6 +834,8 @@ export function createSelectHandler({
           dispatch({ type: 'DOOR_DELETE', floorId: activeFloorId, doorId: selectedId });
         } else if (selectedType === 'window') {
           dispatch({ type: 'WINDOW_DELETE', floorId: activeFloorId, windowId: selectedId });
+        } else if (selectedType === 'electricalDevice') {
+          dispatch({ type: 'ELECTRICAL_DEVICE_DELETE', floorId: activeFloorId, deviceId: selectedId });
         } else if (selectedType === 'column') {
           dispatch({ type: 'COLUMN_DELETE', floorId: activeFloorId, columnId: selectedId });
         } else if (selectedType === 'fixture') {

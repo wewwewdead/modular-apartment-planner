@@ -1,8 +1,8 @@
 /**
  * Drives the solar access study on a worker.
  *
- * The same lifecycle as the daylight grid and the wind study, because it is
- * literally the same one: `useStudyWorker` owns debounce, supersession,
+ * The same lifecycle as the daylight grid, because it is literally the same
+ * one: `useStudyWorker` owns debounce, supersession,
  * staleness and teardown, and this hook only shapes the request.
  *
  * Unlike the daylight map this study has no cheap analytic sibling to fall back

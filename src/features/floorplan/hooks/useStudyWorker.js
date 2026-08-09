@@ -1,11 +1,12 @@
 /**
  * The worker lifecycle shared by every background study.
  *
- * Wind, the daylight grid and solar access all ask the same question of the
- * browser — "run this expensive thing off the main thread, and tell me when the
- * answer is for the building I am actually looking at" — and each used to
- * answer it with its own copy of the code below. Three copies drift: they had
- * already grown different supersession behaviour. This is the single copy.
+ * The daylight grid and solar access (and any future study) all ask the same
+ * question of the browser — "run this expensive thing off the main thread, and
+ * tell me when the answer is for the building I am actually looking at" — and
+ * each used to answer it with its own copy of the code below. Copies drift:
+ * they had already grown different supersession behaviour. This is the single
+ * copy.
  *
  * What varies between studies is settings-shaped and lives at the call site:
  * which worker file to build, how long to wait for edits to stop, what to post,
@@ -20,8 +21,7 @@
  *      arrives after its request stopped being the live one is ignorable.
  *   2. **The worker stays warm.** Supersession posts the new request and lets
  *      the worker abandon the old one; it does NOT terminate. Termination threw
- *      away the worker's solved-field cache on every keystroke, which is the
- *      thing that made a one-window change cost a whole new lattice solve.
+ *      away everything the worker had cached on every keystroke.
  *   3. **The last good result stays on screen.** Clearing the overlay the
  *      instant an edit starts makes the plan flash empty on every keystroke.
  *      The previous study stays, marked stale, until its replacement arrives.
@@ -34,13 +34,12 @@
  *
  * ## What warmth costs the studies that cannot yet be interrupted
  *
- * Only the wind worker solves in abandonable chunks. The daylight and solar
- * workers still run their solve to completion inside one message handler, so a
- * superseded run there BLOCKS its replacement until it finishes rather than
- * being killed. That is a deliberate, disclosed trade: the id matching in rule 1
- * keeps the stale answer off the screen either way, and terminating to shave
- * that wait is what cost wind its cache. Giving those two workers the same
- * chunked yields is the fix, and is not in this change.
+ * The daylight and solar workers run their solve to completion inside one
+ * message handler, so a superseded run BLOCKS its replacement until it finishes
+ * rather than being killed. That is a deliberate, disclosed trade: the id
+ * matching in rule 1 keeps the stale answer off the screen either way, and
+ * terminating to shave that wait throws away the worker's cache. Giving the
+ * workers chunked yields is the fix, and is not in this change.
  *
  * The shape of the state is what keeps this out of trouble. Only a *finished
  * result* is stored, and only ever written from a callback — the worker's

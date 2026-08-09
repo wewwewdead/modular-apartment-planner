@@ -3,7 +3,8 @@ import { computeDaylightStudy } from '@/analysis/daylightRunner';
 import { useFloorplanContext } from './FloorplanContext';
 import { useDaylightGrid } from '../hooks/useDaylightGrid';
 import { useSolarAccess } from '../hooks/useSolarAccess';
-import { computeDayStudy, computeInstantShadow } from '@/analysis/sunStudyRunner';
+import { useSunDayStudy } from '../hooks/useSunDayStudy';
+import { computeInstantShadow } from '@/analysis/sunStudyRunner';
 
 /**
  * The environmental studies that cost enough to be worth computing once:
@@ -29,42 +30,14 @@ export function DaylightStudyProvider({ children }) {
   const project = selectors.filteredProject;
   const projectRevision = `${state.changeVersion}|${state.editor.activePhaseId || ''}|${state.editor.phaseViewMode || ''}`;
   const sunStudy = state.editor.sunStudy;
-  const {
-    enabled: sunEnabled,
-    mode: sunMode,
-    date: sunDate,
-    stepMinutes: sunStepMinutes,
-    gridCellSize: sunGridCellSize,
-    thresholdHours: sunThresholdHours,
-    targetId: sunTargetId,
-  } = sunStudy || {};
 
-  const sunDayInput = useMemo(
-    () =>
-      sunEnabled
-        ? {
-            project,
-            sunStudy: {
-              enabled: sunEnabled,
-              mode: sunMode,
-              date: sunDate,
-              stepMinutes: sunStepMinutes,
-              gridCellSize: sunGridCellSize,
-              thresholdHours: sunThresholdHours,
-              targetId: sunTargetId,
-            },
-          }
-        : null,
-    [project, sunDate, sunEnabled, sunGridCellSize, sunMode, sunStepMinutes, sunTargetId, sunThresholdHours],
-  );
-  const deferredSunDayInput = useDeferredValue(sunDayInput);
-  const sunDay = useMemo(
-    () => (deferredSunDayInput ? computeDayStudy(deferredSunDayInput) : null),
-    [deferredSunDayInput],
-  );
+  // The day-scale half runs on a worker (with a synchronous fallback inside the
+  // hook); only the per-minute instant shadow is computed here, because it is
+  // milliseconds and the scrubber drives it constantly.
+  const sunDay = useSunDayStudy({ project, sunStudy, projectRevision });
   const computedSunStudy = useMemo(
-    () => (sunDay ? { ...sunDay, ...computeInstantShadow({ day: sunDay, sunStudy }) } : null),
-    [sunDay, sunStudy],
+    () => (sunDay.day ? { ...sunDay.day, ...computeInstantShadow({ day: sunDay.day, sunStudy }) } : null),
+    [sunDay.day, sunStudy],
   );
 
   const input = useMemo(
@@ -114,13 +87,13 @@ export function DaylightStudyProvider({ children }) {
       solarError: solar.error,
       solarStale: solar.stale,
       sunStudy: computedSunStudy,
-      sunRecomputing: deferredSunDayInput !== sunDayInput,
+      sunRecomputing: sunDay.recomputing,
+      sunError: sunDay.error,
     };
   }, [
     averageStudy,
     daylight,
     computedSunStudy,
-    deferredSunDayInput,
     deferredInput,
     grid.error,
     grid.progress,
@@ -128,7 +101,8 @@ export function DaylightStudyProvider({ children }) {
     grid.status,
     grid.study,
     input,
-    sunDayInput,
+    sunDay.error,
+    sunDay.recomputing,
     solar.error,
     solar.progress,
     solar.stale,
@@ -165,6 +139,7 @@ export function useDaylightStudy() {
       solarStale: false,
       sunStudy: null,
       sunRecomputing: false,
+      sunError: null,
     }
   );
 }

@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
+import { useDragGestureRelease } from '@/features/floorplan/hooks/useDragGestureRelease';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildProjectSectionScene } from '@/sections/scene';
@@ -38,6 +39,8 @@ export default function SvgCanvas() {
   const spaceHeld = useRef(false);
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   const cursorPosRef = useRef({ x: 0, y: 0 });
+  const pendingMoveEvent = useRef(null);
+  const moveFrame = useRef(0);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
 
   const { project, derived, dispatch, getFloor } = useProject();
@@ -56,7 +59,7 @@ export default function SvgCanvas() {
     activeSectionCutId,
     regionSelection,
     pastePreview,
-    maximizedPanel,
+    focusedPanel,
     modelTarget,
     activePhaseId,
     phaseViewMode,
@@ -137,6 +140,11 @@ export default function SvgCanvas() {
 
   const handleMouseDown = useCallback(
     (e) => {
+      // Opens a drag gesture for the store: everything this pointer-down goes on
+      // to change collapses into one undo entry, and the whole-project
+      // coordination pass waits for the release instead of running per frame.
+      dispatch({ type: 'BEGIN_DRAG_GESTURE' });
+
       if (e.button === 1 || (e.button === 0 && spaceHeld.current)) {
         isPanning.current = true;
         lastPanPos.current = { x: e.clientX, y: e.clientY };
@@ -150,10 +158,10 @@ export default function SvgCanvas() {
       }
       tool.onMouseDown(modelPos, e);
     },
-    [getModelPos, modelTarget, pastePreview, placePaste, tool],
+    [dispatch, getModelPos, modelTarget, pastePreview, placePaste, tool],
   );
 
-  const handleMouseMove = useCallback(
+  const processMouseMove = useCallback(
     (e) => {
       if (isPanning.current) {
         const dx = e.clientX - lastPanPos.current.x;
@@ -174,8 +182,47 @@ export default function SvgCanvas() {
     [getModelPos, modelTarget, pastePreview, tool, updatePastePreview, editorDispatch],
   );
 
+  /*
+   * Pointer moves are coalesced to one per animation frame. A mouse reports
+   * moves far faster than the screen refreshes (a 1000 Hz mouse fires ~16 times
+   * per frame), and every drag move runs a model edit and a re-render whose
+   * result is never painted — the extra work only steals from the frame that
+   * does get painted. Only the newest position matters, so intermediate events
+   * are dropped rather than queued: handlers read an absolute cursor position,
+   * so a skipped sample changes nothing about where the object lands.
+   */
+  const handleMouseMove = useCallback(
+    (e) => {
+      pendingMoveEvent.current = e;
+      if (moveFrame.current) return;
+
+      moveFrame.current = requestAnimationFrame(() => {
+        moveFrame.current = 0;
+        const pending = pendingMoveEvent.current;
+        pendingMoveEvent.current = null;
+        if (pending) processMouseMove(pending);
+      });
+    },
+    [processMouseMove],
+  );
+
   const handleMouseUp = useCallback(
     (e) => {
+      /*
+       * A move still queued at release is dropped, not flushed. Handlers that
+       * commit on mouse-up read the tool state the last processed frame wrote —
+       * the wall drag commits the preview geometry it drew — and running one
+       * more move here would update that state after the closure this handler
+       * already holds, committing a position that was never drawn. Dropping it
+       * costs at most one frame of pointer travel and keeps what lands on the
+       * plan identical to what was last on screen.
+       */
+      if (moveFrame.current) {
+        cancelAnimationFrame(moveFrame.current);
+        moveFrame.current = 0;
+      }
+      pendingMoveEvent.current = null;
+
       if (isPanning.current) {
         isPanning.current = false;
         return;
@@ -185,6 +232,15 @@ export default function SvgCanvas() {
       tool.onMouseUp(modelPos, e);
     },
     [getModelPos, modelTarget, pastePreview, tool],
+  );
+
+  useDragGestureRelease(dispatch);
+
+  useEffect(
+    () => () => {
+      if (moveFrame.current) cancelAnimationFrame(moveFrame.current);
+    },
+    [],
   );
 
   const handleDoubleClick = useCallback(
@@ -221,8 +277,8 @@ export default function SvgCanvas() {
     });
   }, [editorDispatch, viewport]);
 
-  const handleToggleMaximize = useCallback(() => {
-    editorDispatch({ type: 'TOGGLE_MAXIMIZE_PANEL', panel: 'canvas' });
+  const handleToggleFocus = useCallback(() => {
+    editorDispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'canvas' });
   }, [editorDispatch]);
 
   // --- Effects ---
@@ -366,6 +422,9 @@ export default function SvgCanvas() {
             case 'h':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.RAILING });
               return;
+            case 'e':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ELECTRICAL });
+              return;
             case 'f':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.FIXTURE });
               editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { fixtureType: 'kitchenTop', previewRotation: 0 } });
@@ -426,7 +485,7 @@ export default function SvgCanvas() {
   const cursor = isSpaceHeld ? 'grab' : modelTarget === 'floor' && pastePreview?.active ? 'copy' : tool.getCursor();
   const zoomPercent = Math.round(viewport.zoom * 1000);
   const displayedTool = viewMode.startsWith('elevation_') ? 'select' : activeTool;
-  const isCanvasMaximized = maximizedPanel === 'canvas';
+  const isCanvasFocused = focusedPanel === 'canvas';
   const selectionCount = regionSelection?.objectCount || 0;
   const liveWallBearing =
     modelTarget === 'floor' && activeTool === TOOLS.WALL && toolState.start && toolState.preview
@@ -582,8 +641,8 @@ export default function SvgCanvas() {
         </svg>
         <CanvasOverlayControls
           onResetCenter={handleResetCenterPoint}
-          onToggleMaximize={handleToggleMaximize}
-          isMaximized={isCanvasMaximized}
+          onToggleFocus={handleToggleFocus}
+          isFocused={isCanvasFocused}
         />
         <CanvasStatusBar
           cursorPos={cursorPos}

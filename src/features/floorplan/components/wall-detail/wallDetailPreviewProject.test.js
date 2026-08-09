@@ -18,6 +18,7 @@ describe('createWallDetailPreviewProject', () => {
     floor.slabs = [createSlab(floor.id, [])];
     project.roofSystem = { id: 'roof' };
     project.trussSystems = [{ id: 'truss', floorId: floor.id }];
+    project.ceilings = [{ id: 'ceiling', floorId: floor.id }];
 
     const preview = createWallDetailPreviewProject(project, floor.id, targetWall.id);
 
@@ -29,6 +30,7 @@ describe('createWallDetailPreviewProject', () => {
     expect(preview.floors[0].slabs).toEqual([]);
     expect(preview.roofSystem).toBeNull();
     expect(preview.trussSystems).toEqual([]);
+    expect(preview.ceilings).toEqual([]);
   });
 
   it('carries an immutable detailing edit into a fresh preview floor', () => {
