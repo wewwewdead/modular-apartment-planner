@@ -89,6 +89,9 @@ const FloorScene = memo(function FloorScene({
               structuralSystem={filteredProject.building?.systems?.structural}
               floor={filteredFloor}
               loadPath={structuralLoadPath}
+              selectedId={selectedId}
+              selectedType={selectedType}
+              previewTransform={toolState.wallDragPreview?.gridTransform || null}
             />
             <WetCoreOverlay
               plumbingSystem={filteredProject.building?.systems?.plumbing}

@@ -22,10 +22,20 @@ import { disposeScene } from './disposeScene';
  * a full rebuild, so visual output, selection overlay and walkthrough/inspect
  * modes are unaffected.
  *
+ * Second level, for when the `sourceKey` does change: `buildFloorObjectGroup`
+ * is handed the floor's previous entries and carries over every object whose
+ * descriptor is unchanged, so a rebuilt floor only re-triangulates what
+ * actually moved. That matters most for the dependencies a floor cannot avoid
+ * declaring — a stair anywhere in the building invalidates every floor's key,
+ * because a railing on any floor may be riding it — where the honest answer is
+ * "one object changed" and the key can only say "something did".
+ *
  * Disposal: floors that are removed or rebuilt have their old geometries
  * disposed via `disposeScene(group, { disposeMaterials: false })` — matching the
  * existing convention where shared palette materials are owned by the viewport
- * and disposed separately in `viewport.dispose()`.
+ * and disposed separately in `viewport.dispose()`. Carried-over objects have
+ * already been re-parented out of the old group by then, so the traversal
+ * reaches only what was genuinely replaced.
  */
 
 function sourceKeyEqual(prev, next) {
@@ -92,7 +102,7 @@ export function createPreviewSceneCache() {
         cacheEntry.sourceKey = floor.sourceKey;
         applyFloorVisibility(cacheEntry, floor.visible);
       } else {
-        const { floorGroup, entries } = buildFloorObjectGroup(floor, materialPalette);
+        const { floorGroup, entries } = buildFloorObjectGroup(floor, materialPalette, previous?.entries);
         cacheEntry = {
           floorGroup,
           entries,

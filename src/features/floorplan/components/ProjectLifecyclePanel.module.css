@@ -191,6 +191,159 @@
   grid-column: 1 / -1;
 }
 
+.lotModeToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.lotModeToggle button {
+  min-height: 26px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.lotModeToggle button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle);
+  color: var(--color-text-primary);
+}
+
+.formHint {
+  color: var(--color-text-secondary);
+  font-size: 9px;
+}
+
+.traverseTable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.traverseRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+}
+
+.traverseBearing {
+  display: grid;
+  grid-template-columns: 26px 44px minmax(38px, 1fr) minmax(38px, 1fr) 44px 24px;
+  gap: 4px;
+  align-items: center;
+}
+
+.traverseBearing input,
+.traverseBearing select,
+.traverseMeasures input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 11px;
+}
+
+.traverseBearing select {
+  padding: 0 2px;
+}
+
+.traverseBearing input {
+  padding: 0 4px;
+  appearance: textfield;
+  text-align: center;
+}
+
+.traverseBearing input::-webkit-outer-spin-button,
+.traverseBearing input::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.traverseBearing input:focus,
+.traverseBearing select:focus,
+.traverseMeasures input:focus {
+  outline: 2px solid var(--color-accent-subtle);
+  border-color: var(--color-accent);
+}
+
+.traverseMeasures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.traverseMeasures label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--color-text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.traverseLineLabel {
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.traverseRemove {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.traverseRemove:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.traversePreview {
+  width: 100%;
+  height: 130px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-bg);
+}
+
+.traversePolygon {
+  fill: var(--color-accent-subtle);
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+}
+
+.traverseFrontEdge {
+  stroke: var(--color-active-glow);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.traverseCorner {
+  fill: var(--color-text-secondary);
+  font-weight: 600;
+}
+
 .primaryAction {
   min-height: 32px;
   border: 1px solid var(--color-active-glow);

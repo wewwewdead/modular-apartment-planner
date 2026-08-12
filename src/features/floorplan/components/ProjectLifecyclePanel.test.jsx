@@ -195,6 +195,44 @@ describe('ProjectLifecyclePanel', () => {
     expect(html).toContain('Road frontage');
     expect(html).toContain('Front setback (m)');
     expect(html).toContain('Apply site constraints');
+    // Both lot input modes are offered.
+    expect(html).toContain('Rectangular lot');
+    expect(html).toContain('Surveyed boundary');
+  });
+
+  it('opens in surveyed mode with the technical description when the lot was surveyed', () => {
+    const lines = [
+      { ns: 'N', degrees: 50, minutes: 56, ew: 'W', distance: 12_690 },
+      { ns: 'N', degrees: 47, minutes: 0, ew: 'E', distance: 4510 },
+      { ns: 'S', degrees: 54, minutes: 57, ew: 'E', distance: 5970 },
+      { ns: 'S', degrees: 54, minutes: 57, ew: 'E', distance: 5940 },
+      { ns: 'S', degrees: 37, minutes: 2, ew: 'W', distance: 5310 },
+    ];
+    const configured = executeBuildingCommand(createProject(), {
+      type: BUILDING_COMMANDS.CONFIGURE_SURVEYED_SITE,
+      lines,
+      northAngle: 0,
+      frontEdgeIndex: 0,
+      roadName: 'Road Lot 812-J',
+      edgeSetbacks: lines.map((_, index) => ({ edgeIndex: index, distance: 1500 })),
+    }).project;
+    const html = renderToStaticMarkup(
+      <ProjectLifecyclePanel
+        project={configured}
+        derived={derivedFixture()}
+        activeStage="site"
+        onStageChange={() => {}}
+        onExecuteCommand={() => {}}
+      />,
+    );
+
+    expect(html).toContain('Surveyed lot boundary');
+    expect(html).toContain('Line 1 bearing degrees');
+    expect(html).toContain('Computed area');
+    expect(html).toContain('Closure error');
+    expect(html).toContain('Surveyed boundary preview');
+    expect(html).toContain('Apply surveyed boundary');
+    expect(html).toContain('Road Lot 812-J');
   });
 
   it('renders parametric structural grid controls without claiming analysis', () => {
@@ -241,6 +279,8 @@ describe('ProjectLifecyclePanel', () => {
     expect(html).toContain('Column stacks at intersections');
     expect(html).toContain('Populate stacks on all 1 levels');
     expect(html).toContain('Section dimensions are modeled assumptions, not capacity calculations.');
+    // Grid edits apply as they are typed, so there is no longer a button.
+    expect(html).not.toContain('Update structural grid');
   });
 
   it('renders explicit wet-service shaft controls and hydraulic-design disclaimer', () => {

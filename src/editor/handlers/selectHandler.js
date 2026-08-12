@@ -26,6 +26,7 @@ import { railingContainsPoint } from '@/geometry/railingGeometry';
 import { collectPlanRegionSelection, normalizeRectBounds, rectSize } from '@/features/floorplan/utils/planClipboard';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { equipmentZonePolygon } from '@/domain/equipmentCoordination';
+import { hitTestGridBubbles, hitTestGridLines } from '@/geometry/structuralGridGeometry';
 
 function centeredRectangle(origin, width, depth) {
   return [
@@ -34,6 +35,20 @@ function centeredRectangle(origin, width, depth) {
     { x: origin.x + width / 2, y: origin.y + depth / 2 },
     { x: origin.x - width / 2, y: origin.y + depth / 2 },
   ];
+}
+
+const GRID_ROTATE_SNAP_DEGREES = 15;
+
+/**
+ * Grid rotation from the pointer. The rotate handle is drawn on the grid's
+ * local +x axis, so the angle of the pointer about the grid origin IS the
+ * grid's rotation — and atan2 in y-down model space already counts clockwise
+ * as positive, the same sense as the SVG rotate() the overlay applies.
+ */
+function gridRotationTowards(origin, modelPos, snap) {
+  const degrees = (Math.atan2(modelPos.y - origin.y, modelPos.x - origin.x) * 180) / Math.PI;
+  const snapped = snap ? Math.round(degrees / GRID_ROTATE_SNAP_DEGREES) * GRID_ROTATE_SNAP_DEGREES : degrees;
+  return Math.round(snapped * 100) / 100;
 }
 
 function hitTestBuildingService(modelPos, project, floor) {
@@ -68,6 +83,13 @@ function hitTest(modelPos, floor, project, annotationTolerance) {
   // when their footprint overlaps a wall, fixture, or room.
   const serviceHit = hitTestBuildingService(modelPos, project, floor);
   if (serviceHit) return serviceHit;
+
+  // The structural grid's axis bubbles sit outside the plan, so they can take
+  // early priority as the grid's grab handles. The axis lines themselves are
+  // tested dead last — they run along wall centrelines by design.
+  const gridSystems = project?.building?.systems?.structural?.gridSystems || [];
+  const bubbleHit = hitTestGridBubbles(modelPos, gridSystems, annotationTolerance / 2);
+  if (bubbleHit) return bubbleHit;
 
   // Electrical devices are the smallest targets on the plan, so they take
   // priority over the door/window they may sit beside. The centre-distance
@@ -186,7 +208,7 @@ function hitTest(modelPos, floor, project, annotationTolerance) {
     return annotationHit;
   }
 
-  return null;
+  return hitTestGridLines(modelPos, gridSystems, annotationTolerance / 2);
 }
 
 export function createSelectHandler({
@@ -241,6 +263,7 @@ export function createSelectHandler({
           'plumbingShaft',
           'electricalRiser',
           'electricalPanelZone',
+          'structuralGrid',
         ]);
         if (!draggableTypes.has(hit.type)) return;
         editorDispatch({
@@ -514,6 +537,39 @@ export function createSelectHandler({
           },
         });
         editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { startPos: modelPos } });
+      } else if (selectedType === 'structuralGrid') {
+        // PREVIEW-THEN-COMMIT (same architecture as wall and section drags).
+        // A grid transform re-resolves every pinned column stack and re-runs
+        // the building coordination pass, so a commit per pointer-move stalled
+        // the drag; worse, advancing startPos per move while reading the grid
+        // from a project ref that only catches up a render later dropped whole
+        // deltas, and the grid trailed the cursor. The proposal is cumulative
+        // from the never-advancing mousedown against a committed project that
+        // cannot move until mouseup.
+        //
+        // The body of the grid translates; the rotate handle turns it. Either
+        // way the proposal carries a whole transform, so the half that is not
+        // being dragged stays exactly as committed. Stacks pinned to
+        // intersections follow in the command, and in the preview alongside it.
+        const grid = (currentProject?.building?.systems?.structural?.gridSystems || []).find(
+          (entry) => entry.id === selectedId,
+        );
+        if (!grid) return;
+        const gridOrigin = { x: grid.origin?.x || 0, y: grid.origin?.y || 0 };
+        const rotating = toolState.dragType === 'handle' && toolState.handle === 'grid-rotate';
+        editorDispatch({
+          type: 'UPDATE_TOOL_STATE',
+          payload: {
+            wallDragPreview: {
+              gridTransform: {
+                gridId: grid.id,
+                origin: rotating ? gridOrigin : { x: gridOrigin.x + dx, y: gridOrigin.y + dy },
+                rotation: rotating ? gridRotationTowards(gridOrigin, modelPos, e.shiftKey) : grid.rotation || 0,
+              },
+              blocked: null,
+            },
+          },
+        });
       } else if (selectedType === 'sectionCut') {
         // PREVIEW-THEN-COMMIT (same architecture as wall drags): no
         // SECTION_UPDATE per mousemove. Per-event commits ran the full
@@ -755,7 +811,7 @@ export function createSelectHandler({
 
       // Preview-then-commit: the drag's single commit dispatch happens here.
       if (toolState.dragging && toolState.wallDragPreview) {
-        const { proposal, sectionProposal, blocked } = toolState.wallDragPreview;
+        const { proposal, sectionProposal, gridTransform, blocked } = toolState.wallDragPreview;
         if (blocked) {
           editorDispatch({ type: 'SET_STATUS_MESSAGE', message: describeWallEditRejection(blocked) });
         } else if (proposal) {
@@ -770,6 +826,16 @@ export function createSelectHandler({
             type: 'SECTION_UPDATE',
             floorId: activeFloorId,
             sectionCut: sectionProposal,
+          });
+        } else if (gridTransform) {
+          dispatch({
+            type: 'EXECUTE_BUILDING_COMMAND',
+            command: {
+              type: BUILDING_COMMANDS.TRANSFORM_STRUCTURAL_GRID,
+              gridId: gridTransform.gridId,
+              origin: gridTransform.origin,
+              rotation: gridTransform.rotation,
+            },
           });
         }
       }

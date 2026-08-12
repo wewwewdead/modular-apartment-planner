@@ -351,6 +351,94 @@ describe('selectHandler building-service drag', () => {
     return { selected, dispatched, toolState };
   }
 
+  function gridProject({ rotation = 0 } = {}) {
+    return {
+      building: {
+        systems: {
+          structural: {
+            gridSystems: [
+              {
+                id: 'grid_1',
+                name: 'Primary Grid',
+                origin: { x: 0, y: 0 },
+                rotation,
+                axes: [
+                  { id: 'x1', label: '1', orientation: 'vertical', offset: 0 },
+                  { id: 'x2', label: '2', orientation: 'vertical', offset: 4000 },
+                  { id: 'y1', label: 'A', orientation: 'horizontal', offset: 0 },
+                  { id: 'y2', label: 'B', orientation: 'horizontal', offset: 5000 },
+                ],
+              },
+            ],
+            columnStacks: [],
+          },
+        },
+      },
+      floors: [],
+    };
+  }
+
+  function interact(project, floor, start, end) {
+    let toolState = {};
+    let selected = null;
+    const dispatched = [];
+    const editorDispatch = (action) => {
+      if (action.type === 'SELECT_OBJECT') selected = { id: action.id, type: action.objectType };
+      if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+    };
+    const handler = createSelectHandler({
+      dispatch: (action) => dispatched.push(action),
+      editorDispatch,
+      project,
+      getFloor: () => floor,
+      activeFloorId: 'floor_1',
+      viewport: { zoom: 0.1 },
+      snapEnabled: true,
+    });
+
+    handler.onMouseDown(start, { button: 0, target: { dataset: {} } }, toolState);
+    if (end && selected) {
+      handler.onMouseMove(end, { shiftKey: false }, toolState, selected.id, selected.type);
+      handler.onMouseMove(end, { shiftKey: false }, toolState, selected.id, selected.type);
+    }
+    return { selected, dispatched, toolState };
+  }
+
+  it('selects the grid by its axis bubble and previews the whole-grid move', () => {
+    // Vertical axis 1 spans the horizontal range 0..5000 plus a 700mm
+    // extension, so its first bubble sits at (0, -700).
+    const result = interact(gridProject(), serviceFloor(), { x: 0, y: -700 }, { x: 2000, y: 500 });
+
+    expect(result.selected).toEqual({ id: 'grid_1', type: 'structuralGrid' });
+    expect(result.dispatched).toHaveLength(0);
+    expect(result.toolState.wallDragPreview.gridTransform).toEqual({
+      gridId: 'grid_1',
+      origin: { x: 2000, y: 1200 },
+      rotation: 0,
+    });
+  });
+
+  it('finds the bubble of a rotated grid where it is drawn, not where it started', () => {
+    // Rotated 90° clockwise (y-down), the bubble at (0, -700) lands on (700, 0).
+    const result = interact(gridProject({ rotation: 90 }), serviceFloor(), { x: 700, y: 0 }, null);
+
+    expect(result.selected).toEqual({ id: 'grid_1', type: 'structuralGrid' });
+  });
+
+  it('selects a grid line only when nothing else is under the cursor', () => {
+    const emptyFloor = serviceFloor();
+    const onLine = interact(gridProject(), emptyFloor, { x: 2000, y: 0 }, null);
+    expect(onLine.selected).toEqual({ id: 'grid_1', type: 'structuralGrid' });
+
+    // A wall running along the same axis line wins the click.
+    const walledFloor = {
+      ...serviceFloor(),
+      walls: [{ id: 'wall_1', start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, thickness: 100 }],
+    };
+    const onWall = interact(gridProject(), walledFloor, { x: 2000, y: 0 }, null);
+    expect(onWall.selected).toEqual({ id: 'wall_1', type: 'wall' });
+  });
+
   it.each([
     {
       label: 'wet-service shaft',
@@ -397,6 +485,205 @@ describe('selectHandler building-service drag', () => {
       expect(result.toolState.startPos).toEqual(end);
     },
   );
+});
+
+describe('selectHandler structural grid drag — preview-then-commit', () => {
+  function createGridHarness({ rotation = 0, origin = { x: 0, y: 0 }, handle = null } = {}) {
+    const project = {
+      building: {
+        systems: {
+          structural: {
+            gridSystems: [
+              {
+                id: 'grid_1',
+                name: 'Primary Grid',
+                origin,
+                rotation,
+                axes: [
+                  { id: 'x1', label: '1', orientation: 'vertical', offset: 0 },
+                  { id: 'x2', label: '2', orientation: 'vertical', offset: 4000 },
+                  { id: 'y1', label: 'A', orientation: 'horizontal', offset: 0 },
+                  { id: 'y2', label: 'B', orientation: 'horizontal', offset: 5000 },
+                ],
+              },
+            ],
+            columnStacks: [],
+          },
+        },
+      },
+      floors: [],
+    };
+    const floor = { id: 'floor_1', walls: [], columns: [], doors: [], windows: [], rooms: [] };
+    const mousedown = { x: 0, y: 0 };
+    let toolState = {
+      pendingDrag: false,
+      dragging: true,
+      dragType: 'move',
+      startPos: { ...mousedown },
+      originalPos: { ...mousedown },
+    };
+    const dispatched = [];
+
+    const handler = createSelectHandler({
+      dispatch: (action) => dispatched.push(action),
+      editorDispatch: (action) => {
+        if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+      },
+      project,
+      getFloor: () => floor,
+      activeFloorId: 'floor_1',
+      viewport: { zoom: 0.1 },
+      snapEnabled: true,
+    });
+
+    // The rotate grip is an SVG element carrying data-handle, so a real
+    // mousedown on it is what opens a handle drag.
+    if (handle) {
+      handler.onMouseDown({ ...mousedown }, { button: 0, target: { dataset: { handle } } }, toolState);
+    }
+
+    return {
+      dispatched,
+      getToolState: () => toolState,
+      move(modelPos, e = { shiftKey: false }) {
+        handler.onMouseMove(modelPos, e, toolState, 'grid_1', 'structuralGrid');
+      },
+      up(modelPos) {
+        handler.onMouseUp(modelPos, { button: 0 }, toolState);
+      },
+      key(e) {
+        handler.onKeyDown(e, toolState, 'grid_1', 'structuralGrid');
+      },
+    };
+  }
+
+  it('dispatches NOTHING during the drag and previews the cumulative origin', () => {
+    const harness = createGridHarness();
+
+    for (let step = 1; step <= 30; step += 1) {
+      harness.move({ x: step * 40, y: step * 30 });
+    }
+
+    expect(harness.dispatched).toHaveLength(0);
+    expect(harness.getToolState().wallDragPreview.gridTransform).toEqual({
+      gridId: 'grid_1',
+      origin: { x: 1200, y: 900 },
+      rotation: 0,
+    });
+  });
+
+  it('mouseup commits exactly ONE transform carrying the full move (gravity regression)', () => {
+    const harness = createGridHarness();
+
+    for (let step = 1; step <= 30; step += 1) {
+      harness.move({ x: step * 40, y: step * 30 });
+    }
+    harness.up({ x: 1200, y: 900 });
+
+    expect(harness.dispatched).toHaveLength(1);
+    expect(harness.dispatched[0]).toMatchObject({
+      type: 'EXECUTE_BUILDING_COMMAND',
+      command: {
+        type: BUILDING_COMMANDS.TRANSFORM_STRUCTURAL_GRID,
+        gridId: 'grid_1',
+        origin: { x: 1200, y: 900 },
+      },
+    });
+    expect(harness.getToolState().wallDragPreview).toBeNull();
+    expect(harness.getToolState().dragging).toBe(false);
+  });
+
+  it('Escape cancels the grid drag: preview cleared, nothing dispatched', () => {
+    const harness = createGridHarness();
+
+    harness.move({ x: 800, y: 300 });
+    expect(harness.getToolState().wallDragPreview).not.toBeNull();
+
+    harness.key({ key: 'Escape' });
+
+    expect(harness.dispatched).toHaveLength(0);
+    expect(harness.getToolState().wallDragPreview).toBeNull();
+    expect(harness.getToolState().dragging).toBe(false);
+  });
+
+  it('keeps the committed rotation when the grid is only moved', () => {
+    const harness = createGridHarness({ rotation: 37, origin: { x: 500, y: 500 } });
+
+    harness.move({ x: 300, y: 200 });
+    harness.up({ x: 300, y: 200 });
+
+    expect(harness.dispatched[0].command).toMatchObject({
+      type: BUILDING_COMMANDS.TRANSFORM_STRUCTURAL_GRID,
+      origin: { x: 800, y: 700 },
+      rotation: 37,
+    });
+  });
+
+  it('turns the grid to the pointer angle about its origin, clockwise-positive', () => {
+    const harness = createGridHarness({ origin: { x: 1000, y: 1000 }, handle: 'grid-rotate' });
+
+    // The handle rides the local +x axis, so a pointer straight out to the
+    // right is 0°, and one straight DOWN the screen is +90° in y-down space.
+    harness.move({ x: 6000, y: 1000 });
+    expect(harness.getToolState().wallDragPreview.gridTransform.rotation).toBe(0);
+
+    harness.move({ x: 1000, y: 6000 });
+    expect(harness.getToolState().wallDragPreview.gridTransform.rotation).toBe(90);
+
+    harness.move({ x: 1000, y: -4000 });
+    expect(harness.getToolState().wallDragPreview.gridTransform.rotation).toBe(-90);
+
+    // Rotating never moves the origin.
+    expect(harness.getToolState().wallDragPreview.gridTransform.origin).toEqual({ x: 1000, y: 1000 });
+    expect(harness.dispatched).toHaveLength(0);
+  });
+
+  it('snaps rotation to 15° steps while Shift is held', () => {
+    const harness = createGridHarness({ handle: 'grid-rotate' });
+
+    // atan2(2000, 5000) ≈ 21.8° → nearest 15° step.
+    harness.move({ x: 5000, y: 2000 }, { shiftKey: true });
+    expect(harness.getToolState().wallDragPreview.gridTransform.rotation).toBe(15);
+
+    harness.move({ x: 5000, y: 2000 });
+    expect(harness.getToolState().wallDragPreview.gridTransform.rotation).toBeCloseTo(21.8, 1);
+  });
+
+  it('commits the rotation once on mouseup, origin included', () => {
+    const harness = createGridHarness({ origin: { x: 2000, y: 0 }, rotation: 0, handle: 'grid-rotate' });
+
+    // Sweep the grip round to 45°: it ends level with the origin diagonally.
+    for (let step = 1; step <= 20; step += 1) {
+      harness.move({ x: 2000 + step * 100, y: step * 100 });
+    }
+    expect(harness.dispatched).toHaveLength(0);
+
+    harness.up({ x: 4000, y: 2000 });
+
+    expect(harness.dispatched).toHaveLength(1);
+    expect(harness.dispatched[0]).toMatchObject({
+      type: 'EXECUTE_BUILDING_COMMAND',
+      command: {
+        type: BUILDING_COMMANDS.TRANSFORM_STRUCTURAL_GRID,
+        gridId: 'grid_1',
+        origin: { x: 2000, y: 0 },
+        rotation: 45,
+      },
+    });
+    expect(harness.getToolState().wallDragPreview).toBeNull();
+  });
+
+  it('Escape cancels a rotation with nothing dispatched', () => {
+    const harness = createGridHarness({ handle: 'grid-rotate' });
+
+    harness.move({ x: 3000, y: 3000 });
+    expect(harness.getToolState().wallDragPreview.gridTransform.rotation).toBe(45);
+
+    harness.key({ key: 'Escape' });
+
+    expect(harness.dispatched).toHaveLength(0);
+    expect(harness.getToolState().wallDragPreview).toBeNull();
+  });
 });
 
 describe('selectHandler — electrical devices', () => {

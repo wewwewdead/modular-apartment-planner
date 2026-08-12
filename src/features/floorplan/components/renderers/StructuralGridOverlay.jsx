@@ -6,7 +6,7 @@ function axisRange(axes, orientation) {
   return offsets.length ? { min: Math.min(...offsets), max: Math.max(...offsets) } : { min: 0, max: 0 };
 }
 
-function GridAxis({ axis, crossRange, extension }) {
+function GridAxis({ axis, crossRange, extension, selected }) {
   const vertical = axis.orientation === 'vertical';
   const start = crossRange.min - extension;
   const end = crossRange.max + extension;
@@ -16,6 +16,7 @@ function GridAxis({ axis, crossRange, extension }) {
   const y2 = vertical ? end : axis.offset;
   const firstBubble = { x: x1, y: y1 };
   const secondBubble = { x: x2, y: y2 };
+  const stroke = selected ? '#4636a8' : '#6f5f9f';
 
   return (
     <g data-type="structural-grid-axis" data-axis-id={axis.id}>
@@ -24,26 +25,73 @@ function GridAxis({ axis, crossRange, extension }) {
         y1={y1}
         x2={x2}
         y2={y2}
-        stroke="#6f5f9f"
-        strokeWidth="1"
+        stroke={stroke}
+        strokeWidth={selected ? 2 : 1}
         strokeDasharray="12 5 2 5"
-        opacity="0.8"
+        opacity={selected ? 1 : 0.8}
         vectorEffect="non-scaling-stroke"
       />
       {[firstBubble, secondBubble].map((point, index) => (
         <g key={index} transform={`translate(${point.x} ${point.y})`}>
           <circle
             r="180"
-            fill="var(--color-panel-bg)"
-            stroke="#6f5f9f"
-            strokeWidth="1.5"
+            fill={selected ? 'rgba(70, 54, 168, 0.14)' : 'var(--color-panel-bg)'}
+            stroke={stroke}
+            strokeWidth={selected ? 2.5 : 1.5}
             vectorEffect="non-scaling-stroke"
           />
-          <text y="65" fill="#6f5f9f" fontSize="190" fontWeight="700" textAnchor="middle">
+          <text y="65" fill={stroke} fontSize="190" fontWeight="700" textAnchor="middle">
             {axis.label}
           </text>
         </g>
       ))}
+    </g>
+  );
+}
+
+/**
+ * Rotation grip for the selected grid, drawn inside the grid's own transform
+ * so it orbits with the grid and follows an uncommitted drag for free. It sits
+ * on the local +x axis, which is what lets the select handler read the grid's
+ * rotation straight off the pointer angle about the origin.
+ *
+ * The overlay layer is pointer-transparent; this is the one element that takes
+ * the pointer, and only the circle does — the glyph stays transparent so the
+ * event target always carries the data-handle the select handler looks for.
+ */
+function GridRotateHandle({ x }) {
+  return (
+    <g data-type="structural-grid-rotate">
+      <line
+        x1={x - 1000}
+        y1="0"
+        x2={x - 200}
+        y2="0"
+        stroke="#4636a8"
+        strokeWidth="1.5"
+        strokeDasharray="8 6"
+        vectorEffect="non-scaling-stroke"
+      />
+      <circle
+        cx={x}
+        cy="0"
+        r="200"
+        fill="rgba(70, 54, 168, 0.14)"
+        stroke="#4636a8"
+        strokeWidth="2.5"
+        vectorEffect="non-scaling-stroke"
+        data-handle="grid-rotate"
+        style={{ pointerEvents: 'all', cursor: 'grab' }}
+      />
+      <path
+        d={`M ${x - 100} 0 A 100 100 0 1 1 ${x} 100`}
+        fill="none"
+        stroke="#4636a8"
+        strokeWidth="2"
+        vectorEffect="non-scaling-stroke"
+        style={{ pointerEvents: 'none' }}
+      />
+      <polygon points={`${x - 60},100 ${x + 20},62 ${x + 20},138`} fill="#4636a8" style={{ pointerEvents: 'none' }} />
     </g>
   );
 }
@@ -143,10 +191,44 @@ function LoadPathEdges({ loadPath, floor }) {
   );
 }
 
-function StructuralGridOverlay({ structuralSystem, floor, loadPath }) {
+/**
+ * `previewTransform` is a live drag proposal ({ gridId, origin, rotation })
+ * that has not been committed: the grid is drawn where the pointer is holding
+ * it while the project still carries the pre-drag transform. Pinned stacks are
+ * carried through the same move and turn, so the preview shows exactly what
+ * mouseup will commit.
+ */
+function StructuralGridOverlay({
+  structuralSystem,
+  floor,
+  loadPath,
+  selectedId = null,
+  selectedType = null,
+  previewTransform = null,
+}) {
   const grids = structuralSystem?.gridSystems || [];
   const stacks = structuralSystem?.columnStacks || [];
   if (!grids.length && !stacks.length && !(loadPath?.edges || []).length) return null;
+
+  const previewGrid = previewTransform ? grids.find((grid) => grid.id === previewTransform.gridId) : null;
+  const previewRotation = previewGrid ? (previewTransform.rotation ?? previewGrid.rotation ?? 0) : 0;
+  // Positive degrees turn clockwise in y-down space, the same convention the
+  // SVG rotate() below and the committed command both use.
+  const previewTurn = previewGrid ? ((previewRotation - (previewGrid.rotation || 0)) * Math.PI) / 180 : 0;
+  const previewPinnedStack = (stack) => {
+    if (!previewGrid || stack.gridIntersection?.gridId !== previewGrid.id) return stack;
+    const localX = stack.origin.x - (previewGrid.origin?.x || 0);
+    const localY = stack.origin.y - (previewGrid.origin?.y || 0);
+    const cos = Math.cos(previewTurn);
+    const sin = Math.sin(previewTurn);
+    return {
+      ...stack,
+      origin: {
+        x: previewTransform.origin.x + localX * cos - localY * sin,
+        y: previewTransform.origin.y + localX * sin + localY * cos,
+      },
+    };
+  };
 
   return (
     <g data-layer="structural-coordination" style={{ pointerEvents: 'none' }}>
@@ -155,12 +237,17 @@ function StructuralGridOverlay({ structuralSystem, floor, loadPath }) {
         const xRange = axisRange(axes, 'vertical');
         const yRange = axisRange(axes, 'horizontal');
         const extension = Math.max(700, Math.max(xRange.max - xRange.min, yRange.max - yRange.min) * 0.08);
+        const selected = selectedType === 'structuralGrid' && selectedId === grid.id;
+        const preview = previewGrid?.id === grid.id;
+        const origin = preview ? previewTransform.origin : grid.origin;
+        const rotation = preview ? previewRotation : grid.rotation || 0;
         return (
           <g
             key={grid.id}
             data-type="structural-grid"
             data-grid-id={grid.id}
-            transform={`translate(${grid.origin?.x || 0} ${grid.origin?.y || 0}) rotate(${grid.rotation || 0})`}
+            data-selected={selected || undefined}
+            transform={`translate(${origin?.x || 0} ${origin?.y || 0}) rotate(${rotation})`}
           >
             {axes.map((axis) => (
               <GridAxis
@@ -168,13 +255,15 @@ function StructuralGridOverlay({ structuralSystem, floor, loadPath }) {
                 axis={axis}
                 crossRange={axis.orientation === 'vertical' ? yRange : xRange}
                 extension={extension}
+                selected={selected}
               />
             ))}
+            {selected && <GridRotateHandle x={xRange.max + extension + 1000} />}
           </g>
         );
       })}
       {stacks.map((stack) => (
-        <ColumnStackMarker key={stack.id} stack={stack} floor={floor} />
+        <ColumnStackMarker key={stack.id} stack={previewPinnedStack(stack)} floor={floor} />
       ))}
       <LoadPathEdges loadPath={loadPath} floor={floor} />
     </g>

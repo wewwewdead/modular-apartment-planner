@@ -10,6 +10,7 @@ import {
 import { validateBuildingCoordination } from './buildingGraph';
 import { applyColumnUpdate } from './projectCommands';
 import { deriveAreaLedger, isSimplePolygon } from './siteModels';
+import { isValidTraverseLine, traverseBoundary } from './surveyTraverse';
 import { ROOM_USE_CATEGORIES, createSpaceProgram, createUnitInstance, createUnitType } from './apartmentProgram';
 import { WET_FIXTURE_TYPES, createPlumbingShaft, fixtureDistanceToShaft } from './wetCoreModels';
 import {
@@ -86,6 +87,8 @@ import {
 export const BUILDING_COMMANDS = Object.freeze({
   GENERATE_STRUCTURAL_GRID: 'GenerateStructuralGrid',
   CONFIGURE_REGULAR_STRUCTURAL_GRID: 'ConfigureRegularStructuralGrid',
+  TRANSFORM_STRUCTURAL_GRID: 'TransformStructuralGrid',
+  REMOVE_STRUCTURAL_GRID: 'RemoveStructuralGrid',
   POPULATE_GRID_COLUMN_STACKS: 'PopulateGridColumnStacks',
   CREATE_COLUMN_STACK: 'CreateColumnStack',
   ASSIGN_COLUMN_TO_STACK: 'AssignColumnToStack',
@@ -106,6 +109,7 @@ export const BUILDING_COMMANDS = Object.freeze({
   UPSERT_SOLAR_STUDY_TARGET: 'UpsertSolarStudyTarget',
   REMOVE_SOLAR_STUDY_TARGET: 'RemoveSolarStudyTarget',
   CONFIGURE_RECTANGULAR_SITE: 'ConfigureRectangularSite',
+  CONFIGURE_SURVEYED_SITE: 'ConfigureSurveyedSite',
   CONFIGURE_REGULAR_PARKING_PLAN: 'ConfigureRegularParkingPlan',
   CONFIGURE_TEST_FIT_PROFILE: 'ConfigureTestFitProfile',
   GENERATE_TEST_FIT_OPTIONS: 'GenerateTestFitOptions',
@@ -1985,6 +1989,135 @@ function configureRectangularSite(project, command) {
   ]);
 }
 
+/**
+ * Set the property boundary from a surveyor's technical description: one
+ * quadrant bearing plus distance per boundary line, exactly as tabulated on a
+ * subdivision sketch plan. The polygon keeps the starting corner of every
+ * line; the closure gap left by rounded bearings and distances is tolerated
+ * up to 1:200 of the perimeter, beyond which the input is treated as a typo
+ * rather than survey rounding.
+ */
+const SURVEY_MISCLOSURE_TOLERANCE_RATIO = 1 / 200;
+
+function configureSurveyedSite(project, command) {
+  const lines = Array.isArray(command.lines)
+    ? command.lines.map((entry) => ({
+        ns: entry?.ns,
+        degrees: entry?.degrees,
+        minutes: entry?.minutes ?? 0,
+        ew: entry?.ew,
+        distance: entry?.distance,
+      }))
+    : [];
+  if (lines.length < 3 || !lines.every(isValidTraverseLine)) {
+    return commandError(
+      project,
+      command,
+      'invalid-traverse-lines',
+      'Each boundary line needs a quadrant bearing (N/S, 0–90°, minutes below 60, E/W) and a positive distance in millimetres.',
+      { lineCount: lines.length },
+    );
+  }
+  const origin = command.origin || { x: 0, y: 0 };
+  const northAngle = command.northAngle ?? 0;
+  if (!validPoint(origin) || !Number.isFinite(northAngle)) {
+    return commandError(project, command, 'invalid-site-orientation', 'Site origin and north angle must be finite.', {
+      origin,
+      northAngle,
+    });
+  }
+  const frontEdgeIndex = command.frontEdgeIndex ?? 0;
+  if (!Number.isInteger(frontEdgeIndex) || frontEdgeIndex < 0 || frontEdgeIndex >= lines.length) {
+    return commandError(project, command, 'invalid-frontage-edge', 'Road frontage must reference one boundary line.', {
+      frontEdgeIndex,
+    });
+  }
+
+  const traverse = traverseBoundary(lines, { origin, northAngle });
+  if (traverse.misclosureRatio > SURVEY_MISCLOSURE_TOLERANCE_RATIO) {
+    return commandError(
+      project,
+      command,
+      'traverse-misclosure',
+      `Boundary lines do not close: the traverse ends ${Math.round(traverse.misclosure)} mm away from its starting corner. Check the bearings and distances against the plan.`,
+      { misclosure: traverse.misclosure, perimeter: traverse.perimeter },
+    );
+  }
+  if (!isSimplePolygon(traverse.points)) {
+    return commandError(
+      project,
+      command,
+      'invalid-property-boundary',
+      'Surveyed boundary must be a simple non-zero-area polygon.',
+    );
+  }
+
+  if (!Array.isArray(command.edgeSetbacks) || command.edgeSetbacks.length !== lines.length) {
+    return commandError(
+      project,
+      command,
+      'incomplete-edge-setbacks',
+      'Provide exactly one setback for every boundary line.',
+      { expectedCount: lines.length, actualCount: command.edgeSetbacks?.length || 0 },
+    );
+  }
+  const seen = new Set();
+  const edgeSetbacks = [];
+  for (const entry of command.edgeSetbacks) {
+    if (
+      !Number.isInteger(entry.edgeIndex) ||
+      entry.edgeIndex < 0 ||
+      entry.edgeIndex >= lines.length ||
+      seen.has(entry.edgeIndex) ||
+      !Number.isFinite(entry.distance) ||
+      entry.distance < 0
+    ) {
+      return commandError(
+        project,
+        command,
+        'invalid-edge-setback',
+        'Setback edge indexes must be unique and distances must be non-negative finite millimetres.',
+        { entry },
+      );
+    }
+    seen.add(entry.edgeIndex);
+    edgeSetbacks.push({
+      edgeIndex: entry.edgeIndex,
+      distance: entry.distance,
+      classification: entry.classification || (entry.edgeIndex === frontEdgeIndex ? 'front' : 'side'),
+      source: entry.source || 'user_configured_assumption',
+    });
+  }
+  edgeSetbacks.sort((a, b) => a.edgeIndex - b.edgeIndex);
+
+  const boundaryId = command.boundaryId || project.building.site?.boundaryId;
+  if (!boundaryId) {
+    return commandError(project, command, 'boundary-id-required', 'A stable boundaryId is required.');
+  }
+  const roadName = command.roadName || 'Road';
+
+  const nextProject = updateSite(project, (site) => ({
+    ...site,
+    boundaryId,
+    boundary: traverse.points,
+    northAngle,
+    edgeSetbacks,
+    roadEdges: [{ edgeIndex: frontEdgeIndex, roadName }],
+    lotSetup: {
+      kind: 'surveyed',
+      lines,
+      origin: { ...origin },
+      frontEdgeIndex,
+      roadName,
+    },
+  }));
+  return commandSuccess(project, nextProject, command, [
+    { operation: 'replace', entityType: 'surveyedSite', id: boundaryId },
+    { operation: 'replace', entityType: 'siteEdgeSetbacks', id: boundaryId },
+    { operation: 'replace', entityType: 'roadFrontage', id: boundaryId },
+  ]);
+}
+
 function configureRegularParkingPlan(project, command) {
   const site = project.building.site || {};
   if (!isSimplePolygon(site.boundary || [])) {
@@ -3485,6 +3618,79 @@ function configureRegularStructuralGrid(project, command) {
   ]);
 }
 
+/**
+ * Move or rotate an existing grid without restating its axis layout. This is
+ * what canvas dragging dispatches, so it must stay cheap and must not care
+ * whether the grid was set up as 'regular' or assembled some other way.
+ * Column stacks pinned to grid intersections follow the transform; realized
+ * floor columns do not move — the alignment overlay flags them instead, the
+ * same contract ConfigureRegularStructuralGrid already has.
+ */
+function transformStructuralGrid(project, command) {
+  const system = structuralSystem(project);
+  if (!system) return commandError(project, command, 'structural-system-missing', 'Structural system is missing.');
+  const grid = (system.gridSystems || []).find((entry) => entry.id === command.gridId);
+  if (!grid) {
+    return commandError(project, command, 'grid-not-found', `Structural grid ${command.gridId} was not found.`);
+  }
+  const origin = command.origin ?? grid.origin ?? { x: 0, y: 0 };
+  const rotation = command.rotation ?? grid.rotation ?? 0;
+  if (!validPoint(origin) || !Number.isFinite(rotation)) {
+    return commandError(project, command, 'invalid-grid-transform', 'Grid origin and rotation must be finite.', {
+      origin,
+      rotation,
+    });
+  }
+
+  const gridSystems = system.gridSystems.map((entry) =>
+    entry.id === grid.id ? { ...entry, origin: { x: origin.x, y: origin.y }, rotation } : entry,
+  );
+  const columnStacks = (system.columnStacks || []).map((stack) => {
+    if (stack.gridIntersection?.gridId !== grid.id) return stack;
+    const nextOrigin = resolveGridIntersection(gridSystems, stack.gridIntersection);
+    return nextOrigin ? { ...stack, origin: nextOrigin } : stack;
+  });
+  const nextProject = updateStructuralSystem(project, (current) => ({
+    ...current,
+    gridSystems,
+    columnStacks,
+  }));
+  return commandSuccess(project, nextProject, command, [
+    { operation: 'replace', entityType: 'structuralGrid', id: grid.id },
+    {
+      operation: 'recompute',
+      entityType: 'columnStackOrigins',
+      gridId: grid.id,
+      movedColumnGeometry: false,
+    },
+  ]);
+}
+
+/**
+ * Remove a grid and the intent-only column stacks pinned to its
+ * intersections. Realized floor columns stay — deleting design intent must
+ * not silently demolish modeled geometry — and syncCanonicalBuilding
+ * recreates a plain (un-pinned) stack for every column that still carries a
+ * stackId, so those stacks survive as reverse indexes of the real columns.
+ */
+function removeStructuralGrid(project, command) {
+  const system = structuralSystem(project);
+  if (!system) return commandError(project, command, 'structural-system-missing', 'Structural system is missing.');
+  const grid = (system.gridSystems || []).find((entry) => entry.id === command.gridId);
+  if (!grid) {
+    return commandError(project, command, 'grid-not-found', `Structural grid ${command.gridId} was not found.`);
+  }
+  const nextProject = updateStructuralSystem(project, (current) => ({
+    ...current,
+    gridSystems: (current.gridSystems || []).filter((entry) => entry.id !== grid.id),
+    columnStacks: (current.columnStacks || []).filter((stack) => stack.gridIntersection?.gridId !== grid.id),
+  }));
+  return commandSuccess(project, nextProject, command, [
+    { operation: 'remove', entityType: 'structuralGrid', id: grid.id },
+    { operation: 'remove', entityType: 'columnStacks', gridId: grid.id, keptRealizedColumns: true },
+  ]);
+}
+
 function populateGridColumnStacks(project, command) {
   const system = structuralSystem(project);
   const grid = (system?.gridSystems || []).find((entry) => entry.id === command.gridId);
@@ -4297,6 +4503,10 @@ export function executeBuildingCommand(project, command) {
       return generateStructuralGrid(project, command);
     case BUILDING_COMMANDS.CONFIGURE_REGULAR_STRUCTURAL_GRID:
       return configureRegularStructuralGrid(project, command);
+    case BUILDING_COMMANDS.TRANSFORM_STRUCTURAL_GRID:
+      return transformStructuralGrid(project, command);
+    case BUILDING_COMMANDS.REMOVE_STRUCTURAL_GRID:
+      return removeStructuralGrid(project, command);
     case BUILDING_COMMANDS.POPULATE_GRID_COLUMN_STACKS:
       return populateGridColumnStacks(project, command);
     case BUILDING_COMMANDS.CREATE_COLUMN_STACK:
@@ -4337,6 +4547,8 @@ export function executeBuildingCommand(project, command) {
       return removeSolarStudyTarget(project, command);
     case BUILDING_COMMANDS.CONFIGURE_RECTANGULAR_SITE:
       return configureRectangularSite(project, command);
+    case BUILDING_COMMANDS.CONFIGURE_SURVEYED_SITE:
+      return configureSurveyedSite(project, command);
     case BUILDING_COMMANDS.CONFIGURE_REGULAR_PARKING_PLAN:
       return configureRegularParkingPlan(project, command);
     case BUILDING_COMMANDS.CONFIGURE_TEST_FIT_PROFILE:

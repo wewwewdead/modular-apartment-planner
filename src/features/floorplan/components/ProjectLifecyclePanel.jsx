@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
+import { formatBearing, isValidTraverseLine, traverseBoundary } from '@/domain/surveyTraverse';
 import styles from './ProjectLifecyclePanel.module.css';
 
 export const LIFECYCLE_STAGES = Object.freeze([
@@ -21,6 +22,12 @@ function optionalNumber(value) {
   if (value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+// An empty field is missing input, not zero: Number('') would quietly commit 0.
+function requiredNumber(value) {
+  const text = String(value ?? '').trim();
+  return text === '' ? Number.NaN : Number(text);
 }
 
 function millimetersFromMeters(value) {
@@ -530,8 +537,7 @@ function BriefStage({ brief, lastCommand, onExecuteCommand }) {
   );
 }
 
-function SiteStage({ building, ledger, parking, lastCommand, onExecuteCommand }) {
-  const site = building.site || {};
+function RectangularLotForm({ site, lastCommand, onExecuteCommand }) {
   const setup = site.lotSetup?.kind === 'rectangle' ? site.lotSetup : null;
   const setbackByRole = new Map((site.edgeSetbacks || []).map((entry) => [entry.classification, entry.distance]));
   const [draft, setDraft] = useState(() => ({
@@ -544,25 +550,6 @@ function SiteStage({ building, ledger, parking, lastCommand, onExecuteCommand })
     rearSetback: metersDraft(setbackByRole.get('rear')),
     leftSetback: metersDraft(setbackByRole.get('left')),
     rightSetback: metersDraft(setbackByRole.get('right')),
-  }));
-  const firstBay = site.parkingPlan?.bays?.[0];
-  const accessRoute = site.parkingPlan?.accessRoutes?.[0];
-  const frontageIndex = setup?.frontEdgeIndex ?? 0;
-  const frontageStart = site.boundary?.[frontageIndex] || { x: 0, y: 0 };
-  const frontageEnd = site.boundary?.[(frontageIndex + 1) % (site.boundary?.length || 1)] || { x: 0, y: 0 };
-  const [parkingDraft, setParkingDraft] = useState(() => ({
-    bayCount: valueOrBlank(site.parkingPlan?.bays?.length ?? parking?.targetCount ?? 0),
-    bayWidth: metersDraft(firstBay?.width ?? 2500),
-    bayLength: metersDraft(firstBay?.length ?? 5000),
-    bayGap: '0',
-    firstBayX: metersDraft(firstBay?.origin?.x ?? (setup?.origin?.x || 0) + 2500),
-    firstBayY: metersDraft(firstBay?.origin?.y ?? (setup?.origin?.y || 0) + 2500),
-    angle: valueOrBlank(firstBay?.angle ?? 0),
-    accessWidth: metersDraft(accessRoute?.clearWidth ?? 3000),
-    routeStartX: metersDraft(accessRoute?.points?.[0]?.x ?? (frontageStart.x + frontageEnd.x) / 2),
-    routeStartY: metersDraft(accessRoute?.points?.[0]?.y ?? (frontageStart.y + frontageEnd.y) / 2),
-    routeEndX: metersDraft(accessRoute?.points?.at(-1)?.x ?? firstBay?.origin?.x ?? (setup?.origin?.x || 0) + 2500),
-    routeEndY: metersDraft(accessRoute?.points?.at(-1)?.y ?? firstBay?.origin?.y ?? (setup?.origin?.y || 0) + 2500),
   }));
   const setField = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
   const apply = () =>
@@ -582,6 +569,401 @@ function SiteStage({ building, ledger, parking, lastCommand, onExecuteCommand })
         right: millimetersFromMeters(draft.rightSetback),
       },
     });
+
+  return (
+    <div className={styles.formSection}>
+      <strong>Rectangular lot setup</strong>
+      <div className={styles.formGrid}>
+        <label>
+          <span>Lot width (m)</span>
+          <input
+            aria-label="Lot width"
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={draft.width}
+            onChange={(event) => setField('width', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Lot depth (m)</span>
+          <input
+            aria-label="Lot depth"
+            type="number"
+            min="0.1"
+            step="0.1"
+            value={draft.depth}
+            onChange={(event) => setField('depth', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>North angle (°)</span>
+          <input
+            aria-label="North angle"
+            type="number"
+            step="1"
+            value={draft.northAngle}
+            onChange={(event) => setField('northAngle', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Road frontage</span>
+          <select
+            aria-label="Road frontage edge"
+            value={draft.frontEdgeIndex}
+            onChange={(event) => setField('frontEdgeIndex', event.target.value)}
+          >
+            <option value="0">Bottom edge</option>
+            <option value="1">Right edge</option>
+            <option value="2">Top edge</option>
+            <option value="3">Left edge</option>
+          </select>
+        </label>
+        <label className={styles.wideField}>
+          <span>Road name</span>
+          <input
+            aria-label="Road name"
+            value={draft.roadName}
+            onChange={(event) => setField('roadName', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Front setback (m)</span>
+          <input
+            aria-label="Front setback"
+            type="number"
+            min="0"
+            step="0.1"
+            value={draft.frontSetback}
+            onChange={(event) => setField('frontSetback', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Rear setback (m)</span>
+          <input
+            aria-label="Rear setback"
+            type="number"
+            min="0"
+            step="0.1"
+            value={draft.rearSetback}
+            onChange={(event) => setField('rearSetback', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Left setback (m)</span>
+          <input
+            aria-label="Left setback"
+            type="number"
+            min="0"
+            step="0.1"
+            value={draft.leftSetback}
+            onChange={(event) => setField('leftSetback', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Right setback (m)</span>
+          <input
+            aria-label="Right setback"
+            type="number"
+            min="0"
+            step="0.1"
+            value={draft.rightSetback}
+            onChange={(event) => setField('rightSetback', event.target.value)}
+          />
+        </label>
+      </div>
+      <button type="button" className={styles.primaryAction} onClick={apply}>
+        Apply site constraints
+      </button>
+      {lastCommand?.commandType === BUILDING_COMMANDS.CONFIGURE_RECTANGULAR_SITE && (
+        <span className={lastCommand.ok ? styles.commandSuccess : styles.commandError}>
+          {lastCommand.ok ? 'Site envelope updated and checked.' : lastCommand.error?.message}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TraversePreview({ points, frontEdgeIndex }) {
+  if (!points || points.length < 3) return null;
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const width = Math.max(1, Math.max(...xs) - minX);
+  const height = Math.max(1, Math.max(...ys) - minY);
+  const padding = Math.max(width, height) * 0.1;
+  const labelSize = Math.max(width, height) * 0.07;
+  const frontStart = points[frontEdgeIndex] || points[0];
+  const frontEnd = points[(frontEdgeIndex + 1) % points.length] || points[0];
+  return (
+    <svg
+      className={styles.traversePreview}
+      viewBox={`${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`}
+      role="img"
+      aria-label="Surveyed boundary preview"
+    >
+      <polygon
+        className={styles.traversePolygon}
+        points={points.map((point) => `${point.x},${point.y}`).join(' ')}
+        vectorEffect="non-scaling-stroke"
+      />
+      <line
+        className={styles.traverseFrontEdge}
+        x1={frontStart.x}
+        y1={frontStart.y}
+        x2={frontEnd.x}
+        y2={frontEnd.y}
+        vectorEffect="non-scaling-stroke"
+      />
+      {points.map((point, index) => (
+        <text key={index} className={styles.traverseCorner} x={point.x} y={point.y} fontSize={labelSize}>
+          {index + 1}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+const BLANK_TRAVERSE_ROW = Object.freeze({ ns: 'N', degrees: '', minutes: '0', ew: 'E', distance: '', setback: '' });
+
+function SurveyedLotForm({ site, lastCommand, onExecuteCommand }) {
+  const setup = site.lotSetup?.kind === 'surveyed' ? site.lotSetup : null;
+  const setbackByIndex = new Map((site.edgeSetbacks || []).map((entry) => [entry.edgeIndex, entry.distance]));
+  const [rows, setRows] = useState(() =>
+    setup
+      ? setup.lines.map((entry, index) => ({
+          ns: entry.ns,
+          degrees: valueOrBlank(entry.degrees),
+          minutes: valueOrBlank(entry.minutes ?? 0),
+          ew: entry.ew,
+          distance: metersDraft(entry.distance),
+          setback: metersDraft(setbackByIndex.get(index)),
+        }))
+      : Array.from({ length: 4 }, () => ({ ...BLANK_TRAVERSE_ROW })),
+  );
+  const [meta, setMeta] = useState(() => ({
+    northAngle: valueOrBlank(site.northAngle ?? 0),
+    frontEdgeIndex: valueOrBlank(setup?.frontEdgeIndex ?? 0),
+    roadName: setup?.roadName || site.roadEdges?.[0]?.roadName || 'Road',
+  }));
+  const setMetaField = (field, value) => setMeta((current) => ({ ...current, [field]: value }));
+  const setRow = (index, field, value) =>
+    setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)));
+  const addRow = () => setRows((current) => [...current, { ...BLANK_TRAVERSE_ROW }]);
+  const removeRow = (index) => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
+
+  const draftLines = rows.map((row) => ({
+    ns: row.ns,
+    ew: row.ew,
+    degrees: row.degrees === '' ? Number.NaN : Number(row.degrees),
+    minutes: row.minutes === '' ? 0 : Number(row.minutes),
+    distance: millimetersFromMeters(row.distance),
+  }));
+  const frontEdgeIndex = Math.min(Math.max(0, Number(meta.frontEdgeIndex) || 0), rows.length - 1);
+  const traverse = traverseBoundary(draftLines, { northAngle: Number(meta.northAngle) || 0 });
+  const closureLabel = traverse
+    ? traverse.misclosure < 1
+      ? 'Closes exactly'
+      : `${Math.round(traverse.misclosure)} mm (1:${Math.max(
+          1,
+          Math.round(traverse.perimeter / traverse.misclosure),
+        ).toLocaleString()})`
+    : 'Not available';
+  const cornerAfter = (index) => (index + 1 >= rows.length ? 1 : index + 2);
+
+  const apply = () =>
+    onExecuteCommand({
+      type: BUILDING_COMMANDS.CONFIGURE_SURVEYED_SITE,
+      boundaryId: site.boundaryId,
+      lines: draftLines,
+      origin: setup?.origin || { x: 0, y: 0 },
+      northAngle: Number(meta.northAngle),
+      frontEdgeIndex,
+      roadName: meta.roadName,
+      edgeSetbacks: rows.map((row, index) => ({ edgeIndex: index, distance: millimetersFromMeters(row.setback) })),
+    });
+
+  return (
+    <div className={styles.formSection}>
+      <strong>Surveyed lot boundary</strong>
+      <span className={styles.formHint}>
+        Copy the technical description from the surveyor&apos;s plan: one bearing and distance per boundary line. Corner
+        numbers match the plan.
+      </span>
+      <div className={styles.traverseTable}>
+        {rows.map((row, index) => (
+          <div className={styles.traverseRow} key={index}>
+            <div className={styles.traverseBearing}>
+              <span className={styles.traverseLineLabel}>
+                {index + 1}–{cornerAfter(index)}
+              </span>
+              <select
+                aria-label={`Line ${index + 1} north or south`}
+                value={row.ns}
+                onChange={(event) => setRow(index, 'ns', event.target.value)}
+              >
+                <option value="N">N</option>
+                <option value="S">S</option>
+              </select>
+              <input
+                aria-label={`Line ${index + 1} bearing degrees`}
+                type="number"
+                min="0"
+                max="90"
+                step="1"
+                placeholder="°"
+                value={row.degrees}
+                onChange={(event) => setRow(index, 'degrees', event.target.value)}
+              />
+              <input
+                aria-label={`Line ${index + 1} bearing minutes`}
+                type="number"
+                min="0"
+                max="59"
+                step="1"
+                placeholder="′"
+                value={row.minutes}
+                onChange={(event) => setRow(index, 'minutes', event.target.value)}
+              />
+              <select
+                aria-label={`Line ${index + 1} east or west`}
+                value={row.ew}
+                onChange={(event) => setRow(index, 'ew', event.target.value)}
+              >
+                <option value="E">E</option>
+                <option value="W">W</option>
+              </select>
+              <button
+                type="button"
+                className={styles.traverseRemove}
+                aria-label={`Remove line ${index + 1}`}
+                onClick={() => removeRow(index)}
+                disabled={rows.length <= 3}
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.traverseMeasures}>
+              <label>
+                <span>Distance (m)</span>
+                <input
+                  aria-label={`Line ${index + 1} distance`}
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={row.distance}
+                  onChange={(event) => setRow(index, 'distance', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Setback (m)</span>
+                <input
+                  aria-label={`Line ${index + 1} setback`}
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={row.setback}
+                  onChange={(event) => setRow(index, 'setback', event.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button type="button" className={styles.secondaryAction} onClick={addRow}>
+        Add boundary line
+      </button>
+      <div className={styles.formGrid}>
+        <label>
+          <span>North angle (°)</span>
+          <input
+            aria-label="North angle"
+            type="number"
+            step="1"
+            value={meta.northAngle}
+            onChange={(event) => setMetaField('northAngle', event.target.value)}
+          />
+        </label>
+        <label>
+          <span>Road frontage</span>
+          <select
+            aria-label="Road frontage edge"
+            value={meta.frontEdgeIndex}
+            onChange={(event) => setMetaField('frontEdgeIndex', event.target.value)}
+          >
+            {rows.map((row, index) => (
+              <option key={index} value={index}>
+                {`Line ${index + 1}–${cornerAfter(index)}${
+                  isValidTraverseLine(draftLines[index])
+                    ? ` (${formatBearing(draftLines[index])}, ${row.distance} m)`
+                    : ''
+                }`}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.wideField}>
+          <span>Road name</span>
+          <input
+            aria-label="Road name"
+            value={meta.roadName}
+            onChange={(event) => setMetaField('roadName', event.target.value)}
+          />
+        </label>
+      </div>
+      {traverse && (
+        <>
+          <div className={styles.metricsGrid}>
+            <Metric
+              label="Computed area"
+              value={`${(traverse.area / 1_000_000).toLocaleString(undefined, { maximumFractionDigits: 2 })} m²`}
+              note="Compare with the titled area"
+            />
+            <Metric
+              label="Perimeter"
+              value={`${(traverse.perimeter / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })} m`}
+            />
+            <Metric label="Closure error" value={closureLabel} note="Rounding on the plan leaves a small gap" />
+          </div>
+          <TraversePreview points={traverse.points} frontEdgeIndex={frontEdgeIndex} />
+        </>
+      )}
+      <button type="button" className={styles.primaryAction} onClick={apply} disabled={!traverse}>
+        Apply surveyed boundary
+      </button>
+      {lastCommand?.commandType === BUILDING_COMMANDS.CONFIGURE_SURVEYED_SITE && (
+        <span className={lastCommand.ok ? styles.commandSuccess : styles.commandError}>
+          {lastCommand.ok ? 'Surveyed boundary applied and checked.' : lastCommand.error?.message}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SiteStage({ building, ledger, parking, lastCommand, onExecuteCommand }) {
+  const site = building.site || {};
+  const setup = site.lotSetup;
+  const [lotMode, setLotMode] = useState(() => (setup?.kind === 'surveyed' ? 'surveyed' : 'rectangle'));
+  const firstBay = site.parkingPlan?.bays?.[0];
+  const accessRoute = site.parkingPlan?.accessRoutes?.[0];
+  const frontageIndex = setup?.frontEdgeIndex ?? 0;
+  const frontageStart = site.boundary?.[frontageIndex] || { x: 0, y: 0 };
+  const frontageEnd = site.boundary?.[(frontageIndex + 1) % (site.boundary?.length || 1)] || { x: 0, y: 0 };
+  const [parkingDraft, setParkingDraft] = useState(() => ({
+    bayCount: valueOrBlank(site.parkingPlan?.bays?.length ?? parking?.targetCount ?? 0),
+    bayWidth: metersDraft(firstBay?.width ?? 2500),
+    bayLength: metersDraft(firstBay?.length ?? 5000),
+    bayGap: '0',
+    firstBayX: metersDraft(firstBay?.origin?.x ?? (setup?.origin?.x || 0) + 2500),
+    firstBayY: metersDraft(firstBay?.origin?.y ?? (setup?.origin?.y || 0) + 2500),
+    angle: valueOrBlank(firstBay?.angle ?? 0),
+    accessWidth: metersDraft(accessRoute?.clearWidth ?? 3000),
+    routeStartX: metersDraft(accessRoute?.points?.[0]?.x ?? (frontageStart.x + frontageEnd.x) / 2),
+    routeStartY: metersDraft(accessRoute?.points?.[0]?.y ?? (frontageStart.y + frontageEnd.y) / 2),
+    routeEndX: metersDraft(accessRoute?.points?.at(-1)?.x ?? firstBay?.origin?.x ?? (setup?.origin?.x || 0) + 2500),
+    routeEndY: metersDraft(accessRoute?.points?.at(-1)?.y ?? firstBay?.origin?.y ?? (setup?.origin?.y || 0) + 2500),
+  }));
   const applyParking = () =>
     onExecuteCommand({
       type: BUILDING_COMMANDS.CONFIGURE_REGULAR_PARKING_PLAN,
@@ -633,116 +1015,19 @@ function SiteStage({ building, ledger, parking, lastCommand, onExecuteCommand })
           note={`${parking?.explicitlyServedBayCount || 0} bays related`}
         />
       </div>
-      <div className={styles.formSection}>
-        <strong>Rectangular lot setup</strong>
-        <div className={styles.formGrid}>
-          <label>
-            <span>Lot width (m)</span>
-            <input
-              aria-label="Lot width"
-              type="number"
-              min="0.1"
-              step="0.1"
-              value={draft.width}
-              onChange={(event) => setField('width', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Lot depth (m)</span>
-            <input
-              aria-label="Lot depth"
-              type="number"
-              min="0.1"
-              step="0.1"
-              value={draft.depth}
-              onChange={(event) => setField('depth', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>North angle (°)</span>
-            <input
-              aria-label="North angle"
-              type="number"
-              step="1"
-              value={draft.northAngle}
-              onChange={(event) => setField('northAngle', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Road frontage</span>
-            <select
-              aria-label="Road frontage edge"
-              value={draft.frontEdgeIndex}
-              onChange={(event) => setField('frontEdgeIndex', event.target.value)}
-            >
-              <option value="0">Bottom edge</option>
-              <option value="1">Right edge</option>
-              <option value="2">Top edge</option>
-              <option value="3">Left edge</option>
-            </select>
-          </label>
-          <label className={styles.wideField}>
-            <span>Road name</span>
-            <input
-              aria-label="Road name"
-              value={draft.roadName}
-              onChange={(event) => setField('roadName', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Front setback (m)</span>
-            <input
-              aria-label="Front setback"
-              type="number"
-              min="0"
-              step="0.1"
-              value={draft.frontSetback}
-              onChange={(event) => setField('frontSetback', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Rear setback (m)</span>
-            <input
-              aria-label="Rear setback"
-              type="number"
-              min="0"
-              step="0.1"
-              value={draft.rearSetback}
-              onChange={(event) => setField('rearSetback', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Left setback (m)</span>
-            <input
-              aria-label="Left setback"
-              type="number"
-              min="0"
-              step="0.1"
-              value={draft.leftSetback}
-              onChange={(event) => setField('leftSetback', event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Right setback (m)</span>
-            <input
-              aria-label="Right setback"
-              type="number"
-              min="0"
-              step="0.1"
-              value={draft.rightSetback}
-              onChange={(event) => setField('rightSetback', event.target.value)}
-            />
-          </label>
-        </div>
-        <button type="button" className={styles.primaryAction} onClick={apply}>
-          Apply site constraints
+      <div className={styles.lotModeToggle} role="group" aria-label="Lot input mode">
+        <button type="button" aria-pressed={lotMode === 'rectangle'} onClick={() => setLotMode('rectangle')}>
+          Rectangular lot
         </button>
-        {lastCommand?.commandType === BUILDING_COMMANDS.CONFIGURE_RECTANGULAR_SITE && (
-          <span className={lastCommand.ok ? styles.commandSuccess : styles.commandError}>
-            {lastCommand.ok ? 'Site envelope updated and checked.' : lastCommand.error?.message}
-          </span>
-        )}
+        <button type="button" aria-pressed={lotMode === 'surveyed'} onClick={() => setLotMode('surveyed')}>
+          Surveyed boundary
+        </button>
       </div>
+      {lotMode === 'rectangle' ? (
+        <RectangularLotForm site={site} lastCommand={lastCommand} onExecuteCommand={onExecuteCommand} />
+      ) : (
+        <SurveyedLotForm site={site} lastCommand={lastCommand} onExecuteCommand={onExecuteCommand} />
+      )}
       {(site.boundary || []).length >= 3 && (
         <div className={styles.formSection}>
           <strong>Regular parking and road access</strong>
@@ -1768,7 +2053,13 @@ function StructureStage({ project, building, issues, loadPath, realization, last
   const structural = building.systems?.structural || {};
   const primaryGrid = (structural.gridSystems || [])[0] || null;
   const regularSetup = primaryGrid?.setup?.kind === 'regular' ? primaryGrid.setup : null;
-  const [draft, setDraft] = useState(() => ({
+  // The grid fields are live once a grid exists, so they read from the grid
+  // itself rather than from a seeded draft: a canvas drag or a rotation typed
+  // in the properties panel shows up here without this panel being remounted —
+  // which it no longer can be, because remounting mid-keystroke would take the
+  // focus and the half-typed number with it. Raw keystrokes are held per field
+  // until the field is left, so a partial entry survives long enough to finish.
+  const gridModel = {
     name: primaryGrid?.name || 'Primary Grid',
     xAxisCount: valueOrBlank(regularSetup?.xAxisCount ?? 3),
     yAxisCount: valueOrBlank(regularSetup?.yAxisCount ?? 3),
@@ -1777,6 +2068,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
     originX: metersDraft(primaryGrid?.origin?.x ?? 0),
     originY: metersDraft(primaryGrid?.origin?.y ?? 0),
     rotation: valueOrBlank(primaryGrid?.rotation ?? 0),
+  };
+  const [gridDraft, setGridDraft] = useState({});
+  const [draft, setDraft] = useState(() => ({
     columnWidth: metersDraft(realization?.profile?.columnWidth ?? 300),
     columnDepth: metersDraft(realization?.profile?.columnDepth ?? 300),
     beamWidth: metersDraft(realization?.profile?.beamWidth ?? 250),
@@ -1797,21 +2091,55 @@ function StructureStage({ project, building, issues, loadPath, realization, last
     purpose: 'services',
   }));
   const setField = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
-  const apply = () =>
-    onExecuteCommand({
-      type: BUILDING_COMMANDS.CONFIGURE_REGULAR_STRUCTURAL_GRID,
-      gridId: primaryGrid?.id || `${building.id}_primary_grid`,
-      name: draft.name,
-      xAxisCount: Number(draft.xAxisCount),
-      yAxisCount: Number(draft.yAxisCount),
-      xSpacing: millimetersFromMeters(draft.xSpacing),
-      ySpacing: millimetersFromMeters(draft.ySpacing),
-      origin: {
-        x: millimetersFromMeters(draft.originX),
-        y: millimetersFromMeters(draft.originY),
-      },
-      rotation: Number(draft.rotation),
+
+  const gridField = (field) => gridDraft[field] ?? gridModel[field];
+  const gridCommandFrom = (values) => ({
+    type: BUILDING_COMMANDS.CONFIGURE_REGULAR_STRUCTURAL_GRID,
+    gridId: primaryGrid?.id || `${building.id}_primary_grid`,
+    name: String(values.name).trim() || 'Primary Grid',
+    xAxisCount: requiredNumber(values.xAxisCount),
+    yAxisCount: requiredNumber(values.yAxisCount),
+    xSpacing: millimetersFromMeters(values.xSpacing),
+    ySpacing: millimetersFromMeters(values.ySpacing),
+    origin: {
+      x: millimetersFromMeters(values.originX),
+      y: millimetersFromMeters(values.originY),
+    },
+    rotation: requiredNumber(values.rotation),
+  });
+  // The same completeness test the command applies, asked before dispatching:
+  // a half-typed grid must not be sent only to be rejected.
+  const isCompleteGrid = (command) =>
+    Number.isInteger(command.xAxisCount) &&
+    command.xAxisCount >= 2 &&
+    Number.isInteger(command.yAxisCount) &&
+    command.yAxisCount >= 2 &&
+    Number.isFinite(command.xSpacing) &&
+    command.xSpacing > 0 &&
+    Number.isFinite(command.ySpacing) &&
+    command.ySpacing > 0 &&
+    Number.isFinite(command.origin.x) &&
+    Number.isFinite(command.origin.y) &&
+    Number.isFinite(command.rotation);
+
+  const editGridField = (field, value) => {
+    setGridDraft((current) => ({ ...current, [field]: value }));
+    if (!primaryGrid) return;
+    const command = gridCommandFrom({ ...gridModel, ...gridDraft, [field]: value });
+    if (isCompleteGrid(command)) onExecuteCommand(command);
+  };
+  // Leaving a field hands it back to the committed grid. With no grid yet the
+  // draft is the only record of what was typed, so it stays until Create runs.
+  const releaseGridField = (field) => {
+    if (!primaryGrid) return;
+    setGridDraft((current) => {
+      if (!(field in current)) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
     });
+  };
+  const createGrid = () => onExecuteCommand(gridCommandFrom({ ...gridModel, ...gridDraft }));
   const populateStacks = () =>
     onExecuteCommand({
       type: BUILDING_COMMANDS.POPULATE_GRID_COLUMN_STACKS,
@@ -1974,8 +2302,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
             <span>Grid name</span>
             <input
               aria-label="Grid name"
-              value={draft.name}
-              onChange={(event) => setField('name', event.target.value)}
+              value={gridField('name')}
+              onChange={(event) => editGridField('name', event.target.value)}
+              onBlur={() => releaseGridField('name')}
             />
           </label>
           <label>
@@ -1985,8 +2314,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               type="number"
               min="2"
               step="1"
-              value={draft.xAxisCount}
-              onChange={(event) => setField('xAxisCount', event.target.value)}
+              value={gridField('xAxisCount')}
+              onChange={(event) => editGridField('xAxisCount', event.target.value)}
+              onBlur={() => releaseGridField('xAxisCount')}
             />
           </label>
           <label>
@@ -1996,8 +2326,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               type="number"
               min="2"
               step="1"
-              value={draft.yAxisCount}
-              onChange={(event) => setField('yAxisCount', event.target.value)}
+              value={gridField('yAxisCount')}
+              onChange={(event) => editGridField('yAxisCount', event.target.value)}
+              onBlur={() => releaseGridField('yAxisCount')}
             />
           </label>
           <label>
@@ -2007,8 +2338,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               type="number"
               min="0.1"
               step="0.1"
-              value={draft.xSpacing}
-              onChange={(event) => setField('xSpacing', event.target.value)}
+              value={gridField('xSpacing')}
+              onChange={(event) => editGridField('xSpacing', event.target.value)}
+              onBlur={() => releaseGridField('xSpacing')}
             />
           </label>
           <label>
@@ -2018,8 +2350,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               type="number"
               min="0.1"
               step="0.1"
-              value={draft.ySpacing}
-              onChange={(event) => setField('ySpacing', event.target.value)}
+              value={gridField('ySpacing')}
+              onChange={(event) => editGridField('ySpacing', event.target.value)}
+              onBlur={() => releaseGridField('ySpacing')}
             />
           </label>
           <label>
@@ -2028,8 +2361,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               aria-label="Grid origin X"
               type="number"
               step="0.1"
-              value={draft.originX}
-              onChange={(event) => setField('originX', event.target.value)}
+              value={gridField('originX')}
+              onChange={(event) => editGridField('originX', event.target.value)}
+              onBlur={() => releaseGridField('originX')}
             />
           </label>
           <label>
@@ -2038,8 +2372,9 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               aria-label="Grid origin Y"
               type="number"
               step="0.1"
-              value={draft.originY}
-              onChange={(event) => setField('originY', event.target.value)}
+              value={gridField('originY')}
+              onChange={(event) => editGridField('originY', event.target.value)}
+              onBlur={() => releaseGridField('originY')}
             />
           </label>
           <label className={styles.wideField}>
@@ -2048,14 +2383,21 @@ function StructureStage({ project, building, issues, loadPath, realization, last
               aria-label="Grid rotation"
               type="number"
               step="1"
-              value={draft.rotation}
-              onChange={(event) => setField('rotation', event.target.value)}
+              value={gridField('rotation')}
+              onChange={(event) => editGridField('rotation', event.target.value)}
+              onBlur={() => releaseGridField('rotation')}
             />
           </label>
         </div>
-        <button type="button" className={styles.primaryAction} onClick={apply}>
-          {primaryGrid ? 'Update structural grid' : 'Create structural grid'}
-        </button>
+        {primaryGrid ? (
+          <p className={styles.disclaimer}>
+            Grid edits apply as you type. Drag or rotate the grid on the plan and these figures follow.
+          </p>
+        ) : (
+          <button type="button" className={styles.primaryAction} onClick={createGrid}>
+            Create structural grid
+          </button>
+        )}
         {lastCommand?.commandType === BUILDING_COMMANDS.CONFIGURE_REGULAR_STRUCTURAL_GRID && (
           <span className={lastCommand.ok ? styles.commandSuccess : styles.commandError}>
             {lastCommand.ok
@@ -5404,8 +5746,12 @@ export default function ProjectLifecyclePanel({
     building.site?.edgeSetbacks,
     building.site?.parkingPlan,
   ]);
+  // Deliberately without gridSystems: the grid fields are live, and a remount
+  // on every accepted edit would pull the focus out of the field being typed
+  // in. Nothing else in the stage seeds a draft from the grids — the stack and
+  // member sizes come from the realization profile, the slab opening from the
+  // floors — so those still reseed on an external change, as they should.
   const structuralFormKey = JSON.stringify([
-    building.systems?.structural?.gridSystems || [],
     building.systems?.structural?.coordinationProfile || {},
     building.systems?.structural?.realizationProfile || {},
     building.systems?.structural?.realization || {},

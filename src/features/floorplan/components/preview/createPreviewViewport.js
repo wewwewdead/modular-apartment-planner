@@ -737,7 +737,15 @@ export function createPreviewViewport(container) {
         disposeScene(worldRoot, { disposeMaterials: false });
       }
 
-      if (selectionOverlay) {
+      // Only when the whole world went with it. The overlay is built from
+      // descriptors rather than from the world's meshes, so an incremental
+      // rebuild leaves it perfectly valid — and dropping it here left the
+      // selected object un-highlighted from now until the effect that rebuilds
+      // it lands, a React commit later. During a drag that gap reopens fifteen
+      // times a second, which is what made a dragged object flash.
+      // `setSelectionOverlay` replaces (and disposes) it right afterwards, and
+      // `dispose()` clears it on teardown, so nothing is leaked by holding on.
+      if (selectionOverlay && !isSameRoot) {
         scene.remove(selectionOverlay);
         disposeScene(selectionOverlay, { disposeMaterials: true });
         selectionOverlay = null;

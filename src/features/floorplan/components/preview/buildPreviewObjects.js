@@ -762,14 +762,52 @@ function assignPreviewMetadata(object, descriptor, floor) {
 }
 
 /**
+ * Whether two object descriptors describe the same thing to build.
+ *
+ * Descriptors are plain data — numbers, points, outlines — and the scene pass
+ * rebuilds all of them from the project on every change, so reference equality
+ * never holds and a structural comparison is the only way to tell "this mesh is
+ * unchanged" from "this mesh moved". It is worth doing: comparing a whole
+ * building's descriptors costs a fraction of a millisecond, triangulating them
+ * costs tens.
+ */
+function descriptorsEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let index = 0; index < a.length; index += 1) {
+      if (!descriptorsEqual(a[index], b[index])) return false;
+    }
+    return true;
+  }
+
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const key of keys) {
+    if (!descriptorsEqual(a[key], b[key])) return false;
+  }
+  return true;
+}
+
+/**
  * Build the THREE group + local meshMap for a single floor descriptor.
  * Extracted so an incremental cache can rebuild individual floors while
  * reusing groups whose source geometry is unchanged. Returns the floor's
  * meshMap entries keyed by descriptor id (floor-local, no visibility applied
  * beyond the group flag — visibility is a per-entry concern applied by the
  * caller/cache).
+ *
+ * `previousEntries` are this floor's entries from the last build, if it has
+ * one. An object whose descriptor is unchanged is carried over rather than
+ * rebuilt — the reason a floor gets rebuilt is often that one thing on it (or
+ * on a floor it depends on) moved, and re-triangulating the other three hundred
+ * meshes to follow that one is what made dragging feel like wading. `add()`
+ * detaches a carried-over object from the group it came from, so what remains in
+ * the old group is exactly the set the caller is free to dispose.
  */
-export function buildFloorObjectGroup(floor, materialPalette) {
+export function buildFloorObjectGroup(floor, materialPalette, previousEntries = null) {
   const floorGroup = new THREE.Group();
   floorGroup.name = `floor-${floor.floorId}`;
   floorGroup.visible = floor.visible;
@@ -782,14 +820,21 @@ export function buildFloorObjectGroup(floor, materialPalette) {
   const entries = new Map();
 
   for (const descriptor of floor.objects) {
-    const object = createObjectForDescriptor(descriptor, materialPalette);
-    object.name = descriptor.id;
-    object.userData = {
-      id: descriptor.id,
-      kind: descriptor.kind,
-      metadata: descriptor.metadata,
-    };
-    assignPreviewMetadata(object, descriptor, floor);
+    const previous = previousEntries?.get(descriptor.id);
+    const carriedOver = previous && descriptorsEqual(previous.descriptor, descriptor) ? previous.object : null;
+    const object = carriedOver || createObjectForDescriptor(descriptor, materialPalette);
+
+    // A carried-over object already carries all of this: its descriptor is
+    // equal, and the cache only ever offers back entries from the same floor.
+    if (!carriedOver) {
+      object.name = descriptor.id;
+      object.userData = {
+        id: descriptor.id,
+        kind: descriptor.kind,
+        metadata: descriptor.metadata,
+      };
+      assignPreviewMetadata(object, descriptor, floor);
+    }
     floorGroup.add(object);
 
     entries.set(descriptor.id, {

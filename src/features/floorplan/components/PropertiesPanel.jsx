@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
+import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { FILLET_DEFAULT_RADIUS, FILLET_MIN_RADIUS, FILLET_MAX_RADIUS } from '@/domain/defaults';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
@@ -41,6 +42,7 @@ import ProjectSummary from './properties/ProjectSummary';
 import SheetProperties, { SheetExportMenu } from './properties/SheetProperties';
 import SheetViewportProperties from './properties/SheetViewportProperties';
 import BuildingServiceProperties from './properties/BuildingServiceProperties';
+import StructuralGridProperties from './properties/StructuralGridProperties';
 
 /*
  * Plain nouns for the selection types. The panel used to interpolate the raw
@@ -77,6 +79,7 @@ const OBJECT_NOUNS = {
   plumbingShaft: 'plumbing shaft',
   electricalRiser: 'electrical riser',
   electricalPanelZone: 'panel zone',
+  structuralGrid: 'structural grid',
 };
 
 function selectionLabel(selectedType, floorName) {
@@ -175,6 +178,16 @@ export default function PropertiesPanel() {
       const phase = (project.phases || []).find((p) => p.id === selectedId);
       if (phase && (await confirm(`Delete phase "${phase.name}"?`))) {
         dispatch({ type: 'PHASE_DELETE', phaseId: selectedId });
+      }
+      editorDispatch({ type: 'DESELECT' });
+      return;
+    }
+    if (selectedType === 'structuralGrid') {
+      if (await confirm('Delete the structural grid? Modeled columns and their stacks stay; planned-only stacks go.')) {
+        dispatch({
+          type: 'EXECUTE_BUILDING_COMMAND',
+          command: { type: BUILDING_COMMANDS.REMOVE_STRUCTURAL_GRID, gridId: selectedId },
+        });
       }
       editorDispatch({ type: 'DESELECT' });
       return;
@@ -404,7 +417,11 @@ export default function PropertiesPanel() {
       }
     }
   } else if (selectedId && floor) {
-    if (selectedType === 'plumbingShaft') {
+    if (selectedType === 'structuralGrid') {
+      const grid = (project.building?.systems?.structural?.gridSystems || []).find((entry) => entry.id === selectedId);
+      if (grid)
+        content = <StructuralGridProperties grid={grid} site={project.building?.site} dispatch={dispatch} u={u} />;
+    } else if (selectedType === 'plumbingShaft') {
       const shaft = (project.building?.systems?.plumbing?.shafts || []).find((entry) => entry.id === selectedId);
       if (shaft)
         content = <BuildingServiceProperties entity={shaft} serviceType={selectedType} dispatch={dispatch} u={u} />;

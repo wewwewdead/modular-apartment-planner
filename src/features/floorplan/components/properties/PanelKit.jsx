@@ -1,4 +1,5 @@
 import { memo, useCallback, useId, useState } from 'react';
+import { useNumericDraft } from '../useNumericDraft';
 import styles from './PanelKit.module.css';
 
 /**
@@ -83,19 +84,26 @@ export function Stack({ children }) {
   return <div className={styles.stack}>{children}</div>;
 }
 
+/**
+ * Editable number. The entry rules live in useNumericDraft, which is what keeps
+ * a half-typed number on screen instead of letting the committed value — often
+ * clamped from the first digit — overwrite it mid-word.
+ */
 export function NumberField({ label, value, onChange, step, unit, min }) {
-  const handle = useCallback(
-    (event) => {
-      const next = parseFloat(event.target.value);
-      if (Number.isNaN(next)) return;
-      onChange(next);
-    },
-    [onChange],
-  );
+  const { displayValue, handleChange, handleKeyDown, handleBlur } = useNumericDraft(value, onChange);
 
   return (
     <Field label={label}>
-      <input type="number" className={styles.controlNumber} value={value} onChange={handle} step={step} min={min} />
+      <input
+        type="number"
+        className={styles.controlNumber}
+        value={displayValue}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        step={step}
+        min={min}
+      />
       {unit ? <span className={styles.unit}>{unit}</span> : null}
     </Field>
   );
