@@ -35,6 +35,18 @@ function projectWithGrid() {
   }).project;
 }
 
+/** The same grid after one bay was retuned on the plan — no longer regular. */
+function projectWithCustomBays() {
+  const result = executeBuildingCommand(projectWithGrid(), {
+    type: BUILDING_COMMANDS.SET_STRUCTURAL_GRID_BAY_SPACING,
+    gridId: 'grid_ui',
+    orientation: 'vertical',
+    bayIndex: 0,
+    spacing: 6000,
+  });
+  return result.project;
+}
+
 let container = null;
 
 afterEach(() => {
@@ -131,6 +143,36 @@ describe('StructureStage grid form', () => {
     expect(commands[0]).toMatchObject({
       type: BUILDING_COMMANDS.CONFIGURE_REGULAR_STRUCTURAL_GRID,
       xSpacing: 3000,
+    });
+  });
+
+  it('reads a per-bay grid off its axes instead of falling back to blank-form defaults', () => {
+    const { field } = mountStructureStage(projectWithCustomBays());
+
+    // Defaults would read 3 / 3 / 4 m / 4 m and quietly replace the grid with
+    // that on the next keystroke in any field. The axes say otherwise.
+    expect(field('Numbered axis count').value).toBe('3');
+    expect(field('Lettered axis count').value).toBe('4');
+    expect(field('Numbered axis spacing').value).toBe('6');
+    expect(field('Lettered axis spacing').value).toBe('5');
+    expect(container.textContent).toContain('per-bay spacings edited on the plan');
+  });
+
+  it('rebuilds a per-bay grid from what is on the plan, not from a default it never had', () => {
+    const { commands, field } = mountStructureStage(projectWithCustomBays());
+
+    // Origin X is nowhere near the axis layout, but this form rebuilds the whole
+    // grid on any edit — so the layout it carries has to be the real one.
+    type(field('Grid origin X'), '3');
+
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      type: BUILDING_COMMANDS.CONFIGURE_REGULAR_STRUCTURAL_GRID,
+      xAxisCount: 3,
+      yAxisCount: 4,
+      xSpacing: 6000,
+      ySpacing: 5000,
+      origin: { x: 3000, y: 2000 },
     });
   });
 

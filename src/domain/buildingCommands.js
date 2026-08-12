@@ -88,6 +88,7 @@ export const BUILDING_COMMANDS = Object.freeze({
   GENERATE_STRUCTURAL_GRID: 'GenerateStructuralGrid',
   CONFIGURE_REGULAR_STRUCTURAL_GRID: 'ConfigureRegularStructuralGrid',
   TRANSFORM_STRUCTURAL_GRID: 'TransformStructuralGrid',
+  SET_STRUCTURAL_GRID_BAY_SPACING: 'SetStructuralGridBaySpacing',
   REMOVE_STRUCTURAL_GRID: 'RemoveStructuralGrid',
   POPULATE_GRID_COLUMN_STACKS: 'PopulateGridColumnStacks',
   CREATE_COLUMN_STACK: 'CreateColumnStack',
@@ -3667,6 +3668,95 @@ function transformStructuralGrid(project, command) {
 }
 
 /**
+ * Retune a single bay without restating the grid. Setting the 1→2 distance
+ * moves axis 2 and every axis after it by the same delta, so 2→3, 3→4 and the
+ * rest keep the spacings they were given — the CAD convention, and the only
+ * behaviour that lets a grid be dimensioned bay by bay instead of uniformly.
+ * Axes at or before the edited bay, and the whole perpendicular direction,
+ * never move. Pinned column stacks re-resolve exactly as they do for a
+ * transform; realized floor columns do not move, the same contract
+ * ConfigureRegularStructuralGrid already has.
+ */
+function setStructuralGridBaySpacing(project, command) {
+  const system = structuralSystem(project);
+  if (!system) return commandError(project, command, 'structural-system-missing', 'Structural system is missing.');
+  const grid = (system.gridSystems || []).find((entry) => entry.id === command.gridId);
+  if (!grid) {
+    return commandError(project, command, 'grid-not-found', `Structural grid ${command.gridId} was not found.`);
+  }
+  const orientation = command.orientation;
+  if (orientation !== 'vertical' && orientation !== 'horizontal') {
+    return commandError(
+      project,
+      command,
+      'invalid-bay-orientation',
+      "Bay orientation must be 'vertical' (numbered axes) or 'horizontal' (lettered axes).",
+      { orientation },
+    );
+  }
+  const axes = grid.axes || [];
+  const sorted = axes.filter((axis) => axis.orientation === orientation).sort((a, b) => a.offset - b.offset);
+  const bayIndex = command.bayIndex;
+  if (!Number.isInteger(bayIndex) || bayIndex < 0 || bayIndex > sorted.length - 2) {
+    return commandError(
+      project,
+      command,
+      'invalid-bay-index',
+      'Bay index must address a bay between two existing axes of that orientation.',
+      { bayIndex, bayCount: Math.max(sorted.length - 1, 0), orientation },
+    );
+  }
+  const spacing = command.spacing;
+  if (!Number.isFinite(spacing) || spacing <= 0) {
+    return commandError(
+      project,
+      command,
+      'invalid-bay-spacing',
+      'Bay spacing must be a positive finite millimetre distance.',
+      { spacing },
+    );
+  }
+
+  const delta = spacing - (sorted[bayIndex + 1].offset - sorted[bayIndex].offset);
+  // Re-entering the distance a bay already has is not an edit; it must not
+  // spend an undo step or downgrade a regular grid's setup.
+  if (delta === 0) return commandSuccess(project, project, command, []);
+
+  const downstream = new Set(sorted.slice(bayIndex + 1).map((axis) => axis.id));
+  const nextGrid = {
+    ...grid,
+    axes: axes.map((axis) => (downstream.has(axis.id) ? { ...axis, offset: axis.offset + delta } : { ...axis })),
+    // A bay-edited grid must stop claiming a uniform spacing it no longer has:
+    // the Structure stage would otherwise rebuild it from that stale figure.
+    setup: {
+      kind: 'custom',
+      xAxisCount: axes.filter((axis) => axis.orientation === 'vertical').length,
+      yAxisCount: axes.filter((axis) => axis.orientation === 'horizontal').length,
+    },
+  };
+  const gridSystems = system.gridSystems.map((entry) => (entry.id === grid.id ? nextGrid : entry));
+  const columnStacks = (system.columnStacks || []).map((stack) => {
+    if (stack.gridIntersection?.gridId !== grid.id) return stack;
+    const nextOrigin = resolveGridIntersection(gridSystems, stack.gridIntersection);
+    return nextOrigin ? { ...stack, origin: nextOrigin } : stack;
+  });
+  const nextProject = updateStructuralSystem(project, (current) => ({
+    ...current,
+    gridSystems,
+    columnStacks,
+  }));
+  return commandSuccess(project, nextProject, command, [
+    { operation: 'replace', entityType: 'structuralGrid', id: grid.id },
+    {
+      operation: 'recompute',
+      entityType: 'columnStackOrigins',
+      gridId: grid.id,
+      movedColumnGeometry: false,
+    },
+  ]);
+}
+
+/**
  * Remove a grid and the intent-only column stacks pinned to its
  * intersections. Realized floor columns stay — deleting design intent must
  * not silently demolish modeled geometry — and syncCanonicalBuilding
@@ -4505,6 +4595,8 @@ export function executeBuildingCommand(project, command) {
       return configureRegularStructuralGrid(project, command);
     case BUILDING_COMMANDS.TRANSFORM_STRUCTURAL_GRID:
       return transformStructuralGrid(project, command);
+    case BUILDING_COMMANDS.SET_STRUCTURAL_GRID_BAY_SPACING:
+      return setStructuralGridBaySpacing(project, command);
     case BUILDING_COMMANDS.REMOVE_STRUCTURAL_GRID:
       return removeStructuralGrid(project, command);
     case BUILDING_COMMANDS.POPULATE_GRID_COLUMN_STACKS:

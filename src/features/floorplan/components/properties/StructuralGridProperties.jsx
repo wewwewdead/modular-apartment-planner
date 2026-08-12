@@ -3,11 +3,19 @@ import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import InputField from '../InputField';
 import styles from '../PropertiesPanel.module.css';
 
+/** Axes of one direction, in the order they read on the plan. */
+function sortedAxes(grid, orientation) {
+  return (grid.axes || []).filter((axis) => axis.orientation === orientation).sort((a, b) => a.offset - b.offset);
+}
+
 /**
  * Transform controls for a selected structural grid. Position comes from
  * dragging on the plan or the origin fields; rotation is numeric because a
  * drag cannot express it — and for surveyed lots the one rotation that
  * matters, parallel to the road frontage, is one button away.
+ *
+ * Bay distances are here too: a grid is dimensioned bay by bay, not by one
+ * spacing applied everywhere, so each adjacent axis pair gets its own field.
  */
 function StructuralGridProperties({ grid, site, dispatch, u }) {
   const transform = (updates) => {
@@ -27,6 +35,46 @@ function StructuralGridProperties({ grid, site, dispatch, u }) {
         rotation,
       },
     });
+  };
+
+  const setBaySpacing = (orientation, bayIndex, spacing) => {
+    // Same reasoning as transform(): a half-typed or cleared field parses to
+    // something the command would reject, and the rejection would arrive as an
+    // unexplained snap-back.
+    if (!Number.isFinite(spacing) || spacing <= 0) return;
+
+    dispatch({
+      type: 'EXECUTE_BUILDING_COMMAND',
+      command: {
+        type: BUILDING_COMMANDS.SET_STRUCTURAL_GRID_BAY_SPACING,
+        gridId: grid.id,
+        orientation,
+        bayIndex,
+        spacing,
+      },
+    });
+  };
+
+  const renderBays = (orientation, heading) => {
+    const axes = sortedAxes(grid, orientation);
+    // One axis draws no bay, so there is nothing to dimension.
+    if (axes.length < 2) return null;
+    return (
+      <>
+        <div className={styles.subtitle}>{heading}</div>
+        {axes.slice(0, -1).map((axis, index) => (
+          <InputField
+            key={axis.id}
+            label={`${axis.label} → ${axes[index + 1].label}`}
+            type="number"
+            suffix={u.suffix}
+            step={u.step(100)}
+            value={u.toDisplay(axes[index + 1].offset - axis.offset)}
+            onChange={(value) => setBaySpacing(orientation, index, u.fromDisplay(value))}
+          />
+        ))}
+      </>
+    );
   };
 
   const boundary = site?.boundary || [];
@@ -75,9 +123,12 @@ function StructuralGridProperties({ grid, site, dispatch, u }) {
           Align rotation to road frontage
         </button>
       )}
+      {renderBays('vertical', 'Numbered axis bays')}
+      {renderBays('horizontal', 'Lettered axis bays')}
       <div className={styles.subtitle}>
         Drag the grid on the plan by any part of it, or enter the exact origin. Column stacks pinned to intersections
-        move with it; axis spacing is edited in the Structure stage.
+        move with it. Retuning one bay shifts the axes after it and leaves every other bay at its own distance; the
+        uniform regular-grid generator still lives in the Structure stage.
       </div>
     </div>
   );

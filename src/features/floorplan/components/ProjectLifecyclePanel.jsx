@@ -39,6 +39,16 @@ function metersDraft(value) {
   return value == null ? '' : String(value / 1000);
 }
 
+/** Axes of one grid direction, in the order they read on the plan. */
+function gridAxesInOrder(grid, orientation) {
+  return (grid?.axes || []).filter((axis) => axis.orientation === orientation).sort((a, b) => a.offset - b.offset);
+}
+
+/** The only spacing a per-bay grid can offer a uniform form: its first bay. */
+function firstBaySpacing(axes) {
+  return axes.length >= 2 ? axes[1].offset - axes[0].offset : 4000;
+}
+
 function squareMillimetersFromSquareMeters(value) {
   if (value === '') return Number.NaN;
   return Number(value) * 1_000_000;
@@ -2053,6 +2063,26 @@ function StructureStage({ project, building, issues, loadPath, realization, last
   const structural = building.systems?.structural || {};
   const primaryGrid = (structural.gridSystems || [])[0] || null;
   const regularSetup = primaryGrid?.setup?.kind === 'regular' ? primaryGrid.setup : null;
+  // A grid whose bays were retuned on the plan — or one assembled by any path
+  // that never wrote a regular setup — has no uniform spacing to read. Falling
+  // back to the blank-form defaults would be a trap, because these fields
+  // live-dispatch: one keystroke in any of them, Origin X included, would
+  // rebuild the user's grid as a uniform 3x3 at 4 m. Read the counts off the
+  // axes and seed the spacings from the first bay in each direction instead,
+  // so a deliberate rebuild at least starts from what is on the plan.
+  const customAxes =
+    primaryGrid && !regularSetup
+      ? { x: gridAxesInOrder(primaryGrid, 'vertical'), y: gridAxesInOrder(primaryGrid, 'horizontal') }
+      : null;
+  const gridSetup =
+    regularSetup ||
+    (customAxes && {
+      xAxisCount: customAxes.x.length,
+      yAxisCount: customAxes.y.length,
+      xSpacing: firstBaySpacing(customAxes.x),
+      ySpacing: firstBaySpacing(customAxes.y),
+    });
+  const hasCustomBays = primaryGrid?.setup?.kind === 'custom';
   // The grid fields are live once a grid exists, so they read from the grid
   // itself rather than from a seeded draft: a canvas drag or a rotation typed
   // in the properties panel shows up here without this panel being remounted —
@@ -2061,10 +2091,10 @@ function StructureStage({ project, building, issues, loadPath, realization, last
   // until the field is left, so a partial entry survives long enough to finish.
   const gridModel = {
     name: primaryGrid?.name || 'Primary Grid',
-    xAxisCount: valueOrBlank(regularSetup?.xAxisCount ?? 3),
-    yAxisCount: valueOrBlank(regularSetup?.yAxisCount ?? 3),
-    xSpacing: metersDraft(regularSetup?.xSpacing ?? 4000),
-    ySpacing: metersDraft(regularSetup?.ySpacing ?? 4000),
+    xAxisCount: valueOrBlank(gridSetup?.xAxisCount ?? 3),
+    yAxisCount: valueOrBlank(gridSetup?.yAxisCount ?? 3),
+    xSpacing: metersDraft(gridSetup?.xSpacing ?? 4000),
+    ySpacing: metersDraft(gridSetup?.ySpacing ?? 4000),
     originX: metersDraft(primaryGrid?.origin?.x ?? 0),
     originY: metersDraft(primaryGrid?.origin?.y ?? 0),
     rotation: valueOrBlank(primaryGrid?.rotation ?? 0),
@@ -2297,6 +2327,11 @@ function StructureStage({ project, building, issues, loadPath, realization, last
       </div>
       <div className={styles.formSection}>
         <strong>Regular structural grid</strong>
+        {hasCustomBays && (
+          <p className={styles.disclaimer}>
+            This grid has per-bay spacings edited on the plan. Changing these fields rebuilds it with uniform spacing.
+          </p>
+        )}
         <div className={styles.formGrid}>
           <label className={styles.wideField}>
             <span>Grid name</span>
