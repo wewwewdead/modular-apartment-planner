@@ -11,6 +11,20 @@ export const DEFAULT_TEXT_SIZE = 120;
 const TEXT_WIDTH_FACTOR = 0.6;
 const TEXT_LINE_HEIGHT_FACTOR = 1.2;
 
+// sourceRefs are read by slot, never by order of arrival: [p1, p2] for a linear
+// dimension and [p1, vertex, p2] for an angle. An unsnapped pick holds its slot
+// with null so the next snapped pick cannot slide into it.
+export const LINEAR_DIMENSION_REF_SLOTS = 2;
+export const ANGLE_DIMENSION_REF_SLOTS = 3;
+// Documents written before slots were preserved hold compacted arrays. A ref
+// resolves to the exact point it was captured from, so re-slotting by distance
+// is safe unless the geometry moved after the dimension was placed.
+const LEGACY_SOURCE_REF_MATCH_TOLERANCE = 1e-3;
+
+function toPositionalSourceRefs(sourceRefs, slotCount) {
+  return Array.from({ length: slotCount }, (_, slot) => sourceRefs?.[slot] ?? null);
+}
+
 function createDefaultTextLeaderTarget(entity) {
   const { fontSize, height } = getTextMetrics(entity);
 
@@ -85,10 +99,15 @@ function getEntityIdPrefix(entity) {
 }
 
 function cloneSourceRefs(sourceRefs = [], idMap = new Map()) {
-  return sourceRefs.map((ref) => ({
-    ...ref,
-    entityId: idMap.get(ref.entityId) ?? ref.entityId,
-  }));
+  // Empty slots are positional information, not absences — keep them null.
+  return sourceRefs.map((ref) =>
+    ref
+      ? {
+          ...ref,
+          entityId: idMap.get(ref.entityId) ?? ref.entityId,
+        }
+      : null,
+  );
 }
 
 function cloneEntityWithId(entity, nextId, idMap = new Map()) {
@@ -203,13 +222,13 @@ function cloneEntityWithId(entity, nextId, idMap = new Map()) {
 }
 
 function canDuplicateDimension(entity, selectedIdSet) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
+  const boundRefs = (entity.meta?.sourceRefs ?? []).filter((ref) => ref?.entityId);
 
-  if (!sourceRefs.length) {
+  if (!boundRefs.length) {
     return true;
   }
 
-  return sourceRefs.every((ref) => selectedIdSet.has(ref.entityId));
+  return boundRefs.every((ref) => selectedIdSet.has(ref.entityId));
 }
 
 export function duplicateEntitiesByIds(entities, entityIds) {
@@ -680,7 +699,7 @@ export function createDimensionEntity({
       text: formatDimensionText(measureDistance(p1, p2, subtype), units),
       units,
       meta: {
-        sourceRefs,
+        sourceRefs: toPositionalSourceRefs(sourceRefs, LINEAR_DIMENSION_REF_SLOTS),
       },
     },
     layerId,
@@ -704,7 +723,7 @@ export function createAngleDimensionEntity({
     p1: { ...p1 },
     p2: { ...p2 },
     arcRadius,
-    meta: { sourceRefs },
+    meta: { sourceRefs: toPositionalSourceRefs(sourceRefs, ANGLE_DIMENSION_REF_SLOTS) },
   };
   if (isometricPlane) {
     entity.isometricPlane = isometricPlane;
@@ -907,6 +926,88 @@ export function resolveSourceReferenceFromEntities(entities, ref, fallbackPoint 
 
   const entity = entities.find((item) => item.id === ref.entityId);
   return resolveEntityReference(entity, ref) ?? fallbackPoint;
+}
+
+function reslotLegacySourceRefs(sourceRefs, entities, slotPoints) {
+  const slots = slotPoints.map(() => null);
+
+  sourceRefs.forEach((ref) => {
+    const point = ref ? resolveSourceReferenceFromEntities(entities, ref, null) : null;
+
+    if (!point) {
+      return;
+    }
+
+    let bestSlot = -1;
+    let bestDistance = LEGACY_SOURCE_REF_MATCH_TOLERANCE;
+
+    slotPoints.forEach((slotPoint, slot) => {
+      if (slots[slot] || !slotPoint) {
+        return;
+      }
+
+      const distance = calculateDistance(point, slotPoint);
+
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        bestSlot = slot;
+      }
+    });
+
+    if (bestSlot >= 0) {
+      slots[bestSlot] = ref;
+    }
+  });
+
+  return slots;
+}
+
+function getPositionalSourceRefs(entity, entities, slotPoints) {
+  const sourceRefs = entity.meta?.sourceRefs ?? [];
+
+  if (sourceRefs.length >= slotPoints.length) {
+    return sourceRefs;
+  }
+
+  return reslotLegacySourceRefs(sourceRefs, entities, slotPoints);
+}
+
+/**
+ * The [p1, p2] source-ref SLOTS of a linear dimension, re-slotted first when the
+ * document predates positional slots. Slots may hold null; never compact them,
+ * never reorder them — slot 0 is p1 and slot 1 is p2, full stop.
+ *
+ * Exported alongside the point resolver below rather than left private: callers
+ * that need the refs themselves and callers that need the resolved points must
+ * agree on the slotting, or a dimension would report one pair of points while
+ * following another.
+ */
+export function getLinearDimensionSourceRefs(entity, entities = []) {
+  return getPositionalSourceRefs(entity, entities, [entity.p1, entity.p2]);
+}
+
+/** The [p1, vertex, p2] source-ref slots of an angle dimension. See above. */
+export function getAngleDimensionSourceRefs(entity, entities = []) {
+  return getPositionalSourceRefs(entity, entities, [entity.p1, entity.vertex, entity.p2]);
+}
+
+export function resolveLinearDimensionPoints(entity, entities = []) {
+  const sourceRefs = getLinearDimensionSourceRefs(entity, entities);
+
+  return {
+    p1: resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1),
+    p2: resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.p2),
+  };
+}
+
+export function resolveAngleDimensionPoints(entity, entities = []) {
+  const sourceRefs = getAngleDimensionSourceRefs(entity, entities);
+
+  return {
+    p1: resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1),
+    vertex: resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.vertex),
+    p2: resolveSourceReferenceFromEntities(entities, sourceRefs[2], entity.p2),
+  };
 }
 
 export function updateLineEndpoint(entity, handleKey, point) {

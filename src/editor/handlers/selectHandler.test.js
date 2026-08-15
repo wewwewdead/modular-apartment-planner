@@ -792,3 +792,175 @@ describe('selectHandler — electrical devices', () => {
     expect(harness.getSelected()).toBeNull();
   });
 });
+
+/**
+ * Manual dimensions are thin overlays: they lie inside rooms and cross walls by
+ * construction, so testing them AFTER those area fills made them unclickable —
+ * and therefore undeletable from the canvas. They now rank above railings,
+ * beams, walls, rooms and slabs, but still below the small solid targets they
+ * measure between (openings, columns, fixtures).
+ *
+ * Hit tolerance is (SNAP_DISTANCE_PX / zoom) * 2.5 = 250mm at zoom 0.1.
+ */
+describe('selectHandler — manual dimension hit priority', () => {
+  function annotationFloor(overrides = {}) {
+    return {
+      id: 'floor_1',
+      walls: [],
+      columns: [],
+      doors: [],
+      windows: [],
+      rooms: [],
+      fixtures: [],
+      railings: [],
+      beams: [],
+      stairs: [],
+      landings: [],
+      slabs: [],
+      sectionCuts: [],
+      annotations: [],
+      ...overrides,
+    };
+  }
+
+  function createAnnotationHarness(floor) {
+    let toolState = {};
+    let selected = null;
+    const dispatched = [];
+
+    const handler = createSelectHandler({
+      dispatch: (action) => dispatched.push(action),
+      editorDispatch: (action) => {
+        if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+        if (action.type === 'SELECT_OBJECT') selected = { id: action.id, type: action.objectType };
+        if (action.type === 'DESELECT') selected = null;
+      },
+      getFloor: () => floor,
+      activeFloorId: floor.id,
+      viewport: { zoom: 0.1 },
+      snapEnabled: false,
+    });
+
+    return {
+      dispatched,
+      getSelected: () => selected,
+      down(modelPos) {
+        handler.onMouseDown(modelPos, { button: 0, target: { dataset: {} } }, toolState);
+      },
+      key(e) {
+        handler.onKeyDown(e, toolState, selected?.id, selected?.type);
+      },
+    };
+  }
+
+  // 6000x5000 room with a horizontal dimension measuring 1000->5000 at y=2000,
+  // offset 300, so the dimension LINE runs at y=2300 — deep inside the room.
+  function roomFloor() {
+    return annotationFloor({
+      rooms: [
+        {
+          id: 'room_1',
+          points: [
+            { x: 0, y: 0 },
+            { x: 6000, y: 0 },
+            { x: 6000, y: 5000 },
+            { x: 0, y: 5000 },
+          ],
+        },
+      ],
+      annotations: [
+        {
+          id: 'anno_1',
+          type: 'dimension',
+          mode: 'horizontal',
+          startPoint: { x: 1000, y: 2000 },
+          endPoint: { x: 5000, y: 2000 },
+          offset: 300,
+          textOverride: '',
+        },
+      ],
+    });
+  }
+
+  it('selects a dimension lying inside a room, not the room', () => {
+    const harness = createAnnotationHarness(roomFloor());
+    harness.down({ x: 3000, y: 2300 });
+
+    expect(harness.getSelected()).toEqual({ id: 'anno_1', type: 'annotation' });
+  });
+
+  it('selects a dimension where its segment crosses a wall, not the wall', () => {
+    // Vertical dimension at x=3000 spanning y=-1500..1500, straight across a
+    // 200-thick wall running along y=0.
+    const floor = annotationFloor({
+      walls: [{ id: 'wall_1', start: { x: 0, y: 0 }, end: { x: 6000, y: 0 }, thickness: 200 }],
+      annotations: [
+        {
+          id: 'anno_1',
+          type: 'dimension',
+          mode: 'vertical',
+          startPoint: { x: 3000, y: -1500 },
+          endPoint: { x: 3000, y: 1500 },
+          offset: 0,
+          textOverride: '',
+        },
+      ],
+    });
+    const harness = createAnnotationHarness(floor);
+    harness.down({ x: 3000, y: 0 });
+
+    expect(harness.getSelected()).toEqual({ id: 'anno_1', type: 'annotation' });
+  });
+
+  it('keeps the window clickable when a dimension extension line starts at its edge', () => {
+    // Window centred at x=2000, 1200 wide: body spans x=1400..2600, y=-100..100.
+    // The dimension measures from that right edge (2600,0) to (5000,0), so its
+    // extension line rises out of the window jamb.
+    const floor = annotationFloor({
+      walls: [{ id: 'wall_1', start: { x: 0, y: 0 }, end: { x: 6000, y: 0 }, thickness: 200 }],
+      windows: [{ id: 'win_1', wallId: 'wall_1', offset: 2000, width: 1200, height: 1200, sillHeight: 900 }],
+      annotations: [
+        {
+          id: 'anno_1',
+          type: 'dimension',
+          mode: 'horizontal',
+          startPoint: { x: 2600, y: 0 },
+          endPoint: { x: 5000, y: 0 },
+          offset: 800,
+          textOverride: '',
+        },
+      ],
+    });
+
+    // 100mm inside the jamb — well within the 250mm annotation band, yet the
+    // window body still owns the click.
+    const onWindow = createAnnotationHarness(floor);
+    onWindow.down({ x: 2500, y: 0 });
+    expect(onWindow.getSelected()).toEqual({ id: 'win_1', type: 'window' });
+
+    // Off the window body, the same extension line is reachable.
+    const offWindow = createAnnotationHarness(floor);
+    offWindow.down({ x: 2650, y: 400 });
+    expect(offWindow.getSelected()).toEqual({ id: 'anno_1', type: 'annotation' });
+  });
+
+  it('still selects the room when the click is clear of every dimension segment', () => {
+    const harness = createAnnotationHarness(roomFloor());
+    harness.down({ x: 3000, y: 4500 }); // 2200mm below the dimension line
+
+    expect(harness.getSelected()).toEqual({ id: 'room_1', type: 'room' });
+  });
+
+  it('deletes the selected dimension with the Delete key', () => {
+    const harness = createAnnotationHarness(roomFloor());
+    harness.down({ x: 3000, y: 2300 });
+    harness.key({ key: 'Delete' });
+
+    expect(harness.dispatched).toContainEqual({
+      type: 'ANNOTATION_DELETE',
+      floorId: 'floor_1',
+      annotationId: 'anno_1',
+    });
+    expect(harness.getSelected()).toBeNull();
+  });
+});

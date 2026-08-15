@@ -3,22 +3,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import RightPanel from './RightPanel';
 
 describe('RightPanel', () => {
-  it('renders constraint statuses and the drafting-side variable panel', () => {
+  it('renders the drafting-side variable panel', () => {
     const markup = renderToStaticMarkup(
       <RightPanel
         document={{
           name: 'Desk Draft',
           variables: [{ id: 'var-width', name: 'width', value: 1200, unit: 'mm' }],
-          constraints: [
-            {
-              id: 'constraint-1',
-              type: 'equal_width',
-              label: 'Shelf Width Match',
-              enabled: true,
-              driverEntityId: 'rect-1',
-              drivenEntityId: 'rect-2',
-            },
-          ],
           entities: [
             {
               id: 'rect-1',
@@ -51,19 +41,8 @@ describe('RightPanel', () => {
         selectedMeasurements={[]}
         selectedProfileInfo={null}
         isBrokenLineSelection={false}
-        constraintDiagnostics={[
-          {
-            constraintId: 'constraint-1',
-            status: 'applied',
-            statusLabel: 'Applied',
-            message: null,
-          },
-        ]}
         onEntityFieldCommit={vi.fn()}
         onVariablesChange={vi.fn()}
-        onConstraintAdd={vi.fn()}
-        onConstraintUpdate={vi.fn()}
-        onConstraintRemove={vi.fn()}
         onRotateLeft={vi.fn()}
         onRotateRight={vi.fn()}
         onFlipHorizontal={vi.fn()}
@@ -74,8 +53,6 @@ describe('RightPanel', () => {
       />,
     );
 
-    expect(markup).toContain('Shelf Width Match');
-    expect(markup).toContain('Applied');
     expect(markup).toContain('Parametric Variables');
     expect(markup).toContain('width');
   });
@@ -114,7 +91,6 @@ describe('RightPanel', () => {
         document={{
           name: 'Desk Draft',
           variables: [],
-          constraints: [],
           entities,
         }}
         selectedEntity={null}
@@ -124,12 +100,8 @@ describe('RightPanel', () => {
         selectedMeasurements={[]}
         selectedProfileInfo={null}
         isBrokenLineSelection={false}
-        constraintDiagnostics={[]}
         onEntityFieldCommit={vi.fn()}
         onVariablesChange={vi.fn()}
-        onConstraintAdd={vi.fn()}
-        onConstraintUpdate={vi.fn()}
-        onConstraintRemove={vi.fn()}
         onRotateLeft={vi.fn()}
         onRotateRight={vi.fn()}
         onFlipHorizontal={vi.fn()}

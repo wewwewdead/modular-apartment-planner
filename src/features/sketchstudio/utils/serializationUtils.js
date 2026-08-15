@@ -8,7 +8,6 @@ export function validateBasicDocumentShape(document) {
     Array.isArray(document.layers) &&
     Array.isArray(document.entities) &&
     (document.variables == null || Array.isArray(document.variables)) &&
-    Array.isArray(document.constraints) &&
     (document.joints == null || Array.isArray(document.joints)),
   );
 }

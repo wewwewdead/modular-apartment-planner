@@ -6,6 +6,9 @@ import { updateEntityFromHandle } from '../utils/handleUtils';
 import { applyIsometricOrthoPoint } from '../utils/isometricUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
 import { findFilletableCorner, computeSketchFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
+import { computeSketchChamfer, findChamferableCorner, DEFAULT_CHAMFER_DISTANCE } from '../utils/chamferUtils';
+import { computeSketchTrim, isTrimmableEntity } from '../utils/trimUtils';
+import { computeSketchExtend, findExtendCandidate } from '../utils/extendUtils';
 import { resolveFastenerTargetPartId } from '../utils/fastenerUtils';
 import { expandGroupedSelection } from '../utils/groupUtils';
 import { applyOrthoPoint } from '../utils/canvasMath';
@@ -297,6 +300,51 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
         return;
       }
 
+      if (activeTool === 'chamfer') {
+        if (!state.draft.type) dispatch(startDraft({ type: 'chamfer' }));
+        const chamferTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
+        const chamferDistance = parsePositiveNumber(state.draft.precisionInput?.distance) ?? DEFAULT_CHAMFER_DISTANCE;
+        const corner = findChamferableCorner(state.document.entities, worldPoint, chamferTolerance);
+        dispatch(
+          patchDraft({
+            hoveredCorner: corner ?? null,
+            previewGeometry: corner ? computeSketchChamfer(corner, chamferDistance) : null,
+            currentPoint: worldPoint,
+          }),
+        );
+        return;
+      }
+
+      // Trim and extend ghost the exact span the next click will act on.
+      if (activeTool === 'trim') {
+        if (!state.draft.type) dispatch(startDraft({ type: 'trim' }));
+        const trimTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX, state.viewport.zoom);
+        const target = findTopmostEntityAtPoint(editableEntities.filter(isTrimmableEntity), worldPoint, trimTolerance);
+        const result = target ? computeSketchTrim(state.document.entities, target, worldPoint) : null;
+        dispatch(
+          patchDraft({
+            currentPoint: worldPoint,
+            trimTargetId: target?.id ?? null,
+            trimPreview: result ? { points: result.removedSpanPoints, deletesEntity: result.deletesEntity } : null,
+          }),
+        );
+        return;
+      }
+
+      if (activeTool === 'extend') {
+        if (!state.draft.type) dispatch(startDraft({ type: 'extend' }));
+        const extendTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
+        const candidate = findExtendCandidate(editableEntities, worldPoint, extendTolerance);
+        const result = candidate ? computeSketchExtend(state.document.entities, candidate) : null;
+        dispatch(
+          patchDraft({
+            currentPoint: worldPoint,
+            extendPreview: result ? { points: result.addedSpanPoints, target: result.target } : null,
+          }),
+        );
+        return;
+      }
+
       // The fastener tool has no drag step, so the draft exists purely to carry
       // the cursor point that the ghost preview is drawn at. `hoverPartId` lets
       // a pattern preview (hinge, handle) orient itself to the hovered part's
@@ -352,6 +400,12 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
         return;
       }
 
+      // Mirror and array carry their ghost off `currentPoint`; both snap.
+      if (state.draft.type === 'mirror' || state.draft.type === 'array') {
+        dispatch(patchDraft({ currentPoint: snap.point ?? worldPoint }));
+        return;
+      }
+
       if (state.draft.type === 'polyline' && state.draft.points.length >= 2) {
         const nextPoint = getConstrainedDraftPoint('polyline', state.draft, snap.point ?? worldPoint);
         const startPoint = state.draft.points[0];
@@ -367,6 +421,7 @@ export default function useSketchPointer(state, dispatch, viewportHook, options)
     },
     [
       dispatch,
+      editableEntities,
       getConstrainedDraftPoint,
       getOrthoReferencePoint,
       readCanvasPoint,

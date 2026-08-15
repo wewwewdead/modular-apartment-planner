@@ -61,6 +61,9 @@ export function getBomRowGroupKey(row = {}) {
     row.stockSectionWidth,
     row.dimensionAccuracy,
     row.dimensionNote,
+    // Two otherwise identical panels cut with different grain directions are not
+    // interchangeable on the sheet, so they must not collapse into one row.
+    row.grainAngle,
   ]
     .map(serializeBomKeyPart)
     .join('|');

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createBeam } from '@/domain/models';
 import { createCeiling, deriveCeilingDetail } from '@/domain/ceilingModels';
 import {
   CEILING_BOARD_THICKNESS,
@@ -17,8 +18,34 @@ const BOUNDARY = [
 ];
 
 const MANUAL_BASE_ELEVATION = 2700;
-const TRUSS_BASE_ELEVATION = 3000;
-const TRUSS_DROP = 150;
+const SUPPORT_BASE_ELEVATION = 3000;
+const SUPPORT_DROP = 150;
+
+// Two 250 mm beams whose inner faces land on BOUNDARY: a ceiling hung from them
+// derives exactly the rectangle the manual ceiling stores, so the two fixtures
+// differ only in what holds them up.
+const SUPPORT_BEAMS = [
+  {
+    ...createBeam(
+      { kind: 'point', x: 1000, y: 375 },
+      { kind: 'point', x: 5000, y: 375 },
+      250,
+      450,
+      SUPPORT_BASE_ELEVATION,
+    ),
+    id: 'beam_south',
+  },
+  {
+    ...createBeam(
+      { kind: 'point', x: 1000, y: 3625 },
+      { kind: 'point', x: 5000, y: 3625 },
+      250,
+      450,
+      SUPPORT_BASE_ELEVATION,
+    ),
+    id: 'beam_north',
+  },
+];
 
 function createFloor() {
   return {
@@ -30,7 +57,7 @@ function createFloor() {
     rooms: [],
     slabs: [],
     columns: [],
-    beams: [],
+    beams: SUPPORT_BEAMS,
     stairs: [],
     landings: [],
     fixtures: [],
@@ -41,9 +68,7 @@ function createFloor() {
 function createProject(ceilings = []) {
   return {
     floors: [createFloor()],
-    trussSystems: [
-      { id: 'ts1', name: 'Roof trusses', floorId: 'floor_1', baseElevation: TRUSS_BASE_ELEVATION, trussInstances: [] },
-    ],
+    trussSystems: [],
     ceilings,
   };
 }
@@ -58,13 +83,13 @@ function manualCeiling(overrides = {}) {
   });
 }
 
-function trussCeiling(overrides = {}) {
-  return createCeiling('Truss ceiling', {
-    id: 'ceiling_truss',
+function beamCeiling(overrides = {}) {
+  return createCeiling('Beam ceiling', {
+    id: 'ceiling_beam',
     floorId: 'floor_1',
     boundaryPolygon: BOUNDARY,
-    attachment: { mode: 'truss', trussSystemId: 'ts1' },
-    detailing: { suspension: { drop: TRUSS_DROP } },
+    attachment: { mode: 'beam', beamIds: SUPPORT_BEAMS.map((beam) => beam.id) },
+    detailing: { suspension: { drop: SUPPORT_DROP } },
     ...overrides,
   });
 }
@@ -177,12 +202,78 @@ describe('buildCeilingPreviewObjects', () => {
     }
   });
 
-  it('drops a truss-attached ceiling below the attachment plane and hangs it back up', () => {
-    const ceiling = trussCeiling();
+  it('maps the chosen board and frame materials to their palette keys', () => {
+    const ceiling = manualCeiling({
+      detailing: {
+        face: { productProfileId: 'generic-plywood-ceiling-v1' },
+        framing: { material: 'timber' },
+      },
+    });
     const project = createProject([ceiling]);
     const descriptors = buildCeilingPreviewObjects(ceiling, project);
 
-    const boardUnderside = TRUSS_BASE_ELEVATION - TRUSS_DROP;
+    const boards = byDetailKind(descriptors, 'panel');
+    expect(boards.length).toBeGreaterThan(0);
+    for (const board of boards) {
+      expect(board.materialKey).toBe('ceilingBoardPlywood');
+    }
+
+    const framing = byDetailKind(descriptors, 'framing');
+    expect(framing.length).toBeGreaterThan(0);
+    for (const member of framing) {
+      expect(member.materialKey).toBe('ceilingFramingTimber');
+    }
+
+    // Suspension rods stay steel whatever carries the boards.
+    const hung = beamCeiling({
+      detailing: { suspension: { drop: SUPPORT_DROP }, framing: { material: 'timber' } },
+    });
+    const hangers = byDetailKind(buildCeilingPreviewObjects(hung, createProject([hung])), 'hanger');
+    expect(hangers.length).toBeGreaterThan(0);
+    for (const hanger of hangers) {
+      expect(hanger.materialKey).toBe('ceilingHanger');
+    }
+  });
+
+  it('carries the ceiling frame rotation into framing and hanger boxes', () => {
+    const angle = Math.PI / 6;
+    const along = { x: Math.cos(angle), y: Math.sin(angle) };
+    const across = { x: -Math.sin(angle), y: Math.cos(angle) };
+    const origin = { x: 1000, y: 500 };
+    const corner = (a, b) => ({ x: origin.x + along.x * a + across.x * b, y: origin.y + along.y * a + across.y * b });
+    const ceiling = manualCeiling({
+      boundaryPolygon: [corner(0, 0), corner(4000, 0), corner(4000, 3000), corner(0, 3000)],
+    });
+    const project = createProject([ceiling]);
+    const descriptors = buildCeilingPreviewObjects(ceiling, project);
+
+    const boxes = descriptors.filter((descriptor) => descriptor.geometry === 'box');
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) {
+      expect(box.rotation).toBeCloseTo(angle, 9);
+
+      // The centre projected onto the ceiling's own axes sits inside its edges.
+      const dx = box.center.x - origin.x;
+      const dy = box.center.y - origin.y;
+      expect(dx * along.x + dy * along.y).toBeGreaterThanOrEqual(-1e-6);
+      expect(dx * along.x + dy * along.y).toBeLessThanOrEqual(4000 + 1e-6);
+      expect(dx * across.x + dy * across.y).toBeGreaterThanOrEqual(-1e-6);
+      expect(dx * across.x + dy * across.y).toBeLessThanOrEqual(3000 + 1e-6);
+
+      // Bounds trace the spun footprint, not an unrotated rect around the centre.
+      const cos = Math.abs(Math.cos(box.rotation));
+      const sin = Math.abs(Math.sin(box.rotation));
+      expect(box.bounds.maxX - box.bounds.minX).toBeCloseTo(box.size.x * cos + box.size.z * sin, 6);
+      expect(box.bounds.maxY - box.bounds.minY).toBeCloseTo(box.size.x * sin + box.size.z * cos, 6);
+    }
+  });
+
+  it('drops a beam-attached ceiling below the attachment plane and hangs it back up', () => {
+    const ceiling = beamCeiling();
+    const project = createProject([ceiling]);
+    const descriptors = buildCeilingPreviewObjects(ceiling, project);
+
+    const boardUnderside = SUPPORT_BASE_ELEVATION - SUPPORT_DROP;
     expect(boardUnderside).toBe(2850);
     for (const board of byDetailKind(descriptors, 'panel')) {
       expect(board.baseElevation).toBe(boardUnderside);
@@ -194,14 +285,14 @@ describe('buildCeilingPreviewObjects', () => {
     for (const hanger of hangers) {
       expect(hanger.geometry).toBe('box');
       expect(hanger.materialKey).toBe('ceilingHanger');
-      expect(hanger.size.y).toBeCloseTo(TRUSS_DROP - gridDepth, 6);
+      expect(hanger.size.y).toBeCloseTo(SUPPORT_DROP - gridDepth, 6);
       expect(hanger.baseElevation).toBeCloseTo(boardUnderside + gridDepth, 6);
-      expect(hanger.baseElevation + hanger.size.y).toBeCloseTo(TRUSS_BASE_ELEVATION, 6);
+      expect(hanger.baseElevation + hanger.size.y).toBeCloseTo(SUPPORT_BASE_ELEVATION, 6);
     }
   });
 
   it('matches the derived detail counts one descriptor per region, member and hanger', () => {
-    const ceiling = trussCeiling();
+    const ceiling = beamCeiling();
     const project = createProject([ceiling]);
     const detail = deriveCeilingDetail(ceiling, project);
     const descriptors = buildCeilingPreviewObjects(ceiling, project);

@@ -20,6 +20,7 @@ export function createBlankMaterialForm() {
     price: '',
     costBasis: CUSTOM_MATERIAL_DEFAULTS.costBasis,
     density: String(CUSTOM_MATERIAL_DEFAULTS.density),
+    hasGrain: CUSTOM_MATERIAL_DEFAULTS.hasGrain,
     color: CUSTOM_MATERIAL_DEFAULTS.color,
   };
 }
@@ -38,6 +39,7 @@ function toFormFields(material, { id = null, name = material?.name ?? '' } = {})
     price: material?.pricePerM2 != null ? String(material.pricePerM2) : blank.price,
     costBasis: material?.costBasis || blank.costBasis,
     density: material?.density != null ? String(material.density) : blank.density,
+    hasGrain: material?.hasGrain === true,
     color: material?.color || blank.color,
   };
 }
@@ -72,6 +74,7 @@ export function formStateToDraft(formState) {
     pricePerM2: formState.price,
     costBasis: formState.costBasis,
     density: formState.density,
+    hasGrain: formState.hasGrain === true,
     color: formState.color,
   };
 }

@@ -86,7 +86,6 @@ function joineryDocument(jointType, parameters = {}) {
     objectDefinition: {},
     layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
     variables: [],
-    constraints: [],
     joints: [
       createSketchJoint({
         id: `joint-${jointType}`,

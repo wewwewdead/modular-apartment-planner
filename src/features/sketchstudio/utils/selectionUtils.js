@@ -1,7 +1,7 @@
 import { getArcSegments } from './arcUtils';
 import { computeEntityBoundingBox } from './bboxUtils';
 import { getDimensionGeometry } from './dimensionUtils';
-import { getRectCorners, resolveSourceReferenceFromEntities } from './entityUtils';
+import { getRectCorners, resolveLinearDimensionPoints } from './entityUtils';
 import { getPolylineSegments } from './polylineUtils';
 import { getSegmentIntersectionPoint } from './hitTest';
 
@@ -96,9 +96,7 @@ export function entityIntersectsSelectionBox(entity, box, entities) {
   }
 
   if (entity.type === 'dimension') {
-    const sourceRefs = entity.meta?.sourceRefs ?? [];
-    const p1 = resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1);
-    const p2 = resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.p2);
+    const { p1, p2 } = resolveLinearDimensionPoints(entity, entities);
     const geometry = getDimensionGeometry({ p1, p2, subtype: entity.subtype, offset: entity.offset });
 
     return (

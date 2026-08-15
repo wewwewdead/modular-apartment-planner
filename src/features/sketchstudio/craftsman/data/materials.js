@@ -10,6 +10,26 @@
  * (materials -> customMaterials) to avoid an import cycle; catalog ids are
  * pushed into the custom registry via `reserveMaterialIds()` so a custom id can
  * never shadow a built-in one.
+ *
+ * `hasGrain`
+ * ----------
+ * True for stock with a directional fibre a part has to be oriented against:
+ * solid lumber (pine, oak, walnut) and veneered panels (birch and marine
+ * plywood, whose face veneer runs along the sheet length). Deliberately false
+ * for MDF and acrylic (no fibre at all), and for metal and hardware. The flag is
+ * a hard nesting constraint, not a hint - see `nestingOptimizer`.
+ *
+ * `stockLengthMm`
+ * ---------------
+ * The length one stick of this material is sold in, for the 1D cut optimizer
+ * (`linearStockOptimizer`). Present on every `costBasis: 'perLinearMeter'`
+ * entry and on nothing else: sheet goods are nested by area and hardware is
+ * counted. Lumber carries 2400mm and metal sections 6000mm, which are the
+ * standard lengths those are stocked in and match each entry's `defaultHeight`.
+ *
+ * The field is purely ADDITIVE. A user-defined custom material has no
+ * `stockLengthMm`, and the optimizer falls back to its documented 2400mm
+ * default, so nothing about the custom-material schema had to change.
  */
 
 import { getCustomMaterialById, getCustomMaterials, reserveMaterialIds } from './customMaterials';
@@ -26,6 +46,7 @@ const materials = [
     pricePerM2: 12.0,
     costBasis: 'perM2',
     density: 680,
+    hasGrain: true,
     color: '#E8D5B7',
   },
   {
@@ -38,6 +59,7 @@ const materials = [
     pricePerM2: 22.0,
     costBasis: 'perM2',
     density: 680,
+    hasGrain: true,
     color: '#E0CCAA',
   },
   {
@@ -50,6 +72,7 @@ const materials = [
     pricePerM2: 35.0,
     costBasis: 'perM2',
     density: 680,
+    hasGrain: true,
     color: '#D4BE97',
   },
   {
@@ -62,6 +85,7 @@ const materials = [
     pricePerM2: 45.0,
     costBasis: 'perM2',
     density: 680,
+    hasGrain: true,
     color: '#D4A574',
   },
   {
@@ -74,6 +98,7 @@ const materials = [
     pricePerM2: 58.0,
     costBasis: 'perM2',
     density: 680,
+    hasGrain: true,
     color: '#C89B6A',
   },
   {
@@ -86,6 +111,7 @@ const materials = [
     pricePerM2: 72.0,
     costBasis: 'perM2',
     density: 700,
+    hasGrain: true,
     color: '#B8955E',
   },
 
@@ -137,7 +163,9 @@ const materials = [
     defaultHeight: 2400,
     pricePerM2: 1.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 2400,
     density: 500,
+    hasGrain: true,
     color: '#F0D9A8',
   },
   {
@@ -149,7 +177,9 @@ const materials = [
     defaultHeight: 2400,
     pricePerM2: 2.1,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 2400,
     density: 500,
+    hasGrain: true,
     color: '#E8D09E',
   },
   {
@@ -161,7 +191,9 @@ const materials = [
     defaultHeight: 2400,
     pricePerM2: 2.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 2400,
     density: 500,
+    hasGrain: true,
     color: '#DFC794',
   },
   {
@@ -173,7 +205,9 @@ const materials = [
     defaultHeight: 2400,
     pricePerM2: 4.5,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 2400,
     density: 500,
+    hasGrain: true,
     color: '#D6BE8A',
   },
   {
@@ -185,7 +219,9 @@ const materials = [
     defaultHeight: 2400,
     pricePerM2: 12.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 2400,
     density: 700,
+    hasGrain: true,
     color: '#A0784C',
   },
   {
@@ -197,7 +233,9 @@ const materials = [
     defaultHeight: 2400,
     pricePerM2: 24.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 2400,
     density: 640,
+    hasGrain: true,
     color: '#5C3D2E',
   },
 
@@ -513,6 +551,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 1.5,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#727272',
   },
@@ -525,6 +564,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 1.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6F6F6F',
   },
@@ -537,6 +577,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6C6C6C',
   },
@@ -549,6 +590,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6B6B6B',
   },
@@ -561,6 +603,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#686868',
   },
@@ -573,6 +616,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#656565',
   },
@@ -585,6 +629,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#646464',
   },
@@ -597,6 +642,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#626262',
   },
@@ -609,6 +655,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#616161',
   },
@@ -621,6 +668,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 5.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#606060',
   },
@@ -633,6 +681,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 8.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5D5D5D',
   },
@@ -645,6 +694,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5C5C5C',
   },
@@ -657,6 +707,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 10.5,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5A5A5A',
   },
@@ -669,6 +720,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 8.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#595959',
   },
@@ -681,6 +733,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 12.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#575757',
   },
@@ -693,6 +746,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 11.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#555555',
   },
@@ -705,6 +759,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 16.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#535353',
   },
@@ -717,6 +772,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 21.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#515151',
   },
@@ -731,6 +787,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6A6A6A',
   },
@@ -743,6 +800,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#676767',
   },
@@ -755,6 +813,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 5.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#646464',
   },
@@ -767,6 +826,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 6.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#626262',
   },
@@ -779,6 +839,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5F5F5F',
   },
@@ -791,6 +852,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 10.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5D5D5D',
   },
@@ -803,6 +865,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 8.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5B5B5B',
   },
@@ -815,6 +878,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 16.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#585858',
   },
@@ -829,6 +893,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 1.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#747474',
   },
@@ -841,6 +906,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#717171',
   },
@@ -853,6 +919,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#707070',
   },
@@ -865,6 +932,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.9,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6E6E6E',
   },
@@ -877,6 +945,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6C6C6C',
   },
@@ -889,6 +958,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.5,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#656565',
   },
@@ -901,6 +971,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 5.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#636363',
   },
@@ -913,6 +984,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 6.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#616161',
   },
@@ -925,6 +997,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5F5F5F',
   },
@@ -937,6 +1010,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5D5D5D',
   },
@@ -949,6 +1023,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 8.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5B5B5B',
   },
@@ -961,6 +1036,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 11.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#595959',
   },
@@ -975,6 +1051,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#5E5E5E',
   },
@@ -987,6 +1064,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#585858',
   },
@@ -999,6 +1077,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#565656',
   },
@@ -1011,6 +1090,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#545454',
   },
@@ -1023,6 +1103,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 6.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#525252',
   },
@@ -1035,6 +1116,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#505050',
   },
@@ -1047,6 +1129,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 9.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#4E4E4E',
   },
@@ -1059,6 +1142,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 11.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#4C4C4C',
   },
@@ -1071,6 +1155,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 16.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#4A4A4A',
   },
@@ -1085,6 +1170,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 1.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#767676',
   },
@@ -1097,6 +1183,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 1.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#737373',
   },
@@ -1109,6 +1196,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 2.1,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#707070',
   },
@@ -1121,6 +1209,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6D6D6D',
   },
@@ -1133,6 +1222,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 5.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 7850,
     color: '#6A6A6A',
   },
@@ -1147,6 +1237,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#B2B2B2',
   },
@@ -1159,6 +1250,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#AAAAAA',
   },
@@ -1171,6 +1263,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 6.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#A6A6A6',
   },
@@ -1183,6 +1276,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 8.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#A2A2A2',
   },
@@ -1195,6 +1289,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 10.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#9E9E9E',
   },
@@ -1207,6 +1302,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.0,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#B0B0B0',
   },
@@ -1219,6 +1315,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 4.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#A5A5A5',
   },
@@ -1231,6 +1328,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 5.6,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#A0A0A0',
   },
@@ -1243,6 +1341,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#9B9B9B',
   },
@@ -1255,6 +1354,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 9.4,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#969696',
   },
@@ -1267,6 +1367,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 3.8,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#ABABAB',
   },
@@ -1279,6 +1380,7 @@ const materials = [
     defaultHeight: 6000,
     pricePerM2: 7.2,
     costBasis: 'perLinearMeter',
+    stockLengthMm: 6000,
     density: 2700,
     color: '#A3A3A3',
   },
@@ -1732,6 +1834,17 @@ export function buildMaterialCatalogById(materialList = getAllMaterials()) {
     catalog[m.id] = m;
   }
   return catalog;
+}
+
+/**
+ * Whether the stock has a directional grain a part must be oriented against.
+ * Accepts a material object or a material id. Unknown / missing materials are
+ * grain-free, which is the permissive answer: nesting keeps full rotation
+ * freedom rather than locking a part on a guess.
+ */
+export function materialHasGrain(material) {
+  const resolved = typeof material === 'string' ? getMaterialById(material) : material;
+  return resolved?.hasGrain === true;
 }
 
 /** Counted hardware (fasteners) rather than stock a part is cut from. */

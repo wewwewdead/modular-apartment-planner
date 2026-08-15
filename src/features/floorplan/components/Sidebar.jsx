@@ -7,7 +7,13 @@ import { getColumnListLabel } from '@/domain/columnLabels';
 import { createFloorAboveHighest, getFloorElevation, getFloorLevelIndex, getOrderedFloors } from '@/domain/floorModels';
 import { createPhase, getNextPhaseOrder, getOrderedPhases, PHASE_COLORS, reorderPhases } from '@/domain/phaseModels';
 import { getAttachableRoofTrussSystems, getRoofTypeLabel } from '@/domain/roofModels';
-import { CEILING_ATTACHMENT_MODES, createCeilingForProject, getProjectCeilings } from '@/domain/ceilingModels';
+import { getEligibleCeilingSupportBeams } from '@/domain/ceilingBeamAttachment';
+import {
+  CEILING_ATTACHMENT_MODES,
+  CEILING_BOUNDARY_SOURCES,
+  createCeilingForProject,
+  getProjectCeilings,
+} from '@/domain/ceilingModels';
 import { ELECTRICAL_DEVICE_DEFAULTS, TOOLS } from '@/editor/tools';
 import { createSheet, getSheetDisplayLabel } from '@/domain/sheetModels';
 import { getSlabDisplayLabel } from '@/domain/slabLabels';
@@ -317,18 +323,39 @@ export default function Sidebar() {
   };
 
   const addCeiling = () => {
-    // A truss on the same floor gives the ceiling its boundary and the chords it
-    // hangs from, so it is preferred over the floor-derived boundary.
-    const firstTrussOnFloor = (project.trussSystems || []).find((entry) => entry.floorId === activeFloorId) || null;
+    // Which beams carry a ceiling is a decision about the room it covers, not
+    // something the floor can answer on its own, so the button hands the plan a
+    // tool and waits rather than grabbing every beam overhead.
+    if (getEligibleCeilingSupportBeams(floor).length) {
+      editorDispatch({ type: 'SET_MODEL_TARGET', modelTarget: 'floor' });
+      editorDispatch({ type: 'SET_ACTIVE_FLOOR', floorId: activeFloorId });
+      editorDispatch({ type: 'SET_VIEW_MODE', viewMode: 'plan' });
+      editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CEILING_BEAM_PICK });
+      editorDispatch({
+        type: 'SET_STATUS_MESSAGE',
+        message: 'Click the beams the ceiling should hang from, then press Enter.',
+      });
+      return;
+    }
+
+    // Nothing overhead to pick from, so there is no selection to make: the
+    // ceiling arrives on a manual datum and the message names the fix.
     const ceiling = createCeilingForProject(project, {
       floorId: activeFloorId,
       phaseId: activePhaseId || null,
-      ...(firstTrussOnFloor
-        ? { attachment: { mode: CEILING_ATTACHMENT_MODES.TRUSS, trussSystemId: firstTrussOnFloor.id } }
-        : {}),
+      attachment: { mode: CEILING_ATTACHMENT_MODES.MANUAL, beamIds: [] },
+      // Nothing was traced here either, so the boundary stays derived. Drawing a
+      // particular area is what the Ceiling tool is for.
+      boundarySource: CEILING_BOUNDARY_SOURCES.AUTO,
     });
     dispatch({ type: 'CEILING_ADD', ceiling });
     openCeilingEditor(ceiling.id);
+    // Opening the editor clears the status line, so this has to be said after it.
+    editorDispatch({
+      type: 'SET_STATUS_MESSAGE',
+      message:
+        'No beams above this floor — ceiling added with a manual datum. Place top beams on the columns to attach it.',
+    });
   };
 
   const handleDeleteCeiling = async (ceiling) => {
@@ -555,7 +582,8 @@ export default function Sidebar() {
               <button type="button" className={styles.floorButton} onClick={() => openCeilingEditor(ceiling.id)}>
                 <span className={styles.floorName}>{ceiling.name || 'Ceiling'}</span>
                 <span className={styles.floorMeta}>
-                  {ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.TRUSS ? 'Truss-hung' : 'Manual datum'} ·{' '}
+                  {ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.BEAM ? 'Beam-hung' : 'Manual datum'} ·{' '}
+                  {ceiling.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN ? 'drawn area' : 'auto extent'} ·{' '}
                   {Math.round(ceiling.baseElevation || 0)} mm
                 </span>
               </button>

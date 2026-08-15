@@ -3,7 +3,27 @@
  *
  * - Sheet materials use the existing First-Fit Decreasing Height (FFDH) shelf algorithm.
  * - Linear materials use first-fit decreasing bin packing against stock lengths.
+ *
+ * Grain
+ * -----
+ * Sheet grain runs along the sheet LENGTH, i.e. the +X axis of the stock sheet
+ * (`SHEET_GRAIN_ANGLE_DEG`). A part is GRAIN LOCKED when its material declares
+ * `hasGrain` and the part itself carries a `grainAngle`; a locked part may only
+ * be placed at rotations that keep its grain on the sheet axis.
+ *
+ * That is a HARD constraint, not a tie-breaker: a locked part is never turned to
+ * make it fit, even when turning it would save a sheet. Efficiency can drop and
+ * a part can even end up unplaceable - a panel wider than the sheet in its one
+ * legal orientation is reported oversized rather than quietly rotated. Correct
+ * beats tight: cross-grain parts warp, split at the fasteners and show the wrong
+ * face figure, and no packing win is worth that.
+ *
+ * Unconstrained parts keep exactly the freedom they always had, including the
+ * landscape normalization the shelf packer relies on, so a document with no
+ * grain data nests bit-for-bit as before.
  */
+
+import { getGrainRotations, getPlacedGrainAngle, isGrainLocked, SHEET_GRAIN_ANGLE_DEG } from './grainUtils';
 
 const DEFAULT_SHEET = { width: 2440, height: 1220 };
 const DEFAULT_LINEAR_STOCK = 6000;
@@ -61,6 +81,47 @@ function groupByMaterial(parts) {
   return byMaterial;
 }
 
+/**
+ * The footprint a part is packed at, and whether the packer may turn it.
+ *
+ * Unconstrained: normalized to landscape and free to be turned on to a shelf,
+ * which is what the FFDH packer has always assumed.
+ *
+ * Grain locked: the footprint is dictated by the allowed rotations and the
+ * packer may not turn it at all. Grain along the sheet axis keeps the part as
+ * drawn; grain across it means the part is placed turned, so its footprint is
+ * the drawn size swapped - one fixed footprint either way.
+ */
+function resolveSheetPartPlacement(row, width, height) {
+  const grainLocked = isGrainLocked(row.hasGrain === true, row.grainAngle);
+
+  if (!grainLocked) {
+    return {
+      width: Math.max(width, height),
+      height: Math.min(width, height),
+      grainLocked: false,
+      canRotate: true,
+      grainAngle: null,
+      grainRotationsDeg: null,
+      placedGrainAngleDeg: null,
+      grainAlignedToSheet: true,
+    };
+  }
+
+  const { rotations, swapsFootprint, alignedToSheet } = getGrainRotations(row.grainAngle);
+
+  return {
+    width: swapsFootprint ? height : width,
+    height: swapsFootprint ? width : height,
+    grainLocked: true,
+    canRotate: false,
+    grainAngle: row.grainAngle,
+    grainRotationsDeg: rotations,
+    placedGrainAngleDeg: getPlacedGrainAngle(row.grainAngle, rotations[0]),
+    grainAlignedToSheet: alignedToSheet,
+  };
+}
+
 function expandSheetRows(bomRows) {
   const parts = [];
 
@@ -70,16 +131,15 @@ function expandSheetRows(bomRows) {
     const height = toPositiveNumber(row.height);
     if (!width || !height) continue;
 
+    const placement = resolveSheetPartPlacement(row, width, height);
+
     for (let quantityIndex = 0; quantityIndex < (row.quantity || 1); quantityIndex += 1) {
-      const placedWidth = Math.max(width, height);
-      const placedHeight = Math.min(width, height);
       parts.push({
         id: getPartId(row, quantityIndex),
         partName: row.partName,
         material: row.material,
         materialName: row.materialName,
-        width: placedWidth,
-        height: placedHeight,
+        ...placement,
         originalRow: row,
       });
     }
@@ -178,7 +238,10 @@ function nestOnSheets(parts, sheet, kerf) {
         continue;
       }
 
-      if (part.height + kerf <= sheet.width - cursorX && part.width <= sheet.height - shelfY) {
+      // Last resort: turn the part on to the current shelf. Grain-locked parts
+      // never take this branch - a quarter turn would run their fibre across the
+      // sheet - so they fall through to `stillUnplaced` (a new sheet) instead.
+      if (part.canRotate && part.height + kerf <= sheet.width - cursorX && part.width <= sheet.height - shelfY) {
         currentSheet.placements.push({
           ...part,
           x: cursorX,
@@ -242,6 +305,13 @@ function nestOnSheets(parts, sheet, kerf) {
   return sheets;
 }
 
+function countGrainLockedPlacements(sheets) {
+  return sheets.reduce(
+    (sum, sheet) => sum + (sheet.placements || []).filter((placement) => placement.grainLocked).length,
+    0,
+  );
+}
+
 function buildSheetSummary(sheets, sheetSize, totalParts = null) {
   const totalAreaMm2 = sheets.length * sheetSize.width * sheetSize.height;
   const usedAreaMm2 = sheets.reduce((sum, sheet) => sum + (sheet.usedArea || 0), 0);
@@ -251,6 +321,7 @@ function buildSheetSummary(sheets, sheetSize, totalParts = null) {
     stockKind: 'sheet',
     unitsNeeded: sheets.length,
     sheetsNeeded: sheets.length,
+    grainLockedParts: countGrainLockedPlacements(sheets),
     totalParts: totalParts ?? sheets.reduce((sum, sheet) => sum + (sheet.placements?.length || 0), 0),
     sheetSize: `${sheetSize.width} x ${sheetSize.height}mm`,
     totalAreaMm2,
@@ -470,11 +541,13 @@ function aggregateSheetSummaries(groups, sheetSize) {
   const unitsNeeded = groups.reduce((sum, group) => sum + group.summary.unitsNeeded, 0);
   const totalParts = groups.reduce((sum, group) => sum + group.summary.totalParts, 0);
   const oversizedCount = groups.reduce((sum, group) => sum + group.summary.oversizedCount, 0);
+  const grainLockedParts = groups.reduce((sum, group) => sum + (group.summary.grainLockedParts || 0), 0);
 
   return {
     stockKind: 'sheet',
     unitsNeeded,
     sheetsNeeded: unitsNeeded,
+    grainLockedParts,
     totalParts,
     sheetSize: `${sheetSize.width} x ${sheetSize.height}mm`,
     totalAreaMm2,
@@ -585,4 +658,4 @@ export function optimizeCutList(bomRows, options = {}) {
   };
 }
 
-export { DEFAULT_SHEET, DEFAULT_LINEAR_STOCK, DEFAULT_BLADE_KERF };
+export { DEFAULT_SHEET, DEFAULT_LINEAR_STOCK, DEFAULT_BLADE_KERF, SHEET_GRAIN_ANGLE_DEG };

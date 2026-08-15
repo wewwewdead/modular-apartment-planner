@@ -17,6 +17,9 @@ const emptyPrecisionInput = {
   diameter: '',
   offset: '',
   angle: '',
+  distance: '',
+  count: '',
+  spacing: '',
   activeField: null,
 };
 
@@ -42,6 +45,10 @@ const sketchStudioInitialState = {
     activeHardwareId: DEFAULT_FASTENER_HARDWARE_ID,
     focusedJointId: null,
     editingJointId: null,
+    // Array tool layout. Editor-only: never persisted, never undoable.
+    arrayMode: 'linear',
+    // Transient feedback for no-op tool actions ({ id, message, type } | null).
+    toast: null,
   },
   interaction: {
     mode: 'idle',
@@ -86,7 +93,6 @@ const sketchStudioInitialState = {
     past: [],
     future: [],
   },
-  constraintDiagnostics: initialDocumentState.constraintDiagnostics,
   jointDiagnostics: initialDocumentState.jointDiagnostics,
   manufacturingPreviewEntities: initialDocumentState.manufacturingPreviewEntities,
   manufacturingExportEntities: initialDocumentState.manufacturingExportEntities,

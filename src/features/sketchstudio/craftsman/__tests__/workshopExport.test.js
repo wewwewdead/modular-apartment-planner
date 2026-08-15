@@ -71,6 +71,8 @@ describe('Workshop export content builder', () => {
       'cutting-list.csv',
       'cutting-list.html',
       'assembly-instructions.html',
+      'shaper/r1.svg',
+      'shaper/all-parts.svg',
       'README.txt',
     ]);
   });
@@ -164,6 +166,8 @@ describe('Workshop export content builder', () => {
       'cutting-list.csv',
       'cutting-list.html',
       'assembly-instructions.html',
+      'shaper/r1.svg',
+      'shaper/all-parts.svg',
       'README.txt',
     ]);
     const readme = readFile(packageContents, 'README.txt');

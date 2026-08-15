@@ -1,4 +1,5 @@
 import { getEntityManufacturingGeometry, getMaterialStockKind } from './entityManufacturingGeometry';
+import { getEntityGrainAngle } from './grainUtils';
 import { getHardwareById, resolveHardwareIdForFastener } from '../data/materials';
 
 const BOM_ELIGIBLE_TYPES = new Set(['rect', 'line', 'circle', 'polyline']);
@@ -204,6 +205,10 @@ export function entityToBomRow(entity, materialCatalog) {
     defaultStockLength: material?.defaultHeight ?? 0,
     dimensionAccuracy: geometry.dimensionAccuracy,
     dimensionNote: geometry.dimensionNote,
+    // Grain travels with the row so the cut-list optimizer can honour it without
+    // reaching back into the entity list or the material catalog.
+    hasGrain: material?.hasGrain === true,
+    grainAngle: getEntityGrainAngle(entity),
     quantity: 1,
   };
 }

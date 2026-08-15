@@ -16,6 +16,10 @@ const ISO_PLANE_AXES = {
   right: ['right', 'vertical'],
 };
 
+// Families sit 60° apart as lines, so a band narrower than 30° can never claim
+// a direction for two families at once.
+const ISO_FAMILY_MATCH_TOLERANCE_DEG = 15;
+
 function roundValue(value, precision = 1000) {
   return Math.round(value * precision) / precision;
 }
@@ -210,6 +214,37 @@ function getEllipseExtrema(center, rx, ry, rotation = 0) {
   };
 }
 
+function classifyIsometricFamily(vector) {
+  const length = Math.hypot(vector?.x ?? 0, vector?.y ?? 0);
+
+  if (!length) {
+    return null;
+  }
+
+  const direction = { x: vector.x / length, y: vector.y / length };
+  const threshold = Math.cos((ISO_FAMILY_MATCH_TOLERANCE_DEG * Math.PI) / 180);
+
+  return (
+    ISO_FAMILY_DEFINITIONS.reduce((best, family) => {
+      const alignment = Math.abs(dotProduct(direction, family.direction));
+
+      if (alignment < threshold || (best && alignment <= best.alignment)) {
+        return best;
+      }
+
+      return { id: family.id, alignment };
+    }, null)?.id ?? null
+  );
+}
+
+function findPlaneForFamilies(familyA, familyB) {
+  return (
+    Object.keys(ISO_PLANE_AXES).find(
+      (plane) => ISO_PLANE_AXES[plane].includes(familyA) && ISO_PLANE_AXES[plane].includes(familyB),
+    ) ?? null
+  );
+}
+
 export function getIsometricFamilyDefinitions() {
   return ISO_FAMILY_DEFINITIONS.map((family) => ({
     ...family,
@@ -227,6 +262,88 @@ export function getIsometricPlaneAxes(plane = 'top') {
     axisB: familyDefinitions[secondAxisId].direction,
     familyIds: [firstAxisId, secondAxisId],
   };
+}
+
+export function inferIsometricPlaneFromDirections(dir1, dir2, fallbackPlane = null) {
+  const familyA = classifyIsometricFamily(dir1);
+  const familyB = classifyIsometricFamily(dir2);
+
+  if (!familyA || !familyB || familyA === familyB) {
+    return fallbackPlane;
+  }
+
+  return findPlaneForFamilies(familyA, familyB) ?? fallbackPlane;
+}
+
+/**
+ * The plane an angle lives in comes from the rays being measured, not from the
+ * rect-drawing plane selector. A dimensioned corner often has a single ray on an
+ * iso axis — with a typed angle the second ray is derived, so the loose
+ * direction only hints which way the anchored ray sweeps. The ui plane still
+ * wins whenever it can contain the anchored ray.
+ */
+export function inferIsometricPlaneForAngle(dir1, dir2, fallbackPlane = null) {
+  const familyA = classifyIsometricFamily(dir1);
+  const familyB = classifyIsometricFamily(dir2);
+
+  if (familyA && familyB) {
+    return inferIsometricPlaneFromDirections(dir1, dir2, fallbackPlane);
+  }
+
+  const anchorFamily = familyA ?? familyB;
+  const looseVector = familyA ? dir2 : dir1;
+
+  if (!anchorFamily || !Math.hypot(looseVector?.x ?? 0, looseVector?.y ?? 0)) {
+    return fallbackPlane;
+  }
+
+  const candidatePlanes = Object.keys(ISO_PLANE_AXES).filter((plane) => ISO_PLANE_AXES[plane].includes(anchorFamily));
+
+  if (fallbackPlane && candidatePlanes.includes(fallbackPlane)) {
+    return fallbackPlane;
+  }
+
+  const familyDirections = Object.fromEntries(ISO_FAMILY_DEFINITIONS.map((family) => [family.id, family.direction]));
+  const looseDirection = normalizeVector(looseVector);
+  const ranked = candidatePlanes
+    .map((plane) => ({
+      plane,
+      score: dotProduct(looseDirection, familyDirections[ISO_PLANE_AXES[plane].find((id) => id !== anchorFamily)]),
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  if (ranked.length < 2 || Math.abs(ranked[0].score - ranked[1].score) < 1e-6) {
+    return fallbackPlane;
+  }
+
+  return ranked[0].plane;
+}
+
+export function getEntityIsometricPlane(entity) {
+  return entity?.meta?.isometricPlane ?? null;
+}
+
+/**
+ * The plane an in-face diagonal belongs to cannot be read back from its screen
+ * direction, so geometry drawn in isometric mode records the face it was drawn
+ * on. Rays that disagree about the face describe no single plane.
+ */
+export function resolveIsometricPlaneFromEntities(entities) {
+  const planes = (entities ?? []).map(getEntityIsometricPlane).filter(Boolean);
+
+  if (!planes.length || planes.some((plane) => plane !== planes[0])) {
+    return null;
+  }
+
+  return planes[0];
+}
+
+export function withIsometricPlaneMeta(entity, viewMode, isometricPlane) {
+  if (!entity || viewMode !== 'isometric' || !isometricPlane) {
+    return entity;
+  }
+
+  return { ...entity, meta: { ...(entity.meta || {}), isometricPlane } };
 }
 
 export function applyIsometricOrthoPoint(startPoint, point) {

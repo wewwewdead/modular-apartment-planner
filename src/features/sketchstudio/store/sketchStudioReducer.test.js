@@ -20,6 +20,7 @@ import {
   setActiveHardware,
   setEntityHardware,
   setEntityMaterial,
+  setEntityGrainAngle,
   setSelection,
   setDocumentEntities,
   setViewport,
@@ -615,6 +616,29 @@ describe('sketchStudioReducer history', () => {
       expect.objectContaining({ id: 'panel-top' }),
     ]);
     expect(nextState.document.entities.find((entity) => entity.id === 'panel-top')).not.toHaveProperty('materialId');
+  });
+
+  it('applies a grain direction across the selection and folds it onto the fibre axis', () => {
+    const state = createState();
+    const baseState = {
+      ...state,
+      document: {
+        ...state.document,
+        entities: [
+          createRectEntity('panel-left', 0, 0, 200, 120, 18),
+          createRectEntity('panel-right', 220, 0, 200, 120, 18),
+        ],
+      },
+    };
+
+    // 270 degrees is the same fibre axis as 90, so it normalizes on the way in.
+    const nextState = sketchStudioReducer(baseState, setEntityGrainAngle(['panel-left', 'panel-right'], 270));
+    expect(nextState.document.entities.map((entity) => entity.grainAngle)).toEqual([90, 90]);
+
+    // Clearing the constraint stores null, not a stale angle.
+    const clearedState = sketchStudioReducer(nextState, setEntityGrainAngle(['panel-left'], null));
+    expect(clearedState.document.entities.find((entity) => entity.id === 'panel-left').grainAngle).toBeNull();
+    expect(clearedState.document.entities.find((entity) => entity.id === 'panel-right').grainAngle).toBe(90);
   });
 
   it('tracks the fastener tool hardware outside the document and history', () => {

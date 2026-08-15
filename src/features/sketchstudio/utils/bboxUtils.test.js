@@ -9,7 +9,6 @@ describe('bboxUtils and serializationUtils', () => {
     name: 'Test',
     units: 'mm',
     layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
-    constraints: [],
     metadata: {},
     objectDefinition: {},
     entities: [
@@ -99,5 +98,12 @@ describe('bboxUtils and serializationUtils', () => {
     const serialized = serializeDocument(document);
     expect(validateBasicDocumentShape(document)).toBe(true);
     expect(deserializeDocument(serialized).id).toBe('doc-1');
+  });
+
+  it('still accepts a constraint-era document that carries a constraints array', () => {
+    const legacy = { ...document, version: 2, constraints: [{ id: 'c1', type: 'equal_width' }] };
+
+    expect(validateBasicDocumentShape(legacy)).toBe(true);
+    expect(deserializeDocument(serializeDocument(legacy)).id).toBe('doc-1');
   });
 });

@@ -7,7 +7,7 @@ import { getAngleDimensionGeometry, formatAngleText } from '../../utils/angleUti
 import { getArcPath } from '../../utils/arcUtils';
 import { computeEntityBoundingBox } from '../../utils/bboxUtils';
 import { getDimensionGeometry, measureDistance, formatDimensionText } from '../../utils/dimensionUtils';
-import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
+import { getRectCorners, resolveAngleDimensionPoints, resolveLinearDimensionPoints } from '../../utils/entityUtils';
 import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
 import {
@@ -83,9 +83,7 @@ function getPointsBounds(points) {
 }
 
 function getDimensionBounds(entity, allEntities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.p2);
+  const { p1, p2 } = resolveLinearDimensionPoints(entity, allEntities);
   if (!p1 || !p2) {
     return null;
   }
@@ -113,10 +111,7 @@ function getDimensionBounds(entity, allEntities) {
 }
 
 function getAngleDimensionBounds(entity, allEntities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const vertex = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.vertex);
-  const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[2], entity.p2);
+  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, allEntities);
   if (!vertex || !p1 || !p2) {
     return null;
   }
@@ -196,9 +191,7 @@ function featureToSvgElement(entity) {
 }
 
 function dimensionToSvgElement(entity, allEntities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.p2);
+  const { p1, p2 } = resolveLinearDimensionPoints(entity, allEntities);
   if (!p1 || !p2) {
     return '';
   }
@@ -223,10 +216,7 @@ function dimensionToSvgElement(entity, allEntities) {
 }
 
 function angleDimensionToSvgElement(entity, allEntities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const vertex = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.vertex);
-  const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[2], entity.p2);
+  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, allEntities);
   if (!vertex || !p1 || !p2) {
     return '';
   }
@@ -238,14 +228,16 @@ function angleDimensionToSvgElement(entity, allEntities) {
     arcRadius: entity.arcRadius,
     isometricPlane: entity.isometricPlane,
   });
-  const text = formatAngleText(geometry.angleDeg);
   const attrs = dimAttrs(entity);
+  const arc = geometry.arcPath ? `\n    <path d="${geometry.arcPath}" ${attrs} />` : '';
+  const label =
+    geometry.angleDeg == null
+      ? ''
+      : `\n    <text x="${geometry.textPoint.x}" y="${geometry.textPoint.y}" text-anchor="middle" dominant-baseline="middle" ${DIM_FONT}>${escapeXml(formatAngleText(geometry.angleDeg))}</text>`;
 
   return `  <g>
     <line x1="${geometry.ray1.x1}" y1="${geometry.ray1.y1}" x2="${geometry.ray1.x2}" y2="${geometry.ray1.y2}" ${attrs} />
-    <line x1="${geometry.ray2.x1}" y1="${geometry.ray2.y1}" x2="${geometry.ray2.x2}" y2="${geometry.ray2.y2}" ${attrs} />
-    <path d="${geometry.arcPath}" ${attrs} />
-    <text x="${geometry.textPoint.x}" y="${geometry.textPoint.y}" text-anchor="middle" dominant-baseline="middle" ${DIM_FONT}>${escapeXml(text)}</text>
+    <line x1="${geometry.ray2.x1}" y1="${geometry.ray2.y1}" x2="${geometry.ray2.x2}" y2="${geometry.ray2.y2}" ${attrs} />${arc}${label}
   </g>`;
 }
 

@@ -1,5 +1,6 @@
 import { ProjectValidationError } from './errors';
 import { PHASE_ASSIGNABLE_KEYS } from '@/domain/phaseAssignments';
+import { resolveCeilingElevations } from '@/domain/ceilingModels';
 import { syncCanonicalBuilding } from '@/domain/buildingModels';
 import { QUANTITY_RATE_KEYS } from '@/domain/quantityTakeoff';
 
@@ -848,7 +849,11 @@ export function validateProjectReferences(project) {
     }
   }
 
-  const trussSystemIds = new Set((project.trussSystems || []).map((ts) => ts.id));
+  // A ceiling hangs from beams on its own floor, so that is the only place a
+  // support beam id may resolve.
+  const beamIdsByFloor = new Map(
+    project.floors.map((floor) => [floor.id, new Set((floor.beams || []).map((beam) => beam.id))]),
+  );
   for (const ceiling of project.ceilings || []) {
     if (ceiling.phaseId && !phaseIds.has(ceiling.phaseId)) {
       warnings.push({
@@ -862,10 +867,12 @@ export function validateProjectReferences(project) {
         message: `References non-existent floor ${ceiling.floorId}`,
       });
     }
-    if (ceiling.attachment?.trussSystemId && !trussSystemIds.has(ceiling.attachment.trussSystemId)) {
+    const floorBeamIds = beamIdsByFloor.get(ceiling.floorId) || new Set();
+    for (const beamId of ceiling.attachment?.beamIds || []) {
+      if (floorBeamIds.has(beamId)) continue;
       warnings.push({
         path: `ceiling ${ceiling.id}`,
-        message: `attachment references non-existent truss system ${ceiling.attachment.trussSystemId}`,
+        message: `attachment references non-existent support beam ${beamId}`,
       });
     }
   }
@@ -1019,16 +1026,30 @@ export function repairBrokenReferences(project) {
     ts.phaseId && !phaseIds.has(ts.phaseId) ? { ...ts, phaseId: null } : ts,
   );
 
-  // Nullify invalid phaseId on ceilings, and drop a dangling truss attachment
-  // back to manual so the stored boundary/elevation stay the ceiling's own.
-  const trussSystemIds = new Set(trussSystems.map((ts) => ts.id));
+  // Nullify invalid phaseId on ceilings, and drop support beams that are gone.
+  // A ceiling left with fewer than two of them has nothing to take a boundary
+  // from, so it stands on its own datum instead — at the height it is hanging at
+  // now, because manual mode stores the boards and beam mode stored the plane
+  // above them.
+  const ceilingBeamIdsByFloor = new Map(
+    repairedFloors.map((floor) => [floor.id, new Set((floor.beams || []).map((beam) => beam.id))]),
+  );
   const ceilings = (project.ceilings || []).map((ceiling) => {
     let repaired = ceiling;
     if (ceiling.phaseId && !phaseIds.has(ceiling.phaseId)) {
       repaired = { ...repaired, phaseId: null };
     }
-    if (ceiling.attachment?.trussSystemId && !trussSystemIds.has(ceiling.attachment.trussSystemId)) {
-      repaired = { ...repaired, attachment: { ...ceiling.attachment, mode: 'manual', trussSystemId: null } };
+
+    const storedBeamIds = ceiling.attachment?.beamIds || [];
+    const floorBeamIds = ceilingBeamIdsByFloor.get(ceiling.floorId) || new Set();
+    const resolvedBeamIds = storedBeamIds.filter((beamId) => floorBeamIds.has(beamId));
+    if (resolvedBeamIds.length !== storedBeamIds.length) {
+      const stranded = ceiling.attachment?.mode === 'beam' && resolvedBeamIds.length < 2;
+      repaired = {
+        ...repaired,
+        attachment: stranded ? { mode: 'manual', beamIds: [] } : { ...ceiling.attachment, beamIds: resolvedBeamIds },
+        ...(stranded ? { baseElevation: resolveCeilingElevations(project, ceiling).boardUnderside } : {}),
+      };
     }
     return repaired;
   });

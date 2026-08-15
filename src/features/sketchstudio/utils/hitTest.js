@@ -1,7 +1,12 @@
 import { getAngleDimensionGeometry } from './angleUtils';
 import { getArcSegments } from './arcUtils';
 import { getDimensionGeometry } from './dimensionUtils';
-import { getRectCorners, getTextCorners, resolveSourceReferenceFromEntities } from './entityUtils';
+import {
+  getRectCorners,
+  getTextCorners,
+  resolveAngleDimensionPoints,
+  resolveLinearDimensionPoints,
+} from './entityUtils';
 import { getPolylineSegments } from './polylineUtils';
 import { getTextLeaderGeometry } from './textLeaderUtils';
 
@@ -114,9 +119,7 @@ export function hitTestArc(entity, point, tolerance) {
 }
 
 export function hitTestDimension(entity, point, tolerance, entities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const p1 = resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.p2);
+  const { p1, p2 } = resolveLinearDimensionPoints(entity, entities);
   const geometry = getDimensionGeometry({
     p1,
     p2,
@@ -224,10 +227,7 @@ export function hitTestText(entity, point, tolerance) {
 }
 
 export function hitTestAngleDimension(entity, point, tolerance, entities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const vertex = resolveSourceReferenceFromEntities(entities, sourceRefs[1], entity.vertex);
-  const p1 = resolveSourceReferenceFromEntities(entities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(entities, sourceRefs[2], entity.p2);
+  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, entities);
   const geometry = getAngleDimensionGeometry({ vertex, p1, p2, arcRadius: entity.arcRadius });
 
   // Check rays

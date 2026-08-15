@@ -282,7 +282,7 @@ export function evaluateSketchExpression(expression, options = {}) {
   };
 }
 
-export function findVariableReferencesInDocument({ entities = [], constraints = [] } = {}, variableName) {
+export function findVariableReferencesInDocument({ entities = [] } = {}, variableName) {
   if (!variableName) {
     return [];
   }
@@ -304,17 +304,6 @@ export function findVariableReferencesInDocument({ entities = [], constraints = 
         });
       }
     });
-  });
-
-  constraints.forEach((constraint) => {
-    if (typeof constraint?.distanceExpression === 'string' && constraint.distanceExpression.includes(variableName)) {
-      matches.push({
-        kind: 'constraint',
-        constraintId: constraint.id,
-        field: 'distanceExpression',
-        expression: constraint.distanceExpression,
-      });
-    }
   });
 
   return matches;

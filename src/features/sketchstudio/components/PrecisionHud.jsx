@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export default function PrecisionHud({ precisionHud, cursorScreen, onInputChange, onSubmit }) {
+export default function PrecisionHud({ precisionHud, cursorScreen, onInputChange, onSubmit, onToggleChange }) {
   const firstInputRef = useRef(null);
 
   useEffect(() => {
@@ -26,6 +26,24 @@ export default function PrecisionHud({ precisionHud, cursorScreen, onInputChange
         <div key={measurement.key} className="sketchStudioPrecisionRow">
           <span className="sketchStudioPrecisionLabel">{measurement.label}</span>
           <span className="sketchStudioPrecisionValue">{measurement.value.toFixed(1)}</span>
+        </div>
+      ))}
+      {(precisionHud.toggles ?? []).map((toggle) => (
+        <div key={toggle.key} className="sketchStudioPrecisionRow">
+          <span className="sketchStudioPrecisionLabel">{toggle.label}</span>
+          <span className="sketchStudioPrecisionToggleGroup">
+            {toggle.options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`sketchStudioPrecisionToggle ${toggle.value === option.value ? 'is-active' : ''}`}
+                aria-pressed={toggle.value === option.value}
+                onClick={() => onToggleChange?.(toggle.key, option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </span>
         </div>
       ))}
       {precisionHud.inputs.map((input, index) => (

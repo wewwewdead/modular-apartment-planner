@@ -342,3 +342,246 @@ describe('migration_25_to_26 electrical device collection backfill', () => {
     expect(project.floors[0].electricalDevices).toEqual([]);
   });
 });
+
+describe('migration_26_to_27 ceilings hang from beams instead of trusses', () => {
+  const migrate = async (project) => (await import('../migrations/migration_26_to_27.js')).migrateV26toV27(project);
+
+  function trussProject(ceilingOverrides = {}, trussOverrides = {}) {
+    return {
+      id: 'p1',
+      version: 23,
+      floors: [
+        {
+          id: 'floor_1',
+          walls: [],
+          beams: [{ id: 'beam_a' }, { id: 'beam_b' }],
+        },
+        { id: 'floor_2', walls: [], beams: [{ id: 'beam_upper_a' }, { id: 'beam_upper_b' }] },
+      ],
+      trussSystems: [
+        {
+          id: 'truss_1',
+          floorId: 'floor_1',
+          baseElevation: 3000,
+          trussInstances: [
+            {
+              id: 'ti_1',
+              supportMode: 'beam_pair',
+              supportBeamIds: { start: 'beam_a', end: 'beam_b' },
+            },
+          ],
+          ...trussOverrides,
+        },
+      ],
+      ceilings: [
+        {
+          id: 'ceiling_1',
+          floorId: 'floor_1',
+          attachment: { mode: 'truss', trussSystemId: 'truss_1' },
+          baseElevation: 3000,
+          boundaryPolygon: [{ x: 0, y: 0 }],
+          detailing: { suspension: { drop: 150 } },
+          ...ceilingOverrides,
+        },
+      ],
+    };
+  }
+
+  it('rebuilds the attachment from the beams the trusses bore on', async () => {
+    const result = await migrate(trussProject());
+
+    const ceiling = result.ceilings[0];
+    expect(ceiling.attachment).toEqual({ mode: 'beam', beamIds: ['beam_a', 'beam_b'] });
+    // The plane it was hanging from is the beams' own level.
+    expect(ceiling.baseElevation).toBe(3000);
+    expect(ceiling.boundaryPolygon).toEqual([{ x: 0, y: 0 }]);
+    expect(result.version).toBe(23);
+  });
+
+  it('takes the beams of every beam-carried instance, and ignores the rest', async () => {
+    const project = trussProject(
+      {},
+      {
+        trussInstances: [
+          { id: 'ti_1', supportMode: 'beam_pair', supportBeamIds: { start: 'beam_a', end: 'beam_b' } },
+          // Drawn free-hand: it names no beams to inherit.
+          { id: 'ti_2', supportMode: 'free', supportBeamIds: { start: 'beam_ignored', end: null } },
+        ],
+      },
+    );
+
+    expect((await migrate(project)).ceilings[0].attachment.beamIds).toEqual(['beam_a', 'beam_b']);
+  });
+
+  it('drops to a manual datum at the board underside when the trusses named no beam pair', async () => {
+    const project = trussProject({}, { trussInstances: [{ id: 'ti_1', supportMode: 'free' }] });
+
+    const ceiling = (await migrate(project)).ceilings[0];
+    expect(ceiling.attachment).toEqual({ mode: 'manual', beamIds: [] });
+    // Truss mode stored the plane and hung the boards 150 mm below it; manual
+    // mode stores the boards, so the ceiling must not float up by its drop.
+    expect(ceiling.baseElevation).toBe(2850);
+  });
+
+  it('will not adopt beams standing on another floor', async () => {
+    const project = trussProject({ floorId: 'floor_2' });
+
+    const ceiling = (await migrate(project)).ceilings[0];
+    expect(ceiling.attachment).toEqual({ mode: 'manual', beamIds: [] });
+    expect(ceiling.baseElevation).toBe(2850);
+  });
+
+  it('uses the default drop when the ceiling never stored one', async () => {
+    const project = trussProject({ detailing: {} }, { trussInstances: [] });
+
+    expect((await migrate(project)).ceilings[0].baseElevation).toBe(2850);
+  });
+
+  it('keeps the stored elevation when the truss system itself is gone', async () => {
+    const project = trussProject({ attachment: { mode: 'truss', trussSystemId: 'truss_gone' } });
+
+    const ceiling = (await migrate(project)).ceilings[0];
+    expect(ceiling.attachment).toEqual({ mode: 'manual', beamIds: [] });
+    expect(ceiling.baseElevation).toBe(3000);
+  });
+
+  it('normalizes any other stored mode to manual and coerces the beam ids', async () => {
+    const project = trussProject({ attachment: { mode: 'magnets', beamIds: ['beam_a', '', 'beam_a'] } });
+
+    expect((await migrate(project)).ceilings[0].attachment).toEqual({ mode: 'manual', beamIds: ['beam_a'] });
+  });
+
+  it('leaves a project with no ceilings alone', async () => {
+    const project = { id: 'p1', floors: [], ceilings: [] };
+    expect(await migrate(project)).toBe(project);
+  });
+
+  it('loads a v26 truss-attached save through deserializeProject as a beam attachment', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const { createProject } = await import('@/domain/models');
+    const payload = createProject('Truss-hung ceiling save');
+    const floor = payload.floors[0];
+    floor.columns = [
+      { id: 'col_a', x: 0, y: 0, width: 300, depth: 300, height: 3000, rotation: 0 },
+      { id: 'col_b', x: 6000, y: 0, width: 300, depth: 300, height: 3000, rotation: 0 },
+      { id: 'col_c', x: 0, y: 4000, width: 300, depth: 300, height: 3000, rotation: 0 },
+      { id: 'col_d', x: 6000, y: 4000, width: 300, depth: 300, height: 3000, rotation: 0 },
+    ];
+    floor.beams = [
+      {
+        id: 'beam_a',
+        startRef: { kind: 'column', id: 'col_a' },
+        endRef: { kind: 'column', id: 'col_b' },
+        width: 250,
+        depth: 450,
+        floorLevel: 3000,
+        placementRole: 'roof_ring',
+      },
+      {
+        id: 'beam_b',
+        startRef: { kind: 'column', id: 'col_c' },
+        endRef: { kind: 'column', id: 'col_d' },
+        width: 250,
+        depth: 450,
+        floorLevel: 3000,
+        placementRole: 'roof_ring',
+      },
+    ];
+    payload.trussSystems = [
+      {
+        id: 'truss_1',
+        name: 'Roof trusses',
+        floorId: floor.id,
+        baseElevation: 3000,
+        trussInstances: [{ id: 'ti_1', supportMode: 'beam_pair', supportBeamIds: { start: 'beam_a', end: 'beam_b' } }],
+      },
+    ];
+    payload.ceilings = [
+      {
+        id: 'ceiling_1',
+        name: 'Living Ceiling',
+        floorId: floor.id,
+        phaseId: null,
+        attachment: { mode: 'truss', trussSystemId: 'truss_1' },
+        boundaryPolygon: [
+          { x: 125, y: 125 },
+          { x: 5875, y: 125 },
+          { x: 5875, y: 3875 },
+          { x: 125, y: 3875 },
+        ],
+        baseElevation: 3000,
+        detailing: { suspension: { drop: 150 } },
+      },
+    ];
+
+    const { project } = deserializeProject({ schemaVersion: 26, version: payload.version, data: payload });
+
+    expect(project.ceilings[0].attachment).toEqual({ mode: 'beam', beamIds: ['beam_a', 'beam_b'] });
+    expect(project.ceilings[0].baseElevation).toBe(3000);
+  });
+});
+
+describe('migration_27_to_28 ceiling boundary source backfill', () => {
+  const migrate = async (project) => (await import('../migrations/migration_27_to_28.js')).migrateV27toV28(project);
+
+  it('marks every stored ceiling as taking its extent from the beams', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [{ id: 'floor_1', walls: [], beams: [] }],
+      ceilings: [
+        { id: 'ceiling_1', floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_a', 'beam_b'] } },
+        { id: 'ceiling_2', floorId: 'floor_1', attachment: { mode: 'manual', beamIds: [] } },
+      ],
+    });
+
+    expect(result.ceilings.map((ceiling) => ceiling.boundarySource)).toEqual(['auto', 'auto']);
+    expect(result.version).toBe(23);
+  });
+
+  it('keeps a drawn extent and rejects anything that is not exactly "drawn"', async () => {
+    const result = await migrate({
+      id: 'p1',
+      version: 23,
+      floors: [],
+      ceilings: [
+        { id: 'ceiling_1', boundarySource: 'drawn' },
+        { id: 'ceiling_2', boundarySource: 'Drawn' },
+        { id: 'ceiling_3', boundarySource: 'traced' },
+      ],
+    });
+
+    expect(result.ceilings.map((ceiling) => ceiling.boundarySource)).toEqual(['drawn', 'auto', 'auto']);
+  });
+
+  it('leaves a project with no ceilings untouched', async () => {
+    const project = { id: 'p1', version: 23, floors: [], ceilings: [] };
+    expect(await migrate(project)).toBe(project);
+  });
+
+  it('backfills through a full deserialize from schema 27', async () => {
+    const { deserializeProject } = await import('../deserialize.js');
+    const { createProject } = await import('@/domain/models');
+    const payload = createProject('Ceiling save');
+    payload.ceilings = [
+      {
+        id: 'ceiling_1',
+        name: 'Living Ceiling',
+        floorId: payload.floors[0].id,
+        phaseId: null,
+        attachment: { mode: 'manual', beamIds: [] },
+        boundaryPolygon: [
+          { x: 0, y: 0 },
+          { x: 5000, y: 0 },
+          { x: 5000, y: 3000 },
+          { x: 0, y: 3000 },
+        ],
+        baseElevation: 2800,
+      },
+    ];
+
+    const { project } = deserializeProject({ schemaVersion: 27, version: payload.version, data: payload });
+
+    expect(project.ceilings[0].boundarySource).toBe('auto');
+  });
+});

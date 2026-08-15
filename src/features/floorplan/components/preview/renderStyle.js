@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 
 /**
  * The two things the preview can be asked to be.
@@ -79,7 +80,7 @@ export const RENDER_STYLE_PRESETS = {
     // Still worth accumulating: this model is full of 45 mm studs and railing
     // balusters, and sub-pixel jitter is the only anti-aliasing that keeps them
     // from crawling.
-    maxSamples: 10,
+    maxSamples: IS_DESKTOP_APP ? 16 : 10,
     sunAngularRadiusDeg: 0.35,
   },
   [RENDER_STYLES.REALISTIC]: {
@@ -98,7 +99,10 @@ export const RENDER_STYLE_PRESETS = {
     // model loses the tonal separation between its faces.
     exposure: 1,
     detailStrength: 1,
-    maxSamples: 48,
+    // The desktop shell earns the longer run: with its bigger refine budget the
+    // extra samples actually land (see REFINE_BUDGET_MS), buying smoother
+    // penumbras and cleaner thin-member antialiasing after the camera settles.
+    maxSamples: IS_DESKTOP_APP ? 128 : 48,
     // The sun's true half-angle is 0.27°, and shadow edges in a real street are
     // softer than that because the sky around the sun is lit too. 1.4° lands on
     // the penumbra a photograph actually shows at building scale.

@@ -609,7 +609,7 @@ describe('ceilings — project collection', () => {
     expect(deleted.project.ceilings.map((entry) => entry.id)).toEqual(['ceiling_2']);
   });
 
-  it('shifts manual ceilings with a floor elevation change but leaves truss-attached ones alone', () => {
+  it('shifts manual ceilings with a floor elevation change but leaves beam-attached ones alone', () => {
     const { state, floorId } = ceilingState();
     let next = floorplanReducer(state, {
       type: 'CEILING_ADD',
@@ -617,23 +617,25 @@ describe('ceilings — project collection', () => {
         id: 'ceiling_manual',
         floorId,
         baseElevation: 2700,
-        attachment: { mode: 'manual', trussSystemId: null },
+        attachment: { mode: 'manual', beamIds: [] },
       }),
     });
     next = floorplanReducer(next, {
       type: 'CEILING_ADD',
-      ceiling: createCeiling('Truss-hung', {
-        id: 'ceiling_truss',
+      ceiling: createCeiling('Beam-hung', {
+        id: 'ceiling_beam',
         floorId,
         baseElevation: 2700,
-        attachment: { mode: 'truss', trussSystemId: 'truss_1' },
+        attachment: { mode: 'beam', beamIds: ['beam_1'] },
       }),
     });
 
     const raised = floorplanReducer(next, { type: 'FLOOR_UPDATE', floor: { id: floorId, elevation: 3000 } });
     const byId = Object.fromEntries(raised.project.ceilings.map((entry) => [entry.id, entry]));
     expect(byId.ceiling_manual.baseElevation).toBe(5700);
-    expect(byId.ceiling_truss.baseElevation).toBe(2700);
+    // The beams the ceiling hangs from were shifted with the floor, so its own
+    // stored snapshot must not be shifted a second time on top of them.
+    expect(byId.ceiling_beam.baseElevation).toBe(2700);
   });
 
   it('clears ceiling phase assignments when the phase is deleted', () => {

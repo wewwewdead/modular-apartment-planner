@@ -20,11 +20,11 @@ function getPolylineBounds(entity) {
 }
 
 describe('sketchDocumentResolver', () => {
-  it('combines variables and constraints into resolved geometry', () => {
-    const { document, constraintDiagnostics } = resolveSketchDocument({
-      version: 1,
-      id: 'doc-constraint',
-      name: 'Constraint Test',
+  it('combines variables and parametric expressions into resolved geometry', () => {
+    const { document } = resolveSketchDocument({
+      version: 3,
+      id: 'doc-parametric',
+      name: 'Parametric Test',
       units: 'mm',
       metadata: {},
       objectDefinition: {},
@@ -32,16 +32,6 @@ describe('sketchDocumentResolver', () => {
       variables: [
         { id: 'var-width', name: 'width', value: 1200, unit: 'mm' },
         { id: 'var-thickness', name: 'thickness', value: 18, unit: 'mm' },
-      ],
-      constraints: [
-        {
-          id: 'constraint-1',
-          type: 'equal_width',
-          driverEntityId: 'rect-1',
-          drivenEntityId: 'rect-2',
-          label: 'Match shelf widths',
-          enabled: true,
-        },
       ],
       entities: [
         {
@@ -74,8 +64,9 @@ describe('sketchDocumentResolver', () => {
 
     expect(document.variables).toHaveLength(2);
     expect(document.entities.find((entity) => entity.id === 'rect-1').width).toBe(1164);
-    expect(document.entities.find((entity) => entity.id === 'rect-2').width).toBe(1164);
-    expect(constraintDiagnostics[0]).toMatchObject({ status: 'applied' });
+    // Nothing ties rect-2 to rect-1 any more: an entity with no expression of
+    // its own keeps the width it was drawn at.
+    expect(document.entities.find((entity) => entity.id === 'rect-2').width).toBe(200);
   });
 
   it('regenerates automatic dado depth from source overlap when geometry changes', () => {
@@ -95,7 +86,6 @@ describe('sketchDocumentResolver', () => {
       objectDefinition: {},
       layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
       variables: [],
-      constraints: [],
       joints: [joint],
       entities: [
         {
@@ -178,7 +168,6 @@ describe('sketchDocumentResolver', () => {
       objectDefinition: {},
       layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
       variables: [],
-      constraints: [],
       joints: [joint],
       entities: [
         {
@@ -261,7 +250,6 @@ describe('sketchDocumentResolver', () => {
       objectDefinition: {},
       layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
       variables: [],
-      constraints: [],
       joints: [joint],
       entities: [
         {
@@ -350,7 +338,6 @@ describe('sketchDocumentResolver', () => {
       objectDefinition: {},
       layers: [{ id: 'default', name: 'Default', visible: true, locked: false }],
       variables: [],
-      constraints: [],
       joints: [joint],
       entities: [
         {

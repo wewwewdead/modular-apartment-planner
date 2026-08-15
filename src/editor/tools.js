@@ -26,6 +26,10 @@ export const TOOLS = {
   STAIR: 'stair',
   SECTION: 'section',
   SLAB: 'slab',
+  CEILING: 'ceiling',
+  // Picks the beams a new ceiling hangs from, one click each, instead of taking
+  // every beam on the floor.
+  CEILING_BEAM_PICK: 'ceiling_beam_pick',
   ROOM: 'room',
   DOOR: 'door',
   WINDOW: 'window',

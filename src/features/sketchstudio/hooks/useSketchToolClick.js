@@ -15,8 +15,18 @@ import {
 } from '../utils/entityUtils';
 import { inferDimensionSubtype } from '../utils/dimensionUtils';
 import { findTopmostEntityAtPoint } from '../utils/hitTest';
+import { withIsometricPlaneMeta } from '../utils/isometricUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
 import { findFilletableCorner, computeSketchFillet, applyFillet, DEFAULT_FILLET_RADIUS } from '../utils/filletUtils';
+import {
+  applyChamfer,
+  computeSketchChamfer,
+  findChamferableCorner,
+  DEFAULT_CHAMFER_DISTANCE,
+} from '../utils/chamferUtils';
+import { computeSketchTrim, isTrimmableEntity } from '../utils/trimUtils';
+import { computeSketchExtend, findExtendCandidate } from '../utils/extendUtils';
+import { pruneDocumentAfterEntityRemoval } from '../utils/documentEditUtils';
 import { buildFastenerFeatureConfig, getHardwarePattern, resolveFastenerTargetPartId } from '../utils/fastenerUtils';
 import { buildHardwarePatternFeatureConfigs } from '../utils/hardwarePatternUtils';
 import { createGroupId, expandGroupedSelection } from '../utils/groupUtils';
@@ -27,15 +37,20 @@ import {
   commitEntity,
   patchDraft,
   setActiveTool,
+  setDocument,
   setDocumentEntities,
   setSelection,
   setSuppressNextClick,
+  showToast,
   startDraft,
 } from '../store/sketchStudioActions';
 import {
   PROFILE_CLOSE_TOLERANCE_PX,
-  constrainAnglePoint,
+  buildAngleDimensionEntityFromDraft,
+  buildSketchArrayResult,
+  buildSketchMirrorResult,
   isOffsettableEntity,
+  resolveAngleIsometricPlane,
   mergeSelection,
   parsePositiveNumber,
   getRectEndpointFromDraft,
@@ -45,6 +60,7 @@ import {
   buildOffsetEntityFromDraft,
   HIT_TOLERANCE_PX,
 } from './sketchConstants';
+import { commitSelectionCopyResult } from './selectionCopyCommit';
 
 export default function useSketchToolClick(state, dispatch, viewportHook, options) {
   const { activeTool, editableEntities, draftPreview, commitPrecisionDraft, getConstrainedDraftPoint } = options;
@@ -87,6 +103,143 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
             dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null }));
           }
         }
+        return;
+      }
+
+      if (activeTool === 'chamfer') {
+        const chamferTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
+        const chamferDistance = parsePositiveNumber(state.draft.precisionInput?.distance) ?? DEFAULT_CHAMFER_DISTANCE;
+        const corner = findChamferableCorner(state.document.entities, worldPoint, chamferTolerance);
+        if (corner) {
+          const geometry = computeSketchChamfer(corner, chamferDistance);
+          if (geometry) {
+            dispatch(setDocumentEntities(applyChamfer(state.document.entities, corner, geometry, targetLayerId)));
+            dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null }));
+          }
+        }
+        return;
+      }
+
+      // Trim replaces the clicked entity, so the whole document goes through the
+      // referential clean-up (joints pruned, group membership normalised) in one
+      // dispatch — one gesture, one undo entry.
+      if (activeTool === 'trim') {
+        const trimTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX, state.viewport.zoom);
+        const target = findTopmostEntityAtPoint(editableEntities.filter(isTrimmableEntity), worldPoint, trimTolerance);
+        if (!target) return;
+        const result = computeSketchTrim(state.document.entities, target, worldPoint);
+        if (!result) return;
+        dispatch(setDocument(pruneDocumentAfterEntityRemoval(state.document, result.entities, result.removedIds)));
+        if (state.selection.selectedIds.includes(target.id)) {
+          dispatch(setSelection(state.selection.selectedIds.filter((entityId) => entityId !== target.id)));
+        }
+        dispatch(patchDraft({ trimPreview: null, trimTargetId: null }));
+        return;
+      }
+
+      if (activeTool === 'extend') {
+        const extendTolerance = pixelsToWorldUnits(HIT_TOLERANCE_PX * 2, state.viewport.zoom);
+        const candidate = findExtendCandidate(editableEntities, worldPoint, extendTolerance);
+        if (!candidate) {
+          dispatch(showToast('Click near the free end of a line, arc, or open polyline'));
+          return;
+        }
+        const result = computeSketchExtend(state.document.entities, candidate);
+        if (!result) {
+          dispatch(showToast('Nothing lies in the path of that extension'));
+          return;
+        }
+        dispatch(setDocumentEntities(result.entities));
+        dispatch(patchDraft({ extendPreview: null }));
+        return;
+      }
+
+      if (activeTool === 'mirror') {
+        const point = snap.point ?? worldPoint;
+
+        if (!state.draft.type) {
+          if (!state.selection.selectedIds.length) {
+            dispatch(showToast('Select the entities to mirror first'));
+            return;
+          }
+
+          // Picking a line entity uses that whole line as the axis: its two
+          // endpoints define the mirror in a single click.
+          if (hoveredEntity?.type === 'line' && !snap.point) {
+            commitSelectionCopyResult(
+              dispatch,
+              buildSketchMirrorResult({
+                entities: state.document.entities,
+                draft: state.draft,
+                selectedIds: state.selection.selectedIds,
+                axisStart: { x: hoveredEntity.x1, y: hoveredEntity.y1 },
+                axisEnd: { x: hoveredEntity.x2, y: hoveredEntity.y2 },
+              }),
+              'Nothing in the selection can be mirrored',
+            );
+            return;
+          }
+
+          dispatch(
+            startDraft({
+              type: 'mirror',
+              step: 'pickAxisEnd',
+              startPoint: point,
+              currentPoint: point,
+              points: [point],
+              selectionIds: [...state.selection.selectedIds],
+            }),
+          );
+          return;
+        }
+
+        commitSelectionCopyResult(
+          dispatch,
+          buildSketchMirrorResult({
+            entities: state.document.entities,
+            draft: state.draft,
+            selectedIds: state.selection.selectedIds,
+            axisStart: state.draft.points[0],
+            axisEnd: point,
+          }),
+          'Nothing in the selection can be mirrored',
+        );
+        return;
+      }
+
+      if (activeTool === 'array') {
+        const point = snap.point ?? worldPoint;
+
+        if (!state.draft.type) {
+          if (!state.selection.selectedIds.length) {
+            dispatch(showToast('Select the entities to array first'));
+            return;
+          }
+
+          dispatch(
+            startDraft({
+              type: 'array',
+              step: state.ui.arrayMode === 'polar' ? 'pickCount' : 'pickSecond',
+              startPoint: point,
+              currentPoint: point,
+              points: [point],
+              selectionIds: [...state.selection.selectedIds],
+            }),
+          );
+          return;
+        }
+
+        commitSelectionCopyResult(
+          dispatch,
+          buildSketchArrayResult({
+            entities: state.document.entities,
+            draft: state.draft,
+            selectedIds: state.selection.selectedIds,
+            arrayMode: state.ui.arrayMode,
+            targetPoint: point,
+          }),
+          'Nothing in the selection can be arrayed',
+        );
         return;
       }
 
@@ -277,11 +430,15 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
 
         const nextEntity =
           activeTool === 'line'
-            ? createLineEntity(
-                state.draft.startPoint,
-                getLineEndpointFromDraft({ ...state.draft, currentPoint: draftPoint }),
-                state.document.entities,
-                targetLayerId,
+            ? withIsometricPlaneMeta(
+                createLineEntity(
+                  state.draft.startPoint,
+                  getLineEndpointFromDraft({ ...state.draft, currentPoint: draftPoint }),
+                  state.document.entities,
+                  targetLayerId,
+                ),
+                state.ui.viewMode,
+                state.ui.isometricPlane,
               )
             : activeTool === 'rect'
               ? state.ui.viewMode === 'isometric'
@@ -358,7 +515,11 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
             pixelsToWorldUnits(PROFILE_CLOSE_TOLERANCE_PX, state.viewport.zoom)
         ) {
           const nextEntity = closePolyline(
-            createPolylineEntity(state.draft.points, state.document.entities, targetLayerId, true),
+            withIsometricPlaneMeta(
+              createPolylineEntity(state.draft.points, state.document.entities, targetLayerId, true),
+              state.ui.viewMode,
+              state.ui.isometricPlane,
+            ),
           );
           if (nextEntity) dispatch(commitEntity(nextEntity));
           return;
@@ -420,7 +581,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               currentPoint: point,
               points: [point],
               subtype: null,
-              sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean),
+              sourceRefs: [buildSourceRefFromSnap(snap)],
             }),
           );
           return;
@@ -432,7 +593,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               points: [state.draft.points[0], point],
               subtype: inferDimensionSubtype(state.draft.points[0], point),
               currentPoint: worldPoint,
-              sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)].filter(Boolean),
+              sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)],
             }),
           );
           return;
@@ -445,7 +606,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               placementPoint: worldPoint,
               units: state.document.units,
               entities: state.document.entities,
-              sourceRefs: state.draft.sourceRefs.filter(Boolean),
+              sourceRefs: state.draft.sourceRefs,
               layerId: state.document.layers.some((l) => l.id === 'dimensions') ? 'dimensions' : targetLayerId,
               subtype: state.draft.subtype,
             }),
@@ -467,7 +628,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               step: 'pickLine2',
               currentPoint: point,
               points: [point],
-              sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean),
+              sourceRefs: [buildSourceRefFromSnap(snap)],
               lineEntity1: hitEntity,
             }),
           );
@@ -494,7 +655,10 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
             const arcRadius = Math.min(distA, distB, 60) * 0.5;
             const p1 = calculateDistance(vertex, a2) > calculateDistance(vertex, a1) ? a2 : a1;
             const p2 = calculateDistance(vertex, b2) > calculateDistance(vertex, b1) ? b2 : b1;
-            const isoPlane = state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null;
+            const isoPlane = resolveAngleIsometricPlane(vertex, p1, p2, state.ui.viewMode, state.ui.isometricPlane, [
+              line1,
+              hitEntity,
+            ]);
             dispatch(
               commitEntity(
                 createAngleDimensionEntity({
@@ -503,7 +667,9 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
                   p2,
                   arcRadius: Math.max(arcRadius, 20),
                   entities: state.document.entities,
-                  sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean),
+                  // Every point here is derived from the two hit lines, not from
+                  // the snap under the cursor: no slot has a source ref.
+                  sourceRefs: [],
                   layerId: state.document.layers.some((l) => l.id === 'dimensions') ? 'dimensions' : targetLayerId,
                   isometricPlane: isoPlane,
                 }),
@@ -522,7 +688,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               step: 'pickVertex',
               currentPoint: point,
               points: [point],
-              sourceRefs: [buildSourceRefFromSnap(snap)].filter(Boolean),
+              sourceRefs: [buildSourceRefFromSnap(snap)],
             }),
           );
           return;
@@ -533,7 +699,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               step: 'pickSecond',
               points: [state.draft.points[0], point],
               currentPoint: worldPoint,
-              sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)].filter(Boolean),
+              sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)],
             }),
           );
           return;
@@ -544,36 +710,25 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
               step: 'pickSecond',
               points: [state.draft.points[0], point],
               currentPoint: worldPoint,
-              sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)].filter(Boolean),
+              sourceRefs: [...state.draft.sourceRefs, buildSourceRefFromSnap(snap)],
               lineEntity1: undefined,
             }),
           );
           return;
         }
         if (state.draft.step === 'pickSecond') {
-          const vertex = state.draft.points[1];
           const inputAngle = parsePositiveNumber(state.draft.precisionInput?.angle);
-          const isoPlane = state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null;
-          const p2 =
-            inputAngle != null
-              ? constrainAnglePoint(vertex, state.draft.points[0], point, inputAngle, isoPlane)
-              : point;
-          const arcRadius = Math.max(calculateDistance(vertex, p2), 20);
           const p2SourceRef = inputAngle != null ? null : buildSourceRefFromSnap(snap);
-          dispatch(
-            commitEntity(
-              createAngleDimensionEntity({
-                vertex,
-                p1: state.draft.points[0],
-                p2,
-                arcRadius,
-                entities: state.document.entities,
-                sourceRefs: [...state.draft.sourceRefs, p2SourceRef].filter(Boolean),
-                layerId: state.document.layers.some((l) => l.id === 'dimensions') ? 'dimensions' : targetLayerId,
-                isometricPlane: isoPlane,
-              }),
-            ),
-          );
+          const nextEntity = buildAngleDimensionEntityFromDraft({
+            draft: state.draft,
+            referencePoint: point,
+            document: state.document,
+            targetLayerId,
+            sourceRefs: [...state.draft.sourceRefs, p2SourceRef],
+            viewMode: state.ui.viewMode,
+            isometricPlane: state.ui.isometricPlane,
+          });
+          if (nextEntity) dispatch(commitEntity(nextEntity));
         }
       }
     },
@@ -592,6 +747,7 @@ export default function useSketchToolClick(state, dispatch, viewportHook, option
       state.selection.selectedIds,
       state.ui.activeHardwareId,
       state.ui.activeLayerId,
+      state.ui.arrayMode,
       state.ui.isometricPlane,
       state.ui.viewMode,
       state.viewport,

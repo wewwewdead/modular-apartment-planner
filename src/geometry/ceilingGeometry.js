@@ -1,5 +1,10 @@
 import { CEILING_HANGER_PLAN_SIZE, CEILING_WALL_ANGLE_LEG } from '@/domain/defaults';
 import { deriveCeilingDetail, getCeilingLocalSpace, resolveCeilingBoundary } from '@/domain/ceilingModels';
+import {
+  CEILING_BOARD_MATERIALS,
+  CEILING_FRAME_MATERIALS,
+  getCeilingProductProfile,
+} from '@/domain/ceilingProductProfiles';
 
 // Square footprint for a suspension rod/wire — thin enough to read as a hanger,
 // thick enough to survive the preview's 1 mm minimum box dimension. Hanger
@@ -50,15 +55,20 @@ function createPrismDescriptor(id, kind, outline, baseElevation, height, metadat
   };
 }
 
-function createBoxDescriptor(id, kind, center, size, baseElevation, metadata = {}) {
+function createBoxDescriptor(id, kind, center, size, baseElevation, rotation, metadata = {}) {
   const halfX = size.x / 2;
   const halfZ = size.z / 2;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
   const corners = [
-    { x: center.x - halfX, y: center.y - halfZ },
-    { x: center.x + halfX, y: center.y - halfZ },
-    { x: center.x + halfX, y: center.y + halfZ },
-    { x: center.x - halfX, y: center.y + halfZ },
-  ];
+    { x: -halfX, z: -halfZ },
+    { x: halfX, z: -halfZ },
+    { x: halfX, z: halfZ },
+    { x: -halfX, z: halfZ },
+  ].map((corner) => ({
+    x: center.x + corner.x * cos - corner.z * sin,
+    y: center.y + corner.x * sin + corner.z * cos,
+  }));
 
   return {
     id,
@@ -66,7 +76,7 @@ function createBoxDescriptor(id, kind, center, size, baseElevation, metadata = {
     geometry: 'box',
     center: { x: center.x, y: center.y },
     size,
-    rotation: 0,
+    rotation,
     baseElevation,
     materialKey: metadata.materialKey || kind,
     metadata,
@@ -118,6 +128,13 @@ export function buildCeilingPreviewObjects(ceiling, project) {
   const toPlan = (point) => space.toPlan(point);
   const shared = { ceilingId: ceiling.id, floorId: ceiling.floorId, sourceId: ceiling.id };
 
+  const boardMaterialKey =
+    getCeilingProductProfile(configuration.face.productProfileId).boardMaterial === CEILING_BOARD_MATERIALS.PLYWOOD
+      ? 'ceilingBoardPlywood'
+      : 'ceilingBoard';
+  const framingMaterialKey = (member) =>
+    member.material === CEILING_FRAME_MATERIALS.TIMBER ? 'ceilingFramingTimber' : 'ceilingFraming';
+
   const boards = detail.panels.flatMap((panel) =>
     panel.regions
       .filter((region) => (region.outline || []).length >= 3)
@@ -130,7 +147,7 @@ export function buildCeilingPreviewObjects(ceiling, project) {
           configuration.face.boardThickness,
           {
             ...shared,
-            materialKey: 'ceilingBoard',
+            materialKey: boardMaterialKey,
             ceilingDetailKind: 'panel',
             panelLabel: panel.label,
             holes: (region.holes || []).map((hole) => hole.map(toPlan)),
@@ -149,12 +166,19 @@ export function buildCeilingPreviewObjects(ceiling, project) {
           toPlan(member.end),
           elevations.furringBottom + CEILING_WALL_ANGLE_LEG / 2,
           CEILING_WALL_ANGLE_LEG,
-          { ...shared, materialKey: 'ceilingFraming', ceilingDetailKind: 'framing', framingKind: member.kind },
+          {
+            ...shared,
+            materialKey: framingMaterialKey(member),
+            ceilingDetailKind: 'framing',
+            framingKind: member.kind,
+          },
         );
       }
 
-      // Local U runs with plan x and local V runs against plan y, so both rect
-      // spans stay positive extents once the centre is converted back to plan.
+      // The UV rect maps to a box spun to the ceiling frame's plan angle: box
+      // local x follows the U axis and, because the frame mirrors V, box local
+      // z follows −V — which lands on the same rectangle since the extents are
+      // centred.
       const spanX = member.u1 - member.u0;
       const spanZ = member.v1 - member.v0;
       if (spanX <= 0 || spanZ <= 0) return null;
@@ -165,7 +189,8 @@ export function buildCeilingPreviewObjects(ceiling, project) {
         toPlan({ u: (member.u0 + member.u1) / 2, v: (member.v0 + member.v1) / 2 }),
         { x: spanX, y: member.depth, z: spanZ },
         member.kind === 'carrier' ? elevations.carrierBottom : elevations.furringBottom,
-        { ...shared, materialKey: 'ceilingFraming', ceilingDetailKind: 'framing', framingKind: member.kind },
+        space.rotation,
+        { ...shared, materialKey: framingMaterialKey(member), ceilingDetailKind: 'framing', framingKind: member.kind },
       );
     })
     .filter(Boolean);
@@ -180,6 +205,7 @@ export function buildCeilingPreviewObjects(ceiling, project) {
             toPlan(hanger),
             { x: HANGER_PLAN_SIZE, y: hangerLength, z: HANGER_PLAN_SIZE },
             elevations.carrierTop,
+            space.rotation,
             { ...shared, materialKey: 'ceilingHanger', ceilingDetailKind: 'hanger' },
           ),
         )

@@ -404,6 +404,9 @@ export default function SvgCanvas() {
             case 's':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.SLAB });
               return;
+            case 'p':
+              editorDispatch({ type: 'SET_TOOL', tool: TOOLS.CEILING });
+              return;
             case 'r':
               editorDispatch({ type: 'SET_TOOL', tool: TOOLS.ROOM });
               return;

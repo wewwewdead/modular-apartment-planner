@@ -127,8 +127,7 @@ function hitTest(modelPos, floor, project, annotationTolerance) {
     }
   }
 
-  // Hit test walls
-  // Hit test columns
+  // Hit test section cuts
   for (const sc of floor.sectionCuts || []) {
     if (hitTestSectionCut(modelPos, sc, annotationTolerance)) {
       return { id: sc.id, type: 'sectionCut' };
@@ -147,6 +146,18 @@ function hitTest(modelPos, floor, project, annotationTolerance) {
     if (fixtureContainsPoint(fixture, modelPos)) {
       return { id: fixture.id, type: 'fixture' };
     }
+  }
+
+  // A dimension is a thin overlay drawn on top of the plan, so it outranks the
+  // long members and area fills it crosses — railings, beams, walls, rooms,
+  // slabs — which would otherwise swallow every click and leave the dimension
+  // unselectable (and undeletable) from the canvas. The small solid targets it
+  // measures BETWEEN keep priority at their own bodies: an extension line
+  // touches a window edge or a column face by construction, and it must not
+  // steal their clicks.
+  const annotationHit = hitTestAnnotation(modelPos, floor, annotationTolerance);
+  if (annotationHit) {
+    return annotationHit;
   }
 
   // Hit test railings
@@ -201,11 +212,6 @@ function hitTest(modelPos, floor, project, annotationTolerance) {
     if (slabContainsPoint(slab, modelPos)) {
       return { id: slab.id, type: 'slab' };
     }
-  }
-
-  const annotationHit = hitTestAnnotation(modelPos, floor, annotationTolerance);
-  if (annotationHit) {
-    return annotationHit;
   }
 
   return hitTestGridLines(modelPos, gridSystems, annotationTolerance / 2);

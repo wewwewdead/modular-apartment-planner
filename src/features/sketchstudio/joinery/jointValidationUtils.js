@@ -1,5 +1,11 @@
 import { JOINT_TYPES, getJointTypeLabel } from './jointTypes';
-import { JOINERY_TOUCH_TOLERANCE } from './jointDefaults';
+import {
+  JOINERY_TOUCH_TOLERANCE,
+  MAX_SANE_FIT_CLEARANCE_MM,
+  MIN_SANE_FIT_CLEARANCE_MM,
+  resolveJointFitClearance,
+  supportsJointFitClearance,
+} from './jointDefaults';
 import { applyInsetToOverlap, buildRepeatedEdgeIntervals } from './jointResolvers';
 import { getJointTypeEntry } from './jointRegistry';
 
@@ -81,7 +87,13 @@ function getFemaleAllowanceState(joint, context, parameters) {
   }
 
   const baseWidth = Math.min(Math.max(Number(parameters?.width) || 0, JOINERY_TOUCH_TOLERANCE), insetOverlap.length);
-  const femaleWidth = baseWidth + (Number(parameters?.offset) || 0) + (Number(joint?.tolerance?.clearance) || 0);
+  // Same chain the geometry uses, so a fit that pushes the opening past the
+  // edge is caught before it is cut.
+  const femaleWidth =
+    baseWidth +
+    (Number(parameters?.offset) || 0) +
+    (Number(joint?.tolerance?.clearance) || 0) +
+    resolveJointFitClearance(joint?.type, joint?.tolerance);
 
   return {
     insetOverlap,
@@ -89,6 +101,31 @@ function getFemaleAllowanceState(joint, context, parameters) {
     femaleWidth,
     center: insetOverlap.center,
   };
+}
+
+/**
+ * A fit clearance outside the range hand tools and CNC routers can actually hold
+ * is a mistake, not a preference: past 1mm the joint rattles and glue cannot
+ * bridge it, and an interference beyond -0.1mm cannot be assembled without
+ * splitting the stock. Warn rather than reject - the shop may know better - but
+ * say the number out loud.
+ */
+function buildFitClearanceWarning(joint) {
+  if (!supportsJointFitClearance(joint?.type)) {
+    return null;
+  }
+
+  const clearance = resolveJointFitClearance(joint.type, joint.tolerance);
+
+  if (clearance >= MAX_SANE_FIT_CLEARANCE_MM) {
+    return `Joint fit clearance of ${clearance}mm is very loose (>= ${MAX_SANE_FIT_CLEARANCE_MM}mm). The female opening will not grip the mating part.`;
+  }
+
+  if (clearance < MIN_SANE_FIT_CLEARANCE_MM) {
+    return `Joint fit clearance of ${clearance}mm is an interference fit tighter than ${MIN_SANE_FIT_CLEARANCE_MM}mm. The parts will not assemble without force.`;
+  }
+
+  return null;
 }
 
 function buildRepeatedPatternResult(context, parameters, widthKey) {
@@ -130,6 +167,11 @@ export function validateResolvedJoint(joint, context, parameters) {
   const draftThicknessWarning = buildDraftThicknessWarning(context);
   if (draftThicknessWarning) {
     warnings.push(draftThicknessWarning);
+  }
+
+  const fitClearanceWarning = buildFitClearanceWarning(joint);
+  if (fitClearanceWarning) {
+    warnings.push(fitClearanceWarning);
   }
 
   if (

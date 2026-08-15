@@ -30,29 +30,42 @@ function positive(value) {
   return Number.isFinite(number) && number > 0 ? number : 0;
 }
 
+/**
+ * The structure of one floor that reaches the ceiling band, as the objects
+ * themselves rather than their footprints. Tracing a cutout and deciding what a
+ * ceiling-only view has to contain are the same question asked twice, so both
+ * ask it here: anything that answers the elevation test separately will sooner
+ * or later disagree with the boards it is supposed to explain.
+ */
+export function collectCeilingBandStructure(floor, range) {
+  if (!floor || !range || !(range.max > range.min)) return { beams: [], columns: [], walls: [] };
+
+  const columns = floor.columns || [];
+  const floorLevel = getFloorElevation(floor);
+
+  return {
+    // Beam levels are absolute: the stored level is the beam's top, and it hangs
+    // its own depth below that.
+    beams: (floor.beams || []).filter((beam) => {
+      const top = Number(beam?.floorLevel || 0);
+      return reachesCeilingBand(top - positive(beam?.depth), top, range);
+    }),
+    columns: columns.filter((column) => reachesCeilingBand(floorLevel, floorLevel + positive(column?.height), range)),
+    walls: (floor.walls || []).filter((wall) => {
+      const wallBase = floorLevel + wallBaseOffset(wall);
+      return reachesCeilingBand(wallBase, wallBase + positive(wall?.height), range);
+    }),
+  };
+}
+
 function floorObstructions(floor, range) {
   const columns = floor?.columns || [];
-  const floorLevel = getFloorElevation(floor);
-  const outlines = [];
-
-  // Beam levels are absolute: the stored level is the beam's top, and it hangs
-  // its own depth below that.
-  for (const beam of floor?.beams || []) {
-    const top = Number(beam?.floorLevel || 0);
-    if (!reachesCeilingBand(top - positive(beam?.depth), top, range)) continue;
-    outlines.push(getBeamRenderData(beam, columns)?.outline);
-  }
-
-  for (const column of columns) {
-    if (!reachesCeilingBand(floorLevel, floorLevel + positive(column?.height), range)) continue;
-    outlines.push(columnOutline(column));
-  }
-
-  for (const wall of floor?.walls || []) {
-    const wallBase = floorLevel + wallBaseOffset(wall);
-    if (!reachesCeilingBand(wallBase, wallBase + positive(wall?.height), range)) continue;
-    outlines.push(getWallRenderData(wall, columns)?.outline);
-  }
+  const band = collectCeilingBandStructure(floor, range);
+  const outlines = [
+    ...band.beams.map((beam) => getBeamRenderData(beam, columns)?.outline),
+    ...band.columns.map((column) => columnOutline(column)),
+    ...band.walls.map((wall) => getWallRenderData(wall, columns)?.outline),
+  ];
 
   return outlines.filter((outline) => (outline?.length || 0) >= 3);
 }

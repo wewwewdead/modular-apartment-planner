@@ -46,7 +46,6 @@ export default function SketchStudioLayout(props) {
     selectedProfileInfo,
     isBrokenLineSelection,
     hasGroupedSelection,
-    constraintDiagnostics,
     jointDiagnostics,
     manufacturingPreviewEntities,
     manufacturingExportEntities,
@@ -81,15 +80,13 @@ export default function SketchStudioLayout(props) {
     status,
     setEntityMaterial,
     setEntityThickness,
+    setEntityGrainAngle,
     setEntityHardware,
     setActiveHardware,
     toggleCraftsmanMode,
     toggleShortcutOverlay,
     closeShortcutOverlay,
     setVariables,
-    addConstraint,
-    updateConstraint,
-    removeConstraint,
     focusJoint,
     clearFocusedJoint,
     editJoint,
@@ -99,6 +96,7 @@ export default function SketchStudioLayout(props) {
     removeJoint,
     loadTemplate,
     duplicateEntities,
+    dismissToast,
   } = props;
 
   const confirm = useConfirmDialog();
@@ -228,7 +226,6 @@ export default function SketchStudioLayout(props) {
                 selectedEntities={selectedEntities}
                 selectedIds={selection.selectedIds}
                 variables={document.variables}
-                constraints={document.constraints}
                 joints={document.joints}
                 jointDiagnostics={jointDiagnostics}
                 focusedJointId={ui.focusedJointId}
@@ -241,6 +238,7 @@ export default function SketchStudioLayout(props) {
                 costByMaterial={costByMaterial}
                 onMaterialChange={setEntityMaterial}
                 onThicknessChange={setEntityThickness}
+                onGrainAngleChange={setEntityGrainAngle}
                 onVariablesChange={setVariables}
                 onJointAdd={addJoint}
                 onJointUpdate={updateJoint}
@@ -258,7 +256,6 @@ export default function SketchStudioLayout(props) {
             <RightPanel
               document={document}
               selectedEntity={selectedEntity}
-              selectedEntities={selectedEntities}
               selectedIds={selection.selectedIds}
               groupSelectionSummary={groupSelectionSummary}
               selectedMeasurements={selectedMeasurements}
@@ -266,12 +263,8 @@ export default function SketchStudioLayout(props) {
               isBrokenLineSelection={isBrokenLineSelection}
               canGroupSelection={selection.selectedIds.length >= 2}
               canUngroupSelection={hasGroupedSelection}
-              constraintDiagnostics={constraintDiagnostics}
               onEntityFieldCommit={updateSelectedEntityField}
               onVariablesChange={setVariables}
-              onConstraintAdd={addConstraint}
-              onConstraintUpdate={updateConstraint}
-              onConstraintRemove={removeConstraint}
               onGroupSelection={groupSelection}
               onUngroupSelection={degroupSelection}
               onRotateLeft={rotateSelectionLeft}
@@ -281,6 +274,7 @@ export default function SketchStudioLayout(props) {
               onToggleBrokenLines={toggleBrokenLines}
               onMaterialChange={setEntityMaterial}
               onThicknessChange={setEntityThickness}
+              onGrainAngleChange={setEntityGrainAngle}
               activeTool={activeTool}
               activeHardwareId={ui.activeHardwareId}
               onActiveHardwareChange={setActiveHardware}
@@ -320,6 +314,14 @@ export default function SketchStudioLayout(props) {
       {ui.shortcutOverlayOpen && <ShortcutOverlay onClose={closeShortcutOverlay} />}
       {documentPersistence.status === 'error' && documentPersistence.error && (
         <Toast message={documentPersistence.error} type="error" onDismiss={() => {}} />
+      )}
+      {ui.toast && (
+        <Toast
+          key={ui.toast.id}
+          message={ui.toast.message}
+          type={ui.toast.type}
+          onDismiss={dismissToast ?? (() => {})}
+        />
       )}
     </main>
   );

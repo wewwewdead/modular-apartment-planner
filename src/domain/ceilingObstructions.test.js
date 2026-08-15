@@ -135,7 +135,7 @@ describe('ceilings traced around the structure under them', () => {
     expect(blockedHangers.length).toBeLessThan(clearHangers.length);
   });
 
-  it('trims a truss-hung ceiling to its support beams, a crossing beam and a partition', () => {
+  it('trims a beam-hung ceiling to its support beams, a crossing beam and a partition', () => {
     const columns = [
       ['col_a1', 0, 0],
       ['col_a2', 8000, 0],
@@ -156,7 +156,7 @@ describe('ceilings traced around the structure under them', () => {
       beams: [
         beam('beam_a', 'col_a1', 'col_a2'),
         beam('beam_b', 'col_b1', 'col_b2'),
-        // Runs across the trusses rather than under them.
+        // Crosses the ceiling rather than bounding it.
         beam('beam_cross', 'col_m1', 'col_m2'),
       ],
       walls: [{ ...createWall({ x: 5500, y: 0 }, { x: 5500, y: 6000 }, 200, { height: CEILING_LEVEL }), id: 'wall_1' }],
@@ -186,11 +186,9 @@ describe('ceilings traced around the structure under them', () => {
         }),
       ],
     });
-    const ceiling = createCeilingForProject(project, {
-      floorId: floor.id,
-      attachment: { mode: 'truss', trussSystemId: 'ts_1' },
-    });
+    const ceiling = createCeilingForProject(project, { floorId: floor.id });
     project.ceilings = [ceiling];
+    expect(ceiling.attachment.mode).toBe('beam');
 
     const detail = deriveCeilingDetail(ceiling, project);
 

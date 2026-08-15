@@ -10,10 +10,13 @@ import { generateBomHtml } from './bomHtmlExport';
 import { exportEntitiesToDxf } from './dxfExport';
 import { buildNestedSheetFilename, exportNestedSheetsToDxf } from './nestedDxfExport';
 import { exportEntitiesToSvg } from './svgExport';
+import { SHAPER_FOLDER, buildShaperDepthTable, buildShaperSvgDocuments } from './shaperSvgExport';
 import { generateAssemblySteps } from '../utils/assemblyGenerator';
 import { buildBomEntityList, isHardwareBomRow } from '../utils/entityBomAdapter';
+import { buildCutListCsv, buildCutListReadmeLines, optimizeLinearStock } from '../utils/linearStockOptimizer';
 
 const NESTED_SHEETS_FOLDER = 'sheets';
+const CUT_LIST_FILE = 'cutlist.csv';
 
 function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'Untitled';
@@ -76,10 +79,77 @@ function buildHardwareReadmeLines(name, bomRows, sheetCount = 0, skippedFastener
   ];
 }
 
-function buildWorkshopReadme(name, errors, bomRows, sheetCount = 0, skippedFasteners = 0) {
+/**
+ * Fabrication settings baked into the cut files, in the order the exporter
+ * applied them. Nothing is printed when the operator opted into nothing, so a
+ * plain package reads exactly as it always did.
+ */
+function buildFabricationReadmeLines(options = {}, grainLockedParts = 0) {
+  const lines = [];
+
+  if (options.kerf > 0) {
+    lines.push(`  Kerf compensation: ${options.kerf}mm (outer profiles grown, holes and pockets shrunk by half that).`);
+  }
+
+  if (options.dogbone?.style && options.dogbone.style !== 'none') {
+    lines.push(
+      `  Corner relief: ${options.dogbone.style}, ${options.dogbone.bitDiameter ?? 6.35}mm cutter, applied AFTER kerf`,
+      '  on the kerf-compensated path. Drilled fastener holes are exempt.',
+    );
+  }
+
+  if (grainLockedParts > 0) {
+    lines.push(
+      `  Grain: ${grainLockedParts} part(s) are grain locked and were nested without rotation. Sheet grain runs`,
+      `  along the sheet length; the ${NESTED_SHEETS_FOLDER}/ files mark each locked part with an arrow on layer GRAIN.`,
+    );
+  }
+
+  return lines.length ? ['', 'Fabrication settings:', ...lines] : [];
+}
+
+/**
+ * How the Shaper Origin files are colour-coded, and what depth each cut wants.
+ * Depth is documentation only - Origin sets depth on the tool - so the table is
+ * here in the README rather than pretending to be machine data.
+ */
+function buildShaperReadmeLines(shaperDocuments, options = {}) {
+  if (!shaperDocuments?.parts?.length) {
+    return [];
+  }
+
+  const dogboneOn = Boolean(options.dogbone?.style && options.dogbone.style !== 'none');
+
+  return [
+    '',
+    `Shaper Origin (${SHAPER_FOLDER}/):`,
+    `  One SVG per part plus ${SHAPER_FOLDER}/${shaperDocuments.combined?.filename ?? 'all-parts.svg'} with every part in place.`,
+    '  Origin reads CUT TYPE FROM COLOUR, not from layers:',
+    '    white fill + black stroke = exterior cut (part perimeter, cut outside the line)',
+    '    black fill                = interior cut (through cutouts, slots, fastener holes)',
+    '    grey fill  (#808080)      = pocket / partial depth (dado and rabbet channels)',
+    '    grey stroke               = on-line cut (the cutter follows the line itself)',
+    '    blue stroke (#0068FF)     = guide only (grain arrows) - never cut',
+    '  Kerf is NOT compensated in these files. Origin offsets the toolpath on-tool from the',
+    '  cut type it reads out of the colour, so pre-compensating would apply the correction twice.',
+    dogboneOn
+      ? '  Corner relief IS applied, the same as the DXFs. Turn it off if you prefer to pare inside corners by hand.'
+      : '  Corner relief is off. Origin cuts with a round bit like any other router, so inside corners come out',
+    dogboneOn
+      ? null
+      : '  filleted at the bit radius - enable Dogbone in the export bar if a square mating part has to seat.',
+    '  Intended depth per cut (Origin ignores it; set depth on the tool):',
+    ...buildShaperDepthTable(shaperDocuments),
+    // `!== null` rather than Boolean: the leading '' is the blank separator line
+    // and a truthiness filter would swallow it.
+  ].filter((line) => line !== null);
+}
+
+function buildWorkshopReadme(name, errors, bomRows, sheetCount = 0, skippedFasteners = 0, options = {}, extras = {}) {
   const approximateRows = (bomRows || []).filter(
     (row) => row.dimensionAccuracy === 'approximate' || row.costAccuracy === 'approximate',
   );
+  const grainLockedParts = (bomRows || []).filter((row) => row.hasGrain === true && row.grainAngle != null).length;
 
   return [
     `${name} - Workshop Package`,
@@ -91,8 +161,17 @@ function buildWorkshopReadme(name, errors, bomRows, sheetCount = 0, skippedFaste
     `  ${name}.svg - Vector file for Inkscape/Illustrator, with the hardware legend`,
     '  cutting-list.csv - Bill of Materials (spreadsheet)',
     '  cutting-list.html - BOM report (open in browser)',
+    ...(extras.cutListPlan?.groups?.length
+      ? [`  ${CUT_LIST_FILE} - 1D cut list: which lengths come off which board, in order`]
+      : []),
     '  assembly-instructions.html - Step-by-step build guide',
+    ...(extras.shaperDocuments?.parts?.length
+      ? [`  ${SHAPER_FOLDER}/ - Shaper Origin SVGs, one per part plus a combined file`]
+      : []),
     ...buildHardwareReadmeLines(name, bomRows, sheetCount, skippedFasteners),
+    ...buildFabricationReadmeLines(options, grainLockedParts),
+    ...(extras.cutListPlan ? buildCutListReadmeLines(extras.cutListPlan) : []),
+    ...buildShaperReadmeLines(extras.shaperDocuments, options),
     '',
     'For full-scale PDF printing, use the PDF export button in Craftsman Studio.',
     'Set your browser print dialog to "Scale: 100%" and "Margins: None".',
@@ -126,6 +205,7 @@ export function buildWorkshopPackageContents(
       name: `${name}.dxf`,
       content: exportEntitiesToDxf(entities, {
         kerf: options.kerf,
+        dogbone: options.dogbone,
         referenceEntities: options.referenceEntities,
       }),
     });
@@ -138,6 +218,7 @@ export function buildWorkshopPackageContents(
     // (all-linear or empty BOM) simply contribute no files and no warning.
     const nestedSheets = exportNestedSheetsToDxf(entities, bomRows, {
       kerf: options.kerf,
+      dogbone: options.dogbone,
       sheetSize: options.sheetSize,
       bladeKerf: options.bladeKerf,
     });
@@ -183,6 +264,22 @@ export function buildWorkshopPackageContents(
     errors.push(`BOM HTML: ${error.message}`);
   }
 
+  // 1D cut list. Only written when the project actually has linear stock, so an
+  // all-sheet-goods package keeps exactly the file list it has always had.
+  let cutListPlan = null;
+  try {
+    cutListPlan = optimizeLinearStock(bomRows || [], {
+      kerfMm: options.cutKerfMm,
+      stockLengthsMm: options.linearStockLengthsMm,
+    });
+    if (cutListPlan.groups.length) {
+      files.push({ name: CUT_LIST_FILE, content: buildCutListCsv(cutListPlan) });
+    }
+  } catch (error) {
+    cutListPlan = null;
+    errors.push(`Cut list: ${error.message}`);
+  }
+
   try {
     // Same entity list the sidebar's assembly panel and the BOM are built from:
     // parts from the document (so the manufacturing set's cloned panels and
@@ -197,9 +294,35 @@ export function buildWorkshopPackageContents(
     errors.push(`Assembly: ${error.message}`);
   }
 
+  // Shaper Origin files. Kerf is deliberately NOT forwarded - Origin
+  // compensates on-tool - while the dogbone setting is, exactly as the DXFs get
+  // it. See `shaperSvgExport` for why the two diverge.
+  let shaperDocuments = null;
+  try {
+    shaperDocuments = buildShaperSvgDocuments(entities, {
+      dogbone: options.dogbone,
+      referenceEntities: options.referenceEntities,
+    });
+    shaperDocuments.parts.forEach((document) => {
+      files.push({ name: `${SHAPER_FOLDER}/${document.filename}`, content: document.content });
+    });
+    if (shaperDocuments.combined) {
+      files.push({
+        name: `${SHAPER_FOLDER}/${shaperDocuments.combined.filename}`,
+        content: shaperDocuments.combined.content,
+      });
+    }
+  } catch (error) {
+    shaperDocuments = null;
+    errors.push(`Shaper SVG: ${error.message}`);
+  }
+
   files.push({
     name: 'README.txt',
-    content: buildWorkshopReadme(name, errors, bomRows, nestedSheetCount, skippedFasteners),
+    content: buildWorkshopReadme(name, errors, bomRows, nestedSheetCount, skippedFasteners, options, {
+      cutListPlan,
+      shaperDocuments,
+    }),
   });
 
   return {

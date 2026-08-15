@@ -11,6 +11,7 @@ import {
 } from './jointPanelHelpers';
 import JointForm from './JointForm';
 import ExistingJointList from './ExistingJointList';
+import WoodMovementNotices from './WoodMovementNotices';
 
 export {
   getFocusedJointForEditing,
@@ -146,6 +147,8 @@ export default function JointPanel({
           migration.
         </p>
       )}
+
+      <WoodMovementNotices entities={entities} joints={joints} />
 
       <ExistingJointList
         joints={joints}

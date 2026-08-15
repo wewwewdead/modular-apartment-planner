@@ -1,10 +1,12 @@
 import styles from '../styles/craftsman.module.css';
 import {
+  JOINT_FIT_CLASSES,
   JOINT_PLACEMENT_MODES,
   computeSketchJointDefaults,
   createSketchJoint,
   getSketchJointSegmentOptions,
   listJointTypeParameterFields,
+  normalizeJointFitClass,
   parseSerializedSketchJointReference,
   serializeSketchJointReference,
   supportsAutoOverlapDepth,
@@ -166,7 +168,32 @@ export function buildJointFormState(entities, selectedEntities = [], existing = 
     targetPartId,
     sourceEdgeValue: serializeSketchJointReference(existing?.sourceEdgeRef) || sourceEdgeOptions[0]?.value || '',
     targetEdgeValue: serializeSketchJointReference(existing?.targetEdgeRef) || targetEdgeOptions[0]?.value || '',
+    // A joint saved before fits existed carries no `fit`, which normalizes to the
+    // legacy class and therefore to zero added clearance - its geometry does not
+    // move just because the editor was opened.
+    fit: normalizeJointFitClass(existing?.tolerance?.fit),
+    fitClearanceMm: existing?.tolerance?.clearanceMm != null ? String(existing.tolerance.clearanceMm) : '',
     parameterValues: buildParameterValues(type, computedDefaults, existing?.parameters || null),
+  };
+}
+
+/**
+ * Tolerance block for the joint being edited.
+ *
+ * `clearance` is deliberately NOT sent: the form has never edited the legacy
+ * allowance, and passing it here would change what saving an untouched joint
+ * does. Only the fit class (and its custom value) travel.
+ */
+function buildToleranceFromForm(formState) {
+  const fit = normalizeJointFitClass(formState.fit);
+  const customClearance = Number(formState.fitClearanceMm);
+
+  return {
+    fit,
+    clearanceMm:
+      fit === JOINT_FIT_CLASSES.CUSTOM && Number.isFinite(customClearance) && formState.fitClearanceMm !== ''
+        ? customClearance
+        : null,
   };
 }
 
@@ -203,6 +230,7 @@ export function buildJointFromForm(formState) {
       formState.placementMode === JOINT_PLACEMENT_MODES.MANUAL_REFS
         ? parseSerializedSketchJointReference(formState.targetEdgeValue)
         : null,
+    tolerance: buildToleranceFromForm(formState),
     parameters,
   });
 }

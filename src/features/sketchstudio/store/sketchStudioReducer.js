@@ -12,6 +12,7 @@ import {
   updateJointInDocument,
 } from '../joinery/jointReducerHelpers';
 import { getNextActiveLayer } from '../utils/layerUtils';
+import { normalizeGrainAngle } from '../craftsman/utils/grainUtils';
 import { DEFAULT_FASTENER_HARDWARE_ID, applyHardwareToFeatureEntity } from '../utils/fastenerUtils';
 import { resolveSketchDocument, resolveSketchDocumentLightweight } from '../utils/sketchDocumentResolver';
 import {
@@ -51,6 +52,12 @@ function emptyPrecisionInput() {
     diameter: '',
     offset: '',
     angle: '',
+    // Chamfer reuses `distance`; array reuses `count`/`spacing` and the existing
+    // `angle` field for its total sweep — same one-field-per-quantity pattern the
+    // fillet radius and offset distance already follow.
+    distance: '',
+    count: '',
+    spacing: '',
     activeField: null,
   };
 }
@@ -85,10 +92,10 @@ function withRuntimeGroupIndex(document, previousDocument = null, options = {}) 
   // Reuse the prior index (by reference — critical for the by-reference undo
   // snapshots) when the caller guarantees membership is unchanged, or when the
   // resolved entities preserve the exact same group membership as the previous
-  // document. The constraint solver rebuilds the entities array on every
-  // resolution, so an entity-array identity check alone would never match for
-  // any non-drag path; the membership comparison is what makes geometry-only
-  // updates (move/resize/rotate/property edits) skip the O(n) rebuild.
+  // document. Resolution can rebuild the entities array, so an entity-array
+  // identity check alone would not match for every non-drag path; the
+  // membership comparison is what makes geometry-only updates (move/resize/
+  // rotate/property edits) skip the O(n) rebuild.
   const shouldReuseGroupIndex =
     Boolean(reusableGroupIndex) &&
     (options.reuseGroupIndex === true ||
@@ -126,7 +133,6 @@ function resolveDeferredIfNeeded(state) {
   return {
     ...state,
     document: resolved.document,
-    constraintDiagnostics: resolved.constraintDiagnostics,
     ...getJointStatePatch(resolved),
     _needsFullResolution: false,
   };
@@ -151,7 +157,6 @@ function restoreUndoableSnapshot(state, snapshot) {
   return {
     ...state,
     document: resolvedDocumentState.document,
-    constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
     ...getJointStatePatch(resolvedDocumentState),
     ui: {
       ...state.ui,
@@ -456,7 +461,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
         selection: {
           ...state.selection,
@@ -481,7 +485,6 @@ export default function sketchStudioReducer(state, action) {
         {
           ...state,
           document: resolvedDocumentState.document,
-          constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
           ...getJointStatePatch(resolvedDocumentState),
           ui: {
             ...state.ui,
@@ -504,19 +507,16 @@ export default function sketchStudioReducer(state, action) {
         state.interaction.mode === 'transform' ||
         state.interaction.mode === 'anchor-drag';
 
-      // During drags, only resolve parametric expressions (skip constraint solver + joinery)
+      // During drags, only resolve parametric expressions (skip joinery). The
+      // full resolution is deferred to drag end.
       if (isDragging) {
-        const lightDocument = withRuntimeGroupIndex(
-          resolveSketchDocumentLightweight({
-            ...state.document,
-            entities: action.payload,
-          }),
-          state.document,
-          { reuseGroupIndex: true },
-        );
+        const lightDocument = resolveSketchDocumentLightweight({
+          ...state.document,
+          entities: action.payload,
+        });
         return {
           ...state,
-          document: lightDocument,
+          document: withRuntimeGroupIndex(lightDocument, state.document, { reuseGroupIndex: true }),
           _needsFullResolution: true,
         };
       }
@@ -534,7 +534,6 @@ export default function sketchStudioReducer(state, action) {
         {
           ...state,
           document: resolvedDocumentState.document,
-          constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
           ...getJointStatePatch(resolvedDocumentState),
           _needsFullResolution: false,
         },
@@ -564,7 +563,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: nextResolvedDocumentState.document,
-        constraintDiagnostics: nextResolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(nextResolvedDocumentState),
       });
     }
@@ -589,7 +587,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: nextResolvedDocumentState.document,
-        constraintDiagnostics: nextResolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(nextResolvedDocumentState),
       });
     }
@@ -732,7 +729,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
         selection: {
           ...state.selection,
@@ -762,7 +758,6 @@ export default function sketchStudioReducer(state, action) {
       return {
         ...state,
         document: nextDocument,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
         viewport: nextViewport,
         ui: {
@@ -860,7 +855,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }
@@ -887,7 +881,30 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
+        ...getJointStatePatch(resolvedDocumentState),
+      });
+    }
+
+    case SKETCH_STUDIO_ACTIONS.SET_ENTITY_GRAIN_ANGLE: {
+      const { entityIds, grainAngle } = action.payload;
+      const idSet = new Set(entityIds);
+      // Normalized into [0, 180) because grain has no direction, only an axis.
+      const normalizedGrainAngle = normalizeGrainAngle(grainAngle);
+      const nextEntities = state.document.entities.map((entity) => {
+        if (!idSet.has(entity.id)) return entity;
+        return { ...entity, grainAngle: normalizedGrainAngle };
+      });
+      const resolvedDocumentState = withResolvedDocumentState(
+        buildResolvedDocumentState({
+          ...state.document,
+          entities: nextEntities,
+        }),
+        state.document,
+        { reuseGroupIndex: true },
+      );
+      return finalizeUndoableState(state, {
+        ...state,
+        document: resolvedDocumentState.document,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }
@@ -917,7 +934,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }
@@ -972,64 +988,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
-        ...getJointStatePatch(resolvedDocumentState),
-      });
-    }
-
-    case SKETCH_STUDIO_ACTIONS.ADD_CONSTRAINT: {
-      const resolvedDocumentState = withResolvedDocumentState(
-        buildResolvedDocumentState({
-          ...state.document,
-          constraints: [...(state.document.constraints || []), action.payload],
-        }),
-        state.document,
-        { reuseGroupIndex: true },
-      );
-
-      return finalizeUndoableState(state, {
-        ...state,
-        document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
-        ...getJointStatePatch(resolvedDocumentState),
-      });
-    }
-
-    case SKETCH_STUDIO_ACTIONS.UPDATE_CONSTRAINT: {
-      const { constraintId, patch } = action.payload;
-      const resolvedDocumentState = withResolvedDocumentState(
-        buildResolvedDocumentState({
-          ...state.document,
-          constraints: (state.document.constraints || []).map((constraint) =>
-            constraint.id === constraintId ? { ...constraint, ...patch } : constraint,
-          ),
-        }),
-        state.document,
-        { reuseGroupIndex: true },
-      );
-
-      return finalizeUndoableState(state, {
-        ...state,
-        document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
-        ...getJointStatePatch(resolvedDocumentState),
-      });
-    }
-
-    case SKETCH_STUDIO_ACTIONS.REMOVE_CONSTRAINT: {
-      const resolvedDocumentState = withResolvedDocumentState(
-        buildResolvedDocumentState({
-          ...state.document,
-          constraints: (state.document.constraints || []).filter((constraint) => constraint.id !== action.payload),
-        }),
-        state.document,
-        { reuseGroupIndex: true },
-      );
-
-      return finalizeUndoableState(state, {
-        ...state,
-        document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }
@@ -1044,7 +1002,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }
@@ -1060,7 +1017,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }
@@ -1075,7 +1031,6 @@ export default function sketchStudioReducer(state, action) {
       return finalizeUndoableState(state, {
         ...state,
         document: resolvedDocumentState.document,
-        constraintDiagnostics: resolvedDocumentState.constraintDiagnostics,
         ...getJointStatePatch(resolvedDocumentState),
       });
     }

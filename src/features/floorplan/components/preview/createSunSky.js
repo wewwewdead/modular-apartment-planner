@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 import { sunDirectionInPlan } from '@/analysis/sunStudyRunner';
 
 /**
@@ -201,8 +202,10 @@ export function createSunSky() {
     // so the model picks up warm light from the sun's side of the sky and cool
     // light from the other, which one column cannot express.
     skyCanvas = document.createElement('canvas');
-    skyCanvas.width = 512;
-    skyCanvas.height = 256;
+    // This canvas is both the visible backdrop and the source the image-based
+    // lighting is prefiltered from; the desktop shell takes the sharper dome.
+    skyCanvas.width = IS_DESKTOP_APP ? 1024 : 512;
+    skyCanvas.height = IS_DESKTOP_APP ? 512 : 256;
     skyTexture = new THREE.CanvasTexture(skyCanvas);
     // Equirectangular so three treats it as a dome: the vertical axis becomes
     // the polar angle and the gradient sits where a sky sits, however the

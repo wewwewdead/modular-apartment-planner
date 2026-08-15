@@ -1,9 +1,12 @@
 import { useEffect, useMemo } from 'react';
 import styles from '../styles/craftsman.module.css';
 import {
+  JOINT_FIT_CLASSES,
   JOINT_PARAMETER_DEPTH_MODES,
   JOINT_PLACEMENT_MODES,
   computeSketchJointDefaults,
+  describeJointFit,
+  getJointFitOptions,
   getJointTypeDefinition,
   getSketchJointSummary,
   getSketchJointTypeOptions,
@@ -18,6 +21,61 @@ import {
   getRectPartOptions,
   supportsAutoDepthMode,
 } from './jointPanelHelpers';
+
+/**
+ * Fit selector. Hidden for joint types with no female geometry to widen (butt)
+ * or whose holes are already sized from hardware data (dowel, pocket screw).
+ */
+function JointFitFields({ type, formState, setFormState }) {
+  const fitOptions = getJointFitOptions(type);
+  if (!fitOptions.length) {
+    return null;
+  }
+
+  const isCustomFit = formState.fit === JOINT_FIT_CLASSES.CUSTOM;
+  const resolvedFit = describeJointFit(type, {
+    fit: formState.fit,
+    clearanceMm: formState.fitClearanceMm === '' ? null : Number(formState.fitClearanceMm),
+  });
+
+  return (
+    <>
+      <label className={styles.fieldLabel}>
+        Fit
+        <select
+          className={styles.materialSelect}
+          value={formState.fit}
+          onChange={(event) => setFormState((current) => ({ ...current, fit: event.target.value }))}
+        >
+          {fitOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+          {!fitOptions.some((option) => option.value === formState.fit) && (
+            <option value={formState.fit}>{formState.fit}</option>
+          )}
+        </select>
+      </label>
+
+      {isCustomFit && (
+        <label className={styles.fieldLabel}>
+          Custom Clearance (mm)
+          <input
+            type="number"
+            step="0.01"
+            className={styles.thicknessInput}
+            value={formState.fitClearanceMm}
+            placeholder="0"
+            onChange={(event) => setFormState((current) => ({ ...current, fitClearanceMm: event.target.value }))}
+          />
+        </label>
+      )}
+
+      {resolvedFit && <p className={styles.jointHowTo}>{resolvedFit.note}</p>}
+    </>
+  );
+}
 
 function JointStatus({ diagnostic }) {
   if (!diagnostic) {
@@ -334,6 +392,8 @@ export default function JointForm({
             placeholder="Optional joint label"
           />
         </label>
+
+        <JointFitFields type={formState.type} formState={formState} setFormState={setFormState} />
 
         {parameterFields.map((field) => {
           if (field.key === 'depth' && autoDepthEnabled && depthIsAuto) {

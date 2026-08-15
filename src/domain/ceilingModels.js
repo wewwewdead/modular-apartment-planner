@@ -5,8 +5,11 @@ import { getWallRenderData } from '@/geometry/wallColumnGeometry';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { collectCeilingObstructions } from './ceilingObstructions';
 import { getProjectFloor } from './floorModels';
-import { getProjectTrussSystem } from './trussModels';
-import { deriveCeilingBoundaryFromTrussSystem } from '@/truss/ceilingAttachment';
+import {
+  deriveCeilingBoundaryFromBeams,
+  resolveCeilingSupportBeams,
+  selectPreferredCeilingBeamLevel,
+} from './ceilingBeamAttachment';
 import {
   CEILING_BOARD_THICKNESS,
   CEILING_CARRIER_DEPTH,
@@ -23,6 +26,7 @@ import {
 } from './defaults';
 import {
   CEILING_APPLICATIONS,
+  CEILING_FRAME_MATERIALS,
   DEFAULT_CEILING_JURISDICTION_PROFILE_ID,
   DEFAULT_CEILING_PRODUCT_PROFILE_ID,
   getCeilingProductProfile,
@@ -31,8 +35,17 @@ import {
 export const CEILING_SCHEMA_VERSION = 1;
 
 export const CEILING_ATTACHMENT_MODES = Object.freeze({
-  TRUSS: 'truss',
+  BEAM: 'beam',
   MANUAL: 'manual',
+});
+
+// Where a ceiling's plan extent comes from. 'auto' lets the support beams
+// redraw it on every read, which is what a ceiling added from the sidebar wants;
+// 'drawn' means someone traced the area they wanted covered, and no amount of
+// beam movement is allowed to redraw it for them.
+export const CEILING_BOUNDARY_SOURCES = Object.freeze({
+  AUTO: 'auto',
+  DRAWN: 'drawn',
 });
 
 export const CEILING_OPENING_TYPES = Object.freeze({
@@ -226,7 +239,9 @@ export function createCeilingFraming(overrides = {}) {
     mode: Object.values(CEILING_FRAMING_LAYOUT_MODES).includes(overrides.mode)
       ? overrides.mode
       : CEILING_FRAMING_LAYOUT_MODES.AUTOMATIC,
-    material: overrides.material || 'light_gauge_steel',
+    material: Object.values(CEILING_FRAME_MATERIALS).includes(overrides.material)
+      ? overrides.material
+      : CEILING_FRAME_MATERIALS.LIGHT_GAUGE_STEEL,
     furringSpacing: positive(overrides.furringSpacing, CEILING_FURRING_SPACING),
     carrierSpacing: positive(overrides.carrierSpacing, CEILING_CARRIER_SPACING),
     furringWidth: positive(overrides.furringWidth, CEILING_FURRING_WIDTH),
@@ -291,6 +306,10 @@ export function createManualCeilingFastener(point, options = {}) {
   };
 }
 
+function normalizeBeamIds(value) {
+  return [...new Set((Array.isArray(value) ? value : []).filter((id) => typeof id === 'string' && id))];
+}
+
 export function createCeiling(name = 'Ceiling', options = {}) {
   const boundaryPolygon = clonePlanPoints(options.boundaryPolygon);
   return {
@@ -299,12 +318,22 @@ export function createCeiling(name = 'Ceiling', options = {}) {
     floorId: options.floorId ?? null,
     phaseId: typeof options.phaseId === 'string' && options.phaseId ? options.phaseId : null,
     attachment: {
+      // Anything else — including a 'truss' left behind by a save older than the
+      // beam attachment — is a datum this ceiling can no longer resolve, so it
+      // keeps whatever it stored and stands on its own.
       mode: Object.values(CEILING_ATTACHMENT_MODES).includes(options.attachment?.mode)
         ? options.attachment.mode
         : CEILING_ATTACHMENT_MODES.MANUAL,
-      trussSystemId: options.attachment?.trussSystemId || null,
+      beamIds: normalizeBeamIds(options.attachment?.beamIds),
     },
     boundaryPolygon: boundaryPolygon.length >= 3 ? boundaryPolygon : createDefaultCeilingBoundary(),
+    // Only an explicit 'drawn' claims a hand-traced area. Anything else — a save
+    // written before the draw tool existed, or a junk value — is a ceiling that
+    // never asked to keep its own outline.
+    boundarySource:
+      options.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN
+        ? CEILING_BOUNDARY_SOURCES.DRAWN
+        : CEILING_BOUNDARY_SOURCES.AUTO,
     baseElevation: finite(options.baseElevation, DEFAULT_CEILING_BASE_ELEVATION),
     detailing: createCeilingDetailing(options.detailing),
   };
@@ -330,13 +359,19 @@ export function deriveCeilingBoundaryForFloor(floor) {
 export function createCeilingForProject(project, options = {}) {
   const floorId = options.floorId ?? project?.floors?.[0]?.id ?? null;
   const floor = getProjectFloor(project, floorId);
-  const trussSystemId = options.attachment?.trussSystemId || null;
-  const wantsTruss = options.attachment?.mode === CEILING_ATTACHMENT_MODES.TRUSS || Boolean(trussSystemId);
-  const trussSystem = wantsTruss ? getProjectTrussSystem(project, trussSystemId) : null;
-  const trussBoundary = trussSystem
-    ? deriveCeilingBoundaryFromTrussSystem(trussSystem, getProjectFloor(project, trussSystem.floorId))
-    : null;
-  const attachedToTruss = clonePlanPoints(trussBoundary).length >= 3;
+  const requestedBeamIds = normalizeBeamIds(options.attachment?.beamIds);
+  // An explicit manual attachment is a decision, not a default: only a ceiling
+  // that asked for nothing goes looking for beams to hang from.
+  const wantsManual = options.attachment?.mode === CEILING_ATTACHMENT_MODES.MANUAL && !requestedBeamIds.length;
+  const supportBeams = wantsManual
+    ? []
+    : requestedBeamIds.length
+      ? resolveCeilingSupportBeams(floor, requestedBeamIds)
+      : selectPreferredCeilingBeamLevel(floor)?.beams || [];
+
+  const beamBoundary = deriveCeilingBoundaryFromBeams(supportBeams, floor);
+  const attachedToBeams = clonePlanPoints(beamBoundary).length >= 3;
+  const beamElevation = attachedToBeams ? Math.min(...supportBeams.map((beam) => finite(beam.floorLevel))) : null;
 
   const floorTopElevation = floor
     ? finite(floor.elevation, 0) + finite(floor.floorToFloorHeight, DEFAULT_CEILING_BASE_ELEVATION)
@@ -346,19 +381,18 @@ export function createCeilingForProject(project, options = {}) {
     ...options,
     floorId,
     attachment: {
-      mode: attachedToTruss ? CEILING_ATTACHMENT_MODES.TRUSS : CEILING_ATTACHMENT_MODES.MANUAL,
-      trussSystemId,
+      mode: attachedToBeams ? CEILING_ATTACHMENT_MODES.BEAM : CEILING_ATTACHMENT_MODES.MANUAL,
+      beamIds: attachedToBeams ? supportBeams.map((beam) => beam.id) : [],
     },
+    // A polygon handed in wins outright — that is how a drawn ceiling keeps the
+    // area it was traced over while still hanging from the beams found above it.
     boundaryPolygon:
       clonePlanPoints(options.boundaryPolygon).length >= 3
         ? options.boundaryPolygon
-        : attachedToTruss
-          ? trussBoundary
+        : attachedToBeams
+          ? beamBoundary
           : deriveCeilingBoundaryForFloor(floor),
-    baseElevation: finite(
-      options.baseElevation,
-      attachedToTruss ? finite(trussSystem?.baseElevation, floorTopElevation) : floorTopElevation,
-    ),
+    baseElevation: finite(options.baseElevation, attachedToBeams ? beamElevation : floorTopElevation),
   });
 }
 
@@ -376,47 +410,54 @@ export function getProjectCeiling(project, ceilingId) {
   return (project?.ceilings || []).find((ceiling) => ceiling.id === ceilingId) || null;
 }
 
-function resolveCeilingTrussSystem(project, ceiling) {
-  return ceiling?.attachment?.mode === CEILING_ATTACHMENT_MODES.TRUSS
-    ? getProjectTrussSystem(project, ceiling.attachment.trussSystemId)
-    : null;
+/**
+ * The beams a ceiling currently hangs from. They are always on the ceiling's own
+ * floor — a beam carries what stands under it — so a deleted or re-levelled beam
+ * shows up here on the next read rather than being remembered from creation.
+ */
+export function resolveCeilingBeamSupports(project, ceiling) {
+  if (ceiling?.attachment?.mode !== CEILING_ATTACHMENT_MODES.BEAM) return [];
+  return resolveCeilingSupportBeams(getProjectFloor(project, ceiling.floorId), ceiling.attachment.beamIds);
 }
 
-/**
- * The floors whose structure a ceiling has to work around: its own, plus the
- * one its truss stands on when that is a different floor.
- */
+// The floors whose structure a ceiling has to work around: only its own, since
+// what it hangs from and what obstructs it both stand on it.
 function resolveCeilingFloors(project, ceiling) {
-  const trussSystem = resolveCeilingTrussSystem(project, ceiling);
-  const floors = [getProjectFloor(project, ceiling?.floorId)];
-  if (trussSystem && trussSystem.floorId !== ceiling?.floorId) {
-    floors.push(getProjectFloor(project, trussSystem.floorId));
-  }
-  return floors.filter(Boolean);
+  return [getProjectFloor(project, ceiling?.floorId)].filter(Boolean);
 }
 
 export function resolveCeilingBoundary(project, ceiling) {
-  // The truss system carries its own floor id: a ceiling can hang from a truss
-  // that is not on the floor the ceiling belongs to, and the support beams that
-  // trim the boundary live on the truss's floor.
-  const trussSystem = resolveCeilingTrussSystem(project, ceiling);
-  const derived = trussSystem
-    ? clonePlanPoints(deriveCeilingBoundaryFromTrussSystem(trussSystem, getProjectFloor(project, trussSystem.floorId)))
+  const stored = clonePlanPoints(ceiling?.boundaryPolygon);
+  // A drawn area is a decision about where the ceiling stops, so the beams get
+  // no say in it. They still fix the plane it hangs from — only the outline is
+  // withheld from them, and only because someone traced it by hand.
+  if (ceiling?.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN && stored.length >= 3) return stored;
+
+  // Derived on every read, so dragging a column or moving a beam moves the
+  // ceiling with it. The stored polygon is the snapshot to fall back on when
+  // the beams no longer resolve.
+  const supports = resolveCeilingBeamSupports(project, ceiling);
+  const derived = supports.length
+    ? clonePlanPoints(deriveCeilingBoundaryFromBeams(supports, getProjectFloor(project, ceiling.floorId)))
     : [];
   if (derived.length >= 3) return derived;
 
-  const stored = clonePlanPoints(ceiling?.boundaryPolygon);
   return stored.length >= 3 ? stored : createDefaultCeilingBoundary();
 }
 
 export function resolveCeilingElevations(project, ceiling) {
   const detailing = resolveCeilingDetailing(ceiling);
-  const trussMode = ceiling?.attachment?.mode === CEILING_ATTACHMENT_MODES.TRUSS;
-  const trussSystem = trussMode ? getProjectTrussSystem(project, ceiling.attachment.trussSystemId) : null;
-  const attachment = trussMode ? finite(trussSystem?.baseElevation, 0) : finite(ceiling?.baseElevation, 0);
-  // Manual mode stores the board underside directly; truss mode hangs the board
+  const beamMode = ceiling?.attachment?.mode === CEILING_ATTACHMENT_MODES.BEAM;
+  const supportLevels = resolveCeilingBeamSupports(project, ceiling)
+    .map((beam) => Number(beam.floorLevel))
+    .filter(Number.isFinite);
+  // The lowest beam top governs: the ceiling cannot hang from higher than the
+  // support that stops first. With no beam left to read, the stored elevation is
+  // the last thing the ceiling knew about its own attachment plane.
+  const attachment = beamMode && supportLevels.length ? Math.min(...supportLevels) : finite(ceiling?.baseElevation, 0);
+  // Manual mode stores the board underside directly; beam mode hangs the board
   // below the attachment plane by the suspension drop.
-  const boardUnderside = trussMode ? attachment - detailing.suspension.drop : attachment;
+  const boardUnderside = beamMode ? attachment - detailing.suspension.drop : attachment;
   const boardTop = boardUnderside + detailing.face.boardThickness;
   const furringBottom = boardTop;
   const furringTop = furringBottom + detailing.framing.furringDepth;
@@ -426,28 +467,67 @@ export function resolveCeilingElevations(project, ceiling) {
 }
 
 /**
- * Ceiling-local UV is the reflected-ceiling-plan frame:
- *   U = plan x − minX  (east, right on screen)
- *   V = maxY − plan y  (V up on screen = plan north up)
- * so a ceiling drawing keeps the same handedness as the floor plan it sits over.
+ * Direction of the boundary's longest edge, folded to within ±45° of plan
+ * east. Folding modulo 90° keeps a plan-aligned boundary on the classic
+ * east/north frame regardless of its proportions (a portrait room does not
+ * turn sideways), and stops a near-square rotated ceiling from swapping U and
+ * V when its dimensions drift past each other.
+ */
+function resolveCeilingFrameAxis(points) {
+  let longest = 0;
+  let edge = null;
+  for (let index = 0; index < points.length; index += 1) {
+    const next = points[(index + 1) % points.length];
+    const candidate = { x: next.x - points[index].x, y: next.y - points[index].y };
+    const length = Math.hypot(candidate.x, candidate.y);
+    if (length > longest + EPSILON) {
+      longest = length;
+      edge = candidate;
+    }
+  }
+  if (!edge) return { x: 1, y: 0 };
+
+  const quarter = Math.PI / 2;
+  const angle = Math.atan2(edge.y, edge.x);
+  const folded = angle - quarter * Math.round(angle / quarter);
+  return { x: Math.cos(folded), y: Math.sin(folded) };
+}
+
+/**
+ * Ceiling-local UV is the reflected-ceiling-plan frame, aligned to the
+ * ceiling's own edges rather than plan north: U runs along the boundary's
+ * longest edge (folded to within ±45° of plan east) and V runs across it. A
+ * ceiling hung from a rotated beam grid therefore draws upright in the RCP,
+ * and members drawn along U/V land parallel to its real edges instead of
+ * crossing them at the lot angle. For a plan-aligned boundary this is exactly
+ * the classic frame (U = plan x − minX, V = maxY − plan y). V is mirrored
+ * against plan Y either way, so the drawing keeps the same handedness as the
+ * floor plan it sits over.
  */
 export function getCeilingLocalSpace(boundaryPolygon) {
   const points = clonePlanPoints(boundaryPolygon);
-  const originX = points.length ? Math.min(...points.map((point) => point.x)) : 0;
-  const originY = points.length ? Math.min(...points.map((point) => point.y)) : 0;
-  const maxX = points.length ? Math.max(...points.map((point) => point.x)) : 0;
-  const maxY = points.length ? Math.max(...points.map((point) => point.y)) : 0;
+  const axisU = resolveCeilingFrameAxis(points);
+  const axisV = { x: axisU.y, y: -axisU.x };
+  const localU = (point) => point.x * axisU.x + point.y * axisU.y;
+  const localV = (point) => point.x * axisV.x + point.y * axisV.y;
+  const minU = points.length ? Math.min(...points.map(localU)) : 0;
+  const maxU = points.length ? Math.max(...points.map(localU)) : 0;
+  const minV = points.length ? Math.min(...points.map(localV)) : 0;
+  const maxV = points.length ? Math.max(...points.map(localV)) : 0;
   return {
-    originX,
-    originY,
-    maxY,
-    length: maxX - originX,
-    depth: maxY - originY,
+    axisU,
+    axisV,
+    rotation: Math.atan2(axisU.y, axisU.x),
+    length: maxU - minU,
+    depth: maxV - minV,
     toLocal(point) {
-      return { u: finite(point?.x) - originX, v: maxY - finite(point?.y) };
+      const plan = { x: finite(point?.x), y: finite(point?.y) };
+      return { u: localU(plan) - minU, v: localV(plan) - minV };
     },
     toPlan(point) {
-      return { x: originX + finite(point?.u), y: maxY - finite(point?.v) };
+      const u = finite(point?.u) + minU;
+      const v = finite(point?.v) + minV;
+      return { x: u * axisU.x + v * axisV.x, y: u * axisU.y + v * axisV.y };
     },
   };
 }
@@ -465,9 +545,11 @@ function openingRect(opening) {
 /**
  * Vertical slice the ceiling assembly occupies, from the underside of the
  * boards up to whatever it hangs from. Structure crossing this band is what the
- * ceiling has to stop at.
+ * ceiling has to stop at. Exported because the RCP editor's 3D preview has to
+ * show exactly the structure the boards were traced around, and it can only do
+ * that by asking for the same band.
  */
-function ceilingElevationRange(elevations) {
+export function ceilingElevationRange(elevations) {
   return { min: elevations.boardUnderside, max: Math.max(elevations.carrierTop, elevations.attachment) };
 }
 
@@ -883,7 +965,13 @@ export function deriveCeilingFramingMembers(ceiling, project) {
   const framing = context.detailing.framing;
   if (!context.detailing.enabled || context.length <= EPSILON || context.depth <= EPSILON) return [];
 
-  const custom = framing.members.map((member) => createCustomCeilingFramingMember(member));
+  // The Structure section has one material select for the whole grid, so it
+  // governs drawn members too — a member baked as steel when it was drawn must
+  // not stay steel after the ceiling is switched to timber.
+  const custom = framing.members.map((member) => ({
+    ...createCustomCeilingFramingMember(member),
+    material: framing.material,
+  }));
   if (framing.mode === CEILING_FRAMING_LAYOUT_MODES.CUSTOM) return custom;
 
   const removed = new Set(framing.removedGeneratedIds);
@@ -1082,6 +1170,9 @@ export function deriveCeilingDetail(ceiling, project) {
     ceilingId: ceiling.id,
     length: context.length,
     depth: context.depth,
+    // Plan angle of the local U axis: 0 when the frame matches plan north-up,
+    // non-zero when the ceiling's edges pulled the RCP frame around with them.
+    rotation: context.space.rotation,
     boundaryLocal: context.boundaryLocal,
     // The drawn outline: the boundary with the structure taken out of it.
     regions: context.regions.map((region) => ({

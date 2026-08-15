@@ -136,7 +136,7 @@ describe('deserializeProject', () => {
 
     it('migrates a v24 envelope with no ceilings up to the current schema', async () => {
       const { CURRENT_SCHEMA_VERSION } = await import('@/domain/projectVersion');
-      expect(CURRENT_SCHEMA_VERSION).toBe(26);
+      expect(CURRENT_SCHEMA_VERSION).toBe(28);
 
       const { createProject } = await import('@/domain/models');
       const payload = createProject('Pre-ceiling save');

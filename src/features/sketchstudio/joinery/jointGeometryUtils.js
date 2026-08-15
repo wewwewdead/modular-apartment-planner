@@ -3,7 +3,9 @@ import {
   JOINT_PARAMETER_DEPTH_MODES,
   createDefaultFaceReference,
   computeJointDefaultParameters,
+  describeJointFit,
   mergeJointParameters,
+  resolveJointFitClearance,
   roundJoineryValue,
   supportsAutoOverlapDepth,
 } from './jointDefaults';
@@ -93,6 +95,10 @@ function createEmptyPartModificationState() {
     bottom: [],
     left: [],
     jointIds: new Set(),
+    // Fit descriptor per joint that cut this profile. Joints of this shape
+    // produce no feature entity of their own, so the generated profile is the
+    // only place their fit can be documented.
+    fitsByJointId: new Map(),
     fabricationReady: true,
   };
 }
@@ -146,6 +152,10 @@ function createJoineryMeta(joint, part, role, operationKind, detailType, fabrica
       targetPartId: joint.targetPartId,
       parameterModes: { ...(joint.parameterModes || {}) },
       tolerance: { ...(joint.tolerance || {}) },
+      // Resolved fit, so assembly documentation never has to re-derive it (and
+      // cannot disagree with the geometry that was actually cut). Null for joint
+      // types that take no fit clearance.
+      fit: describeJointFit(joint.type, joint.tolerance),
       fabrication: { ...(joint.fabrication || {}) },
       fabricationReady,
       previewOnly: !fabricationReady,
@@ -362,6 +372,7 @@ function createGeneratedProfileEntity(part, partState, fabricationState = {}) {
       joinery: {
         fabricationReady,
         previewOnly: !fabricationReady,
+        fits: Array.from(partState.fitsByJointId.values()),
       },
       manufacturingSourceEntityIds: [part.id],
       manufacturingDetailType: 'profile',
@@ -382,6 +393,12 @@ function applyPartModifications(partStatesById, partId, edgeKey, modifications, 
   const fabricationReady = fabricationState.fabricationReady !== false;
   partState[edgeKey].push(...modifications);
   partState.jointIds.add(joint.id);
+
+  const fit = describeJointFit(joint.type, joint.tolerance);
+  if (fit) {
+    partState.fitsByJointId.set(joint.id, { jointId: joint.id, jointType: joint.type, ...fit });
+  }
+
   partState.fabricationReady = partState.fabricationReady && fabricationReady;
 }
 
@@ -513,15 +530,37 @@ function expandIntervalByWidth(interval, extraWidth, edge) {
   };
 }
 
-function buildWidthOffsetInterval(context, parameters) {
+/**
+ * Fit clearance (mm) this joint's FEMALE geometry widens by. Zero for legacy
+ * joints and for types that size their features from hardware data instead.
+ */
+function getFemaleFitClearance(joint) {
+  return resolveJointFitClearance(joint?.type, joint?.tolerance);
+}
+
+/**
+ * Female opening for a width-driven joint (dado).
+ *
+ * The nominal width comes from the joint's own `width` parameter, whose default
+ * is the resolved contact overlap - i.e. the mating part's real drawn thickness
+ * at the contact, never a global constant. The fit clearance is added on top of
+ * that and of any manual `offset`, so a fit change only ever grows the channel.
+ */
+function buildWidthOffsetInterval(context, parameters, fitClearance = 0) {
   const nominalInterval = buildNominalInterval(context, parameters);
   if (!nominalInterval) {
     return null;
   }
 
-  return expandIntervalByWidth(nominalInterval, parameters.offset, context.targetEdge);
+  const widthOffset = (Number(parameters.offset) || 0) + (Number(fitClearance) || 0);
+  return expandIntervalByWidth(nominalInterval, widthOffset, context.targetEdge);
 }
 
+/**
+ * Nominal (male) and widened (female) intervals for a joint with a mating tenon
+ * or tab. The male keeps the nominal interval untouched; only the female grows,
+ * by the pre-existing `tolerance.clearance` allowance plus the fit clearance.
+ */
 function buildFemaleClearanceIntervals(joint, context) {
   const nominalInterval = buildNominalInterval(context, joint.parameters);
   if (!nominalInterval) {
@@ -531,7 +570,8 @@ function buildFemaleClearanceIntervals(joint, context) {
     };
   }
 
-  const femaleWidthOffset = (Number(joint.parameters.offset) || 0) + (Number(joint.tolerance?.clearance) || 0);
+  const femaleWidthOffset =
+    (Number(joint.parameters.offset) || 0) + (Number(joint.tolerance?.clearance) || 0) + getFemaleFitClearance(joint);
   const femaleInterval = expandIntervalByWidth(nominalInterval, femaleWidthOffset, context.targetEdge);
 
   return {
@@ -568,6 +608,7 @@ const geometryHelpers = {
   buildOccupiedRegions,
   createRectFeatureEntity,
   createCircleFeatureEntity,
+  getFemaleFitClearance,
   buildWidthOffsetInterval,
   buildFemaleClearanceIntervals,
   buildComplementIntervals,

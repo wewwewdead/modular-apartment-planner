@@ -42,7 +42,9 @@ const DETAIL_ASSIGNMENTS = {
   wallFastenerContrast: 'metal',
   wallFastenerConstruction: 'smooth',
   ceilingBoard: 'plaster',
+  ceilingBoardPlywood: 'timber',
   ceilingFraming: 'metal',
+  ceilingFramingTimber: 'timber',
   ceilingHanger: 'metal',
   slab: 'concrete',
   roof: 'concrete',
@@ -149,7 +151,12 @@ export function createMaterialPalette() {
     wallFastenerConstruction: surface({ color: 0xd4523f, roughness: 0.44 }),
 
     ceilingBoard: surface({ color: 0xf0ece4, roughness: 0.93 }),
+    // Sanded plywood overhead: warmer and slightly glossier than the painted
+    // board, a shade lighter than wall plywood because a ceiling is lit almost
+    // entirely by bounce and would otherwise read as walnut.
+    ceilingBoardPlywood: surface({ color: 0xcf9c5c, roughness: 0.7 }),
     ceilingFraming: metal({ color: 0xaab6c0, roughness: 0.38 }),
+    ceilingFramingTimber: surface({ color: 0xb07740, roughness: 0.76 }),
     ceilingHanger: metal({ color: 0x8a949c, roughness: 0.34 }),
 
     // Poured concrete and screed: matte, cool, and — the part that was wrong

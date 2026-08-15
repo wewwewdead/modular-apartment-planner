@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
+  // Relative asset paths so the built app also works from file:// inside the
+  // Electron desktop shell, not just from a web server.
+  base: './',
   plugins: [
     react(),
     VitePWA({

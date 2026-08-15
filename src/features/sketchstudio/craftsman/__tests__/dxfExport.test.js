@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exportEntitiesToDxf } from '../export/dxfExport';
+import { DEFAULT_BIT_DIAMETER, DOGBONE_STYLES } from '../export/dogboneUtils';
 import { createSketchJoint, resolveSketchJoinery } from '../../utils/sketchJoineryUtils';
 
 function splitDxfLines(dxf) {
@@ -365,6 +366,221 @@ describe('DXF export', () => {
     );
     const circle = findEntityPairs(splitDxfLines(dxf), 'CIRCLE');
     expect(Number(circle.get('40'))).toBe(25);
+  });
+
+  describe('no-options invariance', () => {
+    // A document that opts into nothing must produce the file it always did -
+    // same bytes, not merely equivalent geometry. These are the guards for the
+    // three additive changes: LWPOLYLINE bulges, the optional GRAIN layer, and
+    // the corner-relief pass.
+    const document = [
+      { id: 'r1', type: 'rect', x: 0, y: 0, width: 600, height: 400 },
+      {
+        id: 'poly1',
+        type: 'polyline',
+        closed: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+          { x: 0, y: 100 },
+        ],
+      },
+      { id: 'f1', type: 'feature', shape: 'rect', operation: 'subtract', x: 10, y: 10, width: 40, height: 30 },
+      { id: 'c1', type: 'circle', cx: 50, cy: 50, radius: 25 },
+      {
+        id: 'h1',
+        type: 'feature',
+        shape: 'circle',
+        operation: 'subtract',
+        hardwareId: 'hw-screw-8-32',
+        cx: 20,
+        cy: 20,
+        diameter: 3,
+      },
+    ];
+
+    it('emits identical bytes for no options, empty options and explicitly-off options', () => {
+      const baseline = exportEntitiesToDxf(document);
+
+      expect(exportEntitiesToDxf(document, {})).toBe(baseline);
+      expect(exportEntitiesToDxf(document, { dogbone: null })).toBe(baseline);
+      expect(exportEntitiesToDxf(document, { dogbone: { style: DOGBONE_STYLES.NONE } })).toBe(baseline);
+      expect(exportEntitiesToDxf(document, { dogbone: { style: DOGBONE_STYLES.DOGBONE, bitDiameter: 0 } })).toBe(
+        baseline,
+      );
+    });
+
+    it('never emits a bulge group code without corner relief', () => {
+      const lines = splitDxfLines(exportEntitiesToDxf(document, { kerf: 0.4 }));
+      const bulgeCodes = lines.filter((line, index) => line === '42' && index % 2 === 0);
+      expect(bulgeCodes).toHaveLength(0);
+    });
+
+    it('declares the GRAIN layer only when something is actually on it', () => {
+      expect(exportEntitiesToDxf(document)).not.toContain('GRAIN');
+
+      const withGrain = exportEntitiesToDxf([
+        ...document,
+        { id: 'g1', type: 'line', x1: 0, y1: 0, x2: 10, y2: 0, meta: { dxfLayer: 'GRAIN', dxfKerfExempt: true } },
+      ]);
+      expect(withGrain).toContain('GRAIN');
+    });
+  });
+
+  describe('corner relief', () => {
+    const slot = {
+      id: 'slot',
+      type: 'feature',
+      shape: 'rect',
+      operation: 'subtract',
+      x: 0,
+      y: 0,
+      width: 40,
+      height: 30,
+    };
+
+    function readPolylineVertices(dxf) {
+      const allLines = dxf.split('\n').map((line) => line.trim());
+      // $EXTMIN / $EXTMAX in the header are also 10/20 pairs, so start at the
+      // ENTITIES section or the extents would masquerade as vertices.
+      const entitiesStart = allLines.findIndex((line, index) => line === '2' && allLines[index + 1] === 'ENTITIES');
+      const lines = allLines.slice(entitiesStart);
+      const vertices = [];
+      for (let index = 0; index < lines.length - 3; index += 1) {
+        if (lines[index] === '10' && lines[index + 2] === '20') {
+          const vertex = { x: Number(lines[index + 1]), y: Number(lines[index + 3]) };
+          if (lines[index + 4] === '42') {
+            vertex.bulge = Number(lines[index + 5]);
+          }
+          vertices.push(vertex);
+        }
+      }
+      return vertices;
+    }
+
+    it('relieves every corner of a rectangular pocket and emits the arcs as bulges', () => {
+      const dxf = exportEntitiesToDxf([slot], {
+        dogbone: { style: DOGBONE_STYLES.DOGBONE, bitDiameter: DEFAULT_BIT_DIAMETER },
+      });
+      const vertices = readPolylineVertices(dxf);
+
+      expect(vertices).toHaveLength(8);
+      const bulged = vertices.filter((vertex) => vertex.bulge !== undefined);
+      expect(bulged).toHaveLength(4);
+      // A 90-degree corner relief is a semicircle, so |bulge| = tan(180/4) = 1.
+      bulged.forEach((vertex) => expect(Math.abs(vertex.bulge)).toBeCloseTo(1, 9));
+    });
+
+    it('negates the bulge on the way out, because DXF mirrors Y', () => {
+      const dxf = exportEntitiesToDxf([slot], {
+        dogbone: { style: DOGBONE_STYLES.DOGBONE, bitDiameter: DEFAULT_BIT_DIAMETER },
+      });
+      const bulges = readPolylineVertices(dxf)
+        .map((vertex) => vertex.bulge)
+        .filter((bulge) => bulge !== undefined);
+
+      // Source-space bulges for this winding are all +1; the mirror flips them.
+      expect(new Set(bulges.map((bulge) => Math.sign(bulge)))).toEqual(new Set([-1]));
+    });
+
+    it('computes relief on the KERF-COMPENSATED path, not the design path', () => {
+      const kerf = 1;
+      const bitDiameter = 4;
+      const radius = bitDiameter / 2;
+      const dogbone = { style: DOGBONE_STYLES.DOGBONE, bitDiameter };
+
+      const relievedOnly = readPolylineVertices(exportEntitiesToDxf([slot], { dogbone }));
+      const kerfedAndRelieved = readPolylineVertices(exportEntitiesToDxf([slot], { kerf, dogbone }));
+
+      // The pocket shrinks inward by halfKerf first, so every relief lands
+      // halfKerf inside where it would be on the raw design geometry.
+      const bite = radius * Math.SQRT2;
+      const relievedMinX = Math.min(...relievedOnly.map((vertex) => vertex.x));
+      const kerfedMinX = Math.min(...kerfedAndRelieved.map((vertex) => vertex.x));
+
+      expect(relievedMinX).toBeCloseTo(0, 9);
+      expect(kerfedMinX).toBeCloseTo(kerf / 2, 9);
+
+      // And the wall bite is still exactly r*sqrt(2) on the compensated path.
+      const kerfedXs = kerfedAndRelieved.map((vertex) => vertex.x).sort((a, b) => a - b);
+      expect(kerfedXs[2] - kerfedXs[0]).toBeCloseTo(bite, 9);
+    });
+
+    it('leaves drilled fastener holes out of the relief pass entirely', () => {
+      const fastener = {
+        id: 'h1',
+        type: 'feature',
+        shape: 'rect',
+        operation: 'subtract',
+        hardwareId: 'hw-screw-8-32',
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 30,
+      };
+
+      const dxf = exportEntitiesToDxf([fastener], {
+        dogbone: { style: DOGBONE_STYLES.DOGBONE, bitDiameter: DEFAULT_BIT_DIAMETER },
+      });
+
+      // Untouched: still a plain four-vertex rectangle with no arcs.
+      expect(readPolylineVertices(dxf)).toHaveLength(4);
+      expect(dxf).not.toContain('\n42\n');
+    });
+
+    it('leaves reference geometry (the stock outline) out of the relief pass', () => {
+      const outline = {
+        id: 'sheet-outline-1',
+        type: 'polyline',
+        closed: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 60 },
+          { x: 60, y: 60 },
+          { x: 60, y: 30 },
+          { x: 0, y: 30 },
+        ],
+        meta: { dxfLayer: 'SHEET', dxfKerfExempt: true },
+      };
+
+      const dxf = exportEntitiesToDxf([outline], {
+        dogbone: { style: DOGBONE_STYLES.DOGBONE, bitDiameter: DEFAULT_BIT_DIAMETER },
+      });
+
+      expect(readPolylineVertices(dxf)).toHaveLength(6);
+      expect(dxf).not.toContain('\n42\n');
+    });
+
+    it('relieves a concave notch in a part perimeter but not its convex corners', () => {
+      const notched = {
+        id: 'perimeter',
+        type: 'polyline',
+        closed: true,
+        points: [
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 100, y: 100 },
+          { x: 70, y: 100 },
+          { x: 70, y: 70 },
+          { x: 30, y: 70 },
+          { x: 30, y: 100 },
+          { x: 0, y: 100 },
+        ],
+      };
+
+      const vertices = readPolylineVertices(
+        exportEntitiesToDxf([notched], {
+          dogbone: { style: DOGBONE_STYLES.DOGBONE, bitDiameter: DEFAULT_BIT_DIAMETER },
+        }),
+      );
+
+      // 8 original vertices, of which exactly the 2 notch corners expand into
+      // an entry/exit pair.
+      expect(vertices).toHaveLength(10);
+      expect(vertices.filter((vertex) => vertex.bulge !== undefined)).toHaveLength(2);
+    });
   });
 
   it('exports text leader arrows alongside text labels', () => {

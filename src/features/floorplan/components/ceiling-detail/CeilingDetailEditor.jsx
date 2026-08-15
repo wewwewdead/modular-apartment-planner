@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   CEILING_ATTACHMENT_MODES,
+  CEILING_BOUNDARY_SOURCES,
   CEILING_FASTENER_LAYOUT_MODES,
   CEILING_FRAMING_LAYOUT_MODES,
   CEILING_OPENING_TYPES,
@@ -12,7 +13,10 @@ import {
   createManualCeilingFastener,
   deriveCeilingDetail,
   getProjectCeiling,
+  resolveCeilingBeamSupports,
 } from '@/domain/ceilingModels';
+import { CEILING_BEAM_ELEVATION_TOLERANCE, getCeilingSupportBeamLevels } from '@/domain/ceilingBeamAttachment';
+import { getBeamDisplayLabel } from '@/domain/beamLabels';
 import {
   CEILING_JURISDICTION_PROFILES,
   CEILING_PRODUCT_PROFILES,
@@ -57,6 +61,12 @@ import styles from '@/features/floorplan/components/wall-detail/WallDetailEditor
 import { createCeilingDetailPreviewProject } from './ceilingDetailPreviewProject';
 
 const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/preview/ThreePreviewPanel'));
+
+// Stands in for a beam attachment the level list cannot show: beams that have
+// gone, or that have been re-levelled out of eligibility. Selecting it is a
+// no-op — it exists so the picker states what the ceiling is doing instead of
+// showing an empty box.
+const UNLISTED_SUPPORT_LEVEL = 'unlisted_support_level';
 
 const CANVAS_TOOLS = Object.freeze({
   SELECT: 'select',
@@ -369,6 +379,12 @@ export default function CeilingDetailEditor() {
   const bounds = detail ? { length: detail.length, height: detail.depth, mirrorU: false } : null;
   const canvasMetrics = useWallCanvasMetrics(canvasFrameRef, bounds, workspaceView);
   const previewProject = useMemo(() => createCeilingDetailPreviewProject(project, ceiling?.id), [project, ceiling?.id]);
+  const ceilingFloor = useMemo(
+    () => (project?.floors || []).find((entry) => entry.id === ceiling?.floorId) || null,
+    [project, ceiling?.floorId],
+  );
+  const supportLevels = useMemo(() => getCeilingSupportBeamLevels(ceilingFloor), [ceilingFloor]);
+  const supportBeams = useMemo(() => resolveCeilingBeamSupports(project, ceiling), [project, ceiling]);
   const snapCandidates = useMemo(
     () =>
       detail
@@ -845,9 +861,86 @@ export default function CeilingDetailEditor() {
   const panelTracePreview = panelTrace?.points?.length
     ? [...panelTrace.points, panelTrace.previewPoint || panelTrace.points[panelTrace.points.length - 1]]
     : [];
-  const boardFill = face.enabled ? '#dedbd1' : '#c3c8cc';
-  const attachmentLabel =
-    ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.TRUSS ? 'Truss bottom chord' : 'Manual datum';
+  const boardFill = !face.enabled ? '#c3c8cc' : profile.boardMaterial === 'plywood' ? '#dcc39b' : '#dedbd1';
+  const beamMode = ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.BEAM;
+  const attachmentLabel = beamMode ? 'Support beams' : 'Manual datum';
+  // A traced outline is not derived from anything, so the beams say nothing
+  // about where this ceiling stops — only about how high it hangs.
+  const drawnBoundary = ceiling.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN;
+  // Two beams are the fewest that can bound a ceiling, so anything less is a
+  // ceiling drawing itself from the outline it last saved.
+  const supportBeamsMissing = beamMode && supportBeams.length < 2;
+  /*
+    Hangers are derived from the plan alone, so a manual ceiling still counts a grid of them even though it
+    hangs from nothing: its attachment plane is the board underside, which sits below the carrier the hangers
+    would rise from, and the preview discards every one of them for having no length. Claiming a count here
+    would advertise hardware the ceiling does not have, so the collapsed section reports the one number a
+    manual ceiling owns outright — where its boards finish — and leaves the drop to the ceilings it moves.
+  */
+  const suspensionSummary = beamMode
+    ? `${configuration.suspension.drop} mm drop · ${hangers.length} hanger${hangers.length === 1 ? '' : 's'}`
+    : `${formatMm(elevations.boardUnderside)} mm underside`;
+  const activeSupportLevel =
+    beamMode && supportBeams.length
+      ? supportLevels.find(
+          (level) => Math.abs(level.elevation - elevations.attachment) <= CEILING_BEAM_ELEVATION_TOLERANCE,
+        ) || null
+      : null;
+  const attachmentValue = beamMode ? activeSupportLevel?.id || UNLISTED_SUPPORT_LEVEL : 'manual';
+  const chooseAttachment = (value) => {
+    if (value === attachmentValue) return;
+    if (value === UNLISTED_SUPPORT_LEVEL) return;
+    if (value === 'manual') {
+      dispatch({
+        type: 'CEILING_UPDATE',
+        ceiling: {
+          id: ceiling.id,
+          attachment: { mode: CEILING_ATTACHMENT_MODES.MANUAL, beamIds: [] },
+          // Manual mode stores the boards themselves, so the ceiling stays
+          // exactly where it is hanging instead of jumping up by its drop.
+          baseElevation: elevations.boardUnderside,
+        },
+      });
+      return;
+    }
+    const level = supportLevels.find((entry) => entry.id === value);
+    if (!level) return;
+    dispatch({
+      type: 'CEILING_UPDATE',
+      ceiling: {
+        id: ceiling.id,
+        attachment: { mode: CEILING_ATTACHMENT_MODES.BEAM, beamIds: level.beamIds },
+        baseElevation: level.elevation,
+      },
+    });
+  };
+  const attachedBeamIds = beamMode ? ceiling.attachment?.beamIds || [] : [];
+  /**
+   * Add or drop one beam without disturbing the rest. The level picker above is
+   * the coarse control — it seeds a whole level — and this is the fine one: a
+   * ceiling that only runs under three of a level's four beams says so here.
+   *
+   * The stored elevation is rewritten from what is left, because the ceiling
+   * cannot hang higher than the beam that stops first, and that beam changes
+   * every time the set does. Dropping to one beam is allowed; the missing-support
+   * warning already covers a ceiling that can no longer draw its own outline.
+   */
+  const toggleSupportBeam = (beamId) => {
+    const nextBeamIds = attachedBeamIds.includes(beamId)
+      ? attachedBeamIds.filter((id) => id !== beamId)
+      : [...attachedBeamIds, beamId];
+    const levels = nextBeamIds
+      .map((id) => (ceilingFloor?.beams || []).find((beam) => beam.id === id)?.floorLevel)
+      .filter((level) => Number.isFinite(level));
+    dispatch({
+      type: 'CEILING_UPDATE',
+      ceiling: {
+        id: ceiling.id,
+        attachment: { mode: CEILING_ATTACHMENT_MODES.BEAM, beamIds: nextBeamIds },
+        baseElevation: levels.length ? Math.min(...levels) : elevations.attachment,
+      },
+    });
+  };
   const reviewCopy =
     profile.status === CEILING_PRODUCT_PROFILE_STATUS.REFERENCE_ONLY
       ? 'Reference only — the cited document verifies the board sizes and the ceiling application, not a complete fixing schedule. Furring, carrier, hanger, and screw values here are planning defaults. A qualified professional must confirm them against a current installation guide before construction.'
@@ -1091,7 +1184,7 @@ export default function CeilingDetailEditor() {
             title="Structure"
             summary={`${frameMembers.length} member${frameMembers.length === 1 ? '' : 's'} · ${
               configuration.framing.mode === CEILING_FRAMING_LAYOUT_MODES.CUSTOM ? 'custom' : 'automatic'
-            }`}
+            } · ${configuration.framing.material === 'timber' ? 'timber' : 'steel'}`}
             open={openSections.structure}
             onToggle={() => toggleSection('structure')}
             innerRef={sectionRef('structure')}
@@ -1109,6 +1202,14 @@ export default function CeilingDetailEditor() {
             <SelectField label="Mode" value={configuration.framing.mode} onChange={(mode) => updateFraming({ mode })}>
               <option value={CEILING_FRAMING_LAYOUT_MODES.AUTOMATIC}>Automatic + custom</option>
               <option value={CEILING_FRAMING_LAYOUT_MODES.CUSTOM}>Explicit custom members</option>
+            </SelectField>
+            <SelectField
+              label="Material"
+              value={configuration.framing.material}
+              onChange={(material) => updateFraming({ material })}
+            >
+              <option value="light_gauge_steel">Light-gauge steel</option>
+              <option value="timber">Timber</option>
             </SelectField>
             <NumberField
               label="Furring spacing"
@@ -1146,14 +1247,6 @@ export default function CeilingDetailEditor() {
               min={5}
               onChange={(carrierDepth) => updateFraming({ carrierDepth })}
             />
-            <SelectField
-              label="Material"
-              value={configuration.framing.material}
-              onChange={(material) => updateFraming({ material })}
-            >
-              <option value="light_gauge_steel">Light-gauge steel</option>
-              <option value="timber">Timber</option>
-            </SelectField>
             <p className={styles.inlineHelp}>
               Product planning maximum furring spacing: {profile.planningDefaults.maximumFurringSpacingMm} mm
             </p>
@@ -1163,19 +1256,96 @@ export default function CeilingDetailEditor() {
             id="ceiling-suspension"
             step={3}
             title="Suspension"
-            summary={`${configuration.suspension.drop} mm drop · ${hangers.length} hanger${
-              hangers.length === 1 ? '' : 's'
-            }`}
+            summary={suspensionSummary}
             open={openSections.suspension}
             onToggle={() => toggleSection('suspension')}
             innerRef={sectionRef('suspension')}
           >
-            <NumberField
-              label="Drop below attachment"
-              value={configuration.suspension.drop}
-              min={0}
-              onChange={(drop) => updateSuspension({ drop })}
-            />
+            {beamMode || supportLevels.length ? (
+              <SelectField label="Hangs from" value={attachmentValue} onChange={chooseAttachment}>
+                {supportLevels.map((level) => (
+                  <option key={level.id} value={level.id}>
+                    {`${formatMm(level.elevation)} mm — ${level.beams.length} beam${
+                      level.beams.length === 1 ? '' : 's'
+                    }`}
+                  </option>
+                ))}
+                {beamMode && !activeSupportLevel ? (
+                  <option value={UNLISTED_SUPPORT_LEVEL}>
+                    {supportBeamsMissing
+                      ? 'Support beams missing'
+                      : `${formatMm(elevations.attachment)} mm — beams off this floor's levels`}
+                  </option>
+                ) : null}
+                <option value="manual">Manual datum</option>
+              </SelectField>
+            ) : null}
+            {beamMode && supportLevels.length ? (
+              <>
+                <p className={styles.inlineHelp}>Beams this ceiling hangs from</p>
+                <div className={styles.dimensionToggles}>
+                  {supportLevels.map((level) => (
+                    <Fragment key={level.id}>
+                      <span className={styles.presetLabel}>{`${formatMm(level.elevation)} mm`}</span>
+                      {level.beams.map((beam) => (
+                        <Toggle
+                          key={beam.id}
+                          checked={attachedBeamIds.includes(beam.id)}
+                          onChange={() => toggleSupportBeam(beam.id)}
+                          label={getBeamDisplayLabel(beam, ceilingFloor?.columns || [])}
+                        />
+                      ))}
+                    </Fragment>
+                  ))}
+                </div>
+              </>
+            ) : null}
+            {drawnBoundary ? (
+              <p className={styles.inlineHelp}>Outline: as drawn. The beams set the height only.</p>
+            ) : supportBeamsMissing ? (
+              <p className={styles.inlineHelp}>Support beams missing — using saved outline.</p>
+            ) : null}
+            {/*
+              A manual ceiling hangs from nothing, so its stored elevation is the board underside itself and the
+              suspension drop is never applied to it. Offering the drop here would be a field that changes nothing,
+              so the height it does own is what gets typed instead. The stored drop is left alone either way, so
+              switching back to beams restores the hang the ceiling last had.
+            */}
+            {beamMode ? (
+              <>
+                {/*
+                  With every support beam gone, the ceiling reads its attachment plane from the elevation it
+                  last stored, and nothing else on this panel can type that number — so the stored plane
+                  becomes a field exactly here and nowhere else. One surviving beam is enough to govern the
+                  plane again, so a single support hides this rather than offering a height the next read
+                  would overwrite; the missing-support warning above already speaks for that case. The drop
+                  stays alongside it either way, because the boards still hang below whatever plane is typed.
+                */}
+                {supportBeams.length === 0 ? (
+                  <NumberField
+                    label="Attachment height"
+                    value={ceiling.baseElevation}
+                    onChange={(baseElevation) =>
+                      dispatch({ type: 'CEILING_UPDATE', ceiling: { id: ceiling.id, baseElevation } })
+                    }
+                  />
+                ) : null}
+                <NumberField
+                  label="Drop below attachment"
+                  value={configuration.suspension.drop}
+                  min={0}
+                  onChange={(drop) => updateSuspension({ drop })}
+                />
+              </>
+            ) : (
+              <NumberField
+                label="Board underside height"
+                value={ceiling.baseElevation}
+                onChange={(baseElevation) =>
+                  dispatch({ type: 'CEILING_UPDATE', ceiling: { id: ceiling.id, baseElevation } })
+                }
+              />
+            )}
             <NumberField
               label="Hanger spacing"
               value={configuration.suspension.hangerSpacing}
@@ -1742,7 +1912,13 @@ export default function CeilingDetailEditor() {
                 <div className={styles.dimensionBar}>
                   <span>U 0 → {detail.length.toFixed(0)} mm</span>
                   <span>V 0 → {detail.depth.toFixed(0)} mm</span>
-                  <span>Origin: south-west corner · North up · matches floor plan</span>
+                  <span>
+                    {Math.abs(detail.rotation) > 1e-6
+                      ? `Origin: south-west corner · aligned to ceiling edges · ${Math.abs(
+                          (detail.rotation * 180) / Math.PI,
+                        ).toFixed(1)}° off plan north`
+                      : 'Origin: south-west corner · North up · matches floor plan'}
+                  </span>
                   <span>
                     {panels.length} boards · {frameMembers.length} members · {hangers.length} hangers ·{' '}
                     {fasteners.length} screws · {openings.length} openings

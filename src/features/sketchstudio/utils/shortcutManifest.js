@@ -99,6 +99,24 @@ const STATIC_SECTIONS = [
         detail: 'While a fillet draft is active',
         combos: [['[']],
       },
+      {
+        id: 'chamfer-distance-up',
+        label: 'Increase chamfer setback',
+        detail: 'While a chamfer draft is active',
+        combos: [[']']],
+      },
+      {
+        id: 'chamfer-distance-down',
+        label: 'Decrease chamfer setback',
+        detail: 'While a chamfer draft is active',
+        combos: [['[']],
+      },
+      {
+        id: 'array-mode',
+        label: 'Switch array between linear and polar',
+        detail: 'While the Array tool is active',
+        combos: [['Tab']],
+      },
     ],
   },
   {

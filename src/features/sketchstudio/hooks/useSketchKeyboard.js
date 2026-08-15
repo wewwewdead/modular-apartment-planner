@@ -9,16 +9,32 @@ import {
   setActiveTool,
   setDocumentEntities,
   setPrecisionInput,
+  setUiFlag,
   toggleShortcutOverlay,
 } from '../store/sketchStudioActions';
-import { calculateDistance } from '../utils/canvasMath';
-import { createAngleDimensionEntity, createPolylineEntity } from '../utils/entityUtils';
+import { createPolylineEntity } from '../utils/entityUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
+import { withIsometricPlaneMeta } from '../utils/isometricUtils';
 import { DEFAULT_FILLET_RADIUS, MAX_FILLET_RADIUS, MIN_FILLET_RADIUS, FILLET_RADIUS_STEP } from '../utils/filletUtils';
 import { applyFillet } from '../utils/filletUtils';
+import {
+  applyChamfer,
+  CHAMFER_DISTANCE_STEP,
+  DEFAULT_CHAMFER_DISTANCE,
+  MAX_CHAMFER_DISTANCE,
+  MIN_CHAMFER_DISTANCE,
+} from '../utils/chamferUtils';
+import { commitSelectionCopyResult } from './selectionCopyCommit';
 import { removeLastPolylineVertex } from '../utils/polylineUtils';
 import { translateEntities } from '../utils/transformUtils';
-import { TOOL_SHORTCUT_MAP, isEditableTarget, constrainAnglePoint, parsePositiveNumber } from './sketchConstants';
+import {
+  TOOL_SHORTCUT_MAP,
+  buildAngleDimensionEntityFromDraft,
+  buildSketchArrayResult,
+  buildSketchMirrorResult,
+  isEditableTarget,
+  parsePositiveNumber,
+} from './sketchConstants';
 import { SHORTCUT_OVERLAY_TOGGLE_KEY } from '../utils/shortcutManifest';
 
 export default function useSketchKeyboard(state, dispatch, callbacks) {
@@ -95,6 +111,25 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
         }
       }
 
+      // Tab flips the array between a straight run and a ring. Only while the
+      // array tool is active, so Tab keeps its normal focus behaviour elsewhere.
+      if (event.key === 'Tab' && state.ui.activeTool === 'array' && !hasPrimaryModifier && !event.altKey) {
+        event.preventDefault();
+        dispatch(setUiFlag('arrayMode', state.ui.arrayMode === 'polar' ? 'linear' : 'polar'));
+        return;
+      }
+
+      if ((event.key === ']' || event.key === '[') && state.draft.type === 'chamfer') {
+        event.preventDefault();
+        const currentDistance = parsePositiveNumber(state.draft.precisionInput?.distance) ?? DEFAULT_CHAMFER_DISTANCE;
+        const nextDistance =
+          event.key === ']'
+            ? Math.min(MAX_CHAMFER_DISTANCE, currentDistance + CHAMFER_DISTANCE_STEP)
+            : Math.max(MIN_CHAMFER_DISTANCE, currentDistance - CHAMFER_DISTANCE_STEP);
+        dispatch(setPrecisionInput({ distance: String(nextDistance) }));
+        return;
+      }
+
       if (event.key === ']' && state.draft.type === 'fillet') {
         event.preventDefault();
         const currentRadius = parsePositiveNumber(state.draft.precisionInput?.radius) ?? DEFAULT_FILLET_RADIUS;
@@ -118,7 +153,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
           dispatch(endTransform());
           return;
         }
-        if (state.draft.type === 'fillet') {
+        if (state.draft.type === 'fillet' || state.draft.type === 'chamfer') {
           dispatch(cancelDraft());
           dispatch(setActiveTool('select'));
           return;
@@ -170,6 +205,54 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
       }
 
       if (event.key === 'Enter') {
+        if (state.draft.type === 'chamfer' && state.draft.hoveredCorner && state.draft.previewGeometry) {
+          event.preventDefault();
+          dispatch(
+            setDocumentEntities(
+              applyChamfer(
+                state.document.entities,
+                state.draft.hoveredCorner,
+                state.draft.previewGeometry,
+                getNextActiveLayer(state.document, state.ui.activeLayerId),
+              ),
+            ),
+          );
+          dispatch(patchDraft({ hoveredCorner: null, previewGeometry: null }));
+          return;
+        }
+
+        if (state.draft.type === 'mirror' && state.draft.points?.length && state.draft.currentPoint) {
+          event.preventDefault();
+          commitSelectionCopyResult(
+            dispatch,
+            buildSketchMirrorResult({
+              entities: state.document.entities,
+              draft: state.draft,
+              selectedIds: state.selection.selectedIds,
+              axisStart: state.draft.points[0],
+              axisEnd: state.draft.currentPoint,
+            }),
+            'Nothing in the selection can be mirrored',
+          );
+          return;
+        }
+
+        if (state.draft.type === 'array' && state.draft.points?.length) {
+          event.preventDefault();
+          commitSelectionCopyResult(
+            dispatch,
+            buildSketchArrayResult({
+              entities: state.document.entities,
+              draft: state.draft,
+              selectedIds: state.selection.selectedIds,
+              arrayMode: state.ui.arrayMode,
+              targetPoint: state.draft.currentPoint,
+            }),
+            'Nothing in the selection can be arrayed',
+          );
+          return;
+        }
+
         if (state.draft.type === 'fillet' && state.draft.hoveredCorner && state.draft.previewGeometry) {
           event.preventDefault();
           const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
@@ -194,39 +277,30 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
           state.draft.currentPoint
         ) {
           event.preventDefault();
-          const vertex = state.draft.points[1];
-          const inputAngle = parsePositiveNumber(state.draft.precisionInput?.angle);
-          const isoPlane = state.ui.viewMode === 'isometric' ? state.ui.isometricPlane : null;
-          const p2 =
-            inputAngle != null
-              ? constrainAnglePoint(vertex, state.draft.points[0], state.draft.currentPoint, inputAngle, isoPlane)
-              : state.draft.currentPoint;
-          const arcRadius = Math.max(calculateDistance(vertex, p2), 20);
-          const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
-          dispatch(
-            commitEntity(
-              createAngleDimensionEntity({
-                vertex,
-                p1: state.draft.points[0],
-                p2,
-                arcRadius,
-                entities: state.document.entities,
-                sourceRefs: state.draft.sourceRefs?.filter(Boolean) ?? [],
-                layerId: state.document.layers.some((l) => l.id === 'dimensions') ? 'dimensions' : targetLayerId,
-                isometricPlane: isoPlane,
-              }),
-            ),
-          );
+          const nextEntity = buildAngleDimensionEntityFromDraft({
+            draft: state.draft,
+            referencePoint: state.draft.currentPoint,
+            document: state.document,
+            targetLayerId: getNextActiveLayer(state.document, state.ui.activeLayerId),
+            sourceRefs: state.draft.sourceRefs ?? [],
+            viewMode: state.ui.viewMode,
+            isometricPlane: state.ui.isometricPlane,
+          });
+          if (nextEntity) dispatch(commitEntity(nextEntity));
           return;
         }
 
         if (state.draft.type === 'polyline' && state.draft.points.length >= 2) {
           event.preventDefault();
-          const nextEntity = createPolylineEntity(
-            state.draft.points,
-            state.document.entities,
-            getNextActiveLayer(state.document, state.ui.activeLayerId),
-            state.draft.closedPreview,
+          const nextEntity = withIsometricPlaneMeta(
+            createPolylineEntity(
+              state.draft.points,
+              state.document.entities,
+              getNextActiveLayer(state.document, state.ui.activeLayerId),
+              state.draft.closedPreview,
+            ),
+            state.ui.viewMode,
+            state.ui.isometricPlane,
           );
           if (nextEntity) dispatch(commitEntity(nextEntity));
           return;
@@ -271,6 +345,7 @@ export default function useSketchKeyboard(state, dispatch, callbacks) {
     state.selection.selectedIds,
     state.ui.activeLayerId,
     state.ui.activeTool,
+    state.ui.arrayMode,
     state.ui.isometricPlane,
     state.ui.shortcutOverlayOpen,
     state.ui.viewMode,

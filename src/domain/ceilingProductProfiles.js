@@ -9,6 +9,17 @@ export const CEILING_APPLICATIONS = Object.freeze({
   WET_AREA_CEILING: 'wet_area_ceiling',
 });
 
+// Same strings the wall assemblies use, so takeoffs can sum across systems.
+export const CEILING_BOARD_MATERIALS = Object.freeze({
+  FIBER_CEMENT: 'fiber_cement',
+  PLYWOOD: 'plywood',
+});
+
+export const CEILING_FRAME_MATERIALS = Object.freeze({
+  LIGHT_GAUGE_STEEL: 'light_gauge_steel',
+  TIMBER: 'timber',
+});
+
 /**
  * Ceiling profiles follow the wall profile contract: `planningDefaults` drive
  * initial geometry, while `verifiedRules` are the only values that may be
@@ -23,6 +34,7 @@ export const CEILING_PRODUCT_PROFILES = Object.freeze([
     region: 'GLOBAL',
     application: CEILING_APPLICATIONS.INTERIOR_CEILING,
     status: CEILING_PRODUCT_PROFILE_STATUS.CUSTOM_ASSUMPTION,
+    boardMaterial: CEILING_BOARD_MATERIALS.FIBER_CEMENT,
     thicknessesMm: [3.5, 4.5, 6],
     stockBoards: [{ widthMm: 1219, heightMm: 2438 }],
     allowedFrameMaterials: ['light_gauge_steel', 'timber'],
@@ -55,6 +67,7 @@ export const CEILING_PRODUCT_PROFILES = Object.freeze([
     region: 'PH',
     application: CEILING_APPLICATIONS.INTERIOR_CEILING,
     status: CEILING_PRODUCT_PROFILE_STATUS.REFERENCE_ONLY,
+    boardMaterial: CEILING_BOARD_MATERIALS.FIBER_CEMENT,
     thicknessesMm: [3.5, 4.5, 6],
     stockBoards: [{ widthMm: 1219, heightMm: 2438 }],
     allowedFrameMaterials: ['light_gauge_steel', 'timber'],
@@ -84,6 +97,39 @@ export const CEILING_PRODUCT_PROFILES = Object.freeze([
       revision: '2021',
       url: 'https://jameshardie.com.ph/files/documents/JH%20Product%20Catalogue%202021.pdf',
       checkedAt: '2026-08-07',
+    },
+    professionalReviewRequired: true,
+  }),
+  Object.freeze({
+    id: 'generic-plywood-ceiling-v1',
+    version: 1,
+    manufacturer: 'Generic',
+    product: 'Plywood ceiling board',
+    region: 'GLOBAL',
+    application: CEILING_APPLICATIONS.INTERIOR_CEILING,
+    status: CEILING_PRODUCT_PROFILE_STATUS.CUSTOM_ASSUMPTION,
+    boardMaterial: CEILING_BOARD_MATERIALS.PLYWOOD,
+    thicknessesMm: [4.5, 6, 9, 12],
+    stockBoards: [{ widthMm: 1219, heightMm: 2438 }],
+    allowedFrameMaterials: ['light_gauge_steel', 'timber'],
+    jointSystems: ['butt', 'express', 'control'],
+    planningDefaults: {
+      edgeClearanceMm: 12,
+      cornerClearanceMm: 50,
+      perimeterSpacingMm: 150,
+      fieldSpacingMm: 230,
+      maximumFurringSpacingMm: 406,
+      carrierSpacingMm: 1220,
+      hangerSpacingMm: 1200,
+      minimumSupportWidthMm: 35,
+      fastenerType: 'corrosion_resistant_screw',
+    },
+    verifiedRules: {},
+    source: {
+      title: 'User-configured generic plywood ceiling planning profile',
+      revision: 'v1',
+      url: '',
+      checkedAt: null,
     },
     professionalReviewRequired: true,
   }),

@@ -9,6 +9,8 @@ import { createColumnPlaceHandler } from './handlers/columnPlaceHandler';
 import { createRoomPlaceHandler } from './handlers/roomPlaceHandler';
 import { createBeamPlaceHandler } from './handlers/beamPlaceHandler';
 import { createSlabPlaceHandler } from './handlers/slabPlaceHandler';
+import { createCeilingPlaceHandler } from './handlers/ceilingPlaceHandler';
+import { createCeilingBeamPickHandler } from './handlers/ceilingBeamPickHandler';
 import { createStairPlaceHandler } from './handlers/stairPlaceHandler';
 import { createSectionPlaceHandler } from './handlers/sectionPlaceHandler';
 import { createLandingPlaceHandler } from './handlers/landingPlaceHandler';
@@ -175,6 +177,10 @@ export function useEditorTool({
         return createSectionPlaceHandler(ctx);
       case TOOLS.SLAB:
         return createSlabPlaceHandler(ctx);
+      case TOOLS.CEILING:
+        return createCeilingPlaceHandler(ctx);
+      case TOOLS.CEILING_BEAM_PICK:
+        return createCeilingBeamPickHandler(ctx);
       case TOOLS.ROOM:
         return createRoomPlaceHandler(ctx);
       case TOOLS.SELECT:

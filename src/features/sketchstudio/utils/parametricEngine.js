@@ -59,12 +59,6 @@ export function resolveAllEntities(entities, variables) {
   return entities.map((entity) => resolveEntityDimensions(entity, variables));
 }
 
-export function findVariableReferences(entities, variableName, constraints = []) {
-  return findVariableReferencesInDocument(
-    {
-      entities,
-      constraints,
-    },
-    variableName,
-  );
+export function findVariableReferences(entities, variableName) {
+  return findVariableReferencesInDocument({ entities }, variableName);
 }

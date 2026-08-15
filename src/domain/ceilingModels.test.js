@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createFloor, createRoom } from './models';
-import { createTrussSystem } from './trussModels';
+import { createBeam, createColumn, createFloor, createRoom } from './models';
 import {
   CEILING_ATTACHMENT_MODES,
+  CEILING_BOUNDARY_SOURCES,
   CEILING_OPENING_TYPES,
   CEILING_SCHEMA_VERSION,
   createCeiling,
@@ -186,7 +186,7 @@ describe('ceiling factories', () => {
     expect(ceiling.name).toBe('Ceiling');
     expect(ceiling.floorId).toBeNull();
     expect(ceiling.phaseId).toBeNull();
-    expect(ceiling.attachment).toEqual({ mode: CEILING_ATTACHMENT_MODES.MANUAL, trussSystemId: null });
+    expect(ceiling.attachment).toEqual({ mode: CEILING_ATTACHMENT_MODES.MANUAL, beamIds: [] });
     expect(ceiling.baseElevation).toBe(3000);
     expect(ceiling.boundaryPolygon).toEqual([
       { x: -3000, y: -2000 },
@@ -207,6 +207,16 @@ describe('ceiling factories', () => {
     expect(createCeiling('Bogus', { attachment: { mode: 'magnets' } }).attachment.mode).toBe(
       CEILING_ATTACHMENT_MODES.MANUAL,
     );
+    // A save written before ceilings hung from beams: the mode is gone, so the
+    // ceiling stands on the datum it stored rather than on nothing.
+    expect(createCeiling('Legacy', { attachment: { mode: 'truss', trussSystemId: 'ts_1' } }).attachment).toEqual({
+      mode: CEILING_ATTACHMENT_MODES.MANUAL,
+      beamIds: [],
+    });
+    expect(
+      createCeiling('Beams', { attachment: { mode: 'beam', beamIds: ['beam_a', '', 7, 'beam_a', 'beam_b'] } })
+        .attachment,
+    ).toEqual({ mode: CEILING_ATTACHMENT_MODES.BEAM, beamIds: ['beam_a', 'beam_b'] });
   });
 
   it('clones the supplied boundary instead of aliasing it', () => {
@@ -223,8 +233,33 @@ describe('ceiling factories', () => {
   });
 });
 
+// A 6000 × 4000 column grid with a ring of 250 mm beams closing it, so a
+// ceiling hung from them stops at their inner faces: 125 .. 5875 × 125 .. 3875.
+const RING_COLUMNS = [
+  ['col_sw', 0, 0],
+  ['col_se', 6000, 0],
+  ['col_ne', 6000, 4000],
+  ['col_nw', 0, 4000],
+].map(([id, x, y]) => ({ ...createColumn(x, y, 300, 300, { height: 3200 }), id }));
+
+function ringBeam(id, startId, endId, level) {
+  return {
+    ...createBeam({ kind: 'column', id: startId }, { kind: 'column', id: endId }, 250, 450, level),
+    id,
+  };
+}
+
+function beamRing(level, prefix = 'beam') {
+  return [
+    ringBeam(`${prefix}_s`, 'col_sw', 'col_se', level),
+    ringBeam(`${prefix}_n`, 'col_nw', 'col_ne', level),
+    ringBeam(`${prefix}_w`, 'col_sw', 'col_nw', level),
+    ringBeam(`${prefix}_e`, 'col_se', 'col_ne', level),
+  ];
+}
+
 describe('createCeilingForProject', () => {
-  function projectWithFloor() {
+  function projectWithFloor({ beams = [], columns = [] } = {}) {
     const floor = createFloor('Ground Floor', 0, { elevation: 0, floorToFloorHeight: 2800 });
     floor.rooms = [
       createRoom('Living', [
@@ -234,6 +269,8 @@ describe('createCeilingForProject', () => {
         { x: 0, y: 3000 },
       ]),
     ];
+    floor.columns = columns;
+    floor.beams = beams;
     return { floor, project: { floors: [floor], trussSystems: [] } };
   }
 
@@ -252,50 +289,71 @@ describe('createCeilingForProject', () => {
     ]);
   });
 
-  it('takes the plan boundary from an attached truss system', () => {
-    const { floor, project } = projectWithFloor();
-    const trussSystem = createTrussSystem('Roof trusses', {
-      floorId: floor.id,
-      baseElevation: 3200,
-      trussInstances: [
-        {
-          trussTypeId: 'truss_type_gable',
-          span: 6000,
-          startPoint: { x: 0, y: 0 },
-          endPoint: { x: 0, y: 4000 },
-          count: 5,
-          spacing: 1000,
-        },
-      ],
-    });
-    project.trussSystems = [trussSystem];
+  it('hangs a new ceiling from the beams above the floor, inside their faces', () => {
+    const { project } = projectWithFloor({ columns: RING_COLUMNS, beams: beamRing(3200) });
 
-    const ceiling = createCeilingForProject(project, {
-      attachment: { mode: 'truss', trussSystemId: trussSystem.id },
-    });
+    const ceiling = createCeilingForProject(project);
 
-    expect(ceiling.attachment).toEqual({ mode: CEILING_ATTACHMENT_MODES.TRUSS, trussSystemId: trussSystem.id });
+    expect(ceiling.attachment).toEqual({
+      mode: CEILING_ATTACHMENT_MODES.BEAM,
+      beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'],
+    });
     expect(ceiling.baseElevation).toBe(3200);
     const xs = ceiling.boundaryPolygon.map((point) => point.x);
     const ys = ceiling.boundaryPolygon.map((point) => point.y);
-    // Bearing to bearing: the 300 mm overhangs at each end of the span carry the
-    // roof, not the ceiling, so the boundary is the 6000 span itself.
-    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(6000, 6);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(4000, 6);
+    expect(Math.min(...xs)).toBeCloseTo(125, 6);
+    expect(Math.max(...xs)).toBeCloseTo(5875, 6);
+    expect(Math.min(...ys)).toBeCloseTo(125, 6);
+    expect(Math.max(...ys)).toBeCloseTo(3875, 6);
     expect(resolveCeilingBoundary(project, ceiling)).toHaveLength(4);
   });
 
-  it('falls back to manual mode when the truss system yields no boundary', () => {
-    const { project } = projectWithFloor();
-    project.trussSystems = [{ id: 'truss_system_stub', baseElevation: 3400, trussInstances: [] }];
-
-    const ceiling = createCeilingForProject(project, {
-      attachment: { mode: 'truss', trussSystemId: 'truss_system_stub' },
+  it('prefers the level carried by the most beams', () => {
+    const { project } = projectWithFloor({
+      columns: RING_COLUMNS,
+      beams: [
+        ...beamRing(3200),
+        ringBeam('beam_high_s', 'col_sw', 'col_se', 3600),
+        ringBeam('beam_high_n', 'col_nw', 'col_ne', 3600),
+      ],
     });
+
+    const ceiling = createCeilingForProject(project);
+
+    expect(ceiling.baseElevation).toBe(3200);
+    expect(ceiling.attachment.beamIds).toHaveLength(4);
+  });
+
+  it('never hangs a ceiling from the tie beams framing its own floor', () => {
+    const { project } = projectWithFloor({ columns: RING_COLUMNS, beams: beamRing(0) });
+
+    const ceiling = createCeilingForProject(project);
+
+    expect(ceiling.attachment).toEqual({ mode: CEILING_ATTACHMENT_MODES.MANUAL, beamIds: [] });
+    expect(ceiling.baseElevation).toBe(2800);
+  });
+
+  it('falls back to manual mode when the beams yield no boundary', () => {
+    const { project } = projectWithFloor({
+      columns: RING_COLUMNS,
+      // One beam bounds nothing: there is no second face to stop at.
+      beams: [ringBeam('beam_s', 'col_sw', 'col_se', 3200)],
+    });
+
+    const ceiling = createCeilingForProject(project);
 
     expect(ceiling.attachment.mode).toBe(CEILING_ATTACHMENT_MODES.MANUAL);
     expect(ceiling.baseElevation).toBe(2800);
     expect(ceiling.boundaryPolygon).toHaveLength(4);
+  });
+
+  it('honours an explicit manual attachment even with beams overhead', () => {
+    const { project } = projectWithFloor({ columns: RING_COLUMNS, beams: beamRing(3200) });
+
+    const ceiling = createCeilingForProject(project, { attachment: { mode: 'manual' } });
+
+    expect(ceiling.attachment.mode).toBe(CEILING_ATTACHMENT_MODES.MANUAL);
+    expect(ceiling.baseElevation).toBe(2800);
   });
 
   it('derives a default boundary when the floor has no geometry', () => {
@@ -329,16 +387,143 @@ describe('ceiling accessors', () => {
     expect(resolveCeilingDetailing(undefined).schemaVersion).toBe(CEILING_SCHEMA_VERSION);
   });
 
-  it('keeps the stored boundary when a truss system cannot be resolved', () => {
-    const ceiling = rectCeiling({ attachment: { mode: 'truss', trussSystemId: 'missing' } });
-    expect(resolveCeilingBoundary({ trussSystems: [] }, ceiling)).toEqual(RECT_BOUNDARY);
+  it('keeps the stored boundary when the support beams are gone', () => {
+    const ceiling = rectCeiling({
+      floorId: 'floor_1',
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] },
+    });
+    const project = { floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: [] }] };
+
+    expect(resolveCeilingBoundary(project, ceiling)).toEqual(RECT_BOUNDARY);
+  });
+
+  it('re-derives the boundary from the beams on every read, so moving one moves the ceiling', () => {
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+    const beams = [ringBeam('beam_s', 'col_sw', 'col_se', 3200), ringBeam('beam_n', 'col_nw', 'col_ne', 3200)];
+    const project = { floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams }] };
+
+    const before = resolveCeilingBoundary(project, ceiling);
+    expect(Math.max(...before.map((point) => point.y))).toBeCloseTo(3875, 6);
+
+    // Drag the north columns 1000 mm south: the beam follows them, and so does
+    // the ceiling that hangs from it.
+    const moved = {
+      floors: [
+        {
+          ...project.floors[0],
+          columns: RING_COLUMNS.map((column) => (column.y === 4000 ? { ...column, y: 3000 } : column)),
+        },
+      ],
+    };
+    expect(Math.max(...resolveCeilingBoundary(moved, ceiling).map((point) => point.y))).toBeCloseTo(2875, 6);
   });
 });
+
+describe('drawn ceiling boundaries', () => {
+  const beamRingProject = () => ({
+    floors: [
+      {
+        id: 'floor_1',
+        elevation: 0,
+        floorToFloorHeight: 2800,
+        columns: RING_COLUMNS,
+        beams: beamRing(3200),
+        rooms: [],
+        walls: [],
+        slabs: [],
+      },
+    ],
+    trussSystems: [],
+  });
+
+  const beamAttachment = { mode: 'beam', beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'] };
+
+  it('normalizes the source, and only an exact "drawn" claims a hand-drawn area', () => {
+    expect(createCeiling('Ceiling').boundarySource).toBe(CEILING_BOUNDARY_SOURCES.AUTO);
+    expect(rectCeiling({ boundarySource: 'drawn' }).boundarySource).toBe(CEILING_BOUNDARY_SOURCES.DRAWN);
+    expect(rectCeiling({ boundarySource: 'Drawn' }).boundarySource).toBe(CEILING_BOUNDARY_SOURCES.AUTO);
+    expect(rectCeiling({ boundarySource: 'traced' }).boundarySource).toBe(CEILING_BOUNDARY_SOURCES.AUTO);
+    expect(rectCeiling({ boundarySource: null }).boundarySource).toBe(CEILING_BOUNDARY_SOURCES.AUTO);
+  });
+
+  it('keeps the drawn outline even when the support beams resolve', () => {
+    const ceiling = rectCeiling({
+      floorId: 'floor_1',
+      attachment: beamAttachment,
+      boundarySource: CEILING_BOUNDARY_SOURCES.DRAWN,
+    });
+
+    expect(resolveCeilingBoundary(beamRingProject(), ceiling)).toEqual(RECT_BOUNDARY);
+  });
+
+  it('still lets the beams redraw an auto outline', () => {
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: beamAttachment });
+
+    const boundary = resolveCeilingBoundary(beamRingProject(), ceiling);
+    // The beam faces, not the stored 0..6000 × 0..4000 rectangle.
+    expect(Math.min(...boundary.map((point) => point.x))).toBeCloseTo(125, 6);
+    expect(Math.max(...boundary.map((point) => point.x))).toBeCloseTo(5875, 6);
+  });
+
+  it('hangs a drawn ceiling from the beams while keeping the area it was drawn over', () => {
+    const project = beamRingProject();
+    const drawn = [
+      { x: 1000, y: 1000 },
+      { x: 3000, y: 1000 },
+      { x: 3000, y: 2500 },
+      { x: 1000, y: 2500 },
+    ];
+
+    const ceiling = createCeilingForProject(project, {
+      floorId: 'floor_1',
+      boundaryPolygon: drawn,
+      boundarySource: CEILING_BOUNDARY_SOURCES.DRAWN,
+    });
+
+    expect(ceiling.boundarySource).toBe(CEILING_BOUNDARY_SOURCES.DRAWN);
+    expect(ceiling.boundaryPolygon).toEqual(drawn);
+    expect(ceiling.attachment).toEqual(beamAttachment);
+    expect(ceiling.baseElevation).toBe(3200);
+    expect(resolveCeilingBoundary(project, ceiling)).toEqual(drawn);
+  });
+
+  it('carries the drawn area through to the panels and the derived detail', () => {
+    const project = beamRingProject();
+    const drawn = [
+      { x: 1000, y: 1000 },
+      { x: 3000, y: 1000 },
+      { x: 3000, y: 2500 },
+      { x: 1000, y: 2500 },
+    ];
+    const ceiling = createCeilingForProject(project, {
+      floorId: 'floor_1',
+      boundaryPolygon: drawn,
+      boundarySource: CEILING_BOUNDARY_SOURCES.DRAWN,
+    });
+
+    const detail = deriveCeilingDetail(ceiling, project);
+    expect(detail.length).toBeCloseTo(2000, 6);
+    expect(detail.depth).toBeCloseTo(1500, 6);
+  });
+});
+
+// A 6000 × 4000 rectangle spun by `angle`, winding the same way as
+// RECT_BOUNDARY. `origin` is the corner that plays RECT_BOUNDARY's (0, 0).
+function rotatedRectBoundary(angle, origin = { x: 0, y: 0 }) {
+  const along = { x: Math.cos(angle), y: Math.sin(angle) };
+  const across = { x: -Math.sin(angle), y: Math.cos(angle) };
+  return [
+    { x: origin.x, y: origin.y },
+    { x: origin.x + along.x * 6000, y: origin.y + along.y * 6000 },
+    { x: origin.x + along.x * 6000 + across.x * 4000, y: origin.y + along.y * 6000 + across.y * 4000 },
+    { x: origin.x + across.x * 4000, y: origin.y + across.y * 4000 },
+  ];
+}
 
 describe('ceiling local space', () => {
   it('round-trips plan and RCP-local coordinates', () => {
     const space = getCeilingLocalSpace(RECT_BOUNDARY);
-    expect(space).toMatchObject({ originX: 0, originY: 0, maxY: 4000, length: 6000, depth: 4000 });
+    expect(space).toMatchObject({ rotation: 0, length: 6000, depth: 4000 });
     expect(space.toLocal({ x: 1000, y: 1000 })).toEqual({ u: 1000, v: 3000 });
     expect(space.toPlan({ u: 1000, v: 3000 })).toEqual({ x: 1000, y: 1000 });
 
@@ -348,12 +533,65 @@ describe('ceiling local space', () => {
       { x: 4000, y: 3500 },
       { x: -2000, y: 3500 },
     ]);
-    expect(offset).toMatchObject({ originX: -2000, originY: 500, maxY: 3500, length: 6000, depth: 3000 });
+    expect(offset).toMatchObject({ rotation: 0, length: 6000, depth: 3000 });
     const local = offset.toLocal({ x: 1000, y: 2000 });
     expect(local).toEqual({ u: 3000, v: 1500 });
     expect(offset.toPlan(local)).toEqual({ x: 1000, y: 2000 });
     // The boundary's north-west plan corner is the local origin.
     expect(offset.toLocal({ x: -2000, y: 3500 })).toEqual({ u: 0, v: 0 });
+  });
+
+  it('keeps the classic frame for a portrait plan-aligned boundary', () => {
+    // The longest edges run north-south; folding modulo 90° must not turn the
+    // room sideways, or every stored member on it would reinterpret.
+    const space = getCeilingLocalSpace([
+      { x: 0, y: 0 },
+      { x: 3000, y: 0 },
+      { x: 3000, y: 5000 },
+      { x: 0, y: 5000 },
+    ]);
+    expect(space).toMatchObject({ rotation: 0, length: 3000, depth: 5000 });
+    expect(space.toLocal({ x: 0, y: 5000 })).toEqual({ u: 0, v: 0 });
+  });
+
+  it('aligns U with the longest edge of a rotated boundary', () => {
+    const angle = Math.PI / 6;
+    const space = getCeilingLocalSpace(rotatedRectBoundary(angle, { x: 1200, y: -700 }));
+
+    // The frame turns with the ceiling: local dimensions are the true edge
+    // lengths, not the plan bounding box of the rotated shape.
+    expect(space.rotation).toBeCloseTo(angle, 9);
+    expect(space.length).toBeCloseTo(6000, 6);
+    expect(space.depth).toBeCloseTo(4000, 6);
+
+    // Every boundary corner lands on a corner of the local rect...
+    const corners = rotatedRectBoundary(angle, { x: 1200, y: -700 }).map((point) => space.toLocal(point));
+    for (const corner of corners) {
+      expect(Math.min(Math.abs(corner.u), Math.abs(corner.u - 6000))).toBeLessThan(1e-6);
+      expect(Math.min(Math.abs(corner.v), Math.abs(corner.v - 4000))).toBeLessThan(1e-6);
+    }
+
+    // ...and the mapping round-trips.
+    const plan = { x: 2500, y: 900 };
+    const roundTripped = space.toPlan(space.toLocal(plan));
+    expect(roundTripped.x).toBeCloseTo(plan.x, 6);
+    expect(roundTripped.y).toBeCloseTo(plan.y, 6);
+  });
+
+  it('generates framing parallel to a rotated ceiling instead of crossing it', () => {
+    const ceiling = createCeiling('Rotated', {
+      id: 'ceiling_rotated',
+      boundaryPolygon: rotatedRectBoundary(Math.PI / 6),
+    });
+    const members = deriveCeilingFramingMembers(ceiling, null);
+    const furring = members.filter((member) => member.kind === 'furring');
+    expect(furring.length).toBeGreaterThan(0);
+
+    // In the old north-up frame the diamond clipped every row to a different
+    // stub; in the edge-aligned frame each furring row runs the full ceiling.
+    for (const member of furring) {
+      expect(member.u1 - member.u0).toBeCloseTo(6000, 5);
+    }
   });
 });
 
@@ -371,10 +609,13 @@ describe('ceiling elevations', () => {
     });
   });
 
-  it('hangs the board below the truss attachment plane by the suspension drop', () => {
-    const project = { trussSystems: [{ id: 'truss_system_stub', baseElevation: 3200, trussInstances: [] }] };
+  it('hangs the board below the beam tops by the suspension drop', () => {
+    const project = {
+      floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }],
+    };
     const ceiling = rectCeiling({
-      attachment: { mode: 'truss', trussSystemId: 'truss_system_stub' },
+      floorId: 'floor_1',
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] },
       detailing: { suspension: { drop: 250 } },
     });
 
@@ -385,9 +626,32 @@ describe('ceiling elevations', () => {
     expect(elevations.carrierTop).toBe(3011.5);
   });
 
-  it('falls back to zero when a truss-attached ceiling has no resolvable system', () => {
-    const ceiling = rectCeiling({ attachment: { mode: 'truss', trussSystemId: 'missing' } });
-    expect(resolveCeilingElevations({ trussSystems: [] }, ceiling).attachment).toBe(0);
+  it('takes the lowest beam top when the supports disagree', () => {
+    const project = {
+      floors: [
+        {
+          id: 'floor_1',
+          elevation: 0,
+          columns: RING_COLUMNS,
+          beams: [ringBeam('beam_s', 'col_sw', 'col_se', 3200), ringBeam('beam_n', 'col_nw', 'col_ne', 3194)],
+        },
+      ],
+    };
+    const ceiling = rectCeiling({ floorId: 'floor_1', attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] } });
+
+    expect(resolveCeilingElevations(project, ceiling).attachment).toBe(3194);
+  });
+
+  it('keeps the last known plane when a beam-attached ceiling has no beam left', () => {
+    const ceiling = rectCeiling({
+      floorId: 'floor_1',
+      baseElevation: 3200,
+      attachment: { mode: 'beam', beamIds: ['beam_gone'] },
+    });
+    const elevations = resolveCeilingElevations({ floors: [{ id: 'floor_1', beams: [] }] }, ceiling);
+
+    expect(elevations.attachment).toBe(3200);
+    expect(elevations.boardUnderside).toBe(3050);
   });
 });
 
@@ -523,6 +787,26 @@ describe('ceiling framing', () => {
       ),
     ).toBeCloseTo(19900, 6);
     expect(members.every((member) => member.material === 'light_gauge_steel')).toBe(true);
+  });
+
+  it('applies the framing material to generated and drawn members alike', () => {
+    const ceiling = rectCeiling({
+      detailing: {
+        framing: {
+          material: 'timber',
+          // A member drawn while the ceiling was still steel: the one material
+          // select governs the whole grid, so it turns timber too.
+          members: [{ id: 'drawn', kind: 'furring', u0: 0, u1: 6000, v0: 100, v1: 125, material: 'light_gauge_steel' }],
+        },
+      },
+    });
+    const members = deriveCeilingFramingMembers(ceiling, null);
+    expect(members.length).toBeGreaterThan(1);
+    expect(members.every((member) => member.material === 'timber')).toBe(true);
+
+    // Unknown stored values fall back to steel instead of leaking through.
+    expect(createCeilingFraming({ material: 'unobtanium' }).material).toBe('light_gauge_steel');
+    expect(createCeilingFraming({ material: 'timber' }).material).toBe('timber');
   });
 
   it('shortens furring fragments inside the L-shaped notch', () => {

@@ -5,7 +5,19 @@
 
 import { buildSvgExportDocument } from './svgExport';
 
-function buildRulerSvg(x, y) {
+/** Default caption. Kept verbatim so existing PDF output stays byte-identical. */
+const DEFAULT_RULER_CAPTION = '100mm ruler - verify with a physical ruler';
+
+/**
+ * A 100.0mm scale-check ruler: the one mark on the sheet that tells the maker
+ * whether the printer really printed 1:1. `label` is the caption under the bar;
+ * callers that pass nothing get exactly the string this export has always used.
+ *
+ * The ruler occupies 13mm ABOVE the baseline (8mm ticks plus the numerals) and
+ * 6mm below it, which is the box a caller has to reserve when placing it.
+ */
+export function buildRulerSvg(x, y, options = {}) {
+  const caption = options.label ?? DEFAULT_RULER_CAPTION;
   let ruler = `<g transform="translate(${x}, ${y})" stroke="black" stroke-width="0.3" fill="none">`;
   ruler += '<line x1="0" y1="0" x2="100" y2="0" />';
   for (let index = 0; index <= 100; index += 10) {
@@ -13,8 +25,7 @@ function buildRulerSvg(x, y) {
     ruler += `<line x1="${index}" y1="0" x2="${index}" y2="${-height}" />`;
     ruler += `<text x="${index}" y="-10" font-size="3" text-anchor="middle" fill="black" font-family="sans-serif">${index}</text>`;
   }
-  ruler +=
-    '<text x="50" y="6" font-size="2.5" text-anchor="middle" fill="black" font-family="sans-serif">100mm ruler - verify with a physical ruler</text>';
+  ruler += `<text x="50" y="6" font-size="2.5" text-anchor="middle" fill="black" font-family="sans-serif">${caption}</text>`;
   ruler += '</g>';
   return ruler;
 }
@@ -57,9 +68,15 @@ export function buildPrintDocumentHtml(entities, options = {}) {
 </html>`;
 }
 
-export function printEntities(entities, options = {}) {
-  const html = buildPrintDocumentHtml(entities, options);
-
+/**
+ * Print an arbitrary HTML document through a throwaway hidden iframe.
+ *
+ * This is the whole browser surface of PDF export: everything else in this
+ * module (and in `templatePdfExport`) is a pure string builder that a node test
+ * can run. Shared so the tiled full-scale templates print through exactly the
+ * same path as the single-sheet PDF.
+ */
+export function printHtmlDocument(html) {
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '-9999px';
@@ -78,4 +95,8 @@ export function printEntities(entities, options = {}) {
   setTimeout(() => {
     document.body.removeChild(iframe);
   }, 1000);
+}
+
+export function printEntities(entities, options = {}) {
+  printHtmlDocument(buildPrintDocumentHtml(entities, options));
 }

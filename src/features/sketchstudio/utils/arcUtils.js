@@ -11,6 +11,39 @@ export function getQuadraticPoint(p0, p1, p2, t) {
   };
 }
 
+export function getQuadraticDerivative(p0, p1, p2, t) {
+  const mt = 1 - t;
+  return {
+    x: 2 * (mt * (p1.x - p0.x) + t * (p2.x - p1.x)),
+    y: 2 * (mt * (p1.y - p0.y) + t * (p2.y - p1.y)),
+  };
+}
+
+/**
+ * The quadratic Bézier that traces the SAME curve over the parameter window
+ * [t0, t1], via the blossom (polar form) of the original.
+ *
+ * Exact for any t0/t1 — including values outside [0, 1], which is how the extend
+ * tool grows an arc past its own end without changing the curve it lies on.
+ */
+export function getQuadraticSubCurve(p0, p1, p2, t0, t1) {
+  const blossom = (a, b) => ({
+    x: (1 - a) * (1 - b) * p0.x + ((1 - a) * b + a * (1 - b)) * p1.x + a * b * p2.x,
+    y: (1 - a) * (1 - b) * p0.y + ((1 - a) * b + a * (1 - b)) * p1.y + a * b * p2.y,
+  });
+
+  return {
+    start: blossom(t0, t0),
+    control: blossom(t0, t1),
+    end: blossom(t1, t1),
+  };
+}
+
+/** Maximum distance between a quadratic Bézier and its own chord. */
+export function getQuadraticFlatness(p0, p1, p2) {
+  return Math.hypot(p1.x - (p0.x + p2.x) / 2, p1.y - (p0.y + p2.y) / 2) / 2;
+}
+
 function getQuadraticExtremaT(p0, p1, p2) {
   const denominator = p0 - 2 * p1 + p2;
   if (Math.abs(denominator) <= AXIS_EPSILON) {

@@ -3,9 +3,12 @@ import { getIsometricPlaneAxes } from './isometricUtils';
 
 const ARC_SAMPLE_SEGMENTS = 24;
 const TEXT_OFFSET_FACTOR = 1.35;
+// A ray this short carries no direction: normalizing it would invent one, and
+// every angle formula here would then report acos(0) = 90° for a non-angle.
+const DEGENERATE_RAY_EPSILON = 1e-6;
 
 export function formatAngleText(angleDeg) {
-  return `${Math.round(angleDeg * 10) / 10}°`;
+  return angleDeg == null ? '—' : `${Math.round(angleDeg * 10) / 10}°`;
 }
 
 function solveBasis(vector, axisA, axisB) {
@@ -21,20 +24,47 @@ export function computeIsometricAngle(dir1, dir2, plane) {
   const { axisA, axisB } = getIsometricPlaneAxes(plane);
   const proj1 = solveBasis(dir1, axisA, axisB);
   const proj2 = solveBasis(dir2, axisA, axisB);
-  const len1 = Math.hypot(proj1.a, proj1.b) || 1;
-  const len2 = Math.hypot(proj2.a, proj2.b) || 1;
+  const len1 = Math.hypot(proj1.a, proj1.b);
+  const len2 = Math.hypot(proj2.a, proj2.b);
+
+  if (len1 < DEGENERATE_RAY_EPSILON || len2 < DEGENERATE_RAY_EPSILON) {
+    return null;
+  }
+
   const dot = Math.max(-1, Math.min(1, (proj1.a * proj2.a + proj1.b * proj2.b) / (len1 * len2)));
   return Math.acos(dot) * (180 / Math.PI);
 }
 
+export function computeScreenAngle(dir1, dir2) {
+  const len1 = Math.hypot(dir1.x, dir1.y);
+  const len2 = Math.hypot(dir2.x, dir2.y);
+
+  if (len1 < DEGENERATE_RAY_EPSILON || len2 < DEGENERATE_RAY_EPSILON) {
+    return null;
+  }
+
+  const dot = Math.max(-1, Math.min(1, (dir1.x * dir2.x + dir1.y * dir2.y) / (len1 * len2)));
+  return Math.acos(dot) * (180 / Math.PI);
+}
+
 export function getAngleDimensionGeometry({ vertex, p1, p2, arcRadius, isometricPlane }) {
-  const dir1 = normalizeVector(getVector(vertex, p1));
-  const dir2 = normalizeVector(getVector(vertex, p2));
+  const vector1 = getVector(vertex, p1);
+  const vector2 = getVector(vertex, p2);
+  const length1 = Math.hypot(vector1.x, vector1.y);
+  const length2 = Math.hypot(vector2.x, vector2.y);
+  const isDegenerate = length1 < DEGENERATE_RAY_EPSILON || length2 < DEGENERATE_RAY_EPSILON;
+
+  // A collapsed ray must stay collapsed: normalizeVector would hand back the
+  // +x axis and draw a ray the user never pointed anywhere near.
+  const dir1 = length1 < DEGENERATE_RAY_EPSILON ? { x: 0, y: 0 } : normalizeVector(vector1);
+  const dir2 = length2 < DEGENERATE_RAY_EPSILON ? { x: 0, y: 0 } : normalizeVector(vector2);
 
   // Angle between the two rays — corrected for isometric if applicable
-  const angleDeg = isometricPlane
-    ? computeIsometricAngle(getVector(vertex, p1), getVector(vertex, p2), isometricPlane)
-    : Math.acos(Math.max(-1, Math.min(1, dir1.x * dir2.x + dir1.y * dir2.y))) * (180 / Math.PI);
+  const angleDeg = isDegenerate
+    ? null
+    : isometricPlane
+      ? computeIsometricAngle(vector1, vector2, isometricPlane)
+      : computeScreenAngle(dir1, dir2);
 
   // Cross product sign to determine sweep direction
   const cross = dir1.x * dir2.y - dir1.y * dir2.x;
@@ -67,7 +97,9 @@ export function getAngleDimensionGeometry({ vertex, p1, p2, arcRadius, isometric
   // SVG arc path
   const largeArc = angleDeg > 180 ? 1 : 0;
   const sweep = cross < 0 ? 1 : 0;
-  const arcPath = `M ${arcStart.x} ${arcStart.y} A ${arcRadius} ${arcRadius} 0 ${largeArc} ${sweep} ${arcEnd.x} ${arcEnd.y}`;
+  const arcPath = isDegenerate
+    ? null
+    : `M ${arcStart.x} ${arcStart.y} A ${arcRadius} ${arcRadius} 0 ${largeArc} ${sweep} ${arcEnd.x} ${arcEnd.y}`;
 
   // Text at midpoint of the arc (bisector direction)
   const bisector = normalizeVector({
@@ -85,7 +117,7 @@ export function getAngleDimensionGeometry({ vertex, p1, p2, arcRadius, isometric
   };
 
   // Sample points along the arc for hit testing
-  const arcSamples = sampleArcSegments(vertex, dir1, dir2, cross, arcRadius, ARC_SAMPLE_SEGMENTS);
+  const arcSamples = isDegenerate ? [] : sampleArcSegments(vertex, dir1, dir2, cross, arcRadius, ARC_SAMPLE_SEGMENTS);
 
   return {
     ray1,

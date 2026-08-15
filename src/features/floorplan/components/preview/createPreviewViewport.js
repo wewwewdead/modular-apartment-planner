@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 import { applyRenderStyleToPalette, createMaterialPalette, disposeMaterialPalette } from './materials';
 import { disposeScene } from './disposeScene';
 import { createInspectNavigation } from './createInspectNavigation';
@@ -9,6 +10,7 @@ import { createSunSky, sunWorldDirection } from './createSunSky';
 import { SKY_ENVIRONMENT_INTENSITY, STUDIO_ENVIRONMENT_INTENSITY, createEnvironment } from './createEnvironment';
 import { createGroundPlane } from './createGroundPlane';
 import { createProgressiveRenderer } from './createProgressiveRenderer';
+import { canvasPixelRatio } from './previewResolution';
 import { FRAME_ACTION, nextFrameAction, wantsAnotherFrame } from './refineSchedule';
 import { DEFAULT_RENDER_STYLE, renderStyleConfig, toneMappingConstant } from './renderStyle';
 import {
@@ -29,8 +31,12 @@ let axisIndicatorInstance = null;
  * positions, not from the map's own resolution — and the map is re-rendered
  * once per accumulated sample, so quadrupling its area would quadruple the
  * cost of the refine to sharpen an edge that is about to be blurred anyway.
+ *
+ * The desktop shell takes the 4096 map anyway: its refine budget is big enough
+ * to absorb the extra pass cost, and the map's resolution is all the interactive
+ * frame has — jitter averaging only exists once the camera settles.
  */
-const SHADOW_MAP_SIZE = 2048;
+const SHADOW_MAP_SIZE = IS_DESKTOP_APP ? 4096 : 2048;
 
 /** Sample count at which the full penumbra width can be resolved cleanly. */
 const PENUMBRA_REFERENCE_SAMPLES = 24;
@@ -93,7 +99,16 @@ export function createPreviewViewport(container) {
   // has to happen when the model or the light moves — never because the camera
   // did — so it is driven by hand from `markShadowsDirty`.
   renderer.shadowMap.autoUpdate = false;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // One device pixel per device pixel, on both platforms. The desktop shell
+  // still supersamples — twice the ratio, every canvas pixel averaged from four
+  // rendered ones — but it does it *offscreen*, on the accumulation buffers,
+  // and only once the camera has stopped. Supersampling the canvas instead made
+  // every frame of every drag pay for detail the compositor immediately scaled
+  // away: 10 megapixels a frame in full-window mode, and 47 fps. See
+  // `previewResolution` for the two ratios and `createProgressiveRenderer` for
+  // which frames use which.
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  renderer.setPixelRatio(canvasPixelRatio(devicePixelRatio));
   renderer.setSize(container.clientWidth || 1, container.clientHeight || 1, false);
   renderer.domElement.style.width = '100%';
   renderer.domElement.style.height = '100%';
@@ -446,7 +461,10 @@ export function createPreviewViewport(container) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
-    progressive.setSize(width, height);
+    // After `renderer.setSize`, never before: the offscreen chain is sized from
+    // the canvas's own pixel count rather than from CSS pixels, so the canvas
+    // has to be the new size before it is asked.
+    progressive.setSize();
     invalidate();
   };
 

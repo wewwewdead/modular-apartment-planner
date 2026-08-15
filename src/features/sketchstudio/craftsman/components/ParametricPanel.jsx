@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { createVariable, findVariableReferences } from '../../utils/parametricEngine';
 import styles from '../styles/craftsman.module.css';
 
-export default function ParametricPanel({ variables, entities, constraints = [], onVariablesChange }) {
+export default function ParametricPanel({ variables, entities, onVariablesChange }) {
   const [newName, setNewName] = useState('');
   const [newValue, setNewValue] = useState('');
 
@@ -47,7 +47,7 @@ export default function ParametricPanel({ variables, entities, constraints = [],
       {variables.length > 0 && (
         <div className={styles.varList}>
           {variables.map((v) => {
-            const refs = findVariableReferences(entities, v.name, constraints);
+            const refs = findVariableReferences(entities, v.name);
             return (
               <div key={v.id} className={styles.varRow}>
                 <span className={styles.varName}>{v.name}</span>

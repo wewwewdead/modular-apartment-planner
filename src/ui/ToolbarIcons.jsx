@@ -175,6 +175,16 @@ export function SlabIcon(props) {
   );
 }
 
+export function CeilingIcon(props) {
+  return (
+    <I {...props}>
+      <rect x="3" y="5" width="14" height="10" rx="1" {...p} />
+      <path d="M3 5l14 10" {...p} strokeDasharray="2 2" />
+      <path d="M10 5v10" {...p} strokeDasharray="2 2" />
+    </I>
+  );
+}
+
 export function RoomIcon(props) {
   return (
     <I {...props}>

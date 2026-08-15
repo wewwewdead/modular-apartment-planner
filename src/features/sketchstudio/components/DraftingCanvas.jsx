@@ -377,6 +377,7 @@ export default function DraftingCanvas(props) {
             cursorScreen={interaction.cursorScreen}
             onInputChange={precisionBindings.onInputChange}
             onSubmit={precisionBindings.onSubmit}
+            onToggleChange={precisionBindings.onToggleChange}
           />
         </div>
       </div>

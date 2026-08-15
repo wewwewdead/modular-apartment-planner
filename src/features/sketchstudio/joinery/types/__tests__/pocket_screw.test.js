@@ -107,4 +107,23 @@ describe('pocket_screw joint type', () => {
       expect(result.error).toBeTruthy();
     });
   });
+
+  describe('fit clearance', () => {
+    it('is sized from hardware data, so a fit class adds nothing', () => {
+      const joint = createMockJoint('pocket_screw', {
+        parameters: {
+          pocketDiameter: 9.5,
+          pilotDiameter: 3.5,
+          count: 1,
+          spacing: 0,
+          edgeOffset: 10,
+          pocketOffset: 9,
+          depth: 9,
+        },
+        tolerance: { clearance: 0.2, fit: 'loose' },
+      });
+
+      expect(geometryHelpers.getFemaleFitClearance(joint)).toBe(0);
+    });
+  });
 });

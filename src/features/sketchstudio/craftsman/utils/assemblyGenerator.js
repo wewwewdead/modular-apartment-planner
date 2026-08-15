@@ -89,6 +89,43 @@ function formatHardwareList(items) {
 }
 
 /**
+ * Fit notes for every joint whose geometry this entity set carries.
+ *
+ * Joints that cut a discrete feature (a dado slot) record their fit on that
+ * feature's `meta.joinery.fit`; joints that reshape a part outline instead (a
+ * rabbet, a mortise, a tab-and-slot) record theirs on the generated profile's
+ * `meta.joinery.fits`. Reading both is the only way to document every joint, and
+ * deduping by joint id keeps a joint that touched several parts to one note.
+ */
+function collectJointFits(entities) {
+  const byJointId = new Map();
+
+  for (const entity of entities) {
+    const joinery = entity?.meta?.joinery;
+    if (!joinery) {
+      continue;
+    }
+
+    const candidates = [
+      ...(joinery.fit ? [{ jointId: joinery.jointId, jointType: joinery.jointType, ...joinery.fit }] : []),
+      ...(Array.isArray(joinery.fits) ? joinery.fits : []),
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate?.jointId && !byJointId.has(candidate.jointId)) {
+        byJointId.set(candidate.jointId, candidate);
+      }
+    }
+  }
+
+  return Array.from(byJointId.values());
+}
+
+function formatJointFitSentence(fit) {
+  return `${fit.jointId} (${fit.jointType}): ${fit.note}`;
+}
+
+/**
  * Splits fastener rows into the parts they fasten and the ones that float. Both
  * user-placed fasteners and joinery-generated holes carry `targetPartId` (the
  * part the hole is cut into), so joinery hardware lands on its part's step too.
@@ -147,6 +184,7 @@ export function generateAssemblySteps(entities) {
   const hardwareRows = collectHardwareRows(entities);
   const hardware = summarizeHardware(hardwareRows);
   const hardwareByPart = attributeHardwareToParts(entities, hardwareRows, new Set(parts.map((part) => part.entityId)));
+  const jointFits = collectJointFits(entities);
 
   // Generate steps
   const steps = [];
@@ -171,6 +209,19 @@ export function generateAssemblySteps(entities) {
       type: 'hardware',
       parts: [],
       hardware,
+    });
+  }
+
+  if (jointFits.length > 0) {
+    steps.push({
+      number: stepNum++,
+      title: 'Joint fits',
+      description: `Cut clearances are already in the exported geometry — dry-fit before glue. ${jointFits
+        .map(formatJointFitSentence)
+        .join('; ')}.`,
+      type: 'fit',
+      parts: [],
+      jointFits,
     });
   }
 
@@ -228,6 +279,7 @@ export function generateAssemblySteps(entities) {
   return {
     steps,
     hardware,
+    jointFits,
     totalParts: parts.length,
     totalHardware: hardware.reduce((sum, item) => sum + item.quantity, 0),
     estimatedTime: `${Math.max(1, Math.ceil(parts.length * 0.5))} hours`,
@@ -236,6 +288,7 @@ export function generateAssemblySteps(entities) {
 
 export function exportAssemblyToText(assembly) {
   const hardware = assembly.hardware ?? [];
+  const jointFits = assembly.jointFits ?? [];
   const lines = [
     'ASSEMBLY INSTRUCTIONS',
     `Total parts: ${assembly.totalParts}`,
@@ -244,6 +297,7 @@ export function exportAssemblyToText(assembly) {
     ...(hardware.length
       ? ['HARDWARE NEEDED', ...hardware.map((item) => `  ${item.quantity}${TIMES_SIGN} ${item.name}`), '']
       : []),
+    ...(jointFits.length ? ['JOINT FITS', ...jointFits.map((fit) => `  ${formatJointFitSentence(fit)}`), ''] : []),
     ...assembly.steps.map((step) => `Step ${step.number}: ${step.title}\n  ${step.description}`),
   ];
   return lines.join('\n');

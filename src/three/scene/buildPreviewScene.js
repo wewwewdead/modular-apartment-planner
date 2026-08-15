@@ -75,18 +75,6 @@ export function buildPreviewScene(project, options = {}) {
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
     const floorCeilings = (project?.ceilings || []).filter((ceiling) => ceiling.floorId === floor.id);
     const ceilingObjects = floorCeilings.flatMap((ceiling) => buildCeilingPreviewObjects(ceiling, project));
-    // A truss-attached ceiling takes its boundary and attachment plane from its
-    // truss system, which need not be one of this floor's truss systems.
-    const ceilingTrussSystems = floorCeilings
-      .map((ceiling) => (project?.trussSystems || []).find((system) => system.id === ceiling.attachment?.trussSystemId))
-      .filter(Boolean);
-    // Ceilings are also traced around the beams, columns and walls they run
-    // into. Those normally sit on this floor, but a ceiling hung from another
-    // floor's truss stops at that floor's structure too.
-    const ceilingStructureFloors = [...new Set(ceilingTrussSystems.map((system) => system.floorId))]
-      .filter((trussFloorId) => trussFloorId && trussFloorId !== floor.id)
-      .map((trussFloorId) => floors.find((entry) => entry.id === trussFloorId))
-      .filter(Boolean);
     const systemObjects = buildFloorSystemsPreviewObjects(floor, project?.building?.systems || {});
     const objects = [
       ...buildFloorPreviewObjects(floor, { stairContexts, hiddenBoardSides }),
@@ -113,7 +101,9 @@ export function buildPreviewScene(project, options = {}) {
       // object reference while untouched floors keep identity — this lets the
       // preview object cache skip re-triangulating unchanged floors. Truss
       // systems are separate source objects, so include their refs too — and
-      // ceilings likewise live in a project-level array.
+      // ceilings likewise live in a project-level array. A ceiling's boundary,
+      // attachment plane and obstructions all come from the beams, columns and
+      // walls of this same floor, so `floor` already answers for them.
       // stairSources/landingSources: cross-floor railing-stair attachment means
       // any floor's stairs or landings changing must rebuild every floor.
       sourceKey: {
@@ -122,8 +112,6 @@ export function buildPreviewScene(project, options = {}) {
         systems: project?.building?.systems,
         trussSystems: floorTrussSystems,
         ceilings: floorCeilings,
-        ceilingTrussSystems,
-        ceilingStructureFloors,
         stairSources,
         landingSources,
       },

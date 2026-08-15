@@ -7,11 +7,12 @@ import { getAngleDimensionGeometry, formatAngleText } from '../../utils/angleUti
 import { getArcMidpoint, getArcSamplePoints, solveThreePointCircle } from '../../utils/arcUtils';
 import { computeEntityBoundingBox } from '../../utils/bboxUtils';
 import { getDimensionGeometry, measureDistance, formatDimensionText } from '../../utils/dimensionUtils';
-import { getRectCorners, resolveSourceReferenceFromEntities } from '../../utils/entityUtils';
+import { getRectCorners, resolveAngleDimensionPoints, resolveLinearDimensionPoints } from '../../utils/entityUtils';
 import { getTextLeaderGeometry } from '../../utils/textLeaderUtils';
 import { isFastenerEntity } from '../../utils/fastenerUtils';
 import { downloadAsFile } from '../../utils/bomExportUtils';
 import { offsetPolygon } from '../utils/polygonOffset';
+import { applyDogboneToEntity, normalizeDogboneSettings } from './dogboneUtils';
 import { createDxfWriter } from './dxfWriter';
 
 const DEFAULT_EXTENTS = {
@@ -27,6 +28,17 @@ const DXF_LAYERS = [
   // User-placed fasteners: drill operations, not profile cuts, so the operator
   // can run (or suppress) them independently of the cut layer.
   { name: 'HARDWARE', color: 5 },
+];
+
+/**
+ * Layers that only exist when something actually uses them. Declaring them
+ * unconditionally would change the LAYER table of every file ever exported, so
+ * they are appended only when an entity targets them - a document with no grain
+ * annotation still writes exactly the table it wrote before.
+ */
+const OPTIONAL_DXF_LAYERS = [
+  // Grain direction annotation on nested sheets. Never a cut path.
+  { name: 'GRAIN', color: 3 },
 ];
 
 const EXPORTABLE_TYPES = new Set([
@@ -116,7 +128,13 @@ function writeHeader(writer, extents) {
   });
 }
 
-function writeTables(writer) {
+function resolveDxfLayers(entities) {
+  const used = new Set(entities.map((entity) => entity?.meta?.dxfLayer).filter(Boolean));
+  const optional = OPTIONAL_DXF_LAYERS.filter((layer) => used.has(layer.name));
+  return optional.length ? [...DXF_LAYERS, ...optional] : DXF_LAYERS;
+}
+
+function writeTables(writer, layers = DXF_LAYERS) {
   writer.section('TABLES', (section) => {
     section.table('LTYPE', (table) => {
       table.pair(70, 1);
@@ -130,8 +148,8 @@ function writeTables(writer) {
     });
 
     section.table('LAYER', (table) => {
-      table.pair(70, DXF_LAYERS.length);
-      DXF_LAYERS.forEach((layer) => {
+      table.pair(70, layers.length);
+      layers.forEach((layer) => {
         table.pair(0, 'LAYER');
         table.pair(2, layer.name);
         table.pair(70, 0);
@@ -154,6 +172,16 @@ function writeLineEntity(writer, startPoint, endPoint, layer = '0') {
   writer.pair(21, end.y);
 }
 
+/**
+ * `dxfWriter` is a bare group-code/value emitter with no entity vocabulary, so
+ * bulge support is an LWPOLYLINE concern and lives here. Group 42 rides on the
+ * vertex an arc STARTS at and is written only when a vertex actually carries a
+ * non-zero bulge, so a document with no corner relief emits exactly the byte
+ * stream it emitted before bulges existed.
+ *
+ * DXF space mirrors Y (`toDxfPoint`), and mirroring reverses arc orientation, so
+ * the stored bulge sign is negated on the way out.
+ */
 function writePolylineEntity(writer, points, closed = false, layer = '0') {
   if (!points?.length) {
     return;
@@ -168,6 +196,11 @@ function writePolylineEntity(writer, points, closed = false, layer = '0') {
     const dxfPoint = toDxfPoint(point);
     writer.pair(10, dxfPoint.x);
     writer.pair(20, dxfPoint.y);
+
+    const bulge = Number(point?.bulge);
+    if (Number.isFinite(bulge) && bulge !== 0) {
+      writer.pair(42, -bulge);
+    }
   });
 }
 
@@ -312,9 +345,7 @@ function writeFeatureEntity(writer, entity, layer = '0') {
 }
 
 function writeDimensionEntity(writer, entity, allEntities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.p2);
+  const { p1, p2 } = resolveLinearDimensionPoints(entity, allEntities);
   if (!p1 || !p2) {
     return;
   }
@@ -371,10 +402,7 @@ function writeDimensionEntity(writer, entity, allEntities) {
 }
 
 function writeAngleDimensionEntity(writer, entity, allEntities) {
-  const sourceRefs = entity.meta?.sourceRefs ?? [];
-  const vertex = resolveSourceReferenceFromEntities(allEntities, sourceRefs[1], entity.vertex);
-  const p1 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[0], entity.p1);
-  const p2 = resolveSourceReferenceFromEntities(allEntities, sourceRefs[2], entity.p2);
+  const { vertex, p1, p2 } = resolveAngleDimensionPoints(entity, allEntities);
   if (!vertex || !p1 || !p2) {
     return;
   }
@@ -386,7 +414,6 @@ function writeAngleDimensionEntity(writer, entity, allEntities) {
     arcRadius: entity.arcRadius,
     isometricPlane: entity.isometricPlane,
   });
-  const text = formatAngleText(geometry.angleDeg);
 
   writeLineEntity(
     writer,
@@ -406,13 +433,17 @@ function writeAngleDimensionEntity(writer, entity, allEntities) {
     writeLineEntity(writer, samples[index], samples[index + 1], 'DIMENSIONS');
   }
 
+  if (geometry.angleDeg == null) {
+    return;
+  }
+
   writeTextEntity(
     writer,
     {
       x: geometry.textPoint.x,
       y: geometry.textPoint.y,
       fontSize: 8,
-      text,
+      text: formatAngleText(geometry.angleDeg),
     },
     'DIMENSIONS',
   );
@@ -692,6 +723,12 @@ function applyKerfToFeature(entity, kerf, halfKerf) {
   };
 }
 
+/**
+ * Fabrication passes run in a fixed order: joint fit is already baked into the
+ * geometry by the joinery resolver, kerf compensation moves the toolpath off the
+ * finished face, and corner relief is computed LAST, on the kerf-compensated
+ * path, because the bit has to reach the corner of the path it will really cut.
+ */
 function getExportEntities(entities, options = {}) {
   const exportable = entities.filter(
     (entity) => EXPORTABLE_TYPES.has(entity.type) && !isEntityHiddenFromManufacturing(entity),
@@ -700,9 +737,6 @@ function getExportEntities(entities, options = {}) {
     ? exportable.filter((entity) => isEntitySelectedForExport(entity, options.selectedIds || []))
     : exportable;
   const kerf = toNumber(options.kerf);
-  if (kerf <= 0) {
-    return filtered;
-  }
 
   // Reference geometry (stock outlines) is not a toolpath, so it must never be
   // grown or shrunk by kerf compensation. Neither is a fastener's pilot hole: it
@@ -710,9 +744,19 @@ function getExportEntities(entities, options = {}) {
   // circle must reach the machine at exactly the catalog pilot size. Without the
   // exemption `applyKerfToFeature` would shrink a 3.0mm pilot to 2.8mm at a
   // 0.2mm kerf and the screw would split the stock.
-  return filtered.map((entity) =>
-    entity.meta?.dxfKerfExempt || isFastenerEntity(entity) ? entity : applyKerfToEntity(entity, kerf),
-  );
+  const kerfed =
+    kerf > 0
+      ? filtered.map((entity) =>
+          entity.meta?.dxfKerfExempt || isFastenerEntity(entity) ? entity : applyKerfToEntity(entity, kerf),
+        )
+      : filtered;
+
+  const dogbone = normalizeDogboneSettings(options.dogbone);
+  if (!dogbone) {
+    return kerfed;
+  }
+
+  return kerfed.map((entity) => applyDogboneToEntity(entity, dogbone));
 }
 
 /**
@@ -740,7 +784,7 @@ export function exportEntitiesToDxf(entities, options = {}) {
   const writer = createDxfWriter();
 
   writeHeader(writer, computeExtents(exportEntities));
-  writeTables(writer);
+  writeTables(writer, resolveDxfLayers(exportEntities));
   writer.section('ENTITIES', (section) => {
     exportEntities.forEach((entity) => writeEntity(section, entity, referenceEntities));
   });

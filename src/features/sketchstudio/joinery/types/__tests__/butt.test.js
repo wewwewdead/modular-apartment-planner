@@ -55,4 +55,14 @@ describe('butt joint type', () => {
       expect(result.featureEntities).toBeUndefined();
     });
   });
+
+  describe('fit clearance', () => {
+    it('takes no fit clearance - there is no female geometry to widen', () => {
+      const context = createMockContext();
+      const joint = createMockJoint('butt', { tolerance: { clearance: 0.2, fit: 'loose' } });
+
+      expect(geometryHelpers.getFemaleFitClearance(joint)).toBe(0);
+      expect(butt.buildGeometry(joint, context, geometryHelpers).featureEntities).toBeUndefined();
+    });
+  });
 });

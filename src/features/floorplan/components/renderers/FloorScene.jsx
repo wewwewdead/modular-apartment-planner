@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import { normalizeRectBounds } from '@/features/floorplan/utils/planClipboard';
+import CeilingRenderer from './CeilingRenderer';
 import ElevationRenderer from './ElevationRenderer';
 import FloorPlanLayer from './FloorPlanLayer';
 import FloorPreviewLayer from './FloorPreviewLayer';
@@ -72,6 +73,11 @@ const FloorScene = memo(function FloorScene({
             <SitePlanOverlay site={filteredProject.building?.site} />
             <ShadowOverlay study={daylight.sunStudy} />
             <FloorPlanLayer floor={floor} filteredFloor={filteredFloor} selectedId={selectedId} />
+            {/* Ceilings are project-level, so they ride here rather than inside
+                the floor layer — above the rooms and walls they cover, because
+                that is where they are in the building, and below everything the
+                user is actively pointing at. */}
+            <CeilingRenderer project={filteredProject} floorId={floor.id} />
             {/* Above the plan, unlike the shadow overlay below it. A shadow
                 falls on open ground; a daylight factor is a property of the
                 inside of a room, and rooms are drawn with an opaque fill — put

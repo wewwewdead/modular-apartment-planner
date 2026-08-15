@@ -9,20 +9,19 @@ import {
   setUiFlag,
   setEntityMaterial,
   setEntityThickness,
+  setEntityGrainAngle,
   setEntityHardware,
   setActiveHardware,
   toggleCraftsmanMode,
   toggleShortcutOverlay as toggleShortcutOverlayAction,
   closeShortcutOverlay as closeShortcutOverlayAction,
   setVariables,
-  addConstraint,
-  updateConstraint,
-  removeConstraint,
   addJoint,
   updateJoint,
   removeJoint,
   groupSelection as groupSelectionAction,
   degroupSelection as degroupSelectionAction,
+  dismissToast as dismissToastAction,
 } from '../store/sketchStudioActions';
 import { roundWorldValue } from '../utils/canvasMath';
 import { duplicateEntitiesByIds, updateEntityFromNumericField, updateEntityInList } from '../utils/entityUtils';
@@ -89,7 +88,10 @@ export default function useSketchStudio() {
       ),
     [state.document, state.draft, state.ui],
   );
-  const precisionHud = useMemo(() => getPrecisionHudData(state.draft, draftPreview), [state.draft, draftPreview]);
+  const precisionHud = useMemo(
+    () => getPrecisionHudData(state.draft, draftPreview, state.ui),
+    [state.draft, draftPreview, state.ui],
+  );
 
   // --- Simple action callbacks ---
   const handleToolChange = useCallback((toolId) => dispatch(setActiveTool(toolId)), []);
@@ -122,6 +124,8 @@ export default function useSketchStudio() {
     [],
   );
   const toggleShortcutOverlay = useCallback(() => dispatch(toggleShortcutOverlayAction()), []);
+  // Stable identity: Toast restarts its dismiss timer whenever this changes.
+  const dismissToast = useCallback(() => dispatch(dismissToastAction()), []);
   const closeShortcutOverlay = useCallback(() => dispatch(closeShortcutOverlayAction()), []);
   const setIsometricPlane = useCallback((plane) => {
     if (!['top', 'left', 'right'].includes(plane)) return;
@@ -247,7 +251,9 @@ export default function useSketchStudio() {
     precisionBindings: {
       onInputChange: (field, value) => dispatch(setPrecisionInput({ [field]: value, activeField: field })),
       onSubmit: () => commitPrecisionDraft(),
+      onToggleChange: (key, value) => dispatch(setUiFlag(key, value)),
     },
+    dismissToast,
     handleBindings: {
       onHandlePointerDown: handleHandlePointerDown,
       onTransformPointerDown: handleTransformPointerDown,
@@ -273,19 +279,16 @@ export default function useSketchStudio() {
       isometricPlane: state.ui.isometricPlane,
     },
     documentPersistence: persistence.documentPersistence,
-    constraintDiagnostics: state.constraintDiagnostics || [],
     jointDiagnostics: state.jointDiagnostics || [],
     manufacturingPreviewEntities: state.manufacturingPreviewEntities || [],
     manufacturingExportEntities: state.manufacturingExportEntities || [],
     setEntityMaterial: (entityIds, materialId) => dispatch(setEntityMaterial(entityIds, materialId)),
     setEntityThickness: (entityIds, thickness) => dispatch(setEntityThickness(entityIds, thickness)),
+    setEntityGrainAngle: (entityIds, grainAngle) => dispatch(setEntityGrainAngle(entityIds, grainAngle)),
     setEntityHardware: (entityIds, hardwareId) => dispatch(setEntityHardware(entityIds, hardwareId)),
     setActiveHardware: (hardwareId) => dispatch(setActiveHardware(hardwareId)),
     toggleCraftsmanMode: () => dispatch(toggleCraftsmanMode()),
     setVariables: (vars) => dispatch(setVariables(vars)),
-    addConstraint: (constraint) => dispatch(addConstraint(constraint)),
-    updateConstraint: (constraintId, patch) => dispatch(updateConstraint(constraintId, patch)),
-    removeConstraint: (constraintId) => dispatch(removeConstraint(constraintId)),
     focusJoint,
     clearFocusedJoint,
     editJoint,

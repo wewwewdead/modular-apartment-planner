@@ -729,7 +729,7 @@ describe('ceiling persistence', () => {
       name: 'Ceiling',
       floorId: 'floor_1',
       phaseId: null,
-      attachment: { mode: 'manual', trussSystemId: null },
+      attachment: { mode: 'manual', beamIds: [] },
       boundaryPolygon: [
         { x: 0, y: 0 },
         { x: 4000, y: 0 },
@@ -741,21 +741,43 @@ describe('ceiling persistence', () => {
     };
   }
 
+  // A floor carrying the beams a ceiling may hang from.
+  function floorWithBeams(beamIds = ['beam_1', 'beam_2']) {
+    return [
+      {
+        id: 'floor_1',
+        walls: [{ id: 'w1' }],
+        doors: [],
+        windows: [],
+        columns: [],
+        beams: beamIds.map((id) => ({ id })),
+        stairs: [],
+        landings: [],
+        fixtures: [],
+        annotations: [],
+        slabs: [],
+        sectionCuts: [],
+        rooms: [],
+        railings: [],
+      },
+    ];
+  }
+
   it('rejects a non-array ceilings collection', () => {
     const errors = validateProjectStructure(makeProject({ ceilings: {} }));
     expect(errors).toContainEqual(expect.objectContaining({ path: 'ceilings' }));
     expect(validateProjectStructure(makeProject({ ceilings: [] }))).toEqual([]);
   });
 
-  it('warns about broken phase, floor and truss-attachment references', () => {
+  it('warns about broken phase, floor and support-beam references', () => {
     const project = makeProject({
       phases: [{ id: 'phase_1' }],
-      trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }],
+      floors: floorWithBeams(),
       ceilings: [
         ceilingFixture({
           phaseId: 'phase_gone',
           floorId: 'floor_gone',
-          attachment: { mode: 'truss', trussSystemId: 'truss_gone' },
+          attachment: { mode: 'beam', beamIds: ['beam_gone'] },
         }),
       ],
     });
@@ -767,7 +789,7 @@ describe('ceiling persistence', () => {
         expect.objectContaining({ path: 'ceiling ceiling_1', message: expect.stringContaining('non-existent floor') }),
         expect.objectContaining({
           path: 'ceiling ceiling_1',
-          message: expect.stringContaining('non-existent truss system'),
+          message: expect.stringContaining('non-existent support beam'),
         }),
       ]),
     );
@@ -776,8 +798,8 @@ describe('ceiling persistence', () => {
   it('emits no ceiling warnings when every reference resolves', () => {
     const project = makeProject({
       phases: [{ id: 'phase_1' }],
-      trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }],
-      ceilings: [ceilingFixture({ phaseId: 'phase_1', attachment: { mode: 'truss', trussSystemId: 'truss_1' } })],
+      floors: floorWithBeams(),
+      ceilings: [ceilingFixture({ phaseId: 'phase_1', attachment: { mode: 'beam', beamIds: ['beam_1', 'beam_2'] } })],
     });
 
     expect(validateProjectReferences(project).filter((w) => w.path.startsWith('ceiling '))).toEqual([]);
@@ -792,22 +814,36 @@ describe('ceiling persistence', () => {
     expect(repairBrokenReferences(project).ceilings[0].phaseId).toBeNull();
   });
 
-  it('drops a dangling truss attachment back to manual, keeping the stored ceiling geometry', () => {
-    const ceiling = ceilingFixture({
-      attachment: { mode: 'truss', trussSystemId: 'truss_gone' },
-      baseElevation: 2450,
+  it('drops a support beam that is gone, keeping the attachment while two remain', () => {
+    const project = makeProject({
+      floors: floorWithBeams(),
+      ceilings: [ceilingFixture({ attachment: { mode: 'beam', beamIds: ['beam_1', 'beam_2', 'beam_gone'] } })],
     });
-    const project = makeProject({ trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }], ceilings: [ceiling] });
 
     const repaired = repairBrokenReferences(project).ceilings[0];
-    expect(repaired.attachment).toEqual({ mode: 'manual', trussSystemId: null });
-    expect(repaired.baseElevation).toBe(2450);
+    expect(repaired.attachment).toEqual({ mode: 'beam', beamIds: ['beam_1', 'beam_2'] });
+    expect(repaired.baseElevation).toBe(2700);
+  });
+
+  it('strands a ceiling on its own datum at the height it was hanging at', () => {
+    const ceiling = ceilingFixture({
+      attachment: { mode: 'beam', beamIds: ['beam_1', 'beam_gone'] },
+      baseElevation: 3000,
+      detailing: { enabled: true, suspension: { drop: 200 } },
+    });
+    // Only one beam is left, and it is 3000 mm up: the boards are hanging 200 mm
+    // under it, and that is where the manual datum has to put them.
+    const project = makeProject({ floors: floorWithBeams(['beam_1']), ceilings: [ceiling] });
+
+    const repaired = repairBrokenReferences(project).ceilings[0];
+    expect(repaired.attachment).toEqual({ mode: 'manual', beamIds: [] });
+    expect(repaired.baseElevation).toBe(2800);
     expect(repaired.boundaryPolygon).toBe(ceiling.boundaryPolygon);
   });
 
   it('leaves a ceiling whose references all resolve untouched by identity', () => {
-    const ceiling = ceilingFixture({ attachment: { mode: 'truss', trussSystemId: 'truss_1' } });
-    const project = makeProject({ trussSystems: [{ id: 'truss_1', floorId: 'floor_1' }], ceilings: [ceiling] });
+    const ceiling = ceilingFixture({ attachment: { mode: 'beam', beamIds: ['beam_1', 'beam_2'] } });
+    const project = makeProject({ floors: floorWithBeams(), ceilings: [ceiling] });
 
     expect(repairBrokenReferences(project).ceilings[0]).toBe(ceiling);
   });

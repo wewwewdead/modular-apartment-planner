@@ -100,9 +100,13 @@ export default {
       return { error: 'The tab-and-slot pattern could not be laid out on the selected overlap.' };
     }
 
+    // Fit clearance widens the SLOT only. The tab keeps whatever the legacy
+    // `tolerance.clearance` allowance already did to it, untouched, so old
+    // documents cut identical tabs.
+    const fitClearance = helpers.getFemaleFitClearance?.(joint) ?? 0;
     const maleIntervals = intervals.map((interval) => helpers.shrinkInterval(interval, joint.tolerance?.clearance));
     const femaleIntervals = intervals.map((interval) =>
-      helpers.expandInterval(interval, joint.tolerance?.clearance, context.overlap),
+      helpers.expandInterval(interval, (Number(joint.tolerance?.clearance) || 0) + fitClearance, context.overlap),
     );
     const overlapDrivenSourceReliefIntervals =
       context.contactKind === 'penetration' ? helpers.buildComplementIntervals(context.overlap, maleIntervals) : null;

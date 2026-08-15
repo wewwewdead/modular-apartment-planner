@@ -41,15 +41,13 @@ export const SKETCH_STUDIO_ACTIONS = {
   REDO: 'REDO',
   SET_ENTITY_MATERIAL: 'SET_ENTITY_MATERIAL',
   SET_ENTITY_THICKNESS: 'SET_ENTITY_THICKNESS',
+  SET_ENTITY_GRAIN_ANGLE: 'SET_ENTITY_GRAIN_ANGLE',
   SET_ENTITY_HARDWARE: 'SET_ENTITY_HARDWARE',
   SET_ACTIVE_HARDWARE: 'SET_ACTIVE_HARDWARE',
   TOGGLE_CRAFTSMAN_MODE: 'TOGGLE_CRAFTSMAN_MODE',
   TOGGLE_SHORTCUT_OVERLAY: 'TOGGLE_SHORTCUT_OVERLAY',
   CLOSE_SHORTCUT_OVERLAY: 'CLOSE_SHORTCUT_OVERLAY',
   SET_VARIABLES: 'SET_VARIABLES',
-  ADD_CONSTRAINT: 'ADD_CONSTRAINT',
-  UPDATE_CONSTRAINT: 'UPDATE_CONSTRAINT',
-  REMOVE_CONSTRAINT: 'REMOVE_CONSTRAINT',
   ADD_JOINT: 'ADD_JOINT',
   UPDATE_JOINT: 'UPDATE_JOINT',
   REMOVE_JOINT: 'REMOVE_JOINT',
@@ -74,6 +72,18 @@ export const setUiFlag = (key, value) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_UI_FLAG,
   payload: { key, value },
 });
+
+// Toasts carry a monotonic id so two identical messages in a row still remount
+// the component (and therefore restart its dismiss timer).
+let toastSequence = 0;
+
+export const showToast = (message, toastType = 'warning') => {
+  toastSequence += 1;
+
+  return setUiFlag('toast', message ? { id: toastSequence, message, type: toastType } : null);
+};
+
+export const dismissToast = () => setUiFlag('toast', null);
 
 export const setViewport = (viewport) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_VIEWPORT,
@@ -252,6 +262,15 @@ export const setEntityThickness = (entityIds, thickness) => ({
   payload: { entityIds, thickness },
 });
 
+/**
+ * Grain direction for parts cut from directional stock. `grainAngle` is degrees
+ * in the sketch plane (0 = +X); null clears the constraint.
+ */
+export const setEntityGrainAngle = (entityIds, grainAngle) => ({
+  type: SKETCH_STUDIO_ACTIONS.SET_ENTITY_GRAIN_ANGLE,
+  payload: { entityIds, grainAngle },
+});
+
 export const setEntityHardware = (entityIds, hardwareId) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_ENTITY_HARDWARE,
   payload: { entityIds, hardwareId },
@@ -278,21 +297,6 @@ export const closeShortcutOverlay = () => ({
 export const setVariables = (variables) => ({
   type: SKETCH_STUDIO_ACTIONS.SET_VARIABLES,
   payload: variables,
-});
-
-export const addConstraint = (constraint) => ({
-  type: SKETCH_STUDIO_ACTIONS.ADD_CONSTRAINT,
-  payload: constraint,
-});
-
-export const updateConstraint = (constraintId, patch) => ({
-  type: SKETCH_STUDIO_ACTIONS.UPDATE_CONSTRAINT,
-  payload: { constraintId, patch },
-});
-
-export const removeConstraint = (constraintId) => ({
-  type: SKETCH_STUDIO_ACTIONS.REMOVE_CONSTRAINT,
-  payload: constraintId,
 });
 
 export const addJoint = (joint) => ({

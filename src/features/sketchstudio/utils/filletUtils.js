@@ -16,7 +16,7 @@ function getLineEndpoints(entity) {
   ];
 }
 
-function getLineOtherEndpoint(entity, endpointKey) {
+export function getLineOtherEndpoint(entity, endpointKey) {
   if (endpointKey === 'start') {
     return { x: entity.x2, y: entity.y2 };
   }
@@ -209,7 +209,12 @@ export function findFilletableCorner(entities, worldPoint, tolerance) {
   return findRectCorner(entities, worldPoint, tolerance);
 }
 
-export function computeSketchFillet(corner, radius) {
+/**
+ * The two edges leaving a resolved corner, as unit directions plus the lengths
+ * available along each. Shared with the chamfer tool: both cut the same corner,
+ * they only differ in what they put in its place.
+ */
+export function resolveCornerEdges(corner) {
   const { cornerPoint } = corner;
   let dir1;
   let dir2;
@@ -239,6 +244,18 @@ export function computeSketchFillet(corner, radius) {
   if (angle < 0.05 || angle > Math.PI - 0.05) {
     return null;
   }
+
+  return { cornerPoint, dir1, dir2, edgeLength1, edgeLength2, angle };
+}
+
+export function computeSketchFillet(corner, radius) {
+  const edges = resolveCornerEdges(corner);
+
+  if (!edges) {
+    return null;
+  }
+
+  const { cornerPoint, dir1, dir2, edgeLength1, edgeLength2, angle } = edges;
 
   // Tangent distance from corner to tangent point
   const halfAngle = angle / 2;
@@ -286,7 +303,7 @@ function sampleArcPoints(start, control, end, numSegments = 8) {
   return points;
 }
 
-function updateLineEndpoint(entity, endpointKey, newPoint) {
+export function updateCornerLineEndpoint(entity, endpointKey, newPoint) {
   if (endpointKey === 'start') {
     return { ...entity, x1: newPoint.x, y1: newPoint.y };
   }
@@ -294,7 +311,9 @@ function updateLineEndpoint(entity, endpointKey, newPoint) {
   return { ...entity, x2: newPoint.x, y2: newPoint.y };
 }
 
-function rectToLines(rect, entities, layerId) {
+const updateLineEndpoint = updateCornerLineEndpoint;
+
+export function rectToLines(rect, entities, layerId) {
   const corners = getRectCorners(rect);
   const edges = [
     { from: corners.topLeft, to: corners.topRight },
@@ -326,7 +345,7 @@ function rectToLines(rect, entities, layerId) {
   return lines;
 }
 
-function getRectEdgePairForCorner(cornerKey) {
+export function getRectEdgePairForCorner(cornerKey) {
   // Returns [lineIndex1, endpoint1, lineIndex2, endpoint2]
   // Edges order: top(0), right(1), bottom(2), left(3)
   const map = {

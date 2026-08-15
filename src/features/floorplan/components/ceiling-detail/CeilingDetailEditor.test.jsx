@@ -1,9 +1,34 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createFloor } from '@/domain/models';
+import { createBeam, createFloor } from '@/domain/models';
 import { createCeiling } from '@/domain/ceilingModels';
 import CeilingDetailEditor from './CeilingDetailEditor';
+
+const BOUNDARY = [
+  { x: 0, y: 0 },
+  { x: 6000, y: 0 },
+  { x: 6000, y: 4000 },
+  { x: 0, y: 4000 },
+];
+
+function supportBeam(id, y, level) {
+  return {
+    ...createBeam({ kind: 'point', x: 0, y }, { kind: 'point', x: 6000, y }, 250, 450, level),
+    id,
+  };
+}
+
+// A floor carrying two beams at 3000 and one on its own at 3600.
+function floorWithBeamLevels() {
+  const floor = createFloor('Ground', 0);
+  floor.beams = [
+    supportBeam('beam_s', 0, 3000),
+    supportBeam('beam_n', 4000, 3000),
+    supportBeam('beam_high', 2000, 3600),
+  ];
+  return floor;
+}
 
 const mocks = vi.hoisted(() => ({
   project: null,
@@ -131,6 +156,50 @@ describe('CeilingDetailEditor', () => {
     // The default profile is a custom assumption, not a verified manufacturer rule set.
     expect(html).toContain('custom assumption');
     expect(html).toContain('A qualified professional must review the whole assembly before construction.');
+  });
+
+  it('offers every beam level on the floor, plus the manual datum, as the thing to hang from', () => {
+    const floor = floorWithBeamLevels();
+    const ceiling = createCeiling('Beam-hung', {
+      floorId: floor.id,
+      boundaryPolygon: BOUNDARY,
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] },
+    });
+    mocks.project = { id: 'project', floors: [floor], ceilings: [ceiling], trussSystems: [] };
+    mocks.editor = { ceilingDetailEditor: { ceilingId: ceiling.id } };
+
+    const html = renderToStaticMarkup(<CeilingDetailEditor />);
+
+    expect(html).toContain('Hangs from');
+    expect(html).toContain('3600 mm — 1 beam');
+    expect(html).toContain('3000 mm — 2 beams');
+    expect(html).toContain('Manual datum');
+    // The attachment plane is the beams, not a stored number.
+    expect(html).toContain('Support beams');
+    expect(html).not.toContain('Support beams missing');
+  });
+
+  it('says so when the beams a ceiling hangs from are gone', () => {
+    const floor = floorWithBeamLevels();
+    const ceiling = createCeiling('Stranded', {
+      floorId: floor.id,
+      boundaryPolygon: BOUNDARY,
+      baseElevation: 3000,
+      attachment: { mode: 'beam', beamIds: ['beam_deleted'] },
+    });
+    mocks.project = { id: 'project', floors: [floor], ceilings: [ceiling], trussSystems: [] };
+    mocks.editor = { ceilingDetailEditor: { ceilingId: ceiling.id } };
+
+    const html = renderToStaticMarkup(<CeilingDetailEditor />);
+
+    expect(html).toContain('Support beams missing — using saved outline.');
+  });
+
+  it('hides the attachment picker on a manual ceiling with no beams overhead', () => {
+    const html = renderToStaticMarkup(<CeilingDetailEditor />);
+
+    expect(html).not.toContain('Hangs from');
+    expect(html).toContain('Manual datum');
   });
 
   it('shows an unavailable card with a close action when the ceiling is gone', () => {

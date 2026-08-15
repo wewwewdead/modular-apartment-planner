@@ -100,7 +100,6 @@ describe('findVariableReferencesInDocument', () => {
         { id: 'e1', parametricExpressions: { width: 'W * 2', height: '800' } },
         { id: 'e2', parametricExpressions: { width: 'W + 100' } },
       ],
-      constraints: [],
     };
     const matches = findVariableReferencesInDocument(doc, 'W');
     expect(matches.length).toBe(2);
@@ -108,20 +107,9 @@ describe('findVariableReferencesInDocument', () => {
     expect(matches[1]).toMatchObject({ kind: 'entity', entityId: 'e2', field: 'width' });
   });
 
-  it('finds constraint distance expression references', () => {
-    const doc = {
-      entities: [],
-      constraints: [{ id: 'c1', distanceExpression: 'GAP + 10' }],
-    };
-    const matches = findVariableReferencesInDocument(doc, 'GAP');
-    expect(matches.length).toBe(1);
-    expect(matches[0]).toMatchObject({ kind: 'constraint', constraintId: 'c1' });
-  });
-
   it('returns empty array when no matches', () => {
     const doc = {
       entities: [{ id: 'e1', parametricExpressions: { width: '100' } }],
-      constraints: [],
     };
     expect(findVariableReferencesInDocument(doc, 'NOPE')).toEqual([]);
   });
@@ -130,7 +118,7 @@ describe('findVariableReferencesInDocument', () => {
     expect(findVariableReferencesInDocument({}, '')).toEqual([]);
   });
 
-  it('handles missing entities and constraints gracefully', () => {
+  it('handles a missing entities array gracefully', () => {
     expect(findVariableReferencesInDocument(undefined, 'W')).toEqual([]);
     expect(findVariableReferencesInDocument({}, 'W')).toEqual([]);
   });

@@ -26,6 +26,9 @@
  *   catalog field name even for `perLinearMeter` / `perPiece` bases: it is the
  *   unit price for the selected cost basis, which is exactly how
  *   `buildMaterialPricingDict()` already feeds `materialCostUtils`.
+ * - The schema is additive: `hasGrain` was added after the first release and
+ *   normalizes to `false` for every record already in localStorage, so old saved
+ *   customs keep full nesting rotation freedom exactly as before.
  *
  * Deletion fallback
  * - Deleting a custom material that entities still reference is allowed. Lookups
@@ -55,6 +58,7 @@ export const CUSTOM_MATERIAL_DEFAULTS = {
   defaultHeight: 1220,
   costBasis: 'perM2',
   density: 600,
+  hasGrain: false,
   color: '#C08A5A',
 };
 
@@ -287,6 +291,8 @@ export function validateCustomMaterialDraft(draft = {}, options = {}) {
       pricePerM2: price,
       costBasis,
       density: density > 0 ? density : CUSTOM_MATERIAL_DEFAULTS.density,
+      // Additive field: anything stored before grain existed reads as false.
+      hasGrain: draft.hasGrain === true || draft.hasGrain === 'true',
       color: normalizeColor(draft.color),
       isCustom: true,
     }),
@@ -412,6 +418,7 @@ export function buildDuplicateDraft(source) {
     pricePerM2: source?.pricePerM2 ?? 0,
     costBasis: source?.costBasis ?? CUSTOM_MATERIAL_DEFAULTS.costBasis,
     density: source?.density ?? CUSTOM_MATERIAL_DEFAULTS.density,
+    hasGrain: source?.hasGrain === true,
     color: source?.color ?? CUSTOM_MATERIAL_DEFAULTS.color,
   };
 }

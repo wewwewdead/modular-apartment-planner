@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyLineStyleToEntities,
+  createAngleDimensionEntity,
   createArcEntity,
   createDimensionEntity,
   createEllipseEntity,
@@ -12,6 +13,8 @@ import {
   getEntityMeasurementRows,
   getTextMetrics,
   normalizeRectFromPoints,
+  resolveAngleDimensionPoints,
+  resolveLinearDimensionPoints,
   toggleBrokenLineForEntities,
   updateEntityFromNumericField,
 } from './entityUtils';
@@ -365,5 +368,121 @@ describe('entityUtils', () => {
 
     expect(result.duplicatedIds).toEqual([]);
     expect(result.skippedIds).toEqual([dimension.id]);
+  });
+});
+
+describe('dimension source-ref slots', () => {
+  // The live repro: p1 was clicked in empty space and the vertex snapped to a
+  // line endpoint, so the only ref must land in the vertex slot, not slot 0.
+  const line = { id: 'line-1', type: 'line', x1: 200, y1: 200, x2: 449, y2: 409, layerId: 'default', meta: {} };
+  const vertexRef = { entityId: 'line-1', sourceType: 'endpoint', sourceKey: 'end' };
+  const p1 = { x: 199, y: 299 };
+  const vertex = { x: 449, y: 409 };
+  const p2 = { x: 520, y: 560 };
+
+  function buildAngleDimension(sourceRefs) {
+    return createAngleDimensionEntity({ vertex, p1, p2, arcRadius: 60, entities: [line], sourceRefs });
+  }
+
+  it('keeps an unsnapped first pick as an empty slot', () => {
+    const entity = buildAngleDimension([null, vertexRef]);
+
+    expect(entity.meta.sourceRefs).toEqual([null, vertexRef, null]);
+  });
+
+  it('resolves the vertex from its ref while p1 and p2 keep their stored points', () => {
+    const entity = buildAngleDimension([null, vertexRef]);
+    const resolved = resolveAngleDimensionPoints(entity, [line]);
+
+    expect(resolved.p1).toEqual(p1);
+    expect(resolved.vertex).toEqual({ x: 449, y: 409 });
+    expect(resolved.p2).toEqual(p2);
+  });
+
+  it('follows the referenced geometry only in the slot that owns the ref', () => {
+    const entity = buildAngleDimension([null, vertexRef]);
+    const movedLine = { ...line, x2: 600, y2: 700 };
+    const resolved = resolveAngleDimensionPoints(entity, [movedLine]);
+
+    expect(resolved.vertex).toEqual({ x: 600, y: 700 });
+    expect(resolved.p1).toEqual(p1);
+  });
+
+  it('keeps an unsnapped first pick as an empty slot on linear dimensions', () => {
+    const entity = createDimensionEntity({
+      p1,
+      p2,
+      placementPoint: { x: 0, y: 0 },
+      units: 'mm',
+      entities: [line],
+      sourceRefs: [null, vertexRef],
+    });
+
+    expect(entity.meta.sourceRefs).toEqual([null, vertexRef]);
+    expect(resolveLinearDimensionPoints(entity, [line]).p1).toEqual(p1);
+    expect(resolveLinearDimensionPoints(entity, [line]).p2).toEqual({ x: 449, y: 409 });
+  });
+
+  it('re-slots a legacy compacted angle array by matching resolved points', () => {
+    const legacy = { ...buildAngleDimension([]), meta: { sourceRefs: [vertexRef] } };
+    const resolved = resolveAngleDimensionPoints(legacy, [line]);
+
+    expect(resolved.vertex).toEqual({ x: 449, y: 409 });
+    expect(resolved.p1).toEqual(p1);
+    expect(resolved.p2).toEqual(p2);
+  });
+
+  it('re-slots a legacy compacted linear array by matching resolved points', () => {
+    const legacy = {
+      type: 'dimension',
+      p1,
+      p2: { x: 449, y: 409 },
+      meta: { sourceRefs: [vertexRef] },
+    };
+    const resolved = resolveLinearDimensionPoints(legacy, [line]);
+
+    expect(resolved.p1).toEqual(p1);
+    expect(resolved.p2).toEqual({ x: 449, y: 409 });
+  });
+
+  it('leaves a legacy ref unused when it matches no stored point', () => {
+    const strayRef = { entityId: 'line-1', sourceType: 'endpoint', sourceKey: 'start' };
+    const legacy = { ...buildAngleDimension([]), meta: { sourceRefs: [strayRef] } };
+    const resolved = resolveAngleDimensionPoints(legacy, [line]);
+
+    expect(resolved.p1).toEqual(p1);
+    expect(resolved.vertex).toEqual(vertex);
+    expect(resolved.p2).toEqual(p2);
+  });
+
+  it('duplicates dimensions whose slots are all empty', () => {
+    const entity = buildAngleDimension([]);
+    const dimension = createDimensionEntity({
+      p1,
+      p2,
+      placementPoint: { x: 0, y: 0 },
+      units: 'mm',
+      entities: [line, entity],
+      sourceRefs: [],
+    });
+    const result = duplicateEntitiesByIds([line, dimension], [dimension.id]);
+
+    expect(result.skippedIds).toEqual([]);
+    expect(result.duplicatedEntities[0].meta.sourceRefs).toEqual([null, null]);
+  });
+
+  it('preserves empty slots through duplication', () => {
+    const dimension = createDimensionEntity({
+      p1,
+      p2,
+      placementPoint: { x: 0, y: 0 },
+      units: 'mm',
+      entities: [line],
+      sourceRefs: [null, vertexRef],
+    });
+    const result = duplicateEntitiesByIds([line, dimension], ['line-1', dimension.id]);
+    const copied = result.duplicatedEntities.find((entity) => entity.type === 'dimension');
+
+    expect(copied.meta.sourceRefs).toEqual([null, { ...vertexRef, entityId: 'line-2' }]);
   });
 });

@@ -79,4 +79,42 @@ describe('mortise_tenon joint type', () => {
       expect(result.error).toBeTruthy();
     });
   });
+
+  describe('fit clearance', () => {
+    const cases = [
+      ['standard', 0],
+      ['piston', 0.04],
+      ['glue', 0.1],
+      ['loose', 0.3],
+    ];
+
+    it.each(cases)('widens the mortise by the %s clearance and leaves the tenon nominal', (fit, expectedDelta) => {
+      const parameters = { width: 50, depth: 6, inset: 0, offset: 0 };
+      const context = createMockContext();
+      const legacy = mortise_tenon.buildGeometry(
+        createMockJoint('mortise_tenon', { parameters }),
+        context,
+        geometryHelpers,
+      );
+      const withFit = mortise_tenon.buildGeometry(
+        createMockJoint('mortise_tenon', { parameters, tolerance: { clearance: 0.2, fit } }),
+        context,
+        geometryHelpers,
+      );
+
+      const legacyTenon = legacy.partModifications[0].modifications[0];
+      const fitTenon = withFit.partModifications[0].modifications[0];
+      const legacyMortise = legacy.partModifications[1].modifications[0];
+      const fitMortise = withFit.partModifications[1].modifications[0];
+
+      // Male stays nominal: the tenon is untouched by any fit class.
+      expect(fitTenon.start).toBeCloseTo(legacyTenon.start, 9);
+      expect(fitTenon.end).toBeCloseTo(legacyTenon.end, 9);
+      expect(legacyTenon.length).toBeCloseTo(50, 9);
+
+      // Female widens by exactly the class clearance.
+      expect(legacyMortise.length).toBeCloseTo(50.2, 9);
+      expect(fitMortise.length - legacyMortise.length).toBeCloseTo(expectedDelta, 9);
+    });
+  });
 });

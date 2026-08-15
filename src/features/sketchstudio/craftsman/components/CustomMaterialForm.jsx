@@ -165,6 +165,22 @@ export default function CustomMaterialForm({
         </label>
 
         <label className={styles.fieldLabel}>
+          Directional Grain
+          <span className={styles.fieldHint}>
+            Lumber and veneered panels have grain; MDF, acrylic and metal do not. Parts cut from a grain material can be
+            locked to a grain direction, which the cut-list optimizer then honours as a hard constraint.
+          </span>
+          <label className={styles.kerfToggle}>
+            <input
+              type="checkbox"
+              checked={formState.hasGrain === true}
+              onChange={(event) => setField('hasGrain', event.target.checked)}
+            />
+            <span>This material has a grain direction</span>
+          </label>
+        </label>
+
+        <label className={styles.fieldLabel}>
           Color
           <input
             type="color"

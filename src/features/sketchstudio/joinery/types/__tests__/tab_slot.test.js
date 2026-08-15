@@ -90,4 +90,41 @@ describe('tab_slot joint type', () => {
       expect(result.error).toBeTruthy();
     });
   });
+
+  describe('fit clearance', () => {
+    const cases = [
+      ['standard', 0],
+      ['piston', 0.04],
+      ['glue', 0.1],
+      ['loose', 0.3],
+    ];
+    const parameters = { count: 2, tabWidth: 20, spacing: 5, edgeOffset: 10, depth: 10 };
+
+    it.each(cases)('widens every slot by the %s clearance and leaves the tabs nominal', (fit, expectedDelta) => {
+      const context = createMockContext();
+      const legacy = tab_slot.buildGeometry(createMockJoint('tab_slot', { parameters }), context, geometryHelpers);
+      const withFit = tab_slot.buildGeometry(
+        createMockJoint('tab_slot', { parameters, tolerance: { clearance: 0.2, fit } }),
+        context,
+        geometryHelpers,
+      );
+
+      const legacyTabs = legacy.partModifications[0].modifications;
+      const fitTabs = withFit.partModifications[0].modifications;
+      const legacySlots = legacy.partModifications[1].modifications;
+      const fitSlots = withFit.partModifications[1].modifications;
+
+      expect(fitTabs).toHaveLength(legacyTabs.length);
+      legacyTabs.forEach((tab, index) => {
+        // Male unchanged: only the legacy 0.2mm allowance shrank it, as before.
+        expect(fitTabs[index].start).toBeCloseTo(tab.start, 9);
+        expect(fitTabs[index].end).toBeCloseTo(tab.end, 9);
+      });
+
+      legacySlots.forEach((slot, index) => {
+        expect(slot.length).toBeCloseTo(20.2, 9);
+        expect(fitSlots[index].length - slot.length).toBeCloseTo(expectedDelta, 9);
+      });
+    });
+  });
 });

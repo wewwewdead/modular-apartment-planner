@@ -78,10 +78,7 @@ function buildProject() {
     ],
   });
 
-  const ceiling = createCeilingForProject(project, {
-    floorId: floor.id,
-    attachment: { mode: 'truss', trussSystemId: 'ts_1' },
-  });
+  const ceiling = createCeilingForProject(project, { floorId: floor.id });
   project.ceilings = [ceiling];
 
   return { floor, ceiling, project };
@@ -169,6 +166,11 @@ describe('ceiling clearance against the structure it hangs beside', () => {
   it('puts no part of the ceiling inside a beam or a wall', () => {
     const { floor, ceiling, project } = buildProject();
     const descriptors = buildCeilingPreviewObjects(ceiling, project);
+
+    // Guard the fixture: a ceiling that fell back to a manual datum would be
+    // measuring a stored rectangle rather than the beams it hangs from.
+    expect(ceiling.attachment.mode).toBe('beam');
+    expect(ceiling.attachment.beamIds).toEqual(['beam_a', 'beam_b', 'beam_cross']);
 
     // Guard the guard: an empty ceiling would pass the overlap check trivially.
     const kinds = new Set(descriptors.map((descriptor) => descriptor.metadata.ceilingDetailKind));

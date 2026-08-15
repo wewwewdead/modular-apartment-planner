@@ -358,4 +358,37 @@ describe('customMaterials registry', () => {
       expect(getCustomMaterials()).toEqual([]);
     });
   });
+
+  describe('grain flag (additive schema)', () => {
+    it('defaults to false for a draft that never mentions grain', () => {
+      const outcome = validateCustomMaterialDraft(validDraft);
+      expect(outcome.valid).toBe(true);
+      expect(outcome.material.hasGrain).toBe(false);
+    });
+
+    it('records an explicit grain flag, including the string form a form field sends', () => {
+      expect(validateCustomMaterialDraft({ ...validDraft, hasGrain: true }).material.hasGrain).toBe(true);
+      expect(validateCustomMaterialDraft({ ...validDraft, hasGrain: 'true' }).material.hasGrain).toBe(true);
+      expect(validateCustomMaterialDraft({ ...validDraft, hasGrain: false }).material.hasGrain).toBe(false);
+    });
+
+    it('normalizes an old stored record - written before grain existed - to grain free', () => {
+      globalThis.localStorage.setItem(
+        CUSTOM_MATERIALS_STORAGE_KEY,
+        JSON.stringify([{ ...validDraft, id: 'custom-legacy', isCustom: true }]),
+      );
+
+      const loaded = reloadCustomMaterials();
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0].hasGrain).toBe(false);
+    });
+
+    it('carries the grain flag through a duplicate-as-custom', () => {
+      const grained = builtInMaterials.find((material) => material.hasGrain === true);
+      const plain = builtInMaterials.find((material) => material.category === 'mdf');
+
+      expect(duplicateMaterialAsCustom(grained).material.hasGrain).toBe(true);
+      expect(duplicateMaterialAsCustom(plain).material.hasGrain).toBe(false);
+    });
+  });
 });

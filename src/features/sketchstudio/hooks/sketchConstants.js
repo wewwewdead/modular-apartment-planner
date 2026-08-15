@@ -2,15 +2,29 @@ import { calculateDistance, projectPointFromStart } from '../utils/canvasMath';
 import {
   buildLineFromExactLength,
   getDimensionOffsetFromPlacement,
+  createAngleDimensionEntity,
   createFeatureEntity,
   DEFAULT_TEXT_LABEL,
   DEFAULT_TEXT_SIZE,
 } from '../utils/entityUtils';
 import { inferDimensionSubtype } from '../utils/dimensionUtils';
-import { buildIsometricEllipse, buildIsometricPlaneRectangle, getIsometricPlaneAxes } from '../utils/isometricUtils';
+import {
+  buildIsometricEllipse,
+  buildIsometricPlaneRectangle,
+  getIsometricPlaneAxes,
+  inferIsometricPlaneForAngle,
+  resolveIsometricPlaneFromEntities,
+} from '../utils/isometricUtils';
 import { measureOffsetDistance, offsetLineEntity, offsetPolylineEntity, offsetRectEntity } from '../utils/offsetUtils';
 import { isPolylineClosed } from '../utils/profileUtils';
 import { computeSketchFillet } from '../utils/filletUtils';
+import { buildMirrorPreviewEntities, mirrorEntitiesAcrossLine } from '../utils/mirrorUtils';
+import {
+  buildArrayPreviewEntities,
+  computeLinearArray,
+  computePolarArray,
+  DEFAULT_POLAR_ANGLE,
+} from '../utils/arrayUtils';
 import { DEFAULT_FASTENER_HARDWARE_ID, getFastenerDrillingDefaults, getHardwarePattern } from '../utils/fastenerUtils';
 import { resolveHardwarePatternPlacement } from '../utils/hardwarePatternUtils';
 
@@ -76,6 +90,43 @@ export const TOOL_DEFINITIONS = [
     description: 'Create linear dimension annotations',
   },
   { id: 'fillet', label: 'Fillet', shortLabel: 'FIL', shortcut: 'F', description: 'Round corners with an arc radius' },
+  {
+    id: 'chamfer',
+    label: 'Chamfer',
+    shortLabel: 'CHM',
+    // B for Bevel: C, F, and H are already spoken for.
+    shortcut: 'B',
+    description: 'Cut a corner back to a straight edge',
+  },
+  {
+    id: 'trim',
+    label: 'Trim',
+    shortLabel: 'TRM',
+    shortcut: 'X',
+    description: 'Remove the clicked span back to its nearest intersections',
+  },
+  {
+    id: 'extend',
+    label: 'Extend',
+    shortLabel: 'EXT',
+    shortcut: 'E',
+    description: 'Grow an end to the next piece of geometry',
+  },
+  {
+    id: 'mirror',
+    label: 'Mirror',
+    shortLabel: 'MIR',
+    shortcut: 'M',
+    description: 'Copy the selection across a picked axis',
+  },
+  {
+    id: 'array',
+    label: 'Array',
+    shortLabel: 'ARR',
+    // A and R belong to Arc and Rectangle; Y is what "arraY" has left.
+    shortcut: 'Y',
+    description: 'Repeat the selection in a row or around a centre (Tab switches)',
+  },
   { id: 'angle', label: 'Angle', shortLabel: 'ANG', shortcut: 'Q', description: 'Measure angles between two rays' },
 ];
 
@@ -162,6 +213,125 @@ export function constrainAnglePoint(vertex, p1, cursorPoint, angleDeg, isometric
     x: vertex.x + Math.cos(targetAngle) * dist,
     y: vertex.y + Math.sin(targetAngle) * dist,
   };
+}
+
+export function getSourceRefEntities(sourceRefs, entities = []) {
+  return (sourceRefs ?? []).map((ref) =>
+    ref?.entityId ? (entities.find((entity) => entity.id === ref.entityId) ?? null) : null,
+  );
+}
+
+/**
+ * Plane priority: what the rays are attached to beats what their screen
+ * directions suggest, which in turn beats the toolbar selector. A 45° in-face
+ * diagonal is indistinguishable from other faces on screen, so only the source
+ * geometry's own plane can place it.
+ */
+export function resolveAngleIsometricPlane(
+  vertex,
+  p1,
+  referencePoint,
+  viewMode,
+  isometricPlane,
+  sourceEntities = null,
+) {
+  if (viewMode !== 'isometric' || !vertex || !p1 || !referencePoint) {
+    return null;
+  }
+
+  return (
+    resolveIsometricPlaneFromEntities(sourceEntities) ??
+    inferIsometricPlaneForAngle(
+      { x: p1.x - vertex.x, y: p1.y - vertex.y },
+      { x: referencePoint.x - vertex.x, y: referencePoint.y - vertex.y },
+      isometricPlane,
+    )
+  );
+}
+
+export function buildAngleDimensionEntityFromDraft({
+  draft,
+  referencePoint,
+  document,
+  targetLayerId,
+  sourceRefs = [],
+  viewMode,
+  isometricPlane,
+}) {
+  if (draft?.type !== 'angle' || draft.step !== 'pickSecond' || draft.points?.length !== 2 || !referencePoint) {
+    return null;
+  }
+
+  const vertex = draft.points[1];
+  const p1 = draft.points[0];
+  const inputAngle = parsePositiveNumber(draft.precisionInput?.angle);
+  const isoPlane = resolveAngleIsometricPlane(
+    vertex,
+    p1,
+    referencePoint,
+    viewMode,
+    isometricPlane,
+    getSourceRefEntities(sourceRefs, document.entities),
+  );
+  const p2 =
+    inputAngle != null ? constrainAnglePoint(vertex, p1, referencePoint, inputAngle, isoPlane) : referencePoint;
+
+  return createAngleDimensionEntity({
+    vertex,
+    p1,
+    p2,
+    arcRadius: Math.max(calculateDistance(vertex, p2), 20),
+    entities: document.entities,
+    sourceRefs,
+    layerId: document.layers.some((layer) => layer.id === 'dimensions') ? 'dimensions' : targetLayerId,
+    isometricPlane: isoPlane,
+  });
+}
+
+/**
+ * The ids a selection-driven tool (mirror, array) is operating on. The draft
+ * snapshots the selection when the first point is picked, so a mid-gesture
+ * selection change cannot swap what is about to be copied.
+ */
+export function getSelectionDrivenToolIds(draft, selectedIds = []) {
+  const drafted = draft?.selectionIds;
+  return drafted?.length ? drafted : selectedIds;
+}
+
+export function buildSketchMirrorResult({ entities, draft, selectedIds, axisStart, axisEnd }) {
+  const entityIds = getSelectionDrivenToolIds(draft, selectedIds);
+
+  if (!entityIds?.length || !axisStart || !axisEnd) {
+    return null;
+  }
+
+  return mirrorEntitiesAcrossLine(entities, entityIds, axisStart, axisEnd);
+}
+
+export function buildSketchArrayResult({ entities, draft, selectedIds, arrayMode, targetPoint }) {
+  const entityIds = getSelectionDrivenToolIds(draft, selectedIds);
+  const basePoint = draft?.points?.[0];
+
+  if (!entityIds?.length || !basePoint) {
+    return null;
+  }
+
+  const count = parsePositiveNumber(draft.precisionInput?.count) ?? 2;
+
+  if (arrayMode === 'polar') {
+    return computePolarArray(entities, entityIds, {
+      center: basePoint,
+      count,
+      totalAngleDegrees: Number(draft.precisionInput?.angle) || DEFAULT_POLAR_ANGLE,
+    });
+  }
+
+  return computeLinearArray(entities, entityIds, {
+    basePoint,
+    targetPoint: targetPoint ?? draft.currentPoint,
+    count,
+    spacing: parsePositiveNumber(draft.precisionInput?.spacing),
+  });
 }
 
 export function parsePositiveNumber(rawValue) {
@@ -450,6 +620,75 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
     return buildOffsetEntityFromDraft(draft, document, targetLayerId);
   }
 
+  // Trim and extend hover-preview the exact span the click will act on, so the
+  // ghost promises the same geometry the commit produces.
+  if (draft.type === 'trim') {
+    return draft.trimPreview?.points?.length
+      ? {
+          type: 'trim-preview',
+          points: draft.trimPreview.points,
+          deletesEntity: draft.trimPreview.deletesEntity === true,
+        }
+      : null;
+  }
+
+  if (draft.type === 'extend') {
+    return draft.extendPreview?.points?.length
+      ? { type: 'extend-preview', points: draft.extendPreview.points, target: draft.extendPreview.target ?? null }
+      : null;
+  }
+
+  if (draft.type === 'chamfer' && draft.hoveredCorner) {
+    if (draft.previewGeometry) {
+      return {
+        type: 'chamfer-preview',
+        point1: draft.previewGeometry.point1,
+        point2: draft.previewGeometry.point2,
+        cornerPoint: draft.hoveredCorner.cornerPoint,
+        distance: draft.previewGeometry.distance,
+      };
+    }
+
+    return { type: 'chamfer-preview', cornerPoint: draft.hoveredCorner.cornerPoint };
+  }
+
+  if (draft.type === 'mirror') {
+    if (!draft.points?.length || !draft.currentPoint) {
+      return null;
+    }
+
+    const ghosts = buildMirrorPreviewEntities(
+      document.entities,
+      draft.selectionIds ?? [],
+      draft.points[0],
+      draft.currentPoint,
+    );
+
+    return {
+      type: 'ghost-entities',
+      entities: ghosts,
+      axis: { start: draft.points[0], end: draft.currentPoint },
+    };
+  }
+
+  if (draft.type === 'array') {
+    if (!draft.points?.length) {
+      return null;
+    }
+
+    const ghosts = buildArrayPreviewEntities(document.entities, draft.selectionIds ?? [], {
+      mode: ui?.arrayMode ?? 'linear',
+      basePoint: draft.points[0],
+      center: draft.points[0],
+      targetPoint: draft.currentPoint,
+      count: parsePositiveNumber(draft.precisionInput?.count) ?? 2,
+      spacing: parsePositiveNumber(draft.precisionInput?.spacing),
+      totalAngleDegrees: Number(draft.precisionInput?.angle) || DEFAULT_POLAR_ANGLE,
+    });
+
+    return ghosts.length ? { type: 'ghost-entities', entities: ghosts } : null;
+  }
+
   if (draft.type === 'fillet' && draft.hoveredCorner) {
     if (draft.previewGeometry) {
       const { tangentPoint1, tangentPoint2, controlPoint } = draft.previewGeometry;
@@ -530,7 +769,14 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
       const vertex = draft.points[1];
       const arcRadius = calculateDistance(vertex, draft.currentPoint);
       const inputAngle = parsePositiveNumber(draft.precisionInput?.angle);
-      const isoPlane = ui?.viewMode === 'isometric' ? ui.isometricPlane : null;
+      const isoPlane = resolveAngleIsometricPlane(
+        vertex,
+        draft.points[0],
+        draft.currentPoint,
+        ui?.viewMode,
+        ui?.isometricPlane,
+        getSourceRefEntities(draft.sourceRefs, document?.entities),
+      );
       const p2 =
         inputAngle != null
           ? constrainAnglePoint(vertex, draft.points[0], draft.currentPoint, inputAngle, isoPlane)
@@ -541,7 +787,7 @@ export function getDraftPreviewEntity(draft, document, targetLayerId, ui) {
         p1: draft.points[0],
         p2,
         arcRadius: Math.max(arcRadius, 20),
-        isometricPlane: ui?.viewMode === 'isometric' ? ui.isometricPlane : null,
+        isometricPlane: isoPlane,
       };
     }
   }

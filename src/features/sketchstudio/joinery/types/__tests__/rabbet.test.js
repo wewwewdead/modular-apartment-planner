@@ -62,4 +62,34 @@ describe('rabbet joint type', () => {
       expect(result.error).toBeTruthy();
     });
   });
+
+  describe('fit clearance', () => {
+    const cases = [
+      ['standard', 0],
+      ['piston', 0.04],
+      ['glue', 0.1],
+      ['loose', 0.3],
+    ];
+
+    it.each(cases)('widens the receiving step by exactly the %s clearance', (fit, expectedDelta) => {
+      const parameters = { width: 50, depth: 6, inset: 0, offset: 0 };
+      const context = createMockContext();
+      const legacy = rabbet.buildGeometry(createMockJoint('rabbet', { parameters }), context, geometryHelpers);
+      const withFit = rabbet.buildGeometry(
+        createMockJoint('rabbet', { parameters, tolerance: { clearance: 0.2, fit } }),
+        context,
+        geometryHelpers,
+      );
+
+      const legacyCut = legacy.partModifications[0].modifications[0];
+      const fitCut = withFit.partModifications[0].modifications[0];
+
+      // Legacy already carries the pre-existing 0.2mm tolerance allowance; the
+      // fit clearance composes on top of it and nothing else changes.
+      expect(legacyCut.length).toBeCloseTo(50.2, 9);
+      expect(fitCut.length - legacyCut.length).toBeCloseTo(expectedDelta, 9);
+      expect(fitCut.center).toBeCloseTo(legacyCut.center, 9);
+      expect(fitCut.depth).toBe(legacyCut.depth);
+    });
+  });
 });

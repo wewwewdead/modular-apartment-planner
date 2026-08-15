@@ -9,8 +9,15 @@ import {
   createRectEntity,
 } from '../utils/entityUtils';
 import { getNextActiveLayer } from '../utils/layerUtils';
+import { withIsometricPlaneMeta } from '../utils/isometricUtils';
 import { buildFastenerFeatureConfig } from '../utils/fastenerUtils';
-import { buildOffsetEntityFromDraft } from './sketchConstants';
+import {
+  buildAngleDimensionEntityFromDraft,
+  buildOffsetEntityFromDraft,
+  buildSketchArrayResult,
+  buildSketchMirrorResult,
+} from './sketchConstants';
+import { commitSelectionCopyResult } from './selectionCopyCommit';
 
 export default function useSketchDraftCommit(state, dispatch, draftPreview) {
   const commitPrecisionDraft = useCallback(() => {
@@ -19,11 +26,15 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
     const targetLayerId = getNextActiveLayer(state.document, state.ui.activeLayerId);
 
     if (state.draft.type === 'line') {
-      const nextEntity = createLineEntity(
-        state.draft.startPoint,
-        { x: draftPreview.x2, y: draftPreview.y2 },
-        state.document.entities,
-        targetLayerId,
+      const nextEntity = withIsometricPlaneMeta(
+        createLineEntity(
+          state.draft.startPoint,
+          { x: draftPreview.x2, y: draftPreview.y2 },
+          state.document.entities,
+          targetLayerId,
+        ),
+        state.ui.viewMode,
+        state.ui.isometricPlane,
       );
       if (nextEntity) dispatch(commitEntity(nextEntity));
       return;
@@ -135,6 +146,56 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
       return;
     }
 
+    // The precision HUD keeps focus while the angle is typed, so the global
+    // Enter binding never sees the key: this is the angle tool's only commit
+    // path from the input.
+    if (state.draft.type === 'angle') {
+      const nextEntity = buildAngleDimensionEntityFromDraft({
+        draft: state.draft,
+        referencePoint: state.draft.currentPoint,
+        document: state.document,
+        targetLayerId,
+        sourceRefs: state.draft.sourceRefs ?? [],
+        viewMode: state.ui.viewMode,
+        isometricPlane: state.ui.isometricPlane,
+      });
+      if (nextEntity) dispatch(commitEntity(nextEntity));
+      return;
+    }
+
+    // Enter is the polar array's primary commit: its count and total angle both
+    // live in the HUD, which holds focus, so the global Enter binding never sees
+    // the key.
+    if (state.draft.type === 'array') {
+      commitSelectionCopyResult(
+        dispatch,
+        buildSketchArrayResult({
+          entities: state.document.entities,
+          draft: state.draft,
+          selectedIds: state.selection?.selectedIds ?? [],
+          arrayMode: state.ui.arrayMode,
+          targetPoint: state.draft.currentPoint,
+        }),
+        'Nothing in the selection can be arrayed',
+      );
+      return;
+    }
+
+    if (state.draft.type === 'mirror') {
+      commitSelectionCopyResult(
+        dispatch,
+        buildSketchMirrorResult({
+          entities: state.document.entities,
+          draft: state.draft,
+          selectedIds: state.selection?.selectedIds ?? [],
+          axisStart: state.draft.points?.[0],
+          axisEnd: state.draft.currentPoint,
+        }),
+        'Nothing in the selection can be mirrored',
+      );
+      return;
+    }
+
     if (state.draft.type === 'offset') {
       const nextEntity = buildOffsetEntityFromDraft(state.draft, state.document, targetLayerId);
       if (nextEntity) {
@@ -148,8 +209,10 @@ export default function useSketchDraftCommit(state, dispatch, draftPreview) {
     draftPreview,
     state.document,
     state.draft,
+    state.selection,
     state.ui.activeHardwareId,
     state.ui.activeLayerId,
+    state.ui.arrayMode,
     state.ui.isometricPlane,
     state.ui.viewMode,
   ]);

@@ -17,7 +17,7 @@ function baseEntity(entity) {
 }
 
 const sampleDocument = {
-  version: 1,
+  version: 3,
   id: 'doc-1',
   name: 'Untitled Sketch',
   units: 'mm',
@@ -30,7 +30,6 @@ const sampleDocument = {
     tags: [],
   },
   variables: [],
-  constraints: [],
   joints: [],
   layers: [
     baseLayer({

@@ -3,6 +3,7 @@ import {
   Outlet,
   RouterProvider,
   createBrowserRouter,
+  createHashRouter,
   useLocation,
   useNavigate,
   useNavigation,
@@ -83,7 +84,15 @@ export const routes = [
   },
 ];
 
-export const router = createBrowserRouter(routes);
+/*
+ * Inside the Electron shell the app is loaded straight off disk (file://),
+ * where there is no server to answer paths like /floorplan — history-based
+ * routing 404s the moment it needs the address bar. Hash routing keeps every
+ * "URL" inside index.html's fragment, which works identically from disk.
+ */
+const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:';
+
+export const router = (isFileProtocol ? createHashRouter : createBrowserRouter)(routes);
 
 export function AppRouter() {
   return <RouterProvider router={router} />;

@@ -88,4 +88,18 @@ describe('dowel joint type', () => {
       expect(result.error).toBeTruthy();
     });
   });
+
+  describe('fit clearance', () => {
+    it('is sized from hardware data, so a fit class adds nothing', () => {
+      const context = createMockContext();
+      const parameters = { dowelDiameter: 8, count: 2, spacing: 20, edgeOffset: 10, depth: 10 };
+      const loose = createMockJoint('dowel', { parameters, tolerance: { clearance: 0.2, fit: 'loose' } });
+
+      expect(geometryHelpers.getFemaleFitClearance(loose)).toBe(0);
+
+      const legacy = dowel.buildGeometry(createMockJoint('dowel', { parameters }), context, geometryHelpers);
+      const withFit = dowel.buildGeometry(loose, context, geometryHelpers);
+      expect(withFit.featureEntities).toHaveLength(legacy.featureEntities.length);
+    });
+  });
 });

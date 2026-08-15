@@ -84,4 +84,66 @@ describe('dado joint type', () => {
       expect(result.error).toBeTruthy();
     });
   });
+
+  describe('fit clearance', () => {
+    // The dado IS the female half: the fit clearance widens the slot and the
+    // source panel never moves. Deltas are TOTAL width, half per side.
+    const cases = [
+      ['standard', 0],
+      ['piston', 0.04],
+      ['glue', 0.1],
+      ['loose', 0.3],
+    ];
+
+    it.each(cases)('widens the slot by exactly the %s clearance', (fit, expectedDelta) => {
+      const parameters = { width: 50, depth: 6, inset: 0, offset: 0 };
+      const legacy = createMockJoint('dado', { parameters });
+      const withFit = createMockJoint('dado', { parameters, tolerance: { clearance: 0.2, fit } });
+      const context = createMockContext();
+
+      const legacyInterval = geometryHelpers.buildWidthOffsetInterval(
+        context,
+        parameters,
+        geometryHelpers.getFemaleFitClearance(legacy),
+      );
+      const fitInterval = geometryHelpers.buildWidthOffsetInterval(
+        context,
+        parameters,
+        geometryHelpers.getFemaleFitClearance(withFit),
+      );
+
+      expect(legacyInterval.length).toBeCloseTo(50, 9);
+      expect(fitInterval.length - legacyInterval.length).toBeCloseTo(expectedDelta, 9);
+      // Symmetric: the slot grows the same amount on each side of centre.
+      expect(fitInterval.center).toBeCloseTo(legacyInterval.center, 9);
+    });
+
+    it('honours a custom numeric clearance', () => {
+      const parameters = { width: 50, depth: 6, inset: 0, offset: 0 };
+      const joint = createMockJoint('dado', {
+        parameters,
+        tolerance: { clearance: 0.2, fit: 'custom', clearanceMm: 0.55 },
+      });
+      const context = createMockContext();
+      const interval = geometryHelpers.buildWidthOffsetInterval(
+        context,
+        parameters,
+        geometryHelpers.getFemaleFitClearance(joint),
+      );
+
+      expect(interval.length).toBeCloseTo(50.55, 9);
+    });
+
+    it('leaves a joint with no fit exactly where it was', () => {
+      const parameters = { width: 50, depth: 6, inset: 0, offset: 0 };
+      const noFit = createMockJoint('dado', { parameters, tolerance: { clearance: 0.2 } });
+      const context = createMockContext();
+
+      expect(geometryHelpers.getFemaleFitClearance(noFit)).toBe(0);
+      expect(
+        geometryHelpers.buildWidthOffsetInterval(context, parameters, geometryHelpers.getFemaleFitClearance(noFit))
+          .length,
+      ).toBeCloseTo(50, 9);
+    });
+  });
 });

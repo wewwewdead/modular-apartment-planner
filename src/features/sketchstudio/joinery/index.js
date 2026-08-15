@@ -1,9 +1,16 @@
 import { collectSnapSegmentsFromEntities } from '../utils/snapUtils';
 import {
+  JOINT_FIT_CLASSES,
+  JOINT_FIT_CLEARANCES_MM,
   JOINT_PARAMETER_DEPTH_MODES,
   JOINT_PLACEMENT_MODES,
   computeJointDefaultParameters,
+  describeJointFit,
+  getJointFitOptions,
+  normalizeJointFitClass,
+  resolveJointFitClearance,
   supportsAutoOverlapDepth,
+  supportsJointFitClearance,
 } from './jointDefaults';
 import { resolveJointGeometry } from './jointGeometryUtils';
 import { buildJoineryEntityMap, isJoineryRectGenerationSupported, resolveJoineryContext } from './jointResolvers';
@@ -26,22 +33,29 @@ import { getAllJointTypes, getJointTypeEntry } from './jointRegistry';
 
 export {
   cloneJoint,
+  describeJointFit,
   getAllJointTypes,
+  getJointFitOptions,
   getJointTypeDefinition,
   getJointTypeEntry,
   getJointTypeLabel,
   getJointTypeOptions,
   isJoineryRectGenerationSupported,
+  JOINT_FIT_CLASSES,
+  JOINT_FIT_CLEARANCES_MM,
   JOINT_PARAMETER_DEPTH_MODES,
   JOINT_PLACEMENT_MODES,
   listJointEntityIds,
   listJointTypeParameterFields,
   normalizeJoint,
   normalizeJointCollection,
+  normalizeJointFitClass,
   parseSerializedJointReference,
   patchJoint,
+  resolveJointFitClearance,
   serializeJointReference,
   supportsAutoOverlapDepth,
+  supportsJointFitClearance,
 };
 
 export function createSketchJoint(input = {}) {

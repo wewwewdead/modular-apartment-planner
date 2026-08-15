@@ -29,6 +29,11 @@ import { nestPartsOnSheets, DEFAULT_SHEET, DEFAULT_BLADE_KERF } from '../utils/n
 import { exportEntitiesToDxf, selectPartCutEntities } from './dxfExport';
 
 const SHEET_LAYER = 'SHEET';
+const GRAIN_LAYER = 'GRAIN';
+
+/** Grain arrow length as a fraction of the placement's short side. */
+const GRAIN_ARROW_SPAN_RATIO = 0.6;
+const GRAIN_ARROW_HEAD_RATIO = 0.16;
 
 /**
  * Slack for a fastener drilled exactly on a part edge. Big enough to absorb the
@@ -394,6 +399,53 @@ function buildSheetOutline(sheet, sheetIndex) {
 }
 
 /**
+ * Grain direction annotation for a grain-locked placement.
+ *
+ * Drawn on its own `GRAIN` layer as an arrow (shaft plus two barbs) through the
+ * placement centre, pointing along the part's grain AS PLACED. The layer is
+ * declared only when a file actually contains grain geometry, and every piece of
+ * it is marked `dxfKerfExempt` so no compensation or corner-relief pass can ever
+ * mistake it for a toolpath: the operator can switch the layer off and cut the
+ * file unchanged.
+ */
+function buildGrainArrowEntities(placement, placementIndex) {
+  if (!placement?.grainLocked) {
+    return [];
+  }
+
+  const width = toNumber(placement.placedWidth);
+  const height = toNumber(placement.placedHeight);
+  const span = Math.min(width, height) * GRAIN_ARROW_SPAN_RATIO;
+  if (!(span > 0)) {
+    return [];
+  }
+
+  const centerX = toNumber(placement.x) + width / 2;
+  const centerY = toNumber(placement.y) + height / 2;
+  const radians = (toNumber(placement.placedGrainAngleDeg) * Math.PI) / 180;
+  const dirX = Math.cos(radians);
+  const dirY = Math.sin(radians);
+  const half = span / 2;
+  const head = Math.max(span * GRAIN_ARROW_HEAD_RATIO, 0.5);
+
+  const tip = { x: centerX + dirX * half, y: centerY + dirY * half };
+  const tail = { x: centerX - dirX * half, y: centerY - dirY * half };
+  const barb = (sign) => ({
+    x: tip.x - head * (dirX * Math.SQRT1_2 - sign * dirY * Math.SQRT1_2),
+    y: tip.y - head * (dirY * Math.SQRT1_2 + sign * dirX * Math.SQRT1_2),
+  });
+
+  const meta = { dxfLayer: GRAIN_LAYER, dxfKerfExempt: true };
+  const id = `${placement.id || 'part'}-grain-${placementIndex + 1}`;
+
+  return [
+    { id: `${id}-shaft`, type: 'line', x1: tail.x, y1: tail.y, x2: tip.x, y2: tip.y, meta },
+    { id: `${id}-barb-a`, type: 'line', x1: barb(1).x, y1: barb(1).y, x2: tip.x, y2: tip.y, meta },
+    { id: `${id}-barb-b`, type: 'line', x1: barb(-1).x, y1: barb(-1).y, x2: tip.x, y2: tip.y, meta },
+  ];
+}
+
+/**
  * Last-resort outline for a placement whose source entity cannot be resolved
  * (row without ids, entity deleted after the BOM was built). Drawing the nested
  * footprint keeps the sheet layout complete instead of silently dropping a part.
@@ -448,6 +500,10 @@ function buildSheetEntities(sheet, sheetIndex, sourceEntities, copyCounters) {
     const partEntities = selectPartCutEntities(sourceEntities, partId);
     const box = partEntities.length ? getPartBox(partEntities) : null;
 
+    // Grain annotation is derived from the placement footprint, not the part
+    // geometry, so it is drawn even for a footprint-only fallback placement.
+    sheetEntities.push(...buildGrainArrowEntities(placement, placementIndex));
+
     if (!box) {
       const fallback = buildFootprintOutline(placement, placementIndex);
       if (fallback) {
@@ -485,9 +541,10 @@ export function buildNestedSheetFilename(sheetIndex, sheetCount = 0) {
  *
  * @param {Array} entities - sketch/manufacturing entities (post joinery resolve).
  * @param {Array} bomRows - grouped BOM rows, ideally carrying partId/entityIds.
- * @param {Object} options - { sheetSize, bladeKerf, kerf } where `bladeKerf` is
- *   the saw gap the optimizer leaves between parts and `kerf` is the same
- *   geometry compensation the single-file DXF export applies.
+ * @param {Object} options - { sheetSize, bladeKerf, kerf, dogbone } where
+ *   `bladeKerf` is the saw gap the optimizer leaves between parts, `kerf` is the
+ *   same geometry compensation the single-file DXF export applies, and `dogbone`
+ *   is the corner-relief setting, applied after kerf on the nested geometry.
  * @returns {Array<{ filename: string, content: string, skippedFasteners: number }>}
  *   empty when there is nothing sheet-nestable to cut. `skippedFasteners` counts
  *   the fasteners left off that sheet because their centre no longer lands on
@@ -518,6 +575,7 @@ export function exportNestedSheetsToDxf(entities, bomRows, options = {}) {
       filename: buildNestedSheetFilename(sheetIndex, sheets.length),
       content: exportEntitiesToDxf(built.entities, {
         kerf: options.kerf,
+        dogbone: options.dogbone,
         referenceEntities: sourceEntities,
       }),
       skippedFasteners: built.skippedFasteners,

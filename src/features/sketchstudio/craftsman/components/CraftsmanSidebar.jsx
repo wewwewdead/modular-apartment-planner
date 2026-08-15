@@ -4,6 +4,7 @@ import FastenerPanel, { isFastenerPanelVisible } from './FastenerPanel';
 import MaterialEditorPanel from './MaterialEditorPanel';
 import BomPanel from './BomPanel';
 import NestingPanel from './NestingPanel';
+import ShelfSagPanel, { isShelfSagPanelVisible } from './ShelfSagPanel';
 import JointPanel from './JointPanel';
 import ParametricPanel from './ParametricPanel';
 import AssemblyPanel from './AssemblyPanel';
@@ -88,7 +89,6 @@ function CraftsmanSidebar({
   selectedEntities,
   selectedIds,
   variables,
-  constraints,
   joints,
   jointDiagnostics,
   focusedJointId,
@@ -101,6 +101,7 @@ function CraftsmanSidebar({
   costByMaterial = {},
   onMaterialChange,
   onThicknessChange,
+  onGrainAngleChange,
   onVariablesChange,
   onJointAdd,
   onJointUpdate,
@@ -131,12 +132,23 @@ function CraftsmanSidebar({
           <MaterialPicker
             selectedMaterialId={materialSelection.selectedMaterialId}
             thickness={materialSelection.thickness}
+            grainAngle={materialSelection.grainAngle}
             selectionCount={materialSelection.selectionCount}
             isMixedMaterial={materialSelection.isMixedMaterial}
             isMixedThickness={materialSelection.isMixedThickness}
+            isMixedGrainAngle={materialSelection.isMixedGrainAngle}
             onMaterialChange={(materialId) => onMaterialChange(selectedIds, materialId)}
             onThicknessChange={(thickness) => onThicknessChange(selectedIds, thickness)}
+            onGrainAngleChange={
+              onGrainAngleChange ? (grainAngle) => onGrainAngleChange(selectedIds, grainAngle) : undefined
+            }
           />
+        </CollapsibleSection>
+      )}
+
+      {isShelfSagPanelVisible(selectedEntity) && (
+        <CollapsibleSection title="Shelf sag" defaultOpen={false}>
+          <ShelfSagPanel key={selectedEntity.id} entity={selectedEntity} />
         </CollapsibleSection>
       )}
 
@@ -203,12 +215,7 @@ function CraftsmanSidebar({
       </CollapsibleSection>
 
       <CollapsibleSection title="Parametric Variables" defaultOpen={false}>
-        <ParametricPanel
-          variables={variables || []}
-          entities={entities}
-          constraints={constraints || []}
-          onVariablesChange={onVariablesChange}
-        />
+        <ParametricPanel variables={variables || []} entities={entities} onVariablesChange={onVariablesChange} />
       </CollapsibleSection>
 
       <CollapsibleSection title="Assembly Instructions" defaultOpen={false}>

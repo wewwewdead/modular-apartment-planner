@@ -76,7 +76,13 @@ export default {
   },
 
   buildGeometry(joint, context, helpers) {
-    const interval = helpers.buildWidthOffsetInterval(context, joint.parameters);
+    // The dado IS the female half, so the fit clearance widens this slot and
+    // nothing on the source panel moves.
+    const interval = helpers.buildWidthOffsetInterval(
+      context,
+      joint.parameters,
+      helpers.getFemaleFitClearance?.(joint) ?? 0,
+    );
     if (!interval) {
       return { error: 'Dado dimensions do not fit within the available overlap.' };
     }

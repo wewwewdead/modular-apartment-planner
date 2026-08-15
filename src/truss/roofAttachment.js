@@ -82,9 +82,7 @@ export function resolveTrussSystemRoofAttachmentType(trussSystem, catalog) {
   return attachmentTypes.length === 1 ? attachmentTypes[0] : null;
 }
 
-// The roof covers what the top chords cover, overhangs included; a ceiling hung
-// from the same system stops at the bearings instead — see
-// deriveCeilingBoundaryFromTrussSystem.
+// The roof covers what the top chords cover, overhangs included.
 export function deriveRoofBoundaryFromTrussSystem(trussSystem, sourceSystemGeometry = null) {
   const systemGeometry = sourceSystemGeometry || (trussSystem ? buildTrussSystemGeometry(trussSystem) : null);
   const planAxes = resolveSystemPlanAxes(systemGeometry);

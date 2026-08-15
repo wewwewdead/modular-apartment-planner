@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { getEntityHandles } from '../utils/handleUtils';
-import { getEntityMeasurementRows, resolveSourceReferenceFromEntities } from '../utils/entityUtils';
+import { getEntityMeasurementRows, resolveLinearDimensionPoints } from '../utils/entityUtils';
 import { formatDimensionText, measureDistance } from '../utils/dimensionUtils';
 import { hasGroupedSelection as hasGroupedSelectionFromIndex } from '../utils/groupUtils';
 import { getSelectedProfileInfo } from '../utils/objectUtils';
@@ -39,9 +39,7 @@ export default function useSketchSelection(state, groupIndex = state.document.gr
       return getEntityMeasurementRows(selectedEntity);
     }
 
-    const sourceRefs = selectedEntity.meta?.sourceRefs ?? [];
-    const p1 = resolveSourceReferenceFromEntities(state.document.entities, sourceRefs[0], selectedEntity.p1);
-    const p2 = resolveSourceReferenceFromEntities(state.document.entities, sourceRefs[1], selectedEntity.p2);
+    const { p1, p2 } = resolveLinearDimensionPoints(selectedEntity, state.document.entities);
     return [
       ['Subtype', selectedEntity.subtype],
       ['Offset', selectedEntity.offset],

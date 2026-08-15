@@ -116,6 +116,8 @@ describe('detail assignment', () => {
       'stair',
       'door',
       'ceilingBoard',
+      'ceilingBoardPlywood',
+      'ceilingFramingTimber',
       'trussChord_timber',
       'trussChord_metal',
     ];

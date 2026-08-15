@@ -1,6 +1,13 @@
 /**
  * Shared test helpers for per-type joint tests.
+ *
+ * The geometry/validation stubs deliberately mirror the REAL helpers in
+ * jointGeometryUtils / jointValidationUtils where fit clearance is concerned, so
+ * a per-type test that asserts an exact geometry delta is asserting the same
+ * arithmetic the exporter runs.
  */
+
+import { resolveJointFitClearance } from '../../jointDefaults';
 
 export function createMockContext(overrides = {}) {
   return {
@@ -73,7 +80,11 @@ export const validationHelpers = {
   getFemaleAllowanceState(joint, context, parameters) {
     if (!context?.overlap) return null;
     const baseWidth = Math.min(Math.max(Number(parameters?.width) || 0, 0.5), context.overlap.length);
-    const femaleWidth = baseWidth + (Number(parameters?.offset) || 0) + (Number(joint?.tolerance?.clearance) || 0);
+    const femaleWidth =
+      baseWidth +
+      (Number(parameters?.offset) || 0) +
+      (Number(joint?.tolerance?.clearance) || 0) +
+      resolveJointFitClearance(joint?.type, joint?.tolerance);
     return { insetOverlap: context.overlap, baseWidth, femaleWidth, center: context.overlap.center };
   },
   buildRepeatedPatternResult(context, parameters, widthKey) {
@@ -100,12 +111,21 @@ export const geometryHelpers = {
   createCircleFeatureEntity(joint, part, role, center, diameter, depth, opKind, fabState, index = 0) {
     return { id: `feature-${joint.id}-${opKind}-${index}`, type: 'feature', shape: 'circle' };
   },
-  buildWidthOffsetInterval(context, parameters) {
+  getFemaleFitClearance(joint) {
+    return resolveJointFitClearance(joint?.type, joint?.tolerance);
+  },
+  buildWidthOffsetInterval(context, parameters, fitClearance = 0) {
     if (!context?.overlap) return null;
     const width = Math.min(Number(parameters?.width) || 0, context.overlap.length);
     if (width <= 0) return null;
-    const center = context.overlap.center + (Number(parameters?.offset) || 0);
-    return { start: center - width / 2, end: center + width / 2, length: width, center };
+    const center = context.overlap.center;
+    const effectiveWidth = width + (Number(parameters?.offset) || 0) + (Number(fitClearance) || 0);
+    return {
+      start: center - effectiveWidth / 2,
+      end: center + effectiveWidth / 2,
+      length: effectiveWidth,
+      center,
+    };
   },
   buildFemaleClearanceIntervals(joint, context) {
     if (!context?.overlap) return { nominalInterval: null, femaleInterval: null };
@@ -114,7 +134,7 @@ export const geometryHelpers = {
     const center = context.overlap.center;
     const nominalInterval = { start: center - width / 2, end: center + width / 2, length: width, center };
     const clearance = Number(joint.tolerance?.clearance) || 0;
-    const femaleWidth = width + clearance;
+    const femaleWidth = width + clearance + resolveJointFitClearance(joint?.type, joint?.tolerance);
     const femaleInterval = {
       start: center - femaleWidth / 2,
       end: center + femaleWidth / 2,

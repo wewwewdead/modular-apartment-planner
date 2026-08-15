@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { getFloorElevation } from '@/domain/floorModels';
 import BeamPreview from './BeamPreview';
+import CeilingBeamPickOverlay from './CeilingBeamPickOverlay';
+import CeilingPreview from './CeilingPreview';
 import ColumnPreview from './ColumnPreview';
 import DimensionPreview from './DimensionPreview';
 import DoorWindowPreview from './DoorWindowPreview';
@@ -24,6 +26,8 @@ const FloorPreviewLayer = memo(function FloorPreviewLayer({ toolState, activeToo
       <DimensionPreview toolState={toolState} activeTool={activeTool} />
       <WallPreview toolState={toolState} activeTool={activeTool} />
       <SlabPreview toolState={toolState} activeTool={activeTool} />
+      <CeilingPreview toolState={toolState} activeTool={activeTool} />
+      <CeilingBeamPickOverlay toolState={toolState} activeTool={activeTool} floor={floor} />
       <BeamPreview
         toolState={toolState}
         activeTool={activeTool}

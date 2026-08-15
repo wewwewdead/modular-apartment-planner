@@ -1,3 +1,4 @@
+import EntityRenderer from './EntityRenderer';
 import { getArcPath } from '../utils/arcUtils';
 import { buildDraftMeasurementAnnotations } from '../utils/draftMeasurementUtils';
 import { getRectDraftPreviewPolygonPoints } from '../utils/draftPreviewUtils';
@@ -234,6 +235,167 @@ function renderGenericEntityPreview(draftPreview) {
         >
           R{radius.toFixed(0)}
         </text>
+      </g>
+    );
+  }
+
+  // The span a trim click is about to delete, drawn in the warning colour so the
+  // ghost reads as "this goes", not "this stays".
+  if (draftPreview.type === 'trim-preview') {
+    const points = (draftPreview.points || []).map((point) => `${point.x},${point.y}`).join(' ');
+
+    if (!points) {
+      return null;
+    }
+
+    return (
+      <polyline
+        className="sketchStudioTrimPreview"
+        points={points}
+        fill="none"
+        stroke="var(--color-danger, #ff6b6b)"
+        strokeWidth={draftPreview.deletesEntity ? 5 : 4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={draftPreview.deletesEntity ? '6 4' : undefined}
+        opacity={0.85}
+        vectorEffect="non-scaling-stroke"
+      />
+    );
+  }
+
+  if (draftPreview.type === 'extend-preview') {
+    const points = (draftPreview.points || []).map((point) => `${point.x},${point.y}`).join(' ');
+
+    if (!points) {
+      return null;
+    }
+
+    return (
+      <g>
+        <polyline
+          className="sketchStudioExtendPreview"
+          points={points}
+          fill="none"
+          strokeDasharray="6 4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        {draftPreview.target ? (
+          <circle
+            className="sketchStudioDraftEntity"
+            cx={draftPreview.target.x}
+            cy={draftPreview.target.y}
+            r={4}
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+      </g>
+    );
+  }
+
+  if (draftPreview.type === 'chamfer-preview') {
+    const { point1, point2, cornerPoint, distance } = draftPreview;
+
+    if (!point1 || !point2) {
+      if (!cornerPoint) {
+        return null;
+      }
+
+      return (
+        <circle
+          className="sketchStudioDraftEntity"
+          cx={cornerPoint.x}
+          cy={cornerPoint.y}
+          r={8}
+          fill="rgba(59, 130, 246, 0.15)"
+          stroke="var(--color-accent, #3b82f6)"
+          vectorEffect="non-scaling-stroke"
+        />
+      );
+    }
+
+    const midX = (point1.x + point2.x) / 2;
+    const midY = (point1.y + point2.y) / 2;
+    const labelOffX = midX + (midX - cornerPoint.x) * 0.3;
+    const labelOffY = midY + (midY - cornerPoint.y) * 0.3;
+
+    return (
+      <g>
+        <circle
+          className="sketchStudioDraftEntity"
+          cx={cornerPoint.x}
+          cy={cornerPoint.y}
+          r={8}
+          fill="rgba(59, 130, 246, 0.15)"
+          stroke="var(--color-accent, #3b82f6)"
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          className="sketchStudioDraftEntity"
+          x1={point1.x}
+          y1={point1.y}
+          x2={point2.x}
+          y2={point2.y}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          className="sketchStudioDraftEntity"
+          x1={point1.x}
+          y1={point1.y}
+          x2={cornerPoint.x}
+          y2={cornerPoint.y}
+          strokeDasharray="4 2"
+          opacity={0.4}
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          className="sketchStudioDraftEntity"
+          x1={point2.x}
+          y1={point2.y}
+          x2={cornerPoint.x}
+          y2={cornerPoint.y}
+          strokeDasharray="4 2"
+          opacity={0.4}
+          vectorEffect="non-scaling-stroke"
+        />
+        <text
+          className="sketchStudioDimensionDraftText"
+          x={labelOffX}
+          y={labelOffY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          C{distance.toFixed(0)}
+        </text>
+      </g>
+    );
+  }
+
+  // Mirror and array ghosts are real entity shapes, so they go through the same
+  // renderer the committed geometry uses — just in the draft style.
+  if (draftPreview.type === 'ghost-entities') {
+    return (
+      <g>
+        {draftPreview.axis ? (
+          <line
+            className="sketchStudioDraftEntity"
+            x1={draftPreview.axis.start.x}
+            y1={draftPreview.axis.start.y}
+            x2={draftPreview.axis.end.x}
+            y2={draftPreview.axis.end.y}
+            strokeDasharray="8 4"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+        <EntityRenderer
+          entities={draftPreview.entities || []}
+          hoveredId={null}
+          selectedIds={[]}
+          baseClassName="sketchStudioDraftEntity"
+        />
       </g>
     );
   }

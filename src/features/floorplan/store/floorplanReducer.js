@@ -723,9 +723,9 @@ function reduceProjectState(state, action) {
               : trussSystem,
           );
 
-          // Truss-attached ceilings resolve their height from the truss system,
-          // which the shift above already moved — only manual ceilings store an
-          // absolute elevation that has to follow the floor.
+          // Beam-attached ceilings resolve their height from the beams they hang
+          // from, which the shift above already moved — only manual ceilings
+          // store an absolute elevation that has to follow the floor.
           const nextCeilings = (state.project.ceilings || []).map((ceiling) =>
             ceiling.floorId === action.floor.id && ceiling.attachment?.mode === 'manual'
               ? { ...ceiling, baseElevation: (ceiling.baseElevation ?? 0) + elevationDelta }

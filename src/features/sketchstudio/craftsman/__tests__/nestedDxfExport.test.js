@@ -345,6 +345,93 @@ describe('Nested sheet DXF export', () => {
     expect(readVertices(dxf).length).toBeGreaterThan(4);
   });
 
+  describe('grain-locked placements', () => {
+    it('keeps a 0-degree grain part as drawn instead of normalizing it landscape', () => {
+      // Same 300 x 600 portrait panel the landscape test uses - but grain
+      // locked, so the nested geometry must stay 300 x 600.
+      const entities = [{ id: 'r1', type: 'rect', x: 0, y: 0, width: 300, height: 600, materialId: 'ply' }];
+      const rows = [
+        sheetRow({ partId: 'r1', entityIds: ['r1'], width: 300, height: 600, hasGrain: true, grainAngle: 0 }),
+      ];
+
+      const files = exportNestedSheetsToDxf(entities, rows, { sheetSize: SHEET });
+      const part = boundsOf(readPolylineVertices(files[0].content, 1));
+
+      expect(part.maxX - part.minX).toBeCloseTo(300, 6);
+      expect(part.maxY - part.minY).toBeCloseTo(600, 6);
+    });
+
+    it('keeps the footprint-derived rotation coherent for a 90-degree grain part', () => {
+      // Grain across the sheet means the placement IS turned, and the rotation
+      // derivation (footprint comparison, not the optimizer's own flag) has to
+      // agree - the geometry must come out 600 x 300 with its hole carried along.
+      const entities = [
+        { id: 'r1', type: 'rect', x: 0, y: 0, width: 300, height: 600, materialId: 'ply' },
+        {
+          id: 'hole',
+          type: 'feature',
+          shape: 'circle',
+          operation: 'subtract',
+          cx: 50,
+          cy: 100,
+          diameter: 10,
+          meta: { manufacturingSourceEntityIds: ['r1'] },
+        },
+      ];
+      const rows = [
+        sheetRow({ partId: 'r1', entityIds: ['r1'], width: 300, height: 600, hasGrain: true, grainAngle: 90 }),
+      ];
+
+      const files = exportNestedSheetsToDxf(entities, rows, { sheetSize: SHEET });
+      const part = boundsOf(readPolylineVertices(files[0].content, 1));
+
+      expect(part.maxX - part.minX).toBeCloseTo(600, 6);
+      expect(part.maxY - part.minY).toBeCloseTo(300, 6);
+
+      // The hole rides the same quarter turn: sketch (50, 100) maps to (-100, 50)
+      // before translation, i.e. (500, 50) once the part is anchored at (0, 0).
+      const circle = findEntityPairs(files[0].content, 'CIRCLE');
+      expect(Number(circle.get('10'))).toBeCloseTo(500, 6);
+      expect(Number(circle.get('20'))).toBeCloseTo(-50, 6);
+    });
+
+    it('draws a grain arrow on its own non-cutting GRAIN layer', () => {
+      const entities = [{ id: 'r1', type: 'rect', x: 0, y: 0, width: 600, height: 300, materialId: 'ply' }];
+      const rows = [
+        sheetRow({ partId: 'r1', entityIds: ['r1'], width: 600, height: 300, hasGrain: true, grainAngle: 0 }),
+      ];
+
+      const content = exportNestedSheetsToDxf(entities, rows, { sheetSize: SHEET })[0].content;
+      const lines = splitDxfLines(content);
+
+      // Layer declared, and three LINEs (shaft plus two barbs) sit on it.
+      expect(content).toContain('GRAIN');
+      const grainLayerRefs = lines.filter((line, index) => line === 'GRAIN' && lines[index - 1] === '8');
+      expect(grainLayerRefs).toHaveLength(3);
+    });
+
+    it('adds no GRAIN layer at all when nothing is grain locked', () => {
+      const entities = [{ id: 'r1', type: 'rect', x: 0, y: 0, width: 600, height: 300, materialId: 'ply' }];
+      const rows = [sheetRow({ partId: 'r1', entityIds: ['r1'], width: 600, height: 300 })];
+
+      expect(exportNestedSheetsToDxf(entities, rows, { sheetSize: SHEET })[0].content).not.toContain('GRAIN');
+    });
+
+    it('leaves the grain arrow out of kerf compensation', () => {
+      const entities = [{ id: 'r1', type: 'rect', x: 0, y: 0, width: 600, height: 300, materialId: 'ply' }];
+      const rows = [
+        sheetRow({ partId: 'r1', entityIds: ['r1'], width: 600, height: 300, hasGrain: true, grainAngle: 0 }),
+      ];
+
+      const plain = exportNestedSheetsToDxf(entities, rows, { sheetSize: SHEET })[0].content;
+      const kerfed = exportNestedSheetsToDxf(entities, rows, { sheetSize: SHEET, kerf: 1 })[0].content;
+
+      const grainShaft = (dxf) => findEntityPairs(dxf, 'LINE');
+      expect(Number(grainShaft(kerfed).get('10'))).toBeCloseTo(Number(grainShaft(plain).get('10')), 9);
+      expect(Number(grainShaft(kerfed).get('11'))).toBeCloseTo(Number(grainShaft(plain).get('11')), 9);
+    });
+  });
+
   it('pads sheet filenames to at least two digits and grows past 99', () => {
     expect(buildNestedSheetFilename(0, 1)).toBe('sheet-01.dxf');
     expect(buildNestedSheetFilename(8, 9)).toBe('sheet-09.dxf');
