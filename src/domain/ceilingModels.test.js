@@ -10,6 +10,8 @@ import {
   createCeilingFace,
   createCeilingForProject,
   createCeilingFraming,
+  createCeilingLightFixture,
+  createCeilingLighting,
   createCeilingOpening,
   createCeilingSuspension,
   createCustomCeilingFramingMember,
@@ -19,6 +21,7 @@ import {
   deriveCeilingFasteners,
   deriveCeilingFramingMembers,
   deriveCeilingHangers,
+  deriveCeilingLightFixtures,
   deriveCeilingPanels,
   deriveCeilingTakeoff,
   getCeilingLocalSpace,
@@ -110,6 +113,7 @@ describe('ceiling factories', () => {
     });
     expect(detailing.suspension).toEqual({ drop: 150, hangerSpacing: 1200 });
     expect(detailing.openings).toEqual([]);
+    expect(detailing.lighting).toEqual({ fixtures: [] });
   });
 
   it('rejects invalid enum values and non-finite numbers', () => {
@@ -230,6 +234,85 @@ describe('ceiling factories', () => {
     expect(createCeilingFace({ enabled: false }).enabled).toBe(false);
     expect(createCeilingFraming({ material: 'timber' }).material).toBe('timber');
     expect(createCeilingSuspension({ drop: 400 }).drop).toBe(400);
+  });
+
+  it('fills a light fixture from the catalog defaults', () => {
+    const fixture = createCeilingLightFixture({ u: 1200, v: 800 });
+    expect(fixture.id.startsWith('ceil_light_')).toBe(true);
+    expect(fixture).toMatchObject({
+      u: 1200,
+      v: 800,
+      fixtureType: 'recessed_can_6',
+      bulbType: 'br30',
+      colorTempK: 2700,
+      lumensOverride: null,
+      beamAngleDeg: null,
+      dropMm: 0,
+      castShadow: true,
+      label: '',
+    });
+    expect(fixture.aim).toEqual({ tiltDeg: 0, azimuthDeg: 0 });
+    expect(createCeilingLightFixture({ u: 'left', v: null })).toMatchObject({ u: 0, v: 0 });
+  });
+
+  it('refuses a fixture spec that cannot be built', () => {
+    // A wafer has no socket for an A19, so the fixture's own lamp answers.
+    expect(createCeilingLightFixture({}, { fixtureType: 'wafer_led', bulbType: 'a19' }).bulbType).toBe('led_disk');
+    expect(createCeilingLightFixture({}, { fixtureType: 'chandelier_12' })).toMatchObject({
+      fixtureType: 'recessed_can_6',
+      bulbType: 'br30',
+    });
+    // 2750 K is not a temperature anyone sells; the lamp's own is.
+    expect(createCeilingLightFixture({}, { fixtureType: 'track_head', colorTempK: 2750 }).colorTempK).toBe(3000);
+    expect(createCeilingLightFixture({}, { lumensOverride: 0 }).lumensOverride).toBeNull();
+    expect(createCeilingLightFixture({}, { lumensOverride: '1450' }).lumensOverride).toBe(1450);
+    expect(createCeilingLightFixture({}, { beamAngleDeg: 2 }).beamAngleDeg).toBe(10);
+    expect(createCeilingLightFixture({}, { beamAngleDeg: 400 }).beamAngleDeg).toBe(160);
+    expect(createCeilingLightFixture({}, { beamAngleDeg: 'wide' }).beamAngleDeg).toBeNull();
+    expect(createCeilingLightFixture({}, { castShadow: false }).castShadow).toBe(false);
+  });
+
+  it('clamps aim to what the fixture can actually do', () => {
+    // A gimbal stops at 40°; a fixed can never leaves straight down.
+    expect(createCeilingLightFixture({}, { fixtureType: 'gimbal_recessed', aim: { tiltDeg: 70 } }).aim.tiltDeg).toBe(
+      40,
+    );
+    expect(createCeilingLightFixture({}, { fixtureType: 'gimbal_recessed', aim: { tiltDeg: -5 } }).aim.tiltDeg).toBe(0);
+    expect(createCeilingLightFixture({}, { fixtureType: 'recessed_can_6', aim: { tiltDeg: 30 } }).aim.tiltDeg).toBe(0);
+    expect(createCeilingLightFixture({}, { aim: { azimuthDeg: 450 } }).aim.azimuthDeg).toBe(90);
+    expect(createCeilingLightFixture({}, { aim: { azimuthDeg: -90 } }).aim.azimuthDeg).toBe(270);
+  });
+
+  it('takes the drop from the fixture type, and only where something hangs', () => {
+    expect(createCeilingLightFixture({}, { fixtureType: 'pendant' }).dropMm).toBe(900);
+    expect(createCeilingLightFixture({}, { fixtureType: 'chandelier_5' }).dropMm).toBe(600);
+    expect(createCeilingLightFixture({}, { fixtureType: 'semi_flush' }).dropMm).toBe(300);
+    expect(createCeilingLightFixture({}, { fixtureType: 'pendant', dropMm: 1500 }).dropMm).toBe(1500);
+    expect(createCeilingLightFixture({}, { fixtureType: 'pendant', dropMm: -200 }).dropMm).toBe(900);
+    expect(createCeilingLightFixture({}, { fixtureType: 'recessed_can_4' }).dropMm).toBe(0);
+  });
+
+  it('keeps fixtures through the detailing normalizer, which every edit round-trips', () => {
+    const stored = {
+      id: 'ceil_light_1',
+      u: 1200,
+      v: 800,
+      fixtureType: 'pendant',
+      bulbType: 'st19',
+      colorTempK: 2200,
+      dropMm: 1200,
+      label: 'L-1',
+    };
+    const once = createCeilingDetailing({ lighting: { fixtures: [stored] } });
+    // createCeilingDetailing whitelists: a key it does not copy is a key the
+    // user loses on their next commit, not one that merely goes unread.
+    const twice = createCeilingDetailing(once);
+
+    expect(once.lighting.fixtures).toHaveLength(1);
+    expect(twice.lighting).toEqual(once.lighting);
+    expect(twice.lighting.fixtures[0]).toMatchObject({ ...stored, lumensOverride: null, beamAngleDeg: null });
+    expect(createCeilingLighting().fixtures).toEqual([]);
+    expect(createCeilingLighting({ fixtures: 'none' }).fixtures).toEqual([]);
   });
 });
 
@@ -754,6 +837,64 @@ describe('ceiling panels', () => {
   });
 });
 
+/**
+ * Half a ceiling in fiber cement and the rest in plywood is one ceiling with two
+ * board materials, so a board may name its own. Only a board that says so
+ * differs: everything else is the profile's material, and a generated grid is
+ * all of it.
+ */
+describe('per-board ceiling materials', () => {
+  const MIXED_PANELS = [
+    { id: 'left', u: 0, v: 0, width: 1200, height: 2400, material: 'plywood' },
+    { id: 'right', u: 1300, v: 0, width: 1200, height: 2400 },
+  ];
+
+  function mixedCeiling(overrides = {}) {
+    return rectCeiling({
+      detailing: { face: { layout: { mode: 'custom', customPanels: MIXED_PANELS }, ...overrides } },
+    });
+  }
+
+  it('keeps a stored override only when it names a material the profile system knows', () => {
+    const face = createCeilingFace({
+      layout: {
+        mode: 'custom',
+        customPanels: [
+          { id: 'a', material: 'plywood' },
+          { id: 'b', material: 'unobtanium' },
+          { id: 'c', material: undefined },
+          { id: 'd' },
+        ],
+      },
+    });
+
+    expect(face.layout.customPanels[0].material).toBe('plywood');
+    // Absent is the only way to say "inherit", so an unknown or cleared value
+    // leaves no key behind for the derivation to trip over.
+    for (const index of [1, 2, 3]) expect('material' in face.layout.customPanels[index]).toBe(false);
+  });
+
+  it('gives an overridden board its own material and the rest the profile default', () => {
+    const panels = deriveCeilingPanels(mixedCeiling(), null);
+
+    expect(panels.map((panel) => panel.material)).toEqual(['plywood', 'fiber_cement']);
+  });
+
+  it('boards a generated grid entirely in the profile material', () => {
+    const plywoodCeiling = rectCeiling({ detailing: { face: { productProfileId: 'generic-plywood-ceiling-v1' } } });
+
+    expect(deriveCeilingPanels(rectCeiling(), null).every((panel) => panel.material === 'fiber_cement')).toBe(true);
+    expect(deriveCeilingPanels(plywoodCeiling, null).every((panel) => panel.material === 'plywood')).toBe(true);
+  });
+
+  it('follows the profile with the boards that never overrode it', () => {
+    const panels = deriveCeilingPanels(mixedCeiling({ productProfileId: 'generic-plywood-ceiling-v1' }), null);
+
+    // The override was already plywood, so only the inheriting board moves.
+    expect(panels.map((panel) => panel.material)).toEqual(['plywood', 'plywood']);
+  });
+});
+
 describe('ceiling framing', () => {
   it('runs furring across U and carriers along V with a wall angle per boundary edge', () => {
     const members = deriveCeilingFramingMembers(rectCeiling(), null);
@@ -945,6 +1086,63 @@ describe('ceiling fasteners', () => {
   });
 });
 
+describe('derived ceiling lighting', () => {
+  function litCeiling(fixtures, options = {}) {
+    return rectCeiling({ ...options, detailing: { ...options.detailing, lighting: { fixtures } } });
+  }
+
+  it('puts a fixture in plan and on the board underside', () => {
+    const ceiling = litCeiling([{ id: 'l1', u: 1200, v: 800 }]);
+    const [fixture] = deriveCeilingLightFixtures(ceiling, null);
+
+    // Local V is mirrored against plan y, so v 800 on a 4000-deep ceiling is
+    // y 3200 — the same frame the RCP draws in.
+    expect(fixture.plan).toEqual({ x: 1200, y: 3200 });
+    expect(fixture.elevations).toEqual({ mountPlane: 2700, bulb: 2700 });
+    expect(fixture.elevations.mountPlane).toBe(resolveCeilingElevations(null, ceiling).boardUnderside);
+    expect(fixture.photometrics).toEqual({ lumens: 650, watts: 9, beamAngleDeg: 110, colorTempK: 2700 });
+    expect(fixture.id).toBe('l1');
+  });
+
+  it('hangs a pendant below the plane it is fixed to', () => {
+    const [pendant] = deriveCeilingLightFixtures(
+      litCeiling([{ id: 'l1', u: 1200, v: 800, fixtureType: 'pendant', dropMm: 900 }]),
+      null,
+    );
+    expect(pendant.elevations).toEqual({ mountPlane: 2700, bulb: 1800 });
+
+    // A recessed can stores no drop, and would ignore one anyway.
+    const [can] = deriveCeilingLightFixtures(litCeiling([{ id: 'l2', u: 100, v: 100, dropMm: 700 }]), null);
+    expect(can.elevations.bulb).toBe(2700);
+  });
+
+  it('clamps a fixture the ceiling shrank away from', () => {
+    const [fixture] = deriveCeilingLightFixtures(litCeiling([{ id: 'l1', u: 9000, v: -500 }]), null);
+    expect(fixture.u).toBe(6000);
+    expect(fixture.v).toBe(0);
+    expect(fixture.plan).toEqual({ x: 6000, y: 4000 });
+  });
+
+  it('reads the beam-hung board underside as the mount plane', () => {
+    const project = { floors: [{ id: 'floor_1', elevation: 0, columns: RING_COLUMNS, beams: beamRing(3200) }] };
+    const ceiling = litCeiling([{ id: 'l1', u: 1000, v: 1000 }], {
+      floorId: 'floor_1',
+      attachment: { mode: 'beam', beamIds: ['beam_s', 'beam_n'] },
+    });
+    const [fixture] = deriveCeilingLightFixtures(ceiling, project);
+    expect(fixture.elevations.mountPlane).toBe(3050);
+  });
+
+  it('draws nothing when the detailing is off', () => {
+    expect(
+      deriveCeilingLightFixtures(litCeiling([{ id: 'l1', u: 100, v: 100 }], { detailing: {} }), null),
+    ).toHaveLength(1);
+    const off = rectCeiling({ detailing: { enabled: false, lighting: { fixtures: [{ id: 'l1', u: 100, v: 100 }] } } });
+    expect(deriveCeilingLightFixtures(off, null)).toEqual([]);
+    expect(deriveCeilingLightFixtures(rectCeiling(), null)).toEqual([]);
+  });
+});
+
 describe('ceiling takeoff and detail', () => {
   it('sums panels, framing and hangers', () => {
     const ceiling = rectCeiling();
@@ -965,6 +1163,83 @@ describe('ceiling takeoff and detail', () => {
     expect(takeoff.hangerCount).toBe(30);
   });
 
+  it('splits the boards by material, in the order the drawing uses them', () => {
+    const ceiling = rectCeiling({
+      detailing: {
+        face: {
+          layout: {
+            mode: 'custom',
+            customPanels: [
+              { id: 'left', u: 0, v: 0, width: 1200, height: 600, material: 'plywood' },
+              { id: 'middle', u: 1300, v: 0, width: 1200, height: 600 },
+              { id: 'right', u: 2600, v: 0, width: 1200, height: 600, material: 'plywood' },
+            ],
+          },
+        },
+      },
+    });
+    const takeoff = deriveCeilingTakeoff(ceiling, null);
+    const board = 1200 * 600;
+
+    // First appearance orders the list: the plywood board is drawn first.
+    expect(takeoff.materials.map((entry) => entry.material)).toEqual(['plywood', 'fiber_cement']);
+    expect(takeoff.materials[0]).toMatchObject({ panelCount: 2, stockSheetCount: 1 });
+    expect(takeoff.materials[0].installedAreaMm2).toBeCloseTo(2 * board, 3);
+    expect(takeoff.materials[1]).toMatchObject({ panelCount: 1, stockSheetCount: 1 });
+    expect(takeoff.materials[1].installedAreaMm2).toBeCloseTo(board, 3);
+
+    // The totals are untouched: they still count the whole ceiling. Two
+    // materials cost two sheets where one ceiling of the same area cost one,
+    // which is exactly why the split is reported.
+    expect(takeoff.panelCount).toBe(3);
+    expect(takeoff.installedAreaMm2).toBeCloseTo(3 * board, 3);
+    expect(takeoff.stockSheetCount).toBe(Math.ceil((3 * board) / (1219 * 2438)));
+    expect(takeoff.stockSheetCount).toBe(1);
+  });
+
+  it('reports one material for a ceiling boarded in one material, and none for no boards', () => {
+    expect(deriveCeilingTakeoff(rectCeiling(), null).materials).toEqual([
+      {
+        material: 'fiber_cement',
+        panelCount: 10,
+        installedAreaMm2: deriveCeilingTakeoff(rectCeiling(), null).installedAreaMm2,
+        stockSheetCount: deriveCeilingTakeoff(rectCeiling(), null).stockSheetCount,
+      },
+    ]);
+    expect(deriveCeilingTakeoff(rectCeiling({ detailing: { face: { enabled: false } } }), null).materials).toEqual([]);
+  });
+
+  it('counts the lighting by fixture and lamp together', () => {
+    const ceiling = rectCeiling({
+      detailing: {
+        lighting: {
+          fixtures: [
+            { id: 'l1', u: 1000, v: 1000 },
+            { id: 'l2', u: 3000, v: 1000, fixtureType: 'pendant' },
+            { id: 'l3', u: 5000, v: 1000 },
+          ],
+        },
+      },
+    });
+    const takeoff = deriveCeilingTakeoff(ceiling, null);
+
+    expect(takeoff.lighting.fixtureCount).toBe(3);
+    expect(takeoff.lighting.totalLumens).toBe(2 * 650 + 800);
+    expect(takeoff.lighting.totalWatts).toBe(2 * 9 + 9);
+    // First appearance orders the list, the same way the board materials do.
+    expect(takeoff.lighting.byType).toEqual([
+      { fixtureType: 'recessed_can_6', bulbType: 'br30', count: 2, totalLumens: 1300, totalWatts: 18 },
+      { fixtureType: 'pendant', bulbType: 'a19', count: 1, totalLumens: 800, totalWatts: 9 },
+    ]);
+
+    expect(deriveCeilingTakeoff(rectCeiling(), null).lighting).toEqual({
+      fixtureCount: 0,
+      totalLumens: 0,
+      totalWatts: 0,
+      byType: [],
+    });
+  });
+
   it('reports a disabled takeoff without dropping the geometry keys', () => {
     const takeoff = deriveCeilingTakeoff(rectCeiling({ detailing: { face: { enabled: false } } }), null);
     expect(takeoff.enabled).toBe(false);
@@ -975,7 +1250,10 @@ describe('ceiling takeoff and detail', () => {
 
   it('assembles the full ceiling detail bundle', () => {
     const ceiling = rectCeiling({
-      detailing: { openings: [{ id: 'hatch', u: 1000, v: 1000, width: 600, height: 600 }] },
+      detailing: {
+        openings: [{ id: 'hatch', u: 1000, v: 1000, width: 600, height: 600 }],
+        lighting: { fixtures: [{ id: 'l1', u: 2000, v: 2000 }] },
+      },
     });
     const detail = deriveCeilingDetail(ceiling, null);
 
@@ -994,6 +1272,9 @@ describe('ceiling takeoff and detail', () => {
     expect(detail.framing).toEqual(deriveCeilingFramingMembers(ceiling, null));
     expect(detail.hangers).toEqual(deriveCeilingHangers(ceiling, null));
     expect(detail.fasteners.length).toBe(detail.takeoff.fastenerCount);
+    expect(detail.lightFixtures).toEqual(deriveCeilingLightFixtures(ceiling, null));
+    expect(detail.lightFixtures[0]).toMatchObject({ id: 'l1', plan: { x: 2000, y: 2000 } });
+    expect(detail.takeoff.lighting.fixtureCount).toBe(1);
     expect(detail.elevations.boardUnderside).toBe(2700);
   });
 });

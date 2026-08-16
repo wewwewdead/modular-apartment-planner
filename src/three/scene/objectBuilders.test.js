@@ -160,8 +160,8 @@ describe('buildFloorPreviewObjects', () => {
     expect(descriptors.some((entry) => entry.metadata.wallDetailKind === 'panel')).toBe(true);
     expect(descriptors.some((entry) => entry.metadata.wallDetailKind === 'framing')).toBe(true);
     expect(descriptors.some((entry) => entry.metadata.wallDetailKind === 'fastener')).toBe(true);
-    expect(descriptors.some((entry) => entry.geometry === 'wallFastener')).toBe(true);
-    expect(descriptors.find((entry) => entry.geometry === 'wallFastener')).toMatchObject({
+    expect(descriptors.some((entry) => entry.geometry === 'fastener')).toBe(true);
+    expect(descriptors.find((entry) => entry.geometry === 'fastener')).toMatchObject({
       radius: 4,
       depth: 1.5,
       materialKey: 'wallFiberCement',
@@ -194,7 +194,7 @@ describe('buildFloorPreviewObjects', () => {
     floor.walls = [wall];
 
     const panel = buildFloorPreviewObjects(floor).find(
-      (entry) => entry.metadata.wallDetailElementId === `${wall.id}:exterior:panel:left-facade-panel`,
+      (entry) => entry.metadata.wallDetailElementId === 'left-facade-panel',
     );
 
     expect(panel).toMatchObject({
@@ -264,7 +264,9 @@ describe('buildFloorPreviewObjects', () => {
     expect(panels).toHaveLength(1);
     expect(panels[0]).toMatchObject({
       size: { x: 900, y: 1200 },
-      metadata: { wallDetailElementId: `${wall.id}:interior:panel:custom-panel` },
+      // The bare panel id, like framing and fasteners below: this is what the
+      // wall editor selects by, and the 3D highlight is driven off its selection.
+      metadata: { wallDetailElementId: 'custom-panel', assemblySide: 'interior' },
     });
     expect(framing).toHaveLength(1);
     expect(framing[0].metadata.wallDetailElementId).toBe('custom-stud');
@@ -284,7 +286,7 @@ describe('buildFloorPreviewObjects', () => {
       },
     ];
     const traced = buildFloorPreviewObjects(nextFloor).find(
-      (entry) => entry.metadata.wallDetailElementId === `${wall.id}:interior:panel:traced-panel`,
+      (entry) => entry.metadata.wallDetailElementId === 'traced-panel',
     );
     expect(traced).toMatchObject({ geometry: 'wallPanel', depth: 6 });
     expect(traced.outline).toHaveLength(5);

@@ -56,6 +56,9 @@ export function buildPreviewScene(project, options = {}) {
   const floors = getOrderedFloors(project);
   // { wallId: ['interior', ...] } of board faces stripped for frame inspection.
   const hiddenBoardSides = new Map(Object.entries(options.hiddenWallBoards || {}).filter(([, sides]) => sides?.length));
+  // Full assembly detail — currently the ceiling's screws — is what an assembly
+  // editor's own pane asks for and what a whole-building view must not pay for.
+  const assemblyDetail = Boolean(options.assemblyDetail);
   const activeFloorId = getDefaultActiveFloorId(project, options.activeFloorId);
   const activeFloor = floors.find((floor) => floor.id === activeFloorId) || null;
   const topFloor = floors[floors.length - 1] || null;
@@ -74,7 +77,9 @@ export function buildPreviewScene(project, options = {}) {
     const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
     const floorCeilings = (project?.ceilings || []).filter((ceiling) => ceiling.floorId === floor.id);
-    const ceilingObjects = floorCeilings.flatMap((ceiling) => buildCeilingPreviewObjects(ceiling, project));
+    const ceilingObjects = floorCeilings.flatMap((ceiling) =>
+      buildCeilingPreviewObjects(ceiling, project, { fasteners: assemblyDetail }),
+    );
     const systemObjects = buildFloorSystemsPreviewObjects(floor, project?.building?.systems || {});
     const objects = [
       ...buildFloorPreviewObjects(floor, { stairContexts, hiddenBoardSides }),
@@ -109,6 +114,9 @@ export function buildPreviewScene(project, options = {}) {
       sourceKey: {
         floor,
         strippedHere,
+        // Part of the identity, not a render-time flag: turning screws on has to
+        // re-triangulate the ceilings, and a cached floor would swallow it.
+        assemblyDetail,
         systems: project?.building?.systems,
         trussSystems: floorTrussSystems,
         ceilings: floorCeilings,

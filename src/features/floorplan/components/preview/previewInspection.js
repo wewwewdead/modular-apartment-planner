@@ -1,5 +1,14 @@
 import { formatMeasurement } from '@/annotations/format';
 import { getBeamDisplayLabel } from '@/domain/beamLabels';
+import {
+  CEILING_ATTACHMENT_MODES,
+  getCeilingLocalSpace,
+  getProjectCeiling,
+  resolveCeilingBeamSupports,
+  resolveCeilingBoundary,
+  resolveCeilingDetailing,
+  resolveCeilingElevations,
+} from '@/domain/ceilingModels';
 import { getColumnListLabel } from '@/domain/columnLabels';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { getLandingDisplayLabel } from '@/domain/landingLabels';
@@ -8,6 +17,7 @@ import { getStairDisplayLabel } from '@/domain/stairLabels';
 import { getRoofTypeLabel, roofPitchDirectionToAngle } from '@/domain/roofModels';
 import { resolveTrussType } from '@/domain/trussModels';
 import { beamLength } from '@/geometry/beamGeometry';
+import { polygonArea } from '@/geometry/polygon';
 import { getTrussSystemPurlinTotalLength } from '@/geometry/trussGeometry';
 import { findRoofOpeningById, normalizeRoofOpeningType } from '@/roof/openings';
 import { resolveParapetLine } from '@/geometry/roofPlanGeometry';
@@ -34,6 +44,7 @@ const INSPECTABLE_TYPES = new Set([
   'roofOpening',
   'trussSystem',
   'trussInstance',
+  'ceiling',
 ]);
 
 const TYPE_LABELS = {
@@ -54,6 +65,7 @@ const TYPE_LABELS = {
   roofOpening: 'Roof Opening',
   trussSystem: 'Truss System',
   trussInstance: 'Truss Instance',
+  ceiling: 'Ceiling',
 };
 
 const FIXTURE_TYPE_LABELS = {
@@ -380,6 +392,37 @@ function rowsForObject(selectedType, object, floor, roofSystem = null) {
   }
 }
 
+/**
+ * Ceilings are project-level and need the whole project to answer for
+ * themselves — the boundary and the hung elevation are both resolved through
+ * the beams they hang from — so they get their own row builder rather than a
+ * case in `rowsForObject`. The heavy derivations (panels, fasteners, hangers)
+ * are deliberately not touched: this is a readout, not a takeoff.
+ */
+function ceilingRows(project, ceiling) {
+  const boundary = resolveCeilingBoundary(project, ceiling);
+  const space = getCeilingLocalSpace(boundary);
+  const elevations = resolveCeilingElevations(project, ceiling);
+  const detailing = resolveCeilingDetailing(ceiling);
+  const fixtureCount = detailing.lighting.fixtures.length;
+
+  return [
+    mmRow('Length', space.length),
+    mmRow('Depth', space.depth),
+    areaRow('Area', polygonArea(boundary)),
+    mmRow('Board Underside', elevations.boardUnderside),
+    {
+      label: 'Attachment',
+      value:
+        ceiling.attachment?.mode === CEILING_ATTACHMENT_MODES.BEAM
+          ? `Beam (${resolveCeilingBeamSupports(project, ceiling).length} supports)`
+          : 'Manual datum',
+    },
+    { label: 'Boards', value: detailing.face.enabled ? 'Boarded' : 'Not boarded' },
+    ...(fixtureCount ? [{ label: 'Light Fixtures', value: String(fixtureCount) }] : []),
+  ];
+}
+
 export function isPreviewInspectableType(selectedType) {
   return INSPECTABLE_TYPES.has(selectedType);
 }
@@ -414,6 +457,23 @@ export function getPreviewInspection(project, selectedType, selectedId) {
       title: titleForObject(selectedType, roofObject, topFloor || { columns: [] }),
       subtitle: `${project?.roofSystem?.name || 'Roof'} · ${TYPE_LABELS[selectedType]}`,
       rows: rowsForObject(selectedType, roofObject, topFloor || { columns: [] }, project?.roofSystem || null),
+    };
+  }
+
+  const ceiling = selectedType === 'ceiling' ? getProjectCeiling(project, selectedId) : null;
+  if (ceiling) {
+    // The ceiling names its own floor, and the panel keys visibility off that id
+    // — a ceiling on a hidden storey must not report from behind it.
+    const ceilingFloor = (project?.floors || []).find((entry) => entry.id === ceiling.floorId) || null;
+
+    return {
+      id: selectedId,
+      type: selectedType,
+      floorId: ceiling.floorId,
+      floorName: ceilingFloor?.name || 'Ceiling',
+      title: ceiling.name || 'Ceiling',
+      subtitle: `${ceilingFloor?.name || 'Ceiling'} · ${TYPE_LABELS[selectedType]}`,
+      rows: ceilingRows(project, ceiling),
     };
   }
 

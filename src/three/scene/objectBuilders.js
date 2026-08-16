@@ -327,7 +327,9 @@ function buildDetailedWallObjects(context, assembly, layers) {
                 assemblySide: layer.side,
                 boardMaterial: layer.material,
                 wallDetailKind: 'panel',
-                wallDetailElementId: panel.id,
+                // The bare id the wall editor selects by, not the wall-and-side
+                // qualified one, so its selection can drive the highlight here.
+                wallDetailElementId: panel.localId,
                 panelLabel: panel.label,
                 panelRegionIndex: regionIndex,
               }),
@@ -351,7 +353,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
               assemblySide: layer.side,
               boardMaterial: layer.material,
               wallDetailKind: 'panel',
-              wallDetailElementId: panel.id,
+              wallDetailElementId: panel.localId,
               panelLabel: panel.label,
               panelFragmentIndex: fragmentIndex,
             }),
@@ -380,7 +382,7 @@ function buildDetailedWallObjects(context, assembly, layers) {
           fastenerType: fastener.type,
         }),
       );
-      descriptor.geometry = 'wallFastener';
+      descriptor.geometry = 'fastener';
       descriptor.radius = fastenerRadius;
       descriptor.depth = fastenerDepth;
       descriptors.push(descriptor);

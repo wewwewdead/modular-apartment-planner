@@ -4,6 +4,7 @@ import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useConfirmDialog } from '@/ui/ConfirmDialog';
 import { BUILDING_COMMANDS } from '@/domain/buildingCommands';
 import { FILLET_DEFAULT_RADIUS, FILLET_MIN_RADIUS, FILLET_MAX_RADIUS } from '@/domain/defaults';
+import { getProjectCeiling } from '@/domain/ceilingModels';
 import { getOrderedFloors } from '@/domain/floorModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { findTrussInstance, getProjectTrussSystems } from '@/domain/trussModels';
@@ -29,6 +30,7 @@ import ElectricalProperties from './properties/ElectricalProperties';
 import RoomProperties from './properties/RoomProperties';
 import SlabProperties from './properties/SlabProperties';
 import BeamProperties from './properties/BeamProperties';
+import CeilingProperties from './properties/CeilingProperties';
 import DimensionProperties from './properties/DimensionProperties';
 import StairProperties from './properties/StairProperties';
 import LandingProperties from './properties/LandingProperties';
@@ -62,6 +64,7 @@ const OBJECT_NOUNS = {
   landing: 'landing',
   railing: 'railing',
   fixture: 'fixture',
+  ceiling: 'ceiling',
   annotation: 'dimension',
   sectionCut: 'section cut',
   electricalDevice: 'outlet',
@@ -222,6 +225,8 @@ export default function PropertiesPanel() {
       dispatch({ type: 'FIXTURE_DELETE', floorId: activeFloorId, fixtureId: selectedId });
     } else if (selectedType === 'railing') {
       dispatch({ type: 'RAILING_DELETE', floorId: activeFloorId, railingId: selectedId });
+    } else if (selectedType === 'ceiling') {
+      dispatch({ type: 'CEILING_DELETE', ceilingId: selectedId });
     } else if (selectedType === 'room') {
       dispatch({ type: 'ROOM_DELETE', floorId: activeFloorId, roomId: selectedId });
     } else if (selectedType === 'roofSystem') {
@@ -433,6 +438,22 @@ export default function PropertiesPanel() {
       const panel = (project.building?.systems?.electrical?.panelZones || []).find((entry) => entry.id === selectedId);
       if (panel)
         content = <BuildingServiceProperties entity={panel} serviceType={selectedType} dispatch={dispatch} u={u} />;
+    } else if (selectedType === 'ceiling') {
+      // Ceilings hang off the project, not the floor, and carry the floor they
+      // belong to — which is not necessarily the one being edited.
+      const ceiling = getProjectCeiling(project, selectedId);
+      if (ceiling) {
+        content = (
+          <CeilingProperties
+            ceiling={ceiling}
+            project={project}
+            floor={orderedFloors.find((entry) => entry.id === ceiling.floorId) || null}
+            dispatch={dispatch}
+            editorDispatch={editorDispatch}
+            u={u}
+          />
+        );
+      }
     } else if (selectedType === 'floor') {
       const selectedFloor = orderedFloors.find((entry) => entry.id === selectedId) || floor;
       content = (

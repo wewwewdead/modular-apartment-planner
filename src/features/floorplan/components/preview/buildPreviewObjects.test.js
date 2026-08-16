@@ -3,13 +3,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock THREE.js — we test logic, not WebGL
 vi.mock('three', () => {
   class MockColor {
-    constructor(hex) {
+    constructor(hex, green, blue) {
       this.hex = hex;
+      // Three accepts either a packed hex or three channels; the luminaire
+      // materials are built from a lamp's measured RGB, so keep both readings.
+      if (green !== undefined) {
+        this.r = hex;
+        this.g = green;
+        this.b = blue;
+      }
     }
     lerp() {
       return this;
     }
-    copy() {
+    copy(other) {
+      // Recorded, not ignored: the selection accent is asserted through it.
+      if (other && 'hex' in other) this.hex = other.hex;
       return this;
     }
   }
@@ -92,11 +101,13 @@ vi.mock('three', () => {
   class MockMaterial {
     constructor(props = {}) {
       this.color = props.color ? new MockColor(props.color) : new MockColor(0);
-      this.emissive = new MockColor(0);
-      this.emissiveIntensity = 0;
+      this.emissive = props.emissive ? new MockColor(props.emissive) : new MockColor(0);
+      this.emissiveIntensity = props.emissiveIntensity ?? 0;
       this.transparent = props.transparent || false;
       this.opacity = props.opacity || 1;
       this.depthFunc = null;
+      this.userData = {};
+      this.disposed = false;
     }
     clone() {
       const c = new MockMaterial();
@@ -106,7 +117,9 @@ vi.mock('three', () => {
       c.opacity = this.opacity;
       return c;
     }
-    dispose() {}
+    dispose() {
+      this.disposed = true;
+    }
   }
 
   class MockMesh {
@@ -132,7 +145,7 @@ vi.mock('three', () => {
     }
     traverse(fn) {
       fn(this);
-      this.children.forEach((c) => c.traverse?.(fn) || fn(c));
+      this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
     }
   }
 
@@ -154,7 +167,7 @@ vi.mock('three', () => {
     }
     traverse(fn) {
       fn(this);
-      this.children.forEach((c) => c.traverse?.(fn) || fn(c));
+      this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
     }
   }
 
@@ -168,6 +181,70 @@ vi.mock('three', () => {
     }
     traverse(fn) {
       fn(this);
+    }
+  }
+
+  // Lights are Object3Ds with a shadow attached: enough of one to record what
+  // the builders configure, and to be traversed and disposed like any other node.
+  class MockLight {
+    constructor(color, intensity = 0, distance = 0) {
+      this.color = color;
+      this.intensity = intensity;
+      this.distance = distance;
+      this.decay = 1;
+      this.position = new MockVector3();
+      this.userData = {};
+      this.castShadow = false;
+      this.visible = true;
+      this.isLight = true;
+      this.children = [];
+      this.parent = null;
+      this.disposed = false;
+      this.shadow = {
+        mapSize: {
+          x: 0,
+          y: 0,
+          set(width, height) {
+            this.x = width;
+            this.y = height;
+          },
+        },
+        camera: { near: 0, far: 0 },
+        bias: 0,
+        normalBias: 0,
+        autoUpdate: true,
+        needsUpdate: false,
+      };
+    }
+    add(child) {
+      this.children.push(child);
+      child.parent = this;
+    }
+    traverse(fn) {
+      fn(this);
+      this.children.forEach((c) => (c.traverse ? c.traverse(fn) : fn(c)));
+    }
+    dispose() {
+      this.disposed = true;
+    }
+  }
+
+  class MockPointLight extends MockLight {
+    constructor(color, intensity, distance, decay) {
+      super(color, intensity, distance);
+      this.decay = decay ?? 1;
+      this.isPointLight = true;
+    }
+  }
+
+  class MockSpotLight extends MockLight {
+    constructor(color, intensity, distance, angle, penumbra, decay) {
+      super(color, intensity, distance);
+      this.angle = angle;
+      this.penumbra = penumbra;
+      this.decay = decay ?? 1;
+      this.isSpotLight = true;
+      this.target = new MockGroup();
     }
   }
 
@@ -194,11 +271,14 @@ vi.mock('three', () => {
     Group: MockGroup,
     Mesh: MockMesh,
     LineSegments: MockLineSegments,
+    PointLight: MockPointLight,
+    SpotLight: MockSpotLight,
     Shape: MockShape,
     Path: MockPath,
     BoxGeometry: MockGeometry,
     ExtrudeGeometry: MockGeometry,
     CylinderGeometry: MockGeometry,
+    SphereGeometry: MockGeometry,
     BufferGeometry: MockGeometry,
     EdgesGeometry: MockGeometry,
     Float32BufferAttribute: class {},
@@ -212,7 +292,14 @@ vi.mock('three', () => {
   };
 });
 
-import { buildPreviewObjectRoot, buildSelectionOverlay } from './buildPreviewObjects';
+import {
+  MAX_FIXTURE_SHADOW_LIGHTS,
+  SELECTION_ACCENTS,
+  buildPreviewObjectRoot,
+  buildSelectionOverlay,
+  readAssemblyPart,
+} from './buildPreviewObjects';
+import { disposeScene } from './disposeScene';
 import * as THREE from 'three';
 
 function createMockPalette() {
@@ -253,6 +340,9 @@ function createMockPalette() {
     'trussChord_metal',
     'trussWeb_metal',
     'trussPurlin_metal',
+    'ceilingLuminaire',
+    'ceilingOpeningTrim',
+    'ceilingOpeningHousing',
   ];
   for (const key of keys) {
     palette[key] = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
@@ -623,5 +713,444 @@ describe('buildSelectionOverlay', () => {
     // The overlay mesh material should be a clone, not the original palette material
     const overlayMesh = overlay.children[0];
     expect(overlayMesh.material).not.toBe(palette.wall);
+  });
+});
+
+/**
+ * Inside a wall or ceiling assembly editor the preview highlights the piece of
+ * material the drawing has selected, not the wall it belongs to — and it does it
+ * in the editor's own orange rather than the plan's green, so the two panes read
+ * as one selection.
+ */
+describe('assembly part selection', () => {
+  let palette;
+
+  beforeEach(() => {
+    palette = createMockPalette();
+  });
+
+  const boardsAndFraming = () =>
+    createSceneDescriptor([
+      {
+        floorId: 'f1',
+        name: 'Ground',
+        elevation: 0,
+        visible: true,
+        objects: [
+          createDescriptor('w1:int:P1:3d', 'wall', 'wall', 'box', {
+            sourceId: 'w1',
+            wallDetailKind: 'panel',
+            wallDetailElementId: 'P1',
+            assemblySide: 'interior',
+          }),
+          createDescriptor('w1:int:P2:3d', 'wall', 'wall', 'box', {
+            sourceId: 'w1',
+            wallDetailKind: 'panel',
+            wallDetailElementId: 'P2',
+            assemblySide: 'interior',
+          }),
+          // Same board id on the far face: a different piece of material.
+          createDescriptor('w1:ext:P1:3d', 'wall', 'wall', 'box', {
+            sourceId: 'w1',
+            wallDetailKind: 'panel',
+            wallDetailElementId: 'P1',
+            assemblySide: 'exterior',
+          }),
+          createDescriptor('w1:stud:3d', 'wall', 'wall', 'box', {
+            sourceId: 'w1',
+            wallDetailKind: 'framing',
+            wallDetailElementId: 'S1',
+            assemblySide: 'core',
+          }),
+        ],
+      },
+    ]);
+
+  it('lights one board of one face, not every board of the wall', () => {
+    const { meshMap } = buildPreviewObjectRoot(boardsAndFraming(), palette);
+
+    const overlay = buildSelectionOverlay(
+      meshMap,
+      { part: { kind: 'panel', id: 'P1', side: 'interior' } },
+      palette,
+      'assembly',
+    );
+
+    expect(overlay).not.toBeNull();
+    expect(overlay.children.length).toBe(1);
+  });
+
+  it('answers for framing whichever face is being drawn — the core has no side', () => {
+    const { meshMap } = buildPreviewObjectRoot(boardsAndFraming(), palette);
+
+    for (const side of ['interior', 'exterior']) {
+      const overlay = buildSelectionOverlay(
+        meshMap,
+        { part: { kind: 'framing', id: 'S1', side } },
+        palette,
+        'assembly',
+      );
+      expect(overlay?.children.length).toBe(1);
+    }
+  });
+
+  it('ignores a part id that belongs to another kind of piece', () => {
+    const { meshMap } = buildPreviewObjectRoot(boardsAndFraming(), palette);
+
+    // A screw called P1 is not the board called P1.
+    const overlay = buildSelectionOverlay(
+      meshMap,
+      { part: { kind: 'fastener', id: 'P1', side: 'interior' } },
+      palette,
+      'assembly',
+    );
+    expect(overlay).toBeNull();
+  });
+
+  it('tints orange for an assembly editor and green for the plan', () => {
+    const { meshMap } = buildPreviewObjectRoot(boardsAndFraming(), palette);
+
+    const assembly = buildSelectionOverlay(
+      meshMap,
+      { part: { kind: 'panel', id: 'P1', side: 'interior' } },
+      palette,
+      'assembly',
+    );
+    expect(assembly.children[0].material.emissive.hex).toBe(SELECTION_ACCENTS.assembly.emissive.hex);
+
+    const plan = buildSelectionOverlay(meshMap, { selectedId: 'w1', selectedType: 'wall' }, palette);
+    expect(plan.children[0].material.emissive.hex).toBe(SELECTION_ACCENTS.plan.emissive.hex);
+    expect(SELECTION_ACCENTS.assembly.emissive.hex).not.toBe(SELECTION_ACCENTS.plan.emissive.hex);
+  });
+
+  it('makes each board its own pick target, so a click can name one', () => {
+    const { meshMap } = buildPreviewObjectRoot(boardsAndFraming(), palette);
+
+    const parts = [...meshMap.values()].map((entry) => {
+      let node = entry.object;
+      while (node && !node.userData?.previewTarget) node = node.children?.[0];
+      return node?.userData.previewTarget.part;
+    });
+
+    expect(parts).toContainEqual({ kind: 'panel', id: 'P1', side: 'interior' });
+    expect(parts).toContainEqual({ kind: 'panel', id: 'P1', side: 'exterior' });
+    expect(parts).toContainEqual({ kind: 'framing', id: 'S1', side: 'core' });
+  });
+});
+
+/**
+ * A luminaire arrives as two descriptors — the fitting and the light — and this
+ * is where they become a THREE group of meshes and a real light with a shadow
+ * budget to answer to.
+ */
+describe('ceiling luminaires', () => {
+  let palette;
+
+  beforeEach(() => {
+    palette = createMockPalette();
+  });
+
+  const fixtureMetadata = (elementId) => ({
+    sourceId: 'ceiling_1',
+    ceilingId: 'ceiling_1',
+    floorId: 'f1',
+    ceilingDetailKind: 'fixture',
+    ceilingDetailElementId: elementId,
+  });
+
+  function lightDescriptor(id, overrides = {}) {
+    return {
+      id: `${id}:light`,
+      kind: 'ceiling',
+      geometry: 'ceilingLightSource',
+      lightType: 'point',
+      position: { x: 2000, y: 2675, z: 2500 },
+      aim: { x: 0, y: -1, z: 0 },
+      color: { r: 1, g: 0.78, b: 0.55 },
+      intensity: 63.66 * 1e6,
+      angleRad: null,
+      penumbra: 0.35,
+      castShadow: true,
+      distanceMm: 0,
+      metadata: fixtureMetadata(id),
+      ...overrides,
+    };
+  }
+
+  function housingDescriptor(id, overrides = {}) {
+    return {
+      id: `${id}:fixture`,
+      kind: 'ceiling',
+      geometry: 'ceilingLightFixture',
+      fixtureType: 'recessed_can_6',
+      aperture: { radiusMm: 95 },
+      bulb: { diameterMm: 95, lengthMm: 136, count: 1, flat: false },
+      dropMm: 0,
+      aim: { x: 0, y: -1, z: 0 },
+      emissive: { color: { r: 1, g: 0.78, b: 0.55 } },
+      center: { x: 2000, y: 2500 },
+      baseElevation: 2700,
+      rotation: 0,
+      materialKey: 'ceilingLuminaire',
+      metadata: { ...fixtureMetadata(id), materialKey: 'ceilingLuminaire' },
+      ...overrides,
+    };
+  }
+
+  function buildFloor(objects) {
+    return buildPreviewObjectRoot(
+      createSceneDescriptor([{ floorId: 'f1', name: 'Ground', elevation: 0, visible: true, objects }]),
+      palette,
+    );
+  }
+
+  function findFixtureLight(object) {
+    let found = null;
+    object.traverse((node) => {
+      if (node.userData?.isFixtureLight) found = node;
+    });
+    return found;
+  }
+
+  function findLensMaterials(object) {
+    const materials = [];
+    object.traverse((node) => {
+      if (node.material?.userData?.fixtureLens && !materials.includes(node.material)) materials.push(node.material);
+    });
+    return materials;
+  }
+
+  it('builds a point light with the intensity the descriptor asked for', () => {
+    const { meshMap } = buildFloor([lightDescriptor('lt_1')]);
+    const light = findFixtureLight(meshMap.get('lt_1:light').object);
+
+    expect(light.isPointLight).toBe(true);
+    // Already candela × 1e6 when it arrived: nothing here rescales it.
+    expect(light.intensity).toBe(63.66 * 1e6);
+    expect(light.decay).toBe(2);
+    expect(light.distance).toBe(0);
+    expect(light.position).toMatchObject({ x: 2000, y: 2675, z: 2500 });
+    expect(light.userData.isFixtureLight).toBe(true);
+    // The photometric figure is kept alongside the live one: the viewport scales
+    // a lamp for the rig it is being seen under, and it has to rescale from the
+    // descriptor's own number every time rather than from last frame's result.
+    expect(light.userData.baseIntensity).toBe(63.66 * 1e6);
+    // Millimetre-sized shadow settings, rendered once and then left alone.
+    expect(light.castShadow).toBe(true);
+    expect(light.shadow.mapSize).toMatchObject({ x: 1024, y: 1024 });
+    expect(light.shadow.camera).toMatchObject({ near: 50, far: 30000 });
+    expect(light.shadow.bias).toBe(-0.0005);
+    expect(light.shadow.normalBias).toBe(20);
+    expect(light.shadow.autoUpdate).toBe(false);
+    expect(light.shadow.needsUpdate).toBe(true);
+  });
+
+  it('gives a spot its cone and a target to point at', () => {
+    const { meshMap } = buildFloor([
+      lightDescriptor('lt_spot', {
+        lightType: 'spot',
+        angleRad: Math.PI / 3,
+        aim: { x: 1, y: 0, z: 0 },
+      }),
+    ]);
+    const group = meshMap.get('lt_spot:light').object;
+    const light = findFixtureLight(group);
+
+    expect(light.isSpotLight).toBe(true);
+    expect(light.angle).toBeCloseTo(Math.PI / 3, 9);
+    expect(light.penumbra).toBe(0.35);
+    // The target travels with the light rather than sitting loose in the scene.
+    expect(group.children).toContain(light.target);
+    expect(light.target.position).toMatchObject({ x: 4000, y: 2675, z: 2500 });
+  });
+
+  it('leaves a light with no shadow alone when the fixture asked for none', () => {
+    const { meshMap } = buildFloor([lightDescriptor('lt_dark', { castShadow: false })]);
+    const light = findFixtureLight(meshMap.get('lt_dark:light').object);
+
+    expect(light.castShadow).toBe(false);
+    expect(light.shadow.autoUpdate).toBe(true);
+  });
+
+  it('caps the shadow casters per floor, keeping the brightest', () => {
+    const count = MAX_FIXTURE_SHADOW_LIGHTS + 1;
+    const objects = Array.from({ length: count }, (_, index) =>
+      // Ascending brightness, so `lt_0` is the one that has to lose.
+      lightDescriptor(`lt_${index}`, { intensity: (index + 1) * 1e6 }),
+    );
+    const { meshMap } = buildFloor(objects);
+
+    const casting = objects.filter(
+      (descriptor) => findFixtureLight(meshMap.get(descriptor.id).object).castShadow === true,
+    );
+    expect(casting).toHaveLength(MAX_FIXTURE_SHADOW_LIGHTS);
+    expect(findFixtureLight(meshMap.get('lt_0:light').object).castShadow).toBe(false);
+    // The descriptor still says what the user asked for; only the light was demoted.
+    expect(meshMap.get('lt_0:light').descriptor.castShadow).toBe(true);
+  });
+
+  it('breaks a tie on intensity by id, so the same lamps are demoted every build', () => {
+    const objects = Array.from({ length: MAX_FIXTURE_SHADOW_LIGHTS + 2 }, (_, index) =>
+      lightDescriptor(`lt_${String(index).padStart(2, '0')}`, { intensity: 5e6 }),
+    );
+
+    const first = buildFloor(objects);
+    const second = buildFloor(objects);
+    const demoted = (built) =>
+      objects
+        .filter((descriptor) => findFixtureLight(built.meshMap.get(descriptor.id).object).castShadow === false)
+        .map((descriptor) => descriptor.id);
+
+    expect(demoted(first)).toEqual(['lt_08:light', 'lt_09:light']);
+    expect(demoted(second)).toEqual(demoted(first));
+  });
+
+  it('builds the fitting out of palette parts and one emissive material of its own', () => {
+    const { meshMap } = buildFloor([housingDescriptor('lt_1')]);
+    const object = meshMap.get('lt_1:fixture').object;
+
+    expect(object.position).toMatchObject({ x: 2000, y: 2700, z: 2500 });
+
+    const lenses = findLensMaterials(object);
+    expect(lenses).toHaveLength(1);
+    expect(lenses[0].userData).toMatchObject({
+      ownedByPreviewObject: true,
+      fixtureLens: true,
+      litEmissiveIntensity: 3,
+    });
+    expect(lenses[0].emissiveIntensity).toBe(3);
+    // Housing parts come off the shared palette, uncloned.
+    expect(object.children.some((child) => child.material === palette.ceilingOpeningTrim)).toBe(true);
+  });
+
+  it('draws every fixture type in the catalog rather than falling back to a box', () => {
+    const types = [
+      ['recessed_can_4', { radiusMm: 70 }],
+      ['gimbal_recessed', { radiusMm: 70 }],
+      ['wafer_led', { radiusMm: 89 }],
+      ['surface_flush', { radiusMm: 165 }],
+      ['semi_flush', { radiusMm: 177 }],
+      ['cylinder_downlight', { radiusMm: 60 }],
+      ['pendant', { radiusMm: 100 }],
+      ['chandelier_5', { radiusMm: 275 }],
+      ['track_head', { radiusMm: 37 }],
+      ['troffer_2x4', { widthMm: 603, lengthMm: 1213 }],
+    ];
+    const objects = types.map(([fixtureType, aperture], index) =>
+      housingDescriptor(`lt_${fixtureType}`, {
+        fixtureType,
+        aperture,
+        dropMm: fixtureType === 'pendant' ? 900 : fixtureType === 'chandelier_5' ? 600 : 0,
+        bulb: { diameterMm: 60, lengthMm: 110, count: fixtureType === 'chandelier_5' ? 5 : 1, flat: false },
+        center: { x: index * 1000, y: 0 },
+        aim: fixtureType === 'track_head' ? { x: 1, y: 0, z: 0 } : { x: 0, y: -1, z: 0 },
+      }),
+    );
+    const { meshMap } = buildFloor(objects);
+
+    for (const [fixtureType] of types) {
+      const object = meshMap.get(`lt_${fixtureType}:fixture`).object;
+      expect(object.children.length, fixtureType).toBeGreaterThan(1);
+      expect(findLensMaterials(object), fixtureType).toHaveLength(1);
+    }
+
+    // Five candles, five glowing bulbs, one material between them.
+    const chandelier = meshMap.get('lt_chandelier_5:fixture').object;
+    const glowing = chandelier.children.filter((child) => child.material?.userData?.fixtureLens);
+    expect(glowing).toHaveLength(5);
+    for (const bulb of glowing) expect(bulb.castShadow).toBe(false);
+  });
+
+  it('names the fixture as an assembly part, so a click in 3D lands on it', () => {
+    const descriptor = housingDescriptor('lt_1');
+    expect(readAssemblyPart(descriptor)).toEqual({ kind: 'fixture', id: 'lt_1', side: null });
+
+    const { meshMap } = buildFloor([descriptor, lightDescriptor('lt_1')]);
+    for (const id of ['lt_1:fixture', 'lt_1:light']) {
+      expect(meshMap.get(id).object.userData.previewTarget.part).toEqual({
+        kind: 'fixture',
+        id: 'lt_1',
+        side: null,
+      });
+    }
+  });
+
+  it('keeps the selection overlay off the light, so selecting a lamp does not double it', () => {
+    const { meshMap } = buildFloor([housingDescriptor('lt_1'), lightDescriptor('lt_1')]);
+
+    const overlay = buildSelectionOverlay(meshMap, { part: { kind: 'fixture', id: 'lt_1' } }, palette, 'assembly');
+    expect(overlay.children).toHaveLength(1);
+    expect(findFixtureLight(overlay.children[0])).toBeNull();
+  });
+});
+
+/**
+ * Disposal is where the two kinds of material part company: the palette's are
+ * shared by the whole scene and outlive any group, a luminaire's lens belongs to
+ * the one object that built it. A light is a third case again — it owns a shadow
+ * render target that nothing else will free.
+ */
+describe('disposeScene', () => {
+  it('frees what an object owns and leaves the shared palette alone', () => {
+    const palette = createMockPalette();
+    const scene = createSceneDescriptor([
+      {
+        floorId: 'f1',
+        name: 'Ground',
+        elevation: 0,
+        visible: true,
+        objects: [
+          {
+            id: 'lt_1:fixture',
+            kind: 'ceiling',
+            geometry: 'ceilingLightFixture',
+            fixtureType: 'recessed_can_6',
+            aperture: { radiusMm: 95 },
+            bulb: { diameterMm: 95, lengthMm: 136, count: 1, flat: false },
+            dropMm: 0,
+            aim: { x: 0, y: -1, z: 0 },
+            emissive: { color: { r: 1, g: 0.8, b: 0.6 } },
+            center: { x: 0, y: 0 },
+            baseElevation: 2700,
+            rotation: 0,
+            materialKey: 'ceilingLuminaire',
+            metadata: { sourceId: 'c1', ceilingDetailKind: 'fixture', ceilingDetailElementId: 'lt_1' },
+          },
+          {
+            id: 'lt_1:light',
+            kind: 'ceiling',
+            geometry: 'ceilingLightSource',
+            lightType: 'point',
+            position: { x: 0, y: 2675, z: 0 },
+            aim: { x: 0, y: -1, z: 0 },
+            color: { r: 1, g: 0.8, b: 0.6 },
+            intensity: 1e6,
+            angleRad: null,
+            penumbra: 0.35,
+            castShadow: true,
+            distanceMm: 0,
+            metadata: { sourceId: 'c1', ceilingDetailKind: 'fixture', ceilingDetailElementId: 'lt_1' },
+          },
+        ],
+      },
+    ]);
+
+    const { root, meshMap } = buildPreviewObjectRoot(scene, palette);
+    let lens = null;
+    let light = null;
+    meshMap.get('lt_1:fixture').object.traverse((node) => {
+      if (node.material?.userData?.fixtureLens) lens = node.material;
+    });
+    meshMap.get('lt_1:light').object.traverse((node) => {
+      if (node.isLight) light = node;
+    });
+
+    // The conservative call the scene cache makes on every rebuild.
+    disposeScene(root, { disposeMaterials: false });
+
+    expect(lens.disposed).toBe(true);
+    expect(light.disposed).toBe(true);
+    expect(palette.ceilingOpeningTrim.disposed).toBe(false);
+    expect(palette.ceilingOpeningHousing.disposed).toBe(false);
   });
 });

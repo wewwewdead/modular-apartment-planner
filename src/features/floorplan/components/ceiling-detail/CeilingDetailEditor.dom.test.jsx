@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { createBeam, createFloor } from '@/domain/models';
 import { createCeiling, deriveCeilingHangers } from '@/domain/ceilingModels';
 import CeilingDetailEditor from './CeilingDetailEditor';
@@ -32,9 +32,17 @@ vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useEditor: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
 }));
 
-// The live 3D pane is lazy and pulls in three.js; this suite is about the right
-// panel, so keep it out of the render.
-vi.mock('@/features/floorplan/components/preview/ThreePreviewPanel', () => ({ default: () => null }));
+// The live 3D pane is lazy and pulls in three.js. Standing in for it keeps the
+// suite out of WebGL while still recording what the editor asks of it — which is
+// the whole of the highlight contract between the two panes.
+const previewProps = { current: null, pick: null };
+vi.mock('@/features/floorplan/components/preview/ThreePreviewPanel', () => ({
+  default: (props) => {
+    previewProps.current = props;
+    previewProps.pick = props.onAssemblyPick;
+    return null;
+  },
+}));
 
 function supportBeam(id, y, level) {
   return {
@@ -83,12 +91,25 @@ function mountManualCeiling(options = {}) {
   return { ceiling, floor, ...render(<CeilingDetailEditor />) };
 }
 
-/** The number input of the field whose label reads exactly `label`. */
-function numberField(container, label) {
-  const field = Array.from(container.querySelectorAll('label')).find(
+/** The field whose label reads exactly `label`, whatever control it holds. */
+function labelledField(container, label) {
+  return Array.from(container.querySelectorAll('label')).find(
     (node) => node.querySelector('span')?.textContent?.trim() === label,
   );
-  return field?.querySelector('input[type="number"]') || null;
+}
+
+/** The number input of the field whose label reads exactly `label`. */
+function numberField(container, label) {
+  return labelledField(container, label)?.querySelector('input[type="number"]') || null;
+}
+
+function selectField(container, label) {
+  return labelledField(container, label)?.querySelector('select') || null;
+}
+
+/** The fill of every board shape on the reflected ceiling plan, in draw order. */
+function boardFills(container) {
+  return Array.from(container.querySelectorAll('path[fill-rule="evenodd"]')).map((path) => path.getAttribute('fill'));
 }
 
 /**
@@ -329,6 +350,66 @@ describe('stranded beam ceiling attachment height', () => {
 });
 
 /**
+ * Selecting something is what re-lays-out the workspace — the status bar grows
+ * from "Nothing selected" to a longer label — and the canvas contain-fits itself
+ * to whatever height is left, so the drawing can move between a pointerdown and
+ * its pointerup. Measured live, that turned a plain click into a drag of
+ * whatever it had just picked: the board moved, and a generated grid froze into
+ * custom boards to record the move.
+ */
+describe('clicking a board on the plan', () => {
+  const CANVAS_AS_PRESSED = { left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 };
+  // The same canvas after the status bar took a second line: 18 px shorter, and
+  // pushed down by the same amount.
+  const CANVAS_AFTER_RELAYOUT = { left: 0, top: 18, width: 600, height: 382, right: 600, bottom: 400 };
+
+  function pressablePlan(container) {
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    let measured = 0;
+    svg.getBoundingClientRect = () => (measured++ === 0 ? CANVAS_AS_PRESSED : CANVAS_AFTER_RELAYOUT);
+    return { svg, board: container.querySelector('path[fill-rule="evenodd"]'), measurements: () => measured };
+  }
+
+  it('selects the board and commits nothing, though the canvas moves under the pointer', () => {
+    const { container } = mountManualCeiling();
+    const { svg, board } = pressablePlan(container);
+    const at = { clientX: 300, clientY: 200, button: 0, pointerId: 1 };
+
+    fireEvent.pointerDown(board, at);
+    fireEvent.pointerUp(svg, at);
+
+    expect(container.textContent).toContain('Selected board');
+    // Any dispatch here is a move nobody made: the only edit a click can make is
+    // to the selection, which the editor holds itself.
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(sectionSummary(container, 'ceiling-face')).toContain('generated grid');
+  });
+
+  it('ignores a drag too small to see, and still commits one that is not', () => {
+    const { container } = mountManualCeiling();
+    const { svg, board } = pressablePlan(container);
+    const at = { clientX: 300, clientY: 200, button: 0, pointerId: 1 };
+
+    // Half a pixel. In ceiling millimetres that is a real number — 5 mm at this
+    // scale — which is why the threshold is judged on screen instead.
+    fireEvent.pointerDown(board, at);
+    fireEvent.pointerUp(svg, { ...at, clientX: 300.5 });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(board, at);
+    fireEvent.pointerUp(svg, { ...at, clientX: 340 });
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'CEILING_UPDATE',
+        ceiling: expect.objectContaining({ detailing: expect.any(Object) }),
+      }),
+    );
+  });
+});
+
+/**
  * The collapsed Suspension header has to describe the ceiling it belongs to. A
  * manual ceiling applies no drop and hangs nothing, so quoting either number at
  * it states something untrue about the assembly.
@@ -358,5 +439,326 @@ describe('suspension section summary', () => {
     const { container } = mountBeamHungCeiling(['beam_deleted']);
 
     expect(sectionSummary(container, 'ceiling-suspension')).toContain('150 mm drop');
+  });
+});
+
+/**
+ * The plan and the live 3D pane are two views of one selection. Picking a board
+ * on the plan has to light that board — and only that board — in the pane, in
+ * the editor's orange rather than the plan's green; picking one in the pane has
+ * to come back and select it on the plan.
+ */
+describe('selection shared with the 3D pane', () => {
+  function pressablePlan(container) {
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
+    return { svg, board: container.querySelector('path[fill-rule="evenodd"]') };
+  }
+
+  it('hands the pane the board that was picked on the plan, in the assembly accent', () => {
+    const { container } = mountManualCeiling();
+    const { svg, board } = pressablePlan(container);
+
+    expect(previewProps.current.selectionAccent).toBe('assembly');
+    expect(previewProps.current.assemblySelection).toBeNull();
+
+    const at = { clientX: 300, clientY: 200, button: 0, pointerId: 1 };
+    fireEvent.pointerDown(board, at);
+    fireEvent.pointerUp(svg, at);
+
+    // The id is the drawing's own — the same one the 3D descriptors carry, so
+    // one board lights up rather than the whole ceiling.
+    const selected = previewProps.current.assemblySelection;
+    expect(selected.kind).toBe('panel');
+    expect(container.textContent).toContain('Selected board');
+    expect(typeof selected.id).toBe('string');
+  });
+
+  it('takes a pick made in the pane back to the plan', () => {
+    mountManualCeiling();
+
+    act(() => previewProps.pick({ kind: 'panel', id: 'p1', side: null }));
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'panel', id: 'p1' });
+
+    // Empty space clears; a part the plan cannot select leaves it alone.
+    act(() => previewProps.pick({ kind: 'hanger', id: 'h1', side: null }));
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'panel', id: 'p1' });
+
+    act(() => previewProps.pick(null));
+    expect(previewProps.current.assemblySelection).toBeNull();
+  });
+});
+
+/**
+ * Half a ceiling in fiber cement and the rest in plywood is one ceiling. A board
+ * carries its own material only when someone said so: the picker offers the
+ * ceiling's profile as the default, and choosing it back drops the override
+ * rather than freezing today's profile onto the board.
+ */
+describe('per-board material override', () => {
+  const MIXED_PANELS = [
+    { id: 'left', u: 0, v: 0, width: 1200, height: 2400, material: 'plywood' },
+    { id: 'right', u: 1300, v: 0, width: 1200, height: 2400 },
+  ];
+
+  /** The board layout of the last committed ceiling. */
+  function committedLayout() {
+    return mocks.dispatch.mock.calls.at(-1)?.[0]?.ceiling?.detailing?.face?.layout ?? null;
+  }
+
+  function selectBoard(localId) {
+    act(() => previewProps.pick({ kind: 'panel', id: localId, side: null }));
+  }
+
+  it('names the profile default, and offers both materials beside it', () => {
+    const { container } = mountManualCeiling();
+    selectBoard('grid-c0-r0');
+
+    const picker = selectField(container, 'Board material');
+    expect(Array.from(picker.options).map((option) => option.textContent)).toEqual([
+      'Profile default (Fiber cement)',
+      'Fiber cement',
+      'Plywood',
+    ]);
+    // A generated board stores nothing, so it can only be following the profile.
+    expect(picker.value).toBe('');
+  });
+
+  it('seeds the grid into custom boards and stores the override on the one that was picked', () => {
+    const { container } = mountManualCeiling();
+    selectBoard('grid-c0-r0');
+
+    fireEvent.change(selectField(container, 'Board material'), { target: { value: 'plywood' } });
+
+    const layout = committedLayout();
+    // Any per-board edit writes the grid out first, so the other nine boards are
+    // still there — and still saying nothing about their material.
+    expect(layout.mode).toBe('custom');
+    expect(layout.customPanels).toHaveLength(10);
+    const overridden = layout.customPanels.filter((panel) => 'material' in panel);
+    expect(overridden).toHaveLength(1);
+    expect(overridden[0]).toMatchObject({ id: 'grid-c0-r0', material: 'plywood' });
+  });
+
+  it('drops the override when the board is put back on the profile default', () => {
+    const { container } = mountManualCeiling({
+      detailing: { face: { layout: { mode: 'custom', customPanels: MIXED_PANELS } } },
+    });
+    selectBoard('left');
+    expect(selectField(container, 'Board material').value).toBe('plywood');
+
+    fireEvent.change(selectField(container, 'Board material'), { target: { value: '' } });
+
+    // Cleared, not overwritten with today's profile material: the board follows
+    // the profile from here on, including wherever it is switched to next.
+    const stored = committedLayout().customPanels.find((panel) => panel.id === 'left');
+    expect('material' in stored).toBe(false);
+  });
+
+  it('draws each board in its own material on the plan', () => {
+    // Beamless: a beam crossing the ceiling would cut each board into several
+    // shapes, and this is about what colour they are drawn in, not how many.
+    const { container } = mountManualCeiling({
+      beamless: true,
+      detailing: { face: { layout: { mode: 'custom', customPanels: MIXED_PANELS } } },
+    });
+
+    const fills = boardFills(container);
+    expect(fills).toHaveLength(2);
+    expect(new Set(fills).size).toBe(2);
+
+    // Same ceiling in one material draws as one field again.
+    cleanup();
+    const plain = mountManualCeiling({
+      beamless: true,
+      detailing: {
+        face: {
+          // Cleared rather than absent, which the normalizer treats the same way.
+          layout: { mode: 'custom', customPanels: MIXED_PANELS.map((panel) => ({ ...panel, material: undefined })) },
+        },
+      },
+    });
+    expect(new Set(boardFills(plain.container)).size).toBe(1);
+    // The board that never overrode anything is the one that has not moved.
+    expect(boardFills(plain.container)[0]).toBe(fills[1]);
+  });
+
+  it('breaks the takeoff down by material only when there is more than one', () => {
+    const { container } = mountManualCeiling({
+      detailing: { face: { layout: { mode: 'custom', customPanels: MIXED_PANELS } } },
+    });
+
+    expect(container.textContent).toContain('Sheets are counted per material');
+    expectMetricsToRead(container, 'Plywood', '1 board');
+    expectMetricsToRead(container, 'Fiber cement', '1 board');
+
+    cleanup();
+    const plain = mountManualCeiling();
+    expect(plain.container.textContent).not.toContain('Sheets are counted per material');
+    expect(metricValues(plain.container, 'Plywood')).toHaveLength(0);
+  });
+});
+
+/**
+ * Fixtures are stored on the ceiling and normalized by the catalog on every
+ * commit, so the editor's job is to hand the factory whole objects rather than
+ * patched fields: a luminaire has no socket for a lamp it was not built around,
+ * and a picker that could produce one would be a spec nobody can install.
+ */
+describe('ceiling light fixtures', () => {
+  const CAN = {
+    id: 'light_a',
+    u: 1500,
+    v: 1000,
+    fixtureType: 'recessed_can_6',
+    bulbType: 'br30',
+    colorTempK: 2700,
+  };
+
+  function mountLitCeiling(fixtures = [CAN]) {
+    return mountManualCeiling({ beamless: true, detailing: { lighting: { fixtures } } });
+  }
+
+  /** The lighting of the last committed ceiling. */
+  function committedFixtures() {
+    return mocks.dispatch.mock.calls.at(-1)?.[0]?.ceiling?.detailing?.lighting?.fixtures ?? null;
+  }
+
+  it('lists the stored fixture and draws its symbol on the plan', () => {
+    const { container } = mountLitCeiling();
+
+    const symbols = container.querySelectorAll('g[data-fixture-id]');
+    expect(symbols).toHaveLength(1);
+    expect(symbols[0].getAttribute('data-fixture-id')).toBe('light_a');
+    // A 6" can is a plain circle at its true 190 mm aperture, and nothing else.
+    expect(symbols[0].querySelector('circle')?.getAttribute('r')).toBe('95');
+
+    expect(sectionSummary(container, 'ceiling-lighting')).toContain('1 fixture');
+    // 650 lm on one BR30, straight off the lamp: nobody overrode it.
+    expect(sectionSummary(container, 'ceiling-lighting')).toContain('650 lm total');
+    expect(selectField(container, 'Fixture type').value).toBe('recessed_can_6');
+    expect(numberField(container, 'Output').value).toBe('650');
+  });
+
+  it('re-picks the lamp when the fixture type changes under it', () => {
+    const { container } = mountLitCeiling();
+
+    fireEvent.change(selectField(container, 'Fixture type'), { target: { value: 'wafer_led' } });
+
+    // A wafer has no socket for a BR30, so the whole object goes back through
+    // the factory and comes out with the only lamp a wafer takes.
+    expect(committedFixtures()).toHaveLength(1);
+    expect(committedFixtures()[0]).toMatchObject({
+      id: 'light_a',
+      fixtureType: 'wafer_led',
+      bulbType: 'led_disk',
+      u: 1500,
+      v: 1000,
+    });
+  });
+
+  it('offers only the lamps the fixture takes', () => {
+    const { container } = mountLitCeiling();
+
+    const lamps = Array.from(selectField(container, 'Lamp').options).map((option) => option.value);
+    expect(lamps).toEqual(['br30', 'br40', 'par30', 'par38', 'a19']);
+  });
+
+  it('commits a chosen colour temperature as a number', () => {
+    const { container } = mountLitCeiling();
+
+    fireEvent.change(selectField(container, 'Colour temperature'), { target: { value: '4000' } });
+
+    expect(committedFixtures()[0].colorTempK).toBe(4000);
+  });
+
+  it('drops the fixture from the stored array when it is deleted', () => {
+    const { container } = mountLitCeiling([CAN, { ...CAN, id: 'light_b', u: 3000 }]);
+
+    const remove = Array.from(container.querySelectorAll('button')).filter(
+      (button) => button.textContent === 'Delete light',
+    );
+    expect(remove.length).toBeGreaterThan(0);
+    fireEvent.click(remove[0]);
+
+    expect(committedFixtures().map((fixture) => fixture.id)).toEqual(['light_b']);
+  });
+
+  it('reports the lighting order in the takeoff, and stays quiet without one', () => {
+    const { container } = mountLitCeiling([CAN, { ...CAN, id: 'light_b', u: 3000 }]);
+
+    expectMetricsToRead(container, 'Light fixtures', '2');
+    expectMetricsToRead(container, 'Connected load', '18 W');
+    expectMetricsToRead(container, 'Installed lumens', '1300 lm');
+    // Split by fixture and lamp together, which is how the order is placed.
+    expectMetricsToRead(container, '6" recessed downlight', '2 × BR30 flood (65 W eq)');
+
+    cleanup();
+    const dark = mountManualCeiling({ beamless: true });
+    expect(metricValues(dark.container, 'Light fixtures')).toHaveLength(0);
+    expect(dark.container.querySelectorAll('g[data-fixture-id]')).toHaveLength(0);
+  });
+
+  it('takes a fixture picked in the 3D pane back to the plan', () => {
+    const { container } = mountLitCeiling();
+
+    act(() => previewProps.pick({ kind: 'fixture', id: 'light_a', side: null }));
+
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'fixture', id: 'light_a' });
+    expect(container.textContent).toContain('Selected light');
+    expect(container.querySelector('g[data-fixture-id="light_a"]').getAttribute('data-selected')).toBe('true');
+  });
+
+  it('commits a drag on the plan as a move of that fixture alone', () => {
+    const { container } = mountLitCeiling();
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
+
+    const at = { clientX: 150, clientY: 300, button: 0, pointerId: 1 };
+    fireEvent.pointerDown(container.querySelector('g[data-fixture-id="light_a"]'), at);
+    fireEvent.pointerUp(svg, { ...at, clientX: 250 });
+
+    // 100 px across a 600 px canvas showing 6000 mm is a metre, snapped to the
+    // 50 mm grid — and the fixture is still the object the factory built.
+    const moved = committedFixtures()[0];
+    expect(moved.id).toBe('light_a');
+    expect(moved.u).toBe(2500);
+    expect(moved.v).toBe(1000);
+    expect(moved.fixtureType).toBe('recessed_can_6');
+  });
+});
+
+/**
+ * A screw is a three-pixel dot among several hundred identical ones, so its own
+ * colour cannot say which is selected — the drawing rings it instead, the way
+ * the wall elevation already did.
+ */
+describe('selected screw on the plan', () => {
+  it('draws a ring around the one screw that is selected, and nothing around the rest', () => {
+    const { container } = mountManualCeiling();
+    const svg = container.querySelector('svg[data-tool]');
+    svg.setPointerCapture = () => {};
+    svg.releasePointerCapture = () => {};
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 });
+
+    const screws = Array.from(container.querySelectorAll('title'))
+      .filter((node) => node.textContent.startsWith('Screw'))
+      .map((node) => node.parentElement);
+    expect(screws.length).toBeGreaterThan(10);
+    // Unselected, a screw is its head and nothing else.
+    for (const screw of screws) expect(screw.querySelectorAll('circle')).toHaveLength(1);
+
+    const at = { clientX: 300, clientY: 200, button: 0, pointerId: 1 };
+    fireEvent.pointerDown(screws[3], at);
+    fireEvent.pointerUp(svg, at);
+
+    expect(container.textContent).toContain('Selected screw');
+    const ringed = screws.filter((screw) => screw.querySelectorAll('circle').length === 2);
+    expect(ringed).toHaveLength(1);
+    expect(ringed[0]).toBe(screws[3]);
   });
 });

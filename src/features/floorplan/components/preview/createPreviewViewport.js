@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 import { applyRenderStyleToPalette, createMaterialPalette, disposeMaterialPalette } from './materials';
+import { UNLIT_LENS_EMISSIVE_INTENSITY } from './buildPreviewObjects';
 import { disposeScene } from './disposeScene';
 import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
 import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
 import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
 import { createSunSky, sunWorldDirection } from './createSunSky';
+import { ambientIrradiance, fixtureAdaptationScale } from './fixtureAdaptation';
+import { mixNumber, mixSrgbHex, nightfallBlend } from './twilightBlend';
 import { SKY_ENVIRONMENT_INTENSITY, STUDIO_ENVIRONMENT_INTENSITY, createEnvironment } from './createEnvironment';
 import { createGroundPlane } from './createGroundPlane';
 import { createProgressiveRenderer } from './createProgressiveRenderer';
@@ -40,6 +43,63 @@ const SHADOW_MAP_SIZE = IS_DESKTOP_APP ? 4096 : 2048;
 
 /** Sample count at which the full penumbra width can be resolved cleanly. */
 const PENUMBRA_REFERENCE_SAMPLES = 24;
+
+/**
+ * Night.
+ *
+ * Not a sun at a negative altitude — a moonless one, so the room's own lamps are
+ * the only thing lighting the model, which is the whole point of being able to
+ * switch it on. What is left outside is a hemisphere of deep blue that says
+ * there is a world out there without lighting anything in here, a trace of the
+ * environment to keep reflective surfaces from going matte black, and enough
+ * extra exposure that a 650 lm downlight reads as a downlight.
+ */
+const NIGHT_SKY_COLOR = 0x1a2438;
+const NIGHT_GROUND_COLOR = 0x0d0f14;
+const NIGHT_AMBIENT_INTENSITY = 0.015;
+const NIGHT_HEMISPHERE_INTENSITY = 0.25;
+const NIGHT_ENVIRONMENT_SCALE = 0.02;
+const NIGHT_BACKGROUND_INTENSITY = 0.03;
+
+/**
+ * How far the camera opens after dark.
+ *
+ * Derived the same way the sun's own does, one step further down. `exposureScale`
+ * adapts partially — `ADAPTATION = 0.6` — and is already pinned at its
+ * `MAX_ADAPTATION` ceiling of 4 by civil twilight. Night is not where twilight
+ * stopped: the ambient a room receives falls another 3.3× between the two (0.092
+ * to 0.028 in the units `ambientIrradiance` returns), and putting that through
+ * the same partial adaptation gives 3.3^0.6 ≈ 2.05. Four times two is eight.
+ *
+ * The 1.6 this replaces was set against a rig with no interreflection in it at
+ * all, where the only thing a lamp could light was what its beam struck
+ * directly. It rendered the floor under a 650 lm can at 29 of 255 — present in
+ * the numbers, black on a screen — which is the look that was reported twice as
+ * "the light only glows, the room stays dark".
+ *
+ * Still heavily partial: a photographer moving from a sunlit street to this room
+ * opens about ten stops, and this is three. What it buys is that the lamp lands
+ * in the middle of the tone curve instead of in its toe, where ACES has almost
+ * no slope and a six-to-one difference in irradiance comes out as a few levels
+ * of grey.
+ */
+const NIGHT_EXPOSURE_SCALE = 8;
+
+/** The daylight values the same three lights carry, restored on the way out. */
+const DAY_SKY_COLOR = 0xdde7f4;
+const DAY_GROUND_COLOR = 0xe6ded0;
+const DAY_AMBIENT_INTENSITY = 0.08;
+const DAY_HEMISPHERE_INTENSITY = 0.18;
+
+/**
+ * The bounce stand-in, named because the fixture adaptation has to read it: it
+ * is the one directional light that reaches an interior, so a lamp indoors is
+ * competing with it and the two figures must not drift apart.
+ */
+const DAY_FILL_INTENSITY = 0.35;
+
+/** The ground's own colour with no sun study to derive one from. */
+const DEFAULT_GROUND_COLOR = 0x9a958c;
 
 /**
  * Low-discrepancy point on the sun's disc, for sample `index`.
@@ -125,8 +185,8 @@ export function createPreviewViewport(container) {
 
   // A trace of uniform fill, insurance for the case where prefiltering the
   // environment fails and there is nothing else lighting the shadowed side.
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
-  const skyLight = new THREE.HemisphereLight(0xdde7f4, 0xe6ded0, 0.18);
+  const ambientLight = new THREE.AmbientLight(0xffffff, DAY_AMBIENT_INTENSITY);
+  const skyLight = new THREE.HemisphereLight(DAY_SKY_COLOR, DAY_GROUND_COLOR, DAY_HEMISPHERE_INTENSITY);
   scene.add(ambientLight);
   scene.add(skyLight);
 
@@ -141,7 +201,7 @@ export function createPreviewViewport(container) {
 
   // Shapes the side the key light misses. No shadow: it is standing in for
   // bounce, and bounce does not cast one.
-  const fillLight = new THREE.DirectionalLight(0xdce6f2, 0.35);
+  const fillLight = new THREE.DirectionalLight(0xdce6f2, DAY_FILL_INTENSITY);
   fillLight.position.set(-4200, 2600, -3400);
   scene.add(fillLight);
 
@@ -179,6 +239,13 @@ export function createPreviewViewport(container) {
   let compassHeadingHandler = null;
   let shadowsDirty = true;
   let groundLevelMm = 0;
+  let interiorLighting = { lightsOn: true, night: false };
+  // How much of each fixture's photometry the current rig lets through. Derived
+  // in `applySun` from the rig it has just built, never stored on a descriptor.
+  let fixtureIntensityScale = 1;
+  // How far a running sun study has crossed from daylight into the night rig.
+  // Zero whenever there is no study, or its sun is still above civil twilight.
+  let nightfallAmount = 0;
   let activeFloorContext = {
     floorId: null,
     spawn: null,
@@ -500,7 +567,11 @@ export function createPreviewViewport(container) {
       const target = resolvePickTarget(hit.object);
       if (!target) continue;
 
-      const key = `${target.floorId || ''}:${target.kind}:${target.sourceId}`;
+      // Keyed down to the assembly part, so two boards of the same wall are two
+      // pickable things rather than one. Meshes with no part still collapse to
+      // their object, which is what the floorplan wants from a click.
+      const part = target.part ? `${target.part.side || ''}:${target.part.kind}:${target.part.id}` : '';
+      const key = `${target.floorId || ''}:${target.kind}:${target.sourceId}:${part}`;
       if (seenTargets.has(key)) continue;
       seenTargets.add(key);
       targets.push(target);
@@ -605,17 +676,76 @@ export function createPreviewViewport(container) {
     scene.add(ground.object);
   }
 
+  /**
+   * The sun the scene is actually lit by.
+   *
+   * Night is not a time of day here, it is the sun being switched off: a study
+   * left running at noon must not go on lighting the model through it.
+   */
+  function activeSunState() {
+    return interiorLighting.night ? null : sunState;
+  }
+
+  /**
+   * Switch the ceiling luminaires in the loaded world on or off, and set how
+   * much of their rated output the rig around them lets through.
+   *
+   * Both halves of a lamp, because they are two different things on screen: the
+   * light does the lighting, and the lens is what you can see is lit. Dimming
+   * one without the other leaves either a bright lamp lighting nothing or a dark
+   * lamp casting a pool of light.
+   *
+   * Driven from `applySun`, which is the only thing that knows what the rig
+   * currently is. One traversal of the world root either way, so this is where
+   * the intensity is written rather than in a second pass of its own.
+   */
+  function applyInteriorLighting() {
+    if (!worldRoot) return;
+
+    worldRoot.traverse((node) => {
+      if (node.userData?.isFixtureLight) {
+        node.visible = interiorLighting.lightsOn;
+        // Photometry × adaptation. Always from `baseIntensity` rather than from
+        // whatever the light is carrying, so repeated passes over a reused scene
+        // graph cannot compound the factor.
+        const baseIntensity = node.userData.baseIntensity;
+        if (Number.isFinite(baseIntensity)) node.intensity = baseIntensity * fixtureIntensityScale;
+      }
+
+      const materials = Array.isArray(node.material) ? node.material : node.material ? [node.material] : [];
+      for (const material of materials) {
+        if (!material?.userData?.fixtureLens) continue;
+        // The lens deliberately does not take the adaptation scale. Its lit
+        // emissive is already past the tone curve's shoulder — 3 renders 248 of
+        // 255 at exposure 1 and 251 at the night rig's 1.6 — so scaling it moves
+        // nothing on screen and would only clip the lamp's own colour out of the
+        // fitting. A brighter pool under an equally white lens is what a
+        // photograph of a lit room looks like in any case.
+        material.emissiveIntensity = interiorLighting.lightsOn
+          ? (material.userData.litEmissiveIntensity ?? 1)
+          : UNLIT_LENS_EMISSIVE_INTENSITY;
+      }
+    });
+  }
+
   function applyGroundColor() {
     if (!ground) return;
-    if (sunState?.enabled) {
+    const sun = activeSunState();
+    if (sun?.enabled && nightfallAmount < 1) {
       // The ground reads as lit by the same sky it is standing under; a fixed
       // grey under a sunset looks like a hole cut in the picture.
-      const altitudeDeg = (sunState.altitude * 180) / Math.PI;
+      const altitudeDeg = (sun.altitude * 180) / Math.PI;
       const warmth = THREE.MathUtils.clamp((altitudeDeg + 6) / 30, 0, 1);
-      ground.setColor(new THREE.Color().setRGB(0.42 + 0.2 * warmth, 0.4 + 0.2 * warmth, 0.37 + 0.19 * warmth));
+      const color = new THREE.Color().setRGB(0.42 + 0.2 * warmth, 0.4 + 0.2 * warmth, 0.37 + 0.19 * warmth);
+      // Albedo rather than light, but still part of what "the same picture"
+      // means: the sun-derived ground is about a third brighter in linear terms
+      // than the default one, and a step that size on the largest surface in the
+      // frame is exactly what would give the crossover away.
+      if (nightfallAmount > 0) color.lerp(new THREE.Color(DEFAULT_GROUND_COLOR), nightfallAmount);
+      ground.setColor(color);
       return;
     }
-    ground.setColor(0x9a958c);
+    ground.setColor(DEFAULT_GROUND_COLOR);
   }
 
   function applyStyleToRenderer() {
@@ -643,11 +773,16 @@ export function createPreviewViewport(container) {
     lightDistance = radius * 3 + 1000;
     keyLight.target.position.copy(sphere.center);
 
-    const skyTexture = sunSky.update(sunState);
-    const sunIsUp = Boolean(sunState?.enabled) && sunState.altitude > 0;
+    // Night is one more input to this same function rather than a second
+    // lighting path beside it: everything below is still derived from the stored
+    // state, so leaving night restores exactly what was there before it.
+    const night = interiorLighting.night;
+    const sun = activeSunState();
+    const skyTexture = sunSky.update(sun);
+    const sunIsUp = Boolean(sun?.enabled) && sun.altitude > 0;
     let environmentCalibration = STUDIO_ENVIRONMENT_INTENSITY;
 
-    if (sunState?.enabled && skyTexture) {
+    if (sun?.enabled && skyTexture) {
       scene.background = skyTexture;
       scene.environment = environment.skyEnvironment(skyTexture, sunSky.getSkyVersion());
       environmentCalibration = SKY_ENVIRONMENT_INTENSITY;
@@ -664,24 +799,40 @@ export function createPreviewViewport(container) {
     // white light with no physical source, and it shows up precisely where it
     // does the most damage — in the shadows, whose blue is the strongest cue
     // that the lighting is real.
-    const skyIsLighting = Boolean(sunState?.enabled && skyTexture);
-    ambientLight.intensity = skyIsLighting ? 0 : 0.08;
-    skyLight.intensity = skyIsLighting ? 0 : 0.18;
+    const skyIsLighting = Boolean(sun?.enabled && skyTexture);
+    ambientLight.intensity = skyIsLighting ? 0 : DAY_AMBIENT_INTENSITY;
+    skyLight.color.setHex(DAY_SKY_COLOR);
+    skyLight.groundColor.setHex(DAY_GROUND_COLOR);
+    skyLight.intensity = skyIsLighting ? 0 : DAY_HEMISPHERE_INTENSITY;
+    // Tracked rather than read back off the light: the fixture adaptation wants
+    // the sRGB figure that was set, and a round trip through the linear working
+    // space to recover it is a rounding error waiting to happen.
+    let hemisphereSkyHex = DAY_SKY_COLOR;
+    scene.backgroundIntensity = 1;
     sunAngularRadiusDeg = style.sunAngularRadiusDeg;
     let exposure = style.exposure;
+    nightfallAmount = 0;
 
-    if (!sunState?.enabled) {
+    // The environment the night rig runs on, hoisted because two things need the
+    // identical expression: the bottom of the nightfall fade, and the reference
+    // the fixture adaptation is measured against. They have to be the same
+    // number, not two roundings of the same idea.
+    const nightEnvironmentIntensity =
+      style.environmentIntensity * STUDIO_ENVIRONMENT_INTENSITY * NIGHT_ENVIRONMENT_SCALE;
+
+    if (!sun?.enabled) {
       baseLightDirection.set(0.52, 0.74, 0.3).normalize();
       keyLight.intensity = 2.2;
       keyLight.color.setHex(0xffffff);
-      fillLight.intensity = 0.35;
+      fillLight.intensity = DAY_FILL_INTENSITY;
       scene.environmentIntensity = environmentIntensity;
     } else {
-      baseLightDirection.copy(sunWorldDirection(sunState, sunDirection));
+      baseLightDirection.copy(sunWorldDirection(sun, sunDirection));
       if (baseLightDirection.lengthSq() < 1e-9) baseLightDirection.set(0, 1, 0);
       fillLight.intensity = 0;
 
-      const altitude = sunState.altitude;
+      const altitude = sun.altitude;
+      const altitudeDeg = THREE.MathUtils.radToDeg(altitude);
       // Below the horizon the beam is gone and `directBeamFactor` returns zero
       // on its own; the sky carries the scene from there.
       keyLight.intensity = sunIsUp ? SUN_PEAK_INTENSITY * directBeamFactor(altitude) : 0;
@@ -689,16 +840,104 @@ export function createPreviewViewport(container) {
 
       // The sky's own painted brightness *is* its irradiance. Multiplying by a
       // second altitude curve on top would count the sunset twice.
-      scene.environmentIntensity = environmentIntensity * skyIntensityScale(THREE.MathUtils.radToDeg(altitude));
+      scene.environmentIntensity = environmentIntensity * skyIntensityScale(altitudeDeg);
 
       // More of the light scattered means a bigger effective source, so a
       // wider penumbra — the reason a shadow edge at dusk is soft and the same
       // edge at noon is a knife.
       sunAngularRadiusDeg = style.sunAngularRadiusDeg * (1 + 1.5 * diffuseFraction(altitude));
       exposure = style.exposure * exposureScale(altitude);
+
+      // ── Nightfall ──
+      //
+      // Between civil and nautical twilight the study crosses over to the night
+      // rig, and at the bottom it *is* the night rig — the same constants, so a
+      // study left running past dark and the night switch are lighting the model
+      // with the same numbers. Only gated on the sky actually lighting the
+      // scene: with no sky texture (headless, or a locked-down canvas) the
+      // ambient and hemisphere fills above are the fallback and must stay.
+      nightfallAmount = skyIsLighting ? nightfallBlend(altitudeDeg) : 0;
+      if (nightfallAmount > 0) {
+        ambientLight.intensity = mixNumber(0, NIGHT_AMBIENT_INTENSITY, nightfallAmount);
+        skyLight.intensity = mixNumber(0, NIGHT_HEMISPHERE_INTENSITY, nightfallAmount);
+        // The fills come back coloured, which is the point of bringing them
+        // back: what is left after nautical twilight is a deep blue dome and a
+        // darker ground, and a white fill would say daylight in a picture that
+        // no longer has any.
+        hemisphereSkyHex = mixSrgbHex(DAY_SKY_COLOR, NIGHT_SKY_COLOR, nightfallAmount);
+        skyLight.color.setHex(hemisphereSkyHex);
+        skyLight.groundColor.setHex(mixSrgbHex(DAY_GROUND_COLOR, NIGHT_GROUND_COLOR, nightfallAmount));
+        // Toward the night rig's *number*, while the map stays the painted sky.
+        // No step at the join: STUDIO_ENVIRONMENT_INTENSITY and
+        // SKY_ENVIRONMENT_INTENSITY exist precisely so that
+        // `environmentIntensity` means the same irradiance whichever map is
+        // loaded. Keeping the sky map is the better half of the trade too — a
+        // real late-twilight dome is a truer thing for glass to reflect after
+        // dark than a product-photography light box.
+        scene.environmentIntensity = mixNumber(scene.environmentIntensity, nightEnvironmentIntensity, nightfallAmount);
+        scene.backgroundIntensity = mixNumber(1, NIGHT_BACKGROUND_INTENSITY, nightfallAmount);
+        // The discontinuity this removes is the loud one: `exposureScale` is
+        // pinned at its 4× ceiling from about the horizon down, while night runs
+        // at 1.6, so today the same moment of the evening is rendered two and a
+        // half stops apart depending on which control you reached for.
+        exposure = mixNumber(exposure, style.exposure * NIGHT_EXPOSURE_SCALE, nightfallAmount);
+      }
     }
 
+    if (night) {
+      keyLight.intensity = 0;
+      fillLight.intensity = 0;
+      ambientLight.intensity = NIGHT_AMBIENT_INTENSITY;
+      skyLight.color.setHex(NIGHT_SKY_COLOR);
+      skyLight.groundColor.setHex(NIGHT_GROUND_COLOR);
+      skyLight.intensity = NIGHT_HEMISPHERE_INTENSITY;
+      hemisphereSkyHex = NIGHT_SKY_COLOR;
+      // A trace of whichever environment is loaded, so glass and metal still
+      // have something to reflect instead of reading as matte black.
+      scene.environmentIntensity = environmentIntensity * NIGHT_ENVIRONMENT_SCALE;
+      // The backdrop is painted for daylight whichever one is up; this is what
+      // stops a studio sweep or a noon sky from glowing behind a night render.
+      scene.backgroundIntensity = NIGHT_BACKGROUND_INTENSITY;
+      exposure = style.exposure * NIGHT_EXPOSURE_SCALE;
+    }
+
+    // Nothing to cast: a shadow map for a light of zero intensity is a full
+    // extra pass over the scene for a picture that cannot change. Derived from
+    // the intensity rather than from the night flag so it also covers the study
+    // whose sun has set — where the pass would otherwise be re-rendered once per
+    // accumulated sample, because the jittered re-aim keeps marking a beam that
+    // is not there as dirty.
+    keyLight.castShadow = keyLight.intensity > 0;
+
     renderer.toneMappingExposure = exposure;
+
+    // What a lamp indoors is actually competing with, read back off the rig this
+    // function has just built rather than re-derived from the branches above —
+    // so a later change to any of those lights is picked up here for free. The
+    // key light is not in it: a room is shadowed from the sun, which is the
+    // whole case being answered.
+    const roomAmbient = ambientIrradiance({
+      ambientIntensity: ambientLight.intensity,
+      hemisphereIntensity: skyLight.intensity,
+      hemisphereSkyHex,
+      fillIntensity: fillLight.intensity,
+      environmentIntensity: scene.environmentIntensity,
+    });
+    // The operating point `ARTIFICIAL_LIGHT_CALIBRATION` was measured at, built
+    // from the same night constants the branch above sets. Two states land on it
+    // exactly rather than nearly — the night switch, and a study below nautical
+    // twilight, whose fade ends on these very numbers — so in both the scale is
+    // 1 and the shipped night look is untouched.
+    const nightAmbient = ambientIrradiance({
+      ambientIntensity: NIGHT_AMBIENT_INTENSITY,
+      hemisphereIntensity: NIGHT_HEMISPHERE_INTENSITY,
+      hemisphereSkyHex: NIGHT_SKY_COLOR,
+      fillIntensity: 0,
+      environmentIntensity: nightEnvironmentIntensity,
+    });
+    fixtureIntensityScale = fixtureAdaptationScale(roomAmbient, nightAmbient);
+    applyInteriorLighting();
+
     aimKeyLight(-1);
 
     // Fit the orthographic shadow camera to the scene. Sized to the bounding
@@ -797,7 +1036,25 @@ export function createPreviewViewport(container) {
       }
 
       markShadowsDirty();
-      // The shadow camera is fitted to the scene bounds, which just changed.
+      // The shadow camera is fitted to the scene bounds, which just changed —
+      // and `applySun` ends by re-running `applyInteriorLighting`, which is what
+      // brings fresh groups into line with the switch and with the rig's current
+      // fixture scale. One traversal of the world root, not two: this runs on
+      // every incremental rebuild, fifteen times a second while a wall is
+      // dragged.
+      applySun();
+    },
+    /**
+     * The room's own lights: `lightsOn` switches the ceiling luminaires, `night`
+     * takes the sun and the sky away so they are the only thing left lighting
+     * the model.
+     */
+    setInteriorLighting({ lightsOn = true, night = false } = {}) {
+      interiorLighting = { lightsOn: Boolean(lightsOn), night: Boolean(night) };
+      // `applySun` re-derives the whole rig from the stored state — night
+      // included — then re-applies the lamps against it and ends in
+      // markShadowsDirty + invalidate, which is the same path a style or sun
+      // change takes to restart the progressive refine.
       applySun();
     },
     resetView() {

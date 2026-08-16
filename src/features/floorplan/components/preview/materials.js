@@ -46,6 +46,12 @@ const DETAIL_ASSIGNMENTS = {
   ceilingFraming: 'metal',
   ceilingFramingTimber: 'timber',
   ceilingHanger: 'metal',
+  ceilingFastener: 'metal',
+  ceilingOpeningTrim: 'metal',
+  ceilingHatch: 'plaster',
+  ceilingLuminaire: 'smooth',
+  ceilingDiffuser: 'metal',
+  ceilingOpeningHousing: 'metal',
   slab: 'concrete',
   roof: 'concrete',
   parapet: 'plaster',
@@ -158,6 +164,19 @@ export function createMaterialPalette() {
     ceilingFraming: metal({ color: 0xaab6c0, roughness: 0.38 }),
     ceilingFramingTimber: surface({ color: 0xb07740, roughness: 0.76 }),
     ceilingHanger: metal({ color: 0x8a949c, roughness: 0.34 }),
+    ceilingFastener: metal({ color: 0xa8adb1, roughness: 0.3 }),
+
+    // Openings, from below. The trim ring is the one part every opening has, so
+    // it stays neutral — a painted metal flange that reads as a finished edge
+    // rather than as a fitting. What sits inside it is what tells them apart: a
+    // hatch is a lid of the same board as the ceiling, a downlight is a bright
+    // diffusing lens, a diffuser is a cooler machined grille. The housings above
+    // are dark because they live in the plenum and are only ever glimpsed.
+    ceilingOpeningTrim: metal({ color: 0xd9dbdc, roughness: 0.46 }),
+    ceilingHatch: surface({ color: 0xe9e4da, roughness: 0.9 }),
+    ceilingLuminaire: surface({ color: 0xfbf6e6, roughness: 0.24 }),
+    ceilingDiffuser: metal({ color: 0xc6cdd2, roughness: 0.4 }),
+    ceilingOpeningHousing: metal({ color: 0x5d666d, roughness: 0.55 }),
 
     // Poured concrete and screed: matte, cool, and — the part that was wrong
     // before — genuinely mid-toned. Concrete reflects about a quarter of the

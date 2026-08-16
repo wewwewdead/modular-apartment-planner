@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, useProject } from '@/features/floorplan/context/FloorplanContext';
 import {
   WALL_ASSEMBLY_PRESETS,
@@ -106,6 +106,37 @@ import {
 import styles from './WallDetailEditor.module.css';
 
 const ThreePreviewPanel = lazy(() => import('@/features/floorplan/components/preview/ThreePreviewPanel'));
+
+/**
+ * The live 3D pane. The selection crosses in both directions: the board, member,
+ * or screw picked on the elevation lights up orange here, and one picked here
+ * comes back to the elevation. The selection arrives as primitives rather than
+ * as an object so this stays cheap to re-render — the pane has no interest in
+ * the elevation's own viewport.
+ */
+const WallLivePreview = memo(function WallLivePreview({
+  className,
+  project,
+  activeFloorId,
+  selectionKind,
+  selectionId,
+  selectionSide,
+  onPick,
+}) {
+  return (
+    <ThreePreviewPanel
+      className={className}
+      project={project}
+      activeFloorId={activeFloorId}
+      applyPhaseFilter={false}
+      assemblySelection={
+        selectionKind && selectionId ? { kind: selectionKind, id: selectionId, side: selectionSide } : null
+      }
+      selectionAccent="assembly"
+      onAssemblyPick={onPick}
+    />
+  );
+});
 
 const CANVAS_TOOLS = Object.freeze({
   SELECT: 'select',
@@ -691,12 +722,11 @@ function FastenerGraphic({
       {title ? <title>{title}</title> : null}
       {selected ? (
         <circle
+          className={styles.fastenerHalo}
           cx={fastener.u}
           cy={fastener.v}
           r={radius + 7}
           fill="none"
-          stroke="#ffd166"
-          strokeWidth="3"
           vectorEffect="non-scaling-stroke"
         />
       ) : null}
@@ -798,6 +828,9 @@ export default function WallDetailEditor() {
   const sectionNodes = useRef({});
   const sectionRefSetters = useRef({});
   const shortcutHandlerRef = useRef(null);
+  // Stable identity for the 3D pane's memo; the body below keeps it current.
+  const previewPickRef = useRef(null);
+  const handlePreviewPick = useCallback((part) => previewPickRef.current?.(part), []);
 
   // Capture phase: this editor is modal, so the keys it claims must never reach the
   // floorplan canvas listening on the same window (its own Delete would remove walls).
@@ -1064,6 +1097,26 @@ export default function WallDetailEditor() {
     setSelection(null);
     setGesture(null);
     updateDetailing({ activeSide: side });
+  };
+
+  /*
+    A pick in the 3D pane, translated back to a selection on the elevation. A
+    board on the face that is not in front of you turns the elevation around
+    first — the alternative is selecting something the drawing cannot show. Parts
+    the elevation has no handle for (nothing today, but the pane may grow some)
+    leave the selection alone; empty space clears it.
+  */
+  previewPickRef.current = (part) => {
+    if (!part) {
+      setSelection(null);
+      return;
+    }
+    if (!['panel', 'framing', 'fastener'].includes(part.kind)) return;
+    if (part.side && part.side !== 'core' && part.side !== activeSide) {
+      setActiveSide(part.side);
+      updateDetailing({ activeSide: part.side });
+    }
+    setSelection({ type: part.kind, id: part.id });
   };
 
   const editablePanels = () =>
@@ -3716,11 +3769,14 @@ export default function WallDetailEditor() {
                   <small>Updates after every committed panel, frame, screw, gap, or assembly edit</small>
                 </div>
                 <Suspense fallback={<div className={styles.previewLoading}>Loading live wall preview…</div>}>
-                  <ThreePreviewPanel
+                  <WallLivePreview
                     className={styles.wallPreviewPanel}
                     project={previewProject}
                     activeFloorId={floor.id}
-                    applyPhaseFilter={false}
+                    selectionKind={selection?.type || null}
+                    selectionId={selection?.id || null}
+                    selectionSide={activeSide}
+                    onPick={handlePreviewPick}
                   />
                 </Suspense>
               </div>

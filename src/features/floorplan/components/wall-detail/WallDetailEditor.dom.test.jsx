@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { createFloor, createWall } from '@/domain/models';
 import { createWallDetailing, createWallDimension, deriveWallFasteners } from '@/domain/wallDetailing';
 import WallDetailEditor from './WallDetailEditor';
@@ -24,9 +24,17 @@ vi.mock('@/features/floorplan/context/FloorplanContext', () => ({
   useEditor: () => ({ ...mocks.editor, dispatch: mocks.editorDispatch }),
 }));
 
-// The live 3D pane is lazy and pulls in three.js; this suite is about the
-// elevation, so keep it out of the render.
-vi.mock('@/features/floorplan/components/preview/ThreePreviewPanel', () => ({ default: () => null }));
+// The live 3D pane is lazy and pulls in three.js. Standing in for it keeps the
+// suite out of WebGL while recording what the editor asks of it — the whole of
+// the highlight contract between the elevation and the pane.
+const previewProps = { current: null, pick: null };
+vi.mock('@/features/floorplan/components/preview/ThreePreviewPanel', () => ({
+  default: (props) => {
+    previewProps.current = props;
+    previewProps.pick = props.onAssemblyPick;
+    return null;
+  },
+}));
 
 const CANVAS_RECT = { left: 0, top: 0, width: 900, height: 810, right: 900, bottom: 810, x: 0, y: 0 };
 
@@ -416,5 +424,40 @@ describe('WallDetailEditor Ctrl-drag copy', () => {
     expect(boards.at(-1).width).toBe(boards[0].width);
     expect(boards.at(-1).height).toBe(boards[0].height);
     expect(boards.at(-1).u).not.toBe(boards[0].u);
+  });
+});
+
+/**
+ * The elevation and the live 3D pane are two views of one selection. A stud
+ * picked on the drawing has to light up in the pane — in the editor's orange,
+ * not the plan's green — and a board picked in the pane has to come back and
+ * select itself on the drawing.
+ */
+describe('WallDetailEditor selection shared with the 3D pane', () => {
+  it('hands the pane the piece picked on the elevation, with the face it is on', () => {
+    const { container } = render(<WallDetailEditor />);
+
+    expect(previewProps.current.selectionAccent).toBe('assembly');
+    expect(previewProps.current.assemblySelection).toBeNull();
+
+    clickShape(shapeWithTitle(container, 'Stud ·'));
+
+    expect(previewProps.current.assemblySelection).toMatchObject({ kind: 'framing', side: 'interior' });
+    expect(typeof previewProps.current.assemblySelection.id).toBe('string');
+  });
+
+  it('takes a pick made in the pane back to the elevation, turning it around if need be', () => {
+    render(<WallDetailEditor />);
+
+    act(() => previewProps.pick({ kind: 'panel', id: 'P1', side: 'interior' }));
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'panel', id: 'P1', side: 'interior' });
+
+    // A board on the far face turns the drawing around rather than selecting
+    // something it cannot show.
+    act(() => previewProps.pick({ kind: 'panel', id: 'P2', side: 'exterior' }));
+    expect(previewProps.current.assemblySelection).toEqual({ kind: 'panel', id: 'P2', side: 'exterior' });
+
+    act(() => previewProps.pick(null));
+    expect(previewProps.current.assemblySelection).toBeNull();
   });
 });

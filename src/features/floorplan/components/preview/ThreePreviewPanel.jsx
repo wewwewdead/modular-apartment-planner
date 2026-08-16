@@ -9,7 +9,15 @@ import { getOrderedFloors } from '@/domain/floorModels';
 import { getPreviewInspection } from './previewInspection';
 import { resolveWalkFloorContext } from './resolveWalkFloorContext';
 import { computeSunVector } from '@/analysis/sunStudyRunner';
-import { RENDER_STYLE_PRESETS, persistRenderStylePreference, readRenderStylePreference } from './renderStyle';
+import {
+  RENDER_STYLE_PRESETS,
+  persistInteriorLightsPreference,
+  persistNightModePreference,
+  persistRenderStylePreference,
+  readInteriorLightsPreference,
+  readNightModePreference,
+  readRenderStylePreference,
+} from './renderStyle';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
 import styles from './ThreePreviewPanel.module.css';
@@ -17,6 +25,16 @@ import styles from './ThreePreviewPanel.module.css';
 // ~15 scene rebuilds a second while the project is changing every frame.
 const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
 
+/**
+ * `assemblySelection` puts the wall and ceiling detail editors in charge of the
+ * highlight: pass `{ kind, id, side }` for the board, member, screw, or hanger
+ * that is selected in the drawing, or `null` for nothing. Passing it at all
+ * takes the plan's own selection out of the picture — inside an assembly editor
+ * the only selection that means anything is the editor's — and `selectionAccent`
+ * then decides the colour: green for a plan object, orange for a piece of
+ * material. `onAssemblyPick` receives the same shape back when one is clicked
+ * here, so the two panes stay on the same piece.
+ */
 export default function ThreePreviewPanel({
   project,
   activeFloorId,
@@ -24,7 +42,17 @@ export default function ThreePreviewPanel({
   onToggleFocus,
   className = '',
   applyPhaseFilter = true,
+  assemblySelection,
+  selectionAccent = 'plan',
+  onAssemblyPick,
 }) {
+  const assemblyDriven = assemblySelection !== undefined;
+  // Taken apart here so the overlay effect depends on three primitives: a caller
+  // that rebuilds the selection object every render must not cost a rebuilt
+  // overlay every render.
+  const assemblyPartKind = assemblySelection?.kind || null;
+  const assemblyPartId = assemblySelection?.id || null;
+  const assemblyPartSide = assemblySelection?.side || null;
   const viewportRef = useRef(null);
   const containerRef = useRef(null);
   const resizeObserverRef = useRef(null);
@@ -33,6 +61,8 @@ export default function ThreePreviewPanel({
   const [previewScope, setPreviewScope] = useState('all');
   const [navigationMode, setNavigationMode] = useState('inspect');
   const [renderStyle, setRenderStyle] = useState(readRenderStylePreference);
+  const [interiorLightsOn, setInteriorLightsOn] = useState(readInteriorLightsPreference);
+  const [nightMode, setNightMode] = useState(readNightModePreference);
   const [walkUiState, setWalkUiState] = useState({
     navigationMode: 'inspect',
     isLocked: false,
@@ -67,8 +97,13 @@ export default function ThreePreviewPanel({
         activeFloorId,
         visibleFloorIds,
         hiddenWallBoards,
+        // An assembly editor is looking at one wall or one ceiling from a metre
+        // away, so it gets the parts a whole-building view cannot afford —
+        // every ceiling screw. Same switch as the selection: this pane belongs
+        // to an editor, so it draws what the editor is editing.
+        assemblyDetail: assemblyDriven,
       }),
-    [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards],
+    [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards, assemblyDriven],
   );
 
   const activeFloor = (project?.floors || []).find((floor) => floor.id === activeFloorId) || null;
@@ -102,6 +137,15 @@ export default function ThreePreviewPanel({
   );
   const handlePreviewPick = useCallback(
     (target) => {
+      // Inside an assembly editor a click is about the piece of material, not
+      // about the wall or ceiling it belongs to, and the plan's selection is no
+      // business of this pane. A part-less mesh there — the odd support beam
+      // kept for context — clears the selection rather than selecting the beam.
+      if (assemblyDriven) {
+        onAssemblyPick?.(target?.part || null);
+        return;
+      }
+
       if (!target?.sourceId || !target?.kind) {
         editorDispatch({ type: 'DESELECT' });
         return;
@@ -113,7 +157,7 @@ export default function ThreePreviewPanel({
 
       editorDispatch({ type: 'SELECT_OBJECT', id: target.sourceId, objectType: target.kind });
     },
-    [activeFloorId, editorDispatch],
+    [activeFloorId, assemblyDriven, editorDispatch, onAssemblyPick],
   );
 
   useEffect(() => {
@@ -228,9 +272,21 @@ export default function ThreePreviewPanel({
     const meshMap = meshMapRef.current;
     if (!viewport || !meshMap) return;
 
-    const overlay = buildSelectionOverlay(meshMap, { selectedId, selectedType }, viewport.materialPalette);
+    const selection = assemblyDriven
+      ? { part: assemblyPartId ? { kind: assemblyPartKind, id: assemblyPartId, side: assemblyPartSide } : null }
+      : { selectedId, selectedType };
+    const overlay = buildSelectionOverlay(meshMap, selection, viewport.materialPalette, selectionAccent);
     viewport.setSelectionOverlay(overlay);
-  }, [selectedId, selectedType, sceneBuildId]);
+  }, [
+    assemblyDriven,
+    assemblyPartKind,
+    assemblyPartId,
+    assemblyPartSide,
+    selectedId,
+    selectedType,
+    selectionAccent,
+    sceneBuildId,
+  ]);
 
   // Aim the key light at the real sun whenever the study or the site moves.
   // Only the sun vector is needed here — the shadows themselves come from the
@@ -249,6 +305,12 @@ export default function ThreePreviewPanel({
     viewportRef.current?.setRenderStyle(renderStyle);
     persistRenderStylePreference(renderStyle);
   }, [renderStyle]);
+
+  useEffect(() => {
+    viewportRef.current?.setInteriorLighting({ lightsOn: interiorLightsOn, night: nightMode });
+    persistInteriorLightsPreference(interiorLightsOn);
+    persistNightModePreference(nightMode);
+  }, [interiorLightsOn, nightMode]);
 
   useEffect(() => {
     viewportRef.current?.setActiveFloorContext(walkFloorContext);
@@ -296,6 +358,26 @@ export default function ThreePreviewPanel({
               aria-pressed={navigationMode === 'walk'}
             >
               Walk
+            </button>
+          </div>
+          <div className={styles.modeToggle} role="group" aria-label="Preview interior lighting">
+            <button
+              type="button"
+              className={interiorLightsOn ? styles.modeButtonActive : styles.modeButton}
+              onClick={() => setInteriorLightsOn((on) => !on)}
+              title="Switch the ceiling light fixtures on or off in the preview"
+              aria-pressed={interiorLightsOn}
+            >
+              Lights
+            </button>
+            <button
+              type="button"
+              className={nightMode ? styles.modeButtonActive : styles.modeButton}
+              onClick={() => setNightMode((on) => !on)}
+              title="Night: no sun and no daylight, so the fixtures light the model on their own"
+              aria-pressed={nightMode}
+            >
+              Night
             </button>
           </div>
           <select

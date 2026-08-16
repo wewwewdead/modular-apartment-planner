@@ -26,11 +26,21 @@ import {
 } from './defaults';
 import {
   CEILING_APPLICATIONS,
+  CEILING_BOARD_MATERIALS,
   CEILING_FRAME_MATERIALS,
   DEFAULT_CEILING_JURISDICTION_PROFILE_ID,
   DEFAULT_CEILING_PRODUCT_PROFILE_ID,
   getCeilingProductProfile,
 } from './ceilingProductProfiles';
+import {
+  BEAM_ANGLE_RANGE_DEG,
+  getBulbType,
+  getFixtureType,
+  isKnownColorTemperature,
+  isPendantFixture,
+  resolveFixtureBulbId,
+  resolveFixturePhotometrics,
+} from './lightingCatalog';
 
 export const CEILING_SCHEMA_VERSION = 1;
 
@@ -187,6 +197,66 @@ export function createCeilingOpening(rect = {}, options = {}) {
   };
 }
 
+// Degrees CCW from +U in the RCP plane, folded into one turn so a handle that
+// was dragged round three times still names the direction it points.
+function normalizeAzimuth(degrees) {
+  return ((degrees % 360) + 360) % 360;
+}
+
+// null is an answer on a fixture — "whatever the lamp does" — so an absent or
+// unreadable value has to come back as null rather than as zero, which would
+// read as a real figure of nothing.
+function nullableNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+/**
+ * A luminaire sitting on the ceiling at a point in RCP-local UV. The catalog
+ * settles what can be built: a lamp the fixture has no socket for, a colour
+ * temperature nobody sells, or a tilt past the gimbal's stop are all corrected
+ * here rather than carried as data the renderer would have to second-guess.
+ */
+export function createCeilingLightFixture(point, options = {}) {
+  const type = getFixtureType(options.fixtureType ?? point?.fixtureType);
+  const bulb = getBulbType(resolveFixtureBulbId(type.id, options.bulbType ?? point?.bulbType));
+  const colorTempK = finite(options.colorTempK ?? point?.colorTempK, bulb.defaultCct);
+  const lumensOverride = nullableNumber(options.lumensOverride ?? point?.lumensOverride);
+  const beamAngleDeg = nullableNumber(options.beamAngleDeg ?? point?.beamAngleDeg);
+  const aim = options.aim ?? point?.aim;
+  return {
+    id: options.id || point?.id || generateId('ceil_light'),
+    u: finite(point?.u),
+    v: finite(point?.v),
+    fixtureType: type.id,
+    bulbType: bulb.id,
+    colorTempK: isKnownColorTemperature(colorTempK) ? colorTempK : bulb.defaultCct,
+    // null is the lamp's own rating; a number is a figure read off a real data
+    // sheet, so a zero or a negative one is not an override at all.
+    lumensOverride: lumensOverride !== null && lumensOverride > 0 ? lumensOverride : null,
+    beamAngleDeg:
+      beamAngleDeg === null ? null : clamp(beamAngleDeg, BEAM_ANGLE_RANGE_DEG.min, BEAM_ANGLE_RANGE_DEG.max),
+    dropMm: positive(options.dropMm ?? point?.dropMm, type.defaultDropMm),
+    aim: {
+      // A fixture that cannot be aimed has a stop of 0°, which is the same
+      // clamp saying it points straight down.
+      tiltDeg: clamp(finite(aim?.tiltDeg), 0, type.maxTiltDeg),
+      azimuthDeg: normalizeAzimuth(finite(aim?.azimuthDeg)),
+    },
+    castShadow: Boolean(options.castShadow ?? point?.castShadow ?? true),
+    label: options.label || point?.label || '',
+  };
+}
+
+export function createCeilingLighting(overrides = {}) {
+  return {
+    fixtures: (Array.isArray(overrides?.fixtures) ? overrides.fixtures : []).map((fixture) =>
+      createCeilingLightFixture(fixture, fixture),
+    ),
+  };
+}
+
 export function createCeilingFace(overrides = {}) {
   return {
     enabled: overrides.enabled ?? true,
@@ -207,11 +277,17 @@ export function createCeilingFace(overrides = {}) {
       verticalGap: Math.max(0, finite(overrides.layout?.verticalGap, 6)),
       jointSystem: overrides.layout?.jointSystem || 'express',
       customPanels: Array.isArray(overrides.layout?.customPanels)
-        ? overrides.layout.customPanels.map((panel) => ({
+        ? overrides.layout.customPanels.map(({ material, ...panel }) => ({
             ...panel,
             ...(Array.isArray(panel.outlinePoints)
               ? { outlinePoints: panel.outlinePoints.map((point) => ({ ...point })) }
               : {}),
+            // A board may be boarded in something other than the profile's own
+            // material — half a ceiling in fiber cement and the rest in plywood
+            // is one ceiling, not two. Only a known material is kept: an unknown
+            // string, or the key cleared back to the profile default, leaves no
+            // key at all, so "absent" is the only way a board says "inherit".
+            ...(Object.values(CEILING_BOARD_MATERIALS).includes(material) ? { material } : {}),
           }))
         : [],
     },
@@ -271,6 +347,7 @@ export function createCeilingDetailing(overrides = {}) {
     openings: (Array.isArray(overrides.openings) ? overrides.openings : []).map((opening) =>
       createCeilingOpening(opening, opening),
     ),
+    lighting: createCeilingLighting(overrides.lighting),
   };
 }
 
@@ -632,6 +709,11 @@ function normalizeStoredOutline(value, bounds) {
   return polygonAreaUv(outlinePoints) > EPSILON ? outlinePoints : null;
 }
 
+/** The board's own material where it names a valid one, the ceiling's otherwise. */
+function resolveBoardMaterial(value, fallback) {
+  return Object.values(CEILING_BOARD_MATERIALS).includes(value) ? value : fallback;
+}
+
 function normalizeStoredRect(value, bounds) {
   const u0 = clamp(finite(value?.u, value?.u0), 0, bounds.u1);
   const v0 = clamp(finite(value?.v, value?.v0), 0, bounds.v1);
@@ -651,6 +733,9 @@ export function deriveCeilingPanels(ceiling, project) {
   }
 
   const bounds = { u0: 0, u1: length, v0: 0, v1: depth };
+  // The board material the ceiling is specified in. A generated grid is all of
+  // it; a custom board may say otherwise for itself.
+  const faceMaterial = getCeilingProductProfile(face.productProfileId).boardMaterial;
   const sourceRects =
     face.layout.mode === CEILING_PANEL_LAYOUT_MODES.CUSTOM
       ? face.layout.customPanels.map((panel, index) => {
@@ -663,9 +748,10 @@ export function deriveCeilingPanels(ceiling, project) {
             polygonal: Boolean(outlinePoints),
             source: 'custom',
             label: panel.label || '',
+            material: resolveBoardMaterial(panel.material, faceMaterial),
           };
         })
-      : deriveGridRects(face, length, depth);
+      : deriveGridRects(face, length, depth).map((rect) => ({ ...rect, material: faceMaterial }));
   const openingPolygons = openings.map((opening) => uvToXy(rectOutline(opening)));
 
   return sourceRects
@@ -698,6 +784,7 @@ export function deriveCeilingPanels(ceiling, project) {
         netArea,
         regions,
         source: panel.source === 'custom' ? 'custom' : 'generated',
+        material: panel.material,
       };
     })
     .filter((panel) => panel.netArea > EPSILON);
@@ -1130,11 +1217,92 @@ export function deriveCeilingFasteners(ceiling, project) {
   ];
 }
 
+/**
+ * The fixtures placed on a ceiling, resolved into what a drawing or a renderer
+ * can use: plan position, what the lamp actually emits, and the two elevations
+ * that matter — the plane the fixture is fixed to and the height the light
+ * leaves from, which are the same thing until something hangs.
+ *
+ * A stored fixture is clamped into the ceiling rather than dropped: a boundary
+ * that shrank under a fixture is a fixture to move, not one to lose.
+ */
+export function deriveCeilingLightFixtures(ceiling, project) {
+  const { detailing, space, length, depth } = ceilingContext(ceiling, project);
+  if (!detailing.enabled || length <= EPSILON || depth <= EPSILON) return [];
+
+  const elevations = resolveCeilingElevations(project, ceiling);
+  return detailing.lighting.fixtures.map((fixture) => {
+    const u = clamp(fixture.u, 0, length);
+    const v = clamp(fixture.v, 0, depth);
+    const drop = isPendantFixture(fixture.fixtureType) ? fixture.dropMm : 0;
+    return {
+      ...fixture,
+      u,
+      v,
+      plan: space.toPlan({ u, v }),
+      photometrics: resolveFixturePhotometrics(fixture),
+      elevations: {
+        mountPlane: elevations.boardUnderside,
+        bulb: elevations.boardUnderside - drop,
+      },
+    };
+  });
+}
+
 function memberLength(member) {
   if (member.kind === 'wall_angle') {
     return Math.hypot(member.end.u - member.start.u, member.end.v - member.start.v);
   }
   return member.orientation === 'vertical' ? member.v1 - member.v0 : member.u1 - member.u0;
+}
+
+/**
+ * The boards split by what they are made of, for a ceiling boarded in more than
+ * one material. Order follows the drawing — the material of the first board that
+ * uses it — so the list reads in the order the boards do rather than in an order
+ * invented here.
+ *
+ * The sheet counts are per material because that is how the boards are bought:
+ * two half-ceilings need a whole sheet each where one ceiling of the same area
+ * would have needed one. Every ceiling profile shares the same stock sheet, so
+ * one stock area answers for all of them.
+ */
+function summarizePanelMaterials(panels, stockArea) {
+  const totals = new Map();
+  for (const panel of panels) {
+    const entry = totals.get(panel.material) || { material: panel.material, panelCount: 0, installedAreaMm2: 0 };
+    entry.panelCount += 1;
+    entry.installedAreaMm2 += panel.netArea;
+    totals.set(panel.material, entry);
+  }
+  return [...totals.values()].map((entry) => ({
+    ...entry,
+    stockSheetCount: Math.ceil(entry.installedAreaMm2 / stockArea),
+  }));
+}
+
+/**
+ * The luminaires split by what they are — fixture and lamp together, since the
+ * same can with a BR30 and with a PAR38 are two different line items on an
+ * order. Order follows the drawing, the same way the board materials do.
+ */
+function summarizeLightFixtures(fixtures) {
+  const totals = new Map();
+  for (const fixture of fixtures) {
+    const key = `${fixture.fixtureType}:${fixture.bulbType}`;
+    const entry = totals.get(key) || {
+      fixtureType: fixture.fixtureType,
+      bulbType: fixture.bulbType,
+      count: 0,
+      totalLumens: 0,
+      totalWatts: 0,
+    };
+    entry.count += 1;
+    entry.totalLumens += fixture.photometrics.lumens;
+    entry.totalWatts += fixture.photometrics.watts;
+    totals.set(key, entry);
+  }
+  return [...totals.values()];
 }
 
 export function deriveCeilingTakeoff(ceiling, project) {
@@ -1143,6 +1311,7 @@ export function deriveCeilingTakeoff(ceiling, project) {
   const members = deriveCeilingFramingMembers(ceiling, project);
   const fasteners = deriveCeilingFasteners(ceiling, project);
   const hangers = deriveCeilingHangers(ceiling, project);
+  const lightFixtures = deriveCeilingLightFixtures(ceiling, project);
   const profile = getCeilingProductProfile(detailing.face.productProfileId);
   const stock = profile.stockBoards[0] || { widthMm: 1219, heightMm: 2438 };
   const stockArea = Math.max(EPSILON, stock.widthMm * stock.heightMm);
@@ -1155,12 +1324,19 @@ export function deriveCeilingTakeoff(ceiling, project) {
     panelCount: panels.length,
     stockSheetCount: Math.ceil(installedAreaMm2 / stockArea),
     installedAreaMm2,
+    materials: summarizePanelMaterials(panels, stockArea),
     fastenerCount: fasteners.length,
     furringLinearMm: linearByKind('furring'),
     carrierLinearMm: linearByKind('carrier'),
     wallAngleLinearMm: linearByKind('wall_angle'),
     trimmerLinearMm: linearByKind('trimmer'),
     hangerCount: hangers.length,
+    lighting: {
+      fixtureCount: lightFixtures.length,
+      totalLumens: lightFixtures.reduce((total, fixture) => total + fixture.photometrics.lumens, 0),
+      totalWatts: lightFixtures.reduce((total, fixture) => total + fixture.photometrics.watts, 0),
+      byType: summarizeLightFixtures(lightFixtures),
+    },
   };
 }
 
@@ -1185,6 +1361,7 @@ export function deriveCeilingDetail(ceiling, project) {
     framing: deriveCeilingFramingMembers(ceiling, project),
     hangers: deriveCeilingHangers(ceiling, project),
     fasteners: deriveCeilingFasteners(ceiling, project),
+    lightFixtures: deriveCeilingLightFixtures(ceiling, project),
     takeoff: deriveCeilingTakeoff(ceiling, project),
     elevations: resolveCeilingElevations(project, ceiling),
   };

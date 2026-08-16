@@ -58,6 +58,18 @@ export const CEILING_BOARD_THICKNESS = 4.5; // mm
 // keeps from every ceiling edge, so the rod stands beside the beam it hangs
 // from rather than inside it.
 export const CEILING_HANGER_PLAN_SIZE = 10; // mm
+// Screw head as it reads from below: a shallow disc proud of the boards. Only
+// the head is drawn — the shank is buried in the furring behind the board.
+export const CEILING_FASTENER_HEAD_DIAMETER = 8; // mm
+export const CEILING_FASTENER_HEAD_DEPTH = 1.6; // mm
+// Every ceiling opening is finished with a trim that laps onto the boards
+// around the cut. It is what makes a hatch a hatch rather than a hole, and it
+// is the only thing a plain cut-out has to show for itself.
+export const CEILING_OPENING_TRIM_LAP = 18; // mm onto the boards, all round
+export const CEILING_OPENING_TRIM_DEPTH = 3; // mm below the board underside
+// Depth of a downlight can or a diffuser neck above the boards, trimmed to
+// whatever plenum the ceiling actually has.
+export const CEILING_OPENING_HOUSING_DEPTH = 120; // mm
 
 export const LANDING_WIDTH = 1000; // mm
 export const LANDING_DEPTH = 1000; // mm

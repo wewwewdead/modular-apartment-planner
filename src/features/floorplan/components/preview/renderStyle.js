@@ -140,3 +140,54 @@ export function persistRenderStylePreference(styleName) {
     return false;
   }
 }
+
+/**
+ * The other two things the preview remembers between sessions: whether the
+ * ceiling luminaires are switched on, and whether it is being looked at after
+ * dark. Same storage discipline as the render style — a blocked or full
+ * localStorage is not a reason for the preview to fail to open.
+ */
+export const INTERIOR_LIGHTS_STORAGE_KEY = 'floorplan.preview3d.interiorLights';
+export const NIGHT_MODE_STORAGE_KEY = 'floorplan.preview3d.nightMode';
+
+/** Lamps on by default; night off, because the sun is what a plan is drawn under. */
+export const DEFAULT_INTERIOR_LIGHTS_ON = true;
+export const DEFAULT_NIGHT_MODE = false;
+
+function readBooleanPreference(key, fallback) {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistBooleanPreference(key, value) {
+  if (typeof window === 'undefined') return false;
+  try {
+    window.localStorage.setItem(key, value ? 'true' : 'false');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readInteriorLightsPreference() {
+  return readBooleanPreference(INTERIOR_LIGHTS_STORAGE_KEY, DEFAULT_INTERIOR_LIGHTS_ON);
+}
+
+export function persistInteriorLightsPreference(lightsOn) {
+  return persistBooleanPreference(INTERIOR_LIGHTS_STORAGE_KEY, lightsOn);
+}
+
+export function readNightModePreference() {
+  return readBooleanPreference(NIGHT_MODE_STORAGE_KEY, DEFAULT_NIGHT_MODE);
+}
+
+export function persistNightModePreference(night) {
+  return persistBooleanPreference(NIGHT_MODE_STORAGE_KEY, night);
+}

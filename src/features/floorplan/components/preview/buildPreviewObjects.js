@@ -1,8 +1,25 @@
 import * as THREE from 'three';
 
-const SELECTED_SURFACE_COLOR = new THREE.Color(0xcdeedd);
-const SELECTED_EMISSIVE_COLOR = new THREE.Color(0x0f8f74);
-const SELECTED_OUTLINE_COLOR = new THREE.Color(0x0f8f74);
+/**
+ * Two selection accents, because the two previews answer different questions.
+ * On the floorplan a highlight means "this is the object you picked" — green,
+ * the selection colour the rest of the app uses. Inside a wall or ceiling
+ * assembly editor it means "this is the piece of material you picked", and that
+ * is orange, the same #ffb45c the drawing beside it already strokes a selected
+ * board with. One editor, one selection colour, in both of its panes.
+ */
+export const SELECTION_ACCENTS = Object.freeze({
+  plan: Object.freeze({
+    surface: new THREE.Color(0xcdeedd),
+    emissive: new THREE.Color(0x0f8f74),
+    outline: new THREE.Color(0x0f8f74),
+  }),
+  assembly: Object.freeze({
+    surface: new THREE.Color(0xffe0bd),
+    emissive: new THREE.Color(0xc4661a),
+    outline: new THREE.Color(0xffb45c),
+  }),
+});
 
 function planPointToWorld(point, elevation = 0) {
   return new THREE.Vector3(point.x, elevation, point.y);
@@ -62,12 +79,12 @@ function createVerticalShape(outline, holes = []) {
   return shape;
 }
 
-function applySelectedSurfaceStyle(material) {
+function applySelectedSurfaceStyle(material, accent) {
   if (material.color) {
-    material.color.lerp(SELECTED_SURFACE_COLOR, 0.36);
+    material.color.lerp(accent.surface, 0.36);
   }
   if ('emissive' in material && material.emissive) {
-    material.emissive.copy(SELECTED_EMISSIVE_COLOR);
+    material.emissive.copy(accent.emissive);
     material.emissiveIntensity = material.transparent ? 0.12 : 0.22;
   }
   if (material.transparent) {
@@ -178,18 +195,53 @@ function createBoxObject(descriptor, materialPalette) {
   return mesh;
 }
 
-function createWallFastenerObject(descriptor, materialPalette) {
-  const geometry = new THREE.CylinderGeometry(
-    Math.max(descriptor.radius || 6, 1),
-    Math.max((descriptor.radius || 6) * 0.72, 1),
-    Math.max(descriptor.depth || 5, 1),
-    12,
-  );
-  geometry.rotateX(Math.PI / 2);
+/**
+ * A screw head, tapering away from whoever is looking at it: out of the wall
+ * face for a wall screw, down out of the boards for a ceiling one (`axis:
+ * 'vertical'`, driven up into the furring).
+ *
+ * Ceiling heads carry no outline. A ceiling holds an order of magnitude more
+ * screws than a wall face does — several hundred on an ordinary room — and an
+ * edge line on a 4 mm disc seen flat-on from below buys nothing for twice the
+ * objects in the scene.
+ */
+/**
+ * Ceiling screw heads are all one size and there are hundreds of them, so they
+ * share a geometry instead of each triangulating their own — most of the cost of
+ * drawing them, and most of the buffers they would otherwise hold on the GPU.
+ * `shared` keeps `disposeScene` off them: they outlive any one floor group, and
+ * a rebuild that replaced some of them would otherwise pull the buffers out from
+ * under the ones it carried over. Wall screws are sized from an editable field,
+ * so they keep building their own.
+ */
+const SHARED_FASTENER_GEOMETRIES = new Map();
+
+function sharedFastenerGeometry(narrow, wide, depth) {
+  const key = `${narrow}:${wide}:${depth}`;
+  const cached = SHARED_FASTENER_GEOMETRIES.get(key);
+  if (cached) return cached;
+  const geometry = new THREE.CylinderGeometry(narrow, wide, depth, 12);
+  geometry.userData = { ...geometry.userData, shared: true };
+  SHARED_FASTENER_GEOMETRIES.set(key, geometry);
+  return geometry;
+}
+
+function createFastenerObject(descriptor, materialPalette) {
+  const wide = Math.max(descriptor.radius || 6, 1);
+  const narrow = Math.max(wide * 0.72, 1);
+  const vertical = descriptor.axis === 'vertical';
+  const depth = Math.max(descriptor.depth || 5, 1);
+  let geometry;
+  if (vertical) {
+    geometry = sharedFastenerGeometry(narrow, wide, depth);
+  } else {
+    geometry = new THREE.CylinderGeometry(wide, narrow, depth, 12);
+    geometry.rotateX(Math.PI / 2);
+  }
   const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
   mesh.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation + descriptor.size.y / 2));
   mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
-  addOutline(mesh, materialPalette);
+  if (!vertical) addOutline(mesh, materialPalette);
   return mesh;
 }
 
@@ -620,6 +672,454 @@ function createElectricalDeviceObject(descriptor, materialPalette) {
   return group;
 }
 
+// ── Ceiling luminaires ──
+//
+// Local frame: the origin is the fixture's centre on the board underside, +y up
+// into the plenum, −y down into the room, x along the ceiling's U axis. Every
+// builder works in that frame; the group is placed and spun once at the end.
+//
+// The lens of a recessed fitting sits just *below* its trim rather than inside
+// it. A ring would have to be lathed or extruded per fixture, and a glowing disc
+// a few millimetres proud reads the same from the floor for a fraction of the
+// geometry.
+
+/** How hard a lit lens glows. Above the tone curve's shoulder, which is the point. */
+const LENS_EMISSIVE_INTENSITY = 3;
+
+/**
+ * And what it looks like switched off: not black — glass still catches the room
+ * — but nowhere near lit. `setInteriorLighting` swings a lens between the two.
+ */
+export const UNLIT_LENS_EMISSIVE_INTENSITY = 0.06;
+
+/** Shadow map edge for a fixture. One eighth of the sun's, for a light that reaches one room. */
+const FIXTURE_SHADOW_MAP_SIZE = 1024;
+
+/**
+ * At most this many luminaires cast shadows per floor.
+ *
+ * A shadow-casting light is a full extra render pass over the scene (six, for a
+ * point light's cube map), and a flat can easily hold thirty downlights. The
+ * brightest are the ones whose shadows are legible, so they are the ones that
+ * keep the budget; the rest still light the room, they just do not occlude.
+ */
+export const MAX_FIXTURE_SHADOW_LIGHTS = 8;
+
+const FIXTURE_AIM_REST = Object.freeze({ x: 0, y: -1, z: 0 });
+const FIXTURE_AIM_AXIS = new THREE.Vector3(0, -1, 0);
+
+/**
+ * The emissive material for one fixture's lenses and bulbs.
+ *
+ * Per fixture, not per palette: the colour is the lamp's own colour temperature,
+ * and two fixtures on the same ceiling can be a 2200 K filament and a 4000 K
+ * panel. `ownedByPreviewObject` is what tells `disposeScene` this one dies with
+ * the mesh instead of belonging to the shared palette.
+ */
+function createFixtureLensMaterial(descriptor) {
+  const { r = 1, g = 1, b = 1 } = descriptor.emissive?.color || {};
+  const material = new THREE.MeshStandardMaterial({
+    // The body colour is what the lens looks like unlit, so it is the lamp's
+    // colour with the light taken out of it.
+    color: new THREE.Color(r * 0.32, g * 0.32, b * 0.32),
+    emissive: new THREE.Color(r, g, b),
+    roughness: 0.35,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  material.emissiveIntensity = LENS_EMISSIVE_INTENSITY;
+  material.userData = {
+    ownedByPreviewObject: true,
+    fixtureLens: true,
+    litEmissiveIntensity: LENS_EMISSIVE_INTENSITY,
+  };
+  return material;
+}
+
+/**
+ * A lamp casts no shadow of itself: the source sits below its own glass, so all
+ * shadowing it can produce is acne on the fitting it lives in.
+ */
+function addLensMesh(group, geometry, material, px, py, pz) {
+  const mesh = createMesh(geometry, material);
+  mesh.castShadow = false;
+  mesh.position.set(px, py, pz);
+  group.add(mesh);
+  return mesh;
+}
+
+/** Turn a part so its own −y points where the fixture is aimed. */
+function orientToAim(object, aim) {
+  const direction = new THREE.Vector3(aim.x, aim.y, aim.z);
+  if (direction.length() < 1e-6) return object;
+  object.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(FIXTURE_AIM_AXIS, direction.normalize()));
+  return object;
+}
+
+/**
+ * The aim arrives as a world vector — the ceiling's frame already applied — and
+ * the group it is used inside is about to be spun by that same frame. Taking the
+ * rotation back out here is what stops an eyeball on a rotated ceiling from
+ * being turned twice.
+ */
+function aimInFixtureSpace(aim, rotation) {
+  const cos = Math.cos(rotation || 0);
+  const sin = Math.sin(rotation || 0);
+  return { x: aim.x * cos + aim.z * sin, y: aim.y, z: cos * aim.z - sin * aim.x };
+}
+
+function buildRecessedCanLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  addCylinder(group, 'ceilingOpeningTrim', radius, radius, 8, 24, 0, -4, 0, palette);
+  addCylinder(
+    group,
+    'ceilingOpeningHousing',
+    radius * 0.82,
+    radius * 0.82,
+    fixture.canDepth,
+    20,
+    0,
+    fixture.canDepth / 2,
+    0,
+    palette,
+  );
+  addLensMesh(group, new THREE.CylinderGeometry(radius * 0.78, radius * 0.78, 6, 24), fixture.lens, 0, -11, 0);
+}
+
+function buildGimbalLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  addCylinder(group, 'ceilingOpeningTrim', radius, radius, 8, 24, 0, -4, 0, palette);
+  addCylinder(
+    group,
+    'ceilingOpeningHousing',
+    radius * 0.85,
+    radius * 0.85,
+    fixture.canDepth,
+    20,
+    0,
+    fixture.canDepth / 2,
+    0,
+    palette,
+  );
+
+  // The eyeball: a cup on a swivel, and the lamp looking out of it.
+  const pivot = -radius * 0.5;
+  const cup = addCylinder(group, 'fixtureAccentDark', radius * 0.72, radius * 0.72, radius, 20, 0, 0, 0, palette);
+  cup.position.set(fixture.aim.x * radius * 0.5, pivot + fixture.aim.y * radius * 0.5, fixture.aim.z * radius * 0.5);
+  orientToAim(cup, fixture.aim);
+
+  const reach = radius * 0.95;
+  const lens = addLensMesh(
+    group,
+    new THREE.CylinderGeometry(radius * 0.62, radius * 0.62, 6, 24),
+    fixture.lens,
+    fixture.aim.x * reach,
+    pivot + fixture.aim.y * reach,
+    fixture.aim.z * reach,
+  );
+  orientToAim(lens, fixture.aim);
+}
+
+function buildWaferLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  // No can at all — the whole point of a wafer is that it fits where one will not.
+  addCylinder(group, 'ceilingOpeningTrim', radius, radius, 6, 28, 0, -3, 0, palette);
+  addCylinder(group, 'ceilingOpeningHousing', radius * 0.45, radius * 0.45, 30, 12, 0, 15, 0, palette);
+  addLensMesh(group, new THREE.CylinderGeometry(radius * 0.9, radius * 0.9, 5, 28), fixture.lens, 0, -8, 0);
+}
+
+function buildFlushDomeLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  const height = Math.max(fixture.bulbLength * 0.9, 90);
+  addCylinder(group, 'fixtureAccentMetal', radius * 0.55, radius * 0.55, 20, 20, 0, -10, 0, palette);
+  // The drum is the diffuser, so the whole of it glows.
+  addLensMesh(
+    group,
+    new THREE.CylinderGeometry(radius * 0.92, radius * 0.55, height, 28),
+    fixture.lens,
+    0,
+    -20 - height / 2,
+    0,
+  );
+}
+
+function buildSemiFlushLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  const drop = fixture.drop;
+  const height = Math.max(fixture.bulbLength * 0.9, 90);
+  addCylinder(group, 'fixtureAccentMetal', radius * 0.45, radius * 0.45, 16, 20, 0, -8, 0, palette);
+  if (drop > 40) addCylinder(group, 'fixtureAccentMetal', 12, 12, drop - 20, 10, 0, -10 - (drop - 20) / 2, 0, palette);
+  // Centred on the lamp: the drop is where the lamp is, not where the glass starts.
+  addLensMesh(group, new THREE.CylinderGeometry(radius * 0.9, radius * 0.62, height, 28), fixture.lens, 0, -drop, 0);
+}
+
+function buildCylinderDownlightLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  const height = Math.max(fixture.bulbLength + 60, 160);
+  addCylinder(group, 'fixtureAccentMetal', radius * 1.05, radius * 1.05, 12, 24, 0, -6, 0, palette);
+  addCylinder(group, 'fixtureAccentMetal', radius, radius, height, 24, 0, -12 - height / 2, 0, palette);
+  addLensMesh(group, new THREE.CylinderGeometry(radius * 0.86, radius * 0.86, 6, 24), fixture.lens, 0, -12 - height, 0);
+}
+
+function buildPendantLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  const shadeHeight = Math.max(radius * 0.8, 60);
+  const cordLength = Math.max(fixture.drop - shadeHeight, 20);
+  addCylinder(group, 'fixtureAccentMetal', radius * 0.4, radius * 0.4, 14, 16, 0, -7, 0, palette);
+  addCylinder(group, 'fixtureAccentDark', 6, 6, cordLength, 8, 0, -cordLength / 2, 0, palette);
+  addCylinder(
+    group,
+    'fixtureAccentMetal',
+    radius * 0.28,
+    radius,
+    shadeHeight,
+    24,
+    0,
+    -cordLength - shadeHeight / 2,
+    0,
+    palette,
+  );
+  // The lamp hangs at the shade's mouth, which is the elevation the light source
+  // was derived at.
+  addLensMesh(group, new THREE.SphereGeometry(fixture.bulbRadius, 16, 12), fixture.lens, 0, -fixture.drop, 0);
+}
+
+function buildChandelierLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  const drop = fixture.drop;
+  const armLength = radius * 0.82;
+  addCylinder(group, 'fixtureAccentMetal', radius * 0.22, radius * 0.22, 14, 16, 0, -7, 0, palette);
+  addCylinder(group, 'fixtureAccentMetal', 10, 10, drop, 8, 0, -drop / 2, 0, palette);
+  addCylinder(group, 'fixtureAccentMetal', radius * 0.16, radius * 0.26, 70, 16, 0, -drop + 35, 0, palette);
+
+  for (let index = 0; index < fixture.bulbCount; index += 1) {
+    const angle = (index / fixture.bulbCount) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    // rotation.y turns local +x by −angle, so the arm has to be spun back to lie
+    // along the radius it was placed on.
+    const arm = addBox(
+      group,
+      'fixtureAccentMetal',
+      armLength,
+      10,
+      10,
+      (cos * armLength) / 2,
+      -drop,
+      (sin * armLength) / 2,
+      palette,
+    );
+    arm.rotation.y = -angle;
+    addLensMesh(
+      group,
+      new THREE.SphereGeometry(fixture.bulbRadius, 12, 10),
+      fixture.lens,
+      cos * armLength,
+      -drop + fixture.bulbRadius,
+      sin * armLength,
+    );
+  }
+}
+
+function buildTrackHeadLuminaire(group, fixture, palette) {
+  const radius = fixture.radius;
+  const barLength = Math.max(radius * 12, 600);
+  const headLength = Math.max(fixture.bulbLength + 40, 110);
+  // The track the head is clipped to, along the ceiling's U axis.
+  addBox(group, 'fixtureAccentDark', barLength, 26, radius * 1.4, 0, -13, 0, palette);
+
+  const pivot = -26 - radius * 0.6;
+  const head = addCylinder(
+    group,
+    'fixtureAccentMetal',
+    radius,
+    radius * 0.9,
+    headLength,
+    20,
+    (fixture.aim.x * headLength) / 2,
+    pivot + (fixture.aim.y * headLength) / 2,
+    (fixture.aim.z * headLength) / 2,
+    palette,
+  );
+  orientToAim(head, fixture.aim);
+
+  const reach = headLength + 3;
+  const lens = addLensMesh(
+    group,
+    new THREE.CylinderGeometry(radius * 0.86, radius * 0.86, 6, 20),
+    fixture.lens,
+    fixture.aim.x * reach,
+    pivot + fixture.aim.y * reach,
+    fixture.aim.z * reach,
+  );
+  orientToAim(lens, fixture.aim);
+}
+
+function buildTrofferLuminaire(group, fixture, palette) {
+  const width = fixture.width;
+  const length = fixture.length;
+  // Pan in the plenum, flange on the boards, and the panel face below both.
+  addBox(group, 'ceilingOpeningHousing', width, 110, length, 0, 55, 0, palette);
+  addBox(group, 'ceilingOpeningTrim', width + 24, 12, length + 24, 0, -6, 0, palette);
+  addLensMesh(
+    group,
+    new THREE.BoxGeometry(Math.max(width - 30, 1), 8, Math.max(length - 30, 1)),
+    fixture.lens,
+    0,
+    -16,
+    0,
+  );
+}
+
+const CEILING_LIGHT_FIXTURE_BUILDERS = {
+  recessed_can_4: buildRecessedCanLuminaire,
+  recessed_can_6: buildRecessedCanLuminaire,
+  gimbal_recessed: buildGimbalLuminaire,
+  wafer_led: buildWaferLuminaire,
+  surface_flush: buildFlushDomeLuminaire,
+  semi_flush: buildSemiFlushLuminaire,
+  cylinder_downlight: buildCylinderDownlightLuminaire,
+  pendant: buildPendantLuminaire,
+  chandelier_5: buildChandelierLuminaire,
+  track_head: buildTrackHeadLuminaire,
+  troffer_2x2: buildTrofferLuminaire,
+  troffer_2x4: buildTrofferLuminaire,
+};
+
+function createCeilingLightFixtureObject(descriptor, materialPalette) {
+  const group = new THREE.Group();
+  const aperture = descriptor.aperture || {};
+  const bulb = descriptor.bulb || {};
+  const radius = Math.max(aperture.radiusMm ?? (aperture.widthMm ?? 200) / 2, 10);
+  const bulbLength = Math.max(bulb.lengthMm || 110, 10);
+
+  const fixture = {
+    radius,
+    width: Math.max(aperture.widthMm ?? radius * 2, 20),
+    length: Math.max(aperture.lengthMm ?? radius * 2, 20),
+    bulbRadius: Math.max((bulb.diameterMm || 60) / 2, 5),
+    bulbLength,
+    bulbCount: Math.max(bulb.count || 1, 1),
+    // Deep enough to hold the lamp, shallow enough to stay in a real plenum.
+    canDepth: Math.min(Math.max(bulbLength + 60, 120), 240),
+    drop: Math.max(descriptor.dropMm || 0, 0),
+    aim: aimInFixtureSpace(descriptor.aim || FIXTURE_AIM_REST, descriptor.rotation),
+    lens: createFixtureLensMaterial(descriptor),
+  };
+
+  const builder = CEILING_LIGHT_FIXTURE_BUILDERS[descriptor.fixtureType] || buildRecessedCanLuminaire;
+  builder(group, fixture, materialPalette);
+
+  group.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation));
+  group.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+  return group;
+}
+
+/**
+ * Shadow settings for a fixture light, in millimetres.
+ *
+ * `normalBias` is 20 *world units*, not the sub-unit figure a metre-scaled scene
+ * would take — the same reason the sun's own bias is scaled to the model.
+ *
+ * The map renders once and then holds. The renderer drives shadows by hand
+ * (`shadowMap.autoUpdate = false`) and flips `needsUpdate` on every accumulated
+ * sample so the jittered sun can soften its own edges; a fixture never moves, so
+ * opting out of that is the difference between one shadow pass per lamp and one
+ * per lamp per sample — a hundred and twenty-eight of them, for the same picture.
+ */
+function configureFixtureShadow(light) {
+  light.shadow.mapSize.set(FIXTURE_SHADOW_MAP_SIZE, FIXTURE_SHADOW_MAP_SIZE);
+  light.shadow.camera.near = 50;
+  light.shadow.camera.far = 30000;
+  light.shadow.bias = -0.0005;
+  light.shadow.normalBias = 20;
+  light.shadow.autoUpdate = false;
+  light.shadow.needsUpdate = true;
+}
+
+/** How far in front of the lamp a spot's target sits. Direction only; distance is arbitrary. */
+const FIXTURE_TARGET_DISTANCE = 2000;
+
+function createCeilingLightSourceObject(descriptor) {
+  const group = new THREE.Group();
+  const { r = 1, g = 1, b = 1 } = descriptor.color || {};
+  const color = new THREE.Color(r, g, b);
+  const position = descriptor.position || { x: 0, y: 0, z: 0 };
+  const intensity = Math.max(descriptor.intensity || 0, 0);
+  const distance = Math.max(descriptor.distanceMm || 0, 0);
+  const isSpot = descriptor.lightType === 'spot';
+
+  const light = isSpot
+    ? new THREE.SpotLight(color, intensity, distance, descriptor.angleRad, descriptor.penumbra ?? 0.35, 2)
+    : new THREE.PointLight(color, intensity, distance, 2);
+  // Physical falloff either way — the intensity handed over is already candela
+  // scaled for a millimetre world, and inverse-square is what makes it read like
+  // the lamp on the box.
+  light.decay = 2;
+  light.position.set(position.x, position.y, position.z);
+  light.castShadow = Boolean(descriptor.castShadow);
+  // `baseIntensity` is the descriptor's own candela figure, kept on the light so
+  // the viewport can rescale the lamp for the rig it is being seen under without
+  // reaching back to the descriptor — and, more importantly, so that a light
+  // which survives an incremental scene rebuild is always rescaled from the same
+  // base rather than compounding the factor it already carries. The descriptor
+  // itself stays pure photometry: it is cached by source key, so a descriptor
+  // that changed with the time of day would never be rebuilt at all.
+  light.userData = { isFixtureLight: true, baseIntensity: intensity };
+  if (light.castShadow) configureFixtureShadow(light);
+  group.add(light);
+
+  if (isSpot) {
+    const aim = descriptor.aim || FIXTURE_AIM_REST;
+    // The target rides in the same group as the light, so the pair moves and is
+    // disposed as one thing.
+    light.target.position.set(
+      position.x + aim.x * FIXTURE_TARGET_DISTANCE,
+      position.y + aim.y * FIXTURE_TARGET_DISTANCE,
+      position.z + aim.z * FIXTURE_TARGET_DISTANCE,
+    );
+    group.add(light.target);
+  }
+
+  return group;
+}
+
+/**
+ * Hold the floor to `MAX_FIXTURE_SHADOW_LIGHTS` shadow casters, brightest first.
+ *
+ * A post-pass rather than a decision in the descriptor: the descriptor records
+ * what the user asked for, and a fixture that loses the budget on a crowded
+ * ceiling has to win it back on its own when the neighbours are deleted. Sorted
+ * by intensity and broken by id so the same floor always demotes the same lamps
+ * — an unstable choice would flicker the shadows on every rebuild.
+ */
+function applyFixtureShadowCap(entries) {
+  const lights = [];
+  for (const entry of entries.values()) {
+    if (entry.descriptor.geometry === 'ceilingLightSource') lights.push(entry);
+  }
+  if (!lights.length) return;
+
+  lights.sort(
+    (a, b) =>
+      (b.descriptor.intensity || 0) - (a.descriptor.intensity || 0) ||
+      String(a.descriptor.id).localeCompare(String(b.descriptor.id)),
+  );
+
+  let granted = 0;
+  for (const entry of lights) {
+    const allowed = Boolean(entry.descriptor.castShadow) && granted < MAX_FIXTURE_SHADOW_LIGHTS;
+    if (allowed) granted += 1;
+    entry.object.traverse((node) => {
+      if (!node.userData?.isFixtureLight || node.castShadow === allowed) return;
+      node.castShadow = allowed;
+      // A map that was never rendered, or was rendered before the light was
+      // demoted, has to be asked for again.
+      if (allowed && node.shadow) node.shadow.needsUpdate = true;
+    });
+  }
+}
+
 // ── Railing ──
 
 function createRailingObject(descriptor, materialPalette) {
@@ -733,11 +1233,44 @@ function createObjectForDescriptor(descriptor, materialPalette) {
   if (descriptor.geometry === 'railing') return createRailingObject(descriptor, materialPalette);
   if (descriptor.geometry === 'fixture') return createFixtureObject(descriptor, materialPalette);
   if (descriptor.geometry === 'electricalDevice') return createElectricalDeviceObject(descriptor, materialPalette);
-  if (descriptor.geometry === 'wallFastener') return createWallFastenerObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'ceilingLightFixture')
+    return createCeilingLightFixtureObject(descriptor, materialPalette);
+  if (descriptor.geometry === 'ceilingLightSource') return createCeilingLightSourceObject(descriptor);
+  if (descriptor.geometry === 'fastener') return createFastenerObject(descriptor, materialPalette);
   return createBoxObject(descriptor, materialPalette);
 }
 
+/**
+ * Which piece of a detailed wall or ceiling assembly a mesh is — the board,
+ * framing member, screw, or hanger the detail editors let you pick — or null for
+ * a mesh that is a whole object rather than a part of one. `partId` is the id
+ * the editor selects by, so a highlight can be driven straight from its state.
+ */
+export function readAssemblyPart(descriptor) {
+  const metadata = descriptor?.metadata;
+  if (!metadata) return null;
+  const kind = metadata.wallDetailKind || metadata.ceilingDetailKind || null;
+  const id = metadata.wallDetailElementId ?? metadata.ceilingDetailElementId ?? null;
+  if (!kind || !id) return null;
+  return { kind, id, side: metadata.assemblySide || null };
+}
+
+/**
+ * A part selection names one board out of a face full of them, so the side has
+ * to agree as well as the id: the same board id exists on both faces of a wall.
+ * Framing is on neither face — it sits in the core — so it answers to the id
+ * alone.
+ */
+function matchesAssemblyPart(descriptor, part) {
+  const candidate = readAssemblyPart(descriptor);
+  if (!candidate || !part?.id) return false;
+  if (candidate.kind !== part.kind || candidate.id !== part.id) return false;
+  if (!part.side || !candidate.side || candidate.side === 'core') return true;
+  return candidate.side === part.side;
+}
+
 function matchesSelection(descriptor, selection) {
+  if (selection?.part) return matchesAssemblyPart(descriptor, selection.part);
   if (!selection?.selectedId) return false;
   if (selection.selectedType === 'trussSystem') {
     return descriptor.metadata?.trussSystemId === selection.selectedId;
@@ -747,10 +1280,14 @@ function matchesSelection(descriptor, selection) {
 }
 
 function assignPreviewMetadata(object, descriptor, floor) {
+  const part = readAssemblyPart(descriptor);
   const previewTarget = {
     kind: descriptor.kind,
     sourceId: descriptor.metadata?.sourceId || descriptor.id,
     floorId: descriptor.metadata?.floorId || floor.floorId,
+    // Carried so a click in the 3D pane can land on the board it hit rather than
+    // on the wall the board belongs to.
+    part,
   };
 
   object.traverse((node) => {
@@ -845,6 +1382,11 @@ export function buildFloorObjectGroup(floor, materialPalette, previousEntries = 
     });
   }
 
+  // After the whole floor is known: which lamps get shadows is a decision about
+  // the set of them, and carried-over lights have to be re-judged against the
+  // ones that were just rebuilt beside them.
+  applyFixtureShadowCap(entries);
+
   return { floorGroup, entries };
 }
 
@@ -869,8 +1411,9 @@ export function buildPreviewObjectRoot(sceneDescriptor, materialPalette) {
  * Iterates meshMap and finds ALL matching descriptors (handles truss systems, multi-segment walls).
  * Returns a Group of overlay meshes with renderOrder=1 and LessEqual depth for visual priority.
  */
-export function buildSelectionOverlay(meshMap, selection, materialPalette) {
-  if (!selection?.selectedId || !meshMap.size) return null;
+export function buildSelectionOverlay(meshMap, selection, materialPalette, accentName = 'plan') {
+  if (!(selection?.selectedId || selection?.part?.id) || !meshMap.size) return null;
+  const accent = SELECTION_ACCENTS[accentName] || SELECTION_ACCENTS.plan;
 
   const overlayGroup = new THREE.Group();
   overlayGroup.name = 'selection-overlay';
@@ -878,6 +1421,10 @@ export function buildSelectionOverlay(meshMap, selection, materialPalette) {
 
   for (const [, entry] of meshMap) {
     if (!entry.floorVisible) continue;
+    // A luminaire's light answers to the same id as its fitting, and there is
+    // nothing to tint on a light — building one here would put a second lamp in
+    // the room for as long as the fixture stayed selected.
+    if (entry.descriptor.geometry === 'ceilingLightSource') continue;
     if (!matchesSelection(entry.descriptor, selection)) continue;
 
     const overlayObject = createObjectForDescriptor(entry.descriptor, materialPalette);
@@ -888,19 +1435,19 @@ export function buildSelectionOverlay(meshMap, selection, materialPalette) {
         if (Array.isArray(node.material)) {
           node.material = node.material.map((mat) => {
             const clone = mat.clone();
-            applySelectedSurfaceStyle(clone);
+            applySelectedSurfaceStyle(clone, accent);
             clone.depthFunc = THREE.LessEqualDepth;
             return clone;
           });
         } else {
           node.material = node.material.clone();
-          applySelectedSurfaceStyle(node.material);
+          applySelectedSurfaceStyle(node.material, accent);
           node.material.depthFunc = THREE.LessEqualDepth;
         }
       }
       if (node.isLineSegments && node.material) {
         node.material = node.material.clone();
-        node.material.color.copy(SELECTED_OUTLINE_COLOR);
+        node.material.color.copy(accent.outline);
         node.material.opacity = 1;
         node.material.depthFunc = THREE.LessEqualDepth;
       }

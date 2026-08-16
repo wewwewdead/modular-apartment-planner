@@ -790,26 +790,39 @@
 
 /* ---------- Status bar ---------- */
 
+/*
+  One line, always. The bar sits directly above the canvas frame, and the canvas
+  contain-fits the drawing to whatever height that frame has left: when the bar
+  wrapped onto a second line — which it did the moment a longer status arrived,
+  e.g. "ceiling board selected" against "Nothing selected" — the drawing silently
+  re-scaled. Selecting a board looked like the plan zooming out, deselecting like
+  it zooming back in. Long text is clipped instead; the shortcut hint gives way
+  first because it is the one thing here that never changes.
+*/
 .statusBar {
   display: flex;
   align-items: center;
   gap: 6px 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-height: 30px;
   padding: 5px 12px;
+  overflow: hidden;
   background: #101a22;
   border-bottom: 1px solid #26313a;
   font-size: 10px;
+  white-space: nowrap;
 }
 .statusLive {
   display: flex;
   align-items: center;
   gap: 6px 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-width: 0;
+  overflow: hidden;
 }
 .statusTool {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 5px;
   padding: 2px 7px 2px 6px;
@@ -824,9 +837,11 @@
   text-transform: uppercase;
 }
 .statusHint {
+  flex: none;
   color: #efbe7e;
 }
 .statusSnap {
+  flex: none;
   padding: 2px 8px;
   border-radius: 99px;
   background: rgba(56, 122, 100, 0.35);
@@ -837,12 +852,18 @@
   color: #8b98a1;
 }
 .statusSelection {
+  flex: none;
   color: #93a2ad;
 }
+/* Shrinks before anything else: it is a fixed reminder, not live information. */
 .statusShortcut {
+  flex: 0 200 auto;
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
   color: #6f7f8a;
   font-size: 9px;
+  text-overflow: ellipsis;
 }
 
 /* ---------- Canvas ---------- */
@@ -1072,15 +1093,30 @@
   --cad-frame-line: 1px;
   --cad-board-line: 1.25px;
   --cad-profile-line: 1.6px;
+
+  /* One orange for a selected piece, shared with the 3D pane beside the drawing
+     (SELECTION_ACCENTS.assembly in buildPreviewObjects.js). Selection is carried
+     by fill, never by line weight — see above: a heavier line would move the
+     edge the drawing is being measured against. `face` is opaque because it
+     replaces a piece's own fill; `wash` lies over whatever is behind it. */
+  --assembly-selected-line: #ffb45c;
+  --assembly-selected-face: #efb478;
+  --assembly-selected-wash: rgba(255, 180, 92, 0.65);
 }
 
 .panelShape {
   stroke: #303943;
   stroke-width: var(--cad-board-line);
-  transition: stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
+  transition:
+    fill var(--duration-fast, 0.1s) var(--ease-out, ease),
+    stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
+/* The board itself goes orange, not just its outline. A hairline edge is
+   invisible on a face this size once the framing bands and a few hundred screws
+   are drawn over it, which left clicking a board with no answer at all. */
 .panelShape[data-selected='true'] {
-  stroke: #ffb45c;
+  fill: var(--assembly-selected-face);
+  stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .panelShape:not([data-selected='true']):hover {
   stroke: #8fd0f0;
@@ -1095,8 +1131,8 @@
     stroke var(--duration-fast, 0.1s) var(--ease-out, ease);
 }
 .frameShape[data-selected='true'] {
-  fill: rgba(255, 180, 92, 0.65);
-  stroke: #ffb45c;
+  fill: var(--assembly-selected-wash);
+  stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .frameShape:not([data-selected='true']):hover {
   fill: rgba(96, 170, 208, 0.55);
@@ -1126,6 +1162,12 @@
   fill: none;
   stroke: #0d1116;
   stroke-width: var(--cad-profile-line);
+}
+/* An opening is a cut, so there is nothing of it to colour but the void it
+   leaves; the wash fills that, over whatever shows through. */
+.openingProfile[data-selected='true'] {
+  fill: var(--assembly-selected-wash);
+  stroke: var(--assembly-selected-line);
 }
 .canvas[data-tool='select'] .fastenerGraphic:hover {
   filter: brightness(1.45);
@@ -1230,6 +1272,13 @@
 }
 .fastenerGraphic[data-selected='true'] {
   opacity: 1;
+}
+/* Ring around the selected screw. Its own colour would be lost among the
+   hundreds beside it, so the answer is the halo, in the editor's orange. */
+.fastenerHalo {
+  fill: none;
+  stroke: var(--assembly-selected-line);
+  stroke-width: 3px;
 }
 .fastenerGuideBuilder {
   display: flex;
