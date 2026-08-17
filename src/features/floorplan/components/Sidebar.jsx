@@ -44,6 +44,25 @@ function ChevronSvg({ collapsed }) {
   );
 }
 
+function GhostFloorIcon() {
+  return (
+    <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
+      <rect x="2.5" y="2" width="9" height="4.5" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <rect
+        x="1.5"
+        y="8"
+        width="11"
+        height="4"
+        rx="0.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeDasharray="2 1.5"
+      />
+    </svg>
+  );
+}
+
 function DuplicateIcon() {
   return (
     <svg viewBox="0 0 14 14" aria-hidden="true" className={styles.floorActionIcon}>
@@ -108,6 +127,7 @@ export default function Sidebar() {
     activePhaseId,
     phaseViewMode,
     lifecycleStage,
+    showFloorBelowUnderlay,
     sunStudy,
     daylight,
     solarAccess,
@@ -436,6 +456,21 @@ export default function Sidebar() {
           </button>
         }
       >
+        {/* Lives here rather than in the toolbar's Display group, which already
+            runs off the right edge of the window. It also belongs here: it is a
+            statement about which floor you are looking at. */}
+        {orderedFloors.length > 1 && (
+          <button
+            type="button"
+            className={showFloorBelowUnderlay ? styles.underlayToggleActive : styles.underlayToggle}
+            onClick={() => editorDispatch({ type: 'TOGGLE_FLOOR_BELOW_UNDERLAY' })}
+            aria-pressed={showFloorBelowUnderlay}
+            title="Draw the floor below as a grey ghost under this one, so an overhang or setback is visible while you draw"
+          >
+            <GhostFloorIcon />
+            <span>Ghost floor below</span>
+          </button>
+        )}
         {orderedFloors.map((entry) => (
           <div
             key={entry.id}

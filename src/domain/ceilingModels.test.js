@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pointInPolygon } from '@/geometry/polygon';
 import { createBeam, createColumn, createFloor, createRoom } from './models';
 import {
   CEILING_ATTACHMENT_MODES,
@@ -587,6 +588,126 @@ describe('drawn ceiling boundaries', () => {
     const detail = deriveCeilingDetail(ceiling, project);
     expect(detail.length).toBeCloseTo(2000, 6);
     expect(detail.depth).toBeCloseTo(1500, 6);
+  });
+});
+
+// A ceiling closes off the underside of the slab above it, and a cantilever is
+// a slab drawn past the storey below — so the beams alone cannot say how far
+// the ceiling reaches.
+describe('ceiling coverage from the slab above', () => {
+  const FLUSH_SLAB = [
+    { x: 0, y: 0 },
+    { x: 6000, y: 0 },
+    { x: 6000, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+  // The same plate pulled 1500 mm east of the frame.
+  const CANTILEVERED_SLAB = [
+    { x: 0, y: 0 },
+    { x: 7500, y: 0 },
+    { x: 7500, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+
+  const slabAbove = (boundaryPoints) => ({
+    id: 'slab_above',
+    floorId: 'floor_2',
+    elevation: 3200,
+    thickness: 200,
+    boundaryPoints,
+  });
+
+  function stackedProject(boundaryPoints, { beams = beamRing(3200) } = {}) {
+    return {
+      floors: [
+        {
+          id: 'floor_1',
+          levelIndex: 0,
+          elevation: 0,
+          floorToFloorHeight: 3200,
+          columns: RING_COLUMNS,
+          beams,
+          rooms: [],
+          walls: [],
+          slabs: [],
+        },
+        {
+          id: 'floor_2',
+          levelIndex: 1,
+          elevation: 3200,
+          floorToFloorHeight: 3200,
+          columns: [],
+          beams: [],
+          rooms: [],
+          walls: [],
+          slabs: [slabAbove(boundaryPoints)],
+        },
+      ],
+      trussSystems: [],
+    };
+  }
+
+  const withSlabAbove = (project, boundaryPoints) => ({
+    ...project,
+    floors: project.floors.map((floor) =>
+      floor.id === 'floor_2' ? { ...floor, slabs: [slabAbove(boundaryPoints)] } : floor,
+    ),
+  });
+
+  const maxX = (points) => Math.max(...points.map((point) => point.x));
+
+  it('snapshots a new ceiling out to the slab edge rather than the beam faces', () => {
+    const ceiling = createCeilingForProject(stackedProject(CANTILEVERED_SLAB), { floorId: 'floor_1' });
+
+    // Still hung from the four beams, and still on their plane: only the extent
+    // came from the slab.
+    expect(ceiling.attachment).toEqual({
+      mode: CEILING_ATTACHMENT_MODES.BEAM,
+      beamIds: ['beam_s', 'beam_n', 'beam_w', 'beam_e'],
+    });
+    expect(ceiling.baseElevation).toBe(3200);
+    expect(maxX(ceiling.boundaryPolygon)).toBeCloseTo(7500, 6);
+    expect(pointInPolygon({ x: 7000, y: 2000 }, ceiling.boundaryPolygon)).toBe(true);
+  });
+
+  it('re-reads the slab on every read, so dragging its edge out drags the ceiling with it', () => {
+    const project = stackedProject(FLUSH_SLAB);
+    const ceiling = createCeilingForProject(project, { floorId: 'floor_1' });
+
+    expect(maxX(resolveCeilingBoundary(project, ceiling))).toBeCloseTo(6000, 6);
+    expect(maxX(resolveCeilingBoundary(withSlabAbove(project, CANTILEVERED_SLAB), ceiling))).toBeCloseTo(7500, 6);
+  });
+
+  it('leaves a drawn ceiling exactly where it was traced', () => {
+    const project = stackedProject(FLUSH_SLAB);
+    const drawn = [
+      { x: 1000, y: 1000 },
+      { x: 3000, y: 1000 },
+      { x: 3000, y: 2500 },
+      { x: 1000, y: 2500 },
+    ];
+    const ceiling = createCeilingForProject(project, {
+      floorId: 'floor_1',
+      boundaryPolygon: drawn,
+      boundarySource: CEILING_BOUNDARY_SOURCES.DRAWN,
+    });
+
+    expect(ceiling.boundaryPolygon).toEqual(drawn);
+    expect(resolveCeilingBoundary(withSlabAbove(project, CANTILEVERED_SLAB), ceiling)).toEqual(drawn);
+  });
+
+  it('takes the slab as its outline without claiming to hang from beams', () => {
+    const project = stackedProject(CANTILEVERED_SLAB, { beams: [] });
+
+    const ceiling = createCeilingForProject(project, { floorId: 'floor_1' });
+
+    // Structure overhead beats the bounding box of everything on the floor, but
+    // a slab is not something a ceiling can be hung from: the attachment stays
+    // manual and the datum stays the top of the storey.
+    expect(ceiling.attachment).toEqual({ mode: CEILING_ATTACHMENT_MODES.MANUAL, beamIds: [] });
+    expect(ceiling.baseElevation).toBe(3200);
+    expect(ceiling.boundaryPolygon).toEqual(CANTILEVERED_SLAB);
+    expect(resolveCeilingBoundary(project, ceiling)).toEqual(CANTILEVERED_SLAB);
   });
 });
 

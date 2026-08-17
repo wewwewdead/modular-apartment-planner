@@ -57,7 +57,7 @@ function placeBeam(floor) {
   return dispatched.find((action) => action.type === 'BEAM_ADD').beam;
 }
 
-function drawWall(floor, clicks) {
+function drawWall(floor, clicks, options = {}) {
   const tool = trackToolState();
   const dispatched = [];
   const handler = createWallDrawHandler({
@@ -68,6 +68,7 @@ function drawWall(floor, clicks) {
     viewport: { zoom: DEFAULT_ZOOM },
     snapEnabled: true,
     activePhaseId: null,
+    ...options,
   });
 
   for (const click of clicks) {
@@ -136,5 +137,80 @@ describe('drawing a wall across a column bay', () => {
 
     expect(beam.floorLevel).toBe(3400);
     expect(fitted.height).toBeCloseTo(3400 - BEAM_DEPTH, 6);
+  });
+});
+
+/**
+ * Tracing an upper floor over the ghost of the one below.
+ *
+ * The floor below is a REFERENCE, never a parent: it hands over bare
+ * coordinates and nothing else. A wall on this floor attached to a column that
+ * lives one storey down would resolve to nothing the moment the plan reloaded,
+ * so the guarantee tested here is as much about what the wall does NOT carry.
+ */
+describe('drawing a wall over the floor below', () => {
+  const BELOW_END = { x: 6000, y: 0 };
+
+  function emptyUpperFloor() {
+    return { id: 'floor_upper', elevation: 3000, walls: [], beams: [], columns: [] };
+  }
+
+  function floorBelow() {
+    return {
+      id: 'floor_ground',
+      walls: [{ id: 'wall_below', start: { x: 0, y: 0 }, end: BELOW_END, thickness: 200 }],
+      columns: [{ ...createColumn(0, 4000, COLUMN_SIZE, COLUMN_SIZE), id: 'col_below' }],
+    };
+  }
+
+  // Aimed at the corner of the wall below, missed by 50mm — the ghost is 100mm
+  // wide at the default zoom.
+  const nearBelowCorner = { x: 6040, y: 30 };
+  const clicks = [nearBelowCorner, { x: 6030, y: 3000 }];
+
+  it('lands the endpoint on the wall corner below', () => {
+    const wall = drawWall(emptyUpperFloor(), clicks, { floorBelow: floorBelow(), showFloorBelowUnderlay: true });
+
+    expect(wall.start).toEqual(BELOW_END);
+  });
+
+  it('records NO attachment for a point taken from the floor below', () => {
+    const wall = drawWall(emptyUpperFloor(), clicks, { floorBelow: floorBelow(), showFloorBelowUnderlay: true });
+
+    // The whole point of the separate channel: no columnId can reach a wall on
+    // another floor through it.
+    expect(wall.startAttachment).toBeNull();
+    expect(wall.endAttachment).toBeNull();
+    expect(JSON.stringify(wall)).not.toContain('col_below');
+  });
+
+  it('snaps to a column centre below the same way, still without an attachment', () => {
+    const wall = drawWall(
+      emptyUpperFloor(),
+      [
+        { x: 60, y: 4040 },
+        { x: 3000, y: 4000 },
+      ],
+      { floorBelow: floorBelow(), showFloorBelowUnderlay: true },
+    );
+
+    expect(wall.start).toEqual({ x: 0, y: 4000 });
+    expect(wall.startAttachment).toBeNull();
+  });
+
+  it('ignores the floor below while the ghost is hidden', () => {
+    const wall = drawWall(emptyUpperFloor(), clicks, { floorBelow: floorBelow(), showFloorBelowUnderlay: false });
+
+    expect(wall.start).toEqual(nearBelowCorner);
+  });
+
+  it('lets this floor win: a column here outranks the ghost below', () => {
+    const floor = emptyUpperFloor();
+    floor.columns = [{ ...createColumn(6100, 0, COLUMN_SIZE, COLUMN_SIZE), id: 'col_upper' }];
+
+    const wall = drawWall(floor, clicks, { floorBelow: floorBelow(), showFloorBelowUnderlay: true });
+
+    expect(wall.start).toEqual({ x: 6100, y: 0 });
+    expect(wall.startAttachment).toMatchObject({ columnId: 'col_upper' });
   });
 });

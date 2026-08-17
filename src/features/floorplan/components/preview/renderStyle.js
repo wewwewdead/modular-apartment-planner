@@ -142,17 +142,21 @@ export function persistRenderStylePreference(styleName) {
 }
 
 /**
- * The other two things the preview remembers between sessions: whether the
- * ceiling luminaires are switched on, and whether it is being looked at after
- * dark. Same storage discipline as the render style — a blocked or full
- * localStorage is not a reason for the preview to fail to open.
+ * The other things the preview remembers between sessions: whether the ceiling
+ * luminaires are switched on, whether it is being looked at after dark, and
+ * whether walk mode is a physical walk or noclip flight. Same storage
+ * discipline as the render style — a blocked or full localStorage is not a
+ * reason for the preview to fail to open.
  */
 export const INTERIOR_LIGHTS_STORAGE_KEY = 'floorplan.preview3d.interiorLights';
 export const NIGHT_MODE_STORAGE_KEY = 'floorplan.preview3d.nightMode';
+export const WALK_PHYSICS_STORAGE_KEY = 'floorplan.preview3d.walkPhysics';
 
 /** Lamps on by default; night off, because the sun is what a plan is drawn under. */
 export const DEFAULT_INTERIOR_LIGHTS_ON = true;
 export const DEFAULT_NIGHT_MODE = false;
+/** Physics on by default: walk mode exists to stand in the building. */
+export const DEFAULT_WALK_PHYSICS_ON = true;
 
 function readBooleanPreference(key, fallback) {
   if (typeof window === 'undefined') return fallback;
@@ -190,4 +194,12 @@ export function readNightModePreference() {
 
 export function persistNightModePreference(night) {
   return persistBooleanPreference(NIGHT_MODE_STORAGE_KEY, night);
+}
+
+export function readWalkPhysicsPreference() {
+  return readBooleanPreference(WALK_PHYSICS_STORAGE_KEY, DEFAULT_WALK_PHYSICS_ON);
+}
+
+export function persistWalkPhysicsPreference(physicsOn) {
+  return persistBooleanPreference(WALK_PHYSICS_STORAGE_KEY, physicsOn);
 }

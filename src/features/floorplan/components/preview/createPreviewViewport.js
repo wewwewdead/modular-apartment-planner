@@ -5,6 +5,7 @@ import { UNLIT_LENS_EMISSIVE_INTENSITY } from './buildPreviewObjects';
 import { disposeScene } from './disposeScene';
 import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
+import { createWalkPhysics } from './createWalkPhysics';
 import { CLICK_DISTANCE_THRESHOLD } from './previewConfig';
 import { createGrid, descriptorBoundsToWorldBox } from './previewCameraMath';
 import { createSunSky, sunWorldDirection } from './createSunSky';
@@ -254,9 +255,19 @@ export function createPreviewViewport(container) {
   const forwardVector = new THREE.Vector3();
   const horizontalForward = new THREE.Vector3();
   let lastCompassHeading = 0;
+  // Reads the world through callbacks rather than being handed it: `worldRoot`
+  // and `ground` are swapped underneath by `setWorld` and `rebuildGround`, and
+  // a collider that had to be told about each swap would be one missed call
+  // away from walking through the building.
+  const walkPhysics = createWalkPhysics({
+    camera,
+    getCollisionSources: () => [worldRoot, ground?.object],
+    getGroundLevel: () => groundLevelMm,
+  });
   const walkNavigation = createWalkNavigation({
     camera,
     domElement: renderer.domElement,
+    physics: walkPhysics,
     onStateChange: () => {
       emitWalkUiState();
     },
@@ -344,6 +355,7 @@ export function createPreviewViewport(container) {
       navigationMode,
       isLocked: navigationMode === 'walk' && walkNavigation.isLocked(),
       canLock: navigationMode === 'walk',
+      physicsMode: walkNavigation.getPhysicsMode(),
     });
   };
 
@@ -1096,6 +1108,10 @@ export function createPreviewViewport(container) {
     },
     setNavigationMode(mode) {
       setNavigationMode(mode);
+      requestRender();
+    },
+    setWalkPhysicsMode(enabled) {
+      walkNavigation.setPhysicsMode(enabled);
       requestRender();
     },
     setSelectionOverlay(nextOverlay) {

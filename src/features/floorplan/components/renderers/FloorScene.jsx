@@ -5,6 +5,8 @@ import ElevationRenderer from './ElevationRenderer';
 import FloorPlanLayer from './FloorPlanLayer';
 import FloorPreviewLayer from './FloorPreviewLayer';
 import FloorSelectionLayer from './FloorSelectionLayer';
+import FloorUnderlayLayer from './FloorUnderlayLayer';
+import OverhangIndicatorLayer from './OverhangIndicatorLayer';
 import SectionRenderer from './SectionRenderer';
 import ShadowOverlay from './ShadowOverlay';
 import DaylightOverlay from './DaylightOverlay';
@@ -20,6 +22,10 @@ const FloorScene = memo(function FloorScene({
   floor,
   filteredFloor,
   filteredProject,
+  floorBelow,
+  showFloorBelowUnderlay,
+  floorOverhangs,
+  selectedOverhangEdge,
   structuralLoadPath,
   viewMode,
   selectedId,
@@ -56,6 +62,10 @@ const FloorScene = memo(function FloorScene({
     zoom,
     floor,
     filteredFloor,
+    floorBelow,
+    showFloorBelowUnderlay,
+    floorOverhangs,
+    selectedOverhangEdge,
     toolState,
     previewContent,
     marqueeBounds,
@@ -72,7 +82,15 @@ const FloorScene = memo(function FloorScene({
           <>
             <SitePlanOverlay site={filteredProject.building?.site} />
             <ShadowOverlay study={daylight.sunStudy} />
+            {/* The floor below, immediately under the plan being edited — above
+                the grid and the site it stands on, below everything on this
+                floor. Anything drawn over it belongs to the active floor, which
+                is exactly how an overhang should read. */}
+            {showFloorBelowUnderlay && floorBelow ? <FloorUnderlayLayer floor={floorBelow} /> : null}
             <FloorPlanLayer floor={floor} filteredFloor={filteredFloor} selectedId={selectedId} />
+            {/* Annotates THIS floor's slabs, so unlike the ghost underlay it
+                belongs on top of the plan rather than beneath it. */}
+            <OverhangIndicatorLayer overhangs={floorOverhangs} selectedEdge={selectedOverhangEdge} />
             {/* Ceilings are project-level, so they ride here rather than inside
                 the floor layer — above the rooms and walls they cover, because
                 that is where they are in the building, and below everything the
@@ -120,10 +138,17 @@ const FloorScene = memo(function FloorScene({
               selectionBounds={regionSelection?.bounds || null}
               selectedId={selectedId}
               selectedType={selectedType}
+              selectedOverhangEdge={selectedOverhangEdge}
               floor={floor}
               zoom={zoom}
             />
-            <FloorPreviewLayer toolState={toolState} activeTool={activeTool} floor={floor} />
+            <FloorPreviewLayer
+              toolState={toolState}
+              activeTool={activeTool}
+              floor={floor}
+              selectedId={selectedId}
+              selectedType={selectedType}
+            />
           </>
         ) : viewMode === 'section_view' ? (
           <SectionRenderer

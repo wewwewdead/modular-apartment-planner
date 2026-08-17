@@ -5,8 +5,6 @@ import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { TOOLS } from '@/editor/tools';
 import { reconcileFloorRooms } from '@/domain/roomReconcile';
-import { getFloorElevation } from '@/domain/floorModels';
-import { resolveFloorBeamBearingLevel } from '@/domain/beamLevels';
 import { isTypingTarget } from '@/utils/keyboard';
 import {
   NewIcon,
@@ -53,7 +51,7 @@ import {
   ElectricalIcon,
 } from '@/ui/ToolbarIcons';
 import { siteSupportsSunStudy } from '@/analysis/sunStudyState';
-import { ELECTRICAL_DEVICE_DEFAULTS, ELECTRICAL_DEVICE_TYPES, FIXTURE_TYPES } from '@/editor/tools';
+import { FIXTURE_TYPES } from '@/editor/tools';
 import Tooltip from './Tooltip';
 import styles from './Toolbar.module.css';
 
@@ -85,23 +83,6 @@ const toolItems = [
   { tool: TOOLS.FILLET, label: 'Fillet', shortcut: 'G', Icon: FilletIcon },
 ];
 
-// Buttons carry the plan symbol's own lettering rather than a bespoke icon, so
-// the palette reads the same way the drawing does.
-const electricalDeviceCodes = {
-  [ELECTRICAL_DEVICE_TYPES.OUTLET]: 'DUP',
-  [ELECTRICAL_DEVICE_TYPES.OUTLET_GFCI]: 'GFCI',
-  [ELECTRICAL_DEVICE_TYPES.OUTLET_220V]: '220',
-  [ELECTRICAL_DEVICE_TYPES.SWITCH]: 'S',
-  [ELECTRICAL_DEVICE_TYPES.SWITCH_3WAY]: 'S3',
-  [ELECTRICAL_DEVICE_TYPES.SWITCH_DIMMER]: 'SD',
-};
-
-const electricalDeviceItems = Object.values(ELECTRICAL_DEVICE_TYPES).map((deviceType) => ({
-  deviceType,
-  label: ELECTRICAL_DEVICE_DEFAULTS[deviceType].label,
-  code: electricalDeviceCodes[deviceType],
-}));
-
 export default function Toolbar({
   onNew,
   onSave,
@@ -129,7 +110,6 @@ export default function Toolbar({
   } = useEditor();
   const { project, isDirty, canUndo, canRedo, dispatch } = useProject();
   const { canCopySelection, canPaste, copySelection, cutSelection, beginPaste } = usePlanClipboardController();
-  const activeFloor = (project.floors || []).find((floor) => floor.id === activeFloorId) || null;
   const isPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'floor';
   const isRoofPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'roof';
   const isTrussPlanView = workspaceMode === 'model' && viewMode === 'plan' && modelTarget === 'truss';
@@ -485,46 +465,8 @@ export default function Toolbar({
         )}
       </div>
 
-      {activeTool === TOOLS.BEAM && isPlanView && activeFloor ? (
-        <div className={styles.segmentedGroup} role="group" aria-label="Beam placement elevation">
-          <span className={styles.groupLabel}>Beam level</span>
-          <button
-            className={toolState.beamPlacementMode === 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn}
-            onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { beamPlacementMode: 'floor' } })}
-            aria-label={`Place floor or slab beam at ${Math.round(getFloorElevation(activeFloor))} millimetres`}
-          >
-            Floor/slab · {Math.round(getFloorElevation(activeFloor))} mm
-          </button>
-          <button
-            className={toolState.beamPlacementMode !== 'floor' ? styles.segmentedBtnActive : styles.segmentedBtn}
-            onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { beamPlacementMode: 'roof_ring' } })}
-            aria-label={`Place top or roof beam at ${Math.round(resolveFloorBeamBearingLevel(activeFloor))} millimetres`}
-          >
-            Top/roof · {Math.round(resolveFloorBeamBearingLevel(activeFloor))} mm
-          </button>
-        </div>
-      ) : null}
-
-      {activeTool === TOOLS.ELECTRICAL && isPlanView ? (
-        <div className={styles.toolPalette} role="group" aria-label="Electrical device type">
-          <span className={styles.groupLabel}>Device</span>
-          {electricalDeviceItems.map(({ deviceType, label, code }) => {
-            const isActive = (toolState.deviceType || ELECTRICAL_DEVICE_TYPES.OUTLET) === deviceType;
-            return (
-              <Tooltip key={deviceType} label={label}>
-                <button
-                  className={isActive ? styles.toolPaletteBtnActive : styles.toolPaletteBtn}
-                  onClick={() => editorDispatch({ type: 'UPDATE_TOOL_STATE', payload: { deviceType } })}
-                  aria-label={label}
-                  aria-pressed={isActive}
-                >
-                  {code}
-                </button>
-              </Tooltip>
-            );
-          })}
-        </div>
-      ) : null}
+      {/* Beam level lives on the canvas (BeamLevelChip): this end of the toolbar is off-screen at common widths. */}
+      {/* Electrical device type lives on the canvas too (ElectricalDeviceChip), for the same reason. */}
 
       {/* Fixtures palette */}
       <div className={styles.fixturePalette}>

@@ -10,6 +10,7 @@ import { getManualAnnotationFigure } from '@/annotations/scene';
 import { getSectionCutRenderData } from '@/geometry/sectionCutGeometry';
 import { getRailingRenderData } from '@/geometry/railingGeometry';
 import { deviceOutlineOnWall } from '@/geometry/wallGeometry';
+import { midpoint } from '@/geometry/point';
 import { ELECTRICAL_SYMBOL_SIZE } from '@/domain/defaults';
 
 const HANDLE_SIZE = 8; // px, will use vectorEffect
@@ -58,17 +59,31 @@ function WallSelection({ wall, columns, zoom }) {
   );
 }
 
-function SelectionOverlay({ selectedId, selectedType, floor, zoom }) {
+function SelectionOverlay({ selectedId, selectedType, selectedOverhangEdge = null, floor, zoom }) {
   if (!selectedId || !floor) return null;
 
   if (selectedType === 'slab') {
+    // With a cantilever run picked, the run IS the selection: the indicator
+    // layer draws it solid, and the plate's own tint and handles stand down so
+    // what is highlighted is the thing that was clicked, not the whole plate.
+    // Escape or a click on the plate body brings the plate visuals back.
+    if (selectedOverhangEdge?.slabId === selectedId) return null;
+
     const slab = (floor.slabs || []).find((s) => s.id === selectedId) || null;
     const renderData = slab ? getSlabRenderData(slab) : null;
     if (!renderData) return null;
 
     const handleR = HANDLE_SIZE / zoom;
+    const outline = renderData.outline;
     return (
       <g>
+        {/* Non-interactive, unlike the handles below it. The tint covers the
+            whole plate, so as a click target it would swallow everything drawn
+            under it — including the overhang indicators that run along this
+            plate's own edges, which is how one cantilever of several is picked.
+            Nothing is lost by letting clicks through: the select tool hit-tests
+            in model space, so a click that lands on the svg instead of on this
+            polygon still finds the same plate. */}
         <polygon
           points={renderData.points}
           fill="var(--color-selection-fill)"
@@ -76,12 +91,37 @@ function SelectionOverlay({ selectedId, selectedType, floor, zoom }) {
           strokeWidth={2}
           strokeDasharray="6 3"
           vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: 'none' }}
         />
-        {renderData.outline.map((point, index) => (
+        {/* Square per corner moves that corner; round per edge pushes the whole
+            edge out along its normal, which is how a floor plate grows into a
+            cantilever. Two shapes because they do two different things. */}
+        {outline.map((point, index) => {
+          const next = outline[(index + 1) % outline.length];
+          const mid = midpoint(point, next);
+          return (
+            <circle
+              key={`slab-edge-${index}`}
+              data-handle="slab-edge"
+              data-index={index}
+              data-slab-id={slab.id}
+              cx={mid.x}
+              cy={mid.y}
+              r={handleR / 2}
+              fill="var(--color-selection)"
+              stroke="white"
+              strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+              style={{ cursor: 'move' }}
+            />
+          );
+        })}
+        {outline.map((point, index) => (
           <rect
             key={`${point.x}-${point.y}-${index}`}
             data-handle="slab-vertex"
             data-index={index}
+            data-slab-id={slab.id}
             x={point.x - handleR / 2}
             y={point.y - handleR / 2}
             width={handleR}

@@ -7,7 +7,9 @@ import { collectCeilingObstructions } from './ceilingObstructions';
 import { getProjectFloor } from './floorModels';
 import {
   deriveCeilingBoundaryFromBeams,
+  deriveCeilingStructuralCoverage,
   resolveCeilingSupportBeams,
+  selectCeilingCoverageSlabs,
   selectPreferredCeilingBeamLevel,
 } from './ceilingBeamAttachment';
 import {
@@ -446,9 +448,13 @@ export function createCeilingForProject(project, options = {}) {
       ? resolveCeilingSupportBeams(floor, requestedBeamIds)
       : selectPreferredCeilingBeamLevel(floor)?.beams || [];
 
+  // Attachment is a statement about beams, so it is read off the beams alone: a
+  // ceiling whose only shape came from the slab overhead hangs from nothing and
+  // must not claim to hang from beams.
   const beamBoundary = deriveCeilingBoundaryFromBeams(supportBeams, floor);
   const attachedToBeams = clonePlanPoints(beamBoundary).length >= 3;
   const beamElevation = attachedToBeams ? Math.min(...supportBeams.map((beam) => finite(beam.floorLevel))) : null;
+  const coverage = clonePlanPoints(deriveCeilingStructuralCoverage({ project, floor, supportBeams }));
 
   const floorTopElevation = floor
     ? finite(floor.elevation, 0) + finite(floor.floorToFloorHeight, DEFAULT_CEILING_BASE_ELEVATION)
@@ -463,11 +469,13 @@ export function createCeilingForProject(project, options = {}) {
     },
     // A polygon handed in wins outright — that is how a drawn ceiling keeps the
     // area it was traced over while still hanging from the beams found above it.
+    // Failing that the structure answers, and only a floor with no structure
+    // overhead at all falls back to the bounding box of everything on it.
     boundaryPolygon:
       clonePlanPoints(options.boundaryPolygon).length >= 3
         ? options.boundaryPolygon
-        : attachedToBeams
-          ? beamBoundary
+        : coverage.length >= 3
+          ? coverage
           : deriveCeilingBoundaryForFloor(floor),
     baseElevation: finite(options.baseElevation, attachedToBeams ? beamElevation : floorTopElevation),
   });
@@ -503,23 +511,65 @@ function resolveCeilingFloors(project, ceiling) {
   return [getProjectFloor(project, ceiling?.floorId)].filter(Boolean);
 }
 
+/**
+ * The slabs overhead a ceiling's boundary is drawn from, and the floor they are
+ * on. Exported so the RCP editor's preview project can carry exactly the slabs
+ * the boundary resolves through instead of guessing at them.
+ */
+export function resolveCeilingCoverageSlabs(project, ceiling) {
+  return selectCeilingCoverageSlabs({
+    project,
+    floor: getProjectFloor(project, ceiling?.floorId),
+    supportBeams: resolveCeilingBeamSupports(project, ceiling),
+  });
+}
+
+// resolveCeilingBoundary is read constantly — the plan renderer, the properties
+// panel, the 3D preview and the RCP editor all ask for it, and a drag asks again
+// every frame — while the polygon booleans behind it are not free. Store state
+// is immutable, so a project or ceiling that changed is a different object and
+// object identity is a sound key for the answer.
+const boundaryCache = new WeakMap();
+
+function cachedBoundary(project, ceiling, derive) {
+  if (!project || !ceiling) return derive();
+
+  let byCeiling = boundaryCache.get(project);
+  if (!byCeiling) {
+    byCeiling = new WeakMap();
+    boundaryCache.set(project, byCeiling);
+  }
+  let boundary = byCeiling.get(ceiling);
+  if (!boundary) {
+    boundary = derive();
+    byCeiling.set(ceiling, boundary);
+  }
+  return boundary;
+}
+
 export function resolveCeilingBoundary(project, ceiling) {
-  const stored = clonePlanPoints(ceiling?.boundaryPolygon);
-  // A drawn area is a decision about where the ceiling stops, so the beams get
-  // no say in it. They still fix the plane it hangs from — only the outline is
-  // withheld from them, and only because someone traced it by hand.
-  if (ceiling?.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN && stored.length >= 3) return stored;
+  return cachedBoundary(project, ceiling, () => {
+    const stored = clonePlanPoints(ceiling?.boundaryPolygon);
+    // A drawn area is a decision about where the ceiling stops, so the structure
+    // gets no say in it. The beams still fix the plane it hangs from — only the
+    // outline is withheld, and only because someone traced it by hand.
+    if (ceiling?.boundarySource === CEILING_BOUNDARY_SOURCES.DRAWN && stored.length >= 3) return stored;
 
-  // Derived on every read, so dragging a column or moving a beam moves the
-  // ceiling with it. The stored polygon is the snapshot to fall back on when
-  // the beams no longer resolve.
-  const supports = resolveCeilingBeamSupports(project, ceiling);
-  const derived = supports.length
-    ? clonePlanPoints(deriveCeilingBoundaryFromBeams(supports, getProjectFloor(project, ceiling.floorId)))
-    : [];
-  if (derived.length >= 3) return derived;
+    // Derived on every read, so dragging a column, moving a beam or pulling a
+    // slab edge out over a cantilever moves the ceiling with it. The stored
+    // polygon is the snapshot to fall back on when the structure no longer
+    // resolves.
+    const derived = clonePlanPoints(
+      deriveCeilingStructuralCoverage({
+        project,
+        floor: getProjectFloor(project, ceiling?.floorId),
+        supportBeams: resolveCeilingBeamSupports(project, ceiling),
+      }),
+    );
+    if (derived.length >= 3) return derived;
 
-  return stored.length >= 3 ? stored : createDefaultCeilingBoundary();
+    return stored.length >= 3 ? stored : createDefaultCeilingBoundary();
+  });
 }
 
 export function resolveCeilingElevations(project, ceiling) {

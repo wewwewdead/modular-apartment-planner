@@ -2,6 +2,7 @@ import { createWall } from '@/domain/models';
 import { distance } from '@/geometry/point';
 import { SNAP_DISTANCE_PX, MIN_WALL_LENGTH } from '@/domain/defaults';
 import { snapWallEndpoint } from '@/geometry/wallColumnGeometry';
+import { resolveReferenceSnapGeometry, snapPointToReference } from './referenceSnap';
 
 function constrainAngle(start, end, shiftHeld) {
   if (!shiftHeld) return end;
@@ -24,7 +25,22 @@ export function createWallDrawHandler({
   viewport,
   snapEnabled,
   activePhaseId,
+  floorBelow = null,
+  showFloorBelowUnderlay = false,
 }) {
+  /**
+   * The floor below only gets a say once nothing on THIS floor was in reach.
+   * Same-floor snapping keeps priority because it is the only kind that can bind
+   * a wall to a column, and the reference hit it would override is a bare
+   * coordinate — never an attachment, so a wall drawn over the ghost can never
+   * be tied to a column that does not exist on its own floor.
+   */
+  function snapToFloorBelow(modelPos, snapDistModel) {
+    const geometry = resolveReferenceSnapGeometry({ floorBelow, showFloorBelowUnderlay, snapEnabled });
+    const hit = snapPointToReference(modelPos, geometry, snapDistModel);
+    return hit ? { x: hit.x, y: hit.y } : null;
+  }
+
   return {
     onMouseDown(modelPos, e, toolState) {
       if (e.button !== 0) return;
@@ -48,6 +64,9 @@ export function createWallDrawHandler({
         if (snapResult) {
           snapped = { ...snapResult.point };
           attachment = snapResult.attachment;
+        } else {
+          const reference = snapToFloorBelow(modelPos, snapDistModel);
+          if (reference) snapped = reference;
         }
       }
       if (shiftHeld && toolState.start) {
@@ -119,7 +138,12 @@ export function createWallDrawHandler({
           chainStartAttachment: toolState.chainStartAttachment,
           otherPoint: toolState.start,
         });
-        if (snapResult) preview = { ...snapResult.point };
+        if (snapResult) {
+          preview = { ...snapResult.point };
+        } else {
+          const reference = snapToFloorBelow(modelPos, snapDistModel);
+          if (reference) preview = reference;
+        }
       }
       if (e.shiftKey) {
         preview = constrainAngle(toolState.start, preview, true);
@@ -131,7 +155,7 @@ export function createWallDrawHandler({
       });
     },
 
-    onDoubleClick(modelPos, e, toolState) {
+    onDoubleClick(_modelPos, _e, _toolState) {
       // Finish chain
       editorDispatch({
         type: 'UPDATE_TOOL_STATE',
@@ -139,7 +163,7 @@ export function createWallDrawHandler({
       });
     },
 
-    onKeyDown(e, toolState) {
+    onKeyDown(e, _toolState) {
       if (e.key === 'Escape') {
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
@@ -148,7 +172,7 @@ export function createWallDrawHandler({
       }
     },
 
-    getCursor(toolState) {
+    getCursor(_toolState) {
       return 'crosshair';
     },
   };

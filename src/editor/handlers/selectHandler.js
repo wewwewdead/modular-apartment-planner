@@ -9,13 +9,15 @@ import {
   wallSideOfPoint,
   projectPointOnWall,
 } from '@/geometry/wallGeometry';
-import { pointInPolygon } from '@/geometry/polygon';
+import { pointInPolygon, polygonSelfIntersects } from '@/geometry/polygon';
 import { columnOutline } from '@/geometry/columnGeometry';
 import { getBeamRenderData } from '@/geometry/beamGeometry';
 import { getStairRenderData } from '@/geometry/stairGeometry';
 import { landingContainsPoint } from '@/geometry/landingGeometry';
 import { fixtureContainsPoint } from '@/geometry/fixtureGeometry';
-import { slabContainsPoint } from '@/geometry/slabGeometry';
+import { offsetSlabEdge, slabContainsPoint, slabEdgeOutwardNormal } from '@/geometry/slabGeometry';
+import { resolvePoint, snapToGrid } from './handlerSnapUtils';
+import { resolveReferenceSnapGeometry, snapOffsetToReference, snapPointToReference } from './referenceSnap';
 import { hitTestAnnotation } from '@/annotations/scene';
 import { ELECTRICAL_PLATE, ELECTRICAL_SYMBOL_SIZE, MIN_WALL_LENGTH, SNAP_DISTANCE_PX } from '@/domain/defaults';
 import { describeWallEditRejection, propagateWallEdit } from '@/domain/modelGraph';
@@ -38,6 +40,29 @@ function centeredRectangle(origin, width, depth) {
 }
 
 const GRID_ROTATE_SNAP_DEGREES = 15;
+
+/**
+ * The slab boundary as it stood when the drag started.
+ *
+ * A slab edit commits on every pointer-move, so reading the live slab each
+ * frame would measure the drag against geometry the drag itself just moved and
+ * the plate would run away from the cursor. Every frame is therefore computed
+ * from this snapshot, cumulatively from mousedown.
+ */
+function captureSlabEditOrigin(floor, slabId) {
+  if (!slabId) return null;
+  const slab = (floor.slabs || []).find((entry) => entry.id === slabId);
+  if (!slab) return null;
+  return {
+    slabId,
+    boundaryPoints: (slab.boundaryPoints || []).map((point) => ({ x: point.x, y: point.y })),
+  };
+}
+
+function sameBoundary(a = [], b = []) {
+  if (a.length !== b.length) return false;
+  return a.every((point, index) => point.x === b[index].x && point.y === b[index].y);
+}
 
 /**
  * Grid rotation from the pointer. The rotate handle is drawn on the grid's
@@ -227,7 +252,15 @@ export function createSelectHandler({
   viewport,
   snapEnabled,
   activePhaseId = null,
+  floorBelow = null,
+  showFloorBelowUnderlay = false,
 }) {
+  // Null unless the ghost underlay is on screen with snapping on — a layer you
+  // cannot see must never pull the plate you are dragging.
+  function referenceGeometry() {
+    return resolveReferenceSnapGeometry({ floorBelow, showFloorBelowUnderlay, snapEnabled });
+  }
+
   return {
     onMouseDown(modelPos, e, _toolState) {
       if (e.button !== 0) return;
@@ -246,7 +279,32 @@ export function createSelectHandler({
             handle: target.dataset.handle,
             handleIndex: target.dataset.index != null ? Number(target.dataset.index) : null,
             startPos: modelPos,
+            // Only slab handles carry a slab id, so this is null for every
+            // other handle in the app.
+            slabEditOrigin: captureSlabEditOrigin(floor, target.dataset.slabId || null),
+            slabEdgeDrag: null,
           },
+        });
+        return;
+      }
+
+      /*
+       * An overhang indicator is drawn ALONG a stretch of a slab's own edge, so
+       * hit-testing it geometrically would be asking whether a click on the
+       * slab is a click on the slab. It is answered by what was actually under
+       * the pointer instead: the indicator carries its own hit stroke, and only
+       * a click that lands on that stroke picks the run. Anywhere else on the
+       * plate still selects the plate, with no run in mind.
+       *
+       * Below the handle check on purpose. The plate's own edge handle sits at
+       * the midpoint of the very edge an indicator runs along, and dragging that
+       * handle is how the cantilever got there — it must keep winning.
+       */
+      if (target.dataset.overhangSlab) {
+        editorDispatch({
+          type: 'SELECT_OVERHANG_EDGE',
+          slabId: target.dataset.overhangSlab,
+          edgeIndex: Number(target.dataset.overhangEdge),
         });
         return;
       }
@@ -701,28 +759,103 @@ export function createSelectHandler({
           payload: { startPos: modelPos },
         });
       } else if (selectedType === 'slab') {
-        if (toolState.dragType !== 'handle' || toolState.handle !== 'slab-vertex' || toolState.handleIndex == null) {
+        const draggingVertex = toolState.handle === 'slab-vertex';
+        const draggingEdge = toolState.handle === 'slab-edge';
+        if (toolState.dragType !== 'handle' || toolState.handleIndex == null || (!draggingVertex && !draggingEdge)) {
           return;
         }
+
         const slab = (floor.slabs || []).find((s) => s.id === selectedId);
         if (!slab) return;
 
-        const boundaryPoints = slab.boundaryPoints.map((point, index) =>
-          index === toolState.handleIndex ? { x: modelPos.x, y: modelPos.y } : point,
-        );
+        // No snapshot, or one belonging to another plate, means the handle drag
+        // lost the state it was opened with. There is nothing to improvise
+        // from: measured against the live boundary an edge push would re-apply
+        // its own cumulative offset every frame and run away from the cursor.
+        if (toolState.slabEditOrigin?.slabId !== slab.id) return;
+        const originPoints = toolState.slabEditOrigin.boundaryPoints;
+        // A plate is a polygon or it is nothing. No drag adds or removes a
+        // vertex, so this only ever rejects a boundary that was already broken.
+        if (!originPoints || originPoints.length < 3 || toolState.handleIndex >= originPoints.length) return;
 
-        dispatch({
-          type: 'SLAB_UPDATE',
-          floorId: activeFloorId,
-          slab: {
-            id: slab.id,
-            boundaryPoints,
-          },
-        });
-        editorDispatch({
-          type: 'UPDATE_TOOL_STATE',
-          payload: { startPos: modelPos },
-        });
+        let boundaryPoints = null;
+        let edgeOffset = null;
+        const referenceSnapTolerance = SNAP_DISTANCE_PX / viewport.zoom;
+
+        if (draggingVertex) {
+          // The structure below outranks the grid here: a corner set on the wall
+          // line beneath it is a decision, where the nearest 50mm line is just
+          // arithmetic. Measured against the UNSNAPPED cursor so the grid cannot
+          // first pull the pointer out of the reference's reach.
+          const reference = snapPointToReference(modelPos, referenceGeometry(), referenceSnapTolerance);
+          const point = reference ? { x: reference.x, y: reference.y } : resolvePoint(modelPos, snapEnabled);
+          boundaryPoints = originPoints.map((entry, index) =>
+            index === toolState.handleIndex ? point : { x: entry.x, y: entry.y },
+          );
+        } else {
+          const normal = slabEdgeOutwardNormal(originPoints, toolState.handleIndex);
+          // A zero-length edge, or a ring with no area, has no outside to be
+          // pushed towards — the drag is degenerate and does nothing.
+          if (!normal) return;
+
+          const travelX = modelPos.x - toolState.startPos.x;
+          const travelY = modelPos.y - toolState.startPos.y;
+          // Only the component along the normal counts: sliding the cursor
+          // ALONG the edge must not move it, or the plate would shear.
+          const rawOffset = travelX * normal.x + travelY * normal.y;
+          // A wall line below that the edge is about to run past catches it
+          // first — this is what makes a plate land flush over its support
+          // instead of 20mm shy of it. The readout follows the applied offset,
+          // so the number on screen is the reference distance, not the grid one.
+          const referenceOffset = snapOffsetToReference(
+            {
+              start: originPoints[toolState.handleIndex],
+              end: originPoints[(toolState.handleIndex + 1) % originPoints.length],
+            },
+            normal,
+            rawOffset,
+            referenceGeometry(),
+            referenceSnapTolerance,
+          );
+          if (referenceOffset !== null) {
+            edgeOffset = referenceOffset;
+          } else {
+            edgeOffset = snapEnabled ? snapToGrid(rawOffset) : rawOffset;
+          }
+          boundaryPoints = offsetSlabEdge(originPoints, toolState.handleIndex, edgeOffset);
+          if (!boundaryPoints) return;
+        }
+
+        // A plate folded through itself is not a floor. The whole frame is
+        // dropped — geometry AND readout, so the number on screen never
+        // describes a shape that was never applied — and the plate simply sits
+        // at its last valid form until the cursor comes back to a region that
+        // clears. Every frame recomputes from the snapshot, so resuming needs
+        // no state of its own.
+        if (polygonSelfIntersects(boundaryPoints)) return;
+
+        // Snapping means most frames land on the geometry already committed;
+        // dispatching those would dirty the project and burn a render for
+        // nothing.
+        if (!sameBoundary(boundaryPoints, slab.boundaryPoints)) {
+          dispatch({
+            type: 'SLAB_UPDATE',
+            floorId: activeFloorId,
+            slab: {
+              id: slab.id,
+              boundaryPoints,
+            },
+          });
+        }
+
+        if (draggingEdge) {
+          editorDispatch({
+            type: 'UPDATE_TOOL_STATE',
+            payload: {
+              slabEdgeDrag: { offset: edgeOffset, point: { x: modelPos.x, y: modelPos.y } },
+            },
+          });
+        }
       } else if (selectedType === 'door' || selectedType === 'window') {
         // Slide along parent wall
         const items = selectedType === 'door' ? floor.doors : floor.windows;
@@ -859,6 +992,8 @@ export function createSelectHandler({
             originalPos: null,
             currentPos: null,
             wallDragPreview: null,
+            slabEditOrigin: null,
+            slabEdgeDrag: null,
           },
         });
       }
@@ -868,6 +1003,27 @@ export function createSelectHandler({
       // Escape cancels an active drag: preview cleared, nothing dispatched,
       // no history entry consumed — the wall stays exactly where it was.
       if (e.key === 'Escape' && (toolState.dragging || toolState.pendingDrag)) {
+        // A slab edit has no preview to drop: it commits on every pointer-move,
+        // so cancelling means putting the boundary back where mousedown found
+        // it. The restore rides inside the still-open drag gesture (the button
+        // is usually still down), so the drag and its undo collapse into one
+        // history entry that ends where it began.
+        const slabOrigin = toolState.slabEditOrigin;
+        if (slabOrigin) {
+          const floor = getFloor(activeFloorId);
+          const slab = (floor?.slabs || []).find((entry) => entry.id === slabOrigin.slabId);
+          if (slab && !sameBoundary(slab.boundaryPoints || [], slabOrigin.boundaryPoints)) {
+            dispatch({
+              type: 'SLAB_UPDATE',
+              floorId: activeFloorId,
+              slab: {
+                id: slab.id,
+                boundaryPoints: slabOrigin.boundaryPoints.map((point) => ({ x: point.x, y: point.y })),
+              },
+            });
+          }
+        }
+
         editorDispatch({
           type: 'UPDATE_TOOL_STATE',
           payload: {
@@ -880,8 +1036,18 @@ export function createSelectHandler({
             originalPos: null,
             currentPos: null,
             wallDragPreview: null,
+            slabEditOrigin: null,
+            slabEdgeDrag: null,
           },
         });
+        return;
+      }
+
+      // Escape with nothing being dragged steps back out of the finer
+      // selection: the plate stays selected, the run it was looking at does
+      // not. A no-op when there was no run, so it costs nothing to send.
+      if (e.key === 'Escape') {
+        editorDispatch({ type: 'CLEAR_OVERHANG_EDGE_SELECTION' });
         return;
       }
 

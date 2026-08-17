@@ -1,4 +1,9 @@
-import { CEILING_ATTACHMENT_MODES, ceilingElevationRange, resolveCeilingElevations } from '@/domain/ceilingModels';
+import {
+  CEILING_ATTACHMENT_MODES,
+  ceilingElevationRange,
+  resolveCeilingCoverageSlabs,
+  resolveCeilingElevations,
+} from '@/domain/ceilingModels';
 import { collectCeilingBandStructure } from '@/domain/ceilingObstructions';
 
 const FLOOR_COLLECTIONS = [
@@ -77,6 +82,13 @@ function mergeById(...groups) {
  * the ceiling boundary is trimmed to the beam faces and beam geometry resolves
  * through the columns, so dropping either would draw a different ceiling here
  * than the model has.
+ *
+ * The storey above comes along for the same reason, stripped to the slabs the
+ * boundary is drawn from. A ceiling reaches as far as the slab it closes off,
+ * which is further than the beams wherever that slab cantilevers, and a preview
+ * project without those slabs would re-derive a smaller ceiling than the model
+ * has. Which slabs count is asked of the same routine the boundary asks, so the
+ * two cannot drift.
  */
 export function createCeilingDetailPreviewProject(project, ceilingId) {
   const ceiling = (project?.ceilings || []).find((entry) => entry.id === ceilingId) || null;
@@ -104,9 +116,13 @@ export function createCeilingDetailPreviewProject(project, ceilingId) {
     previewFloor.windows = (floor.windows || []).filter((entry) => wallIds.has(entry.wallId));
   }
 
+  const coverage = resolveCeilingCoverageSlabs(project, ceiling);
+  const coverageFloor =
+    coverage.floor && coverage.slabs.length ? { ...stripFloor(coverage.floor), slabs: coverage.slabs } : null;
+
   return {
     ...project,
-    floors: [previewFloor].filter(Boolean),
+    floors: [previewFloor, coverageFloor].filter(Boolean),
     ceilings: [ceiling],
     roofSystem: null,
     // Trusses stand above the ceiling and are no part of it; drawing them here

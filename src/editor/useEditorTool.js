@@ -9,6 +9,7 @@ import { createColumnPlaceHandler } from './handlers/columnPlaceHandler';
 import { createRoomPlaceHandler } from './handlers/roomPlaceHandler';
 import { createBeamPlaceHandler } from './handlers/beamPlaceHandler';
 import { createSlabPlaceHandler } from './handlers/slabPlaceHandler';
+import { createCantileverHandler } from './handlers/cantileverHandler';
 import { createCeilingPlaceHandler } from './handlers/ceilingPlaceHandler';
 import { createCeilingBeamPickHandler } from './handlers/ceilingBeamPickHandler';
 import { createStairPlaceHandler } from './handlers/stairPlaceHandler';
@@ -46,6 +47,8 @@ export function useEditorTool({
   project,
   getFloor,
   activeFloorId,
+  floorBelow = null,
+  showFloorBelowUnderlay = false,
   roofSystem,
   trussSystems,
   modelTarget,
@@ -76,12 +79,15 @@ export function useEditorTool({
   );
   const callGetProject = useMemo(() => () => projectRef.current, []);
 
-  // eslint-disable react-hooks/refs -- callGetFloor is a stable wrapper that reads
+  // react-hooks/refs: callGetFloor is a stable wrapper that reads
   // getFloorRef.current lazily. The tool handlers below only STORE it in their ctx and
   // invoke it later inside event callbacks (onMouseDown/Move/Up), never during render.
   // The rule cannot prove this deferral, so passing callGetFloor into the handler
   // factories is flagged as a false positive. Behavior is unchanged.
-  /* eslint-disable react-hooks/refs */
+  // react-hooks/exhaustive-deps: handlers capture ctx when built but only ever read
+  // `viewport.zoom` from it (hit tolerances), so the memo keys on the zoom rather
+  // than the viewport object — a pan must not rebuild every handler.
+  /* eslint-disable react-hooks/refs, react-hooks/exhaustive-deps */
   const handler = useMemo(() => {
     if (modelTarget === 'truss') {
       if (viewMode !== 'plan') {
@@ -162,6 +168,17 @@ export function useEditorTool({
       viewport,
       snapEnabled,
       activePhaseId,
+      // A tool that operates ON the current selection rather than placing
+      // something new — the cantilever tool works one already-selected plate —
+      // needs to know what that selection is. Both are already handler-memo
+      // dependencies, so carrying them costs nothing extra.
+      selectedId,
+      selectedType,
+      // Reference-only snapping context: the ghost underlay's floor, plus
+      // whether it is actually on screen. Handlers snap to it for bare
+      // coordinates and never for attachments — see editor/handlers/referenceSnap.
+      floorBelow,
+      showFloorBelowUnderlay,
     };
 
     switch (activeTool) {
@@ -177,6 +194,8 @@ export function useEditorTool({
         return createSectionPlaceHandler(ctx);
       case TOOLS.SLAB:
         return createSlabPlaceHandler(ctx);
+      case TOOLS.CANTILEVER:
+        return createCantileverHandler(ctx);
       case TOOLS.CEILING:
         return createCeilingPlaceHandler(ctx);
       case TOOLS.CEILING_BEAM_PICK:
@@ -209,6 +228,10 @@ export function useEditorTool({
     callGetProject,
     activeTool,
     activeFloorId,
+    dispatch,
+    editorDispatch,
+    floorBelow,
+    showFloorBelowUnderlay,
     project,
     roofSystem,
     trussSystems,
@@ -220,7 +243,7 @@ export function useEditorTool({
     selectedId,
     selectedType,
   ]);
-  /* eslint-enable react-hooks/refs */
+  /* eslint-enable react-hooks/refs, react-hooks/exhaustive-deps */
 
   return {
     onMouseDown: (modelPos, e) => handler?.onMouseDown?.(modelPos, e, toolState),

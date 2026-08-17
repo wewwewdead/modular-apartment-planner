@@ -26,6 +26,10 @@ export const TOOLS = {
   STAIR: 'stair',
   SECTION: 'section',
   SLAB: 'slab',
+  // Pushes one edge of an already-drawn slab out by a typed distance, instead
+  // of dragging it and reading the number off the cursor. Entered from the slab
+  // properties panel, never from the toolbar.
+  CANTILEVER: 'cantilever',
   CEILING: 'ceiling',
   // Picks the beams a new ceiling hangs from, one click each, instead of taking
   // every beam on the floor.

@@ -762,3 +762,30 @@ describe('selected screw on the plan', () => {
     expect(ringed[0]).toBe(screws[3]);
   });
 });
+
+/**
+ * A trace is a run of separate clicks with the pointer free in between, so the
+ * canvas may pan under it. Each preview has to be measured against the canvas
+ * where it is now — a click used to pin the measurement rect and keep it, and a
+ * pan between clicks then had the rubber band pointing away from the cursor.
+ */
+describe('panel trace pointer mapping', () => {
+  it('measures the trace preview against the canvas as it stands after a pan', () => {
+    const { container } = mountManualCeiling({ beamless: true });
+    fireEvent.click(container.querySelector('button[title^="Trace cut board"]'));
+    const svg = container.querySelector('svg[data-tool="trace_panel"]');
+    // 600x400 px over a 6000x4000 mm ceiling: 10 mm per px, V up from the bottom.
+    let rect = { left: 0, top: 0, width: 600, height: 400, right: 600, bottom: 400 };
+    svg.getBoundingClientRect = () => rect;
+
+    fireEvent.pointerDown(svg, { button: 0, pointerId: 1, clientX: 100, clientY: 300 });
+    // The canvas pans 200 px left while the pointer stays put, as a space-pan
+    // between clicks does; the same client point is now 2000 mm further along.
+    rect = { ...rect, left: -200, right: 400 };
+    fireEvent.pointerMove(svg, { pointerId: 1, clientX: 100, clientY: 300 });
+
+    const preview = container.querySelector('polyline[stroke="#ffb85c"]');
+    expect(preview).not.toBeNull();
+    expect(preview.getAttribute('points')).toBe('1000,1000 3000,1000');
+  });
+});

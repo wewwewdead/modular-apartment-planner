@@ -239,6 +239,43 @@
   transform: scale(0.97);
 }
 
+/* A schedule row that also offers an action — one cantilever run of several,
+   with the means to take it away. The row has to stay scannable, so the
+   affordance is a quiet inline button rather than a second full-width command
+   competing with the readouts it belongs to. */
+.edgeRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.edgeRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowBtn {
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 var(--space-sm);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.rowBtn:hover {
+  color: var(--color-active-glow);
+  border-color: var(--color-active-glow-border);
+  background: var(--color-active-glow-subtle);
+}
+
 .summary {
   font-size: 12px;
   color: var(--color-text-secondary);

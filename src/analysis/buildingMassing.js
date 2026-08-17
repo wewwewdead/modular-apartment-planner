@@ -56,12 +56,15 @@ function collectFloorPrisms(floor, options) {
     for (const slab of floor.slabs || []) {
       const outline = (slab.boundaryPoints || []).map((point) => ({ x: point.x, y: point.y }));
       if (outline.length < 3) continue;
-      // A slab's own elevation is relative to its floor. Balconies and canopies
-      // shade what is below them, so they are worth including even though they
-      // are thin.
-      const base = floorElevation + (isFiniteNumber(slab.elevation) ? slab.elevation : 0);
+      // `slab.elevation` is the absolute level of the slab's TOP, on the same
+      // datum as the floor's own elevation — it is not an offset within the
+      // storey, and adding the two put every upper-storey balcony a storey too
+      // high. The slab hangs below its top by its thickness. Balconies and
+      // canopies shade what is below them, so they are worth including even
+      // though they are thin.
       const thickness = isFiniteNumber(slab.thickness) ? slab.thickness : 0;
-      prisms.push({ outline, base, top: base + thickness });
+      const top = isFiniteNumber(slab.elevation) ? slab.elevation : floorElevation;
+      prisms.push({ outline, base: top - thickness, top });
     }
   }
 

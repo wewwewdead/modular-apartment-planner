@@ -73,7 +73,7 @@ export function buildPreviewScene(project, options = {}) {
   const stairSources = floors.map((floor) => floor.stairs);
   const landingSources = floors.map((floor) => floor.landings);
 
-  const floorDescriptors = floors.map((floor) => {
+  const floorDescriptors = floors.map((floor, index) => {
     const floorTrussSystems = (project?.trussSystems || []).filter((trussSystem) => trussSystem.floorId === floor.id);
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
     const floorCeilings = (project?.ceilings || []).filter((ceiling) => ceiling.floorId === floor.id);
@@ -106,13 +106,17 @@ export function buildPreviewScene(project, options = {}) {
       // object reference while untouched floors keep identity — this lets the
       // preview object cache skip re-triangulating unchanged floors. Truss
       // systems are separate source objects, so include their refs too — and
-      // ceilings likewise live in a project-level array. A ceiling's boundary,
-      // attachment plane and obstructions all come from the beams, columns and
-      // walls of this same floor, so `floor` already answers for them.
+      // ceilings likewise live in a project-level array. A ceiling's attachment
+      // plane and obstructions come from the beams, columns and walls of this
+      // same floor, so `floor` answers for them — but its boundary reaches as
+      // far as the slab it closes off, which is filed on the floor ABOVE, so
+      // pulling a slab edge out over a cantilever up there has to rebuild the
+      // ceiling down here. Only floors carrying a ceiling declare it.
       // stairSources/landingSources: cross-floor railing-stair attachment means
       // any floor's stairs or landings changing must rebuild every floor.
       sourceKey: {
         floor,
+        slabsAbove: floorCeilings.length ? floors[index + 1]?.slabs || null : null,
         strippedHere,
         // Part of the identity, not a render-time flag: turning screws on has to
         // re-triangulate the ceilings, and a cached floor would swallow it.

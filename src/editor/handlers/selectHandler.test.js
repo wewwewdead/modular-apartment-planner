@@ -794,6 +794,431 @@ describe('selectHandler — electrical devices', () => {
 });
 
 /**
+ * Slab plate editing.
+ *
+ * A 6000 x 4000 plate. Corner handles move one vertex; the round handle at an
+ * edge midpoint pushes that whole edge out along its outward normal, which is
+ * how a floor grows into a cantilever over the storey below.
+ *
+ *      (0,0)────────edge 0────────(6000,0)      outward normal of edge 0 = -y
+ *        │                            │
+ *        │                            │
+ *    (0,4000)──────────────────(6000,4000)
+ *
+ * Every frame is measured from the boundary as it stood at mousedown, so a slow
+ * drag cannot accumulate its own edits (the "gravity" trap the wall drag had).
+ */
+describe('selectHandler — slab plate editing', () => {
+  const PLATE = [
+    { x: 0, y: 0 },
+    { x: 6000, y: 0 },
+    { x: 6000, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+
+  function slabFloor() {
+    return {
+      id: 'floor_1',
+      walls: [],
+      columns: [],
+      doors: [],
+      windows: [],
+      rooms: [],
+      fixtures: [],
+      railings: [],
+      beams: [],
+      stairs: [],
+      landings: [],
+      sectionCuts: [],
+      slabs: [{ id: 'slab_1', floorId: 'floor_1', boundaryPoints: PLATE.map((p) => ({ ...p })), thickness: 200 }],
+    };
+  }
+
+  /**
+   * A chevron plate: the same 6000 x 4000 footprint with its top edge folded
+   * down to a V at (3000, 2000). Pulling the bottom edge (edge 3) up past that
+   * apex is the shortest route to a boundary that crosses itself.
+   */
+  const CHEVRON = [
+    { x: 0, y: 0 },
+    { x: 3000, y: 2000 },
+    { x: 6000, y: 0 },
+    { x: 6000, y: 6000 },
+    { x: 0, y: 6000 },
+  ];
+
+  function chevronFloor() {
+    const floor = slabFloor();
+    floor.slabs[0].boundaryPoints = CHEVRON.map((point) => ({ ...point }));
+    return floor;
+  }
+
+  function createSlabHarness({
+    handle,
+    index,
+    start,
+    snapEnabled = true,
+    floor = slabFloor(),
+    slabId = 'slab_1',
+    floorBelow = null,
+    showFloorBelowUnderlay = false,
+  } = {}) {
+    let toolState = {};
+    const dispatched = [];
+
+    const handler = createSelectHandler({
+      dispatch: (action) => {
+        dispatched.push(action);
+        // The store commits per pointer-move, so the handler reads back its own
+        // edits on the next frame — exactly the condition the origin snapshot
+        // exists to survive.
+        if (action.type === 'SLAB_UPDATE') {
+          floor.slabs = floor.slabs.map((slab) => (slab.id === action.slab.id ? { ...slab, ...action.slab } : slab));
+        }
+      },
+      editorDispatch: (action) => {
+        if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+      },
+      getFloor: () => floor,
+      activeFloorId: 'floor_1',
+      viewport: { zoom: 0.1 },
+      snapEnabled,
+      floorBelow,
+      showFloorBelowUnderlay,
+    });
+
+    handler.onMouseDown(start, {
+      button: 0,
+      target: { dataset: { handle, index: String(index), ...(slabId ? { slabId } : {}) } },
+    });
+
+    return {
+      dispatched,
+      slabUpdates: () => dispatched.filter((action) => action.type === 'SLAB_UPDATE'),
+      getBoundary: () => floor.slabs[0].boundaryPoints,
+      getToolState: () => toolState,
+      move(modelPos) {
+        handler.onMouseMove(modelPos, {}, toolState, 'slab_1', 'slab');
+      },
+      up(modelPos) {
+        handler.onMouseUp(modelPos, { button: 0 }, toolState);
+      },
+      key(e) {
+        handler.onKeyDown(e, toolState, 'slab_1', 'slab');
+      },
+    };
+  }
+
+  it('moves a single vertex to the snapped cursor and leaves the rest alone', () => {
+    const harness = createSlabHarness({ handle: 'slab-vertex', index: 2, start: { x: 6000, y: 4000 } });
+
+    harness.move({ x: 6523, y: 4011 });
+
+    expect(harness.getBoundary()).toEqual([
+      { x: 0, y: 0 },
+      { x: 6000, y: 0 },
+      { x: 6500, y: 4000 },
+      { x: 0, y: 4000 },
+    ]);
+  });
+
+  it('pushes the whole edge out along its normal, carrying both of its vertices', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    harness.move({ x: 3000, y: -600 });
+
+    expect(harness.getBoundary()).toEqual([
+      { x: 0, y: -600 },
+      { x: 6000, y: -600 },
+      { x: 6000, y: 4000 },
+      { x: 0, y: 4000 },
+    ]);
+    // The number has to be on screen while the pointer is down: 600mm out.
+    expect(harness.getToolState().slabEdgeDrag).toEqual({ offset: 600, point: { x: 3000, y: -600 } });
+  });
+
+  it('ignores cursor travel ALONG the edge, which would otherwise shear the plate', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    harness.move({ x: 5000, y: 0 });
+
+    expect(harness.getBoundary()).toEqual(PLATE);
+    // Nothing moved, so nothing was committed — the project stays clean.
+    expect(harness.dispatched.filter((action) => action.type === 'SLAB_UPDATE')).toHaveLength(0);
+  });
+
+  it('stays cumulative from mousedown over a slow drag (gravity regression)', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    // 20 steps of 50mm. Measured against the live slab instead of the mousedown
+    // snapshot, each frame would re-add the previous frame's push.
+    for (let step = 1; step <= 20; step += 1) {
+      harness.move({ x: 3000, y: -step * 50 });
+    }
+
+    expect(harness.getBoundary()[0]).toEqual({ x: 0, y: -1000 });
+    expect(harness.getBoundary()[1]).toEqual({ x: 6000, y: -1000 });
+  });
+
+  it('pulls the edge back in on the reverse drag', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    harness.move({ x: 3000, y: -600 });
+    harness.move({ x: 3000, y: 300 });
+
+    expect(harness.getBoundary()[0]).toEqual({ x: 0, y: 300 });
+    expect(harness.getToolState().slabEdgeDrag.offset).toBe(-300);
+  });
+
+  it('does nothing for a degenerate edge with no outward direction', () => {
+    const floor = slabFloor();
+    // Two coincident vertices: the edge between them has no direction.
+    floor.slabs[0].boundaryPoints = [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 6000, y: 0 },
+      { x: 6000, y: 4000 },
+    ];
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 0, y: 0 }, floor });
+
+    harness.move({ x: 0, y: -600 });
+
+    expect(harness.dispatched.filter((action) => action.type === 'SLAB_UPDATE')).toHaveLength(0);
+  });
+
+  it('moves nothing when the handle drag has lost its mousedown snapshot', () => {
+    // No slab id on the handle means no snapshot was captured. Falling back to
+    // the live boundary would make an edge push re-apply its own offset every
+    // frame, so the drag does nothing at all instead.
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 }, slabId: null });
+
+    harness.move({ x: 3000, y: -600 });
+
+    expect(harness.slabUpdates()).toHaveLength(0);
+    expect(harness.getBoundary()).toEqual(PLATE);
+  });
+
+  it('Escape puts the plate back exactly where the drag found it', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    harness.move({ x: 3000, y: -600 });
+    expect(harness.getBoundary()[0]).toEqual({ x: 0, y: -600 });
+
+    harness.key({ key: 'Escape' });
+
+    // A slab commits per pointer-move, so cancelling has to restore geometry —
+    // clearing the drag state alone would leave the last frame standing.
+    expect(harness.getBoundary()).toEqual(PLATE);
+    expect(harness.slabUpdates().at(-1).slab.boundaryPoints).toEqual(PLATE);
+    expect(harness.getToolState().slabEditOrigin).toBeNull();
+    expect(harness.getToolState().slabEdgeDrag).toBeNull();
+    expect(harness.getToolState().dragging).toBe(false);
+  });
+
+  it('Escape reverts a vertex drag the same way', () => {
+    const harness = createSlabHarness({ handle: 'slab-vertex', index: 2, start: { x: 6000, y: 4000 } });
+
+    harness.move({ x: 6523, y: 4011 });
+    expect(harness.getBoundary()[2]).toEqual({ x: 6500, y: 4000 });
+
+    harness.key({ key: 'Escape' });
+
+    expect(harness.getBoundary()).toEqual(PLATE);
+  });
+
+  it('Escape dispatches nothing when the drag never changed the boundary', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    // Travel along the edge moves nothing, so there is nothing to put back.
+    harness.move({ x: 5000, y: 0 });
+    harness.key({ key: 'Escape' });
+
+    expect(harness.slabUpdates()).toHaveLength(0);
+    expect(harness.getToolState().slabEditOrigin).toBeNull();
+  });
+
+  it('stops at the last valid shape when the edge drag would fold the plate through itself', () => {
+    // Chevron edge 3 is the bottom edge; its outward normal is +y, so pulling
+    // the cursor up gives a negative offset. Past the V apex at y=2000 the
+    // bottom edge crosses the folded top and the plate is no longer a floor.
+    const harness = createSlabHarness({
+      handle: 'slab-edge',
+      index: 3,
+      start: { x: 3000, y: 6000 },
+      floor: chevronFloor(),
+    });
+
+    harness.move({ x: 3000, y: 3000 }); // 3000 in — still clear of the apex
+    expect(harness.getBoundary()[3]).toEqual({ x: 6000, y: 3000 });
+    expect(harness.slabUpdates()).toHaveLength(1);
+
+    harness.move({ x: 3000, y: 1000 }); // 5000 in — crosses the folded top
+    expect(harness.slabUpdates()).toHaveLength(1);
+    expect(harness.getBoundary()[3]).toEqual({ x: 6000, y: 3000 });
+    // The readout is dropped with the frame, so the number on screen never
+    // describes a shape that was not applied.
+    expect(harness.getToolState().slabEdgeDrag.offset).toBe(-3000);
+
+    harness.move({ x: 3000, y: 2500 }); // back to a valid region — follows again
+    expect(harness.slabUpdates()).toHaveLength(2);
+    expect(harness.getBoundary()[3]).toEqual({ x: 6000, y: 2500 });
+    expect(harness.getToolState().slabEdgeDrag.offset).toBe(-3500);
+  });
+
+  it('refuses the vertex drag frames that would cross the boundary, and takes the next valid one', () => {
+    const harness = createSlabHarness({ handle: 'slab-vertex', index: 2, start: { x: 6000, y: 4000 } });
+
+    // Dragging the corner across to the far side folds edge 1 through edge 3.
+    harness.move({ x: -1000, y: 2000 });
+    expect(harness.slabUpdates()).toHaveLength(0);
+    expect(harness.getBoundary()).toEqual(PLATE);
+
+    harness.move({ x: 6500, y: 4000 });
+    expect(harness.getBoundary()[2]).toEqual({ x: 6500, y: 4000 });
+  });
+
+  it('clears the drag snapshot and the readout on release', () => {
+    const harness = createSlabHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+    harness.move({ x: 3000, y: -600 });
+    expect(harness.getToolState().slabEditOrigin).not.toBeNull();
+
+    harness.up({ x: 3000, y: -600 });
+
+    expect(harness.getToolState().slabEditOrigin).toBeNull();
+    expect(harness.getToolState().slabEdgeDrag).toBeNull();
+    expect(harness.getToolState().dragging).toBe(false);
+  });
+
+  /**
+   * Snapping the plate to the floor below.
+   *
+   * The ghost underlay carries a wall along y=-1000 and a column corner-post at
+   * (6180, 4020). Edge 0's outward normal is -y, so pushing it out 1000 lands it
+   * dead on that wall line — 1000, not the 950 the 50mm grid would round 960 to.
+   * That difference is the whole test: the plate stops ON its support instead of
+   * 50mm shy of it.
+   */
+  describe('snapping to the floor below', () => {
+    function ghostFloor() {
+      return {
+        id: 'floor_0',
+        walls: [
+          { id: 'wall_below', start: { x: 0, y: -1000 }, end: { x: 6000, y: -1000 }, thickness: 200 },
+          { id: 'post_below', start: { x: 6180, y: 4020 }, end: { x: 6180, y: 8000 }, thickness: 200 },
+        ],
+        columns: [],
+      };
+    }
+
+    function ghostHarness(overrides) {
+      return createSlabHarness({ floorBelow: ghostFloor(), showFloorBelowUnderlay: true, ...overrides });
+    }
+
+    it('clicks the dragged edge onto the wall line below', () => {
+      const harness = ghostHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+      harness.move({ x: 3000, y: -960 });
+
+      expect(harness.getBoundary()[0]).toEqual({ x: 0, y: -1000 });
+      expect(harness.getBoundary()[1]).toEqual({ x: 6000, y: -1000 });
+      // The readout reports the offset that was applied, not the raw travel.
+      expect(harness.getToolState().slabEdgeDrag.offset).toBe(1000);
+    });
+
+    it('falls back to the grid once the edge is out of the reference line reach', () => {
+      const harness = ghostHarness({ handle: 'slab-edge', index: 0, start: { x: 3000, y: 0 } });
+
+      // 1130 out: past the wall line below by more than the 100mm tolerance.
+      harness.move({ x: 3000, y: -1130 });
+
+      expect(harness.getBoundary()[0]).toEqual({ x: 0, y: -1150 });
+      expect(harness.getToolState().slabEdgeDrag.offset).toBe(1150);
+    });
+
+    it('prefers a reference point to the grid on a vertex drag', () => {
+      const harness = ghostHarness({ handle: 'slab-vertex', index: 2, start: { x: 6000, y: 4000 } });
+
+      // The grid would round this to (6150, 4050); the wall corner below is 36mm
+      // away and wins.
+      harness.move({ x: 6150, y: 4040 });
+
+      expect(harness.getBoundary()[2]).toEqual({ x: 6180, y: 4020 });
+    });
+
+    it('leaves the plate on the grid while the ghost is hidden', () => {
+      const edge = createSlabHarness({
+        handle: 'slab-edge',
+        index: 0,
+        start: { x: 3000, y: 0 },
+        floorBelow: ghostFloor(),
+        showFloorBelowUnderlay: false,
+      });
+      edge.move({ x: 3000, y: -960 });
+
+      expect(edge.getBoundary()[0]).toEqual({ x: 0, y: -950 });
+      expect(edge.getToolState().slabEdgeDrag.offset).toBe(950);
+
+      const vertex = createSlabHarness({
+        handle: 'slab-vertex',
+        index: 2,
+        start: { x: 6000, y: 4000 },
+        floorBelow: ghostFloor(),
+        showFloorBelowUnderlay: false,
+      });
+      vertex.move({ x: 6150, y: 4040 });
+
+      expect(vertex.getBoundary()[2]).toEqual({ x: 6150, y: 4050 });
+    });
+
+    it('leaves the plate on the raw cursor while snapping is off', () => {
+      const harness = ghostHarness({
+        handle: 'slab-vertex',
+        index: 2,
+        start: { x: 6000, y: 4000 },
+        snapEnabled: false,
+      });
+
+      harness.move({ x: 6150, y: 4040 });
+
+      expect(harness.getBoundary()[2]).toEqual({ x: 6150, y: 4040 });
+    });
+
+    it('still refuses a reference-snapped frame that folds the plate through itself', () => {
+      const harness = createSlabHarness({
+        handle: 'slab-edge',
+        index: 3,
+        start: { x: 3000, y: 6000 },
+        floor: chevronFloor(),
+        floorBelow: {
+          id: 'floor_0',
+          walls: [
+            // 3000 in from the chevron's bottom edge: clear of the apex.
+            { id: 'shallow', start: { x: 0, y: 3000 }, end: { x: 6000, y: 3000 } },
+            // 5000 in: past the apex, where the plate crosses itself.
+            { id: 'deep', start: { x: 0, y: 1000 }, end: { x: 6000, y: 1000 } },
+          ],
+          columns: [],
+        },
+        showFloorBelowUnderlay: true,
+      });
+
+      // Reference-snapped to the shallow line — -3000, not the grid's -2950.
+      harness.move({ x: 3000, y: 3040 });
+      expect(harness.getBoundary()[3]).toEqual({ x: 6000, y: 3000 });
+      expect(harness.getToolState().slabEdgeDrag.offset).toBe(-3000);
+
+      // The deep line is in reach of the cursor, but landing on it folds the
+      // plate: the whole frame goes, readout included, and the plate holds.
+      harness.move({ x: 3000, y: 1040 });
+      expect(harness.slabUpdates()).toHaveLength(1);
+      expect(harness.getBoundary()[3]).toEqual({ x: 6000, y: 3000 });
+      expect(harness.getToolState().slabEdgeDrag.offset).toBe(-3000);
+    });
+  });
+});
+
+/**
  * Manual dimensions are thin overlays: they lie inside rooms and cross walls by
  * construction, so testing them AFTER those area fills made them unclickable —
  * and therefore undeletable from the canvas. They now rank above railings,
@@ -962,5 +1387,105 @@ describe('selectHandler — manual dimension hit priority', () => {
       annotationId: 'anno_1',
     });
     expect(harness.getSelected()).toBeNull();
+  });
+});
+
+/* ── Picking one cantilever off the plan ──────────────────────────────────
+ *
+ * An overhang indicator is drawn along a stretch of a slab's own edge, so
+ * "was that click on the overhang or on the plate?" cannot be answered by
+ * geometry — the two are in the same place. It is answered by what the pointer
+ * was actually over: the indicator carries its own hit stroke and its own data
+ * attributes, and only a click that lands on that stroke means the run.
+ */
+describe('selectHandler — picking an overhang run', () => {
+  const PLATE = [
+    { x: 0, y: 0 },
+    { x: 6000, y: 0 },
+    { x: 6000, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+
+  function overhangFloor() {
+    return {
+      id: 'floor_1',
+      walls: [],
+      columns: [],
+      doors: [],
+      windows: [],
+      rooms: [],
+      fixtures: [],
+      railings: [],
+      beams: [],
+      stairs: [],
+      landings: [],
+      sectionCuts: [],
+      annotations: [],
+      electricalDevices: [],
+      slabs: [{ id: 'slab_1', floorId: 'floor_1', boundaryPoints: PLATE, thickness: 200 }],
+    };
+  }
+
+  function createPickHarness() {
+    const floor = overhangFloor();
+    const editorActions = [];
+    let toolState = {};
+
+    const handler = createSelectHandler({
+      dispatch: () => {},
+      editorDispatch: (action) => {
+        editorActions.push(action);
+        if (action.type === 'UPDATE_TOOL_STATE') toolState = { ...toolState, ...action.payload };
+      },
+      project: { building: { systems: {} } },
+      getFloor: () => floor,
+      activeFloorId: 'floor_1',
+      viewport: { zoom: 0.1 },
+      snapEnabled: true,
+    });
+
+    return {
+      editorActions,
+      getToolState: () => toolState,
+      down: (modelPos, dataset = {}) => handler.onMouseDown(modelPos, { button: 0, target: { dataset } }),
+      key: (key) => handler.onKeyDown({ key }, toolState, 'slab_1', 'slab'),
+    };
+  }
+
+  it('selects the run that was clicked, along with the plate it belongs to', () => {
+    const harness = createPickHarness();
+
+    harness.down({ x: 3000, y: 4000 }, { overhangSlab: 'slab_1', overhangEdge: '2' });
+
+    expect(harness.editorActions).toEqual([{ type: 'SELECT_OVERHANG_EDGE', slabId: 'slab_1', edgeIndex: 2 }]);
+  });
+
+  it('selects the plate with no run in mind when the click lands anywhere else on it', () => {
+    const harness = createPickHarness();
+
+    harness.down({ x: 3000, y: 2000 });
+
+    expect(harness.editorActions[0]).toEqual({ type: 'SELECT_OBJECT', id: 'slab_1', objectType: 'slab' });
+    expect(harness.editorActions.some((action) => action.type === 'SELECT_OVERHANG_EDGE')).toBe(false);
+  });
+
+  it('lets the plate edge handle keep its drag, indicator or no indicator', () => {
+    // The edge handle sits at the midpoint of the very edge an indicator runs
+    // along. Dragging it is how the cantilever got there, so it outranks the
+    // annotation drawn on top of the result.
+    const harness = createPickHarness();
+
+    harness.down({ x: 3000, y: 4000 }, { handle: 'slab-edge', index: '2', slabId: 'slab_1', overhangSlab: 'slab_1' });
+
+    expect(harness.getToolState()).toMatchObject({ dragging: true, handle: 'slab-edge', handleIndex: 2 });
+    expect(harness.editorActions.some((action) => action.type === 'SELECT_OVERHANG_EDGE')).toBe(false);
+  });
+
+  it('gives the run back on Escape and leaves the plate selected', () => {
+    const harness = createPickHarness();
+
+    harness.key('Escape');
+
+    expect(harness.editorActions).toEqual([{ type: 'CLEAR_OVERHANG_EDGE_SELECTION' }]);
   });
 });

@@ -1,11 +1,14 @@
 import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { getFloorFootprintSlabs } from '@/geometry/floorOverhang';
 import { dot, normalize, perpendicular, subtract } from '@/geometry/point';
-import { intersectionArea } from '@/geometry/polygonBoolean';
-import { getFloorElevation } from './floorModels';
+import { polygonArea } from '@/geometry/polygon';
+import { intersectionArea, unionPolygons } from '@/geometry/polygonBoolean';
+import { getFloorElevation, getOrderedFloors } from './floorModels';
 
 /**
- * Which beams a ceiling may hang from, and the plan boundary a set of them
- * gives it.
+ * Which beams a ceiling may hang from, and the plan boundary the structure
+ * around it gives it — the beams it hangs from together with the slab overhead
+ * it closes off.
  *
  * A ceiling hangs under the beams that pass over it, so only a beam whose top
  * sits above the floor the ceiling belongs to can carry one: a tie or slab beam
@@ -222,4 +225,88 @@ export function deriveCeilingBoundaryFromBeams(beams, floor = null) {
     [rangeU.max, rangeV.max],
     [rangeU.min, rangeV.max],
   ].map(([u, v]) => ({ x: axisU.x * u + axisV.x * v, y: axisU.y * u + axisV.y * v }));
+}
+
+function slabRing(slab) {
+  return slab.boundaryPoints.map((point) => ({ x: point.x, y: point.y }));
+}
+
+/** The storey whose slab rests on this floor's beams: the next one up. */
+function floorAbove(project, floor) {
+  if (!floor) return null;
+  const floors = getOrderedFloors(project);
+  const index = floors.findIndex((entry) => entry.id === floor.id);
+  return index < 0 ? null : floors[index + 1] || null;
+}
+
+function coverageSlabs(project, floor, beamBoundary) {
+  const above = floorAbove(project, floor);
+  const slabs = getFloorFootprintSlabs(above);
+  return {
+    floor: above,
+    slabs: beamBoundary
+      ? slabs.filter((slab) => intersectionArea(slabRing(slab), beamBoundary) > MIN_AREA_OVERLAP)
+      : slabs,
+  };
+}
+
+/**
+ * One ring out of a union that may have come apart into several: the region the
+ * beams are under, or the largest one when there are no beams to ask. Whatever
+ * is left over is another part of the building that happens to share a slab.
+ */
+function pickPrimaryRing(regions, reference) {
+  if (!regions.length) return null;
+  const score = reference
+    ? (region) => intersectionArea(region.outline, reference)
+    : (region) => polygonArea(region.outline);
+  return regions.reduce((best, region) => (score(region) > score(best) ? region : best)).outline;
+}
+
+/**
+ * The slabs overhead that shape a ceiling's plan extent, and the storey they
+ * belong to.
+ *
+ * A floor's beams frame the TOP of its own storey and the next floor's slab
+ * rests on them, so what a ceiling closes off is the underside of the slab
+ * above. That ring already reaches over any cantilever — a cantilever is not an
+ * object, it is a slab drawn past the storey below — which is exactly what the
+ * beams cannot report, there being none under it.
+ *
+ * Slabs clear of the beam group are left out: one floor can carry several
+ * ceilings under several slabs, and unioning all of them would make every
+ * ceiling cover everything. With no beam rectangle there is nothing to be local
+ * to, so every slab counts.
+ *
+ * @returns {{floor: object | null, slabs: Array<object>}}
+ */
+export function selectCeilingCoverageSlabs({ project, floor, supportBeams = [] } = {}) {
+  return coverageSlabs(project, floor, deriveCeilingBoundaryFromBeams(supportBeams, floor));
+}
+
+/**
+ * Plan boundary for a ceiling: the beams' rectangle widened to whatever the
+ * slab above actually covers.
+ *
+ * The beams still fix the plane and trim the outline where nothing overhead
+ * disagrees; the slab says how far the storey being closed off really reaches.
+ * The union of the two is the only answer that covers a cantilever, which has a
+ * slab over it and no beam under it. No slab above — a top floor, or a frame
+ * carrying nothing but roof beams — leaves the beams the sole authority, as
+ * before.
+ *
+ * One flat ring comes back, holes dropped: every consumer of a ceiling boundary
+ * is written for a single ring, and structure crossing a ceiling is already cut
+ * out of the boards as an obstruction rather than as a hole in the outline.
+ *
+ * Returns null when there is nothing sane to draw, leaving the caller to fall
+ * back to whatever boundary the ceiling has stored.
+ */
+export function deriveCeilingStructuralCoverage({ project, floor, supportBeams = [] } = {}) {
+  const beamBoundary = deriveCeilingBoundaryFromBeams(supportBeams, floor);
+  const { slabs } = coverageSlabs(project, floor, beamBoundary);
+  if (!slabs.length) return beamBoundary;
+
+  const rings = slabs.map(slabRing);
+  return pickPrimaryRing(unionPolygons(beamBoundary ? [...rings, beamBoundary] : rings), beamBoundary);
 }

@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { pointInPolygon, polygonArea } from '@/geometry/polygon';
 import { createBeam, createColumn } from './models';
 import {
   CEILING_BEAM_ELEVATION_TOLERANCE,
   deriveCeilingBoundaryFromBeams,
+  deriveCeilingStructuralCoverage,
   getCeilingSupportBeamLevels,
   getEligibleCeilingSupportBeams,
   isCeilingSupportBeam,
   resolveCeilingSupportBeams,
   selectCeilingBeamsForArea,
+  selectCeilingCoverageSlabs,
   selectPreferredCeilingBeamLevel,
 } from './ceilingBeamAttachment';
 
@@ -305,5 +308,126 @@ describe('deriveCeilingBoundaryFromBeams', () => {
         ringFloor(),
       ),
     ).toBeNull();
+  });
+});
+
+const planRect = (minX, minY, maxX, maxY) => [
+  { x: minX, y: minY },
+  { x: maxX, y: minY },
+  { x: maxX, y: maxY },
+  { x: minX, y: maxY },
+];
+
+// The storey's own footprint, and the same slab pulled 2000 mm east of the
+// frame along its southern half — a cantilever, which is nothing but a slab
+// drawn past the storey below it.
+const FLUSH_SLAB = planRect(0, 0, WIDTH, DEPTH);
+const CANTILEVER_SLAB = [
+  { x: 0, y: 0 },
+  { x: WIDTH + 2000, y: 0 },
+  { x: WIDTH + 2000, y: 2000 },
+  { x: WIDTH, y: 2000 },
+  { x: WIDTH, y: DEPTH },
+  { x: 0, y: DEPTH },
+];
+// Inside the overhang, past every beam: nothing under this point holds it up.
+const OVERHANG_PROBE = { x: WIDTH + 1000, y: 1000 };
+
+function upperFloor(...boundaries) {
+  return {
+    id: 'floor_2',
+    levelIndex: 1,
+    elevation: BEAM_TOP,
+    floorToFloorHeight: BEAM_TOP,
+    slabs: boundaries.map((boundaryPoints, index) => ({
+      id: `slab_${index + 1}`,
+      floorId: 'floor_2',
+      elevation: BEAM_TOP,
+      thickness: 200,
+      boundaryPoints,
+    })),
+  };
+}
+
+function stack(floor, above = null) {
+  return { floors: [floor, above].filter(Boolean) };
+}
+
+describe('deriveCeilingStructuralCoverage', () => {
+  it('gives back the beam rectangle when nothing is stacked over the floor', () => {
+    const floor = ringFloor();
+    const beamOnly = deriveCeilingBoundaryFromBeams(floor.beams, floor);
+
+    // Top floor, and a storey above that was never slabbed: both leave the beams
+    // as the only authority there is.
+    expect(deriveCeilingStructuralCoverage({ project: stack(floor), floor, supportBeams: floor.beams })).toEqual(
+      beamOnly,
+    );
+    expect(
+      deriveCeilingStructuralCoverage({ project: stack(floor, upperFloor()), floor, supportBeams: floor.beams }),
+    ).toEqual(beamOnly);
+    expect(deriveCeilingStructuralCoverage({ floor, supportBeams: floor.beams })).toEqual(beamOnly);
+  });
+
+  it('reaches out under a cantilevered slab, where there is no beam to be found', () => {
+    const floor = ringFloor();
+    const beamOnly = deriveCeilingBoundaryFromBeams(floor.beams, floor);
+    const project = stack(floor, upperFloor(CANTILEVER_SLAB));
+
+    const coverage = deriveCeilingStructuralCoverage({ project, floor, supportBeams: floor.beams });
+
+    expect(pointInPolygon(OVERHANG_PROBE, coverage)).toBe(true);
+    expect(pointInPolygon(OVERHANG_PROBE, beamOnly)).toBe(false);
+    expect(polygonArea(coverage)).toBeGreaterThan(polygonArea(beamOnly));
+    expect(boundsOf(coverage).maxX).toBeCloseTo(WIDTH + 2000, 6);
+  });
+
+  it('leaves out a slab the beam group never reaches', () => {
+    const floor = ringFloor();
+    const project = stack(floor, upperFloor(planRect(20000, 0, 26000, DEPTH)));
+
+    expect(deriveCeilingStructuralCoverage({ project, floor, supportBeams: floor.beams })).toEqual(
+      deriveCeilingBoundaryFromBeams(floor.beams, floor),
+    );
+    expect(selectCeilingCoverageSlabs({ project, floor, supportBeams: floor.beams }).slabs).toEqual([]);
+  });
+
+  it('covers both slabs when a terrace is poured alongside the main one', () => {
+    const floor = ringFloor();
+    const terrace = planRect(WIDTH - 1000, 0, WIDTH + 3000, 3000);
+    const project = stack(floor, upperFloor(FLUSH_SLAB, terrace));
+
+    const coverage = deriveCeilingStructuralCoverage({ project, floor, supportBeams: floor.beams });
+
+    expect(selectCeilingCoverageSlabs({ project, floor, supportBeams: floor.beams }).slabs).toHaveLength(2);
+    expect(pointInPolygon({ x: WIDTH / 2, y: DEPTH / 2 }, coverage)).toBe(true);
+    expect(pointInPolygon({ x: WIDTH + 2000, y: 1500 }, coverage)).toBe(true);
+    expect(boundsOf(coverage).maxX).toBeCloseTo(WIDTH + 3000, 6);
+  });
+
+  it('falls back on the slab alone when the beams give no rectangle', () => {
+    const floor = ringFloor();
+    const project = stack(floor, upperFloor(CANTILEVER_SLAB));
+
+    // One beam bounds nothing, so there is no rectangle to union with — but the
+    // slab overhead still says exactly what this ceiling closes off.
+    expect(deriveCeilingStructuralCoverage({ project, floor, supportBeams: [RING_BEAMS[0]] })).toEqual(CANTILEVER_SLAB);
+    expect(deriveCeilingStructuralCoverage({ project, floor, supportBeams: [] })).toEqual(CANTILEVER_SLAB);
+    // With no rectangle to be local to, every slab up there is a candidate.
+    expect(selectCeilingCoverageSlabs({ project, floor, supportBeams: [] }).slabs).toHaveLength(1);
+  });
+
+  it('picks one region out of a union that came apart, and never two', () => {
+    const floor = ringFloor();
+    const wing = planRect(20000, 0, 26000, DEPTH);
+    const project = stack(floor, upperFloor(FLUSH_SLAB, wing));
+
+    // No beams, so nothing filters the far wing out and the union is two
+    // separate regions. A ceiling is one flat ring, so the bigger region wins.
+    const coverage = deriveCeilingStructuralCoverage({ project, floor, supportBeams: [] });
+
+    expect(polygonArea(FLUSH_SLAB)).toBeGreaterThan(polygonArea(wing));
+    expect(coverage).toEqual(FLUSH_SLAB);
+    expect(pointInPolygon({ x: 23000, y: 3000 }, coverage)).toBe(false);
   });
 });

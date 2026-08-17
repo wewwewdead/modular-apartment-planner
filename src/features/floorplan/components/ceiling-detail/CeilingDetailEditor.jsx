@@ -1280,6 +1280,10 @@ export default function CeilingDetailEditor() {
       event.preventDefault();
       const rect = pinCanvasRect();
       const point = eventToLocal(event, true);
+      // A trace is separate clicks, not a held drag, so the pin must not outlive
+      // this one: panning between clicks moves the canvas, and a preview measured
+      // against where the canvas used to be points anywhere but at the cursor.
+      releaseCanvasRect();
       const points = panelTrace?.points || [];
       const closeDistance = Math.max(8, (detail.length / Math.max(1, rect?.width || 1)) * 12);
       if (points.length >= 3 && Math.hypot(point.u - points[0].u, point.v - points[0].v) <= closeDistance) {

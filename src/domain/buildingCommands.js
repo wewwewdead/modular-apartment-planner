@@ -70,9 +70,13 @@ import {
 } from './unitGeometry';
 import {
   DEFAULT_STRUCTURAL_COORDINATION_PROFILE,
+  OVERHANG_BEAM_DROP_MM,
+  OVERHANG_BEAM_RISE_MM,
   deriveConceptualLoadPath,
   inferSlabSupportRefs,
 } from './structuralCoordination';
+import { getBeamRenderData } from '@/geometry/beamGeometry';
+import { beamSupportsOverhang, computeFloorOverhangs, planOverhangSupportBeams } from '@/geometry/floorOverhang';
 import { pointInPolygon } from '@/geometry/polygon';
 import { isValidTimeZone } from '@/utils/timeZone';
 import {
@@ -96,6 +100,7 @@ export const BUILDING_COMMANDS = Object.freeze({
   MOVE_COLUMN: 'MoveColumn',
   CREATE_BEAM_BETWEEN_SUPPORTS: 'CreateBeamBetweenSupports',
   CREATE_CANTILEVER_BEAM: 'CreateCantileverBeam',
+  GENERATE_SLAB_OVERHANG_SUPPORTS: 'GenerateSlabOverhangSupports',
   SET_BEAM_COORDINATION_INTENT: 'SetBeamCoordinationIntent',
   CONFIGURE_STRUCTURAL_COORDINATION: 'ConfigureStructuralCoordination',
   CONFIGURE_STRUCTURAL_REALIZATION_PROFILE: 'ConfigureStructuralRealizationProfile',
@@ -4155,6 +4160,20 @@ function configureStructuralCoordination(project, command) {
       { field: invalid[0], value: invalid[1] },
     );
   }
+  // Optional: the back-span ratio has no UI yet, and a command that omits it
+  // must keep the profile default rather than writing an undefined over it.
+  if (command.minCantileverBackSpanRatio !== undefined) {
+    if (!Number.isFinite(command.minCantileverBackSpanRatio) || command.minCantileverBackSpanRatio <= 0) {
+      return commandError(
+        project,
+        command,
+        'invalid-structural-coordination-profile',
+        'minCantileverBackSpanRatio must be a positive ratio.',
+        { field: 'minCantileverBackSpanRatio', value: command.minCantileverBackSpanRatio },
+      );
+    }
+    values.minCantileverBackSpanRatio = command.minCantileverBackSpanRatio;
+  }
   const coordinationProfile = {
     id: command.profileId || DEFAULT_STRUCTURAL_COORDINATION_PROFILE.id,
     source: 'user_configured_early_planning_assumption_not_structural_design',
@@ -4449,6 +4468,180 @@ function distanceBetween(first, second) {
   return Math.hypot(second.x - first.x, second.y - first.y);
 }
 
+/**
+ * The soffit a slab's carrying beams have to reach: the underside of the plate.
+ * Both numbers are absolute, so this is the level the beam tops sit at.
+ */
+function slabSoffitElevation(slab, floorBelow) {
+  if (!Number.isFinite(slab?.elevation)) return getFloorTopElevation(floorBelow);
+  return slab.elevation - (Number.isFinite(slab.thickness) ? slab.thickness : 0);
+}
+
+/** Beams anywhere in the project already running under this overhang, at level. */
+function overhangSupportAxes(project, overhangEdges, soffitLevel) {
+  const axes = [];
+  for (const floor of project.floors || []) {
+    for (const beam of floor.beams || []) {
+      if (!Number.isFinite(beam.floorLevel)) continue;
+      if (beam.floorLevel < soffitLevel - OVERHANG_BEAM_DROP_MM) continue;
+      if (beam.floorLevel > soffitLevel + OVERHANG_BEAM_RISE_MM) continue;
+      const data = getBeamRenderData(beam, floor.columns || []);
+      if (!data || !beamSupportsOverhang(data, overhangEdges)) continue;
+      axes.push({ start: data.start, end: data.end });
+    }
+  }
+  return axes;
+}
+
+/**
+ * Plant the cantilever beams a projecting slab edge is missing.
+ *
+ * The overhang is re-measured here rather than taken from the caller: the panel
+ * that offers the button holds a memoised copy, and a command that mutates the
+ * model on the strength of a stale measurement is a command that puts beams
+ * where the slab no longer reaches.
+ *
+ * A floor's beams frame the TOP of its own storey, so these are filed one level
+ * down from the slab they carry, with their tops at its soffit.
+ */
+function generateSlabOverhangSupports(project, command) {
+  const floor = findFloor(project, command.floorId);
+  if (!floor) return commandError(project, command, 'floor-not-found', `Floor ${command.floorId} was not found.`);
+  const slab = (floor.slabs || []).find((entry) => entry.id === command.slabId);
+  if (!slab) return commandError(project, command, 'slab-not-found', `Slab ${command.slabId} was not found.`);
+
+  const overhang = computeFloorOverhangs(project).find(
+    (entry) => entry.floorId === floor.id && entry.slabId === slab.id,
+  );
+  if (!overhang) {
+    return commandError(
+      project,
+      command,
+      'slab-overhang-not-found',
+      'This slab does not reach past the floor below, so there is no overhang to carry.',
+    );
+  }
+  const floorBelow = findFloor(project, overhang.belowFloorId);
+  if (!floorBelow) {
+    return commandError(project, command, 'floor-not-found', `Floor ${overhang.belowFloorId} was not found.`);
+  }
+
+  const width = command.width ?? BEAM_WIDTH;
+  const depth = command.depth ?? BEAM_DEPTH;
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(depth) || depth <= 0) {
+    return commandError(project, command, 'invalid-beam-dimensions', 'Beam width and depth must be positive numbers.');
+  }
+
+  const soffitLevel = slabSoffitElevation(slab, floorBelow);
+  const plan = planOverhangSupportBeams({
+    overhangEdges: overhang.overhangEdges,
+    boundary: slab.boundaryPoints || [],
+    columns: floorBelow.columns || [],
+    existingAxes: overhangSupportAxes(project, overhang.overhangEdges, soffitLevel),
+  });
+
+  if (!plan.placements.length) {
+    if (plan.skippedStationCount) {
+      return commandError(
+        project,
+        command,
+        'overhang-support-column-not-found',
+        `No column on ${floorBelow.name || 'the floor below'} is placed to anchor a beam under this overhang; add columns inboard of the projecting edge first.`,
+        { belowFloorId: floorBelow.id, skippedStationCount: plan.skippedStationCount },
+      );
+    }
+    return commandError(
+      project,
+      command,
+      'slab-overhang-already-supported',
+      'Every projecting edge of this slab already has a beam running under it.',
+      { belowFloorId: floorBelow.id, carriedStationCount: plan.carriedStationCount },
+    );
+  }
+
+  // Stable, traceable ids: a generated support says which slab asked for it.
+  const takenBeamIds = new Set((project.floors || []).flatMap((entry) => (entry.beams || []).map((beam) => beam.id)));
+  let sequence = 0;
+  const nextBeamId = () => {
+    let candidate = `${slab.id}_overhang_support_${(sequence += 1)}`;
+    while (takenBeamIds.has(candidate)) candidate = `${slab.id}_overhang_support_${(sequence += 1)}`;
+    takenBeamIds.add(candidate);
+    return candidate;
+  };
+
+  const beams = plan.placements.map((placement) => ({
+    id: nextBeamId(),
+    startRef: { kind: 'column', id: placement.columnId },
+    endRef: { kind: 'point', x: placement.freeEnd.x, y: placement.freeEnd.y },
+    width,
+    depth,
+    floorLevel: soffitLevel,
+    placementRole: 'floor',
+    // A support belongs to whatever phase builds the slab it carries; a beam
+    // left unphased under a phased slab vanishes from every filtered view.
+    phaseId: command.phaseId ?? slab.phaseId ?? null,
+    coordination: {
+      condition: 'cantilever',
+      maxPlanningSpan: command.maxPlanningSpan ?? null,
+      transferReason: '',
+      supportedElementRefs: [{ kind: 'slab', id: slab.id }],
+    },
+  }));
+
+  const supportRefs = [
+    ...(slab.supportRefs || []).map((ref) => ({ ...ref })),
+    ...beams.map((beam) => ({
+      kind: 'beam',
+      id: beam.id,
+      role: 'overhang_support',
+      inference: 'generated_overhang_support',
+    })),
+  ];
+
+  const nextProject = {
+    ...project,
+    floors: project.floors.map((entry) => {
+      if (entry.id === floorBelow.id) return { ...entry, beams: [...(entry.beams || []), ...beams] };
+      if (entry.id !== floor.id) return entry;
+      return {
+        ...entry,
+        slabs: (entry.slabs || []).map((candidate) =>
+          candidate.id === slab.id ? { ...candidate, supportRefs } : candidate,
+        ),
+      };
+    }),
+  };
+
+  return commandSuccess(project, nextProject, command, [
+    ...beams.map((beam) => ({
+      operation: 'create',
+      entityType: 'beam',
+      id: beam.id,
+      floorId: floorBelow.id,
+      condition: 'cantilever',
+    })),
+    ...beams.map((beam) => ({
+      operation: 'relate',
+      entityType: 'beam',
+      id: beam.id,
+      relation: 'fixedSupport',
+      targetId: beam.startRef.id,
+    })),
+    {
+      operation: 'generate',
+      entityType: 'slabOverhangSupport',
+      id: slab.id,
+      floorId: floorBelow.id,
+      hostFloorId: floor.id,
+      beamIds: beams.map((beam) => beam.id),
+      beamTopLevel: soffitLevel,
+      stationCount: plan.stationCount,
+      carriedStationCount: plan.carriedStationCount,
+      skippedStationCount: plan.skippedStationCount,
+    },
+  ]);
+}
+
 function validSlabSupportRef(floor, ref) {
   if (!ref?.id) return false;
   if (ref.kind === 'beam') return (floor.beams || []).some((entry) => entry.id === ref.id);
@@ -4611,6 +4804,8 @@ export function executeBuildingCommand(project, command) {
       return createBeamBetweenSupports(project, command);
     case BUILDING_COMMANDS.CREATE_CANTILEVER_BEAM:
       return createCantileverBeam(project, command);
+    case BUILDING_COMMANDS.GENERATE_SLAB_OVERHANG_SUPPORTS:
+      return generateSlabOverhangSupports(project, command);
     case BUILDING_COMMANDS.SET_BEAM_COORDINATION_INTENT:
       return setBeamCoordinationIntent(project, command);
     case BUILDING_COMMANDS.CONFIGURE_STRUCTURAL_COORDINATION:

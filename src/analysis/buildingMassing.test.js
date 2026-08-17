@@ -101,7 +101,10 @@ describe('buildAnalysisMassing', () => {
     expect(buildAnalysisMassing({ floors: [floor] }, { includeColumns: false })).toEqual([]);
   });
 
-  it('treats an elevated slab as a shading solid at its own elevation', () => {
+  it('treats an elevated slab as a shading solid at its own absolute elevation', () => {
+    // `slab.elevation` is the absolute level of the slab's top, on the same
+    // datum as the floor's — every other consumer edits and seeds it that way.
+    // Adding it to the floor elevation shaded a storey too high.
     const balcony = createSlab(
       'floor_1',
       [
@@ -111,14 +114,30 @@ describe('buildAnalysisMassing', () => {
         { x: 0, y: 2000 },
       ],
       200,
-      2800,
+      3000,
     );
     const floor = floorOf({ id: 'floor_1', elevation: 3000, slabs: [balcony] });
 
     const [mass] = buildAnalysisMassing({ floors: [floor] });
-    // Floor elevation plus the slab's own offset within that floor.
-    expect(mass.baseElevation).toBe(5800);
+    // The slab hangs below its own top by its thickness.
+    expect(mass.baseElevation).toBe(2800);
+    expect(Math.max(...mass.topElevations)).toBe(3000);
     expect(buildAnalysisMassing({ floors: [floor] }, { includeSlabs: false })).toEqual([]);
+  });
+
+  it('falls back to the floor datum for a slab with no elevation of its own', () => {
+    const balcony = createSlab('floor_1', [
+      { x: 0, y: 0 },
+      { x: 4000, y: 0 },
+      { x: 4000, y: 2000 },
+      { x: 0, y: 2000 },
+    ]);
+    delete balcony.elevation;
+    const floor = floorOf({ id: 'floor_1', elevation: 6000, slabs: [balcony] });
+
+    const [mass] = buildAnalysisMassing({ floors: [floor] });
+    expect(Math.max(...mass.topElevations)).toBe(6000);
+    expect(mass.baseElevation).toBe(5800);
   });
 
   it('restricts to the requested floors', () => {

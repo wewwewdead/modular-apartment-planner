@@ -1,4 +1,4 @@
-import { memo, useCallback, useId, useState } from 'react';
+import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNumericDraft } from '../useNumericDraft';
 import styles from './PanelKit.module.css';
 
@@ -42,9 +42,10 @@ function writeSectionPreference(id, open) {
  * still says what is inside — collapsing must not hide information, only defer
  * it.
  */
-export const Section = memo(function Section({ id, title, summary, defaultOpen = true, children }) {
+export const Section = memo(function Section({ id, title, summary, defaultOpen = true, reveal = null, children }) {
   const [open, setOpen] = useState(() => readSectionPreference(id || title, defaultOpen));
   const bodyId = useId();
+  const containerRef = useRef(null);
 
   const toggle = useCallback(() => {
     setOpen((wasOpen) => {
@@ -53,8 +54,26 @@ export const Section = memo(function Section({ id, title, summary, defaultOpen =
     });
   }, [id, title]);
 
+  // A non-null `reveal` value opens the section, whatever the stored preference
+  // says — pointing at something on the plan must never land its readouts in a
+  // folded section. The preference itself is untouched: being shown something
+  // is not the same as asking for it, and the fold returns next selection.
+  // Adjusted during render (the sanctioned prop-change pattern) rather than in
+  // an effect, so the section is open in the same commit that carries the new
+  // reveal; only the scroll — a real DOM side effect — stays in an effect.
+  const [lastReveal, setLastReveal] = useState(null);
+  if (reveal !== lastReveal) {
+    setLastReveal(reveal);
+    if (reveal != null) setOpen(true);
+  }
+
+  useEffect(() => {
+    if (reveal == null) return;
+    containerRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [reveal]);
+
   return (
-    <div className={styles.section}>
+    <div className={styles.section} ref={containerRef}>
       <button type="button" className={styles.sectionHead} onClick={toggle} aria-expanded={open} aria-controls={bodyId}>
         <span className={`${styles.chevron} ${open ? styles.chevronOpen : ''}`} aria-hidden="true" />
         <span className={styles.sectionTitle}>{title}</span>
@@ -88,9 +107,23 @@ export function Stack({ children }) {
  * Editable number. The entry rules live in useNumericDraft, which is what keeps
  * a half-typed number on screen instead of letting the committed value — often
  * clamped from the first digit — overwrite it mid-word.
+ *
+ * `onSubmit` is for the fields that finish something rather than just set it —
+ * the reach of a cantilever waiting on Apply. Enter still commits through
+ * `onChange` first, so the submit handler sees a settled value; it is given the
+ * parsed number as well so it never has to wait for state to come back round. A
+ * stepper click is not a submit: stepping is how you find the number, not how
+ * you agree to it.
  */
-export function NumberField({ label, value, onChange, step, unit, min }) {
+export function NumberField({ label, value, onChange, step, unit, min, onSubmit }) {
   const { displayValue, handleChange, handleKeyDown, handleBlur } = useNumericDraft(value, onChange);
+
+  const keyDown = (event) => {
+    handleKeyDown(event);
+    if (!onSubmit || event.key !== 'Enter') return;
+    const parsed = parseFloat(event.target.value);
+    if (Number.isFinite(parsed)) onSubmit(parsed);
+  };
 
   return (
     <Field label={label}>
@@ -99,7 +132,7 @@ export function NumberField({ label, value, onChange, step, unit, min }) {
         className={styles.controlNumber}
         value={displayValue}
         onChange={handleChange}
-        onKeyDown={handleKeyDown}
+        onKeyDown={keyDown}
         onBlur={handleBlur}
         step={step}
         min={min}

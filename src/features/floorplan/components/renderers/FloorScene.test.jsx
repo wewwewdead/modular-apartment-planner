@@ -152,4 +152,93 @@ describe('FloorScene', () => {
   it('renders nothing when there is no active floor', () => {
     expect(renderScene({ floor: null, filteredFloor: null })).toBe('<svg></svg>');
   });
+
+  it('draws the ghost floor below underneath the active plan, and only when asked', () => {
+    const floorBelow = {
+      ...createFloor('floor-0'),
+      walls: [{ id: 'wall-below', start: { x: 0, y: 0 }, end: { x: 4000, y: 0 }, thickness: 200 }],
+    };
+
+    const withUnderlay = renderScene({ floorBelow, showFloorBelowUnderlay: true });
+    expect(withUnderlay).toContain('floor-underlay');
+    // Below the active floor's plan layer: an overhang has to read as this
+    // floor drawn OVER the one beneath it.
+    expect(withUnderlay.indexOf('floor-underlay')).toBeLessThan(withUnderlay.indexOf('floor-plan:'));
+
+    expect(renderScene({ floorBelow, showFloorBelowUnderlay: false })).not.toContain('floor-underlay');
+    // Ground floor: nothing below to ghost.
+    expect(renderScene({ floorBelow: null, showFloorBelowUnderlay: true })).not.toContain('floor-underlay');
+  });
+
+  it('marks cantilevered slab edges over the active plan, and nothing when none overhang', () => {
+    const floorOverhangs = [
+      {
+        floorId: 'floor-1',
+        belowFloorId: 'floor-0',
+        slabId: 'slab-1',
+        overhangEdges: [
+          { start: { x: 0, y: 0 }, end: { x: 3000, y: 0 }, depthMm: 620 },
+          { start: { x: 3000, y: 0 }, end: { x: 3000, y: 900 }, depthMm: 240 },
+        ],
+        maxDepthMm: 620,
+      },
+    ];
+
+    const marked = renderScene({ floorOverhangs });
+    expect(marked).toContain('overhang-indicators');
+    // One label per slab, carrying the deepest reach — not one per edge.
+    expect(marked.match(/>620</g)).toHaveLength(1);
+    expect(marked).not.toContain('>240<');
+    // Annotates this floor, so it sits ON the plan rather than under it.
+    expect(marked.indexOf('floor-plan:')).toBeLessThan(marked.indexOf('overhang-indicators'));
+
+    // Nothing cantilevered: the layer must not put a group on the drawing.
+    expect(renderScene({ floorOverhangs: null })).not.toContain('overhang-indicators');
+    expect(renderScene({ floorOverhangs: [] })).not.toContain('overhang-indicators');
+  });
+
+  describe('picking one cantilever of several', () => {
+    const floorOverhangs = [
+      {
+        floorId: 'floor-1',
+        belowFloorId: 'floor-0',
+        slabId: 'slab-1',
+        overhangEdges: [
+          { start: { x: 0, y: 0 }, end: { x: 3000, y: 0 }, depthMm: 620, boundaryEdgeIndex: 0 },
+          { start: { x: 3000, y: 0 }, end: { x: 3000, y: 900 }, depthMm: 240, boundaryEdgeIndex: 1 },
+        ],
+        maxDepthMm: 620,
+      },
+    ];
+
+    it('gives every run a hit target that names it', () => {
+      const markup = renderScene({ floorOverhangs });
+
+      expect(markup).toContain('data-overhang-slab="slab-1"');
+      expect(markup).toContain('data-overhang-edge="0"');
+      expect(markup).toContain('data-overhang-edge="1"');
+      expect(markup).toContain('pointer-events:stroke');
+      // The number that measures a run is not a way of pointing at it.
+      expect(markup).toContain('pointer-events:none');
+    });
+
+    it('draws the selected run differently from the passive ones', () => {
+      const selected = renderScene({ floorOverhangs, selectedOverhangEdge: { slabId: 'slab-1', edgeIndex: 1 } });
+
+      expect(selected).toContain('var(--color-selection)');
+      expect(renderScene({ floorOverhangs })).not.toContain('var(--color-selection)');
+    });
+
+    it('fails soft on a run index that no longer exists, or belongs to another plate', () => {
+      // The index is a position in geometry that is remeasured after every
+      // edit. Out of range must highlight NOTHING — highlighting whichever run
+      // inherited the number would be worse than a missing accent.
+      expect(renderScene({ floorOverhangs, selectedOverhangEdge: { slabId: 'slab-1', edgeIndex: 9 } })).not.toContain(
+        'var(--color-selection)',
+      );
+      expect(
+        renderScene({ floorOverhangs, selectedOverhangEdge: { slabId: 'slab-other', edgeIndex: 1 } }),
+      ).not.toContain('var(--color-selection)');
+    });
+  });
 });

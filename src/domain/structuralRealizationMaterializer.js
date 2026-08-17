@@ -3,6 +3,7 @@ import { intersectionArea } from '@/geometry/polygonBoolean';
 import { createBeam, createColumn } from './models';
 import { resolveBeamBearingLevel } from './beamLevels';
 import { createColumnStack, resolveGridIntersection } from './buildingModels';
+import { getOrderedFloors } from './floorModels';
 import { inferSlabSupportRefs } from './structuralCoordination';
 import {
   createStructuralRealizationProfile,
@@ -137,7 +138,7 @@ export function materializeAcceptedStructuralRealization(project, profileOverrid
 
   const refs = { columnStacks: stacks.map((stack) => stack.id), columns: [], beams: [] };
   const skippedBeamSegments = [];
-  const floors = cleanedFloors.map((floor) => {
+  const framedFloors = cleanedFloors.map((floor) => {
     const columns = [...(floor.columns || [])];
     for (const stack of stacks) {
       const column = generated(
@@ -214,24 +215,33 @@ export function materializeAcceptedStructuralRealization(project, profileOverrid
       beams.push(beam);
       refs.beams.push(beam.id);
     }
-    const floorWithFrame = { ...floorWithColumns, beams };
-    return {
-      ...floorWithFrame,
-      slabs: (floorWithFrame.slabs || []).map((slab) => {
-        const preserved = (slab.supportRefs || []).filter((ref) => ref.kind !== 'beam');
-        const inferred = inferSlabSupportRefs(floorWithFrame, slab);
-        const byKey = new Map([...preserved, ...inferred].map((ref) => [`${ref.kind}:${ref.id}`, ref]));
-        return {
-          ...slab,
-          supportRefs: [...byKey.values()],
-          coordination: {
-            ...slab.coordination,
-            supportAssignment: 'kappa_deterministic_grid_inference',
-          },
-        };
-      }),
-    };
+    return { ...floorWithColumns, beams };
   });
+
+  // Support inference runs in a second pass: a slab's support can sit on the
+  // storey below, and that storey only has its generated frame once the first
+  // pass is finished.
+  const orderedFramed = getOrderedFloors(framedFloors);
+  const floorBelowById = new Map();
+  orderedFramed.forEach((floor, position) => {
+    if (position > 0) floorBelowById.set(floor.id, orderedFramed[position - 1]);
+  });
+  const floors = framedFloors.map((floorWithFrame) => ({
+    ...floorWithFrame,
+    slabs: (floorWithFrame.slabs || []).map((slab) => {
+      const preserved = (slab.supportRefs || []).filter((ref) => ref.kind !== 'beam');
+      const inferred = inferSlabSupportRefs(floorWithFrame, slab, floorBelowById.get(floorWithFrame.id) || null);
+      const byKey = new Map([...preserved, ...inferred].map((ref) => [`${ref.kind}:${ref.id}`, ref]));
+      return {
+        ...slab,
+        supportRefs: [...byKey.values()],
+        coordination: {
+          ...slab.coordination,
+          supportAssignment: 'kappa_deterministic_grid_inference',
+        },
+      };
+    }),
+  }));
 
   const state = createStructuralRealizationState({
     status: 'realized',

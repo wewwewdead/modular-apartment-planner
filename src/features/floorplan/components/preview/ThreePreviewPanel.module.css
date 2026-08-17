@@ -213,6 +213,40 @@
   color: #1a1d23;
 }
 
+/* The overlay itself is click-through so it never blocks the canvas; the mode
+   toggle is the one part of it that has to catch the pointer. */
+.walkModeRow {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(45, 78, 109, 0.22);
+  border-radius: var(--radius-sm, 6px);
+  background: rgba(255, 255, 255, 0.7);
+  pointer-events: auto;
+  align-self: flex-start;
+}
+
+.walkModeButton,
+.walkModeButtonActive {
+  border: none;
+  border-radius: calc(var(--radius-sm, 6px) - 2px);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: #35536f;
+}
+
+.walkModeButton:hover {
+  background: rgba(53, 83, 111, 0.1);
+}
+
+.walkModeButtonActive {
+  background: #35536f;
+  color: #f6f9fc;
+}
+
 .inspectCard {
   position: absolute;
   top: 16px;

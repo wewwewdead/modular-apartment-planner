@@ -179,9 +179,29 @@ function clearSelectionState(editorState) {
     ...editorState,
     selectedId: null,
     selectedType: null,
+    // A sub-selection only means anything while its plate is the selection, so
+    // it goes wherever the selection goes — including into a new SELECT_OBJECT,
+    // which is how clicking the plate anywhere but on its overhang gets you back
+    // to the plate as a whole.
+    selectedOverhangEdge: null,
     regionSelection: null,
     pastePreview: { active: false, point: null },
   };
+}
+
+/**
+ * Forget a run of overhang that belonged to this plate.
+ *
+ * A run is an INDEX into geometry measured off the plate's boundary, so the
+ * moment the boundary moves the index stops meaning what it meant. Dropped here
+ * rather than resolved later: a stale index that happens to still be in range
+ * would quietly highlight a different stretch of edge, which is worse than
+ * highlighting nothing.
+ */
+function withoutOverhangEdgeSelection(state, slabId) {
+  if (!state.editor?.selectedOverhangEdge) return state;
+  if (slabId && state.editor.selectedOverhangEdge.slabId !== slabId) return state;
+  return { ...state, editor: { ...state.editor, selectedOverhangEdge: null } };
 }
 
 function mergeIfChanged(target, patch) {
@@ -207,6 +227,13 @@ function createInitialEditorState(activeFloorId = null) {
     modelTarget: 'floor',
     selectedId: null,
     selectedType: null,
+    // Which run of a selected slab's overhang is being looked at:
+    // `{ slabId, edgeIndex }`, indexing the derived `overhangEdges` of that
+    // slab. A sub-selection, not a selection — the slab is still what is
+    // selected, this only says which part of its edge the panel and the plan
+    // are talking about. Never persisted: it describes measured geometry, not
+    // anything in the project.
+    selectedOverhangEdge: null,
     toolState: {},
     workspaceMode: 'model',
     viewport: { ...modelViewport },
@@ -214,6 +241,10 @@ function createInitialEditorState(activeFloorId = null) {
     sheetViewport,
     showGrid: true,
     snapEnabled: true,
+    // Draws the floor below the active one as a muted ghost under the plan, so a
+    // cantilever or setback is visible while you draw. A viewing state like
+    // showGrid — never persisted, never part of the project.
+    showFloorBelowUnderlay: true,
     viewMode: 'plan',
     activeFloorId,
     activeSheetId: null,
@@ -1153,17 +1184,23 @@ function reduceProjectState(state, action) {
         slabs: [...(floor.slabs || []), action.slab],
       }));
 
-    case 'SLAB_UPDATE':
-      return updateFloor(state, action.floorId, (floor) => ({
+    case 'SLAB_UPDATE': {
+      const nextState = updateFloor(state, action.floorId, (floor) => ({
         ...floor,
         slabs: (floor.slabs || []).map((slab) => (slab.id === action.slab.id ? { ...slab, ...action.slab } : slab)),
       }));
+      // Only a boundary edit invalidates a run: renaming the plate or changing
+      // its thickness leaves every overhang exactly where it was.
+      return action.slab?.boundaryPoints ? withoutOverhangEdgeSelection(nextState, action.slab.id) : nextState;
+    }
 
-    case 'SLAB_DELETE':
-      return updateFloor(state, action.floorId, (floor) => ({
+    case 'SLAB_DELETE': {
+      const nextState = updateFloor(state, action.floorId, (floor) => ({
         ...floor,
         slabs: (floor.slabs || []).filter((slab) => slab.id !== action.slabId),
       }));
+      return withoutOverhangEdgeSelection(nextState, action.slabId);
+    }
 
     case 'RAILING_ADD':
       return updateFloor(state, action.floorId, (floor) => ({
@@ -1406,6 +1443,27 @@ function reduceEditorState(editorState, action) {
         selectedType: action.objectType,
       };
 
+    /**
+     * Clicking an overhang indicator: the plate is selected, AND the run that
+     * was clicked is remembered. One action rather than two so the pair can
+     * never come apart — a SELECT_OBJECT on its own clears the sub-selection by
+     * design, so ordering them separately would depend on which arrived last.
+     */
+    case 'SELECT_OVERHANG_EDGE': {
+      const edgeIndex = Number(action.edgeIndex);
+      if (!action.slabId || !Number.isInteger(edgeIndex) || edgeIndex < 0) return editorState;
+      return {
+        ...clearSelectionState(editorState),
+        selectedId: action.slabId,
+        selectedType: 'slab',
+        selectedOverhangEdge: { slabId: action.slabId, edgeIndex },
+      };
+    }
+
+    /** Escape, and anything else that means "still this plate, no run". */
+    case 'CLEAR_OVERHANG_EDGE_SELECTION':
+      return editorState.selectedOverhangEdge ? { ...editorState, selectedOverhangEdge: null } : editorState;
+
     case 'DESELECT':
       return clearSelectionState(editorState);
 
@@ -1478,6 +1536,15 @@ function reduceEditorState(editorState, action) {
 
     case 'TOGGLE_GRID':
       return { ...editorState, showGrid: !editorState.showGrid };
+
+    case 'TOGGLE_FLOOR_BELOW_UNDERLAY':
+      return { ...editorState, showFloorBelowUnderlay: !editorState.showFloorBelowUnderlay };
+
+    case 'SET_SHOW_FLOOR_BELOW_UNDERLAY': {
+      const show = Boolean(action.show);
+      if (editorState.showFloorBelowUnderlay === show) return editorState;
+      return { ...editorState, showFloorBelowUnderlay: show };
+    }
 
     case 'SET_WALL_BOARD_VISIBILITY': {
       if (!action.wallId) return editorState;
@@ -1634,6 +1701,19 @@ function routeStructuralActionToCommand(state, action) {
         floorLevel: action.beam.floorLevel,
         placementRole: action.beam.placementRole,
         phaseId: action.beam.phaseId,
+      },
+    };
+  }
+
+  // Where the beams go is measured from the model, not chosen in the panel, so
+  // the action carries only what was selected.
+  if (action.type === 'SLAB_GENERATE_OVERHANG_SUPPORTS') {
+    return {
+      type: 'EXECUTE_BUILDING_COMMAND',
+      command: {
+        type: BUILDING_COMMANDS.GENERATE_SLAB_OVERHANG_SUPPORTS,
+        floorId: action.floorId,
+        slabId: action.slabId,
       },
     };
   }

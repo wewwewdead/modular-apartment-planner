@@ -14,6 +14,100 @@
   pointer-events: none;
 }
 
+/*
+ * Shared look for the tool chips that float over the plan (beam level,
+ * electrical device). Docked top-right: the compass owns the top-left corner
+ * and the view controls the bottom-right, so this is the one free corner. Only
+ * one chip is ever mounted — each is keyed to a different active tool — so they
+ * share the position. The dock is sized by its content and never stretched, so
+ * it swallows pointer events only inside the chip itself — the plan under it
+ * stays drawable.
+ */
+.chipDock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-elevated);
+  box-shadow: var(--shadow-sm, 0 1px 4px rgba(0, 0, 0, 0.16));
+  user-select: none;
+}
+
+.chipLabel {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.chipGroup {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-segment-bg);
+}
+
+.chipBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
+.chipBtn:hover {
+  color: var(--color-text-primary);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.chipBtnActive {
+  composes: chipBtn;
+  background: var(--color-segment-active-bg);
+  color: var(--color-active-glow);
+  font-weight: 600;
+  box-shadow:
+    var(--color-segment-active-shadow),
+    0 0 0 1px rgba(45, 95, 142, 0.08);
+}
+
+/* Buttons whose whole content is a 1-4 character plan-symbol code, so they are
+ * squared off around the lettering instead of sized by a phrase. */
+.chipCodeBtn {
+  composes: chipBtn;
+  min-width: 34px;
+  padding: 0 6px;
+  font-family: var(--font-blueprint, var(--font-ui));
+  letter-spacing: 0.04em;
+}
+
+.chipCodeBtnActive {
+  composes: chipCodeBtn chipBtnActive;
+}
+
 .svg {
   width: 100%;
   height: 100%;

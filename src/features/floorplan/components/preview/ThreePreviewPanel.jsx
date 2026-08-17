@@ -14,9 +14,11 @@ import {
   persistInteriorLightsPreference,
   persistNightModePreference,
   persistRenderStylePreference,
+  persistWalkPhysicsPreference,
   readInteriorLightsPreference,
   readNightModePreference,
   readRenderStylePreference,
+  readWalkPhysicsPreference,
 } from './renderStyle';
 import CompassOverlay from '@/features/floorplan/components/CompassOverlay';
 import { ExpandIcon, CollapseIcon } from '@/ui/ToolbarIcons';
@@ -63,11 +65,12 @@ export default function ThreePreviewPanel({
   const [renderStyle, setRenderStyle] = useState(readRenderStylePreference);
   const [interiorLightsOn, setInteriorLightsOn] = useState(readInteriorLightsPreference);
   const [nightMode, setNightMode] = useState(readNightModePreference);
-  const [walkUiState, setWalkUiState] = useState({
+  const [walkUiState, setWalkUiState] = useState(() => ({
     navigationMode: 'inspect',
     isLocked: false,
     canLock: false,
-  });
+    physicsMode: readWalkPhysicsPreference(),
+  }));
   const {
     selectedId,
     selectedType,
@@ -199,11 +202,18 @@ export default function ThreePreviewPanel({
   }, [activeFloorId]);
 
   useEffect(() => {
+    viewportRef.current?.setWalkPhysicsMode(readWalkPhysicsPreference());
     viewportRef.current?.setWalkUiHandler(setWalkUiState);
     viewportRef.current?.setWalkExitHandler(() => {
       setNavigationMode('inspect');
     });
   }, []);
+
+  // The viewport owns the mode (the C key toggles it mid-walk); the panel just
+  // mirrors it into storage.
+  useEffect(() => {
+    persistWalkPhysicsPreference(walkUiState.physicsMode);
+  }, [walkUiState.physicsMode]);
 
   useEffect(() => {
     viewportRef.current?.setCompassHeadingHandler((headingDeg) => {
@@ -317,15 +327,21 @@ export default function ThreePreviewPanel({
   }, [walkFloorContext]);
 
   const resetLabel = navigationMode === 'walk' ? 'Reset Walk' : 'Reset View';
+  const walkPhysicsOn = walkUiState.physicsMode;
+  const walkControlsHint = walkPhysicsOn
+    ? 'Walk: W/A/S/D · Jump: Space · Run: Shift · No-clip: C · Exit: Esc'
+    : 'Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Physics: C · Exit: Esc';
   const primaryFooter =
     navigationMode === 'walk'
       ? walkUiState.isLocked
-        ? 'Look: mouse · Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Exit: Esc'
-        : 'Walk: click preview to capture mouse · Fly: W/A/S/D · Up/Down: R/F · Faster: Shift · Exit: Esc'
+        ? `Look: mouse · ${walkControlsHint}`
+        : `Click preview to capture mouse · ${walkControlsHint}`
       : 'Orbit: drag · Pan: right drag · Zoom: wheel · Inspect: click object';
   const secondaryFooter =
     navigationMode === 'walk'
-      ? 'Ghost walk is noclip flight now, still read-only and collision-free.'
+      ? walkPhysicsOn
+        ? 'Physical walk: gravity holds you to the floors, walls are solid, and the stairs are how you change levels.'
+        : 'No-clip flight: free movement through anything. Press C to land back in the physical walk.'
       : renderStyle === 'realistic'
         ? 'Realistic: sky lighting, ambient occlusion, soft sun shadows. The image keeps refining for a moment after the camera stops.'
         : 'Shaded: flat drawing view with outlines and the ground grid.';
@@ -431,10 +447,34 @@ export default function ThreePreviewPanel({
             <span className={styles.walkOverlayTitle}>
               {walkUiState.isLocked ? 'Walk Mode Active' : 'Walk Mode Ready'}
             </span>
+            <div className={styles.walkModeRow} role="group" aria-label="Walk collision mode">
+              <button
+                type="button"
+                className={walkPhysicsOn ? styles.walkModeButtonActive : styles.walkModeButton}
+                onClick={() => viewportRef.current?.setWalkPhysicsMode(true)}
+                aria-pressed={walkPhysicsOn}
+                title="Physical walk: gravity, solid walls and floors, stairs, jumping"
+              >
+                Physical
+              </button>
+              <button
+                type="button"
+                className={!walkPhysicsOn ? styles.walkModeButtonActive : styles.walkModeButton}
+                onClick={() => viewportRef.current?.setWalkPhysicsMode(false)}
+                aria-pressed={!walkPhysicsOn}
+                title="No-clip: free flight through walls and floors"
+              >
+                No-clip
+              </button>
+            </div>
             <span className={styles.walkOverlayBody}>
               {walkUiState.isLocked
-                ? 'Noclip flight is live. W/S follow the camera view, A/D strafe, R/F move up and down, Shift goes faster, and Esc exits.'
-                : 'Click inside the preview to capture the mouse, then use W/A/S/D for noclip flight and R/F for vertical movement.'}
+                ? walkPhysicsOn
+                  ? 'W/A/S/D walk, Space jumps, Shift runs, and the stairs take you between floors. Step off an open slab edge and you will fall. C switches to no-clip, Esc exits.'
+                  : 'Noclip flight is live. W/S follow the camera view, A/D strafe, R/F move up and down, Shift goes faster. C drops you back into the physical walk, Esc exits.'
+                : walkPhysicsOn
+                  ? 'Click inside the preview to capture the mouse, then walk the building on foot — gravity, walls and stairs are real here.'
+                  : 'Click inside the preview to capture the mouse, then use W/A/S/D for noclip flight and R/F for vertical movement.'}
             </span>
           </div>
         )}

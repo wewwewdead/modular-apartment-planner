@@ -9,6 +9,7 @@ const FloorSelectionLayer = memo(function FloorSelectionLayer({
   selectionBounds,
   selectedId,
   selectedType,
+  selectedOverhangEdge,
   floor,
   zoom,
 }) {
@@ -18,7 +19,13 @@ const FloorSelectionLayer = memo(function FloorSelectionLayer({
     <>
       <ClipboardPreviewLayer content={previewContent} />
       <RegionSelectionOverlay marqueeBounds={marqueeBounds} selectionBounds={selectionBounds} />
-      <SelectionOverlay selectedId={selectedId} selectedType={selectedType} floor={floor} zoom={zoom} />
+      <SelectionOverlay
+        selectedId={selectedId}
+        selectedType={selectedType}
+        selectedOverhangEdge={selectedOverhangEdge}
+        floor={floor}
+        zoom={zoom}
+      />
     </>
   );
 });

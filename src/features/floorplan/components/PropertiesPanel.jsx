@@ -10,6 +10,7 @@ import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { findTrussInstance, getProjectTrussSystems } from '@/domain/trussModels';
 import { TOOLS } from '@/editor/tools';
 import { getOrderedPhases } from '@/domain/phaseModels';
+import { structuralProfile } from '@/domain/structuralCoordination';
 import InputField from './InputField';
 import {
   DrainProperties,
@@ -22,6 +23,8 @@ import {
 } from './RoofProperties';
 import { TrussEmptyState, TrussInstanceProperties, TrussSystemProperties } from './TrussProperties';
 import styles from './PropertiesPanel.module.css';
+import { useFloorOverhangs } from '@/features/floorplan/hooks/useFloorOverhangs';
+import { getFloorFootprintPolygons } from '@/geometry/floorOverhang';
 import { useUnits } from './properties/useUnits';
 import WallProperties, { WallDrawingInput } from './properties/WallProperties';
 import DoorProperties from './properties/DoorProperties';
@@ -101,6 +104,7 @@ export default function PropertiesPanel() {
   const {
     selectedId,
     selectedType,
+    selectedOverhangEdge,
     activeFloorId,
     activeSheetId,
     workspaceMode,
@@ -129,6 +133,22 @@ export default function PropertiesPanel() {
   const visibleTrussIds = new Set((filteredProject.trussSystems || []).map((entry) => entry.id));
   const activePhaseName = phases.find((phase) => phase.id === activePhaseId)?.name || null;
   const sheet = (project.sheets || []).find((entry) => entry.id === activeSheetId) || null;
+  const overhangs = useFloorOverhangs(project.floors);
+  // What the selected plate's overhang was measured against. Retracting an edge
+  // has to be able to re-measure with the same footprint, or "the overhang is
+  // gone" would be a claim rather than a check.
+  const selectedSlabOverhang =
+    selectedType === 'slab' ? overhangs.find((entry) => entry.slabId === selectedId) || null : null;
+  const belowFootprint = useMemo(
+    () =>
+      getFloorFootprintPolygons(
+        (project.floors || []).find((entry) => entry.id === selectedSlabOverhang?.belowFloorId) || null,
+      ),
+    [project.floors, selectedSlabOverhang?.belowFloorId],
+  );
+  // The same planning limits the STRUCT rules check against, so a warning in
+  // the model and a verdict in the panel can never disagree about the numbers.
+  const coordinationProfile = useMemo(() => structuralProfile(project), [project]);
   const u = useUnits();
   const { trussSystem: selectedTrussParent } =
     selectedType === 'trussInstance' ? findTrussInstance(project, selectedId) : { trussSystem: null };
@@ -475,7 +495,21 @@ export default function PropertiesPanel() {
       const slab = (floor.slabs || []).find((s) => s.id === selectedId) || null;
       if (slab) {
         content = (
-          <SlabProperties slab={slab} floor={floor} dispatch={dispatch} floorId={activeFloorId} u={u} phases={phases} />
+          <SlabProperties
+            slab={slab}
+            floor={floor}
+            overhang={selectedSlabOverhang}
+            selectedOverhangEdge={selectedOverhangEdge}
+            belowFootprint={belowFootprint}
+            profile={coordinationProfile}
+            dispatch={dispatch}
+            editorDispatch={editorDispatch}
+            floorId={activeFloorId}
+            u={u}
+            phases={phases}
+            activeTool={activeTool}
+            toolState={toolState}
+          />
         );
       }
     } else if (selectedType === 'wall') {

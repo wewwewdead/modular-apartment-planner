@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { createFloor, createWall } from '@/domain/models';
-import { ceilingElevationRange, createCeiling, resolveCeilingElevations } from '@/domain/ceilingModels';
+import { createBeam, createColumn, createFloor, createWall } from '@/domain/models';
+import {
+  ceilingElevationRange,
+  createCeiling,
+  createCeilingForProject,
+  resolveCeilingBoundary,
+  resolveCeilingElevations,
+} from '@/domain/ceilingModels';
 import { collectCeilingObstructions } from '@/domain/ceilingObstructions';
 import { createCeilingDetailPreviewProject } from './ceilingDetailPreviewProject';
 
@@ -209,6 +215,88 @@ describe('createCeilingDetailPreviewProject', () => {
     expect(createCeilingDetailPreviewProject(null, ceiling.id)).toBeNull();
     expect(createCeilingDetailPreviewProject(project, 'ceiling_missing')).toBeNull();
     expect(createCeilingDetailPreviewProject(project, undefined)).toBeNull();
+  });
+});
+
+// The boundary is re-derived inside the preview project, so anything it is
+// derived from has to travel with it — including the slab overhead, which is
+// filed on the floor above and reaches further than any beam wherever it
+// cantilevers.
+describe('the slab a ceiling closes off travels with the preview', () => {
+  const CANTILEVERED_SLAB = [
+    { x: 0, y: 0 },
+    { x: 7500, y: 0 },
+    { x: 7500, y: 4000 },
+    { x: 0, y: 4000 },
+  ];
+  // Another wing of the same storey: no part of this ceiling.
+  const FAR_SLAB = [
+    { x: 20000, y: 0 },
+    { x: 26000, y: 0 },
+    { x: 26000, y: 4000 },
+    { x: 20000, y: 4000 },
+  ];
+
+  function stackedProject() {
+    const ground = createFloor('Ground', 0, { elevation: 0, floorToFloorHeight: 3200 });
+    ground.columns = [
+      ['col_sw', 0, 0],
+      ['col_se', 6000, 0],
+      ['col_ne', 6000, 4000],
+      ['col_nw', 0, 4000],
+    ].map(([id, x, y]) => ({ ...createColumn(x, y, 300, 300, { height: 3200 }), id }));
+    ground.beams = [
+      ['beam_s', 'col_sw', 'col_se'],
+      ['beam_n', 'col_nw', 'col_ne'],
+      ['beam_w', 'col_sw', 'col_nw'],
+      ['beam_e', 'col_se', 'col_ne'],
+    ].map(([id, startId, endId]) => ({
+      ...createBeam({ kind: 'column', id: startId }, { kind: 'column', id: endId }, 250, 450, 3200),
+      id,
+    }));
+
+    const upper = createFloor('First', 1, { elevation: 3200, floorToFloorHeight: 3200 });
+    upper.slabs = [
+      { id: 'slab_above', floorId: upper.id, elevation: 3200, thickness: 200, boundaryPoints: CANTILEVERED_SLAB },
+      { id: 'slab_far', floorId: upper.id, elevation: 3200, thickness: 200, boundaryPoints: FAR_SLAB },
+    ];
+
+    const project = { id: 'project', floors: [ground, upper], ceilings: [], trussSystems: [] };
+    const ceiling = createCeilingForProject(project, { floorId: ground.id });
+    project.ceilings = [ceiling];
+    return { project, ceiling, ground, upper };
+  }
+
+  it('derives the same boundary inside the preview project as the model has', () => {
+    const { project, ceiling } = stackedProject();
+
+    const preview = createCeilingDetailPreviewProject(project, ceiling.id);
+
+    expect(Math.max(...resolveCeilingBoundary(project, ceiling).map((point) => point.x))).toBeCloseTo(7500, 6);
+    expect(resolveCeilingBoundary(preview, ceiling)).toEqual(resolveCeilingBoundary(project, ceiling));
+  });
+
+  it('carries only the slabs the boundary is drawn from, on a floor stripped of everything else', () => {
+    const { project, ceiling, upper } = stackedProject();
+
+    const preview = createCeilingDetailPreviewProject(project, ceiling.id);
+    const previewUpper = preview.floors.find((floor) => floor.id === upper.id);
+
+    expect(previewUpper.slabs.map((slab) => slab.id)).toEqual(['slab_above']);
+    expect(previewUpper.walls).toEqual([]);
+    expect(previewUpper.columns).toEqual([]);
+    expect(previewUpper.beams).toEqual([]);
+    // The source floor is never mutated.
+    expect(upper.slabs).toHaveLength(2);
+  });
+
+  it('leaves the floors alone when there is no slab overhead to carry', () => {
+    const { project, ceiling, upper } = stackedProject();
+    const withoutSlabs = { ...project, floors: [project.floors[0], { ...upper, slabs: [] }] };
+
+    const preview = createCeilingDetailPreviewProject(withoutSlabs, ceiling.id);
+
+    expect(preview.floors.map((floor) => floor.id)).toEqual([project.floors[0].id]);
   });
 });
 

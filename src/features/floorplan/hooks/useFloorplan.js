@@ -368,6 +368,8 @@ export default function useFloorplan({ initialProject, isPlayground = false } = 
         setActivePhase: (phaseId) => dispatch({ type: 'SET_ACTIVE_PHASE', phaseId }),
         setPhaseViewMode: (mode) => dispatch({ type: 'SET_PHASE_VIEW_MODE', mode }),
         setWorkspaceMode: (workspaceMode) => dispatch({ type: 'SET_WORKSPACE_MODE', workspaceMode }),
+        toggleFloorBelowUnderlay: () => dispatch({ type: 'TOGGLE_FLOOR_BELOW_UNDERLAY' }),
+        setShowFloorBelowUnderlay: (show) => dispatch({ type: 'SET_SHOW_FLOOR_BELOW_UNDERLAY', show }),
         setViewMode: (viewMode, sectionCutId = undefined) =>
           dispatch({ type: 'SET_VIEW_MODE', viewMode, sectionCutId }),
       },

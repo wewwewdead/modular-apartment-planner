@@ -3,6 +3,8 @@ import { useEditor } from '@/features/floorplan/context/FloorplanContext';
 import { useProject } from '@/features/floorplan/context/FloorplanContext';
 import { usePlanClipboardController } from '@/features/floorplan/hooks/usePlanClipboardController';
 import { useDragGestureRelease } from '@/features/floorplan/hooks/useDragGestureRelease';
+import { useFloorOverhangs } from '@/features/floorplan/hooks/useFloorOverhangs';
+import { getOrderedFloors } from '@/domain/floorModels';
 import { resolveRoofSectionCut } from '@/domain/roofModels';
 import { filterProjectByPhase } from '@/domain/phaseFilter';
 import { buildProjectSectionScene } from '@/sections/scene';
@@ -21,6 +23,8 @@ import FloorScene from './FloorScene';
 import GridRenderer from './GridRenderer';
 import RoofScene from './RoofScene';
 import TrussScene from './TrussScene';
+import BeamLevelChip from './BeamLevelChip';
+import ElectricalDeviceChip from './ElectricalDeviceChip';
 import CanvasOverlayControls from './CanvasOverlayControls';
 import CanvasStatusBar from './CanvasStatusBar';
 import { RenderProfilerScope, useRenderProfile } from './renderProfiling';
@@ -49,10 +53,12 @@ export default function SvgCanvas() {
     activeTool,
     selectedId,
     selectedType,
+    selectedOverhangEdge,
     toolState,
     viewport,
     showGrid,
     snapEnabled,
+    showFloorBelowUnderlay,
     activeFloorId,
     statusMessage,
     viewMode,
@@ -74,6 +80,25 @@ export default function SvgCanvas() {
   const wallDragPreview = toolState.wallDragPreview || null;
   const floor = useMemo(() => applyWallDragPreview(committedFloor, wallDragPreview), [committedFloor, wallDragPreview]);
   const filteredFloor = usePhaseFilteredFloor(floor, project, activePhaseId, phaseViewMode);
+  // The floor immediately below the active one in stack order, for the ghost
+  // underlay. Deliberately the UNFILTERED floor: the underlay answers "what am I
+  // standing on", which does not change because a phase is being reviewed. The
+  // memo keys on the floors array, so the object identity handed to the
+  // memoized underlay only changes when that floor is actually edited.
+  const floorBelow = useMemo(() => {
+    if (!activeFloorId) return null;
+    const ordered = getOrderedFloors(project.floors || []);
+    const index = ordered.findIndex((entry) => entry.id === activeFloorId);
+    return index > 0 ? ordered[index - 1] : null;
+  }, [activeFloorId, project.floors]);
+  // Only the active floor's cantilevers are drawn — the indicator annotates the
+  // plan on screen, not the whole stack. Null rather than an empty array so the
+  // memoized scene is not re-rendered by a fresh [] on every floor switch.
+  const overhangs = useFloorOverhangs(project.floors);
+  const floorOverhangs = useMemo(() => {
+    const forFloor = overhangs.filter((entry) => entry.floorId === activeFloorId);
+    return forFloor.length ? forFloor : null;
+  }, [overhangs, activeFloorId]);
   const filteredProject = useMemo(
     () => filterProjectByPhase(project, activePhaseId, phaseViewMode),
     [project, activePhaseId, phaseViewMode],
@@ -116,6 +141,8 @@ export default function SvgCanvas() {
     project,
     getFloor,
     activeFloorId,
+    floorBelow,
+    showFloorBelowUnderlay,
     roofSystem,
     trussSystems: floorTrussSystems,
     modelTarget,
@@ -565,6 +592,22 @@ export default function SvgCanvas() {
     <RenderProfilerScope name="SvgCanvas">
       <div className={styles.canvasContainer}>
         <CompassOverlay className={styles.compassDock} />
+        <BeamLevelChip
+          activeTool={activeTool}
+          viewMode={viewMode}
+          modelTarget={modelTarget}
+          floor={floor}
+          beamPlacementMode={toolState.beamPlacementMode}
+          editorDispatch={editorDispatch}
+        />
+        <ElectricalDeviceChip
+          activeTool={activeTool}
+          viewMode={viewMode}
+          modelTarget={modelTarget}
+          floor={floor}
+          deviceType={toolState.deviceType}
+          editorDispatch={editorDispatch}
+        />
         <svg
           ref={svgRef}
           className={styles.svg}
@@ -622,6 +665,10 @@ export default function SvgCanvas() {
                   floor={floor}
                   filteredFloor={filteredFloor}
                   filteredProject={filteredProject}
+                  floorBelow={floorBelow}
+                  showFloorBelowUnderlay={showFloorBelowUnderlay}
+                  floorOverhangs={floorOverhangs}
+                  selectedOverhangEdge={selectedOverhangEdge}
                   sunStudy={sunStudy}
                   structuralLoadPath={derived?.structuralLoadPath}
                   viewMode={viewMode}

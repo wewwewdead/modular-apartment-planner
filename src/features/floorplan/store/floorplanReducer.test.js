@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createBeam, createColumn, createElectricalDevice, createProject, createWall } from '@/domain/models';
+import {
+  createBeam,
+  createColumn,
+  createElectricalDevice,
+  createFloor,
+  createProject,
+  createSlab,
+  createWall,
+} from '@/domain/models';
 import { createCeiling } from '@/domain/ceilingModels';
 import { createWallDetailing } from '@/domain/wallDetailing';
 import { HISTORY_LIMIT } from '@/domain/projectStateHelpers';
@@ -129,6 +137,33 @@ describe('floorplanReducer', () => {
     expect(initializeFloorplanState(createProject()).editor.focusedPanel).toBeNull();
   });
 
+  it('toggles the ghost floor-below underlay without touching the project', () => {
+    const state = initializeFloorplanState(createProject());
+    // On by default: a stacked plan is the case the underlay exists for, and a
+    // single-floor project never renders it anyway.
+    expect(state.editor.showFloorBelowUnderlay).toBe(true);
+
+    const hidden = floorplanReducer(state, { type: 'TOGGLE_FLOOR_BELOW_UNDERLAY' });
+    expect(hidden.editor.showFloorBelowUnderlay).toBe(false);
+    // A view state, not an edit — nothing to undo, nothing to save.
+    expect(hidden.project).toBe(state.project);
+    expect(hidden.history).toHaveLength(0);
+    expect(hidden.isDirty).toBe(false);
+
+    expect(floorplanReducer(hidden, { type: 'TOGGLE_FLOOR_BELOW_UNDERLAY' }).editor.showFloorBelowUnderlay).toBe(true);
+  });
+
+  it('sets the floor-below underlay directly and no-ops when already there', () => {
+    const state = initializeFloorplanState(createProject());
+
+    const hidden = floorplanReducer(state, { type: 'SET_SHOW_FLOOR_BELOW_UNDERLAY', show: false });
+    expect(hidden.editor.showFloorBelowUnderlay).toBe(false);
+
+    // Same value again must not manufacture a new state object for the canvas
+    // to re-render against.
+    expect(floorplanReducer(hidden, { type: 'SET_SHOW_FLOOR_BELOW_UNDERLAY', show: false })).toBe(hidden);
+  });
+
   it('opens and closes the wall-detail workspace as transient editor state', () => {
     const state = initializeFloorplanState(createProject());
     const floorId = state.project.floors[0].id;
@@ -227,7 +262,10 @@ describe('floorplanReducer', () => {
     expect(redone.project).toBe(projectAfterEdit);
   });
 
-  it('caps the history stack and evicts the oldest snapshot past the limit', () => {
+  // HISTORY_LIMIT+10 full reducer passes take ~2s alone and can crawl past the
+  // 5s default under full-suite CPU load — the longer budget is for contention,
+  // not for the test itself.
+  it('caps the history stack and evicts the oldest snapshot past the limit', { timeout: 15000 }, () => {
     let state = initializeFloorplanState(createProject());
     const floorId = state.project.floors[0].id;
     const totalEdits = HISTORY_LIMIT + 10;
@@ -549,6 +587,67 @@ describe('walls fitted to the structure above them', () => {
   });
 });
 
+describe('generating supports under a cantilevered floor', () => {
+  // A first-floor plate reaching 600 mm past the ground floor, framed 4 m in.
+  function overhangState() {
+    let state = initializeFloorplanState(createProject());
+    const ground = {
+      ...state.project.floors[0],
+      columns: [
+        { ...createColumn(500, 1600), id: 'col_a' },
+        { ...createColumn(2600, 1600), id: 'col_b' },
+      ],
+      slabs: [{ ...createSlab(state.project.floors[0].id, rectangle(0, 0, 3000, 5000), 200, 0), id: 'slab_ground' }],
+    };
+    const first = {
+      ...createFloor('First', 1, { elevation: 3000, floorToFloorHeight: 3000 }),
+      id: 'floor_first',
+      slabs: [{ ...createSlab('floor_first', rectangle(0, 0, 3000, 5600), 200, 3000), id: 'slab_upper' }],
+    };
+
+    state = floorplanReducer(state, { type: 'PROJECT_LOAD', project: { ...state.project, floors: [ground, first] } });
+    return { state, groundId: ground.id };
+  }
+
+  function rectangle(x, y, width, depth) {
+    return [
+      { x, y },
+      { x: x + width, y },
+      { x: x + width, y: y + depth },
+      { x, y: y + depth },
+    ];
+  }
+
+  it('routes the action to the building command and files the beams one storey down', () => {
+    const { state, groundId } = overhangState();
+
+    const next = floorplanReducer(state, {
+      type: 'SLAB_GENERATE_OVERHANG_SUPPORTS',
+      floorId: 'floor_first',
+      slabId: 'slab_upper',
+    });
+
+    const ground = next.project.floors.find((floor) => floor.id === groundId);
+    expect(ground.beams).toHaveLength(3);
+    expect(ground.beams[0].coordination.condition).toBe('cantilever');
+    expect(next.project.floors.find((floor) => floor.id === 'floor_first').beams).toHaveLength(0);
+    expect(next.derived.lastCommand).toMatchObject({ ok: true, commandType: 'GenerateSlabOverhangSupports' });
+  });
+
+  it('reports a refusal through lastCommand and leaves the project alone', () => {
+    const { state } = overhangState();
+
+    const next = floorplanReducer(state, {
+      type: 'SLAB_GENERATE_OVERHANG_SUPPORTS',
+      floorId: 'floor_first',
+      slabId: 'missing_slab',
+    });
+
+    expect(next.project).toBe(state.project);
+    expect(next.derived.lastCommand).toMatchObject({ ok: false, error: { code: 'slab-not-found' } });
+  });
+});
+
 describe('ceilings — project collection', () => {
   function ceilingState(ceilingOverrides = {}) {
     const state = initializeFloorplanState(createProject());
@@ -777,5 +876,120 @@ describe('electrical devices', () => {
     // Wall is now 1000 long, so the 100mm faceplate centre cannot exceed 950.
     expect(shortened.project.floors[0].electricalDevices[0].offset).toBe(950);
     expect(shortened.project.floors[0].electricalDevices[0].id).toBe(device.id);
+  });
+});
+
+/* ── One cantilever of a slab's several ───────────────────────────────────
+ *
+ * `selectedOverhangEdge` is a SUB-selection: the slab is still what is
+ * selected, and this only says which run of its overhang the panel and the plan
+ * are talking about. It indexes geometry that is remeasured from the boundary,
+ * so its whole risk is going stale — which is why it goes wherever the
+ * selection goes, and why a boundary edit drops it outright.
+ */
+describe('overhang run sub-selection', () => {
+  function stateWithSlab() {
+    let state = initializeFloorplanState(createProject());
+    const floorId = state.project.floors[0].id;
+    const slab = {
+      ...createSlab(floorId, [
+        { x: 0, y: 0 },
+        { x: 5000, y: 0 },
+        { x: 5000, y: 5600 },
+        { x: 0, y: 5600 },
+      ]),
+      id: 'slab_upper',
+    };
+    state = floorplanReducer(state, { type: 'SLAB_ADD', floorId, slab });
+    state = floorplanReducer(state, { type: 'SELECT_OVERHANG_EDGE', slabId: 'slab_upper', edgeIndex: 2 });
+    return { state, floorId };
+  }
+
+  it('selects the plate and the run in one action', () => {
+    const { state } = stateWithSlab();
+
+    expect(state.editor.selectedId).toBe('slab_upper');
+    expect(state.editor.selectedType).toBe('slab');
+    expect(state.editor.selectedOverhangEdge).toEqual({ slabId: 'slab_upper', edgeIndex: 2 });
+  });
+
+  it('ignores a run that names no plate or no edge', () => {
+    const { state } = stateWithSlab();
+
+    expect(floorplanReducer(state, { type: 'SELECT_OVERHANG_EDGE', slabId: null, edgeIndex: 2 })).toBe(state);
+    expect(floorplanReducer(state, { type: 'SELECT_OVERHANG_EDGE', slabId: 'slab_upper', edgeIndex: -1 })).toBe(state);
+    expect(floorplanReducer(state, { type: 'SELECT_OVERHANG_EDGE', slabId: 'slab_upper', edgeIndex: 'two' })).toBe(
+      state,
+    );
+  });
+
+  it('lets go of the run whenever the selection moves', () => {
+    const { state, floorId } = stateWithSlab();
+
+    // Selecting the same plate again is how "the plate, not one of its
+    // overhangs" is said.
+    expect(
+      floorplanReducer(state, { type: 'SELECT_OBJECT', id: 'slab_upper', objectType: 'slab' }).editor
+        .selectedOverhangEdge,
+    ).toBeNull();
+    expect(floorplanReducer(state, { type: 'DESELECT' }).editor.selectedOverhangEdge).toBeNull();
+    expect(floorplanReducer(state, { type: 'SET_TOOL', tool: 'wall' }).editor.selectedOverhangEdge).toBeNull();
+    expect(floorplanReducer(state, { type: 'SET_ACTIVE_FLOOR', floorId }).editor.selectedOverhangEdge).toBeNull();
+  });
+
+  it('clears on request, and says nothing when there is nothing to clear', () => {
+    const { state } = stateWithSlab();
+    const cleared = floorplanReducer(state, { type: 'CLEAR_OVERHANG_EDGE_SELECTION' });
+
+    expect(cleared.editor.selectedOverhangEdge).toBeNull();
+    expect(cleared.editor.selectedId).toBe('slab_upper');
+    // Idempotent, so Escape can send it without checking first.
+    expect(floorplanReducer(cleared, { type: 'CLEAR_OVERHANG_EDGE_SELECTION' })).toBe(cleared);
+  });
+
+  it('drops the run when the plate is reshaped, and keeps it when it is merely renamed', () => {
+    const { state, floorId } = stateWithSlab();
+
+    const reshaped = floorplanReducer(state, {
+      type: 'SLAB_UPDATE',
+      floorId,
+      slab: {
+        id: 'slab_upper',
+        boundaryPoints: [
+          { x: 0, y: 0 },
+          { x: 5000, y: 0 },
+          { x: 5000, y: 5000 },
+          { x: 0, y: 5000 },
+        ],
+      },
+    });
+    expect(reshaped.editor.selectedOverhangEdge).toBeNull();
+
+    const renamed = floorplanReducer(state, {
+      type: 'SLAB_UPDATE',
+      floorId,
+      slab: { id: 'slab_upper', name: 'Balcony' },
+    });
+    expect(renamed.editor.selectedOverhangEdge).toEqual({ slabId: 'slab_upper', edgeIndex: 2 });
+  });
+
+  it('drops the run when the plate it belongs to is deleted', () => {
+    const { state, floorId } = stateWithSlab();
+
+    const deleted = floorplanReducer(state, { type: 'SLAB_DELETE', floorId, slabId: 'slab_upper' });
+
+    expect(deleted.editor.selectedOverhangEdge).toBeNull();
+  });
+
+  it("leaves another plate's run alone", () => {
+    const { state, floorId } = stateWithSlab();
+
+    const other = floorplanReducer(state, {
+      type: 'SLAB_UPDATE',
+      floorId,
+      slab: { id: 'slab_other', boundaryPoints: [] },
+    });
+
+    expect(other.editor.selectedOverhangEdge).toEqual({ slabId: 'slab_upper', edgeIndex: 2 });
   });
 });

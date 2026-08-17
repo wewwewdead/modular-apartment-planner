@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { pointInPolygon, polygonArea, polygonAreaCentroid, polygonCentroid, signedPolygonArea } from './polygon';
+import {
+  pointInPolygon,
+  polygonArea,
+  polygonAreaCentroid,
+  polygonCentroid,
+  polygonSelfIntersects,
+  signedPolygonArea,
+} from './polygon';
 
 // A 100 x 200 axis-aligned rectangle, given clockwise in screen (y-down) coords.
 const RECT_CW = [
@@ -214,6 +221,104 @@ describe('polygon math', () => {
     it('gives consistent results regardless of winding order', () => {
       const p = { x: 50, y: 100 };
       expect(pointInPolygon(p, RECT_CW)).toBe(pointInPolygon(p, RECT_CCW));
+    });
+  });
+
+  describe('polygonSelfIntersects', () => {
+    it('passes a simple rectangle, either winding', () => {
+      expect(polygonSelfIntersects(RECT_CW)).toBe(false);
+      expect(polygonSelfIntersects(RECT_CCW)).toBe(false);
+    });
+
+    it('passes a triangle, whose every edge pair is adjacent', () => {
+      expect(
+        polygonSelfIntersects([
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 0, y: 80 },
+        ]),
+      ).toBe(false);
+    });
+
+    it('passes a concave L-shape', () => {
+      expect(polygonSelfIntersects(L_SHAPE)).toBe(false);
+    });
+
+    it('catches a bow-tie, where two far edges cross', () => {
+      // The diagonals (100,0)->(0,100) and (100,100)->(0,0) meet at (50,50).
+      expect(
+        polygonSelfIntersects([
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 0, y: 100 },
+          { x: 100, y: 100 },
+        ]),
+      ).toBe(true);
+    });
+
+    it('does not count the vertex two adjacent edges share, even when they double back along each other', () => {
+      // Edge 0 (0,0)->(100,0) and edge 1 (100,0)->(50,0) overlap over 50 units,
+      // but they are neighbours: that is the ring being closed, not a fault.
+      expect(
+        polygonSelfIntersects([
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+          { x: 50, y: 0 },
+          { x: 50, y: 100 },
+        ]),
+      ).toBe(false);
+    });
+
+    it('counts collinear overlap between two NON-adjacent edges', () => {
+      // Flattened ring: edge 0 spans x 0..60 and edge 2 spans x 20..80, both on y = 0.
+      expect(
+        polygonSelfIntersects([
+          { x: 0, y: 0 },
+          { x: 60, y: 0 },
+          { x: 20, y: 0 },
+          { x: 80, y: 0 },
+        ]),
+      ).toBe(true);
+    });
+
+    it('catches a plate collapsed flat onto its opposite edge', () => {
+      // A 6000 x 4000 slab with its top edge pushed in by exactly 4000: the two
+      // long edges now lie on each other, which is a crossing by any other name.
+      expect(
+        polygonSelfIntersects([
+          { x: 0, y: 4000 },
+          { x: 6000, y: 4000 },
+          { x: 6000, y: 4000 },
+          { x: 0, y: 4000 },
+        ]),
+      ).toBe(true);
+    });
+
+    it('treats a vertex landing exactly ON a far edge as a touch, and the next step past it as a crossing', () => {
+      // The ring dips down to graze the y = 0 edge at (50, 0)...
+      const touching = [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+        { x: 50, y: 0 },
+        { x: 0, y: 100 },
+      ];
+      expect(polygonSelfIntersects(touching)).toBe(false);
+
+      // ...and 10 units further it has gone through.
+      const crossing = touching.map((point, index) => (index === 3 ? { x: 50, y: -10 } : point));
+      expect(polygonSelfIntersects(crossing)).toBe(true);
+    });
+
+    it('has nothing to report for a degenerate ring', () => {
+      expect(polygonSelfIntersects([])).toBe(false);
+      expect(polygonSelfIntersects([{ x: 0, y: 0 }])).toBe(false);
+      expect(
+        polygonSelfIntersects([
+          { x: 0, y: 0 },
+          { x: 100, y: 0 },
+        ]),
+      ).toBe(false);
     });
   });
 });

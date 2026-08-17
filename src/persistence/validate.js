@@ -2,7 +2,35 @@ import { ProjectValidationError } from './errors';
 import { PHASE_ASSIGNABLE_KEYS } from '@/domain/phaseAssignments';
 import { resolveCeilingElevations } from '@/domain/ceilingModels';
 import { syncCanonicalBuilding } from '@/domain/buildingModels';
+import { getOrderedFloors } from '@/domain/floorModels';
 import { QUANTITY_RATE_KEYS } from '@/domain/quantityTakeoff';
+
+/**
+ * Which members a slab may legitimately name as its support.
+ *
+ * Not just its own floor. A floor's beams frame the TOP of that storey, so the
+ * members physically under an upper slab are filed one level down — and a
+ * cantilevered slab has nothing else to point at. Anything wider than own floor
+ * plus the floor below is still a broken reference.
+ */
+function slabSupportScopeIndex(project) {
+  const ordered = getOrderedFloors(project);
+  const scopes = new Map();
+  ordered.forEach((floor, index) => {
+    const sources = index > 0 ? [floor, ordered[index - 1]] : [floor];
+    scopes.set(floor.id, {
+      beam: new Set(sources.flatMap((entry) => (entry.beams || []).map((beam) => beam.id))),
+      wall: new Set(sources.flatMap((entry) => (entry.walls || []).map((wall) => wall.id))),
+      column: new Set(sources.flatMap((entry) => (entry.columns || []).map((column) => column.id))),
+    });
+  });
+  return scopes;
+}
+
+function slabSupportRefResolves(scope, ref) {
+  const ids = scope?.[ref?.kind];
+  return Boolean(ids && ids.has(ref.id));
+}
 
 export function validateProjectStructure(project) {
   const errors = [];
@@ -546,11 +574,13 @@ export function validateProjectReferences(project) {
       });
   }
 
+  const slabSupportScopes = slabSupportScopeIndex(project);
+
   for (const floor of project.floors) {
     const wallIds = new Set((floor.walls || []).map((w) => w.id));
     const landingIds = new Set((floor.landings || []).map((l) => l.id));
     const columnIds = new Set((floor.columns || []).map((c) => c.id));
-    const beamIds = new Set((floor.beams || []).map((beam) => beam.id));
+    const slabSupportScope = slabSupportScopes.get(floor.id);
 
     for (const door of floor.doors || []) {
       if (door.wallId && !wallIds.has(door.wallId)) {
@@ -647,11 +677,7 @@ export function validateProjectReferences(project) {
         });
       }
       for (const supportRef of slab.supportRefs || []) {
-        const valid =
-          (supportRef.kind === 'beam' && beamIds.has(supportRef.id)) ||
-          (supportRef.kind === 'wall' && wallIds.has(supportRef.id)) ||
-          (supportRef.kind === 'column' && columnIds.has(supportRef.id));
-        if (!valid) {
+        if (!slabSupportRefResolves(slabSupportScope, supportRef)) {
           warnings.push({
             path: `floor ${floor.id} slab ${slab.id}`,
             message: `supportRef references non-existent ${supportRef.kind || 'support'} ${supportRef.id || '?'}`,
@@ -910,11 +936,12 @@ export function repairBrokenReferences(project) {
     ),
   );
 
+  const slabSupportScopes = slabSupportScopeIndex(project);
+
   const repairedFloors = project.floors.map((floor) => {
     const wallIds = new Set((floor.walls || []).map((w) => w.id));
     const landingIds = new Set((floor.landings || []).map((l) => l.id));
-    const columnIds = new Set((floor.columns || []).map((column) => column.id));
-    const beamIds = new Set((floor.beams || []).map((beam) => beam.id));
+    const slabSupportScope = slabSupportScopes.get(floor.id);
 
     // Remove doors/windows/devices pointing to non-existent walls
     const doors = (floor.doors || []).filter((d) => !d.wallId || wallIds.has(d.wallId));
@@ -965,12 +992,7 @@ export function repairBrokenReferences(project) {
     );
     const slabs = (floorWithoutSketchAssets.slabs || []).map((slab) => ({
       ...slab,
-      supportRefs: (slab.supportRefs || []).filter(
-        (ref) =>
-          (ref.kind === 'beam' && beamIds.has(ref.id)) ||
-          (ref.kind === 'wall' && wallIds.has(ref.id)) ||
-          (ref.kind === 'column' && columnIds.has(ref.id)),
-      ),
+      supportRefs: (slab.supportRefs || []).filter((ref) => slabSupportRefResolves(slabSupportScope, ref)),
       openings: (slab.openings || []).map((opening) => {
         const ref = opening.serviceRef;
         const valid =
