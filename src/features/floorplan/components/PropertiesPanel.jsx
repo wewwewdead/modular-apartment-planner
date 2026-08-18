@@ -115,6 +115,7 @@ export default function PropertiesPanel() {
     activePhaseId,
     phaseViewMode,
     hiddenWallBoards,
+    hiddenCeilingBoards,
     dispatch: editorDispatch,
   } = useEditor();
   const orderedFloors = getOrderedFloors(project);
@@ -468,6 +469,7 @@ export default function PropertiesPanel() {
             ceiling={ceiling}
             project={project}
             floor={orderedFloors.find((entry) => entry.id === ceiling.floorId) || null}
+            hiddenCeilingBoards={hiddenCeilingBoards}
             dispatch={dispatch}
             editorDispatch={editorDispatch}
             u={u}

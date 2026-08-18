@@ -430,6 +430,14 @@ function buildCeilingLightFixtureObjects(fixture, context) {
  * RCP editor's own pane is the only thing that turns it on: a room's worth of
  * screws is hundreds of tiny meshes, which is a fair price for the drawing you
  * are working in and a poor one for a whole building seen from outside.
+ *
+ * `options.hideBoards` leaves the boards out so the grid above them can be
+ * looked at — the same "take the cladding off and check the frame" move the wall
+ * builder offers per face, except a ceiling has one board plane and so one
+ * answer. Everything the boards were hiding stays: furring, carriers, wall
+ * angles, hangers, the trim and housing of every opening, and the luminaires.
+ * The screws go with the boards, because a screw head hanging in the air where
+ * a board used to be is a drawing of nothing.
  */
 export function buildCeilingPreviewObjects(ceiling, project, options = {}) {
   if (!ceiling) return [];
@@ -450,30 +458,36 @@ export function buildCeilingPreviewObjects(ceiling, project, options = {}) {
   const framingMaterialKey = (member) =>
     member.material === CEILING_FRAME_MATERIALS.TIMBER ? 'ceilingFramingTimber' : 'ceilingFraming';
 
-  const boards = detail.panels.flatMap((panel) =>
-    panel.regions
-      .filter((region) => (region.outline || []).length >= 3)
-      .map((region, regionIndex) =>
-        createPrismDescriptor(
-          `${panel.id}:region:${regionIndex}`,
-          'ceiling',
-          region.outline.map(toPlan),
-          elevations.boardUnderside,
-          configuration.face.boardThickness,
-          {
-            ...shared,
-            materialKey: boardMaterialKey(panel),
-            ceilingDetailKind: 'panel',
-            // The id the RCP editor selects by, so its selection can drive the
-            // highlight here. `panel.id` is qualified with the ceiling; this is
-            // the bare one the drawing knows.
-            ceilingDetailElementId: panel.localId,
-            panelLabel: panel.label,
-            holes: (region.holes || []).map((hole) => hole.map(toPlan)),
-          },
-        ),
-      ),
-  );
+  // Not built at all rather than built and filtered: the boards are the one part
+  // of this assembly that costs a polygon clip per region, and the whole point
+  // of asking for them to be hidden is to look past them.
+  const hideBoards = Boolean(options.hideBoards);
+  const boards = hideBoards
+    ? []
+    : detail.panels.flatMap((panel) =>
+        panel.regions
+          .filter((region) => (region.outline || []).length >= 3)
+          .map((region, regionIndex) =>
+            createPrismDescriptor(
+              `${panel.id}:region:${regionIndex}`,
+              'ceiling',
+              region.outline.map(toPlan),
+              elevations.boardUnderside,
+              configuration.face.boardThickness,
+              {
+                ...shared,
+                materialKey: boardMaterialKey(panel),
+                ceilingDetailKind: 'panel',
+                // The id the RCP editor selects by, so its selection can drive
+                // the highlight here. `panel.id` is qualified with the ceiling;
+                // this is the bare one the drawing knows.
+                ceilingDetailElementId: panel.localId,
+                panelLabel: panel.label,
+                holes: (region.holes || []).map((hole) => hole.map(toPlan)),
+              },
+            ),
+          ),
+      );
 
   const framing = detail.framing
     .map((member) => {
@@ -550,32 +564,34 @@ export function buildCeilingPreviewObjects(ceiling, project, options = {}) {
 
   // Only the head is drawn, sitting proud of the boards: the shank is inside the
   // furring and would never be seen. The board underside is the datum for it,
-  // like everything else on this face.
-  const fasteners = options.fasteners
-    ? detail.fasteners.map((fastener) => {
-        const descriptor = createBoxDescriptor(
-          fastener.id,
-          'ceiling',
-          toPlan(fastener),
-          { x: CEILING_FASTENER_HEAD_DIAMETER, y: CEILING_FASTENER_HEAD_DEPTH, z: CEILING_FASTENER_HEAD_DIAMETER },
-          elevations.boardUnderside - CEILING_FASTENER_HEAD_DEPTH,
-          space.rotation,
-          {
-            ...shared,
-            materialKey: 'ceilingFastener',
-            ceilingDetailKind: 'fastener',
-            ceilingDetailElementId: fastener.id,
-            fastenerType: fastener.type,
-          },
-        );
-        descriptor.geometry = 'fastener';
-        // Driven upward, unlike a wall screw: the head faces the room below.
-        descriptor.axis = 'vertical';
-        descriptor.radius = CEILING_FASTENER_HEAD_DIAMETER / 2;
-        descriptor.depth = CEILING_FASTENER_HEAD_DEPTH;
-        return descriptor;
-      })
-    : [];
+  // like everything else on this face — so with the boards gone the screws go
+  // too, having nothing left to pin up.
+  const fasteners =
+    options.fasteners && !hideBoards
+      ? detail.fasteners.map((fastener) => {
+          const descriptor = createBoxDescriptor(
+            fastener.id,
+            'ceiling',
+            toPlan(fastener),
+            { x: CEILING_FASTENER_HEAD_DIAMETER, y: CEILING_FASTENER_HEAD_DEPTH, z: CEILING_FASTENER_HEAD_DIAMETER },
+            elevations.boardUnderside - CEILING_FASTENER_HEAD_DEPTH,
+            space.rotation,
+            {
+              ...shared,
+              materialKey: 'ceilingFastener',
+              ceilingDetailKind: 'fastener',
+              ceilingDetailElementId: fastener.id,
+              fastenerType: fastener.type,
+            },
+          );
+          descriptor.geometry = 'fastener';
+          // Driven upward, unlike a wall screw: the head faces the room below.
+          descriptor.axis = 'vertical';
+          descriptor.radius = CEILING_FASTENER_HEAD_DIAMETER / 2;
+          descriptor.depth = CEILING_FASTENER_HEAD_DEPTH;
+          return descriptor;
+        })
+      : [];
 
   // Not behind the fastener switch: a room has a handful of luminaires and
   // several hundred screws, and the fixtures are half the reason to look at the

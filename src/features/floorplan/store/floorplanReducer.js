@@ -264,6 +264,12 @@ function createInitialEditorState(activeFloorId = null) {
     // state, not a property of the wall — it never enters history, is never
     // saved, and an absent key means the wall is fully clad.
     hiddenWallBoards: {},
+    // The same for ceilings, one plane at a time: { [ceilingId]: true } while
+    // the boards are stripped in the 3D preview so the furring, carriers and
+    // hangers above them can be inspected. A ceiling boards one face — the one
+    // looking down into the room — so there is nothing to name, and an absent
+    // key means the boards are up.
+    hiddenCeilingBoards: {},
     sunStudy: createSunStudyState(),
     daylight: createDaylightState(),
     solarAccess: createSolarAccessState(),
@@ -367,8 +373,8 @@ function reduceProjectState(state, action) {
         history: [],
         future: [],
         gesture: createDragGesture(),
-        // Wall ids from the outgoing project mean nothing here.
-        editor: { ...state.editor, hiddenWallBoards: {} },
+        // Wall and ceiling ids from the outgoing project mean nothing here.
+        editor: { ...state.editor, hiddenWallBoards: {}, hiddenCeilingBoards: {} },
         derived: {
           ...computeDerivedModels(newProject),
           lastCommand: null,
@@ -392,8 +398,8 @@ function reduceProjectState(state, action) {
         history: [],
         future: [],
         gesture: createDragGesture(),
-        // Wall ids from the outgoing project mean nothing here.
-        editor: { ...state.editor, hiddenWallBoards: {} },
+        // Wall and ceiling ids from the outgoing project mean nothing here.
+        editor: { ...state.editor, hiddenWallBoards: {}, hiddenCeilingBoards: {} },
         derived: {
           ...computeDerivedModels(loadedProject),
           lastCommand: null,
@@ -1564,6 +1570,25 @@ function reduceEditorState(editorState, action) {
     case 'SHOW_ALL_WALL_BOARDS':
       return Object.keys(editorState.hiddenWallBoards || {}).length
         ? { ...editorState, hiddenWallBoards: {} }
+        : editorState;
+
+    case 'SET_CEILING_BOARD_VISIBILITY': {
+      if (!action.ceilingId) return editorState;
+      const hidden = Boolean(action.hidden);
+      const current = editorState.hiddenCeilingBoards || {};
+      if (Boolean(current[action.ceilingId]) === hidden) return editorState;
+
+      const next = { ...current };
+      // Sparse like the wall map: "the boards are up" is the absence of a key
+      // rather than a false stored against the id.
+      if (hidden) next[action.ceilingId] = true;
+      else delete next[action.ceilingId];
+      return { ...editorState, hiddenCeilingBoards: next };
+    }
+
+    case 'SHOW_ALL_CEILING_BOARDS':
+      return Object.keys(editorState.hiddenCeilingBoards || {}).length
+        ? { ...editorState, hiddenCeilingBoards: {} }
         : editorState;
 
     case 'TOGGLE_SUN_STUDY':

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createCollisionIndex } from './previewCollisionIndex';
 import {
   WALK_BOB_AMPLITUDE,
   WALK_BOB_PHASE_PER_MM,
@@ -23,6 +24,12 @@ import {
  *
  * Door leaves are deliberately passable: the preview draws every door closed,
  * and a tour that has to stop at each of them is a tour of the hallway.
+ *
+ * What the rays are cast *against* is `previewCollisionIndex`, not the scene
+ * graph: which meshes can be hit, and where they are, is settled once per world
+ * change instead of being rediscovered on each of the nine to fifteen rays a
+ * step casts. The set it holds is exactly the one this file used to filter for
+ * per hit.
  */
 
 /** The wall rays' heights above the feet. The lowest sits above the step
@@ -39,19 +46,6 @@ const GROUND_PROBE_RANGE = 200000;
 const DOWN = new THREE.Vector3(0, -1, 0);
 const UP = new THREE.Vector3(0, 1, 0);
 
-function isCollidable(hit) {
-  const object = hit.object;
-  if (!object.isMesh) return false;
-  // Walk through door leaves — see the header comment.
-  if (object.userData?.previewTarget?.kind === 'door') return false;
-  // The world root keeps hidden floors in the graph (a single-floor scope just
-  // flips their group's flag), and a wall you cannot see must not stop you.
-  for (let node = object; node; node = node.parent) {
-    if (node.visible === false) return false;
-  }
-  return true;
-}
-
 export function createWalkPhysics({
   camera,
   getCollisionSources,
@@ -62,7 +56,7 @@ export function createWalkPhysics({
 }) {
   const raycaster = new THREE.Raycaster();
   raycaster.near = 0;
-  const hits = [];
+  const collisionIndex = createCollisionIndex();
   const rayOrigin = new THREE.Vector3();
   const remaining = new THREE.Vector3();
   const moveDirection = new THREE.Vector3();
@@ -76,23 +70,26 @@ export function createWalkPhysics({
   let bobAmplitude = 0;
   let bobOffset = 0;
 
-  const castRay = (origin, direction, far, sources) => {
+  /**
+   * Nearest collidable hit along a ray.
+   *
+   * Nearest-only at every call site: a wall ray wants the first thing in the
+   * way, and a ground probe wants the top surface it would land on. Nothing here
+   * has ever wanted the list, which is why the index returns one hit rather than
+   * an array to sort and discard.
+   */
+  const castRay = (origin, direction, far) => {
     raycaster.set(origin, direction);
     raycaster.far = far;
-    hits.length = 0;
-    raycaster.intersectObjects(sources, true, hits);
-    for (const hit of hits) {
-      if (isCollidable(hit)) return hit;
-    }
-    return null;
+    return collisionIndex.raycastNearest(raycaster);
   };
 
   /** Nearest blocking hit along a horizontal direction, over the body's height. */
-  const nearestWallHit = (direction, far, feetY, sources) => {
+  const nearestWallHit = (direction, far, feetY) => {
     let nearest = null;
     for (const height of WALL_RAY_HEIGHTS) {
       rayOrigin.set(camera.position.x, feetY + height, camera.position.z);
-      const hit = castRay(rayOrigin, direction, far, sources);
+      const hit = castRay(rayOrigin, direction, far);
       if (hit && (!nearest || hit.distance < nearest.distance)) nearest = hit;
     }
     return nearest;
@@ -110,8 +107,8 @@ export function createWalkPhysics({
    * edge or a soffit; sliding along "up" is nonsense, so it reports no usable
    * normal and the caller treats it as a plain stop.
    */
-  const advanceBudget = (direction, distance, feetY, sources, normalTarget) => {
-    const hit = nearestWallHit(direction, distance + 4 * bodyRadius, feetY, sources);
+  const advanceBudget = (direction, distance, feetY, normalTarget) => {
+    const hit = nearestWallHit(direction, distance + 4 * bodyRadius, feetY);
     if (!hit) return { hit: null, free: distance, hasWallNormal: false };
 
     let clearanceAlongRay = bodyRadius;
@@ -142,8 +139,8 @@ export function createWalkPhysics({
    * a genuine step up, not the floor running under a bench or a knee rail —
    * take the move and let the grounded smoothing lift the feet.
    */
-  const stepUpClears = (direction, leftover, feetY, sources, blockingHit) => {
-    const raised = advanceBudget(direction, leftover, feetY + stepHeight, sources, assistNormal);
+  const stepUpClears = (direction, leftover, feetY, blockingHit) => {
+    const raised = advanceBudget(direction, leftover, feetY + stepHeight, assistNormal);
     if (raised.hit && raised.free < leftover) return false;
 
     supportOrigin.set(
@@ -151,14 +148,14 @@ export function createWalkPhysics({
       feetY + GROUND_PROBE_LIFT,
       blockingHit.point.z - direction.z * 50,
     );
-    const support = castRay(supportOrigin, DOWN, GROUND_PROBE_RANGE, sources);
+    const support = castRay(supportOrigin, DOWN, GROUND_PROBE_RANGE);
     if (!support) return false;
 
     const stepDelta = support.point.y - feetY;
     return stepDelta > 20 && stepDelta <= stepHeight;
   };
 
-  const moveHorizontally = (moveVector, feetY, sources) => {
+  const moveHorizontally = (moveVector, feetY) => {
     remaining.copy(moveVector);
     let travelled = 0;
 
@@ -168,7 +165,7 @@ export function createWalkPhysics({
       const distance = remaining.length();
       moveDirection.copy(remaining).divideScalar(distance);
 
-      const { hit, free, hasWallNormal } = advanceBudget(moveDirection, distance, feetY, sources, wallNormal);
+      const { hit, free, hasWallNormal } = advanceBudget(moveDirection, distance, feetY, wallNormal);
       if (!hit || free >= distance) {
         camera.position.x += remaining.x;
         camera.position.z += remaining.z;
@@ -185,7 +182,7 @@ export function createWalkPhysics({
 
       // Grounded only: mid-jump the feet-relative rays are already lifted,
       // and assisting there would ghost the body through low walls.
-      if (grounded && stepUpClears(moveDirection, leftover, feetY, sources, hit)) {
+      if (grounded && stepUpClears(moveDirection, leftover, feetY, hit)) {
         camera.position.x += moveDirection.x * leftover;
         camera.position.z += moveDirection.z * leftover;
         travelled += leftover;
@@ -215,13 +212,13 @@ export function createWalkPhysics({
    * may be switched off with the style) and the site datum is standing in.
    */
   const footRadius = bodyRadius * 0.7;
-  const probeGround = (feetY, sources) => {
+  const probeGround = (feetY) => {
     let groundY = null;
     for (let index = 0; index < 5; index += 1) {
       const offsetX = index === 1 ? footRadius : index === 2 ? -footRadius : 0;
       const offsetZ = index === 3 ? footRadius : index === 4 ? -footRadius : 0;
       rayOrigin.set(camera.position.x + offsetX, feetY + GROUND_PROBE_LIFT, camera.position.z + offsetZ);
-      const hit = castRay(rayOrigin, DOWN, GROUND_PROBE_RANGE, sources);
+      const hit = castRay(rayOrigin, DOWN, GROUND_PROBE_RANGE);
       if (hit && (groundY === null || hit.point.y > groundY)) groundY = hit.point.y;
     }
     if (groundY === null) return { groundY: getGroundLevel(), supported: false };
@@ -231,12 +228,16 @@ export function createWalkPhysics({
   return {
     step({ moveVector, jumpRequested = false, deltaSeconds }) {
       if (!deltaSeconds) return;
-      const sources = getCollisionSources().filter(Boolean);
+      // The world is still read through the callback every step — `worldRoot`
+      // and the ground disc are swapped underneath this module — but the reading
+      // is now one cheap comparison: `sync` rebuilds the index only when the
+      // sources, or the floor groups under them, actually changed.
+      collisionIndex.sync(getCollisionSources().filter(Boolean));
       let feetY = camera.position.y - eyeHeight - bobOffset;
 
       let travelled = 0;
       if (moveVector && moveVector.lengthSq() > 0) {
-        travelled = moveHorizontally(moveVector, feetY, sources);
+        travelled = moveHorizontally(moveVector, feetY);
       }
 
       if (grounded && jumpRequested) {
@@ -244,7 +245,7 @@ export function createWalkPhysics({
         grounded = false;
       }
 
-      const { groundY, supported } = probeGround(feetY, sources);
+      const { groundY, supported } = probeGround(feetY);
 
       if (grounded) {
         const delta = groundY - feetY;
@@ -267,7 +268,7 @@ export function createWalkPhysics({
         if (verticalVelocity > 0) {
           const rise = verticalVelocity * deltaSeconds;
           rayOrigin.set(camera.position.x, feetY + eyeHeight, camera.position.z);
-          if (castRay(rayOrigin, UP, rise + WALK_HEAD_CLEARANCE, sources)) {
+          if (castRay(rayOrigin, UP, rise + WALK_HEAD_CLEARANCE)) {
             verticalVelocity = 0;
           }
         }
@@ -319,8 +320,26 @@ export function createWalkPhysics({
       bobOffset = 0;
     },
 
+    /**
+     * The world content changed: throw the collision index away.
+     *
+     * The explicit half of the staleness guard. `sync` would catch a swapped
+     * root or a rebuilt floor group on its own from the structural signature it
+     * keeps, but a collider that let the body walk through a wall built one
+     * frame ago is not a bug anyone would think to look for here, so the two
+     * paths that change the world say so directly as well.
+     */
+    invalidateCollisions() {
+      collisionIndex.invalidate();
+    },
+
     getState() {
       return { grounded, verticalVelocity };
+    },
+
+    /** What the collision index is holding. Diagnostic; used by the tests. */
+    getCollisionStats() {
+      return collisionIndex.getStats();
     },
   };
 }

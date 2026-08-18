@@ -178,6 +178,9 @@ vi.mock('three', () => {
       this.isLineSegments = true;
       this.userData = {};
       this.renderOrder = 0;
+      // Box outlines are one shared unit geometry sized by the object's own
+      // scale, so a line segment now has one.
+      this.scale = { x: 1, y: 1, z: 1, set() {} };
     }
     traverse(fn) {
       fn(this);

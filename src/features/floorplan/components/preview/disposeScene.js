@@ -19,6 +19,11 @@ export function disposeScene(root, options = {}) {
     // the graph leaks it, however the caller feels about materials.
     if (node.isLight) node.dispose?.();
 
+    // An instanced batch owns a matrix buffer of its own, separate from the
+    // unit geometry every batch shares — and the geometry is the one thing here
+    // that must NOT be freed, so the batch has to say so itself.
+    if (node.isInstancedMesh || node.isBatchedMesh) node.dispose?.();
+
     for (const material of materialsOf(node)) {
       // The palette's materials are shared by the whole scene and disposed with
       // it; a material built for one object — a luminaire's lens, coloured to

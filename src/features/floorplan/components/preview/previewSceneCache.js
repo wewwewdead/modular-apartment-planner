@@ -36,6 +36,13 @@ import { disposeScene } from './disposeScene';
  * and disposed separately in `viewport.dispose()`. Carried-over objects have
  * already been re-parented out of the old group by then, so the traversal
  * reaches only what was genuinely replaced.
+ *
+ * Batches: the cache keeps a second root beside the first, holding one group of
+ * instanced draw calls per floor (see `previewBatching`). It is a *sibling*
+ * rather than a child on purpose — the walk controller's collision index and
+ * the click picker both read the world root, and neither must ever meet a
+ * batch. A floor's batch group has exactly the lifetime of the floor group it
+ * was folded from: rebuilt with it, hidden with it, disposed with it.
  */
 
 function sourceKeyEqual(prev, next) {
@@ -70,6 +77,12 @@ function applyFloorVisibility(cacheEntry, visible) {
   if (cacheEntry.floorGroup.visible !== visible) {
     cacheEntry.floorGroup.visible = visible;
   }
+  // The batch group is what is actually drawn for this floor, so scope changes
+  // have to reach it too — the source group's flag only decides what the walk
+  // is allowed to bump into.
+  if (cacheEntry.batchGroup && cacheEntry.batchGroup.visible !== visible) {
+    cacheEntry.batchGroup.visible = visible;
+  }
   // Keep meshMap `floorVisible` flags in sync so the selection overlay (which
   // skips objects on hidden floors) behaves identically to a full rebuild.
   if (cacheEntry.floorVisible !== visible) {
@@ -80,17 +93,43 @@ function applyFloorVisibility(cacheEntry, visible) {
   }
 }
 
-export function createPreviewSceneCache() {
+/**
+ * `batch: false` builds one mesh per descriptor and no instanced draw calls.
+ * Nothing in the app asks for it — a pane that draws is a pane that batches,
+ * assembly editors included — but a caller running against a THREE that has no
+ * instancing to fold geometry into needs a way to say so.
+ */
+export function createPreviewSceneCache({ batch = true } = {}) {
   const root = new THREE.Group();
   root.name = 'preview-root';
+  const batchRoot = new THREE.Group();
+  batchRoot.name = 'preview-batch-root';
 
-  // floorId -> { floorGroup, entries: Map<id, entry>, sourceKey, floorVisible }
+  // floorId -> { floorGroup, batchGroup, entries: Map<id, entry>, sourceKey, floorVisible }
   let floorCache = new Map();
+  // Fixed for the cache's lifetime, and it has to be: a group built under one
+  // rule must never be carried over into a build under the other, because a
+  // batched one is on a layer the camera does not look at and would simply be
+  // missing from the picture.
+  const batching = Boolean(batch);
+
+  function disposeFloor(entry, survivor = null) {
+    root.remove(entry.floorGroup);
+    disposeScene(entry.floorGroup, { disposeMaterials: false });
+    // A rebuilt floor whose batches still fitted gets the same batch group
+    // back, refilled. Disposing it here because its floor group was replaced
+    // would free the instance buffers the new build is drawing from.
+    if (entry.batchGroup && entry.batchGroup !== survivor?.batchGroup) {
+      batchRoot.remove(entry.batchGroup);
+      disposeScene(entry.batchGroup, { disposeMaterials: false });
+    }
+  }
 
   function build(sceneDescriptor, materialPalette) {
     const nextCache = new Map();
     const meshMap = new Map();
     const orderedGroups = [];
+    const orderedBatchGroups = [];
 
     for (const floor of sceneDescriptor.floors) {
       const previous = floorCache.get(floor.floorId);
@@ -102,9 +141,13 @@ export function createPreviewSceneCache() {
         cacheEntry.sourceKey = floor.sourceKey;
         applyFloorVisibility(cacheEntry, floor.visible);
       } else {
-        const { floorGroup, entries } = buildFloorObjectGroup(floor, materialPalette, previous?.entries);
+        const { floorGroup, entries, batchGroup } = buildFloorObjectGroup(floor, materialPalette, previous?.entries, {
+          batch: batching,
+          previousBatchGroup: previous?.batchGroup || null,
+        });
         cacheEntry = {
           floorGroup,
+          batchGroup,
           entries,
           sourceKey: floor.sourceKey,
           floorVisible: floor.visible,
@@ -113,6 +156,7 @@ export function createPreviewSceneCache() {
 
       nextCache.set(floor.floorId, cacheEntry);
       orderedGroups.push(cacheEntry.floorGroup);
+      if (cacheEntry.batchGroup) orderedBatchGroups.push(cacheEntry.batchGroup);
       for (const [id, entry] of cacheEntry.entries) {
         meshMap.set(id, entry);
       }
@@ -123,8 +167,7 @@ export function createPreviewSceneCache() {
     for (const [floorId, previous] of floorCache) {
       const survivor = nextCache.get(floorId);
       if (survivor && survivor.floorGroup === previous.floorGroup) continue;
-      root.remove(previous.floorGroup);
-      disposeScene(previous.floorGroup, { disposeMaterials: false });
+      disposeFloor(previous, survivor);
     }
 
     // Re-attach children in descriptor order. clear() detaches without
@@ -133,18 +176,21 @@ export function createPreviewSceneCache() {
     for (const group of orderedGroups) {
       root.add(group);
     }
+    batchRoot.clear();
+    for (const group of orderedBatchGroups) {
+      batchRoot.add(group);
+    }
 
     floorCache = nextCache;
-    return { root, meshMap };
+    return { root, batchRoot, meshMap };
   }
 
   function dispose() {
     for (const [, previous] of floorCache) {
-      root.remove(previous.floorGroup);
-      disposeScene(previous.floorGroup, { disposeMaterials: false });
+      disposeFloor(previous);
     }
     floorCache = new Map();
   }
 
-  return { build, dispose, getRoot: () => root };
+  return { build, dispose, getRoot: () => root, getBatchRoot: () => batchRoot };
 }

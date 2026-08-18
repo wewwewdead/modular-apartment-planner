@@ -56,6 +56,13 @@ export function buildPreviewScene(project, options = {}) {
   const floors = getOrderedFloors(project);
   // { wallId: ['interior', ...] } of board faces stripped for frame inspection.
   const hiddenBoardSides = new Map(Object.entries(options.hiddenWallBoards || {}).filter(([, sides]) => sides?.length));
+  // The same move for ceilings, but a ceiling has one board plane facing the
+  // room, so there is nothing to name: the id is in the set or it is not.
+  const hiddenCeilingBoards = new Set(
+    Object.entries(options.hiddenCeilingBoards || {})
+      .filter(([, hidden]) => hidden)
+      .map(([ceilingId]) => ceilingId),
+  );
   // Full assembly detail — currently the ceiling's screws — is what an assembly
   // editor's own pane asks for and what a whole-building view must not pay for.
   const assemblyDetail = Boolean(options.assemblyDetail);
@@ -78,7 +85,10 @@ export function buildPreviewScene(project, options = {}) {
     const trussObjects = floorTrussSystems.flatMap((trussSystem) => buildTrussPreviewObjects(trussSystem));
     const floorCeilings = (project?.ceilings || []).filter((ceiling) => ceiling.floorId === floor.id);
     const ceilingObjects = floorCeilings.flatMap((ceiling) =>
-      buildCeilingPreviewObjects(ceiling, project, { fasteners: assemblyDetail }),
+      buildCeilingPreviewObjects(ceiling, project, {
+        fasteners: assemblyDetail,
+        hideBoards: hiddenCeilingBoards.has(ceiling.id),
+      }),
     );
     const systemObjects = buildFloorSystemsPreviewObjects(floor, project?.building?.systems || {});
     const objects = [
@@ -93,6 +103,14 @@ export function buildPreviewScene(project, options = {}) {
     const strippedHere = (floor.walls || [])
       .filter((wall) => hiddenBoardSides.has(wall.id))
       .map((wall) => `${wall.id}:${[...hiddenBoardSides.get(wall.id)].sort().join('+')}`)
+      .join('|');
+    // Ceilings are built into this floor's group, so the same rule applies to
+    // them: a floor whose ceiling lost its boards has to say so in its key, or
+    // the cache hands back the fully boarded group it built last time and the
+    // toggle does nothing on screen.
+    const strippedCeilingsHere = floorCeilings
+      .filter((ceiling) => hiddenCeilingBoards.has(ceiling.id))
+      .map((ceiling) => ceiling.id)
       .join('|');
     return {
       floorId: floor.id,
@@ -118,6 +136,7 @@ export function buildPreviewScene(project, options = {}) {
         floor,
         slabsAbove: floorCeilings.length ? floors[index + 1]?.slabs || null : null,
         strippedHere,
+        strippedCeilingsHere,
         // Part of the identity, not a render-time flag: turning screws on has to
         // re-triangulate the ceilings, and a cached floor would swallow it.
         assemblyDetail,
@@ -159,6 +178,13 @@ export function buildPreviewScene(project, options = {}) {
 
   return {
     activeFloorId,
+    // Carried on the scene as well as on each floor's `sourceKey` so that a
+    // reader with the whole descriptor in hand can tell an assembly editor's
+    // pane — one mesh per screw and per board, every one of them pickable —
+    // from a whole-building view. It says nothing about how those meshes are
+    // drawn: batching folds them into instanced calls either way, and the parts
+    // stay pickable because the meshes themselves are left standing.
+    assemblyDetail,
     visibleFloorIds: [...visibleFloorIds],
     floors: floorsWithNavigationTargets,
     roofLayerId: project?.roofSystem?.id || null,

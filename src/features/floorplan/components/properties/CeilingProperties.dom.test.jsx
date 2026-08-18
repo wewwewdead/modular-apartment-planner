@@ -36,7 +36,15 @@ function findByText(selector, text) {
   return [...container.querySelectorAll(selector)].find((node) => node.textContent.trim() === text) || null;
 }
 
-function mount(ceilingOptions = {}) {
+// A closed section renders no body at all, so the control inside one has to be
+// unfolded before it can be clicked.
+function openSection(title) {
+  const head = [...container.querySelectorAll('button')].find((node) => node.textContent.includes(title));
+  click(head);
+  return head;
+}
+
+function mount(ceilingOptions = {}, props = {}) {
   const floor = createFloor('Ground Floor', 0);
   const ceiling = createCeiling('Kitchen Ceiling', {
     floorId: floor.id,
@@ -65,6 +73,7 @@ function mount(ceilingOptions = {}) {
         dispatch={(action) => actions.push(action)}
         editorDispatch={(action) => editorActions.push(action)}
         u={u}
+        {...props}
       />,
     ),
   );
@@ -109,6 +118,40 @@ describe('CeilingProperties', () => {
     type(container.querySelector('input'), 'Lobby ceiling');
 
     expect(actions).toEqual([{ type: 'CEILING_UPDATE', ceiling: { id: ceiling.id, name: 'Lobby ceiling' } }]);
+  });
+
+  it('hides the boards in the 3D preview without touching the ceiling', () => {
+    const { ceiling, actions, editorActions } = mount();
+
+    openSection('3D view');
+    click(findByText('button', 'Hidden'));
+
+    expect(editorActions).toContainEqual({
+      type: 'SET_CEILING_BOARD_VISIBILITY',
+      ceilingId: ceiling.id,
+      hidden: true,
+    });
+    // A viewing state: nothing about the ceiling itself has changed.
+    expect(actions).toEqual([]);
+  });
+
+  it('puts the boards back', () => {
+    const { ceiling, editorActions } = mount({ id: 'ceiling_shown' }, { hiddenCeilingBoards: { ceiling_shown: true } });
+
+    openSection('3D view');
+    click(findByText('button', 'Shown'));
+
+    expect(editorActions).toContainEqual({
+      type: 'SET_CEILING_BOARD_VISIBILITY',
+      ceilingId: ceiling.id,
+      hidden: false,
+    });
+  });
+
+  it('says which way round it is while the section is folded', () => {
+    mount({ id: 'ceiling_shown' }, { hiddenCeilingBoards: { ceiling_shown: true } });
+
+    expect(container.textContent).toContain('Boards hidden');
   });
 
   it('renders nothing when the selection outlived its ceiling', () => {

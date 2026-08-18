@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { IS_DESKTOP_APP } from '@/platform/desktopApp';
 import { applyRenderStyleToPalette, createMaterialPalette, disposeMaterialPalette } from './materials';
 import { UNLIT_LENS_EMISSIVE_INTENSITY } from './buildPreviewObjects';
+import { SOURCE_ONLY_LAYER } from './previewBatching';
 import { disposeScene } from './disposeScene';
 import { createInspectNavigation } from './createInspectNavigation';
 import { createWalkNavigation } from './createWalkNavigation';
@@ -13,9 +14,10 @@ import { ambientIrradiance, fixtureAdaptationScale } from './fixtureAdaptation';
 import { mixNumber, mixSrgbHex, nightfallBlend } from './twilightBlend';
 import { SKY_ENVIRONMENT_INTENSITY, STUDIO_ENVIRONMENT_INTENSITY, createEnvironment } from './createEnvironment';
 import { createGroundPlane } from './createGroundPlane';
-import { createProgressiveRenderer } from './createProgressiveRenderer';
+import { REFINE_PROFILES, createProgressiveRenderer } from './createProgressiveRenderer';
 import { canvasPixelRatio } from './previewResolution';
-import { FRAME_ACTION, nextFrameAction, wantsAnotherFrame } from './refineSchedule';
+import { FRAME_ACTION, nextFrameAction, shouldPresizeRefine, wantsAnotherFrame } from './refineSchedule';
+import { PREVIEW_PERF_ENABLED, createPreviewPerfRecorder, publishPreviewPerf } from './previewPerf';
 import { DEFAULT_RENDER_STYLE, renderStyleConfig, toneMappingConstant } from './renderStyle';
 import {
   SUN_PEAK_INTENSITY,
@@ -44,6 +46,17 @@ const SHADOW_MAP_SIZE = IS_DESKTOP_APP ? 4096 : 2048;
 
 /** Sample count at which the full penumbra width can be resolved cleanly. */
 const PENUMBRA_REFERENCE_SAMPLES = 24;
+
+/**
+ * How long after the last world change the shader warm-up runs.
+ *
+ * `compileAsync` is worth firing because the alternative is compiling the same
+ * programs synchronously in the middle of the first frame that shows a new
+ * material or a new light count — which is exactly the hitch a user reads as the
+ * preview "catching up". It is not worth firing fifteen times a second, which is
+ * how often a dragged wall rebuilds the scene, so it waits for the drag to stop.
+ */
+const SHADER_WARMUP_DEBOUNCE_MS = 250;
 
 /**
  * Night.
@@ -133,6 +146,10 @@ export function createPreviewViewport(container) {
   const scene = new THREE.Scene();
   scene.background = null;
   const raycaster = new THREE.Raycaster();
+  // A batched member is drawn by an instanced batch in another root, and the
+  // mesh the click has to resolve to is the one left behind on this layer. The
+  // camera never looks at it; the picker only ever looks at it.
+  raycaster.layers.enable(SOURCE_ONLY_LAYER);
   const timer = new THREE.Timer();
   timer.connect(document);
 
@@ -225,7 +242,24 @@ export function createPreviewViewport(container) {
 
   let animationFrame = 0;
   let renderLoopRunning = false;
+  /*
+   * Whether this viewport has been put to sleep by whoever owns it.
+   *
+   * The case it exists for: the wall and ceiling detail editors are overlays,
+   * and the main workspace — its plan canvas and, if the user had it open, its
+   * own 3D preview — stays mounted underneath. An invisible preview that keeps
+   * refining is spending the frame budget of the pane the pointer is actually
+   * in, on a picture nobody can see. Suspending stops the loop without
+   * unmounting, so the camera, the walk pose and the built world all survive
+   * the overlay and are still there when it closes.
+   */
+  let suspended = false;
   let worldRoot = null;
+  // The instanced draw calls the world root's meshes were folded into. A
+  // sibling of the world root, never a child of it: the walk's collision index
+  // and the click picker both read the world root, and a batch answers a ray
+  // with a face normal that has the instance's own rotation left out of it.
+  let batchRoot = null;
   let selectionOverlay = null;
   let gridHelper = null;
   let ground = null;
@@ -235,6 +269,9 @@ export function createPreviewViewport(container) {
   let pointerDown = null;
   let navigationModifierActive = false;
   let navigationMode = 'inspect';
+  // What the settled image costs, and whether the sun's disc is sampled for it.
+  // Follows the navigation mode; see `REFINE_PROFILES`.
+  let refineProfile = REFINE_PROFILES.inspect;
   let walkUiHandler = null;
   let walkExitHandler = null;
   let compassHeadingHandler = null;
@@ -258,12 +295,27 @@ export function createPreviewViewport(container) {
   // Reads the world through callbacks rather than being handed it: `worldRoot`
   // and `ground` are swapped underneath by `setWorld` and `rebuildGround`, and
   // a collider that had to be told about each swap would be one missed call
-  // away from walking through the building.
+  // away from walking through the building. Both of those do also call
+  // `invalidateCollisions` — belt and braces, because the collision index they
+  // feed would otherwise be one missed call away from the same bug.
   const walkPhysics = createWalkPhysics({
     camera,
     getCollisionSources: () => [worldRoot, ground?.object],
     getGroundLevel: () => groundLevelMm,
   });
+
+  // Charged to the frame it happened on, so a stutter can be attributed rather
+  // than guessed at. Wrapped rather than measured inside the physics because the
+  // measurement should not exist at all when the gate is off.
+  let perf = null;
+  if (PREVIEW_PERF_ENABLED) {
+    const innerStep = walkPhysics.step;
+    walkPhysics.step = (input) => {
+      const startedAt = performance.now();
+      innerStep(input);
+      perf?.setWalkStepMs(performance.now() - startedAt);
+    };
+  }
   const walkNavigation = createWalkNavigation({
     camera,
     domElement: renderer.domElement,
@@ -299,7 +351,11 @@ export function createPreviewViewport(container) {
   const aimKeyLight = (sampleIndex, totalSamples = 1) => {
     let direction = baseLightDirection;
 
-    if (sampleIndex >= 1 && sunAngularRadiusDeg > 0) {
+    // The walk profile holds the light at the disc centre for every sample, so
+    // the shadow map is rendered once for a pose and then left alone — see
+    // `REFINE_PROFILES`. A 4096² map re-rendered per sample is most of what a
+    // walk-mode refine used to cost.
+    if (sampleIndex >= 1 && sunAngularRadiusDeg > 0 && refineProfile.jitterSunDisc) {
       // Any two vectors perpendicular to the light give the disc a frame; which
       // two does not matter, only that they are stable between samples.
       lightBasisU.set(0, 1, 0).cross(baseLightDirection);
@@ -410,6 +466,13 @@ export function createPreviewViewport(container) {
     navigationMode = resolvedMode;
     inspectNavigation.setEnabled(navigationMode === 'inspect');
     walkNavigation.setEnabled(navigationMode === 'walk');
+    // Before the pose is restored below, so the frame that lands after this call
+    // is already being refined under the right profile.
+    refineProfile = navigationMode === 'walk' ? REFINE_PROFILES.walk : REFINE_PROFILES.inspect;
+    progressive.setRefineProfile(refineProfile);
+    // A walk that is about to start is a walk against whatever the world is now,
+    // and the index is the cheapest thing in the building to rebuild.
+    if (navigationMode === 'walk') walkPhysics.invalidateCollisions();
 
     if (navigationMode === 'inspect') {
       // Derive inspect state from walk camera so the view doesn't jump
@@ -470,6 +533,8 @@ export function createPreviewViewport(container) {
   };
 
   const renderFrame = (timestamp) => {
+    const frameStartedAt = PREVIEW_PERF_ENABLED ? performance.now() : 0;
+    if (PREVIEW_PERF_ENABLED) renderer.info.reset();
     timer.update(timestamp);
     const deltaSeconds = Math.min(timer.getDelta(), 0.1);
 
@@ -500,6 +565,11 @@ export function createPreviewViewport(container) {
       progressive.renderInteractive();
     } else if (action === FRAME_ACTION.REFINE) {
       progressive.renderSample();
+    } else if (shouldPresizeRefine({ action, nowMs: timestamp, lastMovementMs: lastMovementAt })) {
+      // Still nothing on the canvas — this only resizes the offscreen chain for
+      // the refine that is a frame or two away, so the first sample is a render
+      // rather than a render plus three reallocations.
+      progressive.presizeForRefine();
     }
     // SETTLE draws nothing at all: the frame already on screen is the right one,
     // and redrawing it is how the flicker got in.
@@ -509,9 +579,14 @@ export function createPreviewViewport(container) {
       axisIndicatorInstance.render(renderer, camera);
     }
 
+    if (PREVIEW_PERF_ENABLED) {
+      perf?.frame({ timestamp, action, durationMs: performance.now() - frameStartedAt });
+    }
+
     // Walk mode holds the loop open regardless: the keyboard is polled here, so
-    // letting it stop would freeze movement until the next mouse event.
-    if (keepGoing || navigationMode === 'walk') {
+    // letting it stop would freeze movement until the next mouse event. Being
+    // suspended outranks even that — a viewport nobody can see has no keyboard.
+    if (!suspended && (keepGoing || navigationMode === 'walk')) {
       animationFrame = window.requestAnimationFrame(renderFrame);
     } else {
       renderLoopRunning = false;
@@ -519,7 +594,7 @@ export function createPreviewViewport(container) {
   };
 
   const startRenderLoop = () => {
-    if (renderLoopRunning) return;
+    if (suspended || renderLoopRunning) return;
     renderLoopRunning = true;
     animationFrame = window.requestAnimationFrame(renderFrame);
   };
@@ -532,6 +607,31 @@ export function createPreviewViewport(container) {
   const invalidate = () => {
     sceneDirty = true;
     startRenderLoop();
+  };
+
+  /**
+   * Compile the programs a new world needs before a frame has to wait for them.
+   *
+   * Fire and forget, and deliberately not awaited anywhere: if it fails, or the
+   * renderer is too old to have it, the only consequence is the hitch this was
+   * meant to remove. The `invalidate` on the way out is what puts the warmed
+   * materials on screen — by then the preview has usually gone idle, and an idle
+   * loop does not restart itself.
+   */
+  let shaderWarmupTimer = 0;
+  const scheduleShaderWarmup = () => {
+    if (typeof renderer.compileAsync !== 'function') return;
+    if (shaderWarmupTimer) window.clearTimeout(shaderWarmupTimer);
+    shaderWarmupTimer = window.setTimeout(() => {
+      shaderWarmupTimer = 0;
+      let compiling = null;
+      try {
+        compiling = renderer.compileAsync(scene, camera);
+      } catch {
+        return;
+      }
+      compiling?.then?.(() => invalidate())?.catch?.(() => {});
+    }, SHADER_WARMUP_DEBOUNCE_MS);
   };
 
   const resize = () => {
@@ -681,6 +781,9 @@ export function createPreviewViewport(container) {
       ground.dispose();
       ground = null;
     }
+    // The disc is one of the two things the walk is cast against, and this
+    // function is where it stops existing and starts again.
+    walkPhysics.invalidateCollisions();
     if (!style.ground) return;
 
     ground = createGroundPlane(currentBounds, groundLevelMm);
@@ -766,6 +869,7 @@ export function createPreviewViewport(container) {
     applyRenderStyleToPalette(materialPalette, style);
     progressive.setStyle(style);
     applyOutlineVisibility(worldRoot);
+    applyOutlineVisibility(batchRoot);
     if (gridHelper) gridHelper.visible = style.grid;
     rebuildGround();
   }
@@ -972,11 +1076,53 @@ export function createPreviewViewport(container) {
     invalidate();
   }
 
+  let unpublishPerf = null;
+  if (PREVIEW_PERF_ENABLED) {
+    // `renderer.info` resets itself at the top of every `render` call, and a
+    // frame here is a dozen of them — the composer's passes, the shadow map, the
+    // present blit. Taking the counters by hand is the only way the snapshot
+    // reads as "what this frame drew" rather than "what the last full-screen
+    // quad drew".
+    renderer.info.autoReset = false;
+    perf = createPreviewPerfRecorder({
+      renderer,
+      progressive,
+      getNavigationMode: () => navigationMode,
+    });
+    unpublishPerf = publishPreviewPerf(perf);
+  }
+
   applyStyleToRenderer();
   applySun();
   startRenderLoop();
 
   return {
+    /**
+     * Put the viewport to sleep, or wake it up again.
+     *
+     * Asleep it draws nothing and asks for no frames — not even in walk mode,
+     * and not when something calls `invalidate` behind its back. Everything
+     * else is left exactly as it is: the camera has not moved, the world root
+     * is still hung in the scene, the walk pose is still remembered. Waking it
+     * always costs one full redraw, because whatever happened while it was out
+     * of the picture (an edit committed, the pane resized, nothing at all) the
+     * image on the canvas is the one from before, and proving it is still right
+     * costs the same as redrawing it.
+     */
+    setSuspended(nextSuspended) {
+      const next = Boolean(nextSuspended);
+      if (suspended === next) return;
+      suspended = next;
+
+      if (suspended) {
+        if (animationFrame) window.cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
+        renderLoopRunning = false;
+        return;
+      }
+
+      invalidate();
+    },
     setRenderStyle(styleName) {
       const nextStyle = renderStyleConfig(styleName);
       if (nextStyle === style) return;
@@ -990,7 +1136,7 @@ export function createPreviewViewport(container) {
       sunState = nextSun || null;
       applySun();
     },
-    setWorld(nextRoot, bounds, groundLevel = 0) {
+    setWorld(nextRoot, bounds, groundLevel = 0, { batchRoot: nextBatchRoot = null } = {}) {
       const hadWorld = !!worldRoot;
       const walkPose = navigationMode === 'walk' ? walkNavigation.capturePose() : null;
       // When the incremental scene cache is used it hands back the SAME
@@ -1004,6 +1150,14 @@ export function createPreviewViewport(container) {
         // disposeMaterials: false — shared materials are owned by the palette,
         // disposed via disposeMaterialPalette() in viewport.dispose().
         disposeScene(worldRoot, { disposeMaterials: false });
+      }
+
+      // The batch root follows the same rule for the same reason: the scene
+      // cache hands back the one it owns on every incremental build, and
+      // disposing it would free the batches it had just decided to keep.
+      if (batchRoot && batchRoot !== nextBatchRoot) {
+        scene.remove(batchRoot);
+        disposeScene(batchRoot, { disposeMaterials: false });
       }
 
       // Only when the whole world went with it. The overlay is built from
@@ -1027,6 +1181,10 @@ export function createPreviewViewport(container) {
       }
 
       worldRoot = nextRoot;
+      // Every call, not only the ones that swapped the root: the incremental
+      // cache hands back the same root with rebuilt floor groups inside it, and
+      // a wall that has just been drawn has to be solid on the very next step.
+      walkPhysics.invalidateCollisions();
       groundLevelMm = groundLevel;
       currentBounds = descriptorBoundsToWorldBox(bounds);
       inspectNavigation.setBounds(currentBounds);
@@ -1034,7 +1192,10 @@ export function createPreviewViewport(container) {
       gridHelper.visible = style.grid;
       scene.add(gridHelper);
       if (!isSameRoot) scene.add(worldRoot);
+      batchRoot = nextBatchRoot;
+      if (batchRoot && batchRoot.parent !== scene) scene.add(batchRoot);
       applyOutlineVisibility(worldRoot);
+      applyOutlineVisibility(batchRoot);
       rebuildGround();
       // Occlusion is faded out beyond the model's own box, so the box has to
       // follow the model.
@@ -1055,6 +1216,9 @@ export function createPreviewViewport(container) {
       // every incremental rebuild, fifteen times a second while a wall is
       // dragged.
       applySun();
+      // Debounced, so the same fifteen rebuilds a second queue one compile after
+      // the drag ends rather than fifteen during it.
+      scheduleShaderWarmup();
     },
     /**
      * The room's own lights: `lightsOn` switches the ceiling luminaires, `night`
@@ -1068,6 +1232,10 @@ export function createPreviewViewport(container) {
       // markShadowsDirty + invalidate, which is the same path a style or sun
       // change takes to restart the progressive refine.
       applySun();
+      // Switching the fixtures changes how many lights the renderer sees, and a
+      // light count is part of a program's identity — so the first night frame
+      // compiles a whole new set of them unless they are asked for early.
+      scheduleShaderWarmup();
     },
     resetView() {
       if (navigationMode === 'walk') {
@@ -1168,6 +1336,13 @@ export function createPreviewViewport(container) {
     dispose() {
       window.cancelAnimationFrame(animationFrame);
       renderLoopRunning = false;
+      if (shaderWarmupTimer) {
+        window.clearTimeout(shaderWarmupTimer);
+        shaderWarmupTimer = 0;
+      }
+      unpublishPerf?.();
+      perf = null;
+      walkPhysics.invalidateCollisions();
       inspectNavigation.dispose();
       walkNavigation.dispose();
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
@@ -1184,6 +1359,12 @@ export function createPreviewViewport(container) {
       if (worldRoot) {
         scene.remove(worldRoot);
         disposeScene(worldRoot, { disposeMaterials: false });
+      }
+
+      if (batchRoot) {
+        scene.remove(batchRoot);
+        disposeScene(batchRoot, { disposeMaterials: false });
+        batchRoot = null;
       }
 
       if (gridHelper) {

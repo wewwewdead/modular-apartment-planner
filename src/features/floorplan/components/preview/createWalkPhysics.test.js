@@ -284,6 +284,93 @@ describe('createWalkPhysics', () => {
     expect(camera.position.y).toBeCloseTo(WALK_EYE_HEIGHT, 0);
   });
 
+  it('excludes hidden floors and door leaves from the collision index', () => {
+    const door = box(2100, 1050, 0, 200, 2100, 8000);
+    door.userData.previewTarget = { kind: 'door' };
+    const hiddenFloor = new THREE.Group();
+    hiddenFloor.visible = false;
+    hiddenFloor.add(slab(0, 0, 6000, 6000, 500));
+    hiddenFloor.add(slab(0, 0, 6000, 6000, 3000));
+
+    const { physics, run } = rig([slab(0, 0, 12000, 8000, 0), door, hiddenFloor]);
+
+    run(1);
+
+    // The visible slab, and nothing else: the door leaf and both hidden slabs
+    // were decided against once, at collect time.
+    expect(physics.getCollisionStats().meshes).toBe(1);
+  });
+
+  it('is stopped by a wall built into a rebuilt floor group under the same root', () => {
+    // The incremental scene cache reuses the root object and swaps the floor
+    // groups inside it, so the index cannot key on the root's identity.
+    const root = new THREE.Group();
+    const floor = new THREE.Group();
+    floor.add(slab(0, 0, 8000, 8000, 0));
+    root.add(floor);
+    root.updateMatrixWorld(true);
+
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, WALK_EYE_HEIGHT, 0);
+    const physics = createWalkPhysics({
+      camera,
+      getCollisionSources: () => [root],
+      getGroundLevel: () => -Infinity,
+    });
+
+    const walk = (frames, move) => {
+      const moveVector = move ? new THREE.Vector3(move, 0, 0) : null;
+      for (let frame = 0; frame < frames; frame += 1) {
+        physics.step({ moveVector, deltaSeconds: DT });
+      }
+    };
+
+    walk(30, null);
+    walk(30, 25);
+    expect(camera.position.x).toBeGreaterThan(500);
+
+    // A wall arrives the way a rebuild delivers one: a brand-new floor group in
+    // place of the old one, under the same root.
+    const rebuilt = new THREE.Group();
+    rebuilt.add(slab(0, 0, 8000, 8000, 0));
+    rebuilt.add(box(2100, 1350, 0, 200, 2700, 8000)); // face at x = 2000
+    root.clear();
+    root.add(rebuilt);
+    root.updateMatrixWorld(true);
+
+    walk(240, 25);
+
+    expect(camera.position.x).toBeLessThanOrEqual(2000 - WALK_BODY_RADIUS + 1);
+    expect(physics.getCollisionStats().meshes).toBe(2);
+  });
+
+  it('follows the world when the collision source is swapped for a new root', () => {
+    let root = new THREE.Group();
+    root.add(slab(0, 0, 8000, 8000, 0));
+    root.updateMatrixWorld(true);
+
+    const camera = new THREE.PerspectiveCamera();
+    camera.position.set(0, WALK_EYE_HEIGHT, 0);
+    const physics = createWalkPhysics({
+      camera,
+      getCollisionSources: () => [root],
+      getGroundLevel: () => -900,
+    });
+
+    for (let frame = 0; frame < 30; frame += 1) physics.step({ moveVector: null, deltaSeconds: DT });
+    expect(camera.position.y).toBeCloseTo(WALK_EYE_HEIGHT, 0);
+
+    // A full rebuild hands back a different root entirely — and this one has no
+    // floor in it, so the body should fall to the site datum.
+    root = new THREE.Group();
+    root.updateMatrixWorld(true);
+    physics.invalidateCollisions();
+
+    for (let frame = 0; frame < 180; frame += 1) physics.step({ moveVector: null, deltaSeconds: DT });
+
+    expect(camera.position.y).toBeCloseTo(-900 + WALK_EYE_HEIGHT, 0);
+  });
+
   it('reset drops the body back onto whatever is under the new pose', () => {
     const { camera, physics, run } = rig([slab(0, 0, 6000, 6000, 0), slab(0, 0, 6000, 6000, 3000)]);
 

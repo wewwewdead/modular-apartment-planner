@@ -49,6 +49,10 @@ import { refineSupersample } from './previewResolution';
  * blit to the canvas averages them back down; that averaging *is* the
  * supersampling, and it costs nothing while anyone is dragging. See
  * `applyRenderScale`.
+ *
+ * Walk mode opts out of the step up — see `REFINE_PROFILES`. Someone on foot
+ * crosses the settle threshold constantly, and paying for a resolution change
+ * in both directions each time is what a walk feels as a stutter.
  */
 
 /**
@@ -154,6 +158,39 @@ const REFINE_SUPERSAMPLE = refineSupersample(typeof window === 'undefined' ? 1 :
 /** Render scale of a moving frame: exactly the pixels the display can show. */
 const INTERACTIVE_SCALE = 1;
 
+/**
+ * The refine profiles, and why walk mode gets its own.
+ *
+ * Inspect mode is a camera that is either being dragged or being stared at, and
+ * the settled image is the product: it gets the full supersampled run.
+ *
+ * Walk mode is neither. Someone standing in a room crosses the quiet period
+ * dozens of times a minute — stop, look, step, stop — and each crossing used to
+ * step the whole offscreen chain up to four times the pixels and back down
+ * again, reallocating the composer, the occlusion buffers and the accumulation
+ * target twice per crossing. Those paired reallocations, each landing on a frame
+ * that also had to render the scene supersampled, *are* the freezes reported
+ * while walking.
+ *
+ * At supersample 1 `applyRenderScale` is a no-op between gears, so a refine
+ * costs one ordinary frame and stopping costs nothing at all. What is given up
+ * is resolution the walker was never going to stand still long enough to see,
+ * and the sub-pixel jitter still antialiases the image it does settle on.
+ *
+ * `jitterSunDisc` is the other half of the same trade, spent by the viewport
+ * rather than here: moving the key light to a fresh point on the sun's disc each
+ * sample is what softens a shadow edge, and it is also what marks the shadow map
+ * dirty, so a walk-mode refine re-rendered a 4096² map every sample. Aiming at
+ * the disc centre throughout lets the map be rendered once and then left alone,
+ * at the cost of a penumbra nobody standing indoors was going to study.
+ */
+export const REFINE_PROFILES = Object.freeze({
+  inspect: Object.freeze({ supersample: REFINE_SUPERSAMPLE, maxSamples: Infinity, jitterSunDisc: true }),
+  // Enough samples to clean up the edges of a room in about a third of a second
+  // and no more: a walker's next keystroke is never far away.
+  walk: Object.freeze({ supersample: 1, maxSamples: 12, jitterSunDisc: false }),
+});
+
 export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSample = null }) {
   // Device pixels of the default framebuffer — the size everything offscreen is
   // measured against, and the size the finished image is presented at.
@@ -236,6 +273,7 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
   const accumulationQuad = new FullScreenQuad(accumulationMaterial);
 
   let style = null;
+  let refineProfile = REFINE_PROFILES.inspect;
   let sampleIndex = 0;
   let targetSamples = MIN_SAMPLES;
   let lastFrameMs = 8;
@@ -351,12 +389,31 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
         // cheap moving one or a supersampled settled one.
         renderSize: renderSize.toArray(),
         renderScale,
+        // Which profile the refine is running under, so a walk-mode measurement
+        // cannot be mistaken for an inspect-mode one.
+        refineSupersample: refineProfile.supersample,
       };
     },
 
     /** True once the accumulated image has as many samples as it is getting. */
     isConverged() {
       return sampleIndex >= targetSamples;
+    },
+
+    /**
+     * Which of `REFINE_PROFILES` the settled image is rendered under.
+     *
+     * The accumulation is thrown away rather than adapted: the two profiles do
+     * not render the same picture, so averaging one into the other would be
+     * averaging two different images. Whoever changes the mode is about to
+     * redraw anyway.
+     */
+    setRefineProfile(nextProfile) {
+      const resolved = nextProfile || REFINE_PROFILES.inspect;
+      if (resolved === refineProfile) return;
+      refineProfile = resolved;
+      targetSamples = MIN_SAMPLES;
+      this.reset();
     },
 
     setStyle(nextStyle) {
@@ -462,16 +519,34 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
      * empty scene in full-window mode: 21 ms predicted, 21 ms actual, 121
      * samples landed inside the 2500 ms.
      */
+    /**
+     * Size the offscreen chain for the refine that is about to start, on a frame
+     * that is not going to draw.
+     *
+     * Nothing here touches the canvas — `applyRenderScale` only resizes render
+     * targets — so the frame already on screen stays exactly as it is, which is
+     * what a SETTLE frame is for. It does throw the accumulation away, and that
+     * is harmless: the first refine sample replaces the accumulation rather than
+     * averaging into it in any case.
+     *
+     * A no-op in a profile that refines at the interactive size, and a no-op on
+     * every settle frame after the first.
+     */
+    presizeForRefine() {
+      applyRenderScale(refineProfile.supersample);
+    },
+
     renderSample() {
       // The converged check has to come first: `applyRenderScale` resets the
       // sample count, so asking it anything at all after convergence would
       // restart the refine forever.
       if (sampleIndex >= targetSamples && hasAccumulation) return false;
 
-      // A no-op on every sample but the first of a run. The first one steps the
-      // whole chain up to the supersampled size, which is safe precisely here:
-      // sample zero replaces the accumulation rather than averaging into it.
-      applyRenderScale(REFINE_SUPERSAMPLE);
+      // A no-op on every sample but the first of a run — and, once the settle
+      // frames have pre-sized the chain, on that one too. The first sample is
+      // where a step up to the supersampled size is safe: sample zero replaces
+      // the accumulation rather than averaging into it.
+      applyRenderScale(refineProfile.supersample);
 
       const startedAt = performance.now();
       gtaoPass.enabled = style.ambientOcclusion;
@@ -493,7 +568,11 @@ export function createProgressiveRenderer({ renderer, scene, camera, onBeforeSam
 
       if (sampleIndex === 1) {
         const affordable = Math.floor(REFINE_BUDGET_MS / Math.max(lastFrameMs, 1));
-        targetSamples = THREE.MathUtils.clamp(affordable, MIN_SAMPLES, style.maxSamples);
+        targetSamples = THREE.MathUtils.clamp(
+          affordable,
+          MIN_SAMPLES,
+          Math.min(style.maxSamples, refineProfile.maxSamples),
+        );
       }
 
       return sampleIndex < targetSamples;

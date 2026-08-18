@@ -1,4 +1,10 @@
 import * as THREE from 'three';
+import {
+  buildFloorBatchGroup,
+  taggedBoxGeometry,
+  taggedCylinderGeometry,
+  unitOutlineGeometry,
+} from './previewBatching';
 
 /**
  * Two selection accents, because the two previews answer different questions.
@@ -104,8 +110,23 @@ function createMesh(geometry, material) {
 }
 
 function addOutline(object3d, materialPalette) {
-  if (!object3d.geometry) return;
-  const edges = new THREE.EdgesGeometry(object3d.geometry, 20);
+  const geometry = object3d.geometry;
+  if (!geometry) return;
+
+  // A box's twelve edges are the unit box's twelve edges scaled, so the whole
+  // model draws one set of them rather than measuring its own for every stud.
+  // `EdgesGeometry` is the most expensive thing a rebuild does per mesh — it
+  // walks the triangles looking for shared edges — and on a building made of
+  // boxes that is nearly all of it.
+  const unit = geometry.userData?.batchUnit;
+  if (unit?.key === 'box') {
+    const outline = new THREE.LineSegments(unitOutlineGeometry(unit.key), materialPalette.outline);
+    outline.scale.set(unit.scaleX, unit.scaleY, unit.scaleZ);
+    object3d.add(outline);
+    return;
+  }
+
+  const edges = new THREE.EdgesGeometry(geometry, 20);
   const outline = new THREE.LineSegments(edges, materialPalette.outline);
   object3d.add(outline);
 }
@@ -182,7 +203,7 @@ function createRoofMeshObject(descriptor, materialPalette) {
 }
 
 function createBoxObject(descriptor, materialPalette) {
-  const geometry = new THREE.BoxGeometry(
+  const geometry = taggedBoxGeometry(
     Math.max(descriptor.size.x, 1),
     Math.max(descriptor.size.y, 1),
     Math.max(descriptor.size.z, 1),
@@ -212,7 +233,8 @@ function createBoxObject(descriptor, materialPalette) {
  * `shared` keeps `disposeScene` off them: they outlive any one floor group, and
  * a rebuild that replaced some of them would otherwise pull the buffers out from
  * under the ones it carried over. Wall screws are sized from an editable field,
- * so they keep building their own.
+ * so they keep building their own — they are batched all the same, which is
+ * what most of that cost was.
  */
 const SHARED_FASTENER_GEOMETRIES = new Map();
 
@@ -220,7 +242,7 @@ function sharedFastenerGeometry(narrow, wide, depth) {
   const key = `${narrow}:${wide}:${depth}`;
   const cached = SHARED_FASTENER_GEOMETRIES.get(key);
   if (cached) return cached;
-  const geometry = new THREE.CylinderGeometry(narrow, wide, depth, 12);
+  const geometry = taggedCylinderGeometry(narrow, wide, depth, 12);
   geometry.userData = { ...geometry.userData, shared: true };
   SHARED_FASTENER_GEOMETRIES.set(key, geometry);
   return geometry;
@@ -231,17 +253,31 @@ function createFastenerObject(descriptor, materialPalette) {
   const narrow = Math.max(wide * 0.72, 1);
   const vertical = descriptor.axis === 'vertical';
   const depth = Math.max(descriptor.depth || 5, 1);
-  let geometry;
-  if (vertical) {
-    geometry = sharedFastenerGeometry(narrow, wide, depth);
-  } else {
-    geometry = new THREE.CylinderGeometry(wide, narrow, depth, 12);
-    geometry.rotateX(Math.PI / 2);
-  }
+  const geometry = vertical
+    ? sharedFastenerGeometry(narrow, wide, depth)
+    : taggedCylinderGeometry(wide, narrow, depth, 12);
   const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
   mesh.position.copy(planPointToWorld(descriptor.center, descriptor.baseElevation + descriptor.size.y / 2));
-  mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
-  if (!vertical) addOutline(mesh, materialPalette);
+  if (vertical) {
+    mesh.rotation.y = planAngleToWorldRotation(descriptor.rotation);
+  } else {
+    /*
+     * A wall screw lies on its side, and where that quarter-turn is spent
+     * matters. Baking it into the geometry — `geometry.rotateX` — is what this
+     * used to do, and it left the cylinder untaggable: `taggedCylinderGeometry`
+     * records the unit shape a geometry is a scaled copy of, and a geometry
+     * with a rotation cooked into its vertices is not a scaled copy of
+     * anything. Six hundred screws on a wall face then meant six hundred draw
+     * calls the batcher had to leave alone.
+     *
+     * Spending it on the mesh instead leaves the geometry a plain cylinder, so
+     * every screw on the wall folds into one instanced call — and the world
+     * transform is unchanged, because 'YXZ' composes as Ry·Rx and Ry(θ)·Rx(90°)
+     * is exactly what the baked geometry produced under `rotation.y = θ`.
+     */
+    mesh.rotation.set(Math.PI / 2, planAngleToWorldRotation(descriptor.rotation), 0, 'YXZ');
+    addOutline(mesh, materialPalette);
+  }
   return mesh;
 }
 
@@ -266,7 +302,7 @@ function createStairObject(descriptor, materialPalette) {
   const risers = Math.max(1, descriptor.numberOfRisers || 1);
 
   for (let index = 0; index < risers; index += 1) {
-    const geometry = new THREE.BoxGeometry(
+    const geometry = taggedBoxGeometry(
       Math.max(descriptor.treadDepth, 1),
       Math.max(descriptor.riserHeight, 1),
       Math.max(descriptor.width, 1),
@@ -289,7 +325,7 @@ function createSegment3DObject(descriptor, materialPalette) {
   const length = Math.max(direction.length(), 1);
   const crossSectionHeight = Math.max(descriptor.crossSection?.height || descriptor.thickness || 1, 1);
   const crossSectionWidth = Math.max(descriptor.crossSection?.width || descriptor.thickness || 1, 1);
-  const geometry = new THREE.BoxGeometry(length, crossSectionHeight, crossSectionWidth);
+  const geometry = taggedBoxGeometry(length, crossSectionHeight, crossSectionWidth);
   const mesh = createMesh(geometry, materialPalette[descriptor.materialKey]);
   const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
   const quaternion = new THREE.Quaternion().setFromUnitVectors(
@@ -327,7 +363,7 @@ function createWindowObject(descriptor, materialPalette) {
   ];
 
   for (const rail of frameRails) {
-    const geo = new THREE.BoxGeometry(Math.max(rail.sx, 1), Math.max(rail.sy, 1), Math.max(rail.sz, 1));
+    const geo = taggedBoxGeometry(Math.max(rail.sx, 1), Math.max(rail.sy, 1), Math.max(rail.sz, 1));
     const mesh = createMesh(geo, frameMaterial);
     mesh.position.set(rail.px, rail.py, rail.pz);
     addOutline(mesh, materialPalette);
@@ -373,7 +409,7 @@ function createWindowObject(descriptor, materialPalette) {
   // 'fixed' — no mullions
 
   for (const m of mullions) {
-    const geo = new THREE.BoxGeometry(Math.max(m.sx, 1), Math.max(m.sy, 1), Math.max(m.sz, 1));
+    const geo = taggedBoxGeometry(Math.max(m.sx, 1), Math.max(m.sy, 1), Math.max(m.sz, 1));
     const mesh = createMesh(geo, frameMaterial);
     mesh.position.set(m.px, m.py, m.pz);
     addOutline(mesh, materialPalette);
@@ -391,7 +427,7 @@ function createWindowObject(descriptor, materialPalette) {
 // ── Fixture helpers ──
 
 function addBox(group, materialKey, sx, sy, sz, px, py, pz, materialPalette) {
-  const geo = new THREE.BoxGeometry(Math.max(sx, 1), Math.max(sy, 1), Math.max(sz, 1));
+  const geo = taggedBoxGeometry(Math.max(sx, 1), Math.max(sy, 1), Math.max(sz, 1));
   const mesh = createMesh(geo, materialPalette[materialKey]);
   mesh.position.set(px, py, pz);
   addOutline(mesh, materialPalette);
@@ -400,7 +436,7 @@ function addBox(group, materialKey, sx, sy, sz, px, py, pz, materialPalette) {
 }
 
 function addCylinder(group, materialKey, rTop, rBot, h, segs, px, py, pz, materialPalette) {
-  const geo = new THREE.CylinderGeometry(Math.max(rTop, 0.5), Math.max(rBot, 0.5), Math.max(h, 0.5), segs);
+  const geo = taggedCylinderGeometry(Math.max(rTop, 0.5), Math.max(rBot, 0.5), Math.max(h, 0.5), segs);
   const mesh = createMesh(geo, materialPalette[materialKey]);
   mesh.position.set(px, py, pz);
   addOutline(mesh, materialPalette);
@@ -1343,8 +1379,15 @@ function descriptorsEqual(a, b) {
  * meshes to follow that one is what made dragging feel like wading. `add()`
  * detaches a carried-over object from the group it came from, so what remains in
  * the old group is exactly the set the caller is free to dispose.
+ *
+ * `options.batch` asks for the floor's boxes and cylinders to be folded into
+ * instanced draw calls as well, and returns the group of them to be hung
+ * somewhere the collision index and the picker will not find it — see
+ * `previewBatching`. Off by default, so the one-shot `buildPreviewObjectRoot`
+ * path (drawing-sheet stills) and every existing test build exactly what they
+ * built before.
  */
-export function buildFloorObjectGroup(floor, materialPalette, previousEntries = null) {
+export function buildFloorObjectGroup(floor, materialPalette, previousEntries = null, options = {}) {
   const floorGroup = new THREE.Group();
   floorGroup.name = `floor-${floor.floorId}`;
   floorGroup.visible = floor.visible;
@@ -1387,7 +1430,16 @@ export function buildFloorObjectGroup(floor, materialPalette, previousEntries = 
   // ones that were just rebuilt beside them.
   applyFixtureShadowCap(entries);
 
-  return { floorGroup, entries };
+  // Also after the whole floor is known, and for the same reason: a batch is a
+  // statement about a set of meshes, so it can only be made once they are all
+  // in place — carried-over ones included. `previousBatchGroup` may come back
+  // as the returned one, refilled rather than rebuilt; the caller compares
+  // identity to know whether the old one is still in use.
+  const batchGroup = options.batch
+    ? buildFloorBatchGroup(floorGroup, materialPalette, options.previousBatchGroup || null)
+    : null;
+
+  return { floorGroup, entries, batchGroup };
 }
 
 export function buildPreviewObjectRoot(sceneDescriptor, materialPalette) {

@@ -12,6 +12,14 @@ import { polygonArea } from '@/geometry/polygon';
 import styles from '../PropertiesPanel.module.css';
 import { Hint, Readout, Section, Stack, TextField, panelKitStyles } from './PanelKit';
 
+// A ceiling boards one face — the one looking down into the room — so unlike a
+// wall there are no sides to name and the choice is the whole plane or none of
+// it. Module scope because it never varies with the ceiling.
+const BOARD_VISIBILITY_OPTIONS = [
+  { label: 'Shown', hidden: false },
+  { label: 'Hidden', hidden: true },
+];
+
 /**
  * What a ceiling is, read off the model. Everything but the name is derived —
  * the extent comes from the beams it hangs from and the assembly is designed in
@@ -21,10 +29,12 @@ import { Hint, Readout, Section, Stack, TextField, panelKitStyles } from './Pane
  * The heavy derivations (panels, fasteners, hangers) stay out: they rebuild the
  * whole assembly, and this runs on every selection change.
  */
-function CeilingProperties({ ceiling, project, floor, dispatch, editorDispatch, u }) {
+function CeilingProperties({ ceiling, project, floor, hiddenCeilingBoards, dispatch, editorDispatch, u }) {
   // The selection can outlive its ceiling — deleted from the sidebar while the
   // 3D preview still had it picked.
   if (!ceiling) return null;
+
+  const boardsHidden = Boolean((hiddenCeilingBoards || {})[ceiling.id]);
 
   const boundary = resolveCeilingBoundary(project, ceiling);
   const space = getCeilingLocalSpace(boundary);
@@ -83,6 +93,45 @@ function CeilingProperties({ ceiling, project, floor, dispatch, editorDispatch, 
         <Readout label="Boards" value={detailing.face.enabled ? 'Boarded' : 'Not boarded'} />
         <Readout label="Board profile" value={`${profile.manufacturer} ${profile.product}`} />
         <Readout label="Light fixtures" value={String(detailing.lighting.fixtures.length)} />
+      </Section>
+
+      <Section
+        id="ceiling.preview"
+        title="3D view"
+        defaultOpen={false}
+        summary={boardsHidden ? 'Boards hidden' : 'Fully boarded'}
+      >
+        {detailing.face.enabled ? (
+          <>
+            <Stack>
+              <div className={styles.segmentControl}>
+                {BOARD_VISIBILITY_OPTIONS.map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    className={option.hidden === boardsHidden ? styles.segmentBtnActive : styles.segmentBtn}
+                    onClick={() =>
+                      editorDispatch({
+                        type: 'SET_CEILING_BOARD_VISIBILITY',
+                        ceilingId: ceiling.id,
+                        hidden: option.hidden,
+                      })
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </Stack>
+            <Hint>
+              {boardsHidden
+                ? 'Stripped in the 3D preview only — the furring, carriers and hangers above are exposed. Drawings and quantities are unaffected.'
+                : 'Hide the boards to check the frame above them. Openings, fittings and light fixtures stay.'}
+            </Hint>
+          </>
+        ) : (
+          <Hint>This ceiling has no boards, so there is nothing to strip.</Hint>
+        )}
       </Section>
     </div>
   );

@@ -105,6 +105,9 @@ vi.mock('three', () => {
       this.geometry = geometry;
       this.material = material;
       this.userData = {};
+      // Box outlines are one shared unit geometry sized by the object's own
+      // scale, so a line segment now has one.
+      this.scale = { x: 1, y: 1, z: 1, set() {} };
     }
     traverse(fn) {
       fn(this);
@@ -188,9 +191,20 @@ function createFloorDescriptor(floorId, sourceFloor, objects, visible = true) {
   };
 }
 
+/**
+ * The unbatched build, because a stubbed THREE has no instancing to fold
+ * geometry into — these tests are about which groups the cache reuses and
+ * disposes, which is the same decision either way. The batched path is
+ * exercised against real THREE in previewBatching.test.js.
+ */
+function createCache() {
+  return createPreviewSceneCache({ batch: false });
+}
+
 function createScene(floors) {
   return {
     activeFloorId: floors[0]?.floorId || null,
+    assemblyDetail: false,
     visibleFloorIds: floors.filter((f) => f.visible).map((f) => f.floorId),
     floors,
     roofLayerId: null,
@@ -216,7 +230,7 @@ describe('createPreviewSceneCache', () => {
       createFloorDescriptor('fB', floorB, [createDescriptor('w2')]),
     ]);
 
-    const cache = createPreviewSceneCache();
+    const cache = createCache();
     const { root: root1 } = cache.build(scene1, palette);
     const groupA1 = root1.children.find((c) => c.name === 'floor-fA');
     const groupB1 = root1.children.find((c) => c.name === 'floor-fB');
@@ -247,12 +261,15 @@ describe('createPreviewSceneCache', () => {
     const floorA = { id: 'fA' };
     const scene1 = createScene([createFloorDescriptor('fA', floorA, [createDescriptor('w1')])]);
 
-    const cache = createPreviewSceneCache();
+    const cache = createCache();
     const { root: root1 } = cache.build(scene1, palette);
     const groupA1 = root1.children.find((c) => c.name === 'floor-fA');
     const disposeSpies = [];
     groupA1.traverse((node) => {
-      if (node.geometry) disposeSpies.push(node.geometry);
+      // A geometry the whole scene shares — the unit box every outline is drawn
+      // from — outlives any one floor by design, so it is not part of what a
+      // rebuild is expected to free.
+      if (node.geometry && !node.geometry.userData?.shared) disposeSpies.push(node.geometry);
     });
     expect(disposeSpies.length).toBeGreaterThan(0);
 
@@ -268,7 +285,7 @@ describe('createPreviewSceneCache', () => {
     const floorA = { id: 'fA' };
     const scene1 = createScene([createFloorDescriptor('fA', floorA, [createDescriptor('w1'), createDescriptor('w2')])]);
 
-    const cache = createPreviewSceneCache();
+    const cache = createCache();
     const { meshMap: meshMap1 } = cache.build(scene1, palette);
     expect(meshMap1.size).toBe(2);
     expect(meshMap1.get('w1').floorVisible).toBe(true);
@@ -291,7 +308,7 @@ describe('createPreviewSceneCache', () => {
       createFloorDescriptor('fB', floorB, [createDescriptor('w2')]),
     ]);
 
-    const cache = createPreviewSceneCache();
+    const cache = createCache();
     const { root } = cache.build(scene1, palette);
     expect(root.children.length).toBe(2);
 

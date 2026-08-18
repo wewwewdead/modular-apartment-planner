@@ -28,6 +28,33 @@ import styles from './ThreePreviewPanel.module.css';
 const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
 
 /**
+ * The project as it stood when the pane went to sleep, for as long as it sleeps.
+ *
+ * Gating the rebuild effect stops a sleeping pane building geometry it cannot
+ * show; this stops the work one level above that. The scene descriptor is
+ * memoised on the project, so without the hold every edit committed behind the
+ * overlay rebuilds the whole building's descriptors for an answer nobody reads,
+ * and re-runs the sun effect — a traversal of the world root — on the way past.
+ * On the playground project that lands inside the noise of a single commit, and
+ * it is here anyway: a suspended pane doing arithmetic on a project it cannot
+ * draw is a bug waiting for a bigger building.
+ *
+ * Captured on the edge into suspension rather than tracked continuously, so the
+ * awake path — the one a plan drag runs fifteen times a second — does no state
+ * work at all and hands back the live value untouched. Waking returns to the
+ * live project, and it is that change which asks for the one catch-up build.
+ */
+function useHeldWhileSuspended(value, suspended) {
+  const [snapshot, setSnapshot] = useState({ suspended, value });
+
+  if (snapshot.suspended !== suspended) {
+    setSnapshot({ suspended, value });
+  }
+
+  return suspended ? snapshot.value : value;
+}
+
+/**
  * `assemblySelection` puts the wall and ceiling detail editors in charge of the
  * highlight: pass `{ kind, id, side }` for the board, member, screw, or hanger
  * that is selected in the drawing, or `null` for nothing. Passing it at all
@@ -36,6 +63,12 @@ const MIN_SCENE_REBUILD_INTERVAL_MS = 66;
  * then decides the colour: green for a plan object, orange for a piece of
  * material. `onAssemblyPick` receives the same shape back when one is clicked
  * here, so the two panes stay on the same piece.
+ *
+ * `suspended` is for the pane that is still mounted but no longer on screen —
+ * the main workspace's preview while a wall or ceiling detail editor is open
+ * over the top of it. It stops rebuilding scenes and stops asking for frames,
+ * without unmounting, so the camera and the walk pose survive the overlay; the
+ * edits made behind it are caught up in one rebuild when it comes back.
  */
 export default function ThreePreviewPanel({
   project,
@@ -47,6 +80,7 @@ export default function ThreePreviewPanel({
   assemblySelection,
   selectionAccent = 'plan',
   onAssemblyPick,
+  suspended = false,
 }) {
   const assemblyDriven = assemblySelection !== undefined;
   // Taken apart here so the overlay effect depends on three primitives: a caller
@@ -78,12 +112,15 @@ export default function ThreePreviewPanel({
     phaseViewMode,
     sunStudy,
     hiddenWallBoards,
+    hiddenCeilingBoards,
     dispatch: editorDispatch,
   } = useEditor();
 
+  const awakeProject = useHeldWhileSuspended(project, suspended);
+
   const filteredProject = useMemo(
-    () => (applyPhaseFilter ? filterProjectByPhase(project, activePhaseId, phaseViewMode) : project),
-    [project, activePhaseId, phaseViewMode, applyPhaseFilter],
+    () => (applyPhaseFilter ? filterProjectByPhase(awakeProject, activePhaseId, phaseViewMode) : awakeProject),
+    [awakeProject, activePhaseId, phaseViewMode, applyPhaseFilter],
   );
 
   const orderedFloors = useMemo(() => getOrderedFloors(project), [project]);
@@ -99,14 +136,20 @@ export default function ThreePreviewPanel({
       buildPreviewScene(filteredProject, {
         activeFloorId,
         visibleFloorIds,
-        hiddenWallBoards,
+        // An assembly editor's pane draws the wall or ceiling it is editing and
+        // keeps its own layer switches for what to leave out, so the plan's
+        // "strip the boards and look at the frame" must not follow the object
+        // in here — the preview project reuses the real wall/ceiling id, and
+        // passing these would silently unboard the drawing being worked on.
+        hiddenWallBoards: assemblyDriven ? undefined : hiddenWallBoards,
+        hiddenCeilingBoards: assemblyDriven ? undefined : hiddenCeilingBoards,
         // An assembly editor is looking at one wall or one ceiling from a metre
         // away, so it gets the parts a whole-building view cannot afford —
         // every ceiling screw. Same switch as the selection: this pane belongs
         // to an editor, so it draws what the editor is editing.
         assemblyDetail: assemblyDriven,
       }),
-    [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards, assemblyDriven],
+    [filteredProject, activeFloorId, visibleFloorIds, hiddenWallBoards, hiddenCeilingBoards, assemblyDriven],
   );
 
   const activeFloor = (project?.floors || []).find((floor) => floor.id === activeFloorId) || null;
@@ -248,15 +291,22 @@ export default function ThreePreviewPanel({
     const viewport = viewportRef.current;
     const sceneCache = sceneCacheRef.current;
     if (!viewport || !sceneCache) return undefined;
+    // A suspended pane holds its project still, so this effect rarely has
+    // anything to say while it is asleep — but the floor, the scope and the
+    // board switches are not part of that hold, and one of them changing behind
+    // an overlay must not rebuild a scene nobody is looking at. `suspended` is
+    // a dependency, so waking up re-runs this and the catch-up build happens
+    // then, once, for whatever the total of those changes came to.
+    if (suspended) return undefined;
 
     const runBuild = () => {
       lastBuildAt.current = performance.now();
       // Incremental build: reuse THREE groups for floors whose source geometry is
       // unchanged (immutable reducer updates preserve floor object identity), and
       // only rebuild floors that actually changed.
-      const { root, meshMap } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
+      const { root, batchRoot, meshMap } = sceneCache.build(sceneDescriptor, viewport.materialPalette);
       meshMapRef.current = meshMap;
-      viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel);
+      viewport.setWorld(root, sceneDescriptor.bounds, sceneDescriptor.groundLevel, { batchRoot });
       setSceneBuildId((id) => id + 1);
     };
 
@@ -268,7 +318,14 @@ export default function ThreePreviewPanel({
 
     const timer = setTimeout(runBuild, MIN_SCENE_REBUILD_INTERVAL_MS - sinceLastBuild);
     return () => clearTimeout(timer);
-  }, [sceneDescriptor]);
+  }, [sceneDescriptor, suspended]);
+
+  // After the rebuild effect, deliberately: going to sleep has to cancel the
+  // frame the build above may just have asked for, and waking has to ask for
+  // one after the world it is going to draw has been put back.
+  useEffect(() => {
+    viewportRef.current?.setSuspended(suspended);
+  }, [suspended]);
 
   // Selection effect: swap overlay meshes without rebuilding the scene.
   // Re-runs when the selection changes OR when the scene was rebuilt

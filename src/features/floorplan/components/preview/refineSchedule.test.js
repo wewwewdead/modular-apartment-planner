@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME_ACTION, REFINE_QUIET_PERIOD_MS, nextFrameAction, wantsAnotherFrame } from './refineSchedule';
+import {
+  FRAME_ACTION,
+  REFINE_PRESIZE_LEAD_MS,
+  REFINE_QUIET_PERIOD_MS,
+  nextFrameAction,
+  shouldPresizeRefine,
+  wantsAnotherFrame,
+} from './refineSchedule';
 
 const frame = (overrides) =>
   nextFrameAction({ moved: false, sceneDirty: false, converged: false, nowMs: 1000, lastMovementMs: 0, ...overrides });
@@ -90,6 +97,37 @@ describe('a burst of wheel events', () => {
     // If the quiet period ever drops below a typical wheel cadence the flicker
     // comes straight back.
     expect(REFINE_QUIET_PERIOD_MS).toBeGreaterThan(100);
+  });
+});
+
+describe('shouldPresizeRefine', () => {
+  const presize = (overrides) =>
+    shouldPresizeRefine({ action: FRAME_ACTION.SETTLE, nowMs: 1000, lastMovementMs: 1000, ...overrides });
+
+  it('never fires on a frame that draws', () => {
+    for (const action of [FRAME_ACTION.INTERACTIVE, FRAME_ACTION.REFINE, FRAME_ACTION.IDLE]) {
+      expect(presize({ action, lastMovementMs: 0 })).toBe(false);
+    }
+  });
+
+  it('leaves a momentary pause mid-gesture alone', () => {
+    // The whole point of not doing this on the first settle frame: a pause this
+    // short is about to be followed by another interactive frame, which would
+    // immediately size the chain back down again.
+    expect(presize({ lastMovementMs: 1000 })).toBe(false);
+    expect(presize({ lastMovementMs: 1000 - 20 })).toBe(false);
+  });
+
+  it('fires in the last stretch before the refine starts', () => {
+    expect(presize({ lastMovementMs: 1000 - (REFINE_QUIET_PERIOD_MS - REFINE_PRESIZE_LEAD_MS) })).toBe(true);
+    expect(presize({ lastMovementMs: 1000 - (REFINE_QUIET_PERIOD_MS - 1) })).toBe(true);
+  });
+
+  it('leaves enough lead for a frame to land inside it at 30 fps', () => {
+    // A window shorter than a frame would be stepped straight over and the
+    // first refine sample would pay for the resize after all.
+    expect(REFINE_PRESIZE_LEAD_MS).toBeGreaterThan(1000 / 30);
+    expect(REFINE_PRESIZE_LEAD_MS).toBeLessThan(REFINE_QUIET_PERIOD_MS);
   });
 });
 

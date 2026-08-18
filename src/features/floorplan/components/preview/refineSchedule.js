@@ -19,6 +19,24 @@
 /** How still the camera must be, in milliseconds, before refining begins. */
 export const REFINE_QUIET_PERIOD_MS = 180;
 
+/**
+ * How long before the refine starts the offscreen buffers are resized for it.
+ *
+ * The first refinement sample used to pay for the whole step up to the
+ * supersampled resolution — reallocating the composer chain, the occlusion
+ * buffers and the accumulation target — on top of being the most expensive
+ * frame of the run in its own right. That is a visible hitch at exactly the
+ * moment the user stopped moving and started looking.
+ *
+ * SETTLE frames draw nothing, so the allocation is free there. But it must not
+ * happen on the *first* settle frame: a momentary pause mid-drag would then pay
+ * for a step up it is about to throw away on the next interactive frame, which
+ * is the opposite of the trade. So it happens near the end of the quiet window
+ * instead — late enough that the camera has genuinely stopped, and with enough
+ * lead for at least one frame to land inside it even at 30 fps.
+ */
+export const REFINE_PRESIZE_LEAD_MS = 50;
+
 export const FRAME_ACTION = Object.freeze({
   /** Camera or scene changed: draw one cheap frame and reset the accumulation. */
   INTERACTIVE: 'interactive',
@@ -65,4 +83,24 @@ export function nextFrameAction({
 /** Whether an action needs another animation frame after it. */
 export function wantsAnotherFrame(action) {
   return action !== FRAME_ACTION.IDLE;
+}
+
+/**
+ * Whether a SETTLE frame should size the offscreen chain for the refine that is
+ * about to start.
+ *
+ * Only ever true on a SETTLE, and only in the last `leadMs` of the quiet window.
+ * Pure for the same reason `nextFrameAction` is: this is a policy about frames,
+ * and it should be arguable without a GPU.
+ */
+export function shouldPresizeRefine({
+  action,
+  nowMs,
+  lastMovementMs,
+  quietPeriodMs = REFINE_QUIET_PERIOD_MS,
+  leadMs = REFINE_PRESIZE_LEAD_MS,
+}) {
+  if (action !== FRAME_ACTION.SETTLE) return false;
+  const stillFor = nowMs - lastMovementMs;
+  return stillFor >= quietPeriodMs - leadMs;
 }

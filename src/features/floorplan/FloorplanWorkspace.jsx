@@ -59,7 +59,29 @@ function EditorShell({
   onToggleSidebar,
   onToggleProperties,
 }) {
-  const { workspaceMode, activeFloorId, focusedPanel, toolState, pastePreview, dispatch } = useEditor();
+  const {
+    workspaceMode,
+    activeFloorId,
+    focusedPanel,
+    toolState,
+    pastePreview,
+    wallDetailEditor,
+    ceilingDetailEditor,
+    dispatch,
+  } = useEditor();
+
+  /*
+   * A detail editor is an overlay, and this whole shell stays mounted under it.
+   * That is what makes the plan's own 3D preview expensive at exactly the wrong
+   * moment: every edit committed in the editor changes the project, and the
+   * preview behind the overlay answers by rebuilding its scene and then
+   * refining it — several seconds of frames, at tens of milliseconds each,
+   * spent on a picture that is completely covered up, out of the same budget as
+   * the pane the pointer is in. Suspending it rather than unmounting it keeps
+   * the camera and the walk pose, and it catches up in one rebuild on the way
+   * back out.
+   */
+  const isCoveredByDetailEditor = Boolean(wallDetailEditor || ceilingDetailEditor);
 
   // Focus only means anything over the model workspace; the sheet view has no
   // second pane to choose between.
@@ -173,6 +195,7 @@ function EditorShell({
                     activeFloorId={activeFloorId}
                     isFocused={focusedPanel === 'preview'}
                     onToggleFocus={() => dispatch({ type: 'TOGGLE_FOCUS_PANEL', panel: 'preview' })}
+                    suspended={isCoveredByDetailEditor}
                   />
                 </Suspense>
               </div>
